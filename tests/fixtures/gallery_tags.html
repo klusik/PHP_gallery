@@ -295,6 +295,117 @@ async function runFixture() {
     const viewport = await fetch('/__viewport?width=390');
     check(viewport.ok, '390px viewport override succeeds');
     await waitForLayoutResources();
+    const countCard = document.querySelector('[data-fixture-case="rows-one"]');
+    const countStack = countCard?.querySelector('.gallery-card-media-count-stack');
+    const countBadges = countStack instanceof HTMLElement
+        ? Array.from(countStack.children).filter(element => element instanceof HTMLElement)
+        : [];
+    check(countBadges.length === 3, 'Physical card stacks its photo, PDF and music counts');
+    const [photoBadge, pdfBadge, musicBadge] = countBadges;
+    if (photoBadge && pdfBadge && musicBadge && countStack instanceof HTMLElement) {
+        const photoRect = photoBadge.getBoundingClientRect();
+        const pdfRect = pdfBadge.getBoundingClientRect();
+        const musicRect = musicBadge.getBoundingClientRect();
+        const stackStyle = getComputedStyle(countStack);
+        const photoStyle = getComputedStyle(photoBadge);
+        const pdfStyle = getComputedStyle(pdfBadge);
+        const musicStyle = getComputedStyle(musicBadge);
+        const pdfIcon = pdfBadge.querySelector('svg');
+        const musicIcon = musicBadge.querySelector('svg');
+        check(stackStyle.position === 'absolute'
+            && stackStyle.flexDirection === 'column'
+            && stackStyle.pointerEvents === 'none', 'Count stack stays in the media corner and cannot intercept links');
+        check(Math.abs(photoRect.right - pdfRect.right) <= 0.5
+            && Math.abs(pdfRect.right - musicRect.right) <= 0.5
+            && photoRect.top < pdfRect.top
+            && pdfRect.top < musicRect.top, 'Photo, PDF and music badges form one right-aligned vertical stack');
+        check(photoStyle.backgroundColor === pdfStyle.backgroundColor
+            && pdfStyle.backgroundColor === musicStyle.backgroundColor
+            && photoStyle.backdropFilter === pdfStyle.backdropFilter
+            && pdfStyle.backdropFilter === musicStyle.backdropFilter, 'All stacked badges reuse the same glass surface');
+        check(pdfIcon instanceof SVGElement
+            && musicIcon instanceof SVGElement
+            && Number.parseFloat(getComputedStyle(pdfIcon).width) > 0
+            && Number.parseFloat(getComputedStyle(musicIcon).width) > 0
+            && photoBadge.textContent.includes('12')
+            && pdfBadge.textContent.includes('3')
+            && musicBadge.textContent.includes('2'), 'Both media glyphs and all prepared counts are visible');
+        check(Number.parseFloat(stackStyle.rowGap) < Number.parseFloat(photoStyle.rowGap)
+            && Number.parseFloat(getComputedStyle(pdfBadge).gap) < Number.parseFloat(photoStyle.gap)
+            && Number.parseFloat(getComputedStyle(musicBadge).gap) < Number.parseFloat(photoStyle.gap), 'Media badges use tighter vertical and icon-to-count spacing than the original photo badge');
+    }
+    const mediaHero = document.querySelector('[data-fixture-case="hero-media-counts"]');
+    const mediaHeroActions = mediaHero?.querySelector('.hero-actions');
+    const mediaHeroGroup = mediaHeroActions?.querySelector('.gallery-hero-media-counts');
+    const mediaHeroBadges = mediaHeroGroup instanceof HTMLElement
+        ? Array.from(mediaHeroGroup.querySelectorAll('.gallery-media-count-badge'))
+        : [];
+    const heroPhotoBadge = mediaHeroActions?.querySelector('.gallery-hero-count-badge:not(.gallery-media-count-badge)');
+    const heroAdminTrash = mediaHeroActions?.querySelector('.public-admin-delete-form-hero');
+    const heroAdminEdit = mediaHeroActions?.querySelector('.public-admin-edit-button-hero');
+    const heroAdminAdd = mediaHeroActions?.querySelector('.public-admin-add-gallery-button-hero');
+    const heroDownload = mediaHeroActions?.querySelector('form.public-download-legacy-form');
+    const heroMap = mediaHeroActions?.querySelector('button.map-button');
+    check(mediaHero instanceof HTMLElement
+        && mediaHeroActions instanceof HTMLElement
+        && mediaHeroGroup instanceof HTMLElement
+        && mediaHeroBadges.length === 2
+        && heroPhotoBadge instanceof HTMLElement
+        && heroAdminTrash instanceof HTMLElement
+        && heroAdminEdit instanceof HTMLElement
+        && heroAdminAdd instanceof HTMLElement
+        && heroDownload instanceof HTMLElement
+        && heroMap instanceof HTMLElement, 'Opened-gallery hero contains prepared PDF, music, photo, trash, edit, add, download and map actions');
+    if (mediaHeroGroup instanceof HTMLElement
+        && mediaHeroBadges.length === 2
+        && heroPhotoBadge instanceof HTMLElement
+        && heroAdminTrash instanceof HTMLElement
+        && heroAdminEdit instanceof HTMLElement
+        && heroAdminAdd instanceof HTMLElement
+        && heroDownload instanceof HTMLElement
+        && heroMap instanceof HTMLElement) {
+        const [heroPdfBadge, heroMusicBadge] = mediaHeroBadges;
+        // Desktop fits every action; the production wrap rule stays unchanged.
+        const desktopViewport = await fetch('/__viewport?width=1280');
+        check(desktopViewport.ok, '1280px action-row viewport succeeds');
+        await settle();
+        const actionSequence = [
+            heroPdfBadge,
+            heroMusicBadge,
+            heroPhotoBadge,
+            heroAdminTrash,
+            heroAdminEdit,
+            heroAdminAdd,
+            heroDownload,
+            heroMap,
+        ];
+        const actionRects = actionSequence.map(action => action.getBoundingClientRect());
+        const adjacentGaps = actionRects.slice(1).map((rect, index) =>
+            rect.left - actionRects[index].right,
+        );
+        const actionCenter = actionRects[0].top + actionRects[0].height / 2;
+        check(actionRects.every(rect =>
+            Math.abs(rect.top + rect.height / 2 - actionCenter) <= 0.5)
+            && adjacentGaps.every(gap => gap > 0
+                && Math.abs(gap - adjacentGaps[0]) <= 0.5), 'PDF, music, photo, trash, edit, add, download and map actions share one horizontal row with equal gaps');
+        check(heroPdfBadge.textContent.includes('3')
+            && heroMusicBadge.textContent.includes('2')
+            && heroPdfBadge.getAttribute('aria-label')?.includes('3 unique PDF files')
+            && heroMusicBadge.getAttribute('aria-label')?.includes('2 unique music files'), 'Hero media counts retain their accessible labels and prepared values');
+        check(Number.parseFloat(getComputedStyle(heroPdfBadge).gap) < Number.parseFloat(getComputedStyle(heroPhotoBadge).gap)
+            && Number.parseFloat(getComputedStyle(heroMusicBadge).gap) < Number.parseFloat(getComputedStyle(heroPhotoBadge).gap), 'Hero media badges keep compact icon-to-count spacing');
+        const narrowViewport = await fetch('/__viewport?width=390');
+        check(narrowViewport.ok, '390px viewport is restored for mobile geometry');
+        await settle();
+        const narrowCounts = actionSequence.slice(0, 3).map(action =>
+            action.getBoundingClientRect(),
+        );
+        check(narrowCounts.every(rect =>
+            Math.abs(rect.top - narrowCounts[0].top) <= 0.5)
+            && Math.abs((narrowCounts[1].left - narrowCounts[0].right)
+                - (narrowCounts[2].left - narrowCounts[1].right)) <= 0.5,
+            'Mobile keeps PDF, music and photo counts on one row with equal gaps');
+    }
     const displayAll = document.querySelector('[data-fixture-case="display-all"]');
     check(displayAll instanceof HTMLElement, 'display-all card exists before first-paint measurements');
     displayAll.scrollIntoView({block: 'center'});

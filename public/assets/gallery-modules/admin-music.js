@@ -208,6 +208,55 @@ function preserveAdminMusicTabBindings(currentRoot, replacement) {
     return selectedPanelId;
 }
 
+/** Keep the survivor choices exactly aligned with checked catalog rows.
+ * @param {ParentNode} container Manager root or document containing checkboxes.
+ * @returns {void} Rebuilds the survivor select and enables merge when valid.
+ */
+function syncAdminMusicMergeSelection(container) {
+    const form = container.querySelector('#admin-music-merge');
+    const root = form?.closest('[data-admin-music]');
+    const select = form?.querySelector('select[name="song_id"]');
+    const submit = form?.querySelector('button[type="submit"]');
+    if (!(form instanceof HTMLFormElement)
+        || !(root instanceof HTMLElement)
+        || !(select instanceof HTMLSelectElement)
+        || !(submit instanceof HTMLButtonElement)) return;
+    const requiredSelection = Number.parseInt(form.dataset.mergeMinimum || '', 10);
+    if (!Number.isInteger(requiredSelection) || requiredSelection < 1) {
+        select.replaceChildren();
+        select.disabled = true;
+        submit.disabled = true;
+        return;
+    }
+    const selectedRows = Array.from(root.querySelectorAll(
+        'input[name="song_ids[]"]:checked',
+    )).map(/** Describe one checked song in its rendered row. @param {HTMLInputElement} input Checked catalog song identity. @returns {{id:string,label:string}|null} Prepared survivor option or null for malformed rows. */ input => {
+        const id = input.value;
+        const label = input.closest('tr')?.querySelector(
+            '.admin-music-select span',
+        )?.textContent?.trim() || '';
+        return /^\d+$/.test(id) && label !== '' ? {id, label} : null;
+    }).filter(/** Keep only fully described checked songs. @param {{id:string,label:string}|null} song Prepared selected row. @returns {song is {id:string,label:string}} True when safe to expose as a survivor. */ song => song !== null);
+    const previousValue = select.value;
+    select.replaceChildren(...selectedRows.map(/** Create one option for an eligible survivor. @param {{id:string,label:string}} song Checked song row. @returns {HTMLOptionElement} Matching option node. */ song => {
+        const option = document.createElement('option');
+        option.value = song.id;
+        option.textContent = song.label;
+        return option;
+    }));
+    const previousIsSelected = selectedRows.some(
+        song => song.id === previousValue,
+    );
+    if (selectedRows.length > 0) {
+        select.value = previousIsSelected
+            ? previousValue : selectedRows[0].id;
+    }
+    const canMerge = selectedRows.length >= requiredSelection
+        && root.dataset.busy !== '1' && root.dataset.stale !== '1';
+    select.disabled = !canMerge;
+    submit.disabled = !canMerge;
+}
+
 /**
  * Fetch and conditionally replace only the current Music Manager fragment.
  * @param {HTMLFormElement} form Current production search form.
@@ -274,6 +323,7 @@ async function requestAdminMusicSearch(form, state, generation) {
         root.replaceWith(replacement);
         setupAdminTabsInRoot(replacement);
         setupAdminMusicAlbumOrdering();
+        syncAdminMusicMergeSelection(replacement);
         window.history.replaceState(
             window.history.state,
             '',
@@ -436,6 +486,44 @@ function positionAdminMusicRowDisclosure(disclosure) {
     popup.style.top = `${top - cellBounds.top}px`;
 }
 
+/** Find a Music Manager disclosure that presents a floating overlay.
+ * @param {Element} target Event target inside the manager.
+ * @returns {HTMLDetailsElement|null} Floating row/settings/merge/split/title disclosure, or null for inline disclosures.
+ */
+function adminMusicOverlayDisclosure(target) {
+    const disclosure = target.closest(
+        '.admin-music-tags, .admin-music-variants, '
+        + '.admin-music-locations, .admin-music-song-edit, '
+        + '.admin-music-preferences, .admin-music-merge, '
+        + '.admin-music-split, .admin-music-album-options',
+    );
+    return disclosure instanceof HTMLDetailsElement
+        ? disclosure : null;
+}
+
+/** Close other floating Music Manager overlays while retaining one owner.
+ * @param {HTMLDetailsElement|null} retained Overlay allowed to stay open.
+ * @returns {void} Closes all matching open overlays except the retained disclosure.
+ */
+function closeOtherAdminMusicOverlays(retained) {
+    const openDisclosures = Array.from(document.querySelectorAll(
+        '[data-admin-music] .admin-music-tags[open], '
+        + '[data-admin-music] .admin-music-variants[open], '
+        + '[data-admin-music] .admin-music-locations[open], '
+        + '[data-admin-music] .admin-music-song-edit[open], '
+        + '[data-admin-music] .admin-music-preferences[open], '
+        + '[data-admin-music] .admin-music-merge[open], '
+        + '[data-admin-music] .admin-music-split[open], '
+        + '[data-admin-music] .admin-music-album-options[open]',
+    ));
+    for (const disclosure of openDisclosures) {
+        if (disclosure !== retained
+            && disclosure instanceof HTMLDetailsElement) {
+            disclosure.open = false;
+        }
+    }
+}
+
 /**
  * Capture the current search editor state for an immediate or deferred request.
  * @param {HTMLInputElement} input Search field holding the latest query.
@@ -477,10 +565,20 @@ export function setupAdminMusic() {
     document.body.dataset.adminMusicBound = '1';
     setupAdminTabsInRoot(document);
     setupAdminMusicAlbumOrdering();
+    syncAdminMusicMergeSelection(document);
+    document.addEventListener('change', /** Reconcile survivor choices after checkbox selection, including shared range-selection change events. @param {Event} event Changed manager control. @returns {void} Synchronizes merge eligibility and survivor options. */ event => {
+        const target = event.target;
+        if (target instanceof HTMLInputElement
+            && target.matches('input[name="song_ids[]"]')) {
+            const root = target.closest('[data-admin-music]');
+            if (root) syncAdminMusicMergeSelection(root);
+        }
+    }, true);
     document.addEventListener('click', /** Toggle a row title editor without changing its independent merge selection. @param {MouseEvent} event Click on a production title action or another document control. @returns {void} Opens, switches, or closes the active row editor. */ event => {
         const target = event.target;
         if (!(target instanceof Element)) {
             closeAdminMusicTitleEditor();
+            closeOtherAdminMusicOverlays(null);
             return;
         }
         const contextAction = target.closest('[data-admin-music-context]');
@@ -498,11 +596,23 @@ export function setupAdminMusic() {
                 event.stopImmediatePropagation();
                 invalidateAdminMusicSearchForEditor();
                 closeAdminMusicTitleEditor();
-                disclosure.open = true;
+                const shouldOpen = !disclosure.open;
+                closeOtherAdminMusicOverlays(shouldOpen ? disclosure : null);
+                disclosure.open = shouldOpen;
+                if (!shouldOpen) {
+                    contextAction.focus();
+                    return;
+                }
                 disclosure.querySelector(':scope > summary')?.focus();
                 positionAdminMusicRowDisclosure(disclosure);
             }
             return;
+        }
+        const clickedDisclosure = adminMusicOverlayDisclosure(target);
+        if (!clickedDisclosure) {
+            closeOtherAdminMusicOverlays(null);
+        } else if (!clickedDisclosure.open) {
+            closeOtherAdminMusicOverlays(clickedDisclosure);
         }
         const summary = target.closest('summary');
         const rowDisclosure = summary?.parentElement;
@@ -587,12 +697,34 @@ export function setupAdminMusic() {
             || !target.closest('[data-admin-music]')) return;
         invalidateAdminMusicSearchForEditor();
     });
-    document.addEventListener('keydown', /** Submit a title with plain Enter or close its popup with Escape. @param {KeyboardEvent} event Keyboard input within the document. @returns {void} Keeps title entry single-line while preserving modified Enter behavior. */ event => {
-        if (event.key === 'Escape' && activeAdminMusicTitleEditor) {
-            const trigger = activeAdminMusicTitleEditor.trigger;
-            closeAdminMusicTitleEditor();
-            trigger.focus();
-            return;
+    document.addEventListener('keydown', /** Handle title submission and dismiss floating overlays. @param {KeyboardEvent} event Keyboard input within the document. @returns {void} Submits plain Enter in title fields and returns focus after Escape. */ event => {
+        if (event.key === 'Escape') {
+            if (activeAdminMusicTitleEditor) {
+                const trigger = activeAdminMusicTitleEditor.trigger;
+                closeAdminMusicTitleEditor();
+                trigger.focus();
+                return;
+            }
+            const target = event.target;
+            const focusedDisclosure = target instanceof Element
+                ? adminMusicOverlayDisclosure(target) : null;
+            const openDisclosure = focusedDisclosure?.open
+                ? focusedDisclosure : document.querySelector(
+                    '[data-admin-music] .admin-music-tags[open], '
+                    + '[data-admin-music] .admin-music-variants[open], '
+                    + '[data-admin-music] .admin-music-locations[open], '
+                    + '[data-admin-music] .admin-music-song-edit[open], '
+                    + '[data-admin-music] .admin-music-preferences[open], '
+                    + '[data-admin-music] .admin-music-merge[open], '
+                    + '[data-admin-music] .admin-music-split[open], '
+                    + '[data-admin-music] .admin-music-album-options[open]',
+                );
+            if (openDisclosure instanceof HTMLDetailsElement) {
+                event.preventDefault();
+                openDisclosure.open = false;
+                openDisclosure.querySelector(':scope > summary')?.focus();
+                return;
+            }
         }
         const target = event.target;
         if (event.key !== 'Enter'
@@ -682,6 +814,15 @@ export function setupAdminMusic() {
         let question = form.querySelector('[data-confirm]')?.dataset.confirm
             || form.querySelector('[data-confirm]')?.getAttribute('data-confirm');
         if (form.querySelector('input[name="action"]')?.value === 'merge') {
+            syncAdminMusicMergeSelection(root);
+            const mergeSelect = form.querySelector('select[name="song_id"]');
+            const mergeButton = form.querySelector('button[type="submit"]');
+            if (!(mergeSelect instanceof HTMLSelectElement)
+                || !(mergeButton instanceof HTMLButtonElement)
+                || mergeButton.disabled
+                || !Array.from(root.querySelectorAll(
+                    'input[name="song_ids[]"]:checked',
+                )).some(input => input.value === mergeSelect.value)) return;
             const selected = Array.from(root.querySelectorAll(
                 'input[name="song_ids[]"]:checked'
             )).map(/** Describe the selected song represented by one checkbox. @param {HTMLInputElement} input Selected catalog checkbox. @returns {string} Preview text for the confirmation. */ input => {
@@ -759,6 +900,7 @@ export function setupAdminMusic() {
                     root.replaceWith(replacement);
                     setupAdminTabsInRoot(replacement);
                     setupAdminMusicAlbumOrdering();
+                    syncAdminMusicMergeSelection(replacement);
                     replacement.querySelector('[role="status"]')?.focus();
                     return true;
                 },
@@ -801,7 +943,11 @@ export function setupAdminMusic() {
             clearTimeout(requestTimer);
             root.dataset.busy = '0';
             if (root.dataset.stale !== '1') {
-        buttons.forEach(/** Restore pending controls after an unsuccessful save attempt. @param {HTMLButtonElement} button Button captured from the original manager root. @param {number} index Button position in the captured state. @returns {void} Restores the original enabled state. */ (button, index) => { button.disabled = previous[index]; });
+                // Restore captured controls before reconciling current selection.
+                buttons.forEach((button, index) => {
+                    button.disabled = previous[index];
+                });
+                if (root.isConnected) syncAdminMusicMergeSelection(root);
             }
             resumePendingAdminMusicSearch();
         }

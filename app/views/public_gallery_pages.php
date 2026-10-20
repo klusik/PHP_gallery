@@ -194,7 +194,54 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
 /**
  * Render the selected-gallery hero from controller-prepared state.
  *
- * @param array{gallery_id?:int,visibility?:string,updated_at?:string,cover_image_id?:int,cover_selection_revision?:string,image_count?:int,image_revision?:string,subgallery_count?:int,subgallery_revision?:string,smart_gallery_count?:int,canonical_url?:string} $viewModel Controller-prepared hero state including the public cover-selection revision used by mutation completion.
+ * @param array{
+ *     gallery_id?:int,
+ *     visibility?:string,
+ *     updated_at?:string,
+ *     cover_image_id?:int,
+ *     cover_selection_revision?:string,
+ *     image_count?:int,
+ *     image_revision?:string,
+ *     subgallery_count?:int,
+ *     subgallery_revision?:string,
+ *     smart_gallery_count?:int,
+ *     canonical_url?:string,
+ *     title?:string,
+ *     branding_header_html?:string,
+ *     description_documents_html?:string,
+ *     breadcrumbs_html?:string,
+ *     show_count_badge?:bool,
+ *     branch_image_count?:int,
+ *     media_counts?:array{music:int,pdf:int},
+ *     count_badge?:array{
+ *         visible?:bool,
+ *         admin?:bool,
+ *         mode?:string,
+ *         icons?:bool,
+ *         public_count?:int,
+ *         all_count?:?int
+ *     },
+ *     admin_actions_html?:string,
+ *     download_enabled?:bool,
+ *     download_url?:string,
+ *     download_start_url?:string,
+ *     download_capability?:string,
+ *     map_available?:bool,
+ *     map_url?:string,
+ *     picture_game_available?:bool,
+ *     picture_game_url?:string,
+ *     tag_count?:int,
+ *     tag_visible_limit?:int,
+ *     tag_display_all?:bool,
+ *     tag_scrollbar_enabled?:bool,
+ *     tag_scrollbar_rows?:int,
+ *     tag_groups?:list<array{
+ *         items:list<array{name:string,href:?string}>,
+ *         label:?string
+ *     }>,
+ *     cooperative_links?:list<array{url:string,label:string}>
+ * } $viewModel Controller-prepared hero state, including policy-gated media
+ *     counts and escaped-or-trusted presentation fragments.
  * @return void Render the hero and prepared actions.
  */
 function view_render_public_gallery_hero(array $viewModel): void
@@ -236,6 +283,37 @@ function view_render_public_gallery_hero(array $viewModel): void
             . '">';
 
     if (!empty($viewModel['show_count_badge'])) {
+        $mediaCounts = (array) ($viewModel['media_counts'] ?? []);
+        $pdfFileCount = max(0, (int) ($mediaCounts['pdf'] ?? 0));
+        $musicFileCount = max(0, (int) ($mediaCounts['music'] ?? 0));
+        if ($pdfFileCount > 0 || $musicFileCount > 0) {
+            echo '<div class="gallery-hero-media-counts">';
+            if ($pdfFileCount > 0) {
+                echo
+                    '<span class="gallery-hero-count-badge gallery-media-count-badge" role="img" aria-label="'
+                        . e(t(
+                            'gallery.card.pdf_file_count',
+                            '{count} unique PDF files in this gallery and subgalleries',
+                            ['count' => $pdfFileCount],
+                        ))
+                        . '"><svg class="gallery-media-count-icon gallery-media-count-icon-pdf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2.75h8l4 4v14.5H6zM14 2.75v4h4M8.5 12h7M8.5 15h7M8.5 18h4"/></svg><span class="gallery-hero-count-value">'
+                        . $pdfFileCount
+                        . '</span></span>';
+            }
+            if ($musicFileCount > 0) {
+                echo
+                    '<span class="gallery-hero-count-badge gallery-media-count-badge" role="img" aria-label="'
+                        . e(t(
+                            'gallery.card.music_file_count',
+                            '{count} unique music files in this gallery and subgalleries',
+                            ['count' => $musicFileCount],
+                        ))
+                        . '"><svg class="gallery-media-count-icon gallery-media-count-icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg><span class="gallery-hero-count-value">'
+                        . $musicFileCount
+                        . '</span></span>';
+            }
+            echo '</div>';
+        }
         $count = max(0, (int) ($viewModel['branch_image_count'] ?? 0));
         $badge = (array) ($viewModel['count_badge'] ?? []);
         if (!empty($badge['admin'])) {

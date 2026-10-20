@@ -135,7 +135,10 @@ function database_maintenance_report_path(): string
  * Unknown tables are deliberately protected. A large table is not considered
  * stale merely because of its row count or allocated storage.
  *
- * @return array<string, array<string, mixed>> Policies keyed by table name.
+ * @return array<string,array{category:string,owner:string,orphan_rule:string,
+ *     retention_rule:string,duplicate_rule:string,protected_rule:string,
+ *     cleanup_mode:string,physical_optimization:string}> Ownership and
+ *     permitted maintenance operations keyed by table name.
  */
 function database_maintenance_table_policies(): array
 {
@@ -182,6 +185,18 @@ function database_maintenance_table_policies(): array
             'gallery/content data',
             'Gallery and source image',
             'Valid image content is always protected.',
+        ),
+        'gallery_attachment_usage_state' => $protected(
+            'caches and temporary state',
+            'Gallery media-count snapshot generations',
+            'Reconciled by attachment mutations and the media-count task. '
+                . 'Generic cleanup must not discard active dirty generations.',
+        ),
+        'gallery_attachment_usage_items' => $protected(
+            'caches and temporary state',
+            'Gallery media-count digest and live-album projections',
+            'Rebuilt by the media-count task; original files and source '
+                . 'sidecars remain authoritative. Gallery deletion cascades.',
         ),
         'duplicate_photo_ledger_pairs' => $protected(
             'administrator workflow state',

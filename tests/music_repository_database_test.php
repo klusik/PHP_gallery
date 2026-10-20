@@ -4,8 +4,8 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/music_repository_database_test.php
  * Module Type: Disposable Database Regression Test
- * Purpose: Exercise central music assets and live playlist migration with real persistence.
- * Responsibilities: Cover v1 promotion, owned-asset cleanup, shared assignments, and album projection.
+ * Purpose: Exercise central music assets and gallery usage counts with real persistence.
+ * Responsibilities: Cover v1 promotion, live album projection, digest-unique branch reads, and attachment snapshot CAS.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -75,6 +75,54 @@ namespace Gallery\Services {
         }
         return strtr($text, $replacements);
     }
+
+    /** Confirm public access schema for the gallery lookup boundary in this fixture.
+     * @return void The migrated disposable schema is controlled by this test.
+     */
+    function gallery_access_assert_public_policy_available(): void
+    {
+    }
+
+    /** Confirm visibility schema for the gallery lookup boundary in this fixture.
+     * @return void The migrated disposable schema is controlled by this test.
+     */
+    function gallery_visibility_assert_public_policy_available(): void
+    {
+    }
+
+    /** Report the test-owned gallery access fields as available.
+     * @return bool The disposable database includes the access migration.
+     */
+    function gallery_access_schema_ready(): bool
+    {
+        return true;
+    }
+
+    /** Apply fixture-owned ordinary visitor access to one gallery row.
+     * @param array{id?:int|string,access_mode?:string} $gallery Full gallery row from the real descendant query.
+     * @return bool Whether the fixture marks this gallery visitor-accessible, regardless of the simulated Admin session.
+     */
+    function visitor_can_access_gallery_without_admin_bypass(array $gallery): bool
+    {
+        return in_array(
+            (int) ($gallery['id'] ?? 0),
+            $GLOBALS['music_repository_usage_visitor_gallery_ids'] ?? [],
+            true,
+        );
+    }
+
+    /** Read one test-owned feature toggle with fail-closed defaults for unknown keys.
+     * @param string $key Canonical feature capability key.
+     * @param array<string,bool> $resolving Recursion guard accepted by the production signature.
+     * @return bool Whether this fixture explicitly enables the requested count capability.
+     */
+    function feature_capability_effective_enabled(
+        string $key,
+        array $resolving = [],
+    ): bool {
+        return ($GLOBALS['music_repository_usage_capabilities'][$key] ?? false)
+            === true;
+    }
 }
 
 namespace {
@@ -106,16 +154,33 @@ namespace {
      */
     const MUSIC_REPOSITORY_OVERSIZE_SOURCE_DELTA_BYTES = 1;
 
+    /** Give the projection fixture an overlapping branch and an independent root.
+     * Type: int. Units: physical galleries. Scope: digest-unique usage assertions.
+     * Consumers: root, descendant, and unrelated card branch setup.
+     * Rationale: a root plus one child proves recursive deduplication; one sibling proves branch isolation. Value: 3.
+     */
+    const MUSIC_REPOSITORY_USAGE_GALLERY_COUNT = 3;
+
+    /** Keep synthetic repository metadata structurally valid without writing originals.
+     * Type: int. Units: bytes. Scope: database-only digest projection assets.
+     * Consumers: canonical live-album reader fixtures.
+     * Rationale: the projection must read metadata without opening or hashing media files. Value: 1 byte per synthetic asset.
+     */
+    const MUSIC_REPOSITORY_USAGE_ASSET_BYTES = 1;
+
     require_once __DIR__ . '/support/gallery_workflow_safety.php';
     require_once __DIR__ . '/../app/runtime/storage_observer.php';
     require_once __DIR__ . '/../app/helpers_runtime.php';
     require_once __DIR__ . '/../app/models/app_settings.php';
     require_once __DIR__ . '/../app/models/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/presentation_schema_policy.php';
     require_once __DIR__ . '/../app/models/galleries.php';
     require_once __DIR__ . '/../app/models/music_catalog.php';
     require_once __DIR__ . '/../app/models/gallery_music.php';
     require_once __DIR__ . '/../app/services/music_catalog.php';
     require_once __DIR__ . '/../app/services/gallery_music.php';
+    require_once __DIR__ . '/../app/services/gallery_lookup.php';
 
     use function GalleryWorkflow\check;
     use function GalleryWorkflow\fixtureDatabase;
@@ -139,6 +204,15 @@ namespace {
     use function Gallery\Services\music_repository_asset_path;
     use function Gallery\Services\music_repository_directory;
     use function Gallery\Services\music_repository_store_source;
+    use function Gallery\Services\gallery_branch_attachment_usage_counts;
+    use function Gallery\Services\schema_inspection_reset_request_cache;
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
+    use function Gallery\Models\gallery_model_attachment_usage_mark_dirty;
+    use function Gallery\Models\gallery_model_attachment_usage_replace;
+    use function Gallery\Models\gallery_model_attachment_usage_rows;
+    use function Gallery\Models\gallery_model_attachment_usage_seed_empty;
+    use function Gallery\Services\presentation_gallery_attachment_usage_schema_status;
+    use function Gallery\Services\presentation_schema_render_available;
     use function Gallery\Models\music_repository_model_asset;
     use function Gallery\Models\music_repository_model_register_asset;
     use function Gallery\Models\gallery_music_model_write;
@@ -159,6 +233,33 @@ namespace {
             . 'data'
             . pack('V', strlen($samples))
             . $samples;
+    }
+
+    /** Publish one complete derived snapshot through the real model generation checks.
+     * @param int $galleryId Owned fixture gallery identity.
+     * @param string $kind Projection category, either PDF or music.
+     * @param list<array{source_id:string,sha256:?string,asset_id:?string,album_id:?int,hidden:bool}> $items Complete source projection for this gallery and category.
+     * @return string The current published generation token.
+     */
+    function music_repository_usage_publish(
+        int $galleryId,
+        string $kind,
+        array $items,
+    ): string {
+        $revision = gallery_model_attachment_usage_mark_dirty(
+            $galleryId,
+            $kind,
+        );
+        check(
+            gallery_model_attachment_usage_replace(
+                $galleryId,
+                $kind,
+                $items,
+                $revision,
+            ),
+            'Current attachment usage generation must publish its complete snapshot.',
+        );
+        return $revision;
     }
 
     if (!getenv('GALLERY_WORKFLOW_FIXTURE')) {
@@ -217,6 +318,11 @@ namespace {
             $pdo->exec($statement);
         }
         $migration['after']($pdo);
+        $usageMigration = require __DIR__
+            . '/../database/migrations/202610200004_gallery_attachment_usage.php';
+        foreach ($usageMigration['statements'] as $statement) {
+            $pdo->exec($statement);
+        }
 
         $insertGallery = $pdo->prepare(
             'INSERT INTO galleries '
@@ -1115,16 +1221,404 @@ namespace {
             'A source one byte above 64 MiB must be rejected before central publication or index mutation.',
         );
 
+        // Build real overlapping gallery rows for the actual public branch reader.
+        $usageInsertGallery = $pdo->prepare(
+            'INSERT INTO galleries '
+                . '(parent_id, folder_path, folder_path_hash, slug, title, '
+                . 'description, visibility, access_mode, access_listing, '
+                . 'created_at, updated_at) '
+                . "VALUES (?, ?, ?, ?, ?, '', 'public', ?, 'listed', NOW(), NOW())",
+        );
+        $usageRootPath = 'music-usage-' . $token . '-root';
+        $usageChildPath = $usageRootPath . '/child';
+        $usageUnrelatedPath = 'music-usage-' . $token . '-unrelated';
+        $usageGalleryIds = [];
+        $usageGalleryRows = [
+            [null, $usageRootPath, 'root', 'normal'],
+            [null, $usageUnrelatedPath, 'unrelated', 'normal'],
+        ];
+        foreach ($usageGalleryRows as [$parentId, $path, $label, $accessMode]) {
+            $usageInsertGallery->execute([
+                $parentId,
+                $path,
+                hash('sha256', $path),
+                'music-usage-' . $label . '-' . $token,
+                'Music usage ' . $label . ' ' . $token,
+                $accessMode,
+            ]);
+            $usageGalleryIds[] = (int) $pdo->lastInsertId();
+            $fixtureGalleryIds[] = (int) $pdo->lastInsertId();
+        }
+        $usageRootId = $usageGalleryIds[0];
+        $usageUnrelatedId = $usageGalleryIds[1];
+        $usageInsertGallery->execute([
+            $usageRootId,
+            $usageChildPath,
+            hash('sha256', $usageChildPath),
+            'music-usage-child-' . $token,
+            'Music usage child ' . $token,
+            'password',
+        ]);
+        $usageChildId = (int) $pdo->lastInsertId();
+        $fixtureGalleryIds[] = $usageChildId;
+        check(
+            count($usageGalleryIds) + 1 === MUSIC_REPOSITORY_USAGE_GALLERY_COUNT,
+            'Usage fixture must contain one root, one descendant, and one unrelated gallery.',
+        );
+
+        // Two distinct original digests belong to one song; a third song is
+        // added to a live album later to prove membership is resolved at read time.
+        $usageSongInsert = $pdo->prepare(
+            'INSERT INTO music_songs (title, created_at, updated_at) '
+                . 'VALUES (?, NOW(), NOW())',
+        );
+        $usageSongIds = [];
+        foreach (['same-song', 'live-album-song'] as $label) {
+            $usageSongInsert->execute([
+                'Usage ' . $label . ' ' . $token,
+            ]);
+            $usageSongIds[] = (int) $pdo->lastInsertId();
+            $fixtureSongIds[] = (int) $pdo->lastInsertId();
+        }
+        $usageDigestA = hash('sha256', 'usage file A ' . $token);
+        $usageDigestB = hash('sha256', 'usage file B ' . $token);
+        $usageDigestC = hash('sha256', 'usage file C ' . $token);
+        $usageAssetInsert = $pdo->prepare(
+            'INSERT INTO music_repository_assets '
+                . '(id, song_id, filename, indexed_title, mime, byte_size, '
+                . 'sha256, origin_gallery_id, origin_track_id, created_at, '
+                . 'updated_at) '
+                . 'VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)',
+        );
+        $usageAssetIds = [
+            bin2hex(random_bytes(16)),
+            bin2hex(random_bytes(16)),
+            bin2hex(random_bytes(16)),
+        ];
+        $usageAssets = [
+            [$usageAssetIds[0], $usageSongIds[0], $usageDigestA, '2000-01-01 00:00:00'],
+            [$usageAssetIds[1], $usageSongIds[0], $usageDigestB, '2000-01-02 00:00:00'],
+            [$usageAssetIds[2], $usageSongIds[1], $usageDigestC, '2000-01-03 00:00:00'],
+        ];
+        foreach ($usageAssets as $index => [$assetId, $songId, $digest, $createdAt]) {
+            $usageAssetInsert->execute([
+                $assetId,
+                $songId,
+                'usage-' . $index . '-' . $token . '.wav',
+                'Usage asset ' . $index . ' ' . $token,
+                'audio/wav',
+                MUSIC_REPOSITORY_USAGE_ASSET_BYTES,
+                $digest,
+                $createdAt,
+                $createdAt,
+            ]);
+            $fixtureAssetIds[] = $assetId;
+        }
+        $usageAlbumInsert = $pdo->prepare(
+            'INSERT INTO music_albums '
+                . '(parent_id, title, description, sort_order, revision, '
+                . 'created_at, updated_at) '
+                . 'VALUES (NULL, ?, NULL, 0, 1, NOW(), NOW())',
+        );
+        $usageAlbumInsert->execute(['Usage album ' . $token]);
+        $usageAlbumId = (int) $pdo->lastInsertId();
+        $fixtureAlbumIds[] = $usageAlbumId;
+        $usageMembershipInsert = $pdo->prepare(
+            'INSERT INTO music_album_songs (album_id, song_id, sort_order) '
+                . 'VALUES (?, ?, 0)',
+        );
+        $usageMembershipDelete = $pdo->prepare(
+            'DELETE FROM music_album_songs WHERE album_id = ? AND song_id = ?',
+        );
+        $usageMembershipInsert->execute([$usageAlbumId, $usageSongIds[0]]);
+
+        $usagePdfRootItems = [
+            [
+                'source_id' => 'document:shared-' . $token,
+                'sha256' => $usageDigestA,
+                'asset_id' => null,
+                'album_id' => null,
+                'hidden' => false,
+            ],
+            [
+                'source_id' => 'ofp',
+                'sha256' => $usageDigestA,
+                'asset_id' => null,
+                'album_id' => null,
+                'hidden' => true,
+            ],
+        ];
+        $usagePdfChildItems = [[
+            'source_id' => 'document:child-' . $token,
+            'sha256' => $usageDigestB,
+            'asset_id' => null,
+            'album_id' => null,
+            'hidden' => false,
+        ]];
+        $usageMusicRootItems = [
+            [
+                'source_id' => 'track:direct-a-' . $token,
+                'sha256' => null,
+                'asset_id' => $usageAssetIds[0],
+                'album_id' => null,
+                'hidden' => false,
+            ],
+            [
+                'source_id' => 'track:direct-b-' . $token,
+                'sha256' => null,
+                'asset_id' => $usageAssetIds[1],
+                'album_id' => null,
+                'hidden' => false,
+            ],
+            [
+                'source_id' => 'track:repeat-a-' . $token,
+                'sha256' => null,
+                'asset_id' => $usageAssetIds[0],
+                'album_id' => null,
+                'hidden' => false,
+            ],
+            [
+                'source_id' => 'album:live-' . $token,
+                'sha256' => null,
+                'asset_id' => null,
+                'album_id' => $usageAlbumId,
+                'hidden' => false,
+            ],
+        ];
+        $usageMusicChildItems = [[
+            'source_id' => 'track:shared-descendant-' . $token,
+            'sha256' => null,
+            'asset_id' => $usageAssetIds[0],
+            'album_id' => null,
+            'hidden' => false,
+        ]];
+        music_repository_usage_publish(
+            $usageRootId,
+            'pdf',
+            $usagePdfRootItems,
+        );
+        music_repository_usage_publish(
+            $usageChildId,
+            'pdf',
+            $usagePdfChildItems,
+        );
+        music_repository_usage_publish(
+            $usageRootId,
+            'music',
+            $usageMusicRootItems,
+        );
+        music_repository_usage_publish(
+            $usageChildId,
+            'music',
+            $usageMusicChildItems,
+        );
+        check(
+            gallery_model_attachment_usage_seed_empty($usageUnrelatedId, 'pdf')
+                && gallery_model_attachment_usage_seed_empty($usageUnrelatedId, 'music'),
+            'Known-empty usage seed must create ready state for a new gallery.',
+        );
+        $GLOBALS['music_repository_usage_capabilities'] = [
+            'gallery_pdf_documents' => true,
+            'gallery_music' => true,
+        ];
+        $GLOBALS['music_repository_usage_visitor_gallery_ids'] = [
+            $usageRootId,
+            $usageChildId,
+            $usageUnrelatedId,
+        ];
+        $GLOBALS['music_repository_usage_admin_session'] = true;
+        check(
+            gallery_branch_attachment_usage_counts([$usageRootId], 'pdf')[$usageRootId]
+                === 2
+                && gallery_branch_attachment_usage_counts([$usageRootId], 'music')[$usageRootId]
+                    === 2
+                && gallery_branch_attachment_usage_counts([$usageUnrelatedId], 'pdf')[$usageUnrelatedId]
+                    === 0,
+            'Public branch counts must dedupe PDF/OFP identity, repeated music assets and descendants while counting a known-empty branch as zero.',
+        );
+
+        // Live album membership changes the canonical digest expansion without
+        // rewriting the gallery's assignment snapshot.
+        $usageMembershipInsert->execute([$usageAlbumId, $usageSongIds[1]]);
+        check(
+            gallery_branch_attachment_usage_counts([$usageRootId], 'music')[$usageRootId]
+                === 3,
+            'Adding a current album member must expose its distinct canonical digest in the existing branch projection.',
+        );
+        $usageMembershipDelete->execute([$usageAlbumId, $usageSongIds[1]]);
+        check(
+            gallery_branch_attachment_usage_counts([$usageRootId], 'music')[$usageRootId]
+                === 2,
+            'Removing an album member must immediately remove its digest from the public count.',
+        );
+
+        // A simultaneous Admin session cannot make a visitor-denied descendant countable.
+        $GLOBALS['music_repository_usage_visitor_gallery_ids'] = [$usageRootId];
+        check(
+            gallery_branch_attachment_usage_counts([$usageRootId], 'pdf')[$usageRootId]
+                === 1
+                && gallery_branch_attachment_usage_counts([$usageRootId], 'music')[$usageRootId]
+                    === 2,
+            'Public attachment counts must exclude an inaccessible child even when the fixture marks an Admin session active.',
+        );
+        $GLOBALS['music_repository_usage_visitor_gallery_ids'] = [
+            $usageRootId,
+            $usageChildId,
+            $usageUnrelatedId,
+        ];
+        $usagePdfChildItems[0]['hidden'] = true;
+        music_repository_usage_publish(
+            $usageChildId,
+            'pdf',
+            $usagePdfChildItems,
+        );
+        check(
+            gallery_branch_attachment_usage_counts([$usageRootId], 'pdf')[$usageRootId]
+                === 1,
+            'Hidden descendants must not contribute to the digest-unique PDF branch count.',
+        );
+        $usagePdfChildItems[0]['hidden'] = false;
+
+        $staleUsageRevision = gallery_model_attachment_usage_mark_dirty(
+            $usageRootId,
+            'pdf',
+        );
+        $currentUsageRevision = gallery_model_attachment_usage_mark_dirty(
+            $usageRootId,
+            'pdf',
+        );
+        check(
+            !gallery_model_attachment_usage_replace(
+                $usageRootId,
+                'pdf',
+                $usagePdfRootItems,
+                $staleUsageRevision,
+            )
+                && gallery_model_attachment_usage_rows([$usageRootId], 'pdf')['states'][$usageRootId]
+                    === 'dirty',
+            'A stale CAS publisher must not replace the current dirty generation.',
+        );
+        check(
+            gallery_model_attachment_usage_replace(
+                $usageRootId,
+                'pdf',
+                $usagePdfRootItems,
+                $currentUsageRevision,
+            ),
+            'The current attachment usage generation must publish after a stale token is refused.',
+        );
+
+        $seedRaceRevision = gallery_model_attachment_usage_mark_dirty(
+            $usageRootId,
+            'music',
+        );
+        $stateAfterSeedRace = $pdo->prepare(
+            'SELECT state, revision FROM gallery_attachment_usage_state '
+                . 'WHERE gallery_id = ? AND kind = ?',
+        );
+        check(
+            !gallery_model_attachment_usage_seed_empty($usageRootId, 'music'),
+            'Insert-only empty seeding must not replace a writer-owned generation.',
+        );
+        $stateAfterSeedRace->execute([$usageRootId, 'music']);
+        $retainedUsageState = $stateAfterSeedRace->fetch(\PDO::FETCH_ASSOC);
+        check(
+            is_array($retainedUsageState)
+                && $retainedUsageState['state'] === 'dirty'
+                && $retainedUsageState['revision'] === $seedRaceRevision,
+            'An existing dirty source token must survive an empty-seed race.',
+        );
+        check(
+            gallery_model_attachment_usage_replace(
+                $usageRootId,
+                'music',
+                $usageMusicRootItems,
+                $seedRaceRevision,
+            ),
+            'The original source writer must still publish after an empty seed loses the insert race.',
+        );
+
+        $dirtyChildRevision = gallery_model_attachment_usage_mark_dirty(
+            $usageChildId,
+            'pdf',
+        );
+        check(
+            !array_key_exists(
+                $usageRootId,
+                gallery_branch_attachment_usage_counts([$usageRootId], 'pdf'),
+            ),
+            'Any dirty descendant must omit the incomplete branch count.',
+        );
+        $pdo->prepare(
+            'DELETE FROM gallery_attachment_usage_state WHERE gallery_id = ? AND kind = ?',
+        )->execute([$usageChildId, 'pdf']);
+        check(
+            !array_key_exists(
+                $usageRootId,
+                gallery_branch_attachment_usage_counts([$usageRootId], 'pdf'),
+            ),
+            'An absent descendant snapshot must omit the incomplete branch count.',
+        );
+        music_repository_usage_publish(
+            $usageChildId,
+            'pdf',
+            $usagePdfChildItems,
+        );
+
+        schema_inspection_set_query_executor_for_tests(
+            static fn(string $objectType, string $table, string $object): bool => false,
+        );
+        check(
+            presentation_gallery_attachment_usage_schema_status()['state'] === 'missing'
+                && gallery_branch_attachment_usage_counts([$usageRootId], 'pdf') === [],
+            'Confirmed missing projection schema must safely omit optional card counts.',
+        );
+        schema_inspection_set_query_executor_for_tests(
+            static function (
+                string $objectType,
+                string $table,
+                string $object,
+            ): bool {
+                throw new \PDOException('Fixture schema metadata is unavailable.');
+            },
+        );
+        check(
+            presentation_gallery_attachment_usage_schema_status()['state'] === 'unknown'
+                && gallery_branch_attachment_usage_counts([$usageRootId], 'pdf') === [],
+            'Unknown projection schema must safely omit optional card counts.',
+        );
+        schema_inspection_set_query_executor_for_tests(null);
+        schema_inspection_reset_request_cache();
+        schema_inspection_set_query_executor_for_tests(
+            static fn(string $objectType, string $table, string $object): bool =>
+                !in_array($table, ['music_album_songs', 'music_repository_assets'], true),
+        );
+        check(
+            gallery_branch_attachment_usage_counts([$usageRootId], 'pdf')[$usageRootId]
+                === 2
+                && gallery_branch_attachment_usage_counts([$usageRootId], 'music') === [],
+            'An unavailable current music schema must hide only music counts while PDF counts remain available.',
+        );
+        schema_inspection_set_query_executor_for_tests(null);
+        schema_inspection_reset_request_cache();
+
         $sourceAssets = array_column($afterSecond['tracks'], 'asset_id');
         $pdo->prepare('DELETE FROM galleries WHERE id = ?')->execute([$sourceId]);
+        $deletedOriginDetails = music_catalog_song_details(
+            [$firstSongId],
+        )[$firstSongId] ?? [];
+        $deletedOriginGalleryRows = is_array(
+            $deletedOriginDetails['galleries'] ?? null,
+        ) ? $deletedOriginDetails['galleries'] : [];
         $survivingSourceAsset = music_repository_model_asset(
             (string) $sourceAssets[0],
         );
         check(
             count(gallery_music_playlist($destination)['tracks']) === 2
                 && is_array($survivingSourceAsset)
-                && music_repository_asset_path($survivingSourceAsset) !== null,
-            'Deleting the source gallery must leave destination playback and its central asset available.',
+                && music_repository_asset_path($survivingSourceAsset) !== null
+                && !isset($deletedOriginGalleryRows[$sourceId]),
+            'Deleting a source gallery must preserve destination playback and its central asset without returning a URL row for the deleted origin.',
         );
 
         echo "Music repository database contracts passed.\n";

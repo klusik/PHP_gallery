@@ -825,7 +825,7 @@ function music_catalog_usage(int $songId): array
 
 /** Batch song references and distinct usage data for an administrator page.
  * @param list<int> $songIds Positive song IDs, capped at the page-size policy.
- * @return array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}> Details keyed by song ID.
+ * @return array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>,galleries:array<int,array{id:int|string,url_path:string|null,slug:string|null,folder_path:string|null,title:string|null}>}> Details keyed by song ID with extant physical gallery URL inputs.
  * @throws \InvalidArgumentException When more than one bounded page is requested.
  */
 function music_catalog_song_details(array $songIds): array

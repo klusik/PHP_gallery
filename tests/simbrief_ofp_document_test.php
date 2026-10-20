@@ -162,6 +162,10 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once dirname(__DIR__)
+        . '/tests/support/gallery_attachment_usage_legacy_schema_fixture.php';
+    require_once dirname(__DIR__)
+        . '/app/services/gallery_pdf_documents.php';
     require_once
         dirname(__DIR__) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__) . '/app/services/simbrief_ofp_conversion.php';

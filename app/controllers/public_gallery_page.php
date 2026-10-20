@@ -84,6 +84,7 @@ use function Gallery\Services\gallery_allows_gps_maps;
 use function Gallery\Services\gallery_background_asset_url;
 use function Gallery\Services\gallery_branch_image_count;
 use function Gallery\Services\gallery_branch_image_counts;
+use function Gallery\Services\gallery_branch_attachment_usage_counts;
 use function Gallery\Services\gallery_branding_asset_url;
 use function Gallery\Services\gallery_branding_schema_ready;
 use function Gallery\Services\gallery_breadcrumb_ancestors;
@@ -638,6 +639,23 @@ function cms_gallery(): void
         count($heroTagGroups['gallery']) + count($heroTagGroups['contained']);
     // $showHeroCountBadge keeps the opened-gallery summary aligned with the same Theme/per-gallery visibility policy used by gallery cards.
     $showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);
+    // Prepare visitor-safe unique attachment totals only when this gallery allows its count badge.
+    $heroMediaCounts = ['music' => 0, 'pdf' => 0];
+    if ($showHeroCountBadge) {
+        $heroGalleryId = (int) $gallery['id'];
+        $heroPdfCounts = gallery_branch_attachment_usage_counts(
+            [$heroGalleryId],
+            'pdf',
+        );
+        $heroMusicCounts = gallery_branch_attachment_usage_counts(
+            [$heroGalleryId],
+            'music',
+        );
+        $heroMediaCounts = [
+            'music' => (int) ($heroMusicCounts[$heroGalleryId] ?? 0),
+            'pdf' => (int) ($heroPdfCounts[$heroGalleryId] ?? 0),
+        ];
+    }
     // Never let the administrator bypass inflate the public-facing portion.
     $isCountAdmin = is_array($viewer) && !$anonymousPreview;
     $heroBranchImageCount = $showHeroCountBadge
@@ -713,6 +731,7 @@ function cms_gallery(): void
         'breadcrumbs_html' => $breadcrumbsHtml,
         'show_count_badge' => $showHeroCountBadge,
         'branch_image_count' => $heroBranchImageCount,
+        'media_counts' => $heroMediaCounts,
         'count_badge' => $heroCountBadge,
         'admin_actions_html' => $heroAdminActionsHtml,
         'download_enabled' => $downloadsEnabled,

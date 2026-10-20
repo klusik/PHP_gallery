@@ -30,7 +30,7 @@
  *   2026-10-03
  */
 
-import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261003-images-v4';
+import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261020-shift-range-v1';
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20261014-floating-scroll-v1';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261018-presentation-confirm-v1';
@@ -40,7 +40,7 @@ import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from 
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261016-cover-in-place-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
-import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-unified-media-forms-v1';
+import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261017-media-summary-v1';

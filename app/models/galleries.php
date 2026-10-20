@@ -81,6 +81,22 @@ use PDO;
 use function Gallery\Core\db;
 use function Gallery\Core\slugify;
 
+/** Bound the physical source key stored in one derived attachment projection.
+ * Type: int. Units: bytes. Scope: one source_id column value.
+ * Consumers: gallery_model_attachment_usage_replace.
+ * Rationale: Prefixed opaque PDF, OFP, track and assignment IDs fit within this schema limit.
+ * Value: 80 bytes per source key.
+ */
+const GALLERY_ATTACHMENT_USAGE_SOURCE_ID_BYTES = 80;
+
+/** Generate opaque attachment snapshot generation tokens.
+ * Type: int. Units: random bytes. Scope: one state insert or dirty transition.
+ * Consumers: gallery_model_attachment_usage_seed_empty and mark_dirty.
+ * Rationale: 128 random bits prevent accidental generation-token reuse.
+ * Value: 16 bytes per token.
+ */
+const GALLERY_ATTACHMENT_USAGE_REVISION_BYTES = 16;
+
 /**
  * Check whether any physical gallery exists, regardless of visibility or parent.
  * @return bool True for any persisted gallery; the bounded probe does not load the catalog.
@@ -845,6 +861,207 @@ function gallery_model_folder_paths(): array
      * @return bool True for any nonempty string, including whitespace.
      * @author Rudolf Klusal
      */ static fn(string $path): bool => $path !== ''));
+}
+
+/** Mark one derived attachment snapshot unavailable before its source changes.
+ * @param int $galleryId Persisted physical gallery identifier.
+ * @param string $kind Attachment kind: `pdf` or `music`.
+ * @return string Fresh opaque generation token required to publish the corresponding snapshot.
+ */
+function gallery_model_attachment_usage_mark_dirty(
+    int $galleryId,
+    string $kind,
+): string {
+    if ($galleryId <= 0 || !in_array($kind, ['pdf', 'music'], true)) {
+        throw new \InvalidArgumentException('Invalid attachment usage identity.');
+    }
+    $revision = bin2hex(random_bytes(GALLERY_ATTACHMENT_USAGE_REVISION_BYTES));
+    db()->prepare(
+        "INSERT INTO gallery_attachment_usage_state "
+        . "(gallery_id, kind, state, revision, updated_at) "
+        . "VALUES (?, ?, 'dirty', ?, NOW()) "
+        . "ON DUPLICATE KEY UPDATE state = 'dirty', revision = VALUES(revision), updated_at = NOW()",
+    )->execute([$galleryId, $kind, $revision]);
+    return $revision;
+}
+
+/** Insert a ready-empty snapshot only when no source generation exists yet.
+ * @param int $galleryId Persisted physical gallery identifier.
+ * @param string $kind Attachment kind: `pdf` or `music`.
+ * @return bool True when this call seeded the state; existing dirty or ready generations remain untouched.
+ */
+function gallery_model_attachment_usage_seed_empty(
+    int $galleryId,
+    string $kind,
+): bool {
+    if ($galleryId <= 0 || !in_array($kind, ['pdf', 'music'], true)) {
+        throw new \InvalidArgumentException('Invalid attachment usage identity.');
+    }
+    $revision = bin2hex(random_bytes(GALLERY_ATTACHMENT_USAGE_REVISION_BYTES));
+    $statement = db()->prepare(
+        "INSERT IGNORE INTO gallery_attachment_usage_state "
+        . '(gallery_id, kind, state, revision, updated_at) '
+        . "VALUES (?, ?, 'ready', ?, NOW())",
+    );
+    $statement->execute([$galleryId, $kind, $revision]);
+    return $statement->rowCount() === 1;
+}
+
+/** Replace one already-dirtied attachment snapshot atomically.
+ * @param int $galleryId Persisted physical gallery identifier.
+ * @param string $kind Attachment kind: `pdf` or `music`.
+ * @param list<array{source_id:string,sha256:?string,asset_id:?string,album_id:?int,hidden:bool}> $items Validated source rows, with exactly one of digest, canonical asset, or album reference.
+ * @param string $revision Generation token returned by the preceding dirty mark.
+ * @return bool True when this publisher still owned the generation and installed all rows.
+ * @throws \RuntimeException When a source row is invalid or persistence fails.
+ */
+function gallery_model_attachment_usage_replace(
+    int $galleryId,
+    string $kind,
+    array $items,
+    string $revision,
+): bool {
+    if ($galleryId <= 0 || !in_array($kind, ['pdf', 'music'], true)) {
+        throw new \InvalidArgumentException('Invalid attachment usage identity.');
+    }
+    if (preg_match('/^[a-f0-9]{32}$/D', $revision) !== 1) {
+        throw new \InvalidArgumentException('Invalid attachment usage generation.');
+    }
+    foreach ($items as $item) {
+        $hasDigest = is_string($item['sha256'] ?? null)
+            && preg_match('/^[a-f0-9]{64}$/D', $item['sha256']) === 1;
+        $hasAsset = is_string($item['asset_id'] ?? null)
+            && preg_match('/^[a-f0-9]{32}$/D', $item['asset_id']) === 1;
+        $hasAlbum = is_int($item['album_id'] ?? null)
+            && $item['album_id'] > 0;
+        if (
+            !is_string($item['source_id'] ?? null)
+            || $item['source_id'] === ''
+            || strlen($item['source_id']) > GALLERY_ATTACHMENT_USAGE_SOURCE_ID_BYTES
+            || (int) $hasDigest + (int) $hasAsset + (int) $hasAlbum !== 1
+            || !is_bool($item['hidden'] ?? null)
+        ) {
+            throw new \RuntimeException('Invalid attachment usage item.');
+        }
+    }
+    $pdo = db();
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $current = $pdo->prepare(
+            'SELECT revision, state FROM gallery_attachment_usage_state '
+            . 'WHERE gallery_id = ? AND kind = ? FOR UPDATE',
+        );
+        $current->execute([$galleryId, $kind]);
+        $currentRow = $current->fetch(\PDO::FETCH_ASSOC);
+        if (
+            !is_array($currentRow)
+            || (string) $currentRow['revision'] !== $revision
+            || (string) $currentRow['state'] !== 'dirty'
+        ) {
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
+            return false;
+        }
+        $pdo->prepare(
+            'DELETE FROM gallery_attachment_usage_items '
+            . 'WHERE gallery_id = ? AND kind = ?',
+        )->execute([$galleryId, $kind]);
+        $insert = $pdo->prepare(
+            'INSERT INTO gallery_attachment_usage_items '
+            . '(gallery_id, kind, source_id, sha256, asset_id, album_id, hidden) '
+            . 'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        );
+        foreach ($items as $item) {
+            $insert->execute([
+                $galleryId,
+                $kind,
+                $item['source_id'],
+                $item['sha256'],
+                $item['asset_id'],
+                $item['album_id'],
+                $item['hidden'] ? 1 : 0,
+            ]);
+        }
+        $ready = $pdo->prepare(
+            "UPDATE gallery_attachment_usage_state "
+            . "SET state = 'ready', updated_at = NOW() "
+            . "WHERE gallery_id = ? AND kind = ? AND revision = ?",
+        );
+        $ready->execute([$galleryId, $kind, $revision]);
+        if ($ready->rowCount() !== 1) {
+            if ($ownsTransaction) {
+                $pdo->rollBack();
+            }
+            return false;
+        }
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return true;
+    } catch (\Throwable $error) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+}
+
+/** Read digest rows for ready snapshots in the requested descendant set.
+ * @param list<int> $galleryIds Descendant gallery identifiers already filtered by public access.
+ * @param string $kind Attachment kind: `pdf` or `music`.
+ * @return array{states:array<int,string>,items:list<array{gallery_id:int,sha256:?string,hidden:bool}>} Snapshot statuses and canonical public-visibility source digests.
+ */
+function gallery_model_attachment_usage_rows(
+    array $galleryIds,
+    string $kind,
+): array {
+    if ($galleryIds === [] || !in_array($kind, ['pdf', 'music'], true)) {
+        return ['states' => [], 'items' => []];
+    }
+    $marks = implode(',', array_fill(0, count($galleryIds), '?'));
+    $stateMap = [];
+    $musicJoins = $kind === 'music'
+        ? ' LEFT JOIN music_album_songs mas ON mas.album_id = u.album_id '
+            . 'LEFT JOIN music_repository_assets album_asset ON '
+            . 'album_asset.id = (SELECT canonical_asset.id '
+            . 'FROM music_repository_assets canonical_asset '
+            . 'WHERE canonical_asset.song_id = mas.song_id '
+            . 'ORDER BY canonical_asset.created_at, canonical_asset.id LIMIT 1) '
+            . 'LEFT JOIN music_repository_assets direct_asset '
+            . 'ON direct_asset.id = u.asset_id '
+        : '';
+    $digestExpression = $kind === 'music'
+        ? 'CASE WHEN u.asset_id IS NOT NULL THEN direct_asset.sha256 '
+            . 'WHEN u.album_id IS NOT NULL THEN album_asset.sha256 '
+            . 'ELSE u.sha256 END'
+        : 'u.sha256';
+    $items = db()->prepare(
+        'SELECT s.gallery_id, s.state, ' . $digestExpression
+        . ' AS sha256, u.hidden FROM gallery_attachment_usage_state s '
+        . 'LEFT JOIN gallery_attachment_usage_items u '
+        . 'ON u.gallery_id = s.gallery_id AND u.kind = s.kind '
+        . $musicJoins
+        . "WHERE s.kind = ? AND s.gallery_id IN ($marks)",
+    );
+    $items->execute(array_merge([$kind], $galleryIds));
+    $rows = [];
+    foreach ($items->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+        $galleryId = (int) $row['gallery_id'];
+        $stateMap[$galleryId] = (string) $row['state'];
+        if ((string) $row['state'] !== 'ready' || $row['hidden'] === null) {
+            continue;
+        }
+        $rows[] = [
+            'gallery_id' => $galleryId,
+            'sha256' => is_string($row['sha256']) ? $row['sha256'] : null,
+            'hidden' => (bool) $row['hidden'],
+        ];
+    }
+    return ['states' => $stateMap, 'items' => $rows];
 }
 
 /**

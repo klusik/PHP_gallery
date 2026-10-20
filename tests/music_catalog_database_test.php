@@ -161,6 +161,7 @@ namespace {
     use function Gallery\Services\music_catalog_list;
     use function Gallery\Services\music_catalog_restore_trash_snapshot;
     use function Gallery\Services\music_catalog_revision;
+    use function Gallery\Services\music_catalog_song_details;
     use function Gallery\Services\music_catalog_set_song_title;
     use function Gallery\Services\music_catalog_split;
     use function Gallery\Services\music_catalog_set_show_file_extensions;
@@ -532,6 +533,18 @@ namespace {
             . "WHERE gallery_id = $galleryA "
             . "AND track_id = '$trackOneId'",
         )->fetchColumn();
+        $urlDetails = music_catalog_song_details([$songId])[$songId] ?? [];
+        $urlGalleryRows = is_array($urlDetails['galleries'] ?? null)
+            ? $urlDetails['galleries']
+            : [];
+        check(
+            array_keys($urlGalleryRows) === [$galleryA]
+                && array_keys($urlGalleryRows[$galleryA]) === [
+                    'id', 'url_path', 'slug', 'folder_path', 'title',
+                ]
+                && !isset($urlGalleryRows[$galleryD]),
+            'Song details must return only referenced extant gallery URL fields, excluding unrelated galleries.',
+        );
         $variantId = (int) $pdo->query(
             "SELECT song_id FROM music_track_instances "
             . "WHERE gallery_id = $galleryA "

@@ -23,6 +23,7 @@ use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\e;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\require_admin;
@@ -60,6 +61,14 @@ use function Gallery\Views\view_render_admin_music;
  */
 const ADMIN_MUSIC_PAGE_SIZE = 50;
 
+/** Require a real multi-song selection before presenting a merge survivor.
+ * Type: int. Units: selected song identities. Scope: one catalog merge.
+ * Consumers: cms_admin_music, admin_music_merge_songs.
+ * Rationale: merging one row cannot combine catalog identities and provides no
+ * meaningful survivor choice. Value: 2 selected songs.
+ */
+const ADMIN_MUSIC_MERGE_MINIMUM = 2;
+
 /**
  * Bound existing-playlist import work so the administrator can resume it.
  * Type: int. Units: records. Scope: one explicit reconciliation request.
@@ -68,6 +77,26 @@ const ADMIN_MUSIC_PAGE_SIZE = 50;
  * Value: 20 records per request.
  */
 const ADMIN_MUSIC_RECONCILE_BATCH_SIZE = 20;
+
+/** Build a canonical public gallery URL carrying the active visitor language.
+ *
+ * @param array{id:int|string,url_path:string|null,slug:string|null,folder_path:string|null,title:string|null} $gallery Existing gallery fields consumed by the canonical URL helper.
+ * @return string Canonical public URL with the active language query value.
+ */
+function admin_music_gallery_url(array $gallery): string
+{
+    $url = gallery_public_url($gallery);
+    $fragment = '';
+    $fragmentPosition = strpos($url, '#');
+    if ($fragmentPosition !== false) {
+        $fragment = substr($url, $fragmentPosition);
+        $url = substr($url, 0, $fragmentPosition);
+    }
+    $separator = str_contains($url, '?') ? '&' : '?';
+    return $url . $separator . http_build_query([
+        'lang' => translation_active_language(),
+    ], '', '&', PHP_QUERY_RFC3986) . $fragment;
+}
 
 /**
  * Handle the global Music Manager page and its revisioned catalog mutations.
@@ -234,34 +263,17 @@ function cms_admin_music(): void
             $songTagLabels[(int) $songId] = $tagNames;
             $songTags[(int) $songId] = implode(', ', $tagNames);
         }
-        $galleryIds = [];
+        $galleryRows = [];
         foreach ($songDetails as $songDetail) {
-            foreach ($songDetail['tracks'] ?? [] as $track) {
-                $galleryId = (int) ($track['gallery_id'] ?? 0);
-                if ($galleryId > 0) {
-                    $galleryIds[$galleryId] = $galleryId;
-                }
-            }
-            foreach ($songDetail['direct_galleries'] ?? [] as $gallery) {
-                $galleryId = (int) ($gallery['gallery_id'] ?? 0);
-                if ($galleryId > 0) {
-                    $galleryIds[$galleryId] = $galleryId;
-                }
-            }
-            foreach ($songDetail['live_albums'] ?? [] as $placement) {
-                $galleryId = (int) ($placement['gallery_id'] ?? 0);
-                if ($galleryId > 0) {
-                    $galleryIds[$galleryId] = $galleryId;
+            foreach ($songDetail['galleries'] ?? [] as $galleryId => $gallery) {
+                if (is_array($gallery) && (int) $galleryId > 0) {
+                    $galleryRows[(int) $galleryId] = $gallery;
                 }
             }
         }
         $galleryUrls = [];
-        $activeLanguage = translation_active_language();
-        foreach ($galleryIds as $galleryId) {
-            $galleryUrls[$galleryId] = url_for('gallery', [
-                'id' => $galleryId,
-                'lang' => $activeLanguage,
-            ]);
+        foreach ($galleryRows as $galleryId => $gallery) {
+            $galleryUrls[$galleryId] = admin_music_gallery_url($gallery);
         }
         $albums = music_catalog_album_tree();
         $dirtyStatus = music_catalog_dirty_status();
@@ -339,6 +351,7 @@ function cms_admin_music(): void
         'sort_urls' => $sortUrls,
         'offset' => $offset,
         'limit' => ADMIN_MUSIC_PAGE_SIZE,
+        'merge_minimum' => ADMIN_MUSIC_MERGE_MINIMUM,
         'catalog' => $catalog,
         'song_details' => $songDetails,
         'song_tags' => $songTags,
@@ -421,7 +434,13 @@ function admin_music_gallery_contexts(array $songIds): array
         return [];
     }
     $galleryIds = [];
+    $galleryRows = [];
     foreach ($details as $songDetail) {
+        foreach ($songDetail['galleries'] ?? [] as $galleryId => $galleryRow) {
+            if (is_array($galleryRow) && (int) $galleryId > 0) {
+                $galleryRows[(int) $galleryId] = $galleryRow;
+            }
+        }
         foreach ($songDetail['direct_galleries'] ?? [] as $gallery) {
             $galleryId = (int) ($gallery['gallery_id'] ?? 0);
             if ($galleryId > 0) {
@@ -437,9 +456,12 @@ function admin_music_gallery_contexts(array $songIds): array
     }
     $contexts = [];
     foreach ($galleryIds as $galleryId) {
+        if (!isset($galleryRows[$galleryId])) {
+            continue;
+        }
         $contexts[] = admin_mutation_public_gallery_context(
             $galleryId,
-            url_for('gallery', ['id' => $galleryId]),
+            admin_music_gallery_url($galleryRows[$galleryId]),
         );
     }
     return $contexts;
@@ -576,7 +598,8 @@ function admin_music_merge_songs(
     int $survivorId,
     string $revision,
 ): string {
-    if (count($songIds) < 2 || !in_array($survivorId, $songIds, true)) {
+    if (count($songIds) < ADMIN_MUSIC_MERGE_MINIMUM
+        || !in_array($survivorId, $songIds, true)) {
         throw new \InvalidArgumentException('invalid_selection');
     }
     music_catalog_merge(

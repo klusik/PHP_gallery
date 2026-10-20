@@ -74,9 +74,111 @@ namespace Gallery\Services {
         }
         return $fallback;
     }
+
+    /** Record and return the fixture's descendant-preload request.
+     * @param list<int> $galleryIds Requested root gallery IDs.
+     * @param bool $publicOnly Apply public-listing restrictions.
+     * @return void
+     */
+    function child_galleries_tree_preload(
+        array $galleryIds,
+        bool $publicOnly,
+    ): void {
+        $GLOBALS['gallery_count_modes_preload_calls'][] = [
+            'gallery_ids' => $galleryIds,
+            'public_only' => $publicOnly,
+        ];
+    }
+
+    /** Resolve the test's protected-mode sentinel through a narrow access adapter.
+     * @param array{id:int,access_mode?:string,parent_id?:int|null} $gallery Fixture gallery fields.
+     * @return array{id:int,access_mode?:string,parent_id?:int|null}|null Protected gallery row or no requirement.
+     */
+    function gallery_access_requirement(array $gallery): ?array
+    {
+        return ($gallery['access_mode'] ?? 'normal') === 'password'
+            ? $gallery
+            : null;
+    }
+
+    /** Return one deterministic image-count batch for controller setup.
+     * @param list<int> $galleryIds Countable gallery IDs.
+     * @param bool $publicOnly Apply visitor listing restrictions.
+     * @param bool $withoutAdminBypass Apply visitor access under Admin.
+     * @return array<int,int> Fixture counts keyed by gallery ID.
+     */
+    function gallery_branch_image_counts(
+        array $galleryIds,
+        bool $publicOnly,
+        bool $withoutAdminBypass = false,
+    ): array {
+        return array_fill_keys($galleryIds, 7);
+    }
+
+    /** Record one batched attachment projection read with deterministic rows.
+     * @param list<int> $galleryIds Eligible root gallery IDs.
+     * @param string $kind Requested PDF or music category.
+     * @param bool $withoutAdminBypass Apply ordinary visitor access.
+     * @return array<int,int> Prepared fixture totals keyed by gallery ID.
+     */
+    function gallery_branch_attachment_usage_counts(
+        array $galleryIds,
+        string $kind,
+        bool $withoutAdminBypass = true,
+    ): array {
+        $GLOBALS['gallery_count_modes_usage_calls'][] = [
+            'gallery_ids' => $galleryIds,
+            'kind' => $kind,
+            'without_admin_bypass' => $withoutAdminBypass,
+        ];
+        return array_intersect_key(
+            $GLOBALS['gallery_count_modes_usage_rows'][$kind] ?? [],
+            array_fill_keys($galleryIds, true),
+        );
+    }
+
+    /** Provide an explicit fixture cover asset without image lookups.
+     * @param array{id:int,access_mode?:string} $gallery Gallery identity.
+     * @param bool $publicOnly Apply public cover policy.
+     * @return string Stable fixture asset URL.
+     */
+    function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
+    {
+        return '/fixture-cover.jpg';
+    }
+
+    /** Warm no cover images because the fixture always uses an asset.
+     * @param list<array{id:int,gallery_id:int,relative_path:string}> $images Prepared thumbnail rows; this asset-backed fixture leaves the list empty.
+     * @return void
+     */
+    function thumbnail_bundles_preload(array $images): void {}
+
+    /** Report whether the fixture's current user is under the Admin age limit.
+     * @return bool False for the adult-only badge case.
+     */
+    function current_user_is_known_under_18(): bool
+    {
+        return false;
+    }
 }
 
 namespace Gallery\Core {
+    /** Return the explicitly selected fixture session.
+     * @return array{id:int}|null Authenticated user or public visitor.
+     */
+    function current_user(): ?array
+    {
+        return $GLOBALS['gallery_count_modes_test_user'] ?? null;
+    }
+
+    /** Keep the isolated controller context outside anonymous preview mode.
+     * @return bool False for this owned context fixture.
+     */
+    function admin_anonymous_preview_active(): bool
+    {
+        return false;
+    }
+
     /**
      * Escape accessible HTML labels just as the application does.
      *
@@ -91,7 +193,11 @@ namespace Gallery\Core {
 
 namespace {
     require_once __DIR__ . '/../app/services/gallery_count_badges.php';
+    require_once __DIR__ . '/../app/views/gallery_descriptions.php';
     require_once __DIR__ . '/../app/views/public_gallery_cards.php';
+    require_once __DIR__ . '/../app/views/public_tags.php';
+    require_once __DIR__ . '/../app/views/public_gallery_pages.php';
+    require_once __DIR__ . '/../app/controllers/public_gallery_cards.php';
 
     /** Reject an invalid counter contract without continuing to later cases. */
     $check = static function (bool $condition, string $message): void {
@@ -99,6 +205,296 @@ namespace {
             throw new \RuntimeException($message);
         }
     };
+
+    $renderPublicCard = static function (array $overrides = []): string {
+        ob_start();
+        \Gallery\Views\view_render_public_gallery_card(array_merge([
+            'gallery_id' => 42,
+            'title' => 'Prepared media counts',
+            'url' => '/gallery/42',
+            'visibility' => 'public',
+            'description' => '',
+        ], $overrides));
+        return (string) ob_get_clean();
+    };
+
+    $renderHero = static function (array $overrides = []): string {
+        ob_start();
+        \Gallery\Views\view_render_public_gallery_hero(array_merge([
+            'gallery_id' => 42,
+            'show_count_badge' => true,
+            'branch_image_count' => 7,
+            'media_counts' => ['music' => 2, 'pdf' => 3],
+        ], $overrides));
+        return (string) ob_get_clean();
+    };
+
+    $heroHtml = $renderHero();
+    $heroPdfPosition = strpos($heroHtml, 'gallery-media-count-icon-pdf');
+    $heroMusicPosition = strpos($heroHtml, 'gallery-media-count-icon-music');
+    $heroPhotoPosition = strpos($heroHtml, 'subgallery-stack-icon');
+    $check(
+        $heroPdfPosition !== false
+            && $heroMusicPosition !== false
+            && $heroPhotoPosition !== false
+            && $heroPdfPosition < $heroMusicPosition
+            && $heroMusicPosition < $heroPhotoPosition
+            && str_contains($heroHtml, '3 unique PDF files')
+            && str_contains($heroHtml, '2 unique music files'),
+        'Opened galleries place accessible prepared PDF and music counts before the photo badge.',
+    );
+    $check(
+        !str_contains(
+            $renderHero(['show_count_badge' => false]),
+            'gallery-hero-count-badge',
+        ),
+        'Disabled gallery count policy suppresses every hero count badge.',
+    );
+    $emptyHero = $renderHero([
+        'media_counts' => ['music' => 0, 'pdf' => 0],
+    ]);
+    $check(
+        !str_contains($emptyHero, 'gallery-media-count-badge')
+            && str_contains($emptyHero, 'subgallery-stack-icon'),
+        'Empty or unavailable media counts leave the existing photo badge intact.',
+    );
+    foreach (['pdf', 'music'] as $onlyKind) {
+        $onlyHero = $renderHero([
+            'media_counts' => [
+                'pdf' => $onlyKind === 'pdf' ? 3 : 0,
+                'music' => $onlyKind === 'music' ? 2 : 0,
+            ],
+        ]);
+        $otherKind = $onlyKind === 'pdf' ? 'music' : 'pdf';
+        $check(
+            str_contains($onlyHero, 'gallery-media-count-icon-' . $onlyKind)
+                && !str_contains(
+                    $onlyHero,
+                    'gallery-media-count-icon-' . $otherKind,
+                ),
+            'Each positive hero media kind renders independently.',
+        );
+    }
+
+    $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_mode'] = 'both';
+    $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_icons_enabled'] = '1';
+    $GLOBALS['gallery_count_modes_usage_rows'] = [
+        'pdf' => [41 => 3, 44 => 4],
+        'music' => [41 => 2, 44 => 5],
+    ];
+    $contextGalleries = [
+        ['id' => 41, 'access_mode' => 'normal'],
+        ['id' => 42, 'access_mode' => 'normal', 'count_badge_visibility' => 'hide'],
+        ['id' => 43, 'access_mode' => 'password'],
+        ['id' => 44, 'access_mode' => 'normal'],
+    ];
+    $GLOBALS['gallery_count_modes_test_user'] = null;
+    $GLOBALS['gallery_count_modes_usage_calls'] = [];
+    $publicContexts =
+        \Gallery\Controllers\public_gallery_card_rendering_contexts(
+            $contextGalleries,
+            true,
+            true,
+        );
+    $expectedUsageCalls = [
+        [
+            'gallery_ids' => [41, 44],
+            'kind' => 'pdf',
+            'without_admin_bypass' => true,
+        ],
+        [
+            'gallery_ids' => [41, 44],
+            'kind' => 'music',
+            'without_admin_bypass' => true,
+        ],
+    ];
+    $check(
+        $GLOBALS['gallery_count_modes_usage_calls'] === $expectedUsageCalls
+            && $publicContexts[41]['media_counts'] === [
+                'pdf' => 3,
+                'music' => 2,
+            ]
+            && $publicContexts[44]['media_counts'] === [
+                'pdf' => 4,
+                'music' => 5,
+            ]
+            && $publicContexts[42]['media_counts'] === [
+                'pdf' => 0,
+                'music' => 0,
+            ]
+            && $publicContexts[43]['media_counts'] === [
+                'pdf' => 0,
+                'music' => 0,
+            ],
+        'Public batched contexts prepare visible media counts and keep disabled/protected cards at zero without projection reads.',
+    );
+
+    $GLOBALS['gallery_count_modes_test_user'] = ['id' => 7];
+    $GLOBALS['gallery_count_modes_usage_calls'] = [];
+    $adminContexts =
+        \Gallery\Controllers\public_gallery_card_rendering_contexts(
+            $contextGalleries,
+            false,
+            true,
+        );
+    $check(
+        $GLOBALS['gallery_count_modes_usage_calls'] === $expectedUsageCalls
+            && $adminContexts[41]['media_counts'] === [
+                'pdf' => 3,
+                'music' => 2,
+            ]
+            && $adminContexts[43]['media_counts'] === [
+                'pdf' => 0,
+                'music' => 0,
+            ],
+        'Authenticated Admin contexts still batch visitor-safe counts and omit protected-card projections.',
+    );
+
+    $GLOBALS['gallery_count_modes_test_user'] = null;
+    $GLOBALS['gallery_count_modes_usage_calls'] = [];
+    $disabledContexts =
+        \Gallery\Controllers\public_gallery_card_rendering_contexts(
+            [$contextGalleries[1]],
+            true,
+            true,
+        );
+    $check(
+        $GLOBALS['gallery_count_modes_usage_calls'] === []
+            && $disabledContexts[42]['media_counts'] === [
+                'pdf' => 0,
+                'music' => 0,
+            ],
+        'A disabled card count setting produces zero media sentinels without projection reads.',
+    );
+
+    $GLOBALS['gallery_count_modes_usage_calls'] = [];
+    $omittedCountContexts =
+        \Gallery\Controllers\public_gallery_card_rendering_contexts(
+            [$contextGalleries[0], $contextGalleries[3]],
+            true,
+            false,
+        );
+    $check(
+        $GLOBALS['gallery_count_modes_usage_calls'] === []
+            && $omittedCountContexts[41]['media_counts'] === [
+                'pdf' => 0,
+                'music' => 0,
+            ]
+            && $omittedCountContexts[44]['media_counts'] === [
+                'pdf' => 0,
+                'music' => 0,
+            ],
+        'includeCounts=false emits zero sentinels without any optional projection reads.',
+    );
+    $GLOBALS['gallery_count_modes_test_user'] = null;
+
+    $renderedMediaCard = $renderPublicCard([
+        'show_count_badge' => true,
+        'branch_image_count' => 7,
+        'count_badge' => \Gallery\Services\gallery_count_badge_presentation(
+            ['count_badge_visibility' => null],
+            true,
+            7,
+            11,
+        ),
+        'media_counts' => ['music' => 2, 'pdf' => 3],
+        'cover_asset' => '/fixture-cover.jpg',
+    ]);
+    $photoBadgePosition = strpos(
+        $renderedMediaCard,
+        'gallery-count-badge-admin',
+    );
+    $pdfBadgePosition = strpos(
+        $renderedMediaCard,
+        'gallery-media-count-icon-pdf',
+    );
+    $musicBadgePosition = strpos(
+        $renderedMediaCard,
+        'gallery-media-count-icon-music',
+    );
+    $check(
+        str_contains($renderedMediaCard, 'gallery-card-media-count-stack')
+            && $photoBadgePosition !== false
+            && $pdfBadgePosition !== false
+            && $musicBadgePosition !== false
+            && $photoBadgePosition < $pdfBadgePosition
+            && $pdfBadgePosition < $musicBadgePosition,
+        'Admin photo count remains first with PDF then music counts in one stack.',
+    );
+    $check(
+        str_contains($renderedMediaCard, '3 unique PDF files')
+            && str_contains($renderedMediaCard, '2 unique music files')
+            && str_contains($renderedMediaCard, 'gallery-count-badge-admin'),
+        'Card consumes prepared media counts and retains its accessible Admin photo counter.',
+    );
+
+    $pdfOnlyCard = $renderPublicCard([
+        'show_count_badge' => true,
+        'media_counts' => ['music' => 0, 'pdf' => 4],
+    ]);
+    $check(
+        str_contains($pdfOnlyCard, 'gallery-card-media-count-stack')
+            && str_contains($pdfOnlyCard, '4 unique PDF files')
+            && !str_contains($pdfOnlyCard, 'gallery-media-count-icon-music')
+            && !str_contains($pdfOnlyCard, 'gallery-count-badge-admin'),
+        'A positive PDF count renders by itself while zero music stays absent.',
+    );
+    $check(
+        !str_contains(
+            $renderPublicCard([
+                'show_count_badge' => false,
+                'media_counts' => ['music' => 2, 'pdf' => 3],
+            ]),
+            'gallery-media-count-badge',
+        ),
+        'Disabled count-badge policy suppresses prepared media counts.',
+    );
+    $check(
+        !str_contains(
+            $renderPublicCard([
+                'show_count_badge' => true,
+                'is_protected' => true,
+                'media_counts' => ['music' => 2, 'pdf' => 3],
+            ]),
+            'gallery-media-count-badge',
+        ),
+        'Protected cards suppress media counts even when the count setting is enabled.',
+    );
+    $check(
+        !str_contains(
+            $renderPublicCard([
+                'show_count_badge' => false,
+                'media_counts' => ['music' => 0, 'pdf' => 0],
+            ]),
+            'gallery-card-media-count-stack',
+        ),
+        'Cards without an enabled photo-count policy or positive media counts retain no badge stack.',
+    );
+
+    foreach ([
+        ['cover_asset' => '/fixture-cover.jpg'],
+        ['cover_picture_html' => '<picture><img src="/cover.jpg" alt=""></picture>'],
+        ['collage_picture_html' => ['<span class="gallery-collage"></span>']],
+        [],
+    ] as $renderBranch) {
+        $branchCard = $renderPublicCard(array_merge(
+            [
+                'show_count_badge' => true,
+                'media_counts' => ['music' => 1, 'pdf' => 1],
+            ],
+            $renderBranch,
+        ));
+        $stackPosition = strpos(
+            $branchCard,
+            'gallery-card-media-count-stack',
+        );
+        $coverPosition = strpos($branchCard, '<img');
+        $check(
+            $stackPosition !== false
+                && ($coverPosition === false || $stackPosition < $coverPosition),
+            'Media counts use the same pre-cover position for every physical-card render branch.',
+        );
+    }
 
     $GLOBALS['gallery_count_modes_test_settings'] = [
         // This is the OLD boolean preference. It must not block the new first-upgrade default.

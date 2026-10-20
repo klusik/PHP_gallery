@@ -67,11 +67,12 @@ use function Gallery\Services\runtime_support_health_status;
 use function Gallery\Views\view_render_admin_diagnostics_page;
 
 /**
- * Authenticate and prepare the runtime, shared schema-health, and conversion report.
+ * Authenticate and prepare runtime, schema-health, and conversion reports.
  *
  * GET observes bounded maintenance state without recovering pending mutations.
  * POST verifies CSRF before persisting the selected DNG conversion policies.
- * Raw schema exceptions and journal paths never enter the prepared health cards.
+ * Shared health includes optional gallery media-count schema readiness. Raw
+ * schema exceptions and journal paths never enter the prepared health cards.
  *
  * @return void Render the prepared diagnostics page, or redirect after a policy update.
  */
@@ -221,6 +222,14 @@ function cms_admin_diagnostics(): void
         'presentation_navigation_account' => 'Navigation account storage',
         'presentation_telemetry_reporting' => 'Telemetry reporting',
         'presentation_admin_gallery_report' => 'Complete Admin gallery report',
+        'presentation_gallery_attachment_usage' => t(
+            'admin.dashboard.presentation_schema_feature_attachment_usage',
+            'Gallery media counts',
+        ),
+        'presentation_gallery_attachment_usage_music' => t(
+            'admin.dashboard.presentation_schema_feature_attachment_usage_music',
+            'Music count catalog',
+        ),
         'mutation_gallery_delete' => t(
             'admin.dashboard.mutation_schema_feature_gallery_delete',
             'Gallery and image deletion',

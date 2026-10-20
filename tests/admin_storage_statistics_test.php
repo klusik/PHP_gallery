@@ -467,6 +467,7 @@ namespace {
 
     require_once __DIR__ . '/../app/services/admin_storage_statistics.php';
     require_once __DIR__ . '/../app/services/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/presentation_schema_policy.php';
 
     // Exercise the production three-state combiner without a database. An
     // absent table is the original installation; a partial table must warn.

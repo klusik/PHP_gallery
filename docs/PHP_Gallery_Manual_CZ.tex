@@ -604,6 +604,8 @@ průběžně aktualizuje; výsledky může změnit pouze nejnovější požadave
 odděluje Název, Soubory, Umístění, Štítky a~Akce. Kliknutím na~název skladby
 otevřete editor s~možností přejmenovat skladbu, přidat ji~do~alba a~otevřít její
 štítky, soubory nebo umístění; samostatné zaškrtávací pole vybírá skladbu ke~sloučení.
+Nabídka volby zachované skladby obsahuje jen vybrané skladby a~zvolená skladba
+v~ní zůstane pouze do~té doby, dokud je~součástí výběru.
 Záložka \ui{Skladby} zobrazuje katalog přes celou šířku. \ui{Alba a~playlisty}
 mají strom a~vytváření vlevo a~vybrané album se~skladbami vpravo; na~úzké obrazovce
 se~panely řadí pod sebe. Bez výběru se~zobrazí výzva k~výběru nebo vytvoření alba.
@@ -615,8 +617,9 @@ zůstane na~svém místě. Skladbu lze za~úchyt přetáhnout na~jinou pozici v~
 Ve sloupci Soubory rozbalení vypisuje fyzické varianty. Umístění zobrazuje
 přímé galerie a~hudební alba: dvě varianty v~jedné galerii se počítají jako jedno
 umístění; odvozené zařazení Smart se nepočítá. Odkazy na~galerie v~obou
-rozbaleních otevírají veřejnou galerii a~každý hudební štítek má vlastní
-kompaktní značku.
+rozbaleních otevírají veřejnou galerii přes její kanonickou adresu, aktuální
+jazyk a~nastavený způsob přepisování URL; pokud galerie chybí, odkaz se nezobrazí.
+Každý hudební štítek má vlastní kompaktní značku.
 Odkazy v~záhlaví řadí Název, Soubory, Umístění nebo Štítky oběma směry nad
 celým výsledkem ještě před stránkováním; shody se stabilně řadí podle ID.
 Štítky se řadí abecedně podle prvního hudebního štítku skladby.
@@ -626,6 +629,9 @@ Správce sdílí typografii a~zvýrazňující barvy webu; jeho plochy jsou komp
 průsvitné a~mají jemně zaoblené okraje. Počet souborů je vedle názvu skladby
 znázorněn ikonou vrstev a~číslem. Rozbalení variant a~umístění respektuje
 globální dobu animace pravého panelu administrace; hodnota 0 je okamžitá.
+Plovoucí rozbalení řádku se zavře kliknutím mimo, opětovným kliknutím na~stejný
+spouštěč, klávesou Escape nebo otevřením jiného rozbalení řádku. Interakce uvnitř
+otevřeného rozbalení je nezavře a~kompaktní rozložení řádků zůstává zachováno.
 
 Ozubené kolečko v~záhlaví katalogu obsahuje globální volbu přípon souborů.
 Sousední kolečko nového alba skrývá volbu nadřazeného alba i~popis, dokud
@@ -643,6 +649,8 @@ vizuální a~původní soubor se nikdy nepřejmenuje. Globální volba
 \ui{Zobrazovat přípony v názvech skladeb} je výchozí vypnutá i~po upgradu
 a~ovlivňuje jen názvy odvozené ze souboru; vlastní názvy zachovají svůj text.
 Vybrané skladby lze po náhledu výslovně spojit se~zvolenými metadaty.
+Jako přeživší lze zvolit pouze označenou skladbu; zůstane zachována jen tehdy,
+když je~stále součástí výběru.
 Odpojení varianty opraví chybnou vazbu. Spojení nezpřístupní jiný zdroj
 a~nemění jeho oprávnění ke stažení.
 
@@ -731,6 +739,16 @@ Centrální originál se~v~úložišti počítá pouze jednou bez ohledu na~poč
 nepřesunuté lokální kopie se~počítají zvlášť. Smazání galerie odstraní její
 vazby, nikoli sdílený originál. ZIP export fotografií a~přenos galerie hudbu
 nezahrnují. Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
+
+Stejné Centrum údržby nabízí předem vybranou, volitelnou kontrolu starších
+počtů PDF a~hudby na veřejných kartách. Pokračuje po dávkách nejvýše 25 galerií
+a~v~každé dávce zahashuje nejvýše jeden starší kandidát OFP do~25~MiB. Chybějící
+nebo neověřené počty zůstanou skryté. Analýza nečte originály a~úloha je nemění.
+Ruční změny souborů vyžadují opětovnou kontrolu. Pokud starší OFP nemá otisk,
+úloha jej zahashuje pod trvalým sdíleným zámkem a~otisk atomicky uloží do~jeho
+manifestu; bajty PDF ani zvuku nezmění. Kontrola hudby může vytvořit soukromou
+zamykací složku \filepath{.gallery-music/}. Nová galerie bez metadat zdrojů může
+začít se známými nulovými počty.
 
 \subsection{Úprava identity a~souvislostí}
 \index{m00084@metadata galerie}
@@ -2253,7 +2271,7 @@ Editor Vzhledu nepoužívá samostatný přepínač světlého a~tmavého režim
 
 Globální styl drobečkové navigace nastavte ve \ui{Vzhled > Rozvržení > Karty a~odznaky}. Každou volbu představuje nativní přepínací karta se skutečným vykresleným příkladem, takže lze vybírat podle vzhledu. Karta \ui{Výchozí / převzít z nastavení vzhledu} v~editorech galerie a~chytré galerie ukazuje právě účinný styl Vzhledu. Ovládání podporuje klávesnici a~funguje i~bez JavaScriptu. Stabilní identifikátory jsou \codeword{minimal}, \codeword{chevron}, \codeword{pills}, \codeword{surface}, \codeword{ribbon}, \codeword{nodes}, \codeword{tabs}, \codeword{tiles} a~\codeword{gradient}. Stužka (\codeword{ribbon}) tvoří šipkové segmenty; Propojené uzly (\codeword{nodes}) spojují ozdobné body; Záložky (\codeword{tabs}) jsou kompaktní; Dlaždice (\codeword{tiles}) jsou vystouplé obdélníkové karty; Barevný přechod (\codeword{gradient}) přidává povrch barvy motivu s~ozdobným pruhem.
 
-Každá zkratka může cílit na hlavní stránku, jednu galerii nebo zůstat prázdná. Anonymní návštěvníci vidí pouze nastavené zkratky galerií, které jsou stále veřejné a~uvedené v~seznamech; duplicitní nebo odstraněné galerie se při uložení nastavení vyřadí. Ponechání všech tří pozic prázdných skryje tlačítka oblíbených galerií. Karty galerií mohou zobrazovat také nastavitelný odznak počtu obsažených fotografií. Je-li odznak pro galerii účinný, otevření galerie zachovává stejný počet větve viditelný v~úvodním panelu: počítá obrázky v~aktuální galerii a~jejích přístupných podgaleriích podle stejných pravidel veřejnosti a~přístupu jako karta. Prezentace jednotlivé galerie může dědit výchozí hodnoty webu nebo přepsat volby nabízené editorem galerie.
+Každá zkratka může cílit na hlavní stránku, jednu galerii nebo zůstat prázdná. Anonymní návštěvníci vidí pouze nastavené zkratky galerií, které jsou stále veřejné a~uvedené v~seznamech; duplicitní nebo odstraněné galerie se při uložení nastavení vyřadí. Ponechání všech tří pozic prázdných skryje tlačítka oblíbených galerií. Karty galerií mohou zobrazovat také nastavitelný odznak počtu obsažených fotografií. Je-li odznak pro galerii účinný, otevření galerie zachovává stejný počet větve viditelný v~úvodním panelu: počítá obrázky v~aktuální galerii a~jejích přístupných podgaleriích podle stejných pravidel veřejnosti a~přístupu jako karta. Veřejné karty skládají nenulové počty souborů PDF a~hudby kompaktně pod ikonu fotografie s~menšími mezerami mezi odznaky. Je-li odznak počtu fotografií zapnutý, otevřená galerie zobrazuje stejné počty médií v~liště akcí bezprostředně vlevo od něj. Počet zahrnuje jedinečné soubory v~galerii a~jejích podgaleriích; stejný zaznamenaný SHA-256 se~počítá jen jednou. Platí pravidla veřejnosti, skrytí, přístupu a~oprávnění. Chybějící, neznámá nebo neověřená projekce odznak skryje; známá nula se nezobrazuje. Prezentace jednotlivé galerie může dědit výchozí hodnoty webu nebo přepsat volby nabízené editorem galerie.
 
 Podčást \ui{Animace} nastavuje dobu otevírání a~zavírání veřejného informačního panelu na kartách galerií a~pravého panelu administrace. Každá hodnota je v~rozsahu 0--800~ms; hodnota 0 příslušný pohyb vypne. Výchozí hodnoty jsou 320~ms a~260~ms. Veřejný panel obsahuje název, popis, datum a~úplný seznam štítků galerie. Nativní rozbalovací ovládání funguje i~bez JavaScriptu; s~JavaScriptem zůstává panel v~oblasti okna a~lze jej zavřít kliknutím mimo něj nebo klávesou Escape. Interakce respektuje nastavení omezení pohybu v~prohlížeči.
 
@@ -2757,7 +2775,7 @@ Kompaktní tabulka ponechává viditelné názvy událostí, zprávy, závažnos
 
 Hledání zahrnuje názvy událostí, zprávy, kontext JSON a~údaje požadavku či~routy. Řádek označený \ui{Shoda v~podrobnostech} odpovídá hledání uvnitř sbaleného kontextu. Živé filtrování přijímá jen nejnovější požadavek, takže řádky, počty i~URL odpovídají stejnému výsledku také při rychlém psaní. Při selhání automatické cache ukládá \codeword{cache.automatic\_failed} vstupní cestu, fázi, třídu výjimky, název zdrojového souboru a~řádek i~dostupné ověřené kódy SQLSTATE/ovladače. Neukládá původní zprávy, SQL, soukromé cesty ani přihlašovací údaje. Opakovaná selhání se~slučují po~pěti minutách; změněná diagnostika zachovává minimálně třicetisekundový odstup. Selhání logování zachovává checkpoint a~bezpečné odmítnutí. Vyžaduje-li diagnostika schématu migraci, dokončete ji běžným postupem; automatický pokrok sledujte po~běžné návštěvě pasivním přehledem bez ručního scanu.
 
-Zaškrtávací políčka včetně políčka v~záhlaví označují záznamy aktuální stránky. Panel nabízí rozsahy \ui{Označené}, \ui{Tato stránka} a~\ui{Vše dle filtrů} pro kopírování i~uložení souboru TXT v~UTF-8. Výběr skupiny zahrne všechny její výskyty včetně dosud nenačtených; souběžně označený jednotlivý člen se neopakuje. \ui{Vše dle filtrů} exportuje odpovídající jednotlivé události ze všech stránek ve zvoleném časovém pořadí. Výběr se vymaže při nahrazení řádků filtrováním nebo stránkováním. PHP čte velké exporty po dávkách; kopírování potřebuje celý zvolený text v~paměti prohlížeče, proto pro rozsáhlou historii upřednostněte uložení. Při nedostupné schránce dialog označí úplný text pro ruční kopírování. Stahování TXT funguje i~bez JavaScriptu; původní úplný export ZIP s~CSV/JSON zůstává dostupný.
+Zaškrtávací políčka včetně políčka v~záhlaví označují záznamy aktuální stránky. Ve~hromadných seznamech Administrace s~výběrovými poli klikněte na~řádek a~poté se~stisknutým Shiftem na~další ve~stejném seznamu: povolené viditelné řádky mezi nimi na~aktuální stránce výsledků převezmou výsledný stav druhého pole. Kotva rozsahu se~zruší, když živé filtrování, stránkování nebo jiné nahrazení řádků změní výsledky. Filtry závažnosti nadále určují viditelné řádky protokolu a~rozsahy jeho exportu \ui{Označené}, \ui{Tato stránka} a~\ui{Vše dle filtrů} zachovávají svůj význam. Panel nabízí tyto rozsahy pro kopírování i~uložení souboru TXT v~UTF-8. Výběr skupiny zahrne všechny její výskyty včetně dosud nenačtených; souběžně označený jednotlivý člen se neopakuje. \ui{Vše dle filtrů} exportuje odpovídající jednotlivé události ze všech stránek ve zvoleném časovém pořadí. Výběr se vymaže při nahrazení řádků filtrováním nebo stránkováním. PHP čte velké exporty po dávkách; kopírování potřebuje celý zvolený text v~paměti prohlížeče, proto pro rozsáhlou historii upřednostněte uložení. Při nedostupné schránce dialog označí úplný text pro ruční kopírování. Stahování TXT funguje i~bez JavaScriptu; původní úplný export ZIP s~CSV/JSON zůstává dostupný.
 
 Každodenní správa vytváří užitečnou historii: nahrávání, změny galerií, bezpečnostní rozhodnutí, výsledky údržby, upozornění a~další provozní události mohou zanechat záznam v~protokolu administrace. Historie je cenná, když chcete pochopit, co se stalo, kdy se to stalo a~který účet nebo požadavek byl zapojen. Na aktivní instalaci je také běžné, že se tabulka značně zvětší. Verze~\version{} proto zachází s~péčí o~protokoly jako se samostatným výslovným úkolem údržby místo umožnění neočekávaného odstranění auditní historie obecným úklidem databáze.
 

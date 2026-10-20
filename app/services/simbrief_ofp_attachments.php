@@ -230,7 +230,7 @@ function simbrief_ofp_conversion_supported(): bool
 /**
  * Resolve the source gallery's real directory for a gallery-scoped OFP write.
  *
- * @param array<string,mixed> $gallery Persisted gallery row, not request input.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @return ?string Existing physical gallery directory within galleries_root().
  */
 function simbrief_ofp_gallery_directory(array $gallery): ?string
@@ -264,7 +264,7 @@ function simbrief_ofp_gallery_directory(array $gallery): ?string
 /**
  * Read the existing canonical manifest without trusting a request-supplied path.
  *
- * @param array<string,mixed> $gallery Source gallery.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @return array<string,mixed> Valid v1 manifest or an empty array.
  */
 function simbrief_ofp_gallery_manifest(array $gallery): array
@@ -676,7 +676,8 @@ function simbrief_ofp_attach_manual_pdf(
             $manifest,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         );
-        if (!is_string($json) || strlen($json) > 32768) {
+        // Include the persisted newline in the existing manifest reader cap.
+        if (!is_string($json) || strlen($json) + 1 > 32768) {
             throw new \RuntimeException(
                 'The OFP manifest cannot be stored safely.',
             );
@@ -718,16 +719,42 @@ function simbrief_ofp_attach_manual_pdf(
             fclose($in);
             fclose($out);
         }
-        if (
-            $written !== $size
-            || @file_put_contents($stageManifest, $json . "\n", LOCK_EX)
-                !== (strlen($json) + 1)
-        ) {
+        if ($written !== $size) {
             throw new \RuntimeException(
                 'The OFP attachment could not be staged completely.',
             );
         }
+        $digest = @hash_file('sha256', $stagePdf);
+        if (!is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
+            throw new \RuntimeException(
+                'The staged OFP digest could not be verified.',
+            );
+        }
+        $manifest['ofp_pdf_sha256'] = $digest;
+        $json = json_encode(
+            $manifest,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        if (!is_string($json) || strlen($json) + 1 > 32768
+            || @file_put_contents($stageManifest, $json . "\n", LOCK_EX)
+                !== (strlen($json) + 1)
+        ) {
+            throw new \RuntimeException(
+                'The OFP digest manifest could not be staged.',
+            );
+        }
         @chmod($stageManifest, 0600);
+        if (!function_exists('Gallery\\Services\\gallery_pdf_documents_usage_begin')
+            || !function_exists('Gallery\\Services\\gallery_pdf_documents_usage_publish')
+        ) {
+            throw new \RuntimeException(
+                'PDF attachment usage storage is unavailable.',
+            );
+        }
+        $usageRevision = gallery_pdf_documents_usage_begin(
+            $gallery,
+            'simbrief_ofp_attach_manual_pdf',
+        );
         if ($existing) {
             $backup = $root . '/.simbrief-ofp-' . $suffix . '.bak';
             if (!@copy($pdf, $backup)) {
@@ -758,8 +785,20 @@ function simbrief_ofp_attach_manual_pdf(
             'ofp',
             [['size' => $written]],
         );
+        try {
+            $indexState = gallery_pdf_documents_read_index_state($root);
+            gallery_pdf_documents_usage_publish(
+                $gallery,
+                $usageRevision,
+                $indexState['documents'],
+                $indexState['ofp_hidden'],
+                $manifest,
+            );
+        } catch (\Throwable) {
+            error_log('OFP attachment committed; usage remains dirty for reconciliation.');
+        }
         return [
-            'sha256' => (string) hash_file('sha256', $pdf),
+            'sha256' => $digest,
             'bytes' => $written,
             'provenance' => $provenance,
         ];
@@ -839,6 +878,7 @@ function simbrief_ofp_delete_manual_pdf(
         }
         unset(
             $manifest['ofp_pdf_file'],
+            $manifest['ofp_pdf_sha256'],
             $manifest['pdf_provenance'],
             $manifest['pdf_attached_at'],
         );
@@ -847,7 +887,8 @@ function simbrief_ofp_delete_manual_pdf(
             $manifest,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         );
-        if (!is_string($json) || strlen($json) > 32768) {
+        // Include the persisted newline in the existing manifest reader cap.
+        if (!is_string($json) || strlen($json) + 1 > 32768) {
             throw new \RuntimeException(
                 'The updated OFP manifest cannot be stored safely.',
             );
@@ -873,6 +914,17 @@ function simbrief_ofp_delete_manual_pdf(
                 'The updated OFP manifest could not be staged.',
             );
         }
+        if (!function_exists('Gallery\\Services\\gallery_pdf_documents_usage_begin')
+            || !function_exists('Gallery\\Services\\gallery_pdf_documents_usage_publish')
+        ) {
+            throw new \RuntimeException(
+                'PDF attachment usage storage is unavailable.',
+            );
+        }
+        $usageRevision = gallery_pdf_documents_usage_begin(
+            $gallery,
+            'simbrief_ofp_delete_manual_pdf',
+        );
         @chmod($stageManifest, 0600);
         if (!@rename($pdf, $backupPdf)) {
             throw new \RuntimeException(
@@ -890,6 +942,18 @@ function simbrief_ofp_delete_manual_pdf(
         $backupPdf = '';
         $restorePdf = '';
         gallery_attachment_storage_record((int) $gallery['id'], 'ofp', []);
+        try {
+            $indexState = gallery_pdf_documents_read_index_state($root);
+            gallery_pdf_documents_usage_publish(
+                $gallery,
+                $usageRevision,
+                $indexState['documents'],
+                $indexState['ofp_hidden'],
+                $manifest,
+            );
+        } catch (\Throwable) {
+            error_log('OFP attachment deleted; usage remains dirty for reconciliation.');
+        }
         return true;
     } finally {
         if ($backupPdf !== '' && $restorePdf !== '' && is_file($backupPdf)) {

@@ -615,7 +615,9 @@ Originale und~Reihenfolge bleiben erhalten. Die~Suche nach Titel, Dateiname
 und~Musik-Tag aktualisiert sich während der~Eingabe; nur~die~neueste Anfrage
 ändert die~Ergebnisse. Die~Tabelle trennt Titel, Dateien, Orte, Tags und~Aktionen.
 Ein Klick auf~den Songtitel öffnet die~vorhandene Titelbearbeitung; das~separate
-Kontrollkästchen wählt ihn unabhängig davon zum~Zusammenführen aus. Das~Popup
+Kontrollkästchen wählt ihn unabhängig davon zum~Zusammenführen aus. Nur ausgewählte
+Songs erscheinen in~der~Überlebendenauswahl; ein~gewählter Song bleibt dort nur,
+solange er~weiterhin ausgewählt ist. Das~Popup
 bietet Titelbearbeitung, Albumzuordnung und~Schaltflächen für~Tags, Dateien und~Orte.
 Der~Tab \ui{Songs} zeigt den~Katalog über die~volle Breite. \ui{Alben \&
 Wiedergabelisten} zeigt links Baum und~Anlage, rechts das~gewählte Album mit~Songs;
@@ -633,6 +635,9 @@ direkte Galerien und~Musikalben: zwei Varianten derselben Galerie zählen
 als~ein Ort; abgeleitete Smart-Zugehörigkeit nicht. Galerielinks in~beiden Aufklappelementen öffnen die
 öffentliche Galerie; jedes Musik-Tag erscheint als~eigene kompakte
 Plakette.
+Die~Links verwenden die~kanonische öffentliche Galerie-URL, die~aktuelle Sprache
+und~die~konfigurierte URL-Umschreibung; für~eine fehlende Galerie erscheint kein
+Link.
 Kopfzeilenlinks sortieren Titel, Dateien, Orte oder~Tags aufsteigend oder
 absteigend über alle Ergebnisse vor der~Seitennavigation; gleiche Werte werden
 stabil nach ID sortiert. Tags werden alphabetisch nach~dem ersten Musik-Tag
@@ -645,6 +650,10 @@ steht neben jedem Songtitel als~gestapeltes Symbol mit~Zahl. Die~Aufklappelement
 für~Varianten und~Orte folgen der~globalen Animationsdauer des
 Admin-Seitenpanels;
 0 bedeutet sofortige Anzeige.
+Schwebende Zeilen-Aufklappelemente schließen bei~einem Klick außerhalb, erneutem
+Klick auf~denselben Auslöser, Esc oder~beim Öffnen eines anderen Zeilenelements.
+Interaktionen innerhalb des geöffneten Elements schließen es~nicht; das~kompakte
+Zeilenlayout bleibt erhalten.
 
 Das~Zahnrad in~der Katalogüberschrift enthält die~globale Dateiendungsoption.
 Das~benachbarte Zahnrad zum~Anlegen eines Albums blendet die~Auswahl des
@@ -664,7 +673,9 @@ und~benennt die Originaldatei nie~um.
 \ui{Dateiendungen in Musiktiteln anzeigen} ist~auch nach Upgrades zunächst
 ausgeschaltet und~betrifft nur~dateibasierte Namen; eigene Titel bleiben
 unverändert. Ausgewählte Songs lassen sich nach Vorschau ausdrücklich
-verknüpfen, mit~gewählten überlebenden Metadaten. Eine Variante kann wieder
+verknüpfen, mit~gewählten überlebenden Metadaten. Der~Auswahldialog bietet
+nur~markierte Songs als~Überlebende an; der~gewählte Song bleibt nur~solange
+erhalten, wie er~weiterhin zur~Auswahl gehört. Eine Variante kann wieder
 getrennt werden. Quellzugriff und~Downloadrechte bleiben unabhängig.
 
 Der~kompakte Albumbaum lässt sich mit nativen Aufklappelementen öffnen; bei~der
@@ -759,6 +770,18 @@ migrierte lokale Kopien zählen separat. Beim Löschen einer Galerie verschwinde
 ihre~Referenzen, das~gemeinsam genutzte Original bleibt erhalten. Foto-ZIP-Exporte
 und~Galerieübertragungen enthalten keine Musik. Siehe
 \filepath{docs/GALLERY_MUSIC.md}.
+
+Dasselbe Wartungszentrum bietet einen vorausgewählten optionalen Abgleich
+älterer öffentlicher PDF-/Musikzähler. Er arbeitet in Schritten mit höchstens
+25 Galerien und hasht je Schritt höchstens einen älteren OFP-Kandidaten bis
+25~MiB. Fehlende oder ungültige Werte bleiben ausgeblendet. Die Analyse liest
+keine Originale; die Aufgabe ändert sie nicht. Manuelle Dateisystemänderungen
+erfordern einen erneuten Abgleich. Fehlt einem älteren OFP ein Digest, hasht die
+Aufgabe es unter der dauerhaften gemeinsamen Sperre und speichert den Digest
+atomar im Manifest; die PDF- und Audiodaten bleiben unverändert. Die
+Musikprüfung kann das private Sperrverzeichnis \filepath{.gallery-music/}
+erstellen. Eine neue Galerie ohne Quelldaten kann mit bekannten Nullwerten
+beginnen.
 
 \subsection{Identität und Kontext bearbeiten}
 \index{g00129@Galeriemetadaten}
@@ -2315,7 +2338,7 @@ Der Designeditor verwendet keinen getrennten Hell-/Dunkelmodus-Schalter. Stattde
 
 Wählen Sie den globalen Breadcrumb-Stil unter \ui{Design > Layout > Karten und Kennzeichnungen}. Jede Option ist eine native Radiokarte mit einem echten gerenderten Breadcrumb-Beispiel, sodass die Auswahl nach dem Aussehen möglich ist. Die Karte \ui{Standard / vom Design übernehmen} in Galerie- und Smart-Gallery-Einstellungen zeigt den aktuell wirksamen Designstil. Die Radiokarten lassen sich per Tastatur bedienen und funktionieren ohne JavaScript. Die stabilen IDs lauten \codeword{minimal}, \codeword{chevron}, \codeword{pills}, \codeword{surface}, \codeword{ribbon}, \codeword{nodes}, \codeword{tabs}, \codeword{tiles} und \codeword{gradient}. Band (\codeword{ribbon}) bildet Pfeilsegmente; Verbundene Knoten (\codeword{nodes}) verknüpfen dekorative Punkte; Registerkarten (\codeword{tabs}) sind kompakt; Kacheln (\codeword{tiles}) sind erhabene Rechtecke; Farbverlauf (\codeword{gradient}) ergänzt eine Designfarbfläche mit Akzentstreifen.
 
-Jede Kopfzeilenverknüpfung kann zur Hauptseite oder einer Galerie führen oder leer bleiben. Anonyme Besucher sehen nur konfigurierte Galerieverknüpfungen, die weiterhin öffentlich und gelistet sind; doppelte oder gelöschte Galerieauswahlen werden beim Speichern verworfen. Drei leere Plätze verbergen diese Favoritengalerie-Schaltflächen. Galeriekarten können außerdem eine konfigurierbare Kennzeichnung enthaltener Bilder anzeigen. Ist diese für eine Galerie wirksam, bleibt beim Öffnen dieselbe Zweiganzahl im Hero-Bereich sichtbar; gezählt werden Bilder der aktuellen Galerie und ihrer zugänglichen Untergalerien nach denselben Öffentlichkeits-/Zugriffsregeln wie bei der Karte. Galeriespezifische Präsentation kann Websitevorgaben erben oder die im Galerieeditor angebotenen Entscheidungen überschreiben.
+Jede Kopfzeilenverknüpfung kann zur Hauptseite oder einer Galerie führen oder leer bleiben. Anonyme Besucher sehen nur konfigurierte Galerieverknüpfungen, die weiterhin öffentlich und gelistet sind; doppelte oder gelöschte Galerieauswahlen werden beim Speichern verworfen. Drei leere Plätze verbergen diese Favoritengalerie-Schaltflächen. Galeriekarten können außerdem eine konfigurierbare Kennzeichnung enthaltener Bilder anzeigen. Ist diese für eine Galerie wirksam, bleibt beim Öffnen dieselbe Zweiganzahl im Hero-Bereich sichtbar; gezählt werden Bilder der aktuellen Galerie und ihrer zugänglichen Untergalerien nach denselben Öffentlichkeits-/Zugriffsregeln wie bei der Karte. Öffentliche Karten stapeln von null verschiedene PDF- und Musikdateizahlen kompakt und rechtsbündig unter dem Fotosymbol, mit engem Abstand zwischen den Kennzeichen. Ist das Fotozählungskennzeichen aktiviert, erscheinen dieselben Medienzahlen in der Aktionsleiste der geöffneten Galerie direkt links davon. Jede Zahl umfasst eindeutige Dateien der Galerie und ihrer Untergalerien; derselbe erfasste SHA-256-Wert zählt nur einmal. Es gelten die Regeln für öffentliche Sichtbarkeit, Ausblendung, Zugriff und Berechtigungen. Fehlende, unbekannte oder veraltete Projektionen blenden das Symbol aus; ein bekannter Nullwert bleibt verborgen. Die galerieeigene Präsentation kann Websitevorgaben erben oder die im Galerieeditor angebotenen Entscheidungen überschreiben.
 
 \subsection{Referenz der Designsteuerungen}
 \index{d00073@Design!s00236@Steuerungen}
@@ -2831,7 +2854,7 @@ Die kompakte Tabelle zeigt Ereignisnamen, Meldungen, Schweregrad, Zeitstempel un
 
 Die Suche umfasst Ereignisnamen, Meldungen, JSON-Kontext und~Anfrage-/Routenmetadaten. Eine Zeile mit~\ui{Treffer in~den~Details} passt im~eingeklappten Kontext. Die Live-Filterung übernimmt nur die neueste Anfrage; Zeilen, Zähler und~URL bleiben auch bei schnellem Tippen demselben Ergebnis zugeordnet. Bei automatischen Cache-Fehlern erfasst \codeword{cache.automatic\_failed} Einstieg, Phase, Ausnahmeklasse, Quelldateiname/-zeile und~verfügbare validierte SQLSTATE-/Treiberkennungen. Rohe Meldungen, SQL, private Pfade und~Zugangsdaten werden ausgelassen. Gleiche Fehler werden fünf Minuten zusammengefasst; geänderte Diagnosen behalten mindestens dreißig Sekunden Abstand. Protokollfehler erhalten Checkpoint und~sichere Verweigerung. Erforderliche Migrationen werden regulär abgeschlossen; automatische Arbeit wird nach einem normalen Besuch passiv und~ohne manuelle Prüfung beobachtet.
 
-Kontrollkästchen einschließlich des Kästchens im Tabellenkopf wählen Einträge der aktuellen Seite aus. Die Werkzeugleiste bietet \ui{Ausgewählte}, \ui{Diese Seite} und \ui{Alle gefilterten} zum Kopieren oder Speichern einer UTF-8-TXT-Datei. Eine ausgewählte Gruppe umfasst alle Vorkommen, auch noch nicht geladene; zusätzlich ausgewählte Mitglieder erscheinen nur einmal. \ui{Alle gefilterten} exportiert passende Rohereignisse aller Seiten in der gewählten Zeitreihenfolge. Filterung oder Seitenwechsel löschen die Auswahl beim Ersetzen der Zeilen. PHP liest große Exporte stapelweise; Kopieren benötigt den vollständigen gewählten Text im Browserspeicher, daher empfiehlt sich für umfangreiche Verläufe das Speichern. Ohne Zwischenablagezugriff markiert ein Dialog den vollständigen Text zum manuellen Kopieren. TXT-Downloads funktionieren auch ohne JavaScript; der bisherige vollständige CSV/JSON-ZIP-Export bleibt verfügbar.
+Kontrollkästchen einschließlich des Kästchens im Tabellenkopf wählen Einträge der aktuellen Seite aus. In Admin-Massenlisten mit Auswahlkästchen klicken Sie eine Zeile und dann mit gedrückter Umschalttaste eine weitere in derselben Liste an: Aktivierbare sichtbare Zeilen dazwischen übernehmen auf der aktuellen Ergebnisseite den resultierenden Status des zweiten Kästchens. Der Anker der Bereichsauswahl wird zurückgesetzt, wenn Live-Filterung, Seitenwechsel oder ein anderer Zeilenaustausch die Ergebnisse ändert. Schweregradfilter bestimmen weiterhin die sichtbaren Protokollzeilen; die Exportbereiche \ui{Ausgewählte}, \ui{Diese Seite} und \ui{Alle gefilterten} behalten ihre Bedeutung. Die Werkzeugleiste bietet diese Bereiche zum Kopieren oder Speichern einer UTF-8-TXT-Datei. Eine ausgewählte Gruppe umfasst alle Vorkommen, auch noch nicht geladene; zusätzlich ausgewählte Mitglieder erscheinen nur einmal. \ui{Alle gefilterten} exportiert passende Rohereignisse aller Seiten in der gewählten Zeitreihenfolge. Filterung oder Seitenwechsel löschen die Auswahl beim Ersetzen der Zeilen. PHP liest große Exporte stapelweise; Kopieren benötigt den vollständigen gewählten Text im Browserspeicher, daher empfiehlt sich für umfangreiche Verläufe das Speichern. Ohne Zwischenablagezugriff markiert ein Dialog den vollständigen Text zum manuellen Kopieren. TXT-Downloads funktionieren auch ohne JavaScript; der bisherige vollständige CSV/JSON-ZIP-Export bleibt verfügbar.
 
 Alltägliche Verwaltungsarbeit erzeugt einen nützlichen Verlauf: Uploads, Galerieänderungen, Sicherheitsentscheidungen, Wartungsergebnisse, Warnungen und andere Betriebsereignisse können im Administrationsprotokoll vermerkt werden. Dieser Verlauf hilft zu verstehen, was wann geschah und welches Konto oder welche Anfrage beteiligt war. Auf einer aktiven Installation wächst die Tabelle normalerweise stark. Version~\version{} behandelt Protokollpflege daher als eigene ausdrückliche Wartungsaufgabe, statt allgemeine Datenbankbereinigung unerwartet Auditverlauf entfernen zu lassen.
 

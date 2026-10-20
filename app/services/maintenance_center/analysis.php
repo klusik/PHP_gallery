@@ -1082,6 +1082,31 @@ function maintenance_center_analyze_music_repository(array $context): array
     ];
 }
 
+/** Inspect readiness for optional gallery media-count projections.
+ * @param array<string,mixed> $context Shared analyzer context; unused because
+ *     only the named presentation schema capability is inspected.
+ * @return array{available:bool,has_work:bool,work_units:int,
+ *     candidate_count_known:bool,note:string} Read-only capability status
+ *     and bounded-work guidance; source galleries are not scanned here.
+ */
+function maintenance_center_analyze_attachment_usage(array $context): array
+{
+    $status = presentation_gallery_attachment_usage_schema_status();
+    return [
+        'available' => $status['state'] === 'available',
+        'has_work' => true,
+        'work_units' => MAINTENANCE_CENTER_ATTACHMENT_USAGE_WEIGHT,
+        'candidate_count_known' => false,
+        'note' => maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.attachment_usage_note',
+            'Reconcile optional public PDF and music counts in bounded steps. '
+                . 'Each step checks up to 25 galleries and hashes at most one '
+                . 'legacy OFP candidate up to 25 MiB. Missing or dirty '
+                . 'projections stay omitted; originals remain authoritative.',
+        ),
+    ];
+}
+
 /** Read-only final verification analyzer.
  * @param array<string,mixed> $context Shared task context containing prior analysis results and job state.
  * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.

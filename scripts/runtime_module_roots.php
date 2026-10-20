@@ -51,6 +51,7 @@ return [
             'Gallery\\Services\\resolve_public_gallery_path',
             'Gallery\\Services\\simbrief_ofp_local_pdf_path',
             'Gallery\\Services\\gallery_pdf_documents_read',
+            'Gallery\\Services\\gallery_pdf_documents_read_index_state',
             'Gallery\\Services\\gallery_attachment_storage_summary',
             'Gallery\\Services\\gallery_pdf_publication_forces_private',
             'Gallery\\Controllers\\gallery_pdf_documents_view_model',
@@ -60,6 +61,10 @@ return [
             'Gallery\\Controllers\\gallery_music_view_model',
             'Gallery\\Controllers\\gallery_music_smart_view_model',
             'Gallery\\Views\\view_render_gallery_music',
+            'Gallery\\Services\\gallery_attachment_usage_reconcile_batch',
+            'Gallery\\Services\\gallery_pdf_documents_usage_source_lock',
+            'Gallery\\Services\\gallery_pdf_documents_usage_begin',
+            'Gallery\\Services\\gallery_pdf_documents_usage_publish',
         ],
         'schema-unavailable-response' => [
             'Gallery\\Controllers\\cms_public_schema_unavailable',
@@ -238,6 +243,18 @@ return [
         ],
         'Gallery\\Services\\maintenance_center_execute_music_repository' => [
             'Gallery\\Services\\gallery_music_migrate_repository',
+        ],
+        'Gallery\\Services\\maintenance_center_execute_attachment_usage' => [
+            'Gallery\\Services\\gallery_attachment_usage_reconcile_batch',
+        ],
+        'Gallery\\Services\\simbrief_description_save_ofp_for_gallery' => [
+            // The injected request bridge obtains the kernel before loading the
+            // attachment owner for this save path.
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Services\\gallery_pdf_documents_usage_source_lock',
+            'Gallery\\Services\\gallery_pdf_documents_usage_begin',
+            'Gallery\\Services\\gallery_pdf_documents_read_index_state',
+            'Gallery\\Services\\gallery_pdf_documents_usage_publish',
         ],
         // The updater-only transport branch explicitly requires the lightweight
         // cache runtime policy before this shared single-worker admission check.

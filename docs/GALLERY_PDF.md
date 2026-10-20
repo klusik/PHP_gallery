@@ -13,6 +13,17 @@ and an old original's manifest reference remains available on re-enable.
 When both PDF and music are OFF, the shared editor media tab and its empty panel
 are omitted. An old selected-tab URL falls back to Identity.
 
+Public gallery cards show compact, right-aligned PDF and music count icons below
+the existing photo-count icon when each count is nonzero, with tight spacing
+between stacked badges. When the photo-count badge is enabled, the opened
+gallery's action bar shows the same nonzero media counts inline immediately to
+its left.
+Each count covers unique files in the gallery and its subgalleries; files with
+the same recorded SHA-256 count once. Counts follow public visibility,
+hidden-state, access and capability rules. They use optional derived snapshots;
+missing, unknown or dirty snapshots omit the badge rather than report zero.
+Public rendering uses existing snapshot data and never reads or hashes originals.
+
 In **Admin → Edit gallery**, the **Documents / PDFs** tab owns manual PDF
 upload, the attached-document table, browser PDF-to-PNG conversion, and any
 historical SimBrief OFP PDF/dispatch panel. These forms are independent of the
@@ -293,6 +304,21 @@ ANALYZE timings identify slow/failing tables; an explicit omitted count bounds
 larger installations. Final inspection counts identify schema tables and
 migration
 and code sources read from the existing inspection result, without rescanning.
+
+Public card usage is a separate derived projection added by
+`202610200004_gallery_attachment_usage.php`. Ready empty snapshots mean known
+zero; missing or dirty snapshots mean unknown. Maintenance Center offers a
+default-selected optional reconciliation for legacy sources, processing at
+most 25 galleries per step and hashing at most one legacy OFP candidate up to
+25 MiB per step. If its manifest lacks a valid digest, the task hashes the OFP
+under the shared persistent `.simbrief-ofp-upload.lock` and atomically adds
+`ofp_pdf_sha256` to the manifest. It never changes PDF or audio original bytes.
+Music reconciliation also acquires the private `.gallery-music/.lock` and may
+create that directory. Busy locks defer the gallery. Supported web mutations
+use the same source locks and invalidate the projection before changing source
+data; manual filesystem edits require reconciliation. Newly created galleries
+without source metadata may receive insert-only ready-empty snapshots. These
+counts are distinct from physical storage totals above.
 
 `wall_seconds` includes browser/network pauses, cache/lock/log overhead and idle
 time between requests. `phase_work_seconds` sums monotonic phase callback

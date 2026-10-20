@@ -90,7 +90,7 @@ body.admin-page {
 </style>
 </head><body class="admin-page"><pre id="results"></pre><main id="mount">${markup}</main>
 <script type="module">
-import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261020-music-tabs-popover-drag-v6';
+import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261020-merge-selected-survivor-v2';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const ACTION_TIMEOUT_MS = ${ACTION_TIMEOUT_MS};
@@ -188,13 +188,20 @@ try {
     let root = document.querySelector('[data-admin-music]');
     const originalUrl = location.href;
     let expectedPageUrl = originalUrl;
-    check(root && root.querySelectorAll('tbody tr').length === 2,
-        'Production Music Manager markup did not render both catalog rows.');
+    check(root && root.querySelectorAll('tbody tr').length === 3,
+        'Production Music Manager markup did not render all catalog rows.');
     const searchForm = root.querySelector('form.admin-music-search');
     const reconcileForm = Array.from(root.querySelectorAll('form[data-admin-music-form]'))
         .find(/** Find the standalone catalog reconciliation form. @param {HTMLFormElement} form Rendered Admin write form. @returns {boolean} True when its action is reconcile. */ form =>
             form.querySelector('input[name="action"]')?.value === 'reconcile');
     const mergeForm = root.querySelector('#admin-music-merge');
+    let merge = mergeForm;
+    const mergeSelect = mergeForm?.querySelector('select[name="song_id"]');
+    const mergeSubmit = mergeForm?.querySelector('button[type="submit"]');
+    check(mergeSelect instanceof HTMLSelectElement
+        && mergeSelect.disabled && mergeSelect.options.length === 0
+        && mergeSubmit instanceof HTMLButtonElement && mergeSubmit.disabled,
+        'Merge survivor choices and submission must start disabled until multiple rows are selected.');
     check(searchForm?.method.toLowerCase() === 'get'
         && searchForm.querySelector('input[name="page"]')?.value === 'admin_music'
         && searchForm.querySelector('input[name="album_id"]')?.value === '8'
@@ -346,6 +353,16 @@ try {
     check(!albumContextDisclosure.open
         && albumContextForms.every(form => form.getClientRects().length === 0),
         'The album context gear must collapse its metadata and destructive forms again.');
+    albumContextSummary.click();
+    const toolbarPreferences = root.querySelector(
+        'details.admin-music-preferences',
+    );
+    toolbarPreferences.querySelector(':scope > summary').click();
+    check(!albumContextDisclosure.open
+        && toolbarPreferences.open
+        && albumContextForms.every(form => form.getClientRects().length === 0),
+        'Opening toolbar settings must dismiss the floating album gear panel.');
+    toolbarPreferences.querySelector(':scope > summary').click();
     root.querySelector(
         '.admin-music-tabs [data-admin-tab-target="admin-music-tab-songs"]',
     )?.click();
@@ -455,6 +472,54 @@ try {
         check(variants.textContent.includes('midnight-live.mp3')
             && variants.textContent.includes('midnight-studio.mp3'),
             'Variant disclosure lost physical album paths.');
+        check(usageDetails.open === false,
+            'Opening the Files popup must dismiss the previous Usage popup.');
+        variantsSummary.click();
+        check(variants.open === false,
+            'Clicking the active Files trigger must toggle its popup closed.');
+        usageSummary.click();
+        usageDetails.querySelector(':scope > ul')?.dispatchEvent(
+            new MouseEvent('click', {bubbles: true, cancelable: true}),
+        );
+        check(usageDetails.open === true,
+            'Clicks inside a Usage popup must not dismiss it.');
+        root.querySelector('.admin-music-tabs')?.dispatchEvent(
+            new MouseEvent('click', {bubbles: true, cancelable: true}),
+        );
+        check(usageDetails.open === false,
+            'Clicking outside a row popup must dismiss it.');
+        variantsSummary.click();
+        variantsSummary.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', bubbles: true, cancelable: true,
+        }));
+        check(variants.open === false
+            && document.activeElement === variantsSummary,
+            'Escape must close the active row popup and retain focus on its trigger.');
+
+        const preferences = root.querySelector(
+            'details.admin-music-preferences',
+        );
+        const preferencesSummary = preferences?.querySelector(
+            ':scope > summary',
+        );
+        const mergeSummary = mergeDisclosure.querySelector(':scope > summary');
+        preferencesSummary.click();
+        check(preferences.open === true,
+            'The toolbar settings control must open its floating panel.');
+        mergeSummary.click();
+        check(preferences.open === false && mergeDisclosure.open === true,
+            'Opening bulk merge must dismiss the previous toolbar panel.');
+        merge.querySelector('select[name="song_id"]').dispatchEvent(
+            new MouseEvent('click', {bubbles: true, cancelable: true}),
+        );
+        check(mergeDisclosure.open === true,
+            'Clicks inside the bulk merge form must leave its panel open.');
+        mergeSummary.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', bubbles: true, cancelable: true,
+        }));
+        check(mergeDisclosure.open === false
+            && document.activeElement === mergeSummary,
+            'Escape must dismiss the bulk merge panel and return focus to its trigger.');
     } finally {
         if (previousMotionDuration === '') {
             motionStyle.removeProperty('--admin-side-panel-motion-duration');
@@ -477,9 +542,10 @@ try {
         ['locations', '.admin-music-locations'],
     ]) {
         rows[0].querySelector('[data-admin-music-title-edit]').click();
-        titleContextPopover.querySelector(
+        const contextAction = titleContextPopover.querySelector(
             '[data-admin-music-context="' + context + '"]',
-        ).click();
+        );
+        contextAction.click();
         const contextDisclosure = rows[0].querySelector(selector);
         check(titleDisclosureForContext.open === false
             && contextDisclosure instanceof HTMLDetailsElement
@@ -487,7 +553,18 @@ try {
             && contextDisclosure.querySelector(':scope > summary')
                 === document.activeElement,
             'The ' + context + ' shortcut must close the title popover, open its row detail, and move focus to that disclosure.');
-        contextDisclosure.querySelector(':scope > summary').click();
+        contextAction.click();
+        check(contextDisclosure.open === false,
+            'Clicking the active ' + context + ' shortcut must toggle it closed.');
+        contextAction.click();
+        check(contextDisclosure.open === true,
+            'Clicking the ' + context + ' shortcut again must reopen it.');
+        const outsideTarget = root.querySelector('.admin-music-tabs');
+        outsideTarget.dispatchEvent(new MouseEvent('click', {
+            bubbles: true, cancelable: true,
+        }));
+        check(contextDisclosure.open === false,
+            'Clicking outside the ' + context + ' shortcut popup must dismiss it.');
     }
     const titleEditorInput = rows[0].querySelector('textarea[name="title"]');
     const titleEditorDisclosure = titleEditorInput?.closest('details');
@@ -750,19 +827,65 @@ try {
     );
     root = document.querySelector('[data-admin-music]');
     check(root.querySelector('[role="status"]')?.textContent === 'Music saved successfully.'
-        && root.querySelectorAll('tbody tr').length === 2,
-        'Mutation notice or both rows were lost while resuming a queued live search.');
+        && root.querySelectorAll('tbody tr').length === 3,
+        'Mutation notice or catalog rows were lost while resuming a queued live search.');
+    const refreshedUsage = root.querySelector(
+        'details.admin-music-locations',
+    );
+    refreshedUsage.querySelector(':scope > summary').click();
+    root.querySelector('.admin-music-tabs').dispatchEvent(
+        new MouseEvent('click', {bubbles: true, cancelable: true}),
+    );
+    check(refreshedUsage.open === false,
+        'Delegated outside dismissal must remain active after a refreshed fragment replaces the manager root.');
     expectedPageUrl = location.href;
     mode = 'success';
     check(calls.filter(/** Count one recorded POST operation. @param {{url:string,method:string}} call Captured request summary. @returns {boolean} True for a mutation. */ call => call.method === 'POST').length === 1
         && calls.some(/** Find the production panel refresh request. @param {{url:string,method:string}} call Captured request summary. @returns {boolean} True for the fixture refresh URL. */ call => call.url === '/music-fragment'),
         'The production mutation coordinator did not refresh the panel exactly once.');
 
-    const merge = root.querySelector('#admin-music-merge');
-    root.querySelector('input[name="song_ids[]"][value="101"]').checked = true;
-    root.querySelector('input[name="song_ids[]"][value="102"]').checked = true;
-    merge.querySelector('select[name="song_id"]').value = '101';
+    merge = root.querySelector('#admin-music-merge');
+    const song101 = root.querySelector('input[name="song_ids[]"][value="101"]');
+    const song102 = root.querySelector('input[name="song_ids[]"][value="102"]');
+    const song103 = root.querySelector('input[name="song_ids[]"][value="103"]');
+    const dispatchSelectionChange = input => input.dispatchEvent(
+        new Event('change', {bubbles: true}),
+    );
+    song101.checked = true;
+    dispatchSelectionChange(song101);
+    check(Array.from(merge.querySelector('select[name="song_id"]').options)
+        .map(option => option.value).join(',') === '101'
+        && merge.querySelector('select[name="song_id"]').disabled
+        && merge.querySelector('button[type="submit"]').disabled,
+        'A single checked row must be the only survivor option and keep merge disabled.');
+    song102.checked = true;
+    dispatchSelectionChange(song102);
+    const survivorSelect = merge.querySelector('select[name="song_id"]');
+    check(Array.from(survivorSelect.options).map(option => option.value).join(',')
+        === '101,102' && !survivorSelect.disabled
+        && !merge.querySelector('button[type="submit"]').disabled,
+        'The survivor list must contain exactly the checked songs and enable a valid merge.');
+    survivorSelect.value = '102';
+    song103.checked = true;
+    dispatchSelectionChange(song103);
+    check(Array.from(survivorSelect.options).map(option => option.value).join(',')
+        === '101,102,103' && survivorSelect.value === '102',
+        'Adding a selected song must preserve the valid survivor and expose no unrelated choice.');
+    song102.checked = false;
+    dispatchSelectionChange(song102);
+    check(Array.from(survivorSelect.options).map(option => option.value).join(',')
+        === '101,103' && survivorSelect.value === '101',
+        'Removing the selected survivor must choose the first remaining selected row.');
+    song103.checked = false;
+    dispatchSelectionChange(song103);
+    song102.checked = true;
+    dispatchSelectionChange(song102);
+    survivorSelect.value = '101';
     merge.querySelector('select[name="tag_policy"]').value = 'union';
+    check(Array.from(survivorSelect.options).map(option => option.value).join(',')
+        === '101,102' && !Array.from(survivorSelect.options)
+            .some(option => option.value === '103'),
+        'The final merge may offer only the two checked songs as survivor choices.');
     merge.requestSubmit(merge.querySelector('button'));
     await waitForIdle();
     check(confirmText.includes('Midnight Drive') && confirmText.includes('ambient, road')
@@ -776,6 +899,11 @@ try {
         'The refreshed production form was not intercepted once in place.');
 
     root = document.querySelector('[data-admin-music]');
+    const refreshedMerge = root.querySelector('#admin-music-merge');
+    check(refreshedMerge.querySelector('select[name="song_id"]').options.length === 0
+        && refreshedMerge.querySelector('select[name="song_id"]').disabled
+        && refreshedMerge.querySelector('button[type="submit"]').disabled,
+        'Mutation fragment replacement must reset survivor options and disable merge until selection.');
     root.querySelector('[data-admin-music-title-edit]')?.click();
     const titleInput = root.querySelector('textarea[name="title"]');
     const titleForm = titleInput.form;

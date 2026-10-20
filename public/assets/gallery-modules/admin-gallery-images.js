@@ -25,7 +25,6 @@
 const filenamePreferenceKey = 'php-gallery.admin-image-names.default.v1';
 const sessionFilenameStates = new Map();
 const boundDocuments = new WeakSet();
-const selectionRangeAnchors = new WeakMap();
 
 /**
  * Canonical cover selection projection consumed by editor presentation helpers.
@@ -459,54 +458,6 @@ export function setupAdminGalleryImages(root = document) {
         queueMicrotask(refreshProgrammaticSelection);
     }
 
-    /**
-     * Extends a shifted image-checkbox click across the current visual row range.
-     *
-     * @param {MouseEvent} event Delegated click event from an image selection checkbox.
-     * @return {void} Result value for the caller.
-     */
-    function handleSelectionRangeClick(event) {
-        const checkbox = event.target instanceof Element ? event.target.closest('input[type="checkbox"][name="image_ids[]"]') : null;
-        if (!(checkbox instanceof HTMLInputElement) || !event.shiftKey) {
-            if (checkbox instanceof HTMLInputElement) {
-                const form = checkbox.closest('[data-admin-image-bulk-form]');
-                if (form) selectionRangeAnchors.set(form, checkbox);
-            }
-            return;
-        }
-
-        const form = checkbox.closest('[data-admin-image-bulk-form]');
-        const table = checkbox.closest('[data-admin-image-order-table]');
-        const anchor = form ? selectionRangeAnchors.get(form) : null;
-        if (!form || !table || !anchor?.isConnected || anchor === checkbox || !table.contains(anchor)) {
-            if (form) selectionRangeAnchors.set(form, checkbox);
-            return;
-        }
-        const inputs = Array.from(table.querySelectorAll('input[type="checkbox"][name="image_ids[]"]'));
-        const anchorIndex = inputs.indexOf(anchor);
-        const targetIndex = inputs.indexOf(checkbox);
-        if (anchorIndex < 0 || targetIndex < 0) {
-            selectionRangeAnchors.set(form, checkbox);
-            return;
-        }
-
-        const start = Math.min(anchorIndex, targetIndex);
-        const end = Math.max(anchorIndex, targetIndex);
-        const selected = checkbox.checked;
-        /**
-         * Applies the target selection state to one row in the inclusive range.
-         *
-         * @param {HTMLInputElement} input Checkbox belonging to an image row in the range.
-         * @return {void} Result value for the caller.
-         */
-        function applyRangeCheckboxState(input) {
-            if (input === checkbox || input.checked === selected) return;
-            input.checked = selected;
-            input.dispatchEvent(new doc.defaultView.Event('change', {bubbles: true}));
-        }
-        inputs.slice(start, end + 1).forEach(applyRangeCheckboxState);
-    }
-
     doc.addEventListener('click', handleCoverStarClick, true);
     doc.addEventListener('php-gallery:side-panel-success', handleCoverSaved);
     doc.addEventListener('pointerover', handlePreviewPointer, true);
@@ -520,7 +471,6 @@ export function setupAdminGalleryImages(root = document) {
     doc.addEventListener('change', handleFilenameControl, true);
     doc.addEventListener('click', handleFilenameControl, true);
     doc.addEventListener('change', handleSelectionChange, true);
-    doc.addEventListener('click', handleSelectionRangeClick);
 
     /**
      * Dismisses a preview when its row or containing side panel is removed or closed.

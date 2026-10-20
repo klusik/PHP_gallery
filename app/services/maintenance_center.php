@@ -76,6 +76,14 @@ const MAINTENANCE_CENTER_DIAGNOSTIC_CODE_LIMIT = 80;
  */
 const MAINTENANCE_CENTER_MUSIC_WEIGHT = 5;
 
+/** Reserve progress weight for the bounded media-usage reconciliation.
+ * Type: int. Units: relative plan work units. Scope: one maintenance plan.
+ * Consumers: media.attachment_usage registry and read-only analyzer.
+ * Rationale: 25 is the worker's per-step gallery bound, not a gallery count.
+ * Value: 25 work units.
+ */
+const MAINTENANCE_CENTER_ATTACHMENT_USAGE_WEIGHT = 25;
+
 /** Terminal job history retained by normal maintenance. */
 const MAINTENANCE_CENTER_HISTORY_RETENTION_DAYS = 90;
 
@@ -378,6 +386,9 @@ function maintenance_center_task_runtime_modules(
     if ($taskKey === 'music.repository') {
         // The complete existing attachment owner supplies both the passive
         // readiness reader and the explicitly approved original move worker.
+        return ['gallery-pdf-documents'];
+    }
+    if ($taskKey === 'media.attachment_usage') {
         return ['gallery-pdf-documents'];
     }
     if (in_array(

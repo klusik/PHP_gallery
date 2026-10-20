@@ -184,6 +184,17 @@ function gallery_attachment_storage_file_size(
  */
 const GALLERY_PDF_DOCUMENT_MAX_BYTES = 26214400;
 
+/** Permissions for the shared PDF/OFP source-mutation lock.
+ * Type: int. Units: POSIX permission bits.
+ * Scope: one persistent gallery attachment lock file, created or opened by
+ *   source mutation and reconciliation paths.
+ * Consumers: gallery_pdf_documents_usage_source_lock,
+ *   gallery_attachment_usage_acquire_root_lock.
+ * Rationale: keep the coordination inode private to the application account.
+ * Value: 0600.
+ */
+const GALLERY_PDF_DOCUMENTS_USAGE_LOCK_MODE = 0600;
+
 /**
  * Resolve a physical gallery directory without following a gallery symlink.
  *
@@ -385,10 +396,163 @@ function gallery_pdf_documents_read_index(string $root): array
     return gallery_pdf_documents_read_index_state($root)['documents'];
 }
 
+/** Mark PDF usage dirty before a source mutation when its schema is available.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery.
+ * @param string $operation Stable source-mutation identifier for diagnostics.
+ * @return string|null Dirty generation token, or null for confirmed legacy schema.
+ * @throws RuntimeException When schema readiness or dirty marking cannot be verified.
+ */
+function gallery_pdf_documents_usage_begin(
+    array $gallery,
+    string $operation,
+): ?string {
+    if (
+        !function_exists(
+            'Gallery\\Services\\presentation_gallery_attachment_usage_schema_status',
+        )
+        || !function_exists(
+            'Gallery\\Services\\presentation_schema_assert_known',
+        )
+    ) {
+        throw new RuntimeException(
+            'PDF attachment usage schema readiness is unavailable.',
+        );
+    }
+    $status = \Gallery\Services\presentation_gallery_attachment_usage_schema_status();
+    \Gallery\Services\presentation_schema_assert_known($status, $operation);
+    if (($status['state'] ?? '') === 'missing') {
+        return null;
+    }
+    if (($status['state'] ?? '') !== 'available') {
+        throw new RuntimeException(
+            'PDF attachment usage schema readiness is unavailable.',
+        );
+    }
+    if (!function_exists('Gallery\\Models\\gallery_model_attachment_usage_mark_dirty')) {
+        throw new RuntimeException(
+            'PDF attachment usage storage is unavailable.',
+        );
+    }
+    return \Gallery\Models\gallery_model_attachment_usage_mark_dirty(
+        (int) $gallery['id'],
+        'pdf',
+    );
+}
+
+/** Acquire the shared OFP/PDF source lock before a manual PDF's sidecar lock.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery.
+ * @return resource Exclusive root lock shared by PDF and OFP source mutations.
+ * @throws RuntimeException When the gallery lock is unsafe or unavailable.
+ */
+function gallery_pdf_documents_usage_source_lock(array $gallery): mixed
+{
+    $root = gallery_pdf_documents_gallery_directory($gallery);
+    if ($root === null) {
+        throw new RuntimeException(
+            'PDF attachment storage is unavailable or unsafe.',
+        );
+    }
+    $path = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-upload.lock';
+    if (is_link($path)) {
+        throw new RuntimeException('PDF attachment storage is unsafe.');
+    }
+    $lock = @fopen($path, 'c');
+    if ($lock === false) {
+        throw new RuntimeException('PDF attachment storage cannot be locked.');
+    }
+    @chmod($path, GALLERY_PDF_DOCUMENTS_USAGE_LOCK_MODE);
+    if (!flock($lock, LOCK_EX)) {
+        fclose($lock);
+        throw new RuntimeException('PDF attachment storage is busy.');
+    }
+    return $lock;
+}
+
+/** Publish current PDF sidecar state using the token from before its mutation.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery.
+ * @param string|null $revision Dirty generation token, or null for legacy schema.
+ * @param array<string,array{id:string,sha256:string,hidden:bool}> $documents Trusted current manual PDF rows keyed by opaque ID.
+ * @param bool $ofpHidden Whether the legacy OFP PDF is hidden from visitors.
+ * @param array{ofp_pdf_file?:string,ofp_pdf_sha256?:string}|null $ofpManifest Current or just-committed OFP manifest, or null to read it from its trusted owner.
+ * @return void Leaves usage dirty when digest state is incomplete or publication loses its CAS token.
+ */
+function gallery_pdf_documents_usage_publish(
+    array $gallery,
+    ?string $revision,
+    array $documents,
+    bool $ofpHidden,
+    ?array $ofpManifest = null,
+): void {
+    if ($revision === null) {
+        return;
+    }
+    if (!function_exists('Gallery\\Models\\gallery_model_attachment_usage_replace')) {
+        error_log('PDF attachment usage projection publication was unavailable.');
+        return;
+    }
+    $items = [];
+    foreach ($documents as $id => $document) {
+        $digest = $document['sha256'] ?? null;
+        if (!is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
+            error_log('PDF attachment usage projection remained dirty after an invalid digest.');
+            return;
+        }
+        $items[] = [
+            'source_id' => 'document:' . $id,
+            'sha256' => $digest,
+            'asset_id' => null,
+            'album_id' => null,
+            'hidden' => (bool) ($document['hidden'] ?? false),
+        ];
+    }
+    if ($ofpManifest === null) {
+        if (!function_exists(
+            'Gallery\\Services\\simbrief_ofp_gallery_manifest',
+        )) {
+            error_log('PDF attachment usage projection remained dirty because the OFP owner was unavailable.');
+            return;
+        }
+        try {
+            $ofpManifest = \Gallery\Services\simbrief_ofp_gallery_manifest(
+                $gallery,
+            );
+        } catch (\Throwable) {
+            error_log('PDF attachment usage projection remained dirty because the OFP manifest could not be read.');
+            return;
+        }
+    }
+    if (($ofpManifest['ofp_pdf_file'] ?? '') === 'simbrief-ofp.pdf') {
+        $digest = $ofpManifest['ofp_pdf_sha256'] ?? null;
+        if (!is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
+            error_log('PDF attachment usage projection remained dirty pending the legacy OFP digest.');
+            return;
+        }
+        $items[] = [
+            'source_id' => 'ofp',
+            'sha256' => $digest,
+            'asset_id' => null,
+            'album_id' => null,
+            'hidden' => $ofpHidden,
+        ];
+    }
+    try {
+        if (!\Gallery\Models\gallery_model_attachment_usage_replace(
+            (int) $gallery['id'],
+            'pdf',
+            $items,
+            $revision,
+        )) {
+            error_log('PDF attachment usage projection publication was superseded.');
+        }
+    } catch (\Throwable) {
+        error_log('PDF attachment usage projection publication failed safely.');
+    }
+}
+
 /**
  * List valid general PDF document metadata for one physical gallery.
  *
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @return list<array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool}> Ordered document metadata; an unsafe or missing gallery has no entries.
  */
 function gallery_pdf_documents_list(array $gallery): array
@@ -488,12 +652,17 @@ function gallery_pdf_documents_attach(
             'PDF document storage is unavailable or unsafe.',
         );
     }
+    $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
     if (is_link($lockPath)) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage is unsafe.');
     }
     $lock = @fopen($lockPath, 'c');
     if ($lock === false) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage cannot be locked.');
     }
     @chmod($lockPath, 0600);
@@ -503,6 +672,7 @@ function gallery_pdf_documents_attach(
     $backupIndex = '';
     $restoreTarget = '';
     $committed = false;
+    $usageRevision = null;
     try {
         if (!flock($lock, LOCK_EX)) {
             throw new RuntimeException('PDF document storage is busy.');
@@ -586,6 +756,10 @@ function gallery_pdf_documents_attach(
                 'The PDF document could not be staged completely.',
             );
         }
+        $usageRevision = gallery_pdf_documents_usage_begin(
+            $gallery,
+            'gallery_pdf_documents_attach',
+        );
         @chmod($stageIndex, 0600);
         if (is_file($targetPdf)) {
             $backupPdf =
@@ -641,6 +815,12 @@ function gallery_pdf_documents_attach(
             'pdf',
             $documents,
         );
+        gallery_pdf_documents_usage_publish(
+            $gallery,
+            $usageRevision,
+            $documents,
+            $indexState['ofp_hidden'],
+        );
         return $entry;
     } finally {
         if (!$committed && $backupPdf !== '' && $restoreTarget !== '') {
@@ -660,6 +840,8 @@ function gallery_pdf_documents_attach(
         }
         flock($lock, LOCK_UN);
         fclose($lock);
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
     }
 }
 
@@ -709,7 +891,7 @@ function gallery_pdf_documents_copy_source(
 /**
  * Resolve one verified original PDF by its opaque gallery-scoped document id.
  *
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @param string $id Opaque 32-character lowercase hexadecimal document id.
  * @return ?array{path:string,metadata:array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool}} Confined original path and trusted metadata, or null when unavailable.
  */
@@ -752,7 +934,7 @@ function gallery_pdf_documents_read(array $gallery, string $id): ?array
 
 /**
  * Change whether one indexed manual PDF is visible to gallery visitors.
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @param string $id Opaque document id selected from the gallery's trusted index.
  * @param bool $hidden Whether public and shared visitors must be denied the PDF.
  * @return bool True when the stored visibility changed; false when the document is absent.
@@ -769,13 +951,21 @@ function gallery_pdf_documents_set_hidden(
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
     if (is_link($directory) || !is_dir($directory))
         return false;
+    $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
-    if (is_link($lockPath))
+    if (is_link($lockPath)) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage is unsafe.');
+    }
     $lock = @fopen($lockPath, 'c');
-    if ($lock === false)
+    if ($lock === false) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage cannot be locked.');
+    }
     $stage = '';
+    $usageRevision = null;
     try {
         if (!flock($lock, LOCK_EX))
             throw new RuntimeException('PDF document storage is busy.');
@@ -813,24 +1003,36 @@ function gallery_pdf_documents_set_hidden(
             throw new RuntimeException(
                 'Updated PDF visibility could not be staged.',
             );
+        $usageRevision = gallery_pdf_documents_usage_begin(
+            $gallery,
+            'gallery_pdf_documents_visibility',
+        );
         @chmod($stage, 0600);
         if (!@rename($stage, $indexPath))
             throw new RuntimeException(
                 'Updated PDF visibility could not be installed.',
             );
         $stage = '';
+        gallery_pdf_documents_usage_publish(
+            $gallery,
+            $usageRevision,
+            $documents,
+            $indexState['ofp_hidden'],
+        );
         return true;
     } finally {
         if ($stage !== '' && is_file($stage))
             @unlink($stage);
         flock($lock, LOCK_UN);
         fclose($lock);
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
     }
 }
 
 /**
  * Read the persisted hidden state for a manual PDF or the legacy SimBrief OFP.
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @param string $id Opaque manual document id or the reserved legacy id `ofp`.
  * @return bool Whether the document is hidden; old or missing metadata defaults to visible.
  */
@@ -851,7 +1053,7 @@ function gallery_pdf_documents_hidden(array $gallery, string $id): bool
 
 /**
  * Change visibility of the legacy gallery-local SimBrief OFP without deleting it.
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @param bool $hidden Whether public and shared visitors must be denied the OFP.
  * @return bool True when the visibility marker was atomically stored.
  * @throws RuntimeException When the gallery storage cannot be safely locked or updated.
@@ -876,13 +1078,21 @@ function gallery_pdf_documents_set_ofp_hidden(
         throw new RuntimeException(
             'PDF document storage is unavailable or unsafe.',
         );
+    $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
-    if (is_link($lockPath))
+    if (is_link($lockPath)) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage is unsafe.');
+    }
     $lock = @fopen($lockPath, 'c');
-    if ($lock === false)
+    if ($lock === false) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage cannot be locked.');
+    }
     $stage = '';
+    $usageRevision = null;
     try {
         if (!flock($lock, LOCK_EX))
             throw new RuntimeException('PDF document storage is busy.');
@@ -912,18 +1122,30 @@ function gallery_pdf_documents_set_ofp_hidden(
                 !== (strlen($json) + 1)
         )
             throw new RuntimeException('OFP visibility could not be staged.');
+        $usageRevision = gallery_pdf_documents_usage_begin(
+            $gallery,
+            'gallery_pdf_documents_ofp_visibility',
+        );
         @chmod($stage, 0600);
         if (!@rename($stage, $indexPath))
             throw new RuntimeException(
                 'OFP visibility could not be installed.',
             );
         $stage = '';
+        gallery_pdf_documents_usage_publish(
+            $gallery,
+            $usageRevision,
+            $indexState['documents'],
+            $hidden,
+        );
         return true;
     } finally {
         if ($stage !== '' && is_file($stage))
             @unlink($stage);
         flock($lock, LOCK_UN);
         fclose($lock);
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
     }
 }
 
@@ -953,14 +1175,22 @@ function gallery_pdf_documents_delete(
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
     if (is_link($directory) || !is_dir($directory))
         return false;
+    $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
-    if (is_link($lockPath))
+    if (is_link($lockPath)) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage is unsafe.');
+    }
     $lock = @fopen($lockPath, 'c');
-    if ($lock === false)
+    if ($lock === false) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
         throw new RuntimeException('PDF document storage cannot be locked.');
+    }
     $backupPdf = '';
     $stageIndex = '';
+    $usageRevision = null;
     try {
         if (!flock($lock, LOCK_EX))
             throw new RuntimeException('PDF document storage is busy.');
@@ -1001,6 +1231,10 @@ function gallery_pdf_documents_delete(
                 'Updated PDF document index could not be staged.',
             );
         }
+        $usageRevision = gallery_pdf_documents_usage_begin(
+            $gallery,
+            'gallery_pdf_documents_delete',
+        );
         @chmod($stageIndex, 0600);
         if (!@rename($path, $backupPdf))
             throw new RuntimeException(
@@ -1021,6 +1255,12 @@ function gallery_pdf_documents_delete(
             'pdf',
             $documents,
         );
+        gallery_pdf_documents_usage_publish(
+            $gallery,
+            $usageRevision,
+            $documents,
+            $indexState['ofp_hidden'],
+        );
         return true;
     } finally {
         foreach ([$backupPdf, $stageIndex] as $temporary) {
@@ -1029,5 +1269,7 @@ function gallery_pdf_documents_delete(
         }
         flock($lock, LOCK_UN);
         fclose($lock);
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
     }
 }

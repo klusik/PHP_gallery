@@ -2785,6 +2785,14 @@ function view_render_admin_dashboard_presentation_schema_card(
             'admin.dashboard.presentation_schema_feature_admin_report',
             'Complete Admin gallery report',
         ),
+        'presentation_gallery_attachment_usage' => t(
+            'admin.dashboard.presentation_schema_feature_attachment_usage',
+            'Gallery media counts',
+        ),
+        'presentation_gallery_attachment_usage_music' => t(
+            'admin.dashboard.presentation_schema_feature_attachment_usage_music',
+            'Music count catalog',
+        ),
     ];
     $title = $labels[$feature] ?? t(
         'admin.dashboard.presentation_schema_feature_default',

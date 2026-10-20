@@ -10,8 +10,9 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {setupAdminGalleryImages} from '/assets/gallery-modules/admin-gallery-images.js?v=20261020-unified-media-forms-v1';
-import {setupAdminGallerySidePanel} from '/assets/gallery-modules/admin-side-panel.js?v=20261018-presentation-confirm-v1';
+import {setupAdminGalleryImages} from '/assets/gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
+import {setupAdminBulkSelection} from '/assets/gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
+import {setupAdminGallerySidePanel} from '/assets/gallery-modules/admin-side-panel.js?v=20261020-shift-range-v1';
 import {beginAdminPanelOpen} from '/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 
 // Purpose: Pace fixture-side state polling without delaying successful coordinator updates.
@@ -104,6 +105,7 @@ window.fetch = async (input, options = {}) => {
     return new Response(JSON.stringify(result), {status: 200, headers: {'Content-Type': 'application/json'}});
 };
 
+setupAdminBulkSelection();
 setupAdminGalleryImages(document);
 setupAdminGallerySidePanel();
 const panel = document.querySelector('[data-admin-side-panel]');

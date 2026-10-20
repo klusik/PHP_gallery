@@ -1122,6 +1122,64 @@ function maintenance_center_execute_music_repository(array $context): array
     ];
 }
 
+/** Reconcile one bounded slice of gallery PDF/music usage projections.
+ * @param array{task_state:array{cursor_gallery_id?:int,scanned?:int,
+ *     ready?:int,failed?:int}} $context Persisted resumable checkpoint.
+ * @return array{done:bool,task_state:array{cursor_gallery_id:int,scanned:int,
+ *     ready:int,failed:int},metrics:array{galleries_scanned:int,
+ *     galleries_ready:int,galleries_failed:int},activity:string,warning?:string}
+ *     Cumulative cursor state and this-step metrics; failures remain omitted.
+ */
+function maintenance_center_execute_attachment_usage(array $context): array
+{
+    $previous = (array) $context['task_state'];
+    $state = [
+        'cursor_gallery_id' => max(
+            0,
+            (int) ($previous['cursor_gallery_id'] ?? 0),
+        ),
+        'scanned' => max(0, (int) ($previous['scanned'] ?? 0)),
+        'ready' => max(0, (int) ($previous['ready'] ?? 0)),
+        'failed' => max(0, (int) ($previous['failed'] ?? 0)),
+    ];
+    $result = gallery_attachment_usage_reconcile_batch($state);
+    $next = [
+        'cursor_gallery_id' => max(0, (int) $result['cursor_gallery_id']),
+        'scanned' => max(0, (int) $result['scanned']),
+        'ready' => max(0, (int) $result['ready']),
+        'failed' => max(0, (int) $result['failed']),
+    ];
+    $stepScanned = max(0, $next['scanned'] - $state['scanned']);
+    $stepReady = max(0, $next['ready'] - $state['ready']);
+    $stepFailed = max(0, $next['failed'] - $state['failed']);
+    $response = [
+        'done' => (bool) $result['done'],
+        'task_state' => $next,
+        'metrics' => [
+            'galleries_scanned' => $stepScanned,
+            'galleries_ready' => $stepReady,
+            'galleries_failed' => $stepFailed,
+        ],
+        'activity' => maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.attachment_usage_progress',
+            'Checked {scanned} galleries: {ready} ready, {failed} failed.',
+            [
+                'scanned' => $next['scanned'],
+                'ready' => $next['ready'],
+                'failed' => $next['failed'],
+            ],
+        ),
+    ];
+    if ((bool) $result['done'] && $next['failed'] > 0) {
+        $response['warning'] = maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.attachment_usage_warning',
+            'Some gallery media counts could not be rebuilt; their badges '
+                . 'remain omitted.',
+        );
+    }
+    return $response;
+}
+
 /** No-op execution boundary for server-side preflight rechecks.
  * @param array<string,mixed> $context Shared task context containing prior analysis results and job state.
  * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.

@@ -621,7 +621,9 @@ for~keyboard use and~single-step moves. The~Files
 disclosure lists physical variants. \ui{Locations} expands to~direct gallery
 and~music-album placements: two variants in~one gallery count as~one location,
 and~derived Smart inclusion adds nothing. Gallery links in~both disclosures
-open the~public gallery, and~each music tag appears as~its own compact chip.
+open the~public gallery using its~canonical URL, current language and~the~site's
+configured rewrite style; a~missing gallery has~no~link. Each music tag appears
+as~its own compact chip.
 Header links sort Title, Files, Locations, or~Tags in~either direction across
 the~complete result set before pagination, with stable ID tie-breaking. Tags
 sort alphabetically by~the~song's first music tag.
@@ -630,6 +632,9 @@ The~manager shares the~site's typography and~accent colors, with compact
 translucent surfaces and~softly rounded borders. Each song title sits beside
 its~file count, shown with a~stacked icon and~number. Variant and~\ui{Locations}
 disclosures follow the~global Admin side-panel duration; 0 makes them immediate.
+Floating row disclosures close on~an~outside click, a~repeat click on~the~same
+trigger, Escape, or~when another row disclosure opens. Interaction inside an~open
+disclosure leaves it~open, and~the~compact row layout is~preserved.
 
 The~catalog-heading gear contains the~global filename-extension preference.
 The~adjacent new-album gear hides parent and~description fields until needed.
@@ -646,7 +651,9 @@ never renames the~original file. The~global
 \ui{Show file extensions in song titles} switch defaults OFF, including after
 upgrade, and~affects filename-derived names only. Explicit titles keep their
 text. Select songs to~preview an~explicit same-song relationship and~choose
-surviving metadata; split a~variant to~undo a~wrong link. This never grants
+surviving metadata. The~survivor chooser offers only selected songs, and~the
+chosen survivor remains selected only while it~is~still in~the~selection.
+Split a~variant to~undo a~wrong link. This never grants
 access to~another source or~changes its download permission.
 
 Create albums and~nested subalbums, then navigate the~compact tree with native
@@ -736,6 +743,17 @@ indexes together. Each central asset counts once in~storage totals regardless of
 gallery links; unmigrated local originals count separately. Deleting a~gallery
 removes its~references but~retains shared originals. Gallery ZIP exports and~transfers
 omit music. See \filepath{docs/GALLERY_MUSIC.md}.
+
+The~same Maintenance Center includes a~default-selected optional
+reconciliation for~legacy public PDF/music card counts. It~resumes in~steps
+of~at~most 25 galleries and~hashes at~most one legacy OFP candidate up~to
+25~MiB per~step. Missing or~dirty results stay omitted. Analysis does~not
+read originals; the~task does~not~change them. Manual filesystem edits require
+reconciliation. If~a~legacy OFP lacks a~digest, the~task hashes it~under the
+shared persistent source lock and atomically saves the~digest in~its manifest;
+the~PDF and~audio bytes remain unchanged. Music reconciliation may~create the
+private ilepath{.gallery-music/} lock directory. A~new gallery with no~source
+metadata can~start with ready-zero counts.
 
 \subsection{Edit identity and~context}
 \index{gallery metadata}
@@ -2272,7 +2290,7 @@ The~Theme area controls site identity, colors, dimensions, page width, backgroun
 
 Under \ui{Theme > Layout > Cards \& badges}, choose the~global default breadcrumb style. The~gallery editor's \ui{Display > Advanced} controls and~Smart Gallery presentation controls can~inherit or~override it. Each selector shows a~real rendered breadcrumb example inside a~native radio card, so~administrators can~choose by~appearance. The~inherit card in~gallery selectors previews the~currently effective Theme style. Native radio controls support keyboard selection and~work without JavaScript. The~stable IDs are~\codeword{minimal}, \codeword{chevron}, \codeword{pills}, \codeword{surface}, \codeword{ribbon}, \codeword{nodes}, \codeword{tabs}, \codeword{tiles}, and~\codeword{gradient}. Ribbon forms arrow segments, Connected nodes link decorative dots, Tabs are~compact, Tiles are~raised rectangular cards, and~Gradient adds a~Theme-colored surface with an~accent stripe. All ancestors remain reachable as~the~path wraps, including without JavaScript.
 
-The~Theme editor does not use a~separate light/dark-mode switch. Instead, the~saved color controls and~an~optional Custom CSS skin define the~public visual palette directly. It~also sets gallery-card and~subgallery layouts, the~default breadcrumb style, and~up~to~three header shortcuts. Each shortcut can~target the~main page, one gallery, or~remain empty. Anonymous visitors see only configured gallery shortcuts that are~still public and~listed; duplicate or~deleted gallery selections are~discarded when the~settings are~saved. Leaving all three slots empty hides those favorite-gallery buttons. Gallery cards may~also show a~configurable contained-picture count badge. When that badge is~effective for~a~gallery, opening the~gallery keeps the~same branch count visible in~the~hero panel, counting images in~the~current gallery and~its accessible subgalleries under the~same public/access rules as~the~card. Per-gallery presentation can~inherit the~site defaults or~override the~choices offered by~the~gallery editor. Breadcrumbs wrap onto additional lines on~narrow screens; every ancestor remains an~accessible link, including without JavaScript.
+The~Theme editor does not use a~separate light/dark-mode switch. Instead, the~saved color controls and~an~optional Custom CSS skin define the~public visual palette directly. It~also sets gallery-card and~subgallery layouts, the~default breadcrumb style, and~up~to~three header shortcuts. Each shortcut can~target the~main page, one gallery, or~remain empty. Anonymous visitors see only configured gallery shortcuts that are~still public and~listed; duplicate or~deleted gallery selections are~discarded when the~settings are~saved. Leaving all three slots empty hides those favorite-gallery buttons. Gallery cards may~also show a~configurable contained-picture count badge. When that badge is~effective for~a~gallery, opening the~gallery keeps the~same branch count visible in~the~hero panel, counting images in~the~current gallery and~its accessible subgalleries under the~same public/access rules as~the~card. Public cards stack nonzero PDF and~music counts compactly below the~photo icon with tighter gaps between badges. When the~photo-count badge is~enabled, the~opened gallery's action bar shows those media counts inline immediately to~its left. Each count covers unique files in~the~gallery and~its subgalleries, counting a~recorded SHA-256 once and~following public visibility, hidden-state, access and~capability rules. Missing, unknown or~dirty derived snapshots omit that badge; a~ready zero count remains hidden. Per-gallery presentation can~inherit the~site defaults or~override the~choices offered by~the~gallery editor. Breadcrumbs wrap onto additional lines on~narrow screens; every ancestor remains an~accessible link, including without JavaScript.
 
 The~\ui{Animations} subsection sets the~opening and~closing duration for~the~public information panel on~gallery cards and~the~Admin side panel. Each value ranges from~0~to~800~ms; 0 disables that motion. The~defaults are~320~ms and~260~ms respectively. The~public panel contains the~gallery title, description, date, and~complete tag list. Its native disclosure works without JavaScript; with~JavaScript, the~panel stays within the~viewport and~can~be~dismissed by~clicking elsewhere or~pressing Escape. The~interaction honors the~browser's reduced-motion preference.
 
@@ -2783,7 +2801,7 @@ The~compact log table keeps event names, messages, severity, timestamps and~inst
 
 Search includes event names, messages, JSON context and~request/route metadata. A~row marked \ui{Match in~details} matches inside its collapsed context. Live filtering commits only the~newest request, keeping rows, counts and~the~URL tied to~the~same result even during rapid typing. For~automatic cache failures, \codeword{cache.automatic\_failed} records the~entry point, failure stage, exception class, source filename/line and~validated SQLSTATE/driver codes when available. It~omits raw messages, SQL, private paths and~credentials. Repeated failures are~coalesced for~five minutes; changed diagnostics retain a~thirty-second minimum. Logging failure preserves the~worker checkpoint and~safe refusal. Complete pending migrations when schema diagnostics require them; observe automatic progress through ordinary visits and~passive status without starting a~manual scan.
 
-Use the~checkboxes and~the~header checkbox to~select entries on~the~current page. The~toolbar offers \ui{Selected}, \ui{This page} and~\ui{All filtered} for~both copying and~saving a~UTF-8 TXT file. Selecting a~group includes all its instances, including those not~yet loaded; overlapping individual selections appear only once. \ui{All filtered} exports matching raw events across all pages in~the~chosen time order. Selection clears when filters or~pagination replace the~rows. PHP reads large exports in~batches; copying still needs the~complete chosen text in~browser memory, so~prefer saving for~very large histories. If~clipboard access is~unavailable, a~dialog selects the~complete text for~manual copying. TXT downloads also work without JavaScript; the~existing full CSV/JSON ZIP export remains available.
+Use the~checkboxes and~the~header checkbox to~select entries on~the~current page. In~Admin bulk lists with item checkboxes, click one row and~Shift-click another in~the~same list to~apply the~second checkbox's resulting state to~enabled visible rows between them on~the~current results page. The~range anchor resets when live filtering, pagination, or~another row replacement changes the~results. Severity filters continue to~control which log rows are~visible; \ui{Selected}, \ui{This page} and~\ui{All filtered} retain their existing log export scopes. The~toolbar offers those scopes for~both copying and~saving a~UTF-8 TXT file. Selecting a~group includes all its instances, including those not~yet loaded; overlapping individual selections appear only once. \ui{All filtered} exports matching raw events across all pages in~the~chosen time order. Selection clears when filters or~pagination replace the~rows. PHP reads large exports in~batches; copying still needs the~complete chosen text in~browser memory, so~prefer saving for~very large histories. If~clipboard access is~unavailable, a~dialog selects the~complete text for~manual copying. TXT downloads also work without JavaScript; the~existing full CSV/JSON ZIP export remains available.
 
 Everyday administrative work creates a~useful history: uploads, gallery changes, security decisions, maintenance results, warnings, and~other operational events can~leave a~record in~the~Admin log. That history is~valuable when you want to~understand what happened, when it~happened, and~which account or~request was~involved. It~is~also normal for~the~table to~become large on~an~active installation. Version~\version{} therefore treats log care as~its own explicit maintenance task rather than allowing generic database cleanup to~remove audit history unexpectedly.
 

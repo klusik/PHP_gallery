@@ -561,6 +561,30 @@ assert_database_maintenance(
     ),
     'Transactional cleanup audit rows must be protected from generic cleanup.',
 );
+foreach ([
+    'gallery_attachment_usage_state',
+    'gallery_attachment_usage_items',
+] as $projectionTable) {
+    $projectionPolicy = Gallery\Services\database_maintenance_table_policies()[
+        $projectionTable
+    ];
+    $policyInventory['tables'][$projectionTable] = [
+        'policy' => $projectionPolicy,
+    ];
+    assert_database_maintenance(
+        $projectionPolicy['category'] === 'caches and temporary state'
+            && $projectionPolicy['cleanup_mode'] === 'disabled',
+        'Media projection ownership must be known without authorizing generic deletion.',
+    );
+    assert_database_maintenance(
+        in_array(
+            $projectionTable,
+            database_maintenance_protected_tables($policyInventory),
+            true,
+        ),
+        'Active media projection generations must remain protected from generic cleanup.',
+    );
+}
 assert_database_maintenance(
     (string) $inventory['tables']['mystery_plugin_rows']['category']
         === 'unknown/unclassified',
