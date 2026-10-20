@@ -1,5 +1,195 @@
 # Patch notes
 
+## Version 0.139
+
+Improved the existing Music Manager with working public gallery links, clearer
+merge choices, and consistent popup dismissal. Added Shift-click range selection
+to shared Admin lists, compact counts of unique PDF and music files throughout
+accessible gallery branches, and smaller outlined header actions with icons.
+Added an optional, resumable maintenance task to prepare count metadata for
+existing attachments while preserving original media files and legacy storage.
+
+### Highlights
+
+#### Public gallery PDF and music counts
+
+- Added compact PDF and music count badges beneath the existing photo badge on
+  gallery cards, aligned to the right with tighter icon and number spacing.
+- Added the same media counts to an opened gallery's action bar when its
+  photo-count badge is enabled, horizontally before the photo count. Unified
+  spacing across the count badges, gallery actions, download control, and map
+  button.
+- Counted distinct recorded SHA-256 file digests separately for PDF and music
+  across the gallery and its accessible subgalleries. Repeated references to the
+  same file bytes count once, including repeated live-album use and a PDF also
+  attached through the SimBrief OFP path.
+- Applied current visitor access, visibility, hidden-item, and capability rules
+  to the counts, including when an administrator views public pages. Preserved
+  the existing count-badge setting and omitted zero-count media badges.
+- Omitted a media count when an included branch lacks a ready snapshot, rather
+  than displaying an incomplete total. Existing installations can populate the
+  optional metadata through Maintenance Center.
+
+#### Music Manager links, popups, and merge choices
+
+- Fixed expanded song usage links to open the actual public gallery with its
+  canonical path, active language, and configured URL mode. Used batched gallery
+  metadata and omitted unavailable origin links instead of constructing invalid
+  gallery-ID destinations.
+- Unified dismissal of floating title, tags, file variants, locations, settings,
+  merge, split, and album-option panels. Clicking outside closes them, clicking
+  the same trigger toggles them, opening another panel dismisses the previous
+  one, and Escape restores focus to the trigger.
+- Restricted merge survivor choices to the currently checked songs. Preserved
+  an existing survivor choice while it remains selected and selected a valid
+  replacement after it is unchecked. Disabled merge controls for insufficient,
+  busy, or stale selections and retained the server-side minimum of two songs.
+- Kept the delegated behavior working after refreshed Music Manager fragments
+  and prevented contextual row shortcuts from changing bulk checkbox selection.
+
+#### Shift-click selection across Admin lists
+
+- Added shared inclusive Shift-click range selection for visible, enabled item
+  checkboxes, including reverse-range deselection. Applied the behavior across
+  compatible Admin bulk item lists, including logs, music, and gallery images.
+- Scoped each range to its owning form, checkbox name, and visible list. Kept
+  externally associated form controls working without including hidden rows,
+  disabled controls, or disabled fieldsets in the range.
+- Reset stale anchors when rows are replaced or filtered and excluded master,
+  page-selection, and filter controls from item anchors. Dispatched ordinary
+  change events so existing selected counts and image-row highlights update.
+
+#### Compact public-header actions
+
+- Restyled public-page Admin, Test run, Updates, and Logout controls as 32 px
+  transparent outlined actions with consistent 16 px SVG icons and localized
+  labels, matching the gallery map control's appearance.
+- Preserved Theme-controlled language choices, pending-update feedback,
+  keyboard focus, the disabled running-Test-run state, and the original action
+  destinations and form authority. Kept Admin-page Logout markup unchanged.
+
+### Technical Details
+
+#### Backend and attachment metadata
+
+- Added `app/services/gallery_attachment_usage.php` and extended the existing
+  gallery Model and lookup service to maintain optional derived count snapshots.
+  Public reads use projection metadata instead of walking attachment folders,
+  opening originals, or hashing media during page rendering.
+- Expanded live album references through current membership and the same
+  canonical repository asset selection used for playback, so album edits affect
+  counts without copying the playlist into each gallery's count snapshot.
+- Invalidated snapshots before supported PDF, OFP, and music source mutations.
+  Published completed snapshots only when their generation token still matches,
+  preventing an older producer from overwriting a newer mutation's state.
+- Coordinated PDF/OFP producers and reconciliation with their shared source
+  lock and reused the existing music writer lock. Preserved successful source
+  operations when optional post-commit publication remains pending.
+- Stored `ofp_pdf_sha256` with newly attached or generated OFP metadata. Added
+  bounded, atomic legacy-digest persistence under the same source lock; this
+  changes metadata while preserving the PDF bytes.
+- Seeded genuinely empty new galleries with insert-only ready-empty state,
+  preserving any snapshot or dirty generation already created by a writer.
+
+#### Database and readiness policy
+
+- Added migration
+  `database/migrations/202610200004_gallery_attachment_usage.php` with
+  `gallery_attachment_usage_state` and `gallery_attachment_usage_items`.
+  Added gallery/media-kind generation state, source references, recorded digest
+  and asset/album references, hidden state, lookup indexes, and gallery-owned
+  cascading relationships.
+- Kept existing attachment originals, sidecar indexes, and repository records
+  authoritative. Added no public request-time filesystem rebuild path.
+- Treated available projection schema as usable for reads and generation-safe
+  publication. Confirmed missing optional schema omits badges and preserves the
+  existing legacy attachment-write path. Unknown schema inspection omits reads
+  and refuses source mutations before changing their files or indexes.
+- Skipped count reads and their optional readiness probes when the relevant PDF
+  or music capability is disabled. Preserved partial-schema and unavailable
+  repository degradation without treating an unknown count as a ready zero.
+- Registered the two projection tables with explicit ownership and protected
+  them from generic database cleanup.
+
+#### Maintenance and diagnostics
+
+- Added the default-selected, resumable `media.attachment_usage` maintenance
+  task. Its analysis checks readiness without rebuilding data; execution
+  checkpoints its cursor and scanned, ready, and failed gallery counts.
+- Bounded each reconciliation step to 25 galleries and at most one legacy OFP
+  hash attempt of up to 25 MiB. Deferred busy locks, retained failed snapshots
+  as unavailable, and reported warnings without claiming those galleries ready.
+- Added readiness, System Health, and Runtime Diagnostics labels for
+  `presentation.gallery_attachment_usage` and
+  `presentation.gallery_attachment_usage_music`. Kept diagnostic context bounded
+  without exposing raw SQL, database exceptions, credentials, or private paths.
+- Reused the existing `gallery-pdf-documents` runtime owner for the deferred
+  worker and registered the required deferred maintenance and SimBrief edges
+  in `scripts/runtime_module_roots.php`.
+
+#### Frontend, localization, and documentation
+
+- Updated `public/assets/gallery-modules/admin-bulk-actions.js` to own range
+  selection and retired the duplicate image-specific range handler while
+  preserving its existing change consumers.
+- Updated `public/assets/gallery-modules/admin-music.js`, its view models, and
+  the complete affected revisioned import chain for refreshed fragments.
+- Extended gallery card, hero, and shared header views with prepared counts,
+  accessible icon labels, and scoped styles in
+  `public/assets/styles/utilities.css`.
+- Updated EN, CS, DE, and SV runtime catalogs and dictionaries, topical music,
+  PDF, database, architecture, compatibility, testing, and design documentation,
+  and all four maintained manual sources.
+
+#### Regression coverage
+
+- Added `tests/admin_music_gallery_url_test.php` for localized canonical URLs
+  with clean and query-based routing. Expanded catalog and repository database
+  fixtures for relevant, existing gallery origins.
+- Expanded Music Manager browser coverage for outside-click, trigger-switch,
+  Escape, refreshed-fragment, and selected-only merge behavior. Extended shared
+  workspace and image lifecycle fixtures for list ownership, hidden/disabled
+  rows, reverse ranges, stale anchors, and ordinary selection feedback.
+- Expanded `tests/music_repository_database_test.php` for recursive digest
+  deduplication, PDF/OFP overlap, live membership, access-filtered Admin views,
+  ready-empty state, stale-generation refusal, and schema degradation.
+- Extended count-badge PHP and Chromium fixtures for policy gating, zero and
+  unavailable counts, all card cover branches, compact stacks, and equal action
+  spacing at narrow and desktop widths.
+- Extended PDF/OFP and upload fixtures with real confirmed-missing-schema
+  adapters and unknown-schema refusal. Expanded maintenance registry, analysis,
+  resumable execution, table-protection, and schema-policy coverage.
+- Extended `tests/theme_public_css_cascade_test.php` to render the actual public
+  header and protect action labels, icons, routes, CSRF and return fields,
+  pending updates, running state, language markup, and Admin-page exclusions.
+
+### User Impact
+
+#### For visitors
+
+- Added a compact view of the unique PDF and music files available throughout
+  an accessible gallery branch, alongside its existing photo count.
+- Kept hidden, inaccessible, disabled, or not-yet-reconciled media from producing
+  misleading public badge totals. Preserved existing playback and access rules.
+
+#### For administrators
+
+- Fixed Music Manager usage navigation and made floating panels easier to
+  dismiss. Limited merge data-source choices to the songs actually selected.
+- Added familiar Shift-click range selection to existing Admin item lists and
+  reduced the space occupied by public-page administrative navigation.
+- Added a default-selected maintenance option for initializing or refreshing
+  attachment count metadata. Manual changes to source files or indexes require
+  reconciliation; public visits do not perform this work automatically.
+
+#### Compatibility
+
+- Preserved legacy per-gallery attachments and the existing central audio
+  repository. The new count migration and reconciliation do not move, transcode,
+  or replace media originals.
+- Preserved the independent Windows companion version and installer inputs;
+  this release's changes are confined to the CMS, its tests, and documentation.
+
 ## Version 0.138
 
 Introduced a site-wide Music Manager, normalized song identities, reusable
