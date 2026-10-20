@@ -43,7 +43,7 @@ use function Gallery\Views\view_script_asset_for_context;
 require_once __DIR__ . '/../app/controllers/shared_layout.php';
 
 if (!function_exists('e')) {
-        /**
+    /**
      * Minimal HTML escaping shim for layout helper tests.
      *
      * @param ?string $value Value to process.
@@ -51,7 +51,11 @@ if (!function_exists('e')) {
      */
     function e(?string $value): string
     {
-        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars(
+            (string) $value,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 }
 
@@ -60,14 +64,23 @@ require_once __DIR__ . '/../app/views/layout.php';
 /**
  * Throw when two values are not identical.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Expected value, including its collection shape when applicable.
+ * @param TActual $actual Actual value, including its collection shape when applicable.
  * @param string $label Label value.
+ * @return void Throws when strict comparison fails.
  */
-function assert_public_asset_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_public_asset_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
@@ -75,13 +88,23 @@ function assert_public_asset_same(mixed $expected, mixed $actual, string $label)
  * Throw when an array does not contain an expected value.
  *
  * @param string $needle Needle value.
- * @param array $haystack Haystack value.
+ * @param list<string> $haystack Collected asset paths.
  * @param string $label Label value.
+ * @return void Throws when the required asset path is absent.
  */
-function assert_public_asset_contains(string $needle, array $haystack, string $label): void
-{
+function assert_public_asset_contains(
+    string $needle,
+    array $haystack,
+    string $label,
+): void {
     if (!in_array($needle, $haystack, true)) {
-        throw new RuntimeException($label . ' did not contain ' . var_export($needle, true) . '. Assets: ' . implode(', ', $haystack));
+        throw new RuntimeException(
+            $label
+                . ' did not contain '
+                . var_export($needle, true)
+                . '. Assets: '
+                . implode(', ', $haystack),
+        );
     }
 }
 
@@ -89,69 +112,215 @@ function assert_public_asset_contains(string $needle, array $haystack, string $l
  * Throw when an array contains an unexpected value.
  *
  * @param string $needle Needle value.
- * @param array $haystack Haystack value.
+ * @param list<string> $haystack Collected asset paths.
  * @param string $label Label value.
+ * @return void Throws when the forbidden asset path is present.
  */
-function assert_public_asset_not_contains(string $needle, array $haystack, string $label): void
-{
+function assert_public_asset_not_contains(
+    string $needle,
+    array $haystack,
+    string $label,
+): void {
     if (in_array($needle, $haystack, true)) {
-        throw new RuntimeException($label . ' unexpectedly contained ' . var_export($needle, true) . '. Assets: ' . implode(', ', $haystack));
+        throw new RuntimeException(
+            $label
+                . ' unexpectedly contained '
+                . var_export($needle, true)
+                . '. Assets: '
+                . implode(', ', $haystack),
+        );
     }
 }
 
-$anonymousPublicStyles = shared_layout_stylesheet_files_for_context('public-page', null, false);
-assert_public_asset_contains('assets/styles/public-shared.css', $anonymousPublicStyles, 'anonymous public styles include extracted shared public CSS');
-assert_public_asset_contains('assets/styles/public.css', $anonymousPublicStyles, 'anonymous public styles include public CSS');
-assert_public_asset_contains('assets/styles/lightbox.css', $anonymousPublicStyles, 'anonymous public styles include lightbox CSS');
-assert_public_asset_contains('assets/styles/breadcrumbs.css', $anonymousPublicStyles, 'anonymous public styles include shared breadcrumb presentation');
+$anonymousPublicStyles = shared_layout_stylesheet_files_for_context(
+    'public-page',
+    null,
+    false,
+);
+assert_public_asset_contains(
+    'assets/styles/public-shared.css',
+    $anonymousPublicStyles,
+    'anonymous public styles include extracted shared public CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/public.css',
+    $anonymousPublicStyles,
+    'anonymous public styles include public CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/lightbox.css',
+    $anonymousPublicStyles,
+    'anonymous public styles include lightbox CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/breadcrumbs.css',
+    $anonymousPublicStyles,
+    'anonymous public styles include shared breadcrumb presentation',
+);
 
 foreach (shared_layout_admin_stylesheet_files() as $styleFile) {
-    if (in_array($styleFile, ['assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css', 'assets/styles/utilities.css', 'assets/styles.css', 'assets/styles/breadcrumbs.css'], true)) {
+    if (in_array(
+        $styleFile,
+        [
+            'assets/styles/base.css',
+            'assets/styles/public.css',
+            'assets/styles/lightbox.css',
+            'assets/styles/utilities.css',
+            'assets/styles.css',
+            'assets/styles/breadcrumbs.css',
+        ],
+        true,
+    )) {
         continue;
     }
-    assert_public_asset_not_contains($styleFile, $anonymousPublicStyles, 'anonymous public styles exclude admin-only CSS');
+    assert_public_asset_not_contains(
+        $styleFile,
+        $anonymousPublicStyles,
+        'anonymous public styles exclude admin-only CSS',
+    );
 }
 
 $loggedInUser = ['id' => 1, 'username' => 'admin'];
-$loggedInPublicStyles = shared_layout_stylesheet_files_for_context('public-page', $loggedInUser, false);
-assert_public_asset_contains('assets/styles/public-shared.css', $loggedInPublicStyles, 'logged-in public styles keep shared visitor presentation CSS');
-assert_public_asset_contains('assets/styles/admin.css', $loggedInPublicStyles, 'logged-in public styles keep admin CSS');
-assert_public_asset_contains('assets/styles/side-panel.css', $loggedInPublicStyles, 'logged-in public styles keep side panel CSS');
-assert_public_asset_contains('assets/styles/admin-duplicate-photo-detector.css', $loggedInPublicStyles, 'logged-in public styles include duplicate detector CSS');
+$loggedInPublicStyles = shared_layout_stylesheet_files_for_context(
+    'public-page',
+    $loggedInUser,
+    false,
+);
+assert_public_asset_contains(
+    'assets/styles/public-shared.css',
+    $loggedInPublicStyles,
+    'logged-in public styles keep shared visitor presentation CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/admin.css',
+    $loggedInPublicStyles,
+    'logged-in public styles keep admin CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/side-panel.css',
+    $loggedInPublicStyles,
+    'logged-in public styles keep side panel CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/admin-duplicate-photo-detector.css',
+    $loggedInPublicStyles,
+    'logged-in public styles include duplicate detector CSS',
+);
 
-$anonymousPreviewStyles = shared_layout_stylesheet_files_for_context('public-page', $loggedInUser, true);
-assert_public_asset_same($anonymousPublicStyles, $anonymousPreviewStyles, 'anonymous preview uses the anonymous public CSS set');
+$anonymousPreviewStyles = shared_layout_stylesheet_files_for_context(
+    'public-page',
+    $loggedInUser,
+    true,
+);
+assert_public_asset_same(
+    $anonymousPublicStyles,
+    $anonymousPreviewStyles,
+    'anonymous preview uses the anonymous public CSS set',
+);
 
-$adminStyles = shared_layout_stylesheet_files_for_context('admin-page', $loggedInUser, false);
-assert_public_asset_contains('assets/styles/admin.css', $adminStyles, 'admin pages include admin CSS');
-assert_public_asset_contains('assets/styles/admin-layout.css', $adminStyles, 'admin pages include admin layout CSS');
-assert_public_asset_contains('assets/styles/side-panel.css', $adminStyles, 'admin pages include side panel CSS');
-assert_public_asset_contains('assets/styles/admin-duplicate-photo-detector.css', $adminStyles, 'admin pages include duplicate detector CSS');
+$adminStyles = shared_layout_stylesheet_files_for_context(
+    'admin-page',
+    $loggedInUser,
+    false,
+);
+assert_public_asset_contains(
+    'assets/styles/admin.css',
+    $adminStyles,
+    'admin pages include admin CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/admin-layout.css',
+    $adminStyles,
+    'admin pages include admin layout CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/side-panel.css',
+    $adminStyles,
+    'admin pages include side panel CSS',
+);
+assert_public_asset_contains(
+    'assets/styles/admin-duplicate-photo-detector.css',
+    $adminStyles,
+    'admin pages include duplicate detector CSS',
+);
 
-assert_public_asset_same('assets/public-gallery.js', view_script_asset_for_context(false, null, false), 'anonymous public pages use the public entrypoint');
-assert_public_asset_same('assets/gallery.js', view_script_asset_for_context(false, $loggedInUser, false), 'logged-in public pages keep the full entrypoint');
-assert_public_asset_same('assets/public-gallery.js', view_script_asset_for_context(false, $loggedInUser, true), 'anonymous preview uses the public entrypoint');
-assert_public_asset_same('assets/gallery.js', view_script_asset_for_context(true, null, false), 'admin pages keep the full entrypoint');
+assert_public_asset_same(
+    'assets/public-gallery.js',
+    view_script_asset_for_context(false, null, false),
+    'anonymous public pages use the public entrypoint',
+);
+assert_public_asset_same(
+    'assets/gallery.js',
+    view_script_asset_for_context(false, $loggedInUser, false),
+    'logged-in public pages keep the full entrypoint',
+);
+assert_public_asset_same(
+    'assets/public-gallery.js',
+    view_script_asset_for_context(false, $loggedInUser, true),
+    'anonymous preview uses the public entrypoint',
+);
+assert_public_asset_same(
+    'assets/gallery.js',
+    view_script_asset_for_context(true, null, false),
+    'admin pages keep the full entrypoint',
+);
 
-$anonymousEntrypointSource = file_get_contents(__DIR__ . '/../public/assets/public-gallery.js');
-if (!is_string($anonymousEntrypointSource)
-    || !str_contains($anonymousEntrypointSource, 'progressive-thumbnail-renderer.js')
-    || !str_contains($anonymousEntrypointSource, "'img[data-progressive-thumbnail]'")) {
-    throw new RuntimeException('Anonymous public entrypoint does not conditionally load progressive thumbnail behavior from matching markup.');
+$anonymousEntrypointSource = file_get_contents(__DIR__
+    . '/../public/assets/public-gallery.js');
+if (
+    !is_string($anonymousEntrypointSource)
+    || !str_contains(
+        $anonymousEntrypointSource,
+        'progressive-thumbnail-renderer.js',
+    )
+    || !str_contains(
+        $anonymousEntrypointSource,
+        "'img[data-progressive-thumbnail]'",
+    )
+) {
+    throw new RuntimeException(
+        'Anonymous public entrypoint does not conditionally load progressive thumbnail behavior from matching markup.',
+    );
 }
-if (!str_contains($anonymousEntrypointSource, 'public-thumbnail-render-diagnostics.js')
-    || !str_contains($anonymousEntrypointSource, "'[data-public-thumbnail-diagnostics]'")) {
-    throw new RuntimeException('Anonymous-preview entrypoint does not keep Admin thumbnail diagnostics behind matching profile markup.');
+if (
+    !str_contains(
+        $anonymousEntrypointSource,
+        'public-thumbnail-render-diagnostics.js',
+    )
+    || !str_contains(
+        $anonymousEntrypointSource,
+        "'[data-public-thumbnail-diagnostics]'",
+    )
+) {
+    throw new RuntimeException(
+        'Anonymous-preview entrypoint does not keep Admin thumbnail diagnostics behind matching profile markup.',
+    );
 }
 
-$loggedInEntrypointSource = file_get_contents(__DIR__ . '/../public/assets/gallery.js');
-if (!is_string($loggedInEntrypointSource)
-    || !str_contains($loggedInEntrypointSource, 'setupProgressiveThumbnailRendererWhenPresent')
-    || !str_contains($loggedInEntrypointSource, "document.querySelector('img[data-progressive-thumbnail]')")) {
-    throw new RuntimeException('Logged-in entrypoint does not guard progressive thumbnail loading behind matching public markup.');
+$loggedInEntrypointSource = file_get_contents(__DIR__
+    . '/../public/assets/gallery.js');
+if (
+    !is_string($loggedInEntrypointSource)
+    || !str_contains(
+        $loggedInEntrypointSource,
+        'setupProgressiveThumbnailRendererWhenPresent',
+    )
+    || !str_contains(
+        $loggedInEntrypointSource,
+        "document.querySelector('img[data-progressive-thumbnail]')",
+    )
+) {
+    throw new RuntimeException(
+        'Logged-in entrypoint does not guard progressive thumbnail loading behind matching public markup.',
+    );
 }
-if (!str_contains($loggedInEntrypointSource, 'setupPublicThumbnailRenderDiagnostics')) {
-    throw new RuntimeException('Logged-in entrypoint does not initialize the Admin-only public thumbnail diagnostics panel.');
+if (!str_contains(
+    $loggedInEntrypointSource,
+    'setupPublicThumbnailRenderDiagnostics',
+)) {
+    throw new RuntimeException(
+        'Logged-in entrypoint does not initialize the Admin-only public thumbnail diagnostics panel.',
+    );
 }
 
 echo "Public asset loading model tests passed.\n";

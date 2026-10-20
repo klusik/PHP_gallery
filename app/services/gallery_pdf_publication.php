@@ -43,18 +43,34 @@ function gallery_pdf_publication_forces_private(array $gallery): bool
 {
     $galleryId = (int) ($gallery['id'] ?? 0);
     $sourceGalleryId = (int) ($gallery['parent_id'] ?? 0);
-    $folderPath = str_replace('\\', '/', trim((string) ($gallery['folder_path'] ?? ''), "\\/"));
+    $folderPath = str_replace(
+        '\\',
+        '/',
+        trim((string) ($gallery['folder_path'] ?? ''), "\\/"),
+    );
     $childName = basename($folderPath);
-    if ($galleryId < 1 || $sourceGalleryId < 1 || preg_match('/^pdf-pages-([a-f0-9]{64})$/D', $childName, $match) !== 1) {
+    if (
+        $galleryId < 1
+        || $sourceGalleryId < 1
+        || preg_match('/^pdf-pages-([a-f0-9]{64})$/D', $childName, $match) !== 1
+    ) {
         return false;
     }
 
-    $sourceGallery = function_exists(__NAMESPACE__ . '\\find_gallery') ? find_gallery($sourceGalleryId, true) : null;
+    $sourceGallery = function_exists(__NAMESPACE__ . '\\find_gallery')
+        ? find_gallery($sourceGalleryId, true)
+        : null;
     if (!is_array($sourceGallery)) {
         return true;
     }
-    $sourceFolder = str_replace('\\', '/', trim((string) ($sourceGallery['folder_path'] ?? ''), "\\/"));
-    $expectedFolder = $sourceFolder !== '' ? $sourceFolder . '/' . $childName : $childName;
+    $sourceFolder = str_replace(
+        '\\',
+        '/',
+        trim((string) ($sourceGallery['folder_path'] ?? ''), "\\/"),
+    );
+    $expectedFolder = $sourceFolder !== ''
+        ? $sourceFolder . '/' . $childName
+        : $childName;
     $folderMatches = PHP_OS_FAMILY === 'Windows'
         ? strcasecmp($folderPath, $expectedFolder) === 0
         : $folderPath === $expectedFolder;
@@ -62,28 +78,42 @@ function gallery_pdf_publication_forces_private(array $gallery): bool
         return false;
     }
 
-    $sourcePath = gallery_abs_path((string) ($sourceGallery['folder_path'] ?? ''));
+    $sourcePath = gallery_abs_path(
+        (string) ($sourceGallery['folder_path'] ?? ''),
+    );
     $sourceRoot = realpath($sourcePath);
-    $stateDirectory = $sourcePath . DIRECTORY_SEPARATOR . '.gallery-pdf-conversions';
+    $stateDirectory =
+        $sourcePath . DIRECTORY_SEPARATOR . '.gallery-pdf-conversions';
     $statePath = $stateDirectory . DIRECTORY_SEPARATOR . $match[1] . '.json';
     // Match the conversion reader's per-marker bound while keeping this access-path guard independent of its upload and render services.
     // Type: int. Units: bytes. Scope: one source-side conversion marker read for a gallery visibility decision.
     // Consumers: gallery_pdf_publication_forces_private.
     // Rationale: large page acknowledgment maps need room, while a corrupted sidecar must not force an unbounded public-request read.
     $maximumMarkerBytes = \Gallery\Core\GALLERY_PDF_CONVERSION_MAX_MARKER_BYTES;
-    if ($sourceRoot === false || !is_dir($sourceRoot) || is_link($sourcePath) || is_link($stateDirectory)
-        || realpath($stateDirectory) !== $sourceRoot . DIRECTORY_SEPARATOR . '.gallery-pdf-conversions'
-        || !is_file($statePath) || is_link($statePath) || (int) @filesize($statePath) > $maximumMarkerBytes) {
+    if (
+        $sourceRoot === false
+        || !is_dir($sourceRoot)
+        || is_link($sourcePath)
+        || is_link($stateDirectory)
+        || realpath($stateDirectory)
+            !== $sourceRoot . DIRECTORY_SEPARATOR . '.gallery-pdf-conversions'
+        || !is_file($statePath)
+        || is_link($statePath)
+        || (int) @filesize($statePath) > $maximumMarkerBytes
+    ) {
         return true;
     }
 
     $decoded = json_decode((string) @file_get_contents($statePath), true);
-    if (!is_array($decoded) || ($decoded['format'] ?? '') !== 'php_gallery_pdf_conversion_v1'
+    if (
+        !is_array($decoded)
+        || ($decoded['format'] ?? '') !== 'php_gallery_pdf_conversion_v1'
         || (string) ($decoded['conversion_id'] ?? '') !== $match[1]
         || (int) ($decoded['source_gallery_id'] ?? 0) !== $sourceGalleryId
         || (int) ($decoded['gallery_id'] ?? 0) !== $galleryId
         || (int) ($decoded['child_gallery_id'] ?? 0) !== $galleryId
-        || ($decoded['target_mode'] ?? '') !== 'child') {
+        || ($decoded['target_mode'] ?? '') !== 'child'
+    ) {
         return true;
     }
 
@@ -98,9 +128,17 @@ function gallery_pdf_publication_forces_private(array $gallery): bool
  * @return void No value when the requested visibility is private or the gallery is unrestricted.
  * @throws RuntimeException When an incomplete or unreconciled conversion child would become non-private.
  */
-function gallery_pdf_publication_assert_visibility_change(array $gallery, string $visibility): void
-{
-    if ($visibility !== 'private' && gallery_pdf_publication_forces_private($gallery)) {
-        throw new RuntimeException(t('pdf.publication_incomplete', 'PDF page galleries must remain private until their browser conversion is complete and reconciled.'));
+function gallery_pdf_publication_assert_visibility_change(
+    array $gallery,
+    string $visibility,
+): void {
+    if (
+        $visibility !== 'private'
+        && gallery_pdf_publication_forces_private($gallery)
+    ) {
+        throw new RuntimeException(t(
+            'pdf.publication_incomplete',
+            'PDF page galleries must remain private until their browser conversion is complete and reconciled.',
+        ));
     }
 }

@@ -57,7 +57,9 @@ use function Gallery\Models\viewer_collection_share_model_touch_last_used;
 use function Gallery\Core\now_sql;
 
 const VIEWER_COLLECTION_SHARE_SESSION_NAMESPACE = 'viewer_collection_share_grants';
+
 const VIEWER_COLLECTION_SHARE_LIFETIME_DAYS = 30;
+
 const VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS = 16;
 
 /**
@@ -81,11 +83,15 @@ function viewer_collection_shares_schema_status(): array
 
 /**
  * Return true only when Phase 3 share storage and the effective viewer domain are available.
+ *
+ * @return bool True when the required collection-share storage is available.
  */
 function viewer_collection_shares_storage_available(): bool
 {
     return viewer_accounts_enabled()
-        && schema_inspection_is_available(viewer_collection_shares_schema_status());
+        && schema_inspection_is_available(
+            viewer_collection_shares_schema_status(),
+        );
 }
 
 /**
@@ -100,10 +106,16 @@ function viewer_collection_share_lifetime_seconds(): int
  * Validate the canonical 32-byte base64url token syntax before any database lookup.
  *
  * security_opaque_token_generate(32) always produces 43 unpadded base64url characters.
+ *
+ * @param string $token Candidate bearer token.
+ * @return bool True only for the canonical 43-character base64url form.
  */
 function viewer_collection_share_token_syntax_valid(string $token): bool
 {
-    return strlen($token) === 43 && preg_match('/^[A-Za-z0-9_-]{43}$/D', $token) === 1;
+    return (
+        strlen($token) === 43
+            && preg_match('/^[A-Za-z0-9_-]{43}$/D', $token) === 1
+    );
 }
 
 /**
@@ -128,20 +140,32 @@ function viewer_collection_share_expiry_active(?string $expiresAt): bool
 
 /**
  * Record one share event without allowing diagnostics to change the authority result.
+ *
+ * @param string $eventKey Stable viewer security-event key.
+ * @param ?int $viewerAccountId Viewer account id, or null for anonymous context.
+ * @param string $outcome Bounded event outcome.
+ * @param int $collectionId Collection identifier.
+ * @param int $shareId Share identifier, or zero when unavailable.
+ * @return void
  */
 function viewer_collection_share_security_event_best_effort(
     string $eventKey,
     ?int $viewerAccountId,
     string $outcome,
     int $collectionId,
-    int $shareId = 0
+    int $shareId = 0,
 ): void {
     try {
         $context = ['collection_id' => $collectionId];
         if ($shareId > 0) {
             $context['share_id'] = $shareId;
         }
-        viewer_security_event_record($eventKey, $viewerAccountId, $outcome, $context);
+        viewer_security_event_record(
+            $eventKey,
+            $viewerAccountId,
+            $outcome,
+            $context,
+        );
     } catch (Throwable) {
         // Security-event storage must never create, preserve, or revoke collection authority.
     }
@@ -152,16 +176,28 @@ function viewer_collection_share_security_event_best_effort(
  *
  * No plaintext token can be returned because no plaintext token exists in storage.
  *
- * @return ?array{id:int,collection_id:int,created_at:string,expires_at:string,state:string}
+ * @param int $viewerAccountId Owner viewer account identifier.
+ * @param int $collectionId Owned collection identifier.
+ * @return ?array{id:int,collection_id:int,created_at:string,expires_at:string,state:string} Active share metadata, or null when no active share is available.
  */
-function viewer_collection_share_state(int $viewerAccountId, int $collectionId): ?array
-{
-    if ($viewerAccountId <= 0 || $collectionId <= 0 || !viewer_collection_shares_storage_available()) {
+function viewer_collection_share_state(
+    int $viewerAccountId,
+    int $collectionId,
+): ?array {
+    if (
+        $viewerAccountId <= 0
+        || $collectionId <= 0
+        || !viewer_collection_shares_storage_available()
+    ) {
         return null;
     }
 
     try {
-        $row = viewer_collection_share_model_state($viewerAccountId, $collectionId, now_sql());
+        $row = viewer_collection_share_model_state(
+            $viewerAccountId,
+            $collectionId,
+            now_sql(),
+        );
         if (!$row) {
             return null;
         }
@@ -184,12 +220,14 @@ function viewer_collection_share_state(int $viewerAccountId, int $collectionId):
  * Phase 3 creation/replacement attempts for this collection even though the dormant schema has
  * no partial unique index for active rows.
  *
- * @param array $viewer Current viewer principal returned by current_viewer().
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Owned collection identifier.
- * @return array{ok:bool,changed:bool,reason:string,token:string,share_id:int,expires_at:string,retry_after_seconds:int,replaced:bool}
+ * @return array{ok:bool,changed:bool,reason:string,token:string,share_id:int,expires_at:string,retry_after_seconds:int,replaced:bool} Replacement outcome; plaintext token is populated only on successful creation.
  */
-function viewer_collection_share_replace(array $viewer, int $collectionId): array
-{
+function viewer_collection_share_replace(
+    array $viewer,
+    int $collectionId,
+): array {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     $expectedSecurityVersion = (int) ($viewer['security_version'] ?? 0);
     $empty = [
@@ -202,7 +240,11 @@ function viewer_collection_share_replace(array $viewer, int $collectionId): arra
         'retry_after_seconds' => 0,
         'replaced' => false,
     ];
-    if ($viewerAccountId <= 0 || $expectedSecurityVersion <= 0 || $collectionId <= 0) {
+    if (
+        $viewerAccountId <= 0
+        || $expectedSecurityVersion <= 0
+        || $collectionId <= 0
+    ) {
         return $empty;
     }
     if (!viewer_collection_shares_storage_available()) {
@@ -211,44 +253,69 @@ function viewer_collection_share_replace(array $viewer, int $collectionId): arra
     }
 
     try {
-        $rate = viewer_rate_limit_consume('viewer_share_create_account', 'account', (string) $viewerAccountId);
+        $rate = viewer_rate_limit_consume(
+            'viewer_share_create_account',
+            'account',
+            (string) $viewerAccountId,
+        );
     } catch (Throwable) {
         $empty['reason'] = 'unavailable';
         return $empty;
     }
     if (empty($rate['allowed'])) {
-        $empty['reason'] = (string) ($rate['reason'] ?? '') === 'storage_unavailable' ? 'unavailable' : 'rate_limited';
-        $empty['retry_after_seconds'] = max(0, (int) ($rate['retry_after_seconds'] ?? 0));
+        $empty['reason'] = (string) ($rate['reason'] ?? '')
+        === 'storage_unavailable'
+            ? 'unavailable'
+            : 'rate_limited';
+        $empty['retry_after_seconds'] = max(
+            0,
+            (int) ($rate['retry_after_seconds'] ?? 0),
+        );
         return $empty;
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $empty): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+            $empty,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
                 $failure = $empty;
                 $failure['reason'] = 'account_unavailable';
                 viewer_collection_model_abort($failure);
             }
-            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+            if (
+                viewer_collection_lock_owned($viewerAccountId, $collectionId)
+                === null
+            ) {
                 $failure = $empty;
                 $failure['reason'] = 'not_found';
                 viewer_collection_model_abort($failure);
             }
 
-            $previousIds = viewer_collection_share_model_active_ids_lock($collectionId);
+            $previousIds =
+                viewer_collection_share_model_active_ids_lock($collectionId);
             $replaced = $previousIds !== [];
             $now = now_sql();
             if ($replaced) {
-                viewer_collection_share_model_revoke_active($collectionId, $now);
+                viewer_collection_share_model_revoke_active(
+                    $collectionId,
+                    $now,
+                );
             }
             $token = security_opaque_token_generate(32);
-            $expiresAt = date('Y-m-d H:i:s', time() + viewer_collection_share_lifetime_seconds());
+            $expiresAt = date(
+                'Y-m-d H:i:s',
+                time() + viewer_collection_share_lifetime_seconds(),
+            );
             $shareId = viewer_collection_share_model_insert(
                 $collectionId,
                 $viewerAccountId,
                 security_authority_token_hash($token),
                 $now,
-                $expiresAt
+                $expiresAt,
             );
             return [
                 'ok' => true,
@@ -263,11 +330,13 @@ function viewer_collection_share_replace(array $viewer, int $collectionId): arra
         });
         if ($result['ok']) {
             viewer_collection_share_security_event_best_effort(
-                $result['replaced'] ? 'viewer.collection_share_replaced' : 'viewer.collection_share_created',
+                $result['replaced']
+                    ? 'viewer.collection_share_replaced'
+                    : 'viewer.collection_share_created',
                 $viewerAccountId,
                 'success',
                 $collectionId,
-                (int) $result['share_id']
+                (int) $result['share_id'],
             );
         }
         return $result;
@@ -282,9 +351,9 @@ function viewer_collection_share_replace(array $viewer, int $collectionId): arra
  *
  * Revocation is intentionally not rate-limited because removing authority must remain easy.
  *
- * @param array $viewer Current viewer principal.
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Owned collection identifier.
- * @return array{ok:bool,changed:bool,reason:string}
+ * @return array{ok:bool,changed:bool,reason:string} Revocation outcome and whether any active share row changed.
  */
 function viewer_collection_share_revoke(array $viewer, int $collectionId): array
 {
@@ -297,19 +366,45 @@ function viewer_collection_share_revoke(array $viewer, int $collectionId): array
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable', 'share_id' => 0]);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                    'share_id' => 0,
+                ]);
             }
-            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found', 'share_id' => 0]);
+            if (
+                viewer_collection_lock_owned($viewerAccountId, $collectionId)
+                === null
+            ) {
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'not_found',
+                    'share_id' => 0,
+                ]);
             }
-            $shareIds = viewer_collection_share_model_active_ids_lock($collectionId);
+            $shareIds =
+                viewer_collection_share_model_active_ids_lock($collectionId);
             $changed = $shareIds !== [];
             if ($changed) {
-                viewer_collection_share_model_revoke_active($collectionId, now_sql());
+                viewer_collection_share_model_revoke_active(
+                    $collectionId,
+                    now_sql(),
+                );
             }
-            return ['ok' => true, 'changed' => $changed, 'reason' => 'ok', 'share_id' => $changed ? (int) end($shareIds) : 0];
+            return [
+                'ok' => true,
+                'changed' => $changed,
+                'reason' => 'ok',
+                'share_id' => $changed ? (int) end($shareIds) : 0,
+            ];
         });
         if ($result['changed']) {
             viewer_collection_share_security_event_best_effort(
@@ -317,7 +412,7 @@ function viewer_collection_share_revoke(array $viewer, int $collectionId): array
                 $viewerAccountId,
                 'success',
                 $collectionId,
-                (int) $result['share_id']
+                (int) $result['share_id'],
             );
         }
         unset($result['share_id']);
@@ -333,11 +428,13 @@ function viewer_collection_share_revoke(array $viewer, int $collectionId): array
  * Expired/malformed entries are removed. Duplicate share/collection entries collapse to the
  * newest grant, then only the newest VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS entries remain.
  *
- * @return array<int,array{share_id:int,collection_id:int,expires_at:int,granted_at:int}>
+ * @return array<int,array{share_id:int,collection_id:int,expires_at:int,granted_at:int}> Valid, deduplicated session grants ordered by grant time and bounded by the configured cap.
  */
 function viewer_collection_share_session_grants_prune(): array
 {
-    $raw = viewer_identity_session_get(viewer_collection_share_session_namespace_key());
+    $raw = viewer_identity_session_get(
+        viewer_collection_share_session_namespace_key(),
+    );
     if (!is_array($raw)) {
         $raw = [];
     }
@@ -351,11 +448,19 @@ function viewer_collection_share_session_grants_prune(): array
         $collectionId = (int) ($grant['collection_id'] ?? 0);
         $expiresAt = (int) ($grant['expires_at'] ?? 0);
         $grantedAt = (int) ($grant['granted_at'] ?? 0);
-        if ($shareId <= 0 || $collectionId <= 0 || $expiresAt <= $now || $grantedAt <= 0) {
+        if (
+            $shareId <= 0
+            || $collectionId <= 0
+            || $expiresAt <= $now
+            || $grantedAt <= 0
+        ) {
             continue;
         }
         $key = $shareId . ':' . $collectionId;
-        if (!isset($deduped[$key]) || $grantedAt >= $deduped[$key]['granted_at']) {
+        if (
+            !isset($deduped[$key])
+            || $grantedAt >= $deduped[$key]['granted_at']
+        ) {
             $deduped[$key] = [
                 'share_id' => $shareId,
                 'collection_id' => $collectionId,
@@ -365,27 +470,54 @@ function viewer_collection_share_session_grants_prune(): array
         }
     }
     $grants = array_values($deduped);
-    usort($grants, static fn (array $left, array $right): int => $left['granted_at'] <=> $right['granted_at']);
+    usort(
+        $grants,
+        static fn(array $left, array $right): int => (
+            $left['granted_at'] <=> $right['granted_at']
+        ),
+    );
     if (count($grants) > VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS) {
-        $grants = array_slice($grants, -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS);
+        $grants = array_slice(
+            $grants,
+            -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS,
+        );
     }
-    viewer_identity_session_set(viewer_collection_share_session_namespace_key(), $grants);
+    viewer_identity_session_set(
+        viewer_collection_share_session_namespace_key(),
+        $grants,
+    );
     return $grants;
 }
 
 /**
  * Store one new narrow collection grant without retaining the raw bearer token.
+ *
+ * @param int $shareId Durable share identifier.
+ * @param int $collectionId Shared collection identifier.
+ * @param string $expiresAt Durable share expiry timestamp.
+ * @return bool True when a valid future grant was stored.
  */
-function viewer_collection_share_session_grant_store(int $shareId, int $collectionId, string $expiresAt): bool
-{
+function viewer_collection_share_session_grant_store(
+    int $shareId,
+    int $collectionId,
+    string $expiresAt,
+): bool {
     $expiryTimestamp = strtotime($expiresAt);
-    if ($shareId <= 0 || $collectionId <= 0 || $expiryTimestamp === false || $expiryTimestamp <= time()) {
+    if (
+        $shareId <= 0
+        || $collectionId <= 0
+        || $expiryTimestamp === false
+        || $expiryTimestamp <= time()
+    ) {
         return false;
     }
     $grants = viewer_collection_share_session_grants_prune();
     $filtered = [];
     foreach ($grants as $grant) {
-        if ((int) $grant['share_id'] === $shareId || (int) $grant['collection_id'] === $collectionId) {
+        if (
+            (int) $grant['share_id'] === $shareId
+            || (int) $grant['collection_id'] === $collectionId
+        ) {
             continue;
         }
         $filtered[] = $grant;
@@ -397,24 +529,40 @@ function viewer_collection_share_session_grant_store(int $shareId, int $collecti
         'granted_at' => time(),
     ];
     if (count($filtered) > VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS) {
-        $filtered = array_slice($filtered, -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS);
+        $filtered = array_slice(
+            $filtered,
+            -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS,
+        );
     }
-    viewer_identity_session_set(viewer_collection_share_session_namespace_key(), array_values($filtered));
+    viewer_identity_session_set(
+        viewer_collection_share_session_namespace_key(),
+        array_values($filtered),
+    );
     return true;
 }
 
 /**
  * Remove one session grant reference without touching viewer/Admin/gallery session namespaces.
+ *
+ * @param int $shareId Durable share identifier.
+ * @param int $collectionId Shared collection identifier.
+ * @return void
  */
-function viewer_collection_share_session_grant_remove(int $shareId, int $collectionId): void
-{
+function viewer_collection_share_session_grant_remove(
+    int $shareId,
+    int $collectionId,
+): void {
     $grants = viewer_collection_share_session_grants_prune();
-    viewer_identity_session_set(viewer_collection_share_session_namespace_key(), array_values(array_filter(
-        $grants,
-        static fn (array $grant): bool => !(
-            (int) $grant['share_id'] === $shareId && (int) $grant['collection_id'] === $collectionId
-        )
-    )));
+    viewer_identity_session_set(
+        viewer_collection_share_session_namespace_key(),
+        array_values(array_filter(
+            $grants,
+            static fn(array $grant): bool => !(
+                (int) $grant['share_id'] === $shareId
+                && (int) $grant['collection_id'] === $collectionId
+            ),
+        )),
+    );
 }
 
 /**
@@ -424,11 +572,15 @@ function viewer_collection_share_session_grant_remove(int $shareId, int $collect
  * The transaction then revalidates in account -> collection -> share order before authority is
  * established. A scanner GET therefore creates only its own session grant and never consumes the link.
  *
- * @return ?array{share_id:int,collection_id:int,owner_viewer_account_id:int,expires_at:string}
+ * @param string $token Raw bearer token to exchange; it is not retained in session state.
+ * @return ?array{share_id:int,collection_id:int,owner_viewer_account_id:int,expires_at:string} Exchanged share authority metadata, or null when invalid, inactive, or unavailable.
  */
 function viewer_collection_share_exchange(string $token): ?array
 {
-    if (!viewer_collection_share_token_syntax_valid($token) || !viewer_collection_shares_storage_available()) {
+    if (
+        !viewer_collection_share_token_syntax_valid($token)
+        || !viewer_collection_shares_storage_available()
+    ) {
         return null;
     }
     $tokenHash = security_authority_token_hash($token);
@@ -444,25 +596,52 @@ function viewer_collection_share_exchange(string $token): ?array
             return null;
         }
 
-        $authority = viewer_collection_model_transaction(static function () use ($shareId, $collectionId, $ownerId, $tokenHash): ?array {
+        $authority = viewer_collection_model_transaction(static function () use (
+            $shareId,
+            $collectionId,
+            $ownerId,
+            $tokenHash,
+        ): ?array {
             $account = viewer_collection_model_account_lock($ownerId);
             if (!$account || !viewer_account_can_authenticate($account)) {
                 viewer_collection_model_abort(null);
             }
-            if (viewer_collection_model_owned_lock($ownerId, $collectionId) === null) {
+            if (
+                viewer_collection_model_owned_lock($ownerId, $collectionId)
+                === null
+            ) {
                 viewer_collection_model_abort(null);
             }
-            $share = viewer_collection_share_model_lock($shareId, $collectionId, $ownerId, $tokenHash);
-            if (!$share || !empty($share['revoked_at']) || !viewer_collection_share_expiry_active((string) ($share['expires_at'] ?? ''))) {
+            $share = viewer_collection_share_model_lock(
+                $shareId,
+                $collectionId,
+                $ownerId,
+                $tokenHash,
+            );
+            if (
+                !$share
+                || !empty($share['revoked_at'])
+                || !viewer_collection_share_expiry_active(
+                    (string) ($share['expires_at'] ?? ''),
+                )
+            ) {
                 viewer_collection_model_abort(null);
             }
             return ['expires_at' => (string) $share['expires_at']];
         });
-        if ($authority === null || !viewer_identity_session_active() || !viewer_identity_session_regenerate()) {
+        if (
+            $authority === null
+            || !viewer_identity_session_active()
+            || !viewer_identity_session_regenerate()
+        ) {
             return null;
         }
         $expiresAt = (string) $authority['expires_at'];
-        if (!viewer_collection_share_session_grant_store($shareId, $collectionId, $expiresAt)) {
+        if (!viewer_collection_share_session_grant_store(
+            $shareId,
+            $collectionId,
+            $expiresAt,
+        )) {
             return null;
         }
 
@@ -471,7 +650,13 @@ function viewer_collection_share_exchange(string $token): ?array
         } catch (Throwable) {
             // last_used_at is operational telemetry and is not authorization state.
         }
-        viewer_collection_share_security_event_best_effort('viewer.collection_share_exchanged', $ownerId, 'success', $collectionId, $shareId);
+        viewer_collection_share_security_event_best_effort(
+            'viewer.collection_share_exchanged',
+            $ownerId,
+            'success',
+            $collectionId,
+            $shareId,
+        );
         return [
             'share_id' => $shareId,
             'collection_id' => $collectionId,
@@ -489,7 +674,8 @@ function viewer_collection_share_exchange(string $token): ?array
  * This query deliberately checks the current collection owner and current active account state.
  * It never sets current_viewer(), current_user(), a gallery password grant, or a gallery share grant.
  *
- * @return ?array{share_id:int,collection_id:int,owner_viewer_account_id:int,created_at:string,expires_at:string}
+ * @param int $collectionId Shared collection identifier being authorized.
+ * @return ?array{share_id:int,collection_id:int,owner_viewer_account_id:int,created_at:string,expires_at:string} Current durable share metadata, or null when the session grant is absent or no longer valid.
  */
 function viewer_collection_share_session_authorize(int $collectionId): ?array
 {
@@ -510,12 +696,22 @@ function viewer_collection_share_session_authorize(int $collectionId): ?array
 
     $shareId = (int) $grant['share_id'];
     try {
-        $row = viewer_collection_share_model_authorization_row($shareId, $collectionId);
-        if (!$row
+        $row = viewer_collection_share_model_authorization_row(
+            $shareId,
+            $collectionId,
+        );
+        if (
+            !$row
             || !empty($row['revoked_at'])
-            || !viewer_collection_share_expiry_active((string) ($row['expires_at'] ?? ''))
-            || !viewer_account_can_authenticate($row)) {
-            viewer_collection_share_session_grant_remove($shareId, $collectionId);
+            || !viewer_collection_share_expiry_active(
+                (string) ($row['expires_at'] ?? ''),
+            )
+            || !viewer_account_can_authenticate($row)
+        ) {
+            viewer_collection_share_session_grant_remove(
+                $shareId,
+                $collectionId,
+            );
             return null;
         }
         return [
@@ -537,7 +733,8 @@ function viewer_collection_share_session_authorize(int $collectionId): ?array
  * No image/gallery metadata is returned here. The caller must resolve every reference through
  * viewer_source_images_resolve_authorized() in the recipient request context before rendering.
  *
- * @return ?array{collection:array{id:int,title:string,created_at:string,updated_at:string},references:array<int,array{image_id:int,position:int,created_at:string}>}
+ * @param int $collectionId Shared collection identifier.
+ * @return ?array{collection:array{id:int,title:string,created_at:string,updated_at:string},references:array<int,array{image_id:int,position:int,created_at:string}>} Live container and ordered references after share revalidation, or null when access is unavailable.
  */
 function viewer_collection_shared_read(int $collectionId): ?array
 {
@@ -550,9 +747,15 @@ function viewer_collection_shared_read(int $collectionId): ?array
         if (!$collection) {
             return null;
         }
-        $limit = max(1, (int) viewer_content_quota_config()['max_viewer_items_per_collection']);
+        $limit = max(
+            1,
+            (int) viewer_content_quota_config()['max_viewer_items_per_collection'],
+        );
         $references = [];
-        foreach (viewer_collection_share_model_references($collectionId, $limit) as $row) {
+        foreach (viewer_collection_share_model_references(
+            $collectionId,
+            $limit,
+        ) as $row) {
             $references[] = [
                 'image_id' => (int) ($row['image_id'] ?? 0),
                 'position' => (int) ($row['position'] ?? 0),

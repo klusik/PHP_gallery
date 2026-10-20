@@ -15,12 +15,14 @@
  *   - Prove current_viewer() is backed only by viewer-specific session/account storage
  *   - Prove historical gallery/media admin bypass checks do not recognize viewer state
  *   - Prove Phase 0 leaves existing admin authentication, CSRF, and share-token implementations untouched
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
+
+require_once __DIR__ . '/support/php_source.php';
 
 /**
  * Throw when one viewer identity boundary expectation fails.
@@ -42,10 +44,19 @@ function viewer_identity_assert(bool $condition, string $label): void
  * @param string $functionName Function name.
  * @return string Function declaration/body source.
  */
-function viewer_identity_function_source(string $source, string $functionName): string
-{
-    $needle = 'function ' . $functionName . '(';
-    $start = strpos($source, $needle);
+function viewer_identity_function_source(
+    string $source,
+    string $functionName,
+): string {
+    $startMatch = [];
+    $start = preg_match(
+        '/function\\s+' . preg_quote($functionName, '/') . '\\s*\\(/',
+        $source,
+        $startMatch,
+        PREG_OFFSET_CAPTURE,
+    ) === 1
+        ? $startMatch[0][1]
+        : false;
     if ($start === false) {
         throw new RuntimeException('Function not found: ' . $functionName);
     }
@@ -71,47 +82,131 @@ function viewer_identity_function_source(string $source, string $functionName): 
 
 $root = dirname(__DIR__);
 $security = (string) file_get_contents($root . '/app/security.php');
-$galleryAccess = (string) file_get_contents($root . '/app/services/gallery_access.php');
-$publicMedia = (string) file_get_contents($root . '/app/controllers/public_media.php');
-$viewerAccounts = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
-$viewerAccountModel = (string) file_get_contents($root . '/app/models/viewer_accounts.php');
-$adminAuth = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
-$adminPersistence = (string) file_get_contents($root . '/app/services/auth_persistence.php');
-$sessionBootstrap = (string) file_get_contents($root . '/app/bootstrap/session.php');
+$galleryAccess = (string) file_get_contents($root
+    . '/app/services/gallery_access.php');
+$publicMedia = (string) file_get_contents($root
+    . '/app/controllers/public_media.php');
+$viewerAccounts = (string) file_get_contents($root
+    . '/app/services/viewer_accounts.php');
+$viewerAccountModel = (string) file_get_contents($root
+    . '/app/models/viewer_accounts.php');
+$adminAuth = (string) file_get_contents($root
+    . '/app/controllers/admin_auth.php');
+$adminPersistence = (string) file_get_contents($root
+    . '/app/services/auth_persistence.php');
+$sessionBootstrap = (string) file_get_contents($root
+    . '/app/bootstrap/session.php');
 
 $currentUser = viewer_identity_function_source($security, 'current_user');
-viewer_identity_assert(str_contains($currentUser, "\$_SESSION['user_id']"), 'current_user() must continue using the historical admin session key.');
-$adminSessionService = viewer_identity_function_source((string) file_get_contents($root . '/app/services/auth_accounts.php'), 'auth_account_session_user');
-$adminSessionModel = viewer_identity_function_source((string) file_get_contents($root . '/app/models/auth.php'), 'auth_model_session_user');
-viewer_identity_assert(str_contains($currentUser, 'auth_account_session_user(')
-    && str_contains($adminSessionService, 'auth_model_session_user(')
-    && str_contains($adminSessionModel, 'FROM users WHERE id = ?')
-    && !str_contains($adminSessionModel, 'viewer_')
-    && !str_contains($adminSessionModel, 'password_hash'),
-    'current_user() must use the Admin-only non-credential model projection through its account service.');
-viewer_identity_assert(stripos($currentUser, 'viewer') === false, 'current_user() must never inspect viewer session/account state.');
+viewer_identity_assert(
+    php_source_contains($currentUser, "\$_SESSION['user_id']"),
+    'current_user() must continue using the historical admin session key.',
+);
+$adminSessionService = viewer_identity_function_source(
+    (string) file_get_contents($root . '/app/services/auth_accounts.php'),
+    'auth_account_session_user',
+);
+$adminSessionModel = viewer_identity_function_source(
+    (string) file_get_contents($root . '/app/models/auth.php'),
+    'auth_model_session_user',
+);
+viewer_identity_assert(
+    php_source_contains($currentUser, 'auth_account_session_user(')
+        && php_source_contains($adminSessionService, 'auth_model_session_user(')
+        && php_source_contains($adminSessionModel, 'FROM users WHERE id = ?')
+        && !php_source_contains($adminSessionModel, 'viewer_')
+        && !php_source_contains($adminSessionModel, 'password_hash'),
+    'current_user() must use the Admin-only non-credential model projection through its account service.',
+);
+viewer_identity_assert(
+    stripos($currentUser, 'viewer') === false,
+    'current_user() must never inspect viewer session/account state.',
+);
 
-$currentViewer = viewer_identity_function_source($viewerAccounts, 'current_viewer');
-viewer_identity_assert(str_contains($currentViewer, 'viewer_session_state()'), 'current_viewer() must consume only viewer-specific session state.');
-viewer_identity_assert(str_contains($currentViewer, 'viewer_account_model_session_principal(') && str_contains($viewerAccountModel, 'FROM viewer_sessions') && str_contains($viewerAccountModel, 'viewer_accounts'), 'current_viewer() must load only the viewer identity domain.');
-viewer_identity_assert(stripos($currentViewer, 'FROM users') === false && !str_contains($currentViewer, "\$_SESSION['user_id']"), 'current_viewer() must never depend on the admin users/session identity.');
+$currentViewer = viewer_identity_function_source(
+    $viewerAccounts,
+    'current_viewer',
+);
+viewer_identity_assert(
+    php_source_contains($currentViewer, 'viewer_session_state()'),
+    'current_viewer() must consume only viewer-specific session state.',
+);
+viewer_identity_assert(
+    php_source_contains($currentViewer, 'viewer_account_model_session_principal(')
+        && php_source_contains($viewerAccountModel, 'FROM viewer_sessions')
+        && php_source_contains($viewerAccountModel, 'viewer_accounts'),
+    'current_viewer() must load only the viewer identity domain.',
+);
+viewer_identity_assert(
+    stripos($currentViewer, 'FROM users') === false
+        && !php_source_contains($currentViewer, "\$_SESSION['user_id']"),
+    'current_viewer() must never depend on the admin users/session identity.',
+);
 
-$visitorAccess = viewer_identity_function_source($galleryAccess, 'visitor_can_access_gallery');
-viewer_identity_assert(str_contains($visitorAccess, 'current_user()'), 'Historical authenticated-admin gallery access behavior must remain present.');
-viewer_identity_assert(stripos($visitorAccess, 'current_viewer') === false, 'A viewer principal must never satisfy the historical admin gallery bypass.');
+$visitorAccess = viewer_identity_function_source(
+    $galleryAccess,
+    'visitor_can_access_gallery',
+);
+viewer_identity_assert(
+    php_source_contains($visitorAccess, 'current_user()'),
+    'Historical authenticated-admin gallery access behavior must remain present.',
+);
+viewer_identity_assert(
+    stripos($visitorAccess, 'current_viewer') === false,
+    'A viewer principal must never satisfy the historical admin gallery bypass.',
+);
 
-$publicVisibility = viewer_identity_function_source($galleryAccess, 'public_image_visible_to_current_visitor');
-viewer_identity_assert(str_contains($publicVisibility, 'visitor_can_access_gallery($gallery)'), 'Canonical public image visibility must still delegate to normal gallery authorization.');
-viewer_identity_assert(stripos($publicVisibility, 'viewer_collection') === false && stripos($publicVisibility, 'viewer_favourite') === false, 'Viewer references must not become an alternative media authorization path.');
-viewer_identity_assert(stripos($publicMedia, 'current_viewer') === false, 'Existing public media controller must not treat viewer authentication as administrator authentication in Phase 0.');
+$publicVisibility = viewer_identity_function_source(
+    $galleryAccess,
+    'public_image_visible_to_current_visitor',
+);
+viewer_identity_assert(
+    php_source_contains($publicVisibility, 'visitor_can_access_gallery($gallery)'),
+    'Canonical public image visibility must still delegate to normal gallery authorization.',
+);
+viewer_identity_assert(
+    stripos($publicVisibility, 'viewer_collection') === false
+        && stripos($publicVisibility, 'viewer_favourite') === false,
+    'Viewer references must not become an alternative media authorization path.',
+);
+viewer_identity_assert(
+    stripos($publicMedia, 'current_viewer') === false,
+    'Existing public media controller must not treat viewer authentication as administrator authentication in Phase 0.',
+);
 
-viewer_identity_assert(stripos($adminAuth, 'viewer_') === false, 'Existing admin authentication controller must remain viewer-unaware.');
-viewer_identity_assert(stripos($adminPersistence, 'viewer_') === false, 'Existing durable admin login must remain viewer-unaware.');
-viewer_identity_assert(str_contains($sessionBootstrap, "session_name((string) \$config['admin_session_name'])"), 'Existing admin PHP session naming must remain unchanged.');
-viewer_identity_assert(str_contains($security, "\$_SESSION['csrf_token']") && str_contains($security, 'hash_equals'), 'Existing CSRF token generation/verification contract must remain intact.');
+viewer_identity_assert(
+    stripos($adminAuth, 'viewer_') === false,
+    'Existing admin authentication controller must remain viewer-unaware.',
+);
+viewer_identity_assert(
+    stripos($adminPersistence, 'viewer_') === false,
+    'Existing durable admin login must remain viewer-unaware.',
+);
+viewer_identity_assert(
+    php_source_contains(
+        $sessionBootstrap,
+        "session_name((string) \$config['admin_session_name'])",
+    ),
+    'Existing admin PHP session naming must remain unchanged.',
+);
+viewer_identity_assert(
+    php_source_contains($security, "\$_SESSION['csrf_token']")
+        && php_source_contains($security, 'hash_equals'),
+    'Existing CSRF token generation/verification contract must remain intact.',
+);
 
-$shareTokenValidation = viewer_identity_function_source($galleryAccess, 'request_share_token_allows_gallery');
-viewer_identity_assert(str_contains($shareTokenValidation, 'access_token_hash') && str_contains($shareTokenValidation, "hash('sha256', \$token)"), 'Existing gallery share-token authorization must remain on its historical hashed validation path.');
-viewer_identity_assert(stripos($shareTokenValidation, 'viewer_collection') === false, 'Future collection sharing must not be mixed into existing gallery share-token authorization.');
+$shareTokenValidation = viewer_identity_function_source(
+    $galleryAccess,
+    'request_share_token_allows_gallery',
+);
+viewer_identity_assert(
+    php_source_contains($shareTokenValidation, 'access_token_hash')
+        && php_source_contains($shareTokenValidation, "hash('sha256', \$token)"),
+    'Existing gallery share-token authorization must remain on its historical hashed validation path.',
+);
+viewer_identity_assert(
+    stripos($shareTokenValidation, 'viewer_collection') === false,
+    'Future collection sharing must not be mixed into existing gallery share-token authorization.',
+);
 
 echo "Viewer/admin identity boundary tests passed.\n";

@@ -72,9 +72,12 @@ function viewer_token_table_storage_available(string $table): bool
         'viewer_remember_tokens' => true,
     ];
     if (!isset($allowed[$table])) {
-        throw new InvalidArgumentException('Viewer token storage table is not allowlisted.');
+        throw new InvalidArgumentException(
+            'Viewer token storage table is not allowlisted.',
+        );
     }
-    return schema_inspection_is_available(schema_inspection_feature('viewer.token.' . $table, [
+    return schema_inspection_is_available(schema_inspection_feature('viewer.token.'
+        . $table, [
         schema_inspection_table('viewer_accounts'),
         schema_inspection_table($table),
     ]));
@@ -83,18 +86,20 @@ function viewer_token_table_storage_available(string $table): bool
 /**
  * Return true when a one-time token row is unexpired, unused, and not invalidated.
  *
- * @param array $row Token database row or equivalent data.
- * @param ?int $now Optional Unix timestamp for deterministic tests.
+ * @param array{expires_at:string,consumed_at?:string|null,invalidated_at?:string|null} $row Token expiry and optional consumed/invalidation timestamps.
+ * @param ?int $now Optional Unix timestamp for deterministic expiration checks.
  * @return bool True only while the token can be consumed.
  */
 function viewer_one_time_token_row_is_usable(array $row, ?int $now = null): bool
 {
     $now = $now ?? time();
     $expiresAt = strtotime((string) ($row['expires_at'] ?? ''));
-    return $expiresAt !== false
-        && $expiresAt >= $now
-        && empty($row['consumed_at'])
-        && empty($row['invalidated_at']);
+    return (
+        $expiresAt !== false
+            && $expiresAt >= $now
+            && empty($row['consumed_at'])
+            && empty($row['invalidated_at'])
+    );
 }
 
 /**
@@ -105,23 +110,51 @@ function viewer_one_time_token_row_is_usable(array $row, ?int $now = null): bool
  * @param int $lifetimeSeconds Token lifetime in seconds.
  * @return string Plaintext opaque token for future email delivery.
  */
-function viewer_email_verification_token_issue(int $viewerAccountId, string $email, int $lifetimeSeconds = 86400): string
-{
-    if (!viewer_accounts_enabled() || !viewer_token_table_storage_available('viewer_email_verification_tokens')) {
+function viewer_email_verification_token_issue(
+    int $viewerAccountId,
+    string $email,
+    int $lifetimeSeconds = 86400,
+): string {
+    if (
+        !viewer_accounts_enabled()
+        || !viewer_token_table_storage_available(
+            'viewer_email_verification_tokens',
+        )
+    ) {
         throw new RuntimeException('Viewer token issuance is unavailable.');
     }
-    if ($viewerAccountId <= 0 || $lifetimeSeconds < 300 || $lifetimeSeconds > 604800) {
-        throw new InvalidArgumentException('Viewer email verification token parameters are invalid.');
+    if (
+        $viewerAccountId <= 0
+        || $lifetimeSeconds < 300
+        || $lifetimeSeconds > 604800
+    ) {
+        throw new InvalidArgumentException(
+            'Viewer email verification token parameters are invalid.',
+        );
     }
     $emailFingerprint = viewer_email_fingerprint($email);
     if ($emailFingerprint === '') {
-        throw new InvalidArgumentException('Viewer email verification requires a valid email address.');
+        throw new InvalidArgumentException(
+            'Viewer email verification requires a valid email address.',
+        );
     }
     $token = security_opaque_token_generate(32);
     $now = now_sql();
     $expiresAt = date('Y-m-d H:i:s', time() + $lifetimeSeconds);
-    viewer_account_model_transaction(static function () use ($viewerAccountId, $token, $emailFingerprint, $now, $expiresAt): void {
-        viewer_token_model_issue_email_verification($viewerAccountId, security_authority_token_hash($token), $emailFingerprint, $now, $expiresAt);
+    viewer_account_model_transaction(static function () use (
+        $viewerAccountId,
+        $token,
+        $emailFingerprint,
+        $now,
+        $expiresAt,
+    ): void {
+        viewer_token_model_issue_email_verification(
+            $viewerAccountId,
+            security_authority_token_hash($token),
+            $emailFingerprint,
+            $now,
+            $expiresAt,
+        );
     });
     return $token;
 }
@@ -134,7 +167,10 @@ function viewer_email_verification_token_issue(int $viewerAccountId, string $ema
  */
 function viewer_email_verification_token_consume(string $token): ?array
 {
-    return viewer_one_time_token_consume('viewer_email_verification_tokens', $token);
+    return viewer_one_time_token_consume(
+        'viewer_email_verification_tokens',
+        $token,
+    );
 }
 
 /**
@@ -145,19 +181,44 @@ function viewer_email_verification_token_consume(string $token): ?array
  * @param int $lifetimeSeconds Token lifetime in seconds.
  * @return string Plaintext opaque token for future email delivery.
  */
-function viewer_password_reset_token_issue(int $viewerAccountId, int $securityVersion, int $lifetimeSeconds = 3600): string
-{
-    if (!viewer_accounts_enabled() || !viewer_token_table_storage_available('viewer_password_reset_tokens')) {
+function viewer_password_reset_token_issue(
+    int $viewerAccountId,
+    int $securityVersion,
+    int $lifetimeSeconds = 3600,
+): string {
+    if (
+        !viewer_accounts_enabled()
+        || !viewer_token_table_storage_available('viewer_password_reset_tokens')
+    ) {
         throw new RuntimeException('Viewer token issuance is unavailable.');
     }
-    if ($viewerAccountId <= 0 || $securityVersion <= 0 || $lifetimeSeconds < 300 || $lifetimeSeconds > 86400) {
-        throw new InvalidArgumentException('Viewer password reset token parameters are invalid.');
+    if (
+        $viewerAccountId <= 0
+        || $securityVersion <= 0
+        || $lifetimeSeconds < 300
+        || $lifetimeSeconds > 86400
+    ) {
+        throw new InvalidArgumentException(
+            'Viewer password reset token parameters are invalid.',
+        );
     }
     $token = security_opaque_token_generate(32);
     $now = now_sql();
     $expiresAt = date('Y-m-d H:i:s', time() + $lifetimeSeconds);
-    viewer_account_model_transaction(static function () use ($viewerAccountId, $securityVersion, $token, $now, $expiresAt): void {
-        viewer_token_model_issue_password_reset($viewerAccountId, security_authority_token_hash($token), $securityVersion, $now, $expiresAt);
+    viewer_account_model_transaction(static function () use (
+        $viewerAccountId,
+        $securityVersion,
+        $token,
+        $now,
+        $expiresAt,
+    ): void {
+        viewer_token_model_issue_password_reset(
+            $viewerAccountId,
+            security_authority_token_hash($token),
+            $securityVersion,
+            $now,
+            $expiresAt,
+        );
     });
     return $token;
 }
@@ -173,7 +234,10 @@ function viewer_password_reset_token_issue(int $viewerAccountId, int $securityVe
  */
 function viewer_password_reset_token_consume(string $token): ?array
 {
-    return viewer_one_time_token_consume('viewer_password_reset_tokens', $token);
+    return viewer_one_time_token_consume(
+        'viewer_password_reset_tokens',
+        $token,
+    );
 }
 
 /**
@@ -192,17 +256,31 @@ function viewer_one_time_token_consume(string $table, string $token): ?array
         'viewer_email_verification_tokens' => true,
         'viewer_password_reset_tokens' => true,
     ];
-    if (!isset($allowedTables[$table]) || $token === '' || !viewer_token_table_storage_available($table)) {
+    if (
+        !isset($allowedTables[$table])
+        || $token === ''
+        || !viewer_token_table_storage_available($table)
+    ) {
         return null;
     }
 
-    return viewer_account_model_transaction(static function () use ($table, $token): ?array {
-        $row = viewer_token_model_lock_one_time($table, security_authority_token_hash($token));
+    return viewer_account_model_transaction(static function () use (
+        $table,
+        $token,
+    ): ?array {
+        $row = viewer_token_model_lock_one_time(
+            $table,
+            security_authority_token_hash($token),
+        );
         if (!$row || !viewer_one_time_token_row_is_usable($row)) {
             return null;
         }
         $consumedAt = now_sql();
-        if (!viewer_token_model_mark_consumed($table, (int) $row['id'], $consumedAt)) {
+        if (!viewer_token_model_mark_consumed(
+            $table,
+            (int) $row['id'],
+            $consumedAt,
+        )) {
             return null;
         }
         $row['consumed_at'] = $consumedAt;
@@ -218,8 +296,11 @@ function viewer_one_time_token_consume(string $table, string $token): ?array
  * @param int $limit Maximum inactive rows removed.
  * @return int Number of rows deleted.
  */
-function viewer_remember_token_cleanup_account_locked(int $viewerAccountId, string $now, int $limit = 100): int
-{
+function viewer_remember_token_cleanup_account_locked(
+    int $viewerAccountId,
+    string $now,
+    int $limit = 100,
+): int {
     return viewer_token_model_remember_cleanup($viewerAccountId, $now, $limit);
 }
 
@@ -230,19 +311,21 @@ function viewer_remember_token_cleanup_account_locked(int $viewerAccountId, stri
  * @param string $now Current SQL timestamp.
  * @param int $reserveSlots Number of free slots required after enforcement.
  * @param int $keepTokenId Token id that must remain active during restore rotation.
+ *
+ * @return void No return value; enforces the active-token cap while the account row is locked.
  */
 function viewer_remember_token_enforce_limit_locked(
     int $viewerAccountId,
     string $now,
     int $reserveSlots = 0,
-    int $keepTokenId = 0
+    int $keepTokenId = 0,
 ): void {
     viewer_token_model_remember_enforce_limit(
         $viewerAccountId,
         $now,
         (int) viewer_accounts_config()['max_active_viewer_remember_tokens_per_account'],
         $reserveSlots,
-        $keepTokenId
+        $keepTokenId,
     );
 }
 
@@ -256,33 +339,57 @@ function viewer_remember_token_enforce_limit_locked(
  * @param int $securityVersion Current viewer account security version.
  * @return array{selector:string,verifier:string,expires_at:string} Plaintext browser credential parts.
  */
-function viewer_remember_token_issue(int $viewerAccountId, int $securityVersion): array
-{
+function viewer_remember_token_issue(
+    int $viewerAccountId,
+    int $securityVersion,
+): array {
     if (!viewer_accounts_enabled() || !viewer_auth_storage_available()) {
-        throw new RuntimeException('Viewer remember-token issuance is unavailable.');
+        throw new RuntimeException(
+            'Viewer remember-token issuance is unavailable.',
+        );
     }
     if (!viewer_security_transport_allowed()) {
-        throw new RuntimeException('Viewer remember-token issuance requires a trusted secure transport.');
+        throw new RuntimeException(
+            'Viewer remember-token issuance requires a trusted secure transport.',
+        );
     }
     if ($viewerAccountId <= 0 || $securityVersion <= 0) {
-        throw new InvalidArgumentException('Viewer remember token account data is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer remember token account data is invalid.',
+        );
     }
 
-    return viewer_account_model_transaction(static function () use ($viewerAccountId, $securityVersion): array {
+    return viewer_account_model_transaction(static function () use (
+        $viewerAccountId,
+        $securityVersion,
+    ): array {
         $account = viewer_account_model_lock_auth($viewerAccountId);
-        if (!$account
+        if (
+            !$account
             || !viewer_account_can_authenticate($account)
             || viewer_account_requires_password_change($account)
-            || (int) ($account['security_version'] ?? 0) !== $securityVersion) {
-            throw new RuntimeException('Viewer remember-token issuance is unavailable.');
+            || (int) ($account['security_version'] ?? 0) !== $securityVersion
+        ) {
+            throw new RuntimeException(
+                'Viewer remember-token issuance is unavailable.',
+            );
         }
 
         $selector = security_token_selector_generate(18);
         $verifier = security_opaque_token_generate(32);
         $now = now_sql();
-        $expiresAt = date('Y-m-d H:i:s', time() + ((int) viewer_accounts_config()['remember_lifetime_days'] * 86400));
+        $expiresAt = date(
+            'Y-m-d H:i:s',
+            time()
+                + (
+                    (int) viewer_accounts_config()['remember_lifetime_days']
+                    * 86400
+                ),
+        );
         $userAgent = viewer_identity_request_user_agent();
-        $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-remember-ua', $userAgent);
+        $userAgentHash = $userAgent === ''
+            ? null
+            : viewer_security_fingerprint('viewer-remember-ua', $userAgent);
         viewer_remember_token_cleanup_account_locked($viewerAccountId, $now);
         viewer_remember_token_enforce_limit_locked($viewerAccountId, $now, 1);
         viewer_token_model_remember_insert(
@@ -292,9 +399,13 @@ function viewer_remember_token_issue(int $viewerAccountId, int $securityVersion)
             $securityVersion,
             $userAgentHash,
             $now,
-            $expiresAt
+            $expiresAt,
         );
-        return ['selector' => $selector, 'verifier' => $verifier, 'expires_at' => $expiresAt];
+        return [
+            'selector' => $selector,
+            'verifier' => $verifier,
+            'expires_at' => $expiresAt,
+        ];
     });
 }
 
@@ -305,8 +416,10 @@ function viewer_remember_token_issue(int $viewerAccountId, int $securityVersion)
  * @param string $verifier Secret remember-token verifier.
  * @return ?array Matching unrevoked/unexpired token row, otherwise null.
  */
-function viewer_remember_token_verify(string $selector, string $verifier): ?array
-{
+function viewer_remember_token_verify(
+    string $selector,
+    string $verifier,
+): ?array {
     if (!viewer_accounts_enabled() || !viewer_auth_storage_available()) {
         return null;
     }
@@ -314,17 +427,24 @@ function viewer_remember_token_verify(string $selector, string $verifier): ?arra
         return null;
     }
     $row = viewer_token_model_remember_verify_row($selector, now_sql());
-    $account = $row ? [
-        'status' => $row['account_status'] ?? '',
-        'password_hash' => $row['password_hash'] ?? '',
-        'email_verified_at' => $row['email_verified_at'] ?? null,
-        'must_change_password' => $row['must_change_password'] ?? 0,
-    ] : [];
-    if (!$row
-        || !security_authority_token_verify((string) $row['verifier_hash'], $verifier)
+    $account = $row
+        ? [
+            'status' => $row['account_status'] ?? '',
+            'password_hash' => $row['password_hash'] ?? '',
+            'email_verified_at' => $row['email_verified_at'] ?? null,
+            'must_change_password' => $row['must_change_password'] ?? 0,
+        ] : [];
+    if (
+        !$row
+        || !security_authority_token_verify(
+            (string) $row['verifier_hash'],
+            $verifier,
+        )
         || !viewer_account_can_authenticate($account)
         || viewer_account_requires_password_change($account)
-        || (int) ($row['security_version'] ?? 0) !== (int) ($row['account_security_version'] ?? -1)) {
+        || (int) ($row['security_version'] ?? 0)
+            !== (int) ($row['account_security_version'] ?? -1)
+    ) {
         return null;
     }
     return $row;
@@ -334,11 +454,15 @@ function viewer_remember_token_verify(string $selector, string $verifier): ?arra
  * Revoke one persistent viewer token by selector.
  *
  * @param string $selector Public remember-token selector.
+ *
+ * @return void No return value; revokes the token matching the validated selector when storage is available.
  */
 function viewer_remember_token_revoke(string $selector): void
 {
     if (preg_match('/^[a-f0-9]{36}$/', $selector) !== 1) {
-        throw new InvalidArgumentException('Viewer remember token selector is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer remember token selector is invalid.',
+        );
     }
     if (!viewer_auth_storage_available()) {
         return;
@@ -356,12 +480,22 @@ function viewer_remember_token_revoke(string $selector): void
  * @param string $verifier Secret remember-token verifier.
  * @return ?array{selector:string,verifier:string,expires_at:string} Rotated browser credential or null.
  */
-function viewer_remember_restore_and_rotate(string $selector, string $verifier): ?array
-{
-    if (!viewer_accounts_enabled() || !viewer_auth_storage_available() || !viewer_security_transport_allowed()) {
+function viewer_remember_restore_and_rotate(
+    string $selector,
+    string $verifier,
+): ?array {
+    if (
+        !viewer_accounts_enabled()
+        || !viewer_auth_storage_available()
+        || !viewer_security_transport_allowed()
+    ) {
         return null;
     }
-    if (preg_match('/^[a-f0-9]{36}$/D', $selector) !== 1 || $verifier === '' || strlen($verifier) > 512) {
+    if (
+        preg_match('/^[a-f0-9]{36}$/D', $selector) !== 1
+        || $verifier === ''
+        || strlen($verifier) > 512
+    ) {
         return null;
     }
     $viewerAccountId = viewer_token_model_remember_account_id($selector);
@@ -370,47 +504,91 @@ function viewer_remember_restore_and_rotate(string $selector, string $verifier):
     }
 
     try {
-        return viewer_account_model_transaction(static function () use ($selector, $verifier, $viewerAccountId): ?array {
+        return viewer_account_model_transaction(static function () use (
+            $selector,
+            $verifier,
+            $viewerAccountId,
+        ): ?array {
             $account = viewer_account_model_lock_auth($viewerAccountId);
-            if (!$account || !viewer_account_can_authenticate($account) || viewer_account_requires_password_change($account)) {
+            if (
+                !$account
+                || !viewer_account_can_authenticate($account)
+                || viewer_account_requires_password_change($account)
+            ) {
                 return null;
             }
             $token = viewer_token_model_remember_lock($selector);
-            $expiresAtTimestamp = $token ? strtotime((string) ($token['expires_at'] ?? '')) : false;
-            if (!$token
+            $expiresAtTimestamp = $token
+                ? strtotime((string) ($token['expires_at'] ?? ''))
+                : false;
+            if (
+                !$token
                 || !empty($token['revoked_at'])
                 || $expiresAtTimestamp === false
                 || $expiresAtTimestamp < time()
                 || (int) ($token['viewer_account_id'] ?? 0) !== $viewerAccountId
-                || (int) ($token['security_version'] ?? 0) !== (int) ($account['security_version'] ?? -1)
-                || !security_authority_token_verify((string) ($token['verifier_hash'] ?? ''), $verifier)) {
+                || (int) ($token['security_version'] ?? 0)
+                    !== (int) ($account['security_version'] ?? -1)
+                || !security_authority_token_verify(
+                    (string) ($token['verifier_hash'] ?? ''),
+                    $verifier,
+                )
+            ) {
                 return null;
             }
 
             $now = now_sql();
-            viewer_remember_token_cleanup_account_locked($viewerAccountId, $now);
-            viewer_remember_token_enforce_limit_locked($viewerAccountId, $now, 0, (int) $token['id']);
+            viewer_remember_token_cleanup_account_locked(
+                $viewerAccountId,
+                $now,
+            );
+            viewer_remember_token_enforce_limit_locked(
+                $viewerAccountId,
+                $now,
+                0,
+                (int) $token['id'],
+            );
             $newSelector = security_token_selector_generate(18);
             $newVerifier = security_opaque_token_generate(32);
-            $newExpiresAt = date('Y-m-d H:i:s', time() + ((int) viewer_accounts_config()['remember_lifetime_days'] * 86400));
+            $newExpiresAt = date(
+                'Y-m-d H:i:s',
+                time()
+                    + (
+                        (int) viewer_accounts_config()['remember_lifetime_days']
+                        * 86400
+                    ),
+            );
             if (!viewer_token_model_remember_rotate(
                 (int) $token['id'],
                 $selector,
                 $newSelector,
                 security_authority_token_hash($newVerifier),
                 $now,
-                $newExpiresAt
+                $newExpiresAt,
             )) {
-                throw new RuntimeException('Viewer remember credential rotation lost a concurrent race.');
+                throw new RuntimeException(
+                    'Viewer remember credential rotation lost a concurrent race.',
+                );
             }
 
             viewer_session_establish($account);
-            if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
-                viewer_security_event_record('viewer.remember_restored', $viewerAccountId, 'success', [
-                    'security_version' => (int) $account['security_version'],
-                ]);
+            if (function_exists(__NAMESPACE__
+                . '\\viewer_security_event_record')) {
+                viewer_security_event_record(
+                    'viewer.remember_restored',
+                    $viewerAccountId,
+                    'success',
+                    [
+                        'security_version' =>
+                            (int) $account['security_version'],
+                    ],
+                );
             }
-            return ['selector' => $newSelector, 'verifier' => $newVerifier, 'expires_at' => $newExpiresAt];
+            return [
+                'selector' => $newSelector,
+                'verifier' => $newVerifier,
+                'expires_at' => $newExpiresAt,
+            ];
         });
     } catch (\Throwable $exception) {
         viewer_session_clear();
@@ -430,6 +608,7 @@ function viewer_remember_cookie_contract(): array
         'httponly' => true,
         'secure' => true,
         'samesite' => 'Lax',
-        'lifetime_seconds' => (int) viewer_accounts_config()['remember_lifetime_days'] * 86400,
+        'lifetime_seconds' =>
+            (int) viewer_accounts_config()['remember_lifetime_days'] * 86400,
     ];
 }

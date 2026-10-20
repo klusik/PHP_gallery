@@ -34,50 +34,87 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** Return one account row by normalized login identifier without acquiring a write lock. */
+/**
+ * Return one account row by normalized login identifier without acquiring a write lock.
+ *
+ * @param string $normalizedEmail Canonicalized login email.
+ * @return array<string,mixed>|null Matching account row, or null when absent.
+ */
 function viewer_authentication_model_account_by_normalized_email(string $normalizedEmail): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM viewer_accounts WHERE normalized_email = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT * FROM viewer_accounts WHERE normalized_email = ? LIMIT 1',
+    );
     $stmt->execute([$normalizedEmail]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-/** Return the bounded first-login validation columns for one account. */
+/**
+ * Return the bounded first-login validation columns for one account.
+ *
+ * @param int $viewerAccountId Viewer account identifier.
+ * @return array<string,mixed>|null First-login validation row, or null when absent.
+ */
 function viewer_authentication_model_first_login_account(int $viewerAccountId): ?array
 {
     $stmt = db()->prepare(
         'SELECT id, email, password_hash, must_change_password, status, security_version, email_verified_at '
-        . 'FROM viewer_accounts WHERE id = ? LIMIT 1'
+            . 'FROM viewer_accounts WHERE id = ? LIMIT 1',
     );
     $stmt->execute([$viewerAccountId]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-/** Persist a successful login timestamp and optional password rehash. */
-function viewer_authentication_model_record_login(int $viewerAccountId, string $now, ?string $newPasswordHash): void
-{
+/**
+ * Persist a successful login timestamp and optional password rehash.
+ *
+ * @param int $viewerAccountId Viewer account identifier.
+ * @param string $now Shared SQL timestamp for login and update fields.
+ * @param ?string $newPasswordHash Replacement hash, or null when no rehash is needed.
+ * @return void Updates the account login timestamp and optional password hash.
+ */
+function viewer_authentication_model_record_login(
+    int $viewerAccountId,
+    string $now,
+    ?string $newPasswordHash,
+): void {
     if ($newPasswordHash !== null) {
-        db()->prepare('UPDATE viewer_accounts SET password_hash = ?, last_login_at = ?, updated_at = ? WHERE id = ?')
+        db()
+            ->prepare(
+                'UPDATE viewer_accounts SET password_hash = ?, last_login_at = ?, updated_at = ? WHERE id = ?',
+            )
             ->execute([$newPasswordHash, $now, $now, $viewerAccountId]);
         return;
     }
-    db()->prepare('UPDATE viewer_accounts SET last_login_at = ?, updated_at = ? WHERE id = ?')
+    db()
+        ->prepare(
+            'UPDATE viewer_accounts SET last_login_at = ?, updated_at = ? WHERE id = ?',
+        )
         ->execute([$now, $now, $viewerAccountId]);
 }
 
-/** Compare-and-set the forced first-login password transition. */
+/**
+ * Compare-and-set the forced first-login password transition.
+ *
+ * @param int $viewerAccountId Viewer account identifier.
+ * @param int $expectedSecurityVersion Security version observed before password change.
+ * @param string $newPasswordHash Replacement password hash.
+ * @param int $newSecurityVersion Security version to persist after the change.
+ * @param string $now Shared SQL timestamp for password and update fields.
+ * @return bool True when the compare-and-set transition updated the account.
+ */
 function viewer_authentication_model_complete_first_login(
     int $viewerAccountId,
     int $expectedSecurityVersion,
     string $newPasswordHash,
     int $newSecurityVersion,
-    string $now
+    string $now,
 ): bool {
     $stmt = db()->prepare(
         'UPDATE viewer_accounts SET password_hash = ?, must_change_password = 0, password_changed_at = ?, '
-        . 'security_version = ?, updated_at = ? WHERE id = ? AND security_version = ? AND must_change_password = 1'
+            . 'security_version = ?, updated_at = ? WHERE id = ? AND security_version = ? AND must_change_password = 1',
     );
     $stmt->execute([
         $newPasswordHash,
@@ -90,56 +127,100 @@ function viewer_authentication_model_complete_first_login(
     return $stmt->rowCount() === 1;
 }
 
-/** Revoke all authority invalidated by a forced first-login password replacement. */
-function viewer_authentication_model_revoke_after_first_login_password_change(int $viewerAccountId, string $now): void
-{
-    db()->prepare('UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
+/**
+ * Revoke all authority invalidated by a forced first-login password replacement.
+ *
+ * @param int $viewerAccountId Viewer account whose authority is revoked.
+ * @param string $now Shared SQL timestamp for revocation fields.
+ * @return void Invalidates pending reset/email authority and revokes sessions and remember tokens.
+ */
+function viewer_authentication_model_revoke_after_first_login_password_change(
+    int $viewerAccountId,
+    string $now,
+): void {
+    db()
+        ->prepare(
+            'UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
-    db()->prepare('UPDATE viewer_email_verification_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
+    db()
+        ->prepare(
+            'UPDATE viewer_email_verification_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
-    db()->prepare('UPDATE viewer_email_change_requests SET cancelled_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND cancelled_at IS NULL')
+    db()
+        ->prepare(
+            'UPDATE viewer_email_change_requests SET cancelled_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND cancelled_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
-    db()->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
+    db()
+        ->prepare(
+            'UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
-    db()->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
+    db()
+        ->prepare(
+            'UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
 }
 
-/** Resolve a password-reset token joined to the current account security state. */
+/**
+ * Resolve a password-reset token joined to the current account security state.
+ *
+ * @param string $tokenHash One-way hash of the submitted reset token.
+ * @return array<string,mixed>|null Joined token/account row, or null when absent.
+ */
 function viewer_authentication_model_password_reset_inspect(string $tokenHash): ?array
 {
     $stmt = db()->prepare(
         'SELECT vprt.id AS token_id, vprt.viewer_account_id, vprt.security_version AS token_security_version, '
-        . 'vprt.expires_at, vprt.consumed_at, vprt.invalidated_at, '
-        . 'va.password_hash, va.status, va.email_verified_at, va.security_version AS account_security_version '
-        . 'FROM viewer_password_reset_tokens vprt INNER JOIN viewer_accounts va ON va.id = vprt.viewer_account_id '
-        . 'WHERE vprt.token_hash = ? LIMIT 1'
+            . 'vprt.expires_at, vprt.consumed_at, vprt.invalidated_at, '
+            . 'va.password_hash, va.status, va.email_verified_at, va.security_version AS account_security_version '
+            . 'FROM viewer_password_reset_tokens vprt INNER JOIN viewer_accounts va ON va.id = vprt.viewer_account_id '
+            . 'WHERE vprt.token_hash = ? LIMIT 1',
     );
     $stmt->execute([$tokenHash]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-/** Lock one password-reset token row by primary key. */
+/**
+ * Lock one password-reset token row by primary key.
+ *
+ * @param int $tokenId Password-reset token identifier.
+ * @return array<string,mixed>|null Locked token row, or null when absent.
+ */
 function viewer_authentication_model_password_reset_lock(int $tokenId): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM viewer_password_reset_tokens WHERE id = ? LIMIT 1 FOR UPDATE');
+    $stmt = db()->prepare(
+        'SELECT * FROM viewer_password_reset_tokens WHERE id = ? LIMIT 1 FOR UPDATE',
+    );
     $stmt->execute([$tokenId]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-/** Compare-and-set the account password/security-version during final reset. */
+/**
+ * Compare-and-set the account password/security-version during final reset.
+ *
+ * @param int $viewerAccountId Viewer account identifier.
+ * @param int $expectedSecurityVersion Security version observed when reset began.
+ * @param string $passwordHash Replacement password hash.
+ * @param int $newSecurityVersion Security version to persist after reset.
+ * @param string $now Shared SQL timestamp for password and update fields.
+ * @return bool True when the expected account version was updated.
+ */
 function viewer_authentication_model_complete_password_reset(
     int $viewerAccountId,
     int $expectedSecurityVersion,
     string $passwordHash,
     int $newSecurityVersion,
-    string $now
+    string $now,
 ): bool {
     $stmt = db()->prepare(
         'UPDATE viewer_accounts SET password_hash = ?, must_change_password = 0, password_changed_at = ?, security_version = ?, updated_at = ? '
-        . 'WHERE id = ? AND security_version = ?'
+            . 'WHERE id = ? AND security_version = ?',
     );
     $stmt->execute([
         $passwordHash,
@@ -152,26 +233,52 @@ function viewer_authentication_model_complete_password_reset(
     return $stmt->rowCount() === 1;
 }
 
-/** Consume the exact locked reset token with a compare-and-set guard. */
-function viewer_authentication_model_consume_password_reset(int $tokenId, string $now): bool
-{
+/**
+ * Consume the exact locked reset token with a compare-and-set guard.
+ *
+ * @param int $tokenId Password-reset token identifier.
+ * @param string $now Consumption SQL timestamp.
+ * @return bool True when the active token was consumed.
+ */
+function viewer_authentication_model_consume_password_reset(
+    int $tokenId,
+    string $now,
+): bool {
     $stmt = db()->prepare(
         'UPDATE viewer_password_reset_tokens SET consumed_at = ? '
-        . 'WHERE id = ? AND consumed_at IS NULL AND invalidated_at IS NULL'
+            . 'WHERE id = ? AND consumed_at IS NULL AND invalidated_at IS NULL',
     );
     $stmt->execute([$now, $tokenId]);
     return $stmt->rowCount() === 1;
 }
 
-/** Invalidate every other reset token and revoke active session/remember authority after reset. */
-function viewer_authentication_model_revoke_after_password_reset(int $viewerAccountId, int $consumedTokenId, string $now): void
-{
-    db()->prepare(
-        'UPDATE viewer_password_reset_tokens SET invalidated_at = ? '
-        . 'WHERE viewer_account_id = ? AND id <> ? AND consumed_at IS NULL AND invalidated_at IS NULL'
-    )->execute([$now, $viewerAccountId, $consumedTokenId]);
-    db()->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
+/**
+ * Invalidate every other reset token and revoke active session/remember authority after reset.
+ *
+ * @param int $viewerAccountId Viewer account whose authority is revoked.
+ * @param int $consumedTokenId Password-reset token that completed the change.
+ * @param string $now Shared SQL timestamp for revocation fields.
+ * @return void Invalidates other reset tokens and revokes active sessions and remember tokens.
+ */
+function viewer_authentication_model_revoke_after_password_reset(
+    int $viewerAccountId,
+    int $consumedTokenId,
+    string $now,
+): void {
+    db()
+        ->prepare(
+            'UPDATE viewer_password_reset_tokens SET invalidated_at = ? '
+                . 'WHERE viewer_account_id = ? AND id <> ? AND consumed_at IS NULL AND invalidated_at IS NULL',
+        )
+        ->execute([$now, $viewerAccountId, $consumedTokenId]);
+    db()
+        ->prepare(
+            'UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
-    db()->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
+    db()
+        ->prepare(
+            'UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL',
+        )
         ->execute([$now, $viewerAccountId]);
 }

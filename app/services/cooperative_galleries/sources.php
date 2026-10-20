@@ -22,7 +22,11 @@ function cooperative_album_sources_assert_ready(): void
     cooperative_require_enabled();
     $status = gallery_public_export_schema_status();
     if (!schema_inspection_is_available($status)) {
-        throw new CooperativeException(schema_inspection_is_missing($status) ? 'schema_missing' : 'schema_unknown');
+        throw new CooperativeException(
+            schema_inspection_is_missing($status)
+                ? 'schema_missing'
+                : 'schema_unknown',
+        );
     }
     if (schema_inspection_is_unknown(gallery_visibility_schema_status())) {
         throw new CooperativeException('schema_unknown');
@@ -49,10 +53,19 @@ function cooperative_album_sources_state(int $afterId = 0): array
     foreach (array_slice($rows, 0, 50) as $row) {
         $id = (int) $row['id'];
         $policy = gallery_public_export_policy($id);
-        $items[] = ['gallery_id' => $id, 'title' => (string) $row['title'],
-            'eligible' => $policy['allowed'], 'reason' => $policy['reason']];
+        $items[] = [
+            'gallery_id' => $id,
+            'title' => (string) $row['title'],
+            'eligible' => $policy['allowed'],
+            'reason' => $policy['reason'],
+        ];
     }
-    return ['items' => $items, 'next_cursor' => $hasMore ? $items[count($items) - 1]['gallery_id'] : null];
+    return [
+        'items' => $items,
+        'next_cursor' => $hasMore
+            ? $items[count($items) - 1]['gallery_id']
+            : null,
+    ];
 }
 
 /** Prepare a local member reference after caller-owned Admin authorization.
@@ -74,7 +87,11 @@ function cooperative_album_source_member(int $galleryId, array $scopes): array
     // Preflight both stores before either lazy identity can be created.
     cooperative_storage_assert('identity');
     cooperative_storage_assert('albums');
-    return ['instance_id' => cooperative_instance_id(), 'album_id' => cooperative_album_identity($galleryId), 'scopes' => $scopes];
+    return [
+        'instance_id' => cooperative_instance_id(),
+        'album_id' => cooperative_album_identity($galleryId),
+        'scopes' => $scopes,
+    ];
 }
 
 /** Revalidate an opaque locally owned album for later consent/export orchestration.
@@ -87,5 +104,9 @@ function cooperative_album_source_policy(string $albumId): array
 {
     cooperative_album_sources_assert_ready();
     $galleryId = cooperative_album_local_id($albumId);
-    return $galleryId === null ? ['allowed' => false, 'reason' => 'gallery_missing'] : gallery_public_export_policy($galleryId);
+    return (
+        $galleryId === null
+            ? ['allowed' => false, 'reason' => 'gallery_missing']
+            : gallery_public_export_policy($galleryId)
+    );
 }

@@ -18,7 +18,8 @@ require_once __DIR__ . '/cli_guard.php';
 gallery_require_cli_sapi();
 
 $arguments = array_slice($argv, 1);
-$usage = "Usage:\n"
+$usage =
+    "Usage:\n"
     . "  php scripts/reconcile_admin_operations.php --list [--after=ACTOR:KEY_HASH]\n"
     . "  php scripts/reconcile_admin_operations.php --inspect=ACTOR:KEY_HASH\n"
     . "  php scripts/reconcile_admin_operations.php --complete=EVIDENCE_JSON [--apply]\n"
@@ -42,10 +43,24 @@ if (($arguments[0] ?? '') === '--list' && count($arguments) <= 2) {
         }
         $cursor = substr($arguments[1], strlen('--after='));
     }
-} elseif (count($arguments) === 1 && preg_match('/^--inspect=([1-9][0-9]{0,18}):([a-f0-9]{64})$/D', $arguments[0], $identity)) {
+} elseif (
+    count($arguments) === 1
+    && preg_match(
+        '/^--inspect=([1-9][0-9]{0,18}):([a-f0-9]{64})$/D',
+        $arguments[0],
+        $identity,
+    )
+) {
     $mode = 'inspect';
-} elseif (count($arguments) >= 1 && count($arguments) <= 2 && str_starts_with($arguments[0], '--complete=')
-    && (!isset($arguments[1]) || $arguments[1] === '--apply')) {
+} elseif (
+    count($arguments) >= 1
+    && count($arguments) <= 2
+    && str_starts_with($arguments[0], '--complete=')
+    && (
+        !isset($arguments[1])
+        || $arguments[1] === '--apply'
+    )
+) {
     $mode = 'complete';
     $evidencePath = substr($arguments[0], strlen('--complete='));
     $apply = isset($arguments[1]);
@@ -60,7 +75,10 @@ try {
     if ($mode === 'list') {
         $result = \Gallery\Services\admin_operation_pending_report($cursor);
     } elseif ($mode === 'inspect') {
-        $result = \Gallery\Services\admin_operation_inspect((int) $identity[1], $identity[2]);
+        $result = \Gallery\Services\admin_operation_inspect(
+            (int) $identity[1],
+            $identity[2],
+        );
     } else {
         if (!is_file($evidencePath) || !is_readable($evidencePath)) {
             throw new RuntimeException('Evidence file unavailable.');
@@ -70,19 +88,42 @@ try {
             throw new RuntimeException('Evidence file unavailable.');
         }
         try {
-            $json = @stream_get_contents($stream, \Gallery\Core\ADMIN_OPERATION_INPUT_MAX_BYTES + 1);
+            $json = @stream_get_contents(
+                $stream,
+                \Gallery\Core\ADMIN_OPERATION_INPUT_MAX_BYTES + 1,
+            );
         } finally {
             fclose($stream);
         }
-        $evidence = \Gallery\Services\admin_operation_reconciliation_document(is_string($json) ? $json : '');
-        $response = \Gallery\Services\admin_operation_reconcile_result($evidence['actor_id'], $evidence['key_hash'], $evidence['payload_hash'], $evidence['response'], $apply);
-        $result = ['applied' => $apply, 'state' => $apply ? 'completed' : 'validated_only',
-            'gallery_id' => (int) $response['gallery_id'], 'image_ids' => $response['image_ids'] ?? [],
-            'note' => 'No target work was executed; no retained claim was deleted.'];
+        $evidence = \Gallery\Services\admin_operation_reconciliation_document(
+            is_string($json) ? $json : '',
+        );
+        $response = \Gallery\Services\admin_operation_reconcile_result(
+            $evidence['actor_id'],
+            $evidence['key_hash'],
+            $evidence['payload_hash'],
+            $evidence['response'],
+            $apply,
+        );
+        $result = [
+            'applied' => $apply,
+            'state' => $apply ? 'completed' : 'validated_only',
+            'gallery_id' => (int) $response['gallery_id'],
+            'image_ids' => $response['image_ids'] ?? [],
+            'note' => 'No target work was executed; no retained claim was deleted.',
+        ];
     }
-    echo json_encode($result, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+    echo
+        json_encode($result, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 } catch (Throwable $exception) {
-    $reason = $exception instanceof \Gallery\Services\AdminOperationRefusal ? $exception->reason : 'operation_storage_unavailable';
-    fwrite(STDERR, 'Admin operation inspection/reconciliation refused (' . $reason . "). Inspect retained state; do not delete the claim or repeat target work.\n");
+    $reason = $exception instanceof \Gallery\Services\AdminOperationRefusal
+        ? $exception->reason
+        : 'operation_storage_unavailable';
+    fwrite(
+        STDERR,
+        'Admin operation inspection/reconciliation refused ('
+            . $reason
+            . "). Inspect retained state; do not delete the claim or repeat target work.\n",
+    );
     exit(1);
 }

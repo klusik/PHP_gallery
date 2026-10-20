@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use function Gallery\Core\current_user;
 
 /**
@@ -53,10 +52,16 @@ function admin_render_profile_enabled(): bool
     if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
-    if (function_exists(__NAMESPACE__ . '\\dev_mode_enabled') && !dev_mode_enabled()) {
+    if (
+        function_exists(__NAMESPACE__ . '\\dev_mode_enabled')
+        && !dev_mode_enabled()
+    ) {
         return false;
     }
-    return current_user() !== null && (string) (request_data('query')['page'] ?? '') === 'admin';
+    return (
+        current_user() !== null
+            && (string) (request_data('query')['page'] ?? '') === 'admin'
+    );
 }
 
 /**
@@ -106,7 +111,7 @@ function admin_render_profile_start(string $route): void
     if (!admin_render_profile_enabled()) {
         return;
     }
-    $state =& admin_render_profile_state();
+    $state = &admin_render_profile_state();
     $state['started_at'] = microtime(true);
     $state['route'] = $route;
 }
@@ -122,7 +127,7 @@ function admin_render_profile_count(string $counter, int $amount = 1): void
     if (!admin_render_profile_enabled()) {
         return;
     }
-    $state =& admin_render_profile_state();
+    $state = &admin_render_profile_state();
     if (!array_key_exists($counter, $state['counters'])) {
         $state['counters'][$counter] = 0;
     }
@@ -140,7 +145,7 @@ function admin_render_profile_set_counter(string $counter, int $value): void
     if (!admin_render_profile_enabled()) {
         return;
     }
-    $state =& admin_render_profile_state();
+    $state = &admin_render_profile_state();
     $state['counters'][$counter] = $value;
 }
 
@@ -149,13 +154,14 @@ function admin_render_profile_set_counter(string $counter, int $value): void
  *
  * @param string $timer Timer value.
  * @param float $elapsedMs Elapsed ms value.
+ * @return void Adds the elapsed duration to the named timer when profiling is active.
  */
 function admin_render_profile_add_time(string $timer, float $elapsedMs): void
 {
     if (!admin_render_profile_enabled()) {
         return;
     }
-    $state =& admin_render_profile_state();
+    $state = &admin_render_profile_state();
     if (!isset($state['timers'][$timer])) {
         $state['timers'][$timer] = [
             'count' => 0,
@@ -165,7 +171,10 @@ function admin_render_profile_add_time(string $timer, float $elapsedMs): void
     }
     $state['timers'][$timer]['count']++;
     $state['timers'][$timer]['total_ms'] += $elapsedMs;
-    $state['timers'][$timer]['max_ms'] = max($state['timers'][$timer]['max_ms'], $elapsedMs);
+    $state['timers'][$timer]['max_ms'] = max(
+        $state['timers'][$timer]['max_ms'],
+        $elapsedMs,
+    );
 }
 
 /**
@@ -176,7 +185,7 @@ function admin_render_profile_add_time(string $timer, float $elapsedMs): void
  * @return T Result value for the caller.
  * @template T
  */
-function admin_render_profile_span(string $timer, callable $callback)
+function admin_render_profile_span(string $timer, callable $callback): mixed
 {
     if (!admin_render_profile_enabled()) {
         return $callback();
@@ -185,7 +194,10 @@ function admin_render_profile_span(string $timer, callable $callback)
     try {
         return $callback();
     } finally {
-        admin_render_profile_add_time($timer, (microtime(true) - $startedAt) * 1000);
+        admin_render_profile_add_time(
+            $timer,
+            (microtime(true) - $startedAt) * 1000,
+        );
     }
 }
 
@@ -265,7 +277,7 @@ function admin_render_profile_panel_model(): ?array
     if (!admin_render_profile_enabled()) {
         return null;
     }
-    $state =& admin_render_profile_state();
+    $state = &admin_render_profile_state();
     $totalMs = (microtime(true) - (float) $state['started_at']) * 1000;
     $state['timers']['total_request'] = [
         'count' => 1,
@@ -274,7 +286,12 @@ function admin_render_profile_panel_model(): ?array
     ];
 
     $timers = $state['timers'];
-    uasort($timers, static fn (array $left, array $right): int => $right['total_ms'] <=> $left['total_ms']);
+    uasort(
+        $timers,
+        static fn(array $left, array $right): int => (
+            $right['total_ms'] <=> $left['total_ms']
+        ),
+    );
 
     return [
         'route' => (string) $state['route'],

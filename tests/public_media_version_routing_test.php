@@ -40,10 +40,18 @@ namespace Gallery\Core {
         return trim($value, '-') ?: 'item';
     }
 
-    /** Encode a slash-delimited public path one segment at a time. */
+    /**
+     * Encode a slash-delimited public path one segment at a time.
+     *
+     * @param string $path Untrusted slash-delimited path.
+     * @return string Encoded non-empty path segments joined by slashes.
+     */
     function public_path_segment(string $path): string
     {
-        return implode('/', array_map('rawurlencode', array_filter(explode('/', trim($path, '/')), static fn (string $part): bool => $part !== '')));
+        return implode('/', array_map('rawurlencode', array_filter(
+            explode('/', trim($path, '/')),
+            static fn(string $part): bool => $part !== '',
+        )));
     }
 
     /** Return the fixed public origin used by this isolated URL fixture. */
@@ -52,10 +60,22 @@ namespace Gallery\Core {
         return 'https://gallery.example.test';
     }
 
-    /** Build the fixture's query-style fallback URL. */
+    /**
+     * Build the fixture's query-style fallback URL.
+     *
+     * @param string $page Route identifier.
+     * @param array<string,string|int|float|bool|null> $params Route parameter values.
+     * @return string Encoded query-style route URL.
+     */
     function url_for(string $page, array $params = []): string
     {
-        return '/index.php?' . http_build_query(['page' => $page] + $params, '', '&', PHP_QUERY_RFC3986);
+        return '/index.php?'
+            . http_build_query(
+                ['page' => $page] + $params,
+                '',
+                '&',
+                PHP_QUERY_RFC3986,
+            );
     }
 }
 
@@ -91,19 +111,32 @@ namespace {
     parse_str((string) parse_url($cleanUrl, PHP_URL_QUERY), $cleanQuery);
 
     $failures = [];
-    if (($query['page'] ?? '') !== 'public_media') $failures[] = 'Query mode must use public_media.';
-    if (($query['public_path'] ?? '') !== 'nested/gallery/photo-one') $failures[] = 'Query mode must keep the canonical public path.';
-    if (($query['v'] ?? '') !== $version) $failures[] = 'Query mode must carry the stable cache identity.';
-    if (($cleanQuery['v'] ?? '') !== $version) $failures[] = 'Clean mode must carry the same stable cache identity.';
-    if ((string) parse_url($cleanUrl, PHP_URL_PATH) !== '/gallery/nested/gallery/photo-one/media') $failures[] = 'Clean mode must keep the canonical media route.';
+    if (($query['page'] ?? '') !== 'public_media')
+        $failures[] = 'Query mode must use public_media.';
+    if (($query['public_path'] ?? '') !== 'nested/gallery/photo-one')
+        $failures[] = 'Query mode must keep the canonical public path.';
+    if (($query['v'] ?? '') !== $version)
+        $failures[] = 'Query mode must carry the stable cache identity.';
+    if (($cleanQuery['v'] ?? '') !== $version)
+        $failures[] = 'Clean mode must carry the same stable cache identity.';
+    if (
+        (string) parse_url($cleanUrl, PHP_URL_PATH)
+        !== '/gallery/nested/gallery/photo-one/media'
+    )
+        $failures[] = 'Clean mode must keep the canonical media route.';
 
-    $controller = file_get_contents($root . '/app/controllers/public_media.php') ?: '';
-    if (str_contains($controller, '$_GET[\'v\']') || str_contains($controller, '$_REQUEST[\'v\']')) {
+    $controller = file_get_contents($root . '/app/controllers/public_media.php')
+    ?: '';
+    if (
+        str_contains($controller, '$_GET[\'v\']')
+        || str_contains($controller, '$_REQUEST[\'v\']')
+    ) {
         $failures[] = 'Media controller must not use v to change authorization or payload semantics.';
     }
 
     if ($failures !== []) {
-        foreach ($failures as $failure) fwrite(STDERR, "FAIL: {$failure}\n");
+        foreach ($failures as $failure)
+            fwrite(STDERR, "FAIL: {$failure}\n");
         exit(1);
     }
 

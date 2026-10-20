@@ -92,11 +92,17 @@ function cms_picture_game(): void
         }
         presentation_schema_log_degraded($schemaStatus, 'picture_game_route');
         http_response_code(503);
-        $title = t('public.service_unavailable_title', 'Temporarily unavailable');
+        $title = t(
+            'public.service_unavailable_title',
+            'Temporarily unavailable',
+        );
         render_header($title);
         view_render_picture_game_unavailable([
             'title' => $title,
-            'message' => t('public.presentation_schema_unavailable', 'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.'),
+            'message' => t(
+                'public.presentation_schema_unavailable',
+                'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.',
+            ),
         ]);
         render_footer();
         return;
@@ -108,19 +114,30 @@ function cms_picture_game(): void
                 $gallery,
                 (int) ($_POST['left_image_id'] ?? 0),
                 (int) ($_POST['right_image_id'] ?? 0),
-                (int) ($_POST['winner_image_id'] ?? 0)
+                (int) ($_POST['winner_image_id'] ?? 0),
             );
         } catch (PresentationSchemaUnavailableException $exception) {
             http_response_code(503);
-            $title = t('public.service_unavailable_title', 'Temporarily unavailable');
+            $title = t(
+                'public.service_unavailable_title',
+                'Temporarily unavailable',
+            );
             render_header($title);
-            view_render_picture_game_unavailable(['title' => $title, 'message' => $exception->getMessage()]);
+            view_render_picture_game_unavailable([
+                'title' => $title,
+                'message' => $exception->getMessage(),
+            ]);
             render_footer();
             return;
         } catch (RuntimeException) {
-            admin_log_event('warning', 'picture_game.vote_rejected', t('picture_game.log_vote_rejected'), [
-                'gallery_id' => (int) $gallery['id'],
-            ]);
+            admin_log_event(
+                'warning',
+                'picture_game.vote_rejected',
+                t('picture_game.log_vote_rejected'),
+                [
+                    'gallery_id' => (int) $gallery['id'],
+                ],
+            );
         }
         redirect_to(url_for('picture_game', ['id' => $gallery['id']]));
     }
@@ -129,17 +146,33 @@ function cms_picture_game(): void
     // Variable $topImages stores this steps working value.
     $topImages = picture_game_top_images($gallery);
     $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
-    $topImages = \Gallery\Services\content_localize_entities('image', $topImages);
+    $topImages = \Gallery\Services\content_localize_entities(
+        'image',
+        $topImages,
+    );
     if ($pair) {
-        [$pair['left'], $pair['right']] = \Gallery\Services\content_localize_entities('image', [$pair['left'], $pair['right']]);
+        [$pair['left'], $pair['right']] =
+            \Gallery\Services\content_localize_entities('image', [
+                $pair['left'],
+                $pair['right'],
+            ]);
         $sourceGalleries = [];
         foreach ([$pair['left'], $pair['right']] as $image) {
             $sourceId = (int) $image['gallery_id'];
             $sourceGalleries[$sourceId] = find_gallery($sourceId) ?: $gallery;
         }
-        $sourceTitles = array_column(\Gallery\Services\content_localize_entities('gallery', array_values($sourceGalleries)), 'title', 'id');
-        $pair['left']['gallery_title'] = $sourceTitles[(int) $pair['left']['gallery_id']] ?? '';
-        $pair['right']['gallery_title'] = $sourceTitles[(int) $pair['right']['gallery_id']] ?? '';
+        $sourceTitles = array_column(
+            \Gallery\Services\content_localize_entities(
+                'gallery',
+                array_values($sourceGalleries),
+            ),
+            'title',
+            'id',
+        );
+        $pair['left']['gallery_title'] =
+            $sourceTitles[(int) $pair['left']['gallery_id']] ?? '';
+        $pair['right']['gallery_title'] =
+            $sourceTitles[(int) $pair['right']['gallery_id']] ?? '';
     }
 
     ob_start();
@@ -156,19 +189,35 @@ function cms_picture_game(): void
         'back_label' => t('picture_game.back_to_gallery'),
         'action_url' => url_for('picture_game'),
         'gallery_id' => (int) $gallery['id'],
-        'pair' => $pair ? [
-            'left' => picture_game_choice_view_model((array) $pair['left'], 'left'),
-            'right' => picture_game_choice_view_model((array) $pair['right'], 'right'),
-        ] : null,
-        'remaining_label' => $pair ? t('picture_game.remaining_comparisons', [
-            'remaining' => (string) max(0, (int) $pair['remaining_pairs'] - 1),
-            'total' => (string) (int) $pair['total_pairs'],
-        ]) : '',
-        'top_images' => array_map('Gallery\\Controllers\\picture_game_stats_item_view_model', $topImages),
+        'pair' => $pair
+            ? [
+                'left' => picture_game_choice_view_model(
+                    (array) $pair['left'],
+                    'left',
+                ),
+                'right' => picture_game_choice_view_model(
+                    (array) $pair['right'],
+                    'right',
+                ),
+            ] : null,
+        'remaining_label' => $pair
+            ? t('picture_game.remaining_comparisons', [
+                'remaining' => (string) max(
+                    0,
+                    (int) $pair['remaining_pairs'] - 1,
+                ),
+                'total' => (string) (int) $pair['total_pairs'],
+            ]) : '',
+        'top_images' => array_map(
+            'Gallery\\Controllers\\picture_game_stats_item_view_model',
+            $topImages,
+        ),
         'top_pictures_label' => t('picture_game.top_pictures'),
     ];
 
-    render_header(t('picture_game.page_title', ['title' => (string) $gallery['title']]));
+    render_header(t('picture_game.page_title', [
+        'title' => (string) $gallery['title'],
+    ]));
     view_render_picture_game_page($viewModel);
     render_footer();
 }
@@ -176,20 +225,26 @@ function cms_picture_game(): void
 /**
  * Prepare one selectable picture-game choice.
  *
- * @param array $image Image row or image data.
+ * @param array{id?:int|string,title?:string,filename?:string,gallery_show_filenames?:int|string,gallery_title?:string} $image Image row fields used to build the choice.
  * @param string $side Side value.
- * @return array<string, mixed> Prepared image-choice presentation model.
+ * @return array{id:int,side:string,label:string,src:string,srcset:string,alt:string,display_title:string,gallery_title:string} Prepared image-choice model for the view.
  */
 function picture_game_choice_view_model(array $image, string $side): array
 {
     // Variable $label stores this steps working value.
-    $label = $side === 'left' ? t('picture_game.choose_left') : t('picture_game.choose_right');
+    $label = $side === 'left'
+        ? t('picture_game.choose_left')
+        : t('picture_game.choose_right');
     // Variable $imageGallery stores this steps working value.
-    $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
+    $imageGallery = [
+        'show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0),
+    ];
     // Variable $displayTitle stores this steps working value.
     $displayTitle = public_image_display_title($image, $imageGallery);
     // Variable $altText stores this steps working value.
-    $altText = $displayTitle !== '' ? $displayTitle : t('picture_game.picture_alt');
+    $altText = $displayTitle !== ''
+        ? $displayTitle
+        : t('picture_game.picture_alt');
 
     return [
         'id' => (int) ($image['id'] ?? 0),
@@ -206,28 +261,36 @@ function picture_game_choice_view_model(array $image, string $side): array
 /**
  * Render one selectable picture-game choice.
  *
- * @param array $image Image row or image data.
+ * @param array{id?:int|string,title?:string,filename?:string,gallery_show_filenames?:int|string,gallery_title?:string} $image Image row fields used to build the choice.
  * @param string $side Side value.
+ * @return void Renders the prepared choice through the picture-game view.
  */
 function render_picture_game_choice(array $image, string $side): void
 {
-    view_render_picture_game_choice(picture_game_choice_view_model($image, $side));
+    view_render_picture_game_choice(picture_game_choice_view_model(
+        $image,
+        $side,
+    ));
 }
 
 /**
  * Prepare one top-image card for the picture-game stats view.
  *
- * @param array $image Image row or image data.
- * @return array<string, mixed> Prepared stats-card presentation model.
+ * @param array{title?:string,filename?:string,gallery_show_filenames?:int|string,game_wins?:int|string,score?:int|string} $image Image row fields used to build the stats card.
+ * @return array{src:string,srcset:string,alt:string,display_title:string,score_label:string} Prepared stats-card model for the view.
  */
 function picture_game_stats_item_view_model(array $image): array
 {
     // Variable $imageGallery stores this steps working value.
-    $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
+    $imageGallery = [
+        'show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0),
+    ];
     // Variable $displayTitle stores this steps working value.
     $displayTitle = public_image_display_title($image, $imageGallery);
     // Variable $altText stores this steps working value.
-    $altText = $displayTitle !== '' ? $displayTitle : t('picture_game.picture_alt');
+    $altText = $displayTitle !== ''
+        ? $displayTitle
+        : t('picture_game.picture_alt');
 
     return [
         'src' => thumbnail_url($image, 300),
@@ -244,10 +307,14 @@ function picture_game_stats_item_view_model(array $image): array
 /**
  * Render top global picture-game winners for one gallery.
  *
- * @param array $topImages Top images value.
+ * @param list<array<string,mixed>> $topImages Image rows with display metadata and game statistics.
+ * @return void Renders the prepared statistics cards.
  */
 function render_picture_game_stats(array $topImages): void
 {
-    $items = array_map('Gallery\\Controllers\\picture_game_stats_item_view_model', $topImages);
+    $items = array_map(
+        'Gallery\\Controllers\\picture_game_stats_item_view_model',
+        $topImages,
+    );
     view_render_picture_game_stats($items, t('picture_game.top_pictures'));
 }

@@ -27,26 +27,62 @@ use function Gallery\Services\admin_gallery_report_process_job;
  */
 function report_context_assert(bool $condition, string $message): void
 {
-    if (!$condition) { throw new RuntimeException($message); }
+    if (!$condition) {
+        throw new RuntimeException($message);
+    }
 }
 
 $_SESSION = ['sentinel' => 'request-owned'];
 $checkpoint = null;
 $otherCaller = null;
 $state = admin_gallery_report_process_job($checkpoint);
-report_context_assert($state['ok'] === false && $state['status'] === 'missing', 'Absent checkpoint was not handled without storage.');
-$first = ['job_id' => 'fixture-job', 'status' => 'running', 'processed' => 1, 'total' => 2, 'last_image_id' => 7];
+report_context_assert(
+    $state['ok'] === false && $state['status'] === 'missing',
+    'Absent checkpoint was not handled without storage.',
+);
+$first = [
+    'job_id' => 'fixture-job',
+    'status' => 'running',
+    'processed' => 1,
+    'total' => 2,
+    'last_image_id' => 7,
+];
 admin_gallery_report_job_write($checkpoint, $first);
-report_context_assert(admin_gallery_report_job_read($checkpoint) === $first, 'Published checkpoint changed.');
-report_context_assert(admin_gallery_report_job_read($otherCaller) === null, 'Another caller inherited report state.');
+report_context_assert(
+    admin_gallery_report_job_read($checkpoint) === $first,
+    'Published checkpoint changed.',
+);
+report_context_assert(
+    admin_gallery_report_job_read($otherCaller) === null,
+    'Another caller inherited report state.',
+);
 $read = admin_gallery_report_job_read($checkpoint);
 $read['processed'] = 2;
-report_context_assert($checkpoint['processed'] === 1, 'Reading a checkpoint exposed an implicit writable alias.');
+report_context_assert(
+    $checkpoint['processed'] === 1,
+    'Reading a checkpoint exposed an implicit writable alias.',
+);
 admin_gallery_report_job_write($checkpoint, $read);
-report_context_assert($checkpoint['processed'] === 2, 'Explicit batch publication was lost.');
+report_context_assert(
+    $checkpoint['processed'] === 2,
+    'Explicit batch publication was lost.',
+);
 admin_gallery_report_job_clear($checkpoint);
-report_context_assert($checkpoint === null && admin_gallery_report_process_job($checkpoint)['status'] === 'missing', 'Completed checkpoint survived clearing.');
-report_context_assert($_SESSION === ['sentinel' => 'request-owned'], 'Report service changed session transport.');
-$source = module_source(dirname(__DIR__) . '/app/services/admin_gallery_report.php');
-report_context_assert(!str_contains($source, '$_SESSION'), 'A report module part still extracts session state.');
+report_context_assert(
+    $checkpoint === null
+        && admin_gallery_report_process_job($checkpoint)['status']
+            === 'missing',
+    'Completed checkpoint survived clearing.',
+);
+report_context_assert(
+    $_SESSION === ['sentinel' => 'request-owned'],
+    'Report service changed session transport.',
+);
+$source = module_source(
+    dirname(__DIR__) . '/app/services/admin_gallery_report.php',
+);
+report_context_assert(
+    !str_contains($source, '$_SESSION'),
+    'A report module part still extracts session state.',
+);
 echo "Gallery report caller-context checks passed.\n";

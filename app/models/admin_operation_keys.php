@@ -36,7 +36,10 @@ require_once dirname(__DIR__) . '/policy_constants.php';
 function admin_operation_model_primary_state(): string
 {
     try {
-        $statement = db()->prepare('SELECT COLUMN_NAME, SEQ_IN_INDEX, NON_UNIQUE, SUB_PART FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX LIMIT ' . (count(ADMIN_OPERATION_PRIMARY_COLUMNS) + 1));
+        $statement = db()->prepare(
+            'SELECT COLUMN_NAME, SEQ_IN_INDEX, NON_UNIQUE, SUB_PART FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX LIMIT '
+                . (count(ADMIN_OPERATION_PRIMARY_COLUMNS) + 1),
+        );
         if (!$statement->execute(['admin_operation_keys', 'PRIMARY'])) {
             return 'unknown';
         }
@@ -46,15 +49,26 @@ function admin_operation_model_primary_state(): string
         }
         foreach (ADMIN_OPERATION_PRIMARY_COLUMNS as $offset => $column) {
             $row = $rows[$offset];
-            foreach (['COLUMN_NAME', 'SEQ_IN_INDEX', 'NON_UNIQUE', 'SUB_PART'] as $field) {
+            foreach ([
+                'COLUMN_NAME',
+                'SEQ_IN_INDEX',
+                'NON_UNIQUE',
+                'SUB_PART',
+            ] as $field) {
                 if (!array_key_exists($field, $row)) {
                     return 'unknown';
                 }
             }
-            if ($row['COLUMN_NAME'] !== $column
-                || !in_array($row['SEQ_IN_INDEX'], [$offset + 1, (string) ($offset + 1)], true)
+            if (
+                $row['COLUMN_NAME'] !== $column
+                || !in_array(
+                    $row['SEQ_IN_INDEX'],
+                    [$offset + 1, (string) ($offset + 1)],
+                    true,
+                )
                 || !in_array($row['NON_UNIQUE'], [0, '0'], true)
-                || $row['SUB_PART'] !== null) {
+                || $row['SUB_PART'] !== null
+            ) {
                 return 'missing';
             }
         }
@@ -74,15 +88,22 @@ function admin_operation_model_primary_state(): string
 function admin_operation_model_lock(int $actorId, string $keyHash): ?string
 {
     if (db()->inTransaction()) {
-        throw new RuntimeException('Operation claims require an independent durable commit.');
+        throw new RuntimeException(
+            'Operation claims require an independent durable commit.',
+        );
     }
     $databaseName = (string) db()->query('SELECT DATABASE()')->fetchColumn();
-    $name = hash('sha256', $databaseName . ':admin_operation:' . $actorId . ':' . $keyHash);
+    $name = hash(
+        'sha256',
+        $databaseName . ':admin_operation:' . $actorId . ':' . $keyHash,
+    );
     $statement = db()->prepare('SELECT GET_LOCK(?, 0)');
     $statement->execute([$name]);
     $result = $statement->fetchColumn();
     if ($result === null || $result === false) {
-        throw new RuntimeException('Operation ownership could not be verified.');
+        throw new RuntimeException(
+            'Operation ownership could not be verified.',
+        );
     }
     return (int) $result === 1 ? $name : null;
 }
@@ -110,14 +131,37 @@ function admin_operation_model_unlock(string $lockName): void
  * @param string $now UTC SQL timestamp.
  * @return array<string,mixed> Persisted claim, including any prior outcome.
  */
-function admin_operation_model_claim(int $actorId, string $keyHash, string $operation, string $payloadHash, string $ownerHash, string $now): array
-{
+function admin_operation_model_claim(
+    int $actorId,
+    string $keyHash,
+    string $operation,
+    string $payloadHash,
+    string $ownerHash,
+    string $now,
+): array {
     if (db()->inTransaction()) {
-        throw new RuntimeException('Operation claim cannot join a target transaction.');
+        throw new RuntimeException(
+            'Operation claim cannot join a target transaction.',
+        );
     }
-    $statement = db()->prepare("INSERT INTO admin_operation_keys (actor_id, key_hash, operation_name, payload_hash, owner_hash, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?) ON DUPLICATE KEY UPDATE key_hash = key_hash");
-    $statement->execute([$actorId, $keyHash, $operation, $payloadHash, $ownerHash, $now, $now]);
-    return admin_operation_model_find($actorId, $keyHash) ?? throw new RuntimeException('Operation claim could not be read.');
+    $statement = db()->prepare(
+        "INSERT INTO admin_operation_keys (actor_id, key_hash, operation_name, payload_hash, owner_hash, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?) ON DUPLICATE KEY UPDATE key_hash = key_hash",
+    );
+    $statement->execute([
+        $actorId,
+        $keyHash,
+        $operation,
+        $payloadHash,
+        $ownerHash,
+        $now,
+        $now,
+    ]);
+    return (
+        admin_operation_model_find(
+            $actorId,
+            $keyHash,
+        ) ?? throw new RuntimeException('Operation claim could not be read.')
+    );
 }
 
 /**
@@ -129,7 +173,9 @@ function admin_operation_model_claim(int $actorId, string $keyHash, string $oper
  */
 function admin_operation_model_find(int $actorId, string $keyHash): ?array
 {
-    $statement = db()->prepare('SELECT actor_id, key_hash, operation_name, payload_hash, owner_hash, state, response_json, created_at, updated_at FROM admin_operation_keys WHERE actor_id = ? AND key_hash = ?');
+    $statement = db()->prepare(
+        'SELECT actor_id, key_hash, operation_name, payload_hash, owner_hash, state, response_json, created_at, updated_at FROM admin_operation_keys WHERE actor_id = ? AND key_hash = ?',
+    );
     $statement->execute([$actorId, $keyHash]);
     return $statement->fetch() ?: null;
 }
@@ -142,13 +188,28 @@ function admin_operation_model_find(int $actorId, string $keyHash): ?array
  * @param string $now UTC SQL timestamp.
  * @return void
  */
-function admin_operation_model_complete(array $claim, string $responseJson, string $now): void
-{
+function admin_operation_model_complete(
+    array $claim,
+    string $responseJson,
+    string $now,
+): void {
     if (db()->inTransaction()) {
-        throw new RuntimeException('Operation response must commit before output.');
+        throw new RuntimeException(
+            'Operation response must commit before output.',
+        );
     }
-    $statement = db()->prepare("UPDATE admin_operation_keys SET state = 'completed', response_json = ?, updated_at = ? WHERE actor_id = ? AND key_hash = ? AND operation_name = ? AND payload_hash = ? AND owner_hash = ? AND state IN ('pending', 'needs_reconciliation')");
-    $statement->execute([$responseJson, $now, $claim['actor_id'], $claim['key_hash'], $claim['operation_name'], $claim['payload_hash'], $claim['owner_hash']]);
+    $statement = db()->prepare(
+        "UPDATE admin_operation_keys SET state = 'completed', response_json = ?, updated_at = ? WHERE actor_id = ? AND key_hash = ? AND operation_name = ? AND payload_hash = ? AND owner_hash = ? AND state IN ('pending', 'needs_reconciliation')",
+    );
+    $statement->execute([
+        $responseJson,
+        $now,
+        $claim['actor_id'],
+        $claim['key_hash'],
+        $claim['operation_name'],
+        $claim['payload_hash'],
+        $claim['owner_hash'],
+    ]);
     if ($statement->rowCount() !== 1) {
         throw new RuntimeException('Operation completion ownership was lost.');
     }
@@ -163,8 +224,15 @@ function admin_operation_model_complete(array $claim, string $responseJson, stri
  */
 function admin_operation_model_fail(array $claim, string $now): void
 {
-    $statement = db()->prepare("UPDATE admin_operation_keys SET state = 'needs_reconciliation', updated_at = ? WHERE actor_id = ? AND key_hash = ? AND owner_hash = ? AND state = 'pending'");
-    $statement->execute([$now, $claim['actor_id'], $claim['key_hash'], $claim['owner_hash']]);
+    $statement = db()->prepare(
+        "UPDATE admin_operation_keys SET state = 'needs_reconciliation', updated_at = ? WHERE actor_id = ? AND key_hash = ? AND owner_hash = ? AND state = 'pending'",
+    );
+    $statement->execute([
+        $now,
+        $claim['actor_id'],
+        $claim['key_hash'],
+        $claim['owner_hash'],
+    ]);
 }
 
 /**
@@ -174,7 +242,13 @@ function admin_operation_model_fail(array $claim, string $now): void
  */
 function admin_operation_model_pending_counts(): array
 {
-    return db()->query("SELECT COALESCE(SUM(state = 'pending'), 0) AS pending, COALESCE(SUM(state = 'needs_reconciliation'), 0) AS needs_reconciliation, COALESCE(SUM(state NOT IN ('pending', 'needs_reconciliation', 'completed')), 0) AS unknown FROM admin_operation_keys")->fetch() ?: [];
+    return (
+        db()
+            ->query(
+                "SELECT COALESCE(SUM(state = 'pending'), 0) AS pending, COALESCE(SUM(state = 'needs_reconciliation'), 0) AS needs_reconciliation, COALESCE(SUM(state NOT IN ('pending', 'needs_reconciliation', 'completed')), 0) AS unknown FROM admin_operation_keys",
+            )
+            ->fetch() ?: []
+    );
 }
 
 /**
@@ -184,9 +258,14 @@ function admin_operation_model_pending_counts(): array
  * @param string $afterKeyHash Cursor key hash, or empty for the first page.
  * @return list<array<string,mixed>> Bounded metadata rows with one pagination lookahead.
  */
-function admin_operation_model_pending_page(int $afterActor, string $afterKeyHash): array
-{
-    $statement = db()->prepare("SELECT actor_id, key_hash, operation_name, payload_hash, state, created_at, updated_at FROM admin_operation_keys WHERE state <> 'completed' AND (actor_id > ? OR (actor_id = ? AND key_hash > ?)) ORDER BY actor_id, key_hash LIMIT " . (ADMIN_OPERATION_PENDING_PAGE_SIZE + 1));
+function admin_operation_model_pending_page(
+    int $afterActor,
+    string $afterKeyHash,
+): array {
+    $statement = db()->prepare(
+        "SELECT actor_id, key_hash, operation_name, payload_hash, state, created_at, updated_at FROM admin_operation_keys WHERE state <> 'completed' AND (actor_id > ? OR (actor_id = ? AND key_hash > ?)) ORDER BY actor_id, key_hash LIMIT "
+            . (ADMIN_OPERATION_PENDING_PAGE_SIZE + 1),
+    );
     $statement->execute([$afterActor, $afterActor, $afterKeyHash]);
     return $statement->fetchAll();
 }

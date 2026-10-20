@@ -122,9 +122,13 @@ function admin_public_inline_json_buffer_start(bool $wantsJson): int
  * @param array<string,mixed> $payload Canonical JSON payload.
  * @param int $status HTTP response status.
  * @param int $bufferLevel Previous output-buffer level returned by admin_public_inline_json_buffer_start().
+ * @return void Emit the JSON response and discard request-owned buffered output.
  */
-function admin_public_inline_json_response(array $payload, int $status = 200, int $bufferLevel = -1): void
-{
+function admin_public_inline_json_response(
+    array $payload,
+    int $status = 200,
+    int $bufferLevel = -1,
+): void {
     $bufferedChunks = [];
     if ($bufferLevel >= 0) {
         while (ob_get_level() > $bufferLevel) {
@@ -137,18 +141,35 @@ function admin_public_inline_json_response(array $payload, int $status = 200, in
 
     $unexpectedOutput = trim(implode('', $bufferedChunks));
     if ($unexpectedOutput !== '') {
-        $plainOutput = trim((string) preg_replace('/\s+/', ' ', strip_tags($unexpectedOutput)));
-        $snippet = substr($plainOutput !== '' ? $plainOutput : $unexpectedOutput, 0, 1200);
-        error_log('[PHP Gallery] Discarded unexpected output before Admin public mutation JSON response: ' . $snippet);
+        $plainOutput = trim((string) preg_replace(
+            '/\s+/',
+            ' ',
+            strip_tags($unexpectedOutput),
+        ));
+        $snippet = substr(
+            $plainOutput !== '' ? $plainOutput : $unexpectedOutput,
+            0,
+            1200,
+        );
+        error_log(
+            '[PHP Gallery] Discarded unexpected output before Admin public mutation JSON response: '
+                . $snippet,
+        );
 
         // The diagnostic write is intentionally isolated too. A broken optional Admin-log
         // schema must not reintroduce displayed PHP output after the mutation buffer was cleaned.
         $diagnosticBufferLevel = ob_get_level();
         ob_start();
         try {
-            admin_log_event('warning', 'gallery.public_json_output_discarded', 'Unexpected PHP output was discarded before an Admin public mutation JSON response.', [
-                'output' => $snippet,
-            ], ['category' => 'gallery', 'severity' => 'warning']);
+            admin_log_event(
+                'warning',
+                'gallery.public_json_output_discarded',
+                'Unexpected PHP output was discarded before an Admin public mutation JSON response.',
+                [
+                    'output' => $snippet,
+                ],
+                ['category' => 'gallery', 'severity' => 'warning'],
+            );
         } finally {
             while (ob_get_level() > $diagnosticBufferLevel) {
                 ob_end_clean();
@@ -159,10 +180,14 @@ function admin_public_inline_json_response(array $payload, int $status = 200, in
     http_response_code($status);
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store, private, max-age=0');
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    echo $json === false
-        ? '{"ok":false,"error":"The server could not encode the mutation response.","error_code":"json_encode_failed"}'
-        : $json;
+    $json = json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
+    echo
+        $json === false
+            ? '{"ok":false,"error":"The server could not encode the mutation response.","error_code":"json_encode_failed"}'
+            : $json;
 }
 
 /**
@@ -184,9 +209,16 @@ function cms_admin_public_update_gallery(): void
     if (!$gallery) {
         if ($wantsJson) {
             admin_public_inline_json_response(admin_mutation_error_envelope(
-                t('admin.side_panel.gallery_delete_failed', 'Gallery delete failed.'),
+                t(
+                    'admin.side_panel.gallery_delete_failed',
+                    'Gallery delete failed.',
+                ),
                 'gallery_not_found',
-                admin_mutation_descriptor('gallery.update', 'gallery', 'update')
+                admin_mutation_descriptor(
+                    'gallery.update',
+                    'gallery',
+                    'update',
+                ),
             ), 404);
             return;
         }
@@ -220,16 +252,33 @@ function cms_admin_public_update_gallery(): void
             // $trashSchemaStatus distinguishes a known missing migration from a temporary inspection failure.
             $trashSchemaStatus = gallery_trash_schema_status();
             // $trashUnavailableMessage keeps UNKNOWN fail-closed without incorrectly telling the admin to migrate.
-            $trashUnavailableMessage = (string) ($trashSchemaStatus['state'] ?? 'unknown') === 'missing'
-                ? t('admin.galleries.trash_requires_migration', 'The trash bin needs a database migration. Run pending migrations, then try again.')
-                : t('admin.galleries.trash_temporarily_unavailable', 'The trash bin is temporarily unavailable because its database schema could not be verified. Nothing was deleted.');
+            $trashUnavailableMessage = (string) (
+                $trashSchemaStatus['state'] ?? 'unknown'
+            ) === 'missing'
+                ? t(
+                    'admin.galleries.trash_requires_migration',
+                    'The trash bin needs a database migration. Run pending migrations, then try again.',
+                )
+                : t(
+                    'admin.galleries.trash_temporarily_unavailable',
+                    'The trash bin is temporarily unavailable because its database schema could not be verified. Nothing was deleted.',
+                );
             if ($wantsJson) {
-                admin_public_inline_json_response(admin_mutation_error_envelope(
-                    $trashUnavailableMessage,
-                    'gallery_trash_unavailable',
-                    admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
-                    ['redirect_url' => $redirect]
-                ), 422, $jsonBufferLevel);
+                admin_public_inline_json_response(
+                    admin_mutation_error_envelope(
+                        $trashUnavailableMessage,
+                        'gallery_trash_unavailable',
+                        admin_mutation_descriptor(
+                            'gallery.delete',
+                            'gallery',
+                            'delete',
+                            [(int) $gallery['id']],
+                        ),
+                        ['redirect_url' => $redirect],
+                    ),
+                    422,
+                    $jsonBufferLevel,
+                );
                 return;
             }
             flash_message('admin_notice', $trashUnavailableMessage);
@@ -243,45 +292,103 @@ function cms_admin_public_update_gallery(): void
                     'deleted_from' => 'public_inline',
                 ])
                 : delete_gallery_subtrees([(int) $gallery['id']]);
-            admin_log_event('warning', $trashEnabled ? 'gallery.public_trashed' : 'gallery.public_deleted', $trashEnabled ? 'Admin moved a gallery to the trash from the public page.' : 'Admin deleted a gallery from the public page.', [
-                'gallery_id' => (int) $gallery['id'],
-                'folder_path' => (string) $gallery['folder_path'],
-                'deleted_roots' => (int) ($deleted['root_count'] ?? 0),
-                'deleted_rows' => (int) ($deleted['row_count'] ?? 0),
-                'missing_folders' => (int) ($deleted['missing_folders'] ?? 0),
-            ]);
+            admin_log_event(
+                'warning',
+                $trashEnabled
+                    ? 'gallery.public_trashed'
+                    : 'gallery.public_deleted',
+                $trashEnabled
+                    ? 'Admin moved a gallery to the trash from the public page.'
+                    : 'Admin deleted a gallery from the public page.',
+                [
+                    'gallery_id' => (int) $gallery['id'],
+                    'folder_path' => (string) $gallery['folder_path'],
+                    'deleted_roots' => (int) ($deleted['root_count'] ?? 0),
+                    'deleted_rows' => (int) ($deleted['row_count'] ?? 0),
+                    'missing_folders' => (int) (
+                        $deleted['missing_folders'] ?? 0
+                    ),
+                ],
+            );
             if ($wantsJson) {
-                admin_public_inline_json_response(admin_mutation_success_envelope(
-                    $trashEnabled
-                        ? t('admin.galleries.trashed_result', 'Moved {count} gallery folder(s) to the trash.', ['count' => (int) ($deleted['root_count'] ?? 1)])
-                        : t('admin.galleries.deleted_result', 'Deleted {count} gallery folder(s).', ['count' => (int) ($deleted['root_count'] ?? 1)]),
-                    admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
-                    null,
-                    [
-                        admin_mutation_public_gallery_context(
-                            $parentGalleryId,
-                            $redirect,
-                            admin_mutation_gallery_membership_postcondition((int) $gallery['id'], $parentGalleryId, false)
+                admin_public_inline_json_response(
+                    admin_mutation_success_envelope(
+                        $trashEnabled
+                            ? t(
+                                'admin.galleries.trashed_result',
+                                'Moved {count} gallery folder(s) to the trash.',
+                                [
+                                    'count' => (int) (
+                                        $deleted['root_count'] ?? 1
+                                    ),
+                                ],
+                            )
+                            : t(
+                                'admin.galleries.deleted_result',
+                                'Deleted {count} gallery folder(s).',
+                                [
+                                    'count' => (int) (
+                                        $deleted['root_count'] ?? 1
+                                    ),
+                                ],
+                            ),
+                        admin_mutation_descriptor(
+                            'gallery.delete',
+                            'gallery',
+                            'delete',
+                            [(int) $gallery['id']],
                         ),
-                    ],
-                    ['redirect_url' => $redirect]
-                ), 200, $jsonBufferLevel);
+                        null,
+                        [
+                            admin_mutation_public_gallery_context(
+                                $parentGalleryId,
+                                $redirect,
+                                admin_mutation_gallery_membership_postcondition(
+                                    (int) $gallery['id'],
+                                    $parentGalleryId,
+                                    false,
+                                ),
+                            ),
+                        ],
+                        ['redirect_url' => $redirect],
+                    ),
+                    200,
+                    $jsonBufferLevel,
+                );
                 return;
             }
         } catch (Throwable $exception) {
-            admin_log_event('error', 'gallery.public_delete_failed', 'Public-page gallery delete failed.', [
-                'gallery_id' => (int) $gallery['id'],
-                'folder_path' => (string) $gallery['folder_path'],
-                'error' => $exception->getMessage(),
-            ]);
-            $deleteFailureMessage = t('admin.galleries.delete_failed', 'Gallery delete failed: {error}', ['error' => $exception->getMessage()]);
+            admin_log_event(
+                'error',
+                'gallery.public_delete_failed',
+                'Public-page gallery delete failed.',
+                [
+                    'gallery_id' => (int) $gallery['id'],
+                    'folder_path' => (string) $gallery['folder_path'],
+                    'error' => $exception->getMessage(),
+                ],
+            );
+            $deleteFailureMessage = t(
+                'admin.galleries.delete_failed',
+                'Gallery delete failed: {error}',
+                ['error' => $exception->getMessage()],
+            );
             if ($wantsJson) {
-                admin_public_inline_json_response(admin_mutation_error_envelope(
-                    $deleteFailureMessage,
-                    'gallery_delete_failed',
-                    admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
-                    ['redirect_url' => $redirect]
-                ), 422, $jsonBufferLevel);
+                admin_public_inline_json_response(
+                    admin_mutation_error_envelope(
+                        $deleteFailureMessage,
+                        'gallery_delete_failed',
+                        admin_mutation_descriptor(
+                            'gallery.delete',
+                            'gallery',
+                            'delete',
+                            [(int) $gallery['id']],
+                        ),
+                        ['redirect_url' => $redirect],
+                    ),
+                    422,
+                    $jsonBufferLevel,
+                );
                 return;
             }
             flash_message('admin_notice', $deleteFailureMessage);
@@ -302,7 +409,9 @@ function cms_admin_public_update_gallery(): void
         $input['description'] = (string) ($gallery['description'] ?? '');
     }
     // Variable $visibility stores this steps working value.
-    $visibility = gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished'));
+    $visibility = gallery_visibility_storage_value(
+        (string) ($gallery['visibility'] ?? 'unpublished'),
+    );
     if ($action === 'publish') {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
@@ -319,37 +428,82 @@ function cms_admin_public_update_gallery(): void
                 admin_public_inline_json_response(admin_mutation_error_envelope(
                     $exception->getMessage(),
                     'gallery_visibility_failed',
-                    admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']])
+                    admin_mutation_descriptor(
+                        'gallery.visibility',
+                        'gallery',
+                        'update',
+                        [(int) $gallery['id']],
+                    ),
                 ), 422);
                 return;
             }
             flash_message('admin_notice', $exception->getMessage());
-            redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
+            redirect_to(
+                (string) (
+                    $_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)
+                ),
+            );
         }
     }
     $input['visibility'] = $visibility;
     try {
-        admin_save_gallery_from_input($gallery, $input, $_FILES, 'admin-edit-identity', false);
+        admin_save_gallery_from_input(
+            $gallery,
+            $input,
+            $_FILES,
+            'admin-edit-identity',
+            false,
+        );
         if ($wantsJson && $isVisibilityAction) {
-            $updatedGallery = find_gallery((int) $gallery['id'], true) ?: find_gallery((int) $gallery['id']) ?: $gallery;
-            $parentGalleryId = max(0, (int) ($updatedGallery['parent_id'] ?? 0));
+            $updatedGallery = find_gallery(
+                (int) $gallery['id'],
+                true,
+            ) ?: find_gallery((int) $gallery['id']) ?: $gallery;
+            $parentGalleryId = max(
+                0,
+                (int) ($updatedGallery['parent_id'] ?? 0),
+            );
             $contextUrl = url_for('home');
             if ($parentGalleryId > 0) {
-                $parentGallery = find_gallery($parentGalleryId, true) ?: find_gallery($parentGalleryId);
-                if ($parentGallery) $contextUrl = gallery_public_url($parentGallery);
+                $parentGallery = find_gallery(
+                    $parentGalleryId,
+                    true,
+                ) ?: find_gallery($parentGalleryId);
+                if ($parentGallery)
+                    $contextUrl = gallery_public_url($parentGallery);
             }
-            $isRendered = admin_mutation_gallery_is_rendered_in_context($updatedGallery, $parentGalleryId);
+            $isRendered = admin_mutation_gallery_is_rendered_in_context(
+                $updatedGallery,
+                $parentGalleryId,
+            );
             $postcondition = $isRendered
-                ? admin_mutation_postcondition('gallery_visibility', ['gallery_id' => (int) $gallery['id'], 'visibility' => $action])
-                : admin_mutation_gallery_membership_postcondition((int) $gallery['id'], $parentGalleryId, false);
+                ? admin_mutation_postcondition('gallery_visibility', [
+                    'gallery_id' => (int) $gallery['id'],
+                    'visibility' => $action,
+                ])
+                : admin_mutation_gallery_membership_postcondition(
+                    (int) $gallery['id'],
+                    $parentGalleryId,
+                    false,
+                );
             $result = admin_mutation_success_envelope(
                 t('gallery.visibility.updated', 'Visibility updated.'),
-                admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']]),
+                admin_mutation_descriptor(
+                    'gallery.visibility',
+                    'gallery',
+                    'update',
+                    [(int) $gallery['id']],
+                ),
                 null,
-                [admin_mutation_public_gallery_context($parentGalleryId, $contextUrl, $postcondition)],
-                ['redirect_url' => $contextUrl]
+                [admin_mutation_public_gallery_context(
+                    $parentGalleryId,
+                    $contextUrl,
+                    $postcondition,
+                )],
+                ['redirect_url' => $contextUrl],
             );
-            $result['gallery_state'] = gallery_editor_quick_access_state($updatedGallery);
+            $result['gallery_state'] =
+                gallery_editor_quick_access_state($updatedGallery);
             admin_public_inline_json_response($result);
             return;
         }
@@ -358,21 +512,32 @@ function cms_admin_public_update_gallery(): void
             admin_public_inline_json_response(admin_mutation_error_envelope(
                 $exception->getMessage(),
                 'gallery_visibility_failed',
-                admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']])
+                admin_mutation_descriptor(
+                    'gallery.visibility',
+                    'gallery',
+                    'update',
+                    [(int) $gallery['id']],
+                ),
             ), 422);
             return;
         }
         flash_message('admin_notice', $exception->getMessage());
     }
-    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
+    redirect_to(
+        (string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)),
+    );
 }
 
 /**
- * Handles cms admin public update image logic for the gallery application.
+ * Apply an authenticated public-editor image update and report its outcome.
+ *
+ * @return void Emit a JSON response or redirect after handling the update.
  */
 function cms_admin_public_update_image(): void
 {
-    $wantsJson = (bool) call_user_func('Gallery' . chr(92) . 'Core' . chr(92) . 'admin_wants_json');
+    $wantsJson = (bool) call_user_func(
+        'Gallery' . chr(92) . 'Core' . chr(92) . 'admin_wants_json',
+    );
     require_admin();
     if (request_method() !== 'POST') {
         cms_not_found();
@@ -394,55 +559,88 @@ function cms_admin_public_update_image(): void
         // filesystem-safe mutation service as bulk and duplicate-detector deletes.
         $galleryId = (int) ($image['gallery_id'] ?? 0);
         // $gallery and $fallbackUrl preserve the owning public context before the image row disappears.
-        $gallery = $galleryId > 0 ? (find_gallery($galleryId, true) ?: find_gallery($galleryId)) : null;
-        $fallbackUrl = (string) ($_SERVER['HTTP_REFERER'] ?? ($gallery ? gallery_public_url($gallery) : url_for('home')));
+        $gallery = $galleryId > 0
+            ? (find_gallery($galleryId, true) ?: find_gallery($galleryId))
+            : null;
+        $fallbackUrl = (string) (
+            $_SERVER['HTTP_REFERER']
+            ?? ($gallery ? gallery_public_url($gallery) : url_for('home'))
+        );
         try {
             // $deleted stores the complete database/filesystem cleanup result.
             $deleted = delete_gallery_images($galleryId, [(int) $image['id']]);
             if ((int) ($deleted['deleted'] ?? 0) <= 0) {
                 throw new \RuntimeException('Image was not deleted.');
             }
-            admin_log_event('warning', 'image.public_inline_deleted', 'Admin deleted an image from the public inline editor.', [
-                'gallery_id' => $galleryId,
-                'image_id' => (int) $image['id'],
-                'files_deleted' => (int) ($deleted['files_deleted'] ?? 0),
-                'derivatives_deleted' => (int) ($deleted['derivatives_deleted'] ?? 0),
-                'missing_files' => (int) ($deleted['missing_files'] ?? 0),
-                'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
-            ], ['category' => 'other', 'severity' => 'warning']);
-            if (\Gallery\Core\admin_wants_json()) {
-                $contexts = $gallery ? [
-                    admin_mutation_public_gallery_context(
-                        $galleryId,
-                        gallery_public_url($gallery),
-                        admin_mutation_postcondition('image_absent', ['image_id' => (int) $image['id']])
+            admin_log_event(
+                'warning',
+                'image.public_inline_deleted',
+                'Admin deleted an image from the public inline editor.',
+                [
+                    'gallery_id' => $galleryId,
+                    'image_id' => (int) $image['id'],
+                    'files_deleted' => (int) ($deleted['files_deleted'] ?? 0),
+                    'derivatives_deleted' => (int) (
+                        $deleted['derivatives_deleted'] ?? 0
                     ),
-                ] : [];
+                    'missing_files' => (int) ($deleted['missing_files'] ?? 0),
+                    'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
+                ],
+                ['category' => 'other', 'severity' => 'warning'],
+            );
+            if (\Gallery\Core\admin_wants_json()) {
+                $contexts = $gallery
+                    ? [
+                        admin_mutation_public_gallery_context(
+                            $galleryId,
+                            gallery_public_url($gallery),
+                            admin_mutation_postcondition('image_absent', [
+                                'image_id' => (int) $image['id'],
+                            ]),
+                        ),
+                    ] : [];
                 header('Content-Type: application/json');
                 echo json_encode(admin_mutation_success_envelope(
                     t('admin.gallery_editor.image_deleted', 'Image deleted.'),
-                    admin_mutation_descriptor('image.delete', 'image', 'delete', [(int) $image['id']]),
+                    admin_mutation_descriptor(
+                        'image.delete',
+                        'image',
+                        'delete',
+                        [(int) $image['id']],
+                    ),
                     null,
                     $contexts,
-                    ['redirect_url' => $fallbackUrl]
+                    ['redirect_url' => $fallbackUrl],
                 ));
                 return;
             }
         } catch (Throwable $exception) {
-            admin_log_event('error', 'image.public_inline_delete_failed', 'Public inline image deletion failed.', [
-                'gallery_id' => $galleryId,
-                'image_id' => (int) $image['id'],
-                'error' => $exception->getMessage(),
-            ], ['category' => 'other', 'severity' => 'error']);
-            $failureMessage = 'Image delete failed: ' . $exception->getMessage();
+            admin_log_event(
+                'error',
+                'image.public_inline_delete_failed',
+                'Public inline image deletion failed.',
+                [
+                    'gallery_id' => $galleryId,
+                    'image_id' => (int) $image['id'],
+                    'error' => $exception->getMessage(),
+                ],
+                ['category' => 'other', 'severity' => 'error'],
+            );
+            $failureMessage =
+                'Image delete failed: ' . $exception->getMessage();
             if (\Gallery\Core\admin_wants_json()) {
                 http_response_code(422);
                 header('Content-Type: application/json');
                 echo json_encode(admin_mutation_error_envelope(
                     $failureMessage,
                     'image_delete_failed',
-                    admin_mutation_descriptor('image.delete', 'image', 'delete', [(int) $image['id']]),
-                    ['redirect_url' => $fallbackUrl]
+                    admin_mutation_descriptor(
+                        'image.delete',
+                        'image',
+                        'delete',
+                        [(int) $image['id']],
+                    ),
+                    ['redirect_url' => $fallbackUrl],
                 ));
                 return;
             }
@@ -458,7 +656,11 @@ function cms_admin_public_update_image(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'private';
     }
-    $isVisibilityAction = in_array($action, ['public', 'unpublished', 'private'], true);
+    $isVisibilityAction = in_array(
+        $action,
+        ['public', 'unpublished', 'private'],
+        true,
+    );
     if ($isVisibilityAction) {
         $visibility = $action === 'unpublished' ? 'draft' : $action;
     }
@@ -469,7 +671,11 @@ function cms_admin_public_update_image(): void
     }
     $fields = [
         'title' => trim((string) ($_POST['title'] ?? $image['title'] ?? '')),
-        'description' => (string) ($_POST['description'] ?? $image['description'] ?? ''),
+        'description' => (string) (
+            $_POST['description']
+            ?? $image['description']
+            ?? ''
+        ),
         'visibility' => $visibility,
     ];
     if (nsfw_guard_schema_ready()) {
@@ -481,18 +687,28 @@ function cms_admin_public_update_image(): void
     }
     if ($wantsJson && $isVisibilityAction) {
         $galleryId = (int) ($image['gallery_id'] ?? 0);
-        $gallery = $galleryId > 0 ? (find_gallery($galleryId, true) ?: find_gallery($galleryId)) : null;
+        $gallery = $galleryId > 0
+            ? (find_gallery($galleryId, true) ?: find_gallery($galleryId))
+            : null;
         $contextUrl = $gallery ? gallery_public_url($gallery) : url_for('home');
         admin_public_inline_json_response(admin_mutation_success_envelope(
             t('gallery.visibility.updated', 'Visibility updated.'),
-            admin_mutation_descriptor('image.visibility', 'image', 'update', [(int) $image['id']]),
+            admin_mutation_descriptor(
+                'image.visibility',
+                'image',
+                'update',
+                [(int) $image['id']],
+            ),
             null,
             [admin_mutation_public_gallery_context(
                 $galleryId,
                 $contextUrl,
-                admin_mutation_postcondition('image_visibility', ['image_ids' => [(int) $image['id']], 'visibility' => $visibility])
+                admin_mutation_postcondition('image_visibility', [
+                    'image_ids' => [(int) $image['id']],
+                    'visibility' => $visibility,
+                ]),
             )],
-            ['redirect_url' => $contextUrl]
+            ['redirect_url' => $contextUrl],
         ));
         return;
     }
@@ -507,10 +723,13 @@ function cms_admin_public_update_image(): void
  * inspectable by admins without becoming authoritative human copy.
  *
  * @param array<string,mixed> $image Image row currently being edited.
+ * @return void Render the prepared AI metadata panel.
  */
 function render_admin_image_ai_metadata_panel(array $image): void
 {
-    \Gallery\Views\view_render_admin_image_ai_metadata_panel(admin_image_ai_metadata_view_model($image));
+    \Gallery\Views\view_render_admin_image_ai_metadata_panel(admin_image_ai_metadata_view_model(
+        $image,
+    ));
 }
 
 /**
@@ -521,38 +740,68 @@ function render_admin_image_ai_metadata_panel(array $image): void
  */
 function admin_image_ai_metadata_view_model(array $image): ?array
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('ai_image_metadata')
+    ) {
         return null;
     }
-    if (!function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
+    if (!function_exists(
+        'Gallery\\Services\\ai_image_analysis_latest_metadata_for_image',
+    )) {
         return null;
     }
-    if (!function_exists('Gallery\\Services\\ai_image_analysis_schema_ready') || !ai_image_analysis_schema_ready()) {
+    if (
+        !function_exists('Gallery\\Services\\ai_image_analysis_schema_ready')
+        || !ai_image_analysis_schema_ready()
+    ) {
         return ['enabled' => true, 'schema_ready' => false];
     }
 
-    $metadataRow = ai_image_analysis_latest_metadata_for_image((int) ($image['id'] ?? 0));
+    $metadataRow = ai_image_analysis_latest_metadata_for_image(
+        (int) ($image['id'] ?? 0),
+    );
     if (!$metadataRow) {
-        return ['enabled' => true, 'schema_ready' => true, 'has_metadata' => false];
+        return [
+            'enabled' => true,
+            'schema_ready' => true,
+            'has_metadata' => false,
+        ];
     }
-    $modelLabel = trim((string) ($metadataRow['model_name'] ?? '') . ' ' . (string) ($metadataRow['model_version'] ?? ''));
+    $modelLabel = trim(
+        (string) ($metadataRow['model_name'] ?? '')
+            . ' '
+            . (string) ($metadataRow['model_version'] ?? ''),
+    );
     $sourceSummary = [];
     if (!empty($metadataRow['source_checksum_sha256'])) {
-        $sourceSummary[] = 'sha256 ' . (string) $metadataRow['source_checksum_sha256'];
+        $sourceSummary[] =
+            'sha256 ' . (string) $metadataRow['source_checksum_sha256'];
     }
     if (!empty($metadataRow['source_file_size'])) {
-        $sourceSummary[] = number_format((float) $metadataRow['source_file_size'], 0, '.', ' ') . ' bytes';
+        $sourceSummary[] =
+            number_format((float) $metadataRow['source_file_size'], 0, '.', ' ')
+            . ' bytes';
     }
     if (!empty($metadataRow['source_modified_at'])) {
-        $sourceSummary[] = 'modified ' . (string) $metadataRow['source_modified_at'];
+        $sourceSummary[] =
+            'modified ' . (string) $metadataRow['source_modified_at'];
     }
     return [
         'enabled' => true,
         'schema_ready' => true,
         'has_metadata' => true,
-        'model_label' => $modelLabel !== '' ? $modelLabel : t('admin.gallery_editor.unknown', 'Unknown'),
-        'generated_at' => (string) ($metadataRow['generated_at'] ?? '') !== '' ? (string) $metadataRow['generated_at'] : t('admin.gallery_editor.unknown', 'Unknown'),
-        'source_summary' => $sourceSummary ? implode(' | ', $sourceSummary) : t('admin.gallery_editor.unknown', 'Unknown'),
+        'model_label' => $modelLabel !== ''
+            ? $modelLabel
+            : t('admin.gallery_editor.unknown', 'Unknown'),
+        'generated_at' => (string) ($metadataRow['generated_at'] ?? '') !== ''
+            ? (string) $metadataRow['generated_at']
+            : t('admin.gallery_editor.unknown', 'Unknown'),
+        'source_summary' => $sourceSummary
+            ? implode(' | ', $sourceSummary)
+            : t('admin.gallery_editor.unknown', 'Unknown'),
         'searchable_text' => (string) ($metadataRow['searchable_text'] ?? ''),
         'raw_json' => ai_image_analysis_metadata_pretty_json($metadataRow),
     ];
@@ -565,24 +814,39 @@ function admin_image_ai_metadata_view_model(array $image): ?array
  * @param ?int $storedMaxSize Stored maximum size.
  * @return array<string,mixed> View model.
  */
-function admin_image_thumbnail_bounds_view_model(?int $storedMinSize, ?int $storedMaxSize): array
-{
+function admin_image_thumbnail_bounds_view_model(
+    ?int $storedMinSize,
+    ?int $storedMaxSize,
+): array {
     $values = \Gallery\Services\thumbnail_bound_slider_values();
     $maxIndex = count($values) - 1;
-    $minIndex = array_search(\Gallery\Services\thumbnail_bound_form_value($storedMinSize), $values, true);
+    $minIndex = array_search(
+        \Gallery\Services\thumbnail_bound_form_value($storedMinSize),
+        $values,
+        true,
+    );
     $maxValue = \Gallery\Services\thumbnail_bound_form_value($storedMaxSize);
-    $maxIndexValue = $maxValue === 0 ? $maxIndex : array_search($maxValue, $values, true);
+    $maxIndexValue = $maxValue === 0
+        ? $maxIndex
+        : array_search($maxValue, $values, true);
     $minIndex = $minIndex === false ? 0 : (int) $minIndex;
-    $maxIndexValue = $maxIndexValue === false ? $maxIndex : (int) $maxIndexValue;
+    $maxIndexValue = $maxIndexValue === false
+        ? $maxIndex
+        : (int) $maxIndexValue;
     if ($minIndex > $maxIndexValue) {
         $minIndex = $maxIndexValue;
     }
-    return ['values' => $values, 'min_index' => $minIndex, 'max_index' => $maxIndexValue];
+    return [
+        'values' => $values,
+        'min_index' => $minIndex,
+        'max_index' => $maxIndexValue,
+    ];
 }
 
-
 /**
- * Handles cms admin edit image logic for the gallery application.
+ * Render or update the authenticated Admin image editor.
+ *
+ * @return void Render the editor or respond to the submitted update.
  */
 function cms_admin_edit_image(): void
 {
@@ -595,30 +859,63 @@ function cms_admin_edit_image(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
-        $shouldUpdateLocalization = content_localization_enabled()
-            && (array_key_exists('content_language', $_POST) || array_key_exists('translations', $_POST));
-        if ($shouldUpdateLocalization && !content_localization_schema_ready('image')) {
+        $shouldUpdateLocalization =
+            content_localization_enabled()
+            && (
+                array_key_exists('content_language', $_POST)
+                || array_key_exists('translations', $_POST)
+            );
+        if (
+            $shouldUpdateLocalization
+            && !content_localization_schema_ready('image')
+        ) {
             if (admin_wants_json()) {
-                admin_panel_error_response(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'), 503);
+                admin_panel_error_response(
+                    t(
+                        'admin.content_localization.save_unavailable',
+                        'Multilingual content was not saved because its database migration is unavailable.',
+                    ),
+                    503,
+                );
                 return;
             }
-            flash_message('admin_notice', t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
+            flash_message('admin_notice', t(
+                'admin.content_localization.save_unavailable',
+                'Multilingual content was not saved because its database migration is unavailable.',
+            ));
             redirect_to(url_for('admin_edit_image', ['id' => $image['id']]));
         }
-        $smartGalleriesEnabled = feature_capability_effective_enabled('smart_galleries');
+        $smartGalleriesEnabled = feature_capability_effective_enabled(
+            'smart_galleries',
+        );
         if ($smartGalleriesEnabled && isset($_POST['editorial_rating'])) {
             smart_gallery_assert_mutation_ready('image.editorial_rating');
         }
-        if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
-            if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
-                admin_panel_error_response(admin_nsfw_guard_mutation_error(), 503);
+        if (
+            !empty($_POST['nsfw_field_present'])
+            && !nsfw_guard_schema_ready()
+        ) {
+            if (str_contains(
+                (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+                'application/json',
+            )) {
+                admin_panel_error_response(
+                    admin_nsfw_guard_mutation_error(),
+                    503,
+                );
                 return;
             }
             flash_message('admin_notice', admin_nsfw_guard_mutation_error());
             redirect_to(url_for('admin_edit_image', ['id' => $image['id']]));
         }
         // Variable $visibility stores this steps working value.
-        $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'public';
+        $visibility = in_array(
+            $_POST['visibility'] ?? '',
+            ['draft', 'public', 'private'],
+            true,
+        )
+            ? (string) $_POST['visibility']
+            : 'public';
         // Variable $fields stores this steps working value.
         $fields = [
             'title' => (string) $_POST['title'],
@@ -635,15 +932,27 @@ function cms_admin_edit_image(): void
         }
         if (thumbnail_bounds_schema_ready()) {
             // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this image.
-            $thumbnailBounds = thumbnail_bound_pair_from_post('image_thumbnail', $_POST);
+            $thumbnailBounds = thumbnail_bound_pair_from_post(
+                'image_thumbnail',
+                $_POST,
+            );
             $fields['thumbnail_min_size'] = $thumbnailBounds[0];
             $fields['thumbnail_max_size'] = $thumbnailBounds[1];
         }
         image_editor_update_fields((int) $image['id'], $fields);
         if ($shouldUpdateLocalization) {
-            content_save_localizations('image', (int) $image['id'], $_POST['content_language'] ?? null, $_POST['translations'] ?? []);
+            content_save_localizations(
+                'image',
+                (int) $image['id'],
+                $_POST['content_language'] ?? null,
+                $_POST['translations'] ?? [],
+            );
         }
-        sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
+        sync_entity_tags(
+            'image',
+            (int) $image['id'],
+            (string) ($_POST['tags'] ?? ''),
+        );
         if (public_path_schema_ready()) {
             regenerate_public_paths();
         }
@@ -654,7 +963,10 @@ function cms_admin_edit_image(): void
             echo json_encode(admin_edit_image_success_response($image));
             return;
         }
-        redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
+        redirect_to(url_for('admin_edit_image', [
+            'id' => $image['id'],
+            'saved' => 1,
+        ]));
     }
     $thumbnailBoundsReady = thumbnail_bounds_schema_ready();
     \Gallery\Views\view_render_admin_edit_image([
@@ -662,12 +974,19 @@ function cms_admin_edit_image(): void
         'thumbnail_url' => thumbnail_url($image, 800),
         'csrf_html' => csrf_field(),
         'nsfw_ready' => nsfw_guard_schema_ready(),
-        'smart_gallery_ready' => feature_capability_effective_enabled('smart_galleries') && smart_gallery_schema_ready(),
+        'smart_gallery_ready' =>
+            feature_capability_effective_enabled('smart_galleries')
+                && smart_gallery_schema_ready(),
         'thumbnail_bounds_ready' => $thumbnailBoundsReady,
-        'thumbnail_bounds' => $thumbnailBoundsReady ? admin_image_thumbnail_bounds_view_model(
-            isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null,
-            isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null
-        ) : [],
+        'thumbnail_bounds' => $thumbnailBoundsReady
+            ? admin_image_thumbnail_bounds_view_model(
+                isset($image['thumbnail_min_size'])
+                    ? (int) $image['thumbnail_min_size']
+                    : null,
+                isset($image['thumbnail_max_size'])
+                    ? (int) $image['thumbnail_max_size']
+                    : null,
+            ) : [],
         'tag_names' => tag_names_for_entity('image', (int) $image['id']),
         'tag_suggestions' => \Gallery\Services\all_tag_names(),
         'exif_ready' => exif_gps_schema_ready(),

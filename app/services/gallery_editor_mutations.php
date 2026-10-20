@@ -52,12 +52,19 @@ use function Gallery\Models\gallery_model_update_fields;
  * @param ?callable(string):bool $collision Optional model-read adapter for a legacy caller-owned connection.
  * @return string Unique normalized gallery slug.
  */
-function gallery_editor_unique_slug(string $value, int $excludeGalleryId = 0, ?callable $collision = null): string
-{
+function gallery_editor_unique_slug(
+    string $value,
+    int $excludeGalleryId = 0,
+    ?callable $collision = null,
+): string {
     $base = slugify($value);
     $candidate = $base;
     $counter = 2;
-    while ($collision !== null ? $collision($candidate) : gallery_model_slug_exists($candidate, $excludeGalleryId)) {
+    while (
+        $collision !== null
+            ? $collision($candidate)
+            : gallery_model_slug_exists($candidate, $excludeGalleryId)
+    ) {
         $candidate = $base . '-' . $counter;
         $counter++;
     }
@@ -79,7 +86,10 @@ function gallery_editor_update_fields(int $galleryId, array $fields): void
             $gallery = find_gallery($galleryId, true);
             if (is_array($gallery)) {
                 require_once __DIR__ . '/gallery_pdf_publication.php';
-                gallery_pdf_publication_assert_visibility_change($gallery, (string) $fields['visibility']);
+                gallery_pdf_publication_assert_visibility_change(
+                    $gallery,
+                    (string) $fields['visibility'],
+                );
             }
         }
         gallery_model_update_fields($galleryId, $fields, now_sql());
@@ -97,11 +107,18 @@ function gallery_editor_update_fields(int $galleryId, array $fields): void
  * @return array{id:int|string,folder_path:string,title:string,description:string,cover_image_id:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null} Fresh persisted gallery identity and cover metadata after the sidecar write.
  * @throws GalleryEditConflict When the gallery/photo is missing or the photo is no longer a direct image owned by that gallery.
  */
-function gallery_editor_set_cover_image(int $galleryId, int $coverImageId, array $fallbackGallery): array
-{
+function gallery_editor_set_cover_image(
+    int $galleryId,
+    int $coverImageId,
+    array $fallbackGallery,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return gallery_editor_set_cover_image_owned($galleryId, $coverImageId, $fallbackGallery);
+        return gallery_editor_set_cover_image_owned(
+            $galleryId,
+            $coverImageId,
+            $fallbackGallery,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -119,12 +136,19 @@ function gallery_editor_set_cover_image(int $galleryId, int $coverImageId, array
  * @return array{id:int|string,folder_path:string,title:string,description:string,cover_image_id:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null} Fresh persisted gallery identity and cover metadata; missing rows or changed ownership raise a conflict.
  * @author Rudolf Klusal
  */
-function gallery_editor_set_cover_image_owned(int $galleryId, int $coverImageId, array $fallbackGallery): array
-{
+function gallery_editor_set_cover_image_owned(
+    int $galleryId,
+    int $coverImageId,
+    array $fallbackGallery,
+): array {
     $gallery = find_gallery($galleryId, true);
     $image = find_image($coverImageId, true);
-    if (!$gallery || !$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId
-        || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
+    if (
+        !$gallery
+        || !$image
+        || (int) ($image['gallery_id'] ?? 0) !== $galleryId
+        || str_contains((string) ($image['relative_path'] ?? ''), '/')
+    ) {
         throw new GalleryEditConflict(gallery_edit_comparison($gallery ?? []));
     }
     $fields = ['cover_image_id' => $coverImageId];
@@ -141,7 +165,9 @@ function gallery_editor_set_cover_image_owned(int $galleryId, int $coverImageId,
         throw new GalleryEditConflict([]);
     }
     if (!write_gallery_sidecar($updated)) {
-        throw new \RuntimeException('The title pictures were saved, but their sidecar metadata could not be written.');
+        throw new \RuntimeException(
+            'The title pictures were saved, but their sidecar metadata could not be written.',
+        );
     }
     return $updated;
 }
@@ -162,11 +188,20 @@ function gallery_editor_set_cover_image_owned(int $galleryId, int $coverImageId,
  * @throws GalleryEditConflict When an image is missing, moved, nested, or owned by another gallery.
  * @throws GalleryEditUnavailable When multi-cover persistence has not been migrated.
  */
-function gallery_editor_set_cover_images(int $galleryId, array $coverImageIds, array $fallbackGallery, ?string $expectedRevision = null): array
-{
+function gallery_editor_set_cover_images(
+    int $galleryId,
+    array $coverImageIds,
+    array $fallbackGallery,
+    ?string $expectedRevision = null,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return gallery_editor_set_cover_images_owned($galleryId, $coverImageIds, $fallbackGallery, $expectedRevision);
+        return gallery_editor_set_cover_images_owned(
+            $galleryId,
+            $coverImageIds,
+            $fallbackGallery,
+            $expectedRevision,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -183,27 +218,48 @@ function gallery_editor_set_cover_images(int $galleryId, array $coverImageIds, a
  * @param string|null $expectedRevision Optional cover fingerprint captured by the action source.
  * @return array{id:int|string,folder_path:string,title:string,description:string,cover_image_id:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null} Fresh persisted gallery identity and cover metadata after the selection update.
  */
-function gallery_editor_set_cover_images_owned(int $galleryId, array $coverImageIds, array $fallbackGallery, ?string $expectedRevision = null): array
-{
+function gallery_editor_set_cover_images_owned(
+    int $galleryId,
+    array $coverImageIds,
+    array $fallbackGallery,
+    ?string $expectedRevision = null,
+): array {
     if (!array_is_list($coverImageIds)) {
-        throw new \DomainException(t('admin.gallery_editor.selected_photo_unavailable', 'The selected photo is unavailable.'));
+        throw new \DomainException(t(
+            'admin.gallery_editor.selected_photo_unavailable',
+            'The selected photo is unavailable.',
+        ));
     }
     $ids = [];
     foreach ($coverImageIds as $imageId) {
-        if (!is_int($imageId) || $imageId <= 0 || in_array($imageId, $ids, true)) {
-            throw new \DomainException(t('admin.gallery_editor.selected_photo_unavailable', 'The selected photo is unavailable.'));
+        if (
+            !is_int($imageId)
+            || $imageId <= 0
+            || in_array($imageId, $ids, true)
+        ) {
+            throw new \DomainException(t(
+                'admin.gallery_editor.selected_photo_unavailable',
+                'The selected photo is unavailable.',
+            ));
         }
         $ids[] = $imageId;
     }
     if ($ids === [] || count($ids) > 4) {
-        throw new \DomainException(t('admin.gallery_editor.cover_selection_limit', 'Choose between one and four title-picture photos.'));
+        throw new \DomainException(t(
+            'admin.gallery_editor.cover_selection_limit',
+            'Choose between one and four title-picture photos.',
+        ));
     }
     if (count($ids) === 1) {
         $gallery = find_gallery($galleryId, true);
         if ($expectedRevision !== null) {
             gallery_editor_assert_cover_revision($gallery, $expectedRevision);
         }
-        return gallery_editor_set_cover_image_owned($galleryId, $ids[0], $fallbackGallery);
+        return gallery_editor_set_cover_image_owned(
+            $galleryId,
+            $ids[0],
+            $fallbackGallery,
+        );
     }
 
     $gallery = find_gallery($galleryId, true);
@@ -214,8 +270,11 @@ function gallery_editor_set_cover_images_owned(int $galleryId, array $coverImage
     gallery_editor_assert_cover_selection_schema();
     foreach ($ids as $imageId) {
         $image = find_image($imageId, true);
-        if (!$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId
-            || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
+        if (
+            !$image
+            || (int) ($image['gallery_id'] ?? 0) !== $galleryId
+            || str_contains((string) ($image['relative_path'] ?? ''), '/')
+        ) {
             throw new GalleryEditConflict(gallery_edit_comparison($gallery));
         }
     }
@@ -233,7 +292,9 @@ function gallery_editor_set_cover_images_owned(int $galleryId, array $coverImage
         throw new GalleryEditConflict([]);
     }
     if (!write_gallery_sidecar($updated)) {
-        throw new \RuntimeException('The title pictures were saved, but their sidecar metadata could not be written.');
+        throw new \RuntimeException(
+            'The title pictures were saved, but their sidecar metadata could not be written.',
+        );
     }
     return $updated;
 }
@@ -251,11 +312,20 @@ function gallery_editor_set_cover_images_owned(int $galleryId, array $coverImage
  * @param string|null $expectedRevision Optional cover fingerprint captured by the clicked star.
  * @return array{id:int|string,folder_path:string,title:string,description:string,cover_image_id:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null} Fresh persisted gallery identity and cover metadata after the sidecar write.
  */
-function gallery_editor_change_cover_selection(int $galleryId, int $imageId, string $intent, ?string $expectedRevision = null): array
-{
+function gallery_editor_change_cover_selection(
+    int $galleryId,
+    int $imageId,
+    string $intent,
+    ?string $expectedRevision = null,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return gallery_editor_change_cover_selection_owned($galleryId, $imageId, $intent, $expectedRevision);
+        return gallery_editor_change_cover_selection_owned(
+            $galleryId,
+            $imageId,
+            $intent,
+            $expectedRevision,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -272,10 +342,16 @@ function gallery_editor_change_cover_selection(int $galleryId, int $imageId, str
  * @param string|null $expectedRevision Optional cover fingerprint captured by the clicked star.
  * @return array{id:int|string,folder_path:string,title:string,description:string,cover_image_id:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null} Fresh persisted gallery identity and cover metadata after the sidecar write.
  */
-function gallery_editor_change_cover_selection_owned(int $galleryId, int $imageId, string $intent, ?string $expectedRevision = null): array
-{
+function gallery_editor_change_cover_selection_owned(
+    int $galleryId,
+    int $imageId,
+    string $intent,
+    ?string $expectedRevision = null,
+): array {
     if (!in_array($intent, ['arm', 'add', 'reset'], true)) {
-        throw new \InvalidArgumentException('Unsupported title-picture selection intent.');
+        throw new \InvalidArgumentException(
+            'Unsupported title-picture selection intent.',
+        );
     }
     $gallery = find_gallery($galleryId, true);
     $image = find_image($imageId, true);
@@ -284,20 +360,31 @@ function gallery_editor_change_cover_selection_owned(int $galleryId, int $imageI
     }
     gallery_editor_assert_cover_selection_schema();
     if (!array_key_exists('cover_image_ids', $gallery)) {
-        throw new GalleryEditUnavailable(t('admin.gallery_editor.cover_schema_unknown', 'Cover selection was not changed because its database schema could not be verified. Check database diagnostics and try again.'));
+        throw new GalleryEditUnavailable(t(
+            'admin.gallery_editor.cover_schema_unknown',
+            'Cover selection was not changed because its database schema could not be verified. Check database diagnostics and try again.',
+        ));
     }
     if (!gallery_cover_selection_storage_valid($gallery)) {
-        throw new GalleryEditUnavailable('Stored title-picture selection is invalid and cannot be safely changed.');
+        throw new GalleryEditUnavailable(
+            'Stored title-picture selection is invalid and cannot be safely changed.',
+        );
     }
     gallery_editor_assert_cover_revision($gallery, $expectedRevision);
-    if (!$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId
-        || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
+    if (
+        !$image
+        || (int) ($image['gallery_id'] ?? 0) !== $galleryId
+        || str_contains((string) ($image['relative_path'] ?? ''), '/')
+    ) {
         throw new GalleryEditConflict(gallery_edit_comparison($gallery));
     }
     $mode = gallery_cover_selection_mode($gallery);
     $ids = gallery_cover_selection_ids($gallery);
     if ($intent === 'arm') {
-        if ($mode !== 'single' || (int) ($gallery['cover_image_id'] ?? 0) !== $imageId) {
+        if (
+            $mode !== 'single'
+            || (int) ($gallery['cover_image_id'] ?? 0) !== $imageId
+        ) {
             throw new GalleryEditConflict(gallery_edit_comparison($gallery));
         }
         $ids = [$imageId];
@@ -307,13 +394,22 @@ function gallery_editor_change_cover_selection_owned(int $galleryId, int $imageI
         }
         // Prune stale selections before appending; deleted/moved pictures
         // must not consume scarce visual slots or return as public media.
-        $ids = array_values(array_filter($ids, static function (int $id) use ($galleryId): bool {
+        $ids = array_values(array_filter($ids, static function (int $id) use (
+            $galleryId,
+        ): bool {
             $candidate = find_image($id, true);
-            return $candidate && (int) ($candidate['gallery_id'] ?? 0) === $galleryId
-                && !str_contains((string) ($candidate['relative_path'] ?? ''), '/');
+            return $candidate
+                && (int) ($candidate['gallery_id'] ?? 0) === $galleryId
+                && !str_contains(
+                    (string) ($candidate['relative_path'] ?? ''),
+                    '/',
+                );
         }));
         if (count($ids) >= 4) {
-            throw new \DomainException(t('admin.gallery_editor.cover_selection_limit', 'Choose between one and four title-picture photos.'));
+            throw new \DomainException(t(
+                'admin.gallery_editor.cover_selection_limit',
+                'Choose between one and four title-picture photos.',
+            ));
         }
         $ids[] = $imageId;
     } else {
@@ -324,7 +420,9 @@ function gallery_editor_change_cover_selection_owned(int $galleryId, int $imageI
     }
     $fields = [
         'cover_image_id' => $ids[0],
-        'cover_image_ids' => $intent === 'reset' ? null : json_encode($ids, JSON_THROW_ON_ERROR),
+        'cover_image_ids' => $intent === 'reset'
+            ? null
+            : json_encode($ids, JSON_THROW_ON_ERROR),
     ];
     if (array_key_exists('cover_image_path', $gallery)) {
         $fields['cover_image_path'] = null;
@@ -335,7 +433,9 @@ function gallery_editor_change_cover_selection_owned(int $galleryId, int $imageI
         throw new GalleryEditConflict([]);
     }
     if (!write_gallery_sidecar($updated)) {
-        throw new \RuntimeException('The title pictures were saved, but their sidecar metadata could not be written.');
+        throw new \RuntimeException(
+            'The title pictures were saved, but their sidecar metadata could not be written.',
+        );
     }
     return $updated;
 }
@@ -351,8 +451,14 @@ function gallery_editor_assert_cover_selection_schema(): void
     $state = gallery_cover_selection_schema_state();
     if ($state !== 'available') {
         $message = $state === 'missing'
-            ? t('admin.gallery_editor.cover_migration_required', 'Multi-photo title pictures require the latest database migration.')
-            : t('admin.gallery_editor.cover_schema_unknown', 'Cover selection was not changed because its database schema could not be verified. Check database diagnostics and try again.');
+            ? t(
+                'admin.gallery_editor.cover_migration_required',
+                'Multi-photo title pictures require the latest database migration.',
+            )
+            : t(
+                'admin.gallery_editor.cover_schema_unknown',
+                'Cover selection was not changed because its database schema could not be verified. Check database diagnostics and try again.',
+            );
         throw new GalleryEditUnavailable($message);
     }
 }
@@ -365,16 +471,23 @@ function gallery_editor_assert_cover_selection_schema(): void
  * @return void Continue for legacy callers or a matching revision.
  * @throws GalleryEditConflict When the gallery is missing or the submitted selection is stale.
  */
-function gallery_editor_assert_cover_revision(?array $gallery, ?string $expectedRevision): void
-{
+function gallery_editor_assert_cover_revision(
+    ?array $gallery,
+    ?string $expectedRevision,
+): void {
     if ($gallery === null) {
         throw new GalleryEditConflict([]);
     }
     if ($expectedRevision === null) {
         return;
     }
-    if (preg_match('/^[a-f0-9]{20}$/D', $expectedRevision) !== 1
-        || !hash_equals(gallery_cover_selection_revision($gallery), $expectedRevision)) {
+    if (
+        preg_match('/^[a-f0-9]{20}$/D', $expectedRevision) !== 1
+        || !hash_equals(
+            gallery_cover_selection_revision($gallery),
+            $expectedRevision,
+        )
+    ) {
         throw new GalleryEditConflict(gallery_edit_comparison($gallery));
     }
 }

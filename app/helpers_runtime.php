@@ -118,7 +118,11 @@ function asset_url(string $path): string
         return base_url('public/' . $path);
     }
     // Variable $scriptFile stores this steps working value.
-    $scriptFile = str_replace('\\', '/', (string) ($server['SCRIPT_FILENAME'] ?? ''));
+    $scriptFile = str_replace(
+        '\\',
+        '/',
+        (string) ($server['SCRIPT_FILENAME'] ?? ''),
+    );
     if (str_ends_with($scriptFile, '/public/index.php')) {
         return base_url($path);
     }
@@ -165,11 +169,14 @@ function asset_dependency_revision(array $paths): string
 
 /**
  * Send a 302 redirect and stop processing immediately.
+ *
+ * @param string $url Destination URL for the Location header.
+ * @return never Send the redirect response and terminate execution.
  */
 function redirect_to(string $url): never
 {
     header('Location: ' . $url, true, 302);
-    exit;
+    exit();
 }
 
 /**
@@ -235,13 +242,20 @@ function now_sql(): string
  * installations. Czech and common Central European characters are mapped
  * explicitly before the optional intl/iconv fallbacks, decomposed combining
  * marks are removed, and invisible formatting characters cannot split words.
+ *
+ * @param string $text Human-entered title or tag name.
+ * @return string Deterministic URL-safe slug.
  */
 function slugify(string $text): string
 {
     // Decode values copied from HTML sources before transliteration.
     $text = html_entity_decode(trim($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     // Remove soft hyphens, zero-width characters, and byte-order marks.
-    $text = (string) preg_replace('/[\x{00AD}\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u', '', $text);
+    $text = (string) preg_replace(
+        '/[\x{00AD}\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u',
+        '',
+        $text,
+    );
 
     if (class_exists('Normalizer')) {
         // NFKD exposes combining accents so they can be removed consistently.
@@ -254,14 +268,70 @@ function slugify(string $text): string
     // Keep Czech and neighboring-language transliteration stable even when the
     // server locale or iconv implementation differs from the development host.
     $text = strtr($text, [
-        'Á' => 'A', 'Ä' => 'A', 'Č' => 'C', 'Ć' => 'C', 'Ď' => 'D', 'É' => 'E', 'Ě' => 'E', 'Ë' => 'E',
-        'Í' => 'I', 'Ĺ' => 'L', 'Ľ' => 'L', 'Ň' => 'N', 'Ń' => 'N', 'Ó' => 'O', 'Ö' => 'O', 'Ô' => 'O',
-        'Ř' => 'R', 'Ŕ' => 'R', 'Š' => 'S', 'Ś' => 'S', 'Ť' => 'T', 'Ú' => 'U', 'Ů' => 'U', 'Ü' => 'U',
-        'Ý' => 'Y', 'Ž' => 'Z', 'Ź' => 'Z', 'Ż' => 'Z', 'Æ' => 'AE', 'Œ' => 'OE', 'Ø' => 'O', 'Ł' => 'L',
-        'á' => 'a', 'ä' => 'a', 'č' => 'c', 'ć' => 'c', 'ď' => 'd', 'é' => 'e', 'ě' => 'e', 'ë' => 'e',
-        'í' => 'i', 'ĺ' => 'l', 'ľ' => 'l', 'ň' => 'n', 'ń' => 'n', 'ó' => 'o', 'ö' => 'o', 'ô' => 'o',
-        'ř' => 'r', 'ŕ' => 'r', 'š' => 's', 'ś' => 's', 'ť' => 't', 'ú' => 'u', 'ů' => 'u', 'ü' => 'u',
-        'ý' => 'y', 'ž' => 'z', 'ź' => 'z', 'ż' => 'z', 'æ' => 'ae', 'œ' => 'oe', 'ø' => 'o', 'ł' => 'l',
+        'Á' => 'A',
+        'Ä' => 'A',
+        'Č' => 'C',
+        'Ć' => 'C',
+        'Ď' => 'D',
+        'É' => 'E',
+        'Ě' => 'E',
+        'Ë' => 'E',
+        'Í' => 'I',
+        'Ĺ' => 'L',
+        'Ľ' => 'L',
+        'Ň' => 'N',
+        'Ń' => 'N',
+        'Ó' => 'O',
+        'Ö' => 'O',
+        'Ô' => 'O',
+        'Ř' => 'R',
+        'Ŕ' => 'R',
+        'Š' => 'S',
+        'Ś' => 'S',
+        'Ť' => 'T',
+        'Ú' => 'U',
+        'Ů' => 'U',
+        'Ü' => 'U',
+        'Ý' => 'Y',
+        'Ž' => 'Z',
+        'Ź' => 'Z',
+        'Ż' => 'Z',
+        'Æ' => 'AE',
+        'Œ' => 'OE',
+        'Ø' => 'O',
+        'Ł' => 'L',
+        'á' => 'a',
+        'ä' => 'a',
+        'č' => 'c',
+        'ć' => 'c',
+        'ď' => 'd',
+        'é' => 'e',
+        'ě' => 'e',
+        'ë' => 'e',
+        'í' => 'i',
+        'ĺ' => 'l',
+        'ľ' => 'l',
+        'ň' => 'n',
+        'ń' => 'n',
+        'ó' => 'o',
+        'ö' => 'o',
+        'ô' => 'o',
+        'ř' => 'r',
+        'ŕ' => 'r',
+        'š' => 's',
+        'ś' => 's',
+        'ť' => 't',
+        'ú' => 'u',
+        'ů' => 'u',
+        'ü' => 'u',
+        'ý' => 'y',
+        'ž' => 'z',
+        'ź' => 'z',
+        'ż' => 'z',
+        'æ' => 'ae',
+        'œ' => 'oe',
+        'ø' => 'o',
+        'ł' => 'l',
         'ß' => 'ss',
     ]);
     // Remove accents left as decomposed Unicode combining marks.
@@ -269,9 +339,13 @@ function slugify(string $text): string
 
     // iconv remains useful for characters outside the explicit map. Failure is
     // tolerated because the ASCII filter below still produces a safe result.
-    $ascii = function_exists('iconv') ? iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text) : false;
+    $ascii = function_exists('iconv')
+        ? iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text)
+        : false;
     $source = $ascii === false ? $text : $ascii;
-    $source = function_exists('mb_strtolower') ? mb_strtolower($source, 'UTF-8') : strtolower($source);
+    $source = function_exists('mb_strtolower')
+        ? mb_strtolower($source, 'UTF-8')
+        : strtolower($source);
     $slug = (string) preg_replace('/[^a-z0-9]+/i', '-', $source);
     $slug = trim(strtolower($slug), '-');
     return $slug !== '' ? $slug : 'gallery';
@@ -288,17 +362,26 @@ function slugify(string $text): string
  * @param ?int $excludeGalleryId Optional existing gallery excluded from collisions.
  * @return string Unique normalized gallery slug.
  */
-function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): string
-{
+function unique_slug(
+    PDO $pdo,
+    string $title,
+    ?int $excludeGalleryId = null,
+): string {
     require_once __DIR__ . '/models/galleries.php';
     require_once __DIR__ . '/services/gallery_editor_mutations.php';
-    return \Gallery\Services\gallery_editor_unique_slug($title, $excludeGalleryId ?? 0,
+    return \Gallery\Services\gallery_editor_unique_slug(
+        $title,
+        $excludeGalleryId ?? 0,
         /**
          * Ask the model about one candidate on the historical caller's connection.
          *
          * @param string $candidate Normalized slug proposed by domain suffix policy.
          * @return bool Whether the candidate is already owned.
          */
-        static fn (string $candidate): bool => \Gallery\Models\gallery_model_slug_exists_on_connection($pdo, $candidate, $excludeGalleryId)
+        static fn(string $candidate): bool => \Gallery\Models\gallery_model_slug_exists_on_connection(
+            $pdo,
+            $candidate,
+            $excludeGalleryId,
+        ),
     );
 }

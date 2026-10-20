@@ -54,12 +54,20 @@ use function Gallery\Views\view_render_admin_gallery_media_fields;
  * @param string $activeEditTab Currently selected editor tab.
  * @return void Emit the gallery Media tab from prepared presentation state.
  */
-function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditTab): void
-{
+function admin_edit_gallery_render_media_tab(
+    array $gallery,
+    string $activeEditTab,
+): void {
     $coverMode = gallery_cover_selection_mode($gallery);
-    $coverMultiCount = $coverMode === 'multi' ? count(gallery_cover_selection_ids($gallery)) : 0;
+    $coverMultiCount = $coverMode === 'multi'
+        ? count(gallery_cover_selection_ids($gallery))
+        : 0;
     $coverOptionsHtml = gallery_cover_options(
-        (int) $gallery['id'], $coverMode === 'multi' || $coverMode === 'automatic' ? 0 : (int) ($gallery['cover_image_id'] ?? 0), true
+        (int) $gallery['id'],
+        $coverMode === 'multi' || $coverMode === 'automatic'
+            ? 0
+            : (int) ($gallery['cover_image_id'] ?? 0),
+        true,
     );
 
     ob_start();
@@ -68,7 +76,9 @@ function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditT
 
     $backgroundSourceSchemaReady = gallery_background_source_schema_ready();
     // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
-    $backgroundSource = $backgroundSourceSchemaReady ? gallery_background_source($gallery) : null;
+    $backgroundSource = $backgroundSourceSchemaReady
+        ? gallery_background_source($gallery)
+        : null;
 
     ob_start();
     view_render_admin_gallery_media_fields([
@@ -82,25 +92,84 @@ function admin_edit_gallery_render_media_tab(array $gallery, string $activeEditT
         'background_source_schema_ready' => $backgroundSourceSchemaReady,
         'background_source' => $backgroundSource,
         'labels' => [
-            'media_title' => t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background'),
-            'media_help' => t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.'),
-            'title_picture' => t('admin.gallery_editor.title_picture', t('admin.gallery_editor.title_picture_current', 'Title picture')),
-            'automatic' => t('admin.gallery_editor.automatic_two_photos', 'Automatic (2 photos)'),
-            'cover_legacy' => t('admin.gallery_editor.cover_legacy', 'Default (original gallery behavior)'),
-            'cover_multi_selected' => t('admin.gallery_editor.cover_multi_selected', '{count} selected photos', ['count' => $coverMultiCount]),
-            'cover_auto_help' => t('admin.gallery_editor.cover_auto_help', 'Automatic selects up to two pictures from this gallery or its subgalleries. Manual stars override this choice.'),
-            'includes_subgallery_images' => t('admin.gallery_editor.includes_subgallery_images', 'Includes images from subgalleries.'),
-            'upload_gallery_thumbnail' => t('admin.gallery_editor.upload_gallery_thumbnail', 'Upload gallery thumbnail'),
-            'gallery_thumbnail_upload_help' => t('admin.gallery_editor.gallery_thumbnail_upload_help', 'This is stored separately from gallery images.'),
-            'gallery_thumbnail_migration_hidden' => t('admin.gallery_editor.gallery_thumbnail_migration_hidden', 'Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.'),
-            'background_source' => t('admin.gallery_editor.background_source', 'Background source'),
-            'use_theme_background' => t('admin.gallery_editor.use_theme_background', 'Use theme background'),
-            'upload_new_image' => t('admin.gallery_editor.upload_new_image', 'Upload new image'),
-            'pick_existing_gallery_images' => t('admin.gallery_editor.pick_existing_gallery_images', 'Pick from existing gallery images'),
-            'generate_collage_public' => t('admin.gallery_editor.generate_collage_public', 'Generate collage from public galleries'),
-            'background_source_help' => t('admin.gallery_editor.background_source_help', 'If unset, the gallery inherits the Theme background.'),
-            'background_migration_hidden' => t('admin.gallery_editor.background_migration_hidden', 'Background source selection will be available after the background migration is applied.'),
+            'media_title' => t(
+                'admin.gallery_editor.media_title',
+                'Thumbnail, branding, and background',
+            ),
+            'media_help' => t(
+                'admin.gallery_editor.media_help',
+                'Optional visual assets override theme fallbacks only for this gallery.',
+            ),
+            'title_picture' => t('admin.gallery_editor.title_picture', t(
+                'admin.gallery_editor.title_picture_current',
+                'Title picture',
+            )),
+            'automatic' => t(
+                'admin.gallery_editor.automatic_two_photos',
+                'Automatic (2 photos)',
+            ),
+            'cover_legacy' => t(
+                'admin.gallery_editor.cover_legacy',
+                'Default (original gallery behavior)',
+            ),
+            'cover_multi_selected' => t(
+                'admin.gallery_editor.cover_multi_selected',
+                '{count} selected photos',
+                ['count' => $coverMultiCount],
+            ),
+            'cover_auto_help' => t(
+                'admin.gallery_editor.cover_auto_help',
+                'Automatic selects up to two pictures from this gallery or its subgalleries. Manual stars override this choice.',
+            ),
+            'includes_subgallery_images' => t(
+                'admin.gallery_editor.includes_subgallery_images',
+                'Includes images from subgalleries.',
+            ),
+            'upload_gallery_thumbnail' => t(
+                'admin.gallery_editor.upload_gallery_thumbnail',
+                'Upload gallery thumbnail',
+            ),
+            'gallery_thumbnail_upload_help' => t(
+                'admin.gallery_editor.gallery_thumbnail_upload_help',
+                'This is stored separately from gallery images.',
+            ),
+            'gallery_thumbnail_migration_hidden' => t(
+                'admin.gallery_editor.gallery_thumbnail_migration_hidden',
+                'Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.',
+            ),
+            'background_source' => t(
+                'admin.gallery_editor.background_source',
+                'Background source',
+            ),
+            'use_theme_background' => t(
+                'admin.gallery_editor.use_theme_background',
+                'Use theme background',
+            ),
+            'upload_new_image' => t(
+                'admin.gallery_editor.upload_new_image',
+                'Upload new image',
+            ),
+            'pick_existing_gallery_images' => t(
+                'admin.gallery_editor.pick_existing_gallery_images',
+                'Pick from existing gallery images',
+            ),
+            'generate_collage_public' => t(
+                'admin.gallery_editor.generate_collage_public',
+                'Generate collage from public galleries',
+            ),
+            'background_source_help' => t(
+                'admin.gallery_editor.background_source_help',
+                'If unset, the gallery inherits the Theme background.',
+            ),
+            'background_migration_hidden' => t(
+                'admin.gallery_editor.background_migration_hidden',
+                'Background source selection will be available after the background migration is applied.',
+            ),
         ],
     ]);
-    render_admin_tab_panel('admin-edit-media', (string) ob_get_clean(), $activeEditTab === 'admin-edit-media');
+    render_admin_tab_panel(
+        'admin-edit-media',
+        (string) ob_get_clean(),
+        $activeEditTab === 'admin-edit-media',
+    );
 }

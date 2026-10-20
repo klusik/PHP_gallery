@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-
 // Load the dependency-free Core request adapter for isolated service consumers.
 require_once __DIR__ . '/request_data.php';
 require_once __DIR__ . '/session_context.php';

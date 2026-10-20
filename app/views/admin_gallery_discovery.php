@@ -35,22 +35,53 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Services\t;
 
-/** @param array<string,mixed> $viewModel Controller-prepared discovery-page state. */
+/**
+ * Render the Admin gallery discovery page and its prepared discovery shell.
+ *
+ * @param array<string,mixed> $viewModel Controller-prepared discovery-page state.
+ * @return void Emit the page header, navigation, discovery shell, and footer.
+ */
 function view_render_admin_gallery_discovery_page(array $viewModel): void
 {
     render_header((string) ($viewModel['title'] ?? ''));
-    echo '<section class="hero"><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1><nav class="nav"><a class="button secondary" href="' . e((string) ($viewModel['back_url'] ?? '')) . '">' . e((string) ($viewModel['back_label'] ?? '')) . '</a></nav></section>';
-    view_render_admin_gallery_discovery_shell((array) ($viewModel['shell'] ?? []));
+    echo
+        '<section class="hero"><h1>'
+            . e((string) ($viewModel['title'] ?? ''))
+            . '</h1><nav class="nav"><a class="button secondary" href="'
+            . e((string) ($viewModel['back_url'] ?? ''))
+            . '">'
+            . e((string) ($viewModel['back_label'] ?? ''))
+            . '</a></nav></section>';
+    view_render_admin_gallery_discovery_shell(
+        (array) ($viewModel['shell'] ?? []),
+    );
     render_footer();
 }
 
 /** @param array<string,mixed> $viewModel Controller-prepared discovery shell state. */
 function view_render_admin_gallery_discovery_shell(array $viewModel): void
 {
-    echo '<section class="panel admin-discovery-panel" data-admin-discovery-panel data-discovery-endpoint="' . e((string) ($viewModel['endpoint'] ?? '')) . '" data-import-url="' . e((string) ($viewModel['import_url'] ?? '')) . '" data-csrf-token="' . e((string) ($viewModel['csrf_token'] ?? '')) . '" data-job-token="' . e((string) ($viewModel['job_token'] ?? '')) . '">';
+    echo
+        '<section class="panel admin-discovery-panel" data-admin-discovery-panel data-discovery-endpoint="'
+            . e((string) ($viewModel['endpoint'] ?? ''))
+            . '" data-import-url="'
+            . e((string) ($viewModel['import_url'] ?? ''))
+            . '" data-csrf-token="'
+            . e((string) ($viewModel['csrf_token'] ?? ''))
+            . '" data-job-token="'
+            . e((string) ($viewModel['job_token'] ?? ''))
+            . '">';
     echo '<p class="muted">' . e((string) ($viewModel['intro'] ?? '')) . '</p>';
-    echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status>' . e((string) ($viewModel['starting_message'] ?? '')) . '</p><p class="muted" data-admin-discovery-counts></p></div>';
-    echo '<template data-admin-gallery-move-options><option value="">' . e((string) ($viewModel['move_placeholder'] ?? '')) . '</option>' . (string) ($viewModel['gallery_options_html'] ?? '') . '</template>';
+    echo
+        '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status>'
+            . e((string) ($viewModel['starting_message'] ?? ''))
+            . '</p><p class="muted" data-admin-discovery-counts></p></div>';
+    echo
+        '<template data-admin-gallery-move-options><option value="">'
+            . e((string) ($viewModel['move_placeholder'] ?? ''))
+            . '</option>'
+            . (string) ($viewModel['gallery_options_html'] ?? '')
+            . '</template>';
     echo '<div data-admin-discovery-results></div>';
     echo '</section>';
 }
@@ -63,12 +94,42 @@ function view_render_admin_gallery_discovery_shell(array $viewModel): void
 function view_render_admin_new_gallery_page(array $viewModel): void
 {
     render_header((string) ($viewModel['title'] ?? ''));
-    echo '<div class="gallery-create-page"><header class="gallery-create-header"><div><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1><p>' . e(t('admin.galleries.create_hint', 'Start with a name. Add photos from the gallery after creating it.')) . '</p></div><nav class="nav"><a class="button secondary" href="' . e((string) ($viewModel['galleries_url'] ?? '')) . '">' . e((string) ($viewModel['galleries_label'] ?? '')) . '</a><a class="button secondary gallery-create-back" href="' . e((string) ($viewModel['dashboard_url'] ?? '')) . '">' . e((string) ($viewModel['dashboard_label'] ?? '')) . '</a></nav></header>';
+    echo
+        '<div class="gallery-create-page"><header class="gallery-create-header"><div><h1>'
+            . e((string) ($viewModel['title'] ?? ''))
+            . '</h1><p>'
+            . e(t(
+                'admin.galleries.create_hint',
+                'Start with a name. Add photos from the gallery after creating it.',
+            ))
+            . '</p></div><nav class="nav"><a class="button secondary" href="'
+            . e((string) ($viewModel['galleries_url'] ?? ''))
+            . '">'
+            . e((string) ($viewModel['galleries_label'] ?? ''))
+            . '</a><a class="button secondary gallery-create-back" href="'
+            . e((string) ($viewModel['dashboard_url'] ?? ''))
+            . '">'
+            . e((string) ($viewModel['dashboard_label'] ?? ''))
+            . '</a></nav></header>';
     if ((string) ($viewModel['error_notice'] ?? '') !== '') {
-        echo '<div class="notice error" role="alert">' . e((string) $viewModel['error_notice']) . '</div>';
+        echo
+            '<div class="notice error" role="alert">'
+                . e((string) $viewModel['error_notice'])
+                . '</div>';
     }
-    echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" class="form-grid gallery-create-form">' . (string) ($viewModel['csrf_html'] ?? '');
+    echo
+        '<form method="post" action="'
+            . e((string) ($viewModel['action_url'] ?? ''))
+            . '" class="form-grid gallery-create-form">'
+            . (string) ($viewModel['csrf_html'] ?? '');
     echo (string) ($viewModel['fields_html'] ?? '');
-    echo '<footer class="gallery-create-actions"><a href="' . e((string) ($viewModel['galleries_url'] ?? '')) . '">' . e(t('admin.gallery_list.cancel', 'Cancel')) . '</a><button type="submit" class="button primary">' . e((string) ($viewModel['submit_label'] ?? '')) . '</button></footer></form></div>';
+    echo
+        '<footer class="gallery-create-actions"><a href="'
+            . e((string) ($viewModel['galleries_url'] ?? ''))
+            . '">'
+            . e(t('admin.gallery_list.cancel', 'Cancel'))
+            . '</a><button type="submit" class="button primary">'
+            . e((string) ($viewModel['submit_label'] ?? ''))
+            . '</button></footer></form></div>';
     render_footer();
 }

@@ -33,28 +33,71 @@ use function Gallery\Views\view_render_admin_gallery_editor_form_open;
 use function Gallery\Views\view_render_admin_gallery_identity_tab;
 use function GalleryWorkflow\check;
 
-$gallery = ['id' => 8, 'edit_revision' => '17', 'title' => 'Original',
-    'access_password_hash' => 'private-password-hash', 'access_token_hash' => 'private-token-hash',
-    'access_share_token' => 'private-share-token'];
-check(gallery_edit_revision($gallery) === '17', 'Rendered revision must belong to the supplied row.');
-foreach ([null, [], '', '0', '01', '-1', '1e3', '17 ', '0x10', '100000000000000000000'] as $invalid) {
-    check(gallery_edit_revision(['edit_revision' => $invalid]) === '', 'Malformed revision accepted.');
+$gallery = [
+    'id' => 8,
+    'edit_revision' => '17',
+    'title' => 'Original',
+    'access_password_hash' => 'private-password-hash',
+    'access_token_hash' => 'private-token-hash',
+    'access_share_token' => 'private-share-token',
+];
+check(
+    gallery_edit_revision($gallery) === '17',
+    'Rendered revision must belong to the supplied row.',
+);
+foreach ([
+    null,
+    [],
+    '',
+    '0',
+    '01',
+    '-1',
+    '1e3',
+    '17 ',
+    '0x10',
+    '100000000000000000000',
+] as $invalid) {
+    check(gallery_edit_revision(['edit_revision' => $invalid])
+        === '', 'Malformed revision accepted.');
 }
 $comparison = gallery_edit_comparison($gallery);
-check($comparison === ['id' => 8, 'edit_revision' => '17', 'title' => 'Original'], 'Comparison exposed non-allowlisted fields.');
-$draft = gallery_edit_review_draft($gallery + ['access_password' => 'private-submitted-password',
-    'csrf_token' => 'private-csrf', 'folder_name' => '</textarea><script>unsafe</script>', 'tags' => 'keep these tags',
-    'gallery_thumbnail_bounds_recursive' => '1', 'remove_branding_logo' => '1',
-    'gallery_presentation_present' => '1', 'gallery_presentation_music' => '0',
-    'gallery_presentation_interval' => 'fast']);
-check(!isset($draft['id'], $draft['edit_revision'], $draft['access_password']), 'Draft contains transport or credential fields.');
-check(($draft['gallery_thumbnail_bounds_recursive'] ?? '') === '1' && ($draft['remove_branding_logo'] ?? '') === '1',
-    'Review dropped an entered recursive or asset-removal choice.');
-check(($draft['gallery_presentation_music'] ?? '') === '0'
-    && ($draft['gallery_presentation_interval'] ?? '') === 'fast',
-    'Conflict review dropped entered presentation preferences.');
+check(
+    $comparison === ['id' => 8, 'edit_revision' => '17', 'title' => 'Original'],
+    'Comparison exposed non-allowlisted fields.',
+);
+$draft = gallery_edit_review_draft(
+    $gallery
+        + [
+            'access_password' => 'private-submitted-password',
+            'csrf_token' => 'private-csrf',
+            'folder_name' => '</textarea><script>unsafe</script>',
+            'tags' => 'keep these tags',
+            'gallery_thumbnail_bounds_recursive' => '1',
+            'remove_branding_logo' => '1',
+            'gallery_presentation_present' => '1',
+            'gallery_presentation_music' => '0',
+            'gallery_presentation_interval' => 'fast',
+        ],
+);
+check(
+    !isset($draft['id'], $draft['edit_revision'], $draft['access_password']),
+    'Draft contains transport or credential fields.',
+);
+check(
+    ($draft['gallery_thumbnail_bounds_recursive'] ?? '') === '1'
+        && ($draft['remove_branding_logo'] ?? '') === '1',
+    'Review dropped an entered recursive or asset-removal choice.',
+);
+check(
+    ($draft['gallery_presentation_music'] ?? '') === '0'
+        && ($draft['gallery_presentation_interval'] ?? '') === 'fast',
+    'Conflict review dropped entered presentation preferences.',
+);
 ob_start();
-view_render_admin_gallery_editor_form_open(['gallery_id' => 8, 'edit_revision' => gallery_edit_revision($gallery)]);
+view_render_admin_gallery_editor_form_open([
+    'gallery_id' => 8,
+    'edit_revision' => gallery_edit_revision($gallery),
+]);
 view_render_admin_gallery_identity_tab([
     'active' => true,
     'gallery' => $gallery + ['slug' => 'original'],
@@ -62,35 +105,72 @@ view_render_admin_gallery_identity_tab([
     'labels' => ['title' => 'Title', 'description' => 'Description'],
     'intro' => ['title' => 'Identity'],
 ]);
-view_render_admin_gallery_editor_form_close(['save_label' => 'Save gallery', 'help' => 'Save every shared tab.']);
+view_render_admin_gallery_editor_form_close([
+    'save_label' => 'Save gallery',
+    'help' => 'Save every shared tab.',
+]);
 $form = (string) ob_get_clean();
 ob_start();
 \Gallery\Views\view_render_admin_gallery_presentation([
-    'gallery_id' => 8, 'ready' => true,
-    'settings' => ['version' => 1, 'enabled' => true, 'autoplay' => true, 'music' => false,
-        'interval' => 'fast', 'transition' => 'slow'],
+    'gallery_id' => 8,
+    'ready' => true,
+    'settings' => [
+        'version' => 1,
+        'enabled' => true,
+        'autoplay' => true,
+        'music' => false,
+        'interval' => 'fast',
+        'transition' => 'slow',
+    ],
     'url' => 'https://gallery.test/?presentation=1&presentation_music=0',
 ]);
 $presentation = (string) ob_get_clean();
-check(str_contains($form, 'id="admin-gallery-settings-8"')
-    && substr_count($presentation, 'form="admin-gallery-settings-8"') === 7
-    && !str_contains($presentation, '<form')
-    && str_contains($presentation, 'data-gallery-presentation-editor'),
-    'Presentation must use native association with the existing guarded form.');
-check(str_contains($form, 'name="edit_revision" value="17"'), 'Form omitted exact prepared revision.');
-check(str_contains($form, 'data-admin-gallery-settings-form')
-    && str_contains($form, 'id="admin-edit-identity"')
-    && str_contains($form, 'data-admin-tab-panel')
-    && str_contains($form, 'data-admin-gallery-savebar')
-    && preg_match('/<form[^>]*data-admin-gallery-settings-form[^>]*>.*data-admin-gallery-savebar.*<\/form>/s', $form) === 1,
-    'Gallery settings form must own a stable, server-rendered save bar.');
+check(
+    str_contains($form, 'id="admin-gallery-settings-8"')
+        && substr_count($presentation, 'form="admin-gallery-settings-8"') === 7
+        && !str_contains($presentation, '<form')
+        && str_contains($presentation, 'data-gallery-presentation-editor'),
+    'Presentation must use native association with the existing guarded form.',
+);
+check(
+    str_contains($form, 'name="edit_revision" value="17"'),
+    'Form omitted exact prepared revision.',
+);
+check(
+    str_contains($form, 'data-admin-gallery-settings-form')
+        && str_contains($form, 'id="admin-edit-identity"')
+        && str_contains($form, 'data-admin-tab-panel')
+        && str_contains($form, 'data-admin-gallery-savebar')
+        && preg_match(
+            '/<form[^>]*data-admin-gallery-settings-form[^>]*>.*data-admin-gallery-savebar.*<\/form>/s',
+            $form,
+        ) === 1,
+    'Gallery settings form must own a stable, server-rendered save bar.',
+);
 
 ob_start();
-view_render_admin_gallery_edit_conflict(['message' => 'Conflict', 'reload_url' => '?id=8', 'latest' => $comparison,
-    'draft' => $draft, 'labels' => ['draft' => 'Entered', 'latest' => 'Latest', 'open' => 'Review', 'help' => 'Keep this page']]);
+view_render_admin_gallery_edit_conflict([
+    'message' => 'Conflict',
+    'reload_url' => '?id=8',
+    'latest' => $comparison,
+    'draft' => $draft,
+    'labels' => [
+        'draft' => 'Entered',
+        'latest' => 'Latest',
+        'open' => 'Review',
+        'help' => 'Keep this page',
+    ],
+]);
 $html = (string) ob_get_clean();
-check(str_contains($html, 'keep these tags') && str_contains($html, 'target="_blank"'), 'No-JavaScript review lost entered values or latest-editor recovery.');
-check(!str_contains($html, '<script>') && !str_contains($html, 'private-'), 'Conflict markup leaked secrets or unescaped values.');
+check(
+    str_contains($html, 'keep these tags')
+        && str_contains($html, 'target="_blank"'),
+    'No-JavaScript review lost entered values or latest-editor recovery.',
+);
+check(
+    !str_contains($html, '<script>') && !str_contains($html, 'private-'),
+    'Conflict markup leaked secrets or unescaped values.',
+);
 
 schema_inspection_set_query_executor_for_tests(
     /**
@@ -101,13 +181,22 @@ schema_inspection_set_query_executor_for_tests(
      * @return bool Confirmed absence.
      * @author Rudolf Klusal
      */
-    static function (string $objectType, string $table, string $object): bool { return false; });
-check(gallery_edit_schema_state() === 'missing', 'Missing revision state was not preserved.');
+    static function (string $objectType, string $table, string $object): bool {
+        return false;
+    },
+);
+check(
+    gallery_edit_schema_state() === 'missing',
+    'Missing revision state was not preserved.',
+);
 try {
     gallery_edit_begin($gallery, '17');
     throw new RuntimeException('Missing revision schema allowed a mutation.');
 } catch (GalleryEditUnavailable $exception) {
-    check(str_contains($exception->getMessage(), 'migration'), 'Missing schema should explain migration recovery.');
+    check(
+        str_contains($exception->getMessage(), 'migration'),
+        'Missing schema should explain migration recovery.',
+    );
 }
 
 schema_inspection_set_query_executor_for_tests(
@@ -119,23 +208,54 @@ schema_inspection_set_query_executor_for_tests(
      * @return bool Never returns; throws the injected metadata exception.
      * @author Rudolf Klusal
      */
-    static function (string $objectType, string $table, string $object): bool { throw new RuntimeException('private-database-detail'); });
-check(gallery_edit_schema_state() === 'unknown', 'Inspection uncertainty was collapsed into missing.');
+    static function (string $objectType, string $table, string $object): bool {
+        throw new RuntimeException('private-database-detail');
+    },
+);
+check(
+    gallery_edit_schema_state() === 'unknown',
+    'Inspection uncertainty was collapsed into missing.',
+);
 try {
     gallery_edit_begin($gallery, '17');
     throw new RuntimeException('Unknown revision schema allowed a mutation.');
 } catch (GalleryEditUnavailable $exception) {
-    check(!str_contains($exception->getMessage(), 'private-'), 'Raw metadata exception escaped.');
+    check(
+        !str_contains($exception->getMessage(), 'private-'),
+        'Raw metadata exception escaped.',
+    );
 }
 schema_inspection_set_query_executor_for_tests(null);
 foreach (['en', 'cs', 'de', 'sv'] as $language) {
-    $json = json_decode((string) file_get_contents(dirname(__DIR__) . '/app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);
+    $json = json_decode(
+        (string) file_get_contents(
+            dirname(__DIR__) . '/app/lang/' . $language . '.json',
+        ),
+        true,
+        512,
+        JSON_THROW_ON_ERROR,
+    );
     $fallback = require dirname(__DIR__) . '/app/lang/' . $language . '.php';
-    foreach (['busy', 'conflict', 'schema_missing', 'schema_unknown', 'connection_lost', 'review_title', 'review_draft',
-        'review_latest', 'review_open', 'review_help'] as $suffix) {
+    foreach ([
+        'busy',
+        'conflict',
+        'schema_missing',
+        'schema_unknown',
+        'connection_lost',
+        'review_title',
+        'review_draft',
+        'review_latest',
+        'review_open',
+        'review_help',
+    ] as $suffix) {
         $key = 'admin.gallery_editor.edit_' . $suffix;
-        check(is_string($json[$key] ?? null) && $json[$key] !== '' && ($fallback[$key] ?? null) === $json[$key],
-            'A maintained conflict translation or matching PHP fallback is missing.');
+        check(
+            is_string($json[$key] ?? null)
+                && $json[$key] !== ''
+                && ($fallback[$key] ?? null) === $json[$key],
+            'A maintained conflict translation or matching PHP fallback is missing.',
+        );
     }
 }
-echo "PASS gallery edit revision fidelity, secret-free review, missing and unknown refusal\n";
+echo
+    "PASS gallery edit revision fidelity, secret-free review, missing and unknown refusal\n";

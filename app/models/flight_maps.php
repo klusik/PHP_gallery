@@ -50,11 +50,13 @@ const FLIGHT_MAPS_NAVDATA_BATCH_ROWS = 200;
  * Return one stored gallery flight-map row.
  *
  * @param int $galleryId Gallery identifier.
- * @return ?array Stored flight-map row, or null when none exists.
+ * @return array<string,mixed>|null Stored flight-map row, or null when none exists.
  */
 function flight_maps_model_find(int $galleryId): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM gallery_flight_maps WHERE gallery_id = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT * FROM gallery_flight_maps WHERE gallery_id = ? LIMIT 1',
+    );
     $stmt->execute([$galleryId]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -64,10 +66,13 @@ function flight_maps_model_find(int $galleryId): ?array
  * Delete one gallery flight-map row.
  *
  * @param int $galleryId Gallery identifier.
+ * @return void Delete the stored flight-map row for the gallery.
  */
 function flight_maps_model_delete(int $galleryId): void
 {
-    $stmt = db()->prepare('DELETE FROM gallery_flight_maps WHERE gallery_id = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM gallery_flight_maps WHERE gallery_id = ?',
+    );
     $stmt->execute([$galleryId]);
 }
 
@@ -90,10 +95,9 @@ function flight_maps_model_upsert(
     array $points,
     array $unresolved,
     string $now,
-    ?string $resolvedAt = null
-): void
-{
-    $stmt = db()->prepare("INSERT INTO gallery_flight_maps (
+    ?string $resolvedAt = null,
+): void {
+    $stmt = db()->prepare('INSERT INTO gallery_flight_maps (
         gallery_id,
         map_source_type,
         route_text,
@@ -111,7 +115,7 @@ function flight_maps_model_upsert(
         unresolved_points_json = VALUES(unresolved_points_json),
         point_count = VALUES(point_count),
         resolved_at = VALUES(resolved_at),
-        updated_at = VALUES(updated_at)");
+        updated_at = VALUES(updated_at)');
     $stmt->execute([
         $galleryId,
         $sourceType,
@@ -119,7 +123,7 @@ function flight_maps_model_upsert(
         json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         json_encode(
             array_values($unresolved),
-            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         ),
         count($points),
         $resolvedAt !== null && trim($resolvedAt) !== '' ? $resolvedAt : $now,
@@ -141,20 +145,21 @@ function flight_maps_model_complete_route(
     array $row,
     array $points,
     array $unresolved,
-    string $now
-): bool
-{
-    $stmt = db()->prepare('UPDATE gallery_flight_maps
+    string $now,
+): bool {
+    $stmt = db()->prepare(
+        'UPDATE gallery_flight_maps
         SET resolved_points_json = ?, unresolved_points_json = ?, point_count = ?, resolved_at = ?, updated_at = ?
         WHERE gallery_id = ? AND map_source_type = ?
             AND BINARY route_text = BINARY ?
             AND BINARY resolved_points_json = BINARY ?
-            AND BINARY unresolved_points_json = BINARY ? AND updated_at = ?');
+            AND BINARY unresolved_points_json = BINARY ? AND updated_at = ?',
+    );
     $stmt->execute([
         json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         json_encode(
             array_values($unresolved),
-            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         ),
         count($points),
         $now,
@@ -176,17 +181,27 @@ function flight_maps_model_complete_route(
  */
 function flight_maps_model_navdata_status(): array
 {
-    $total = (int) db()->query('SELECT COUNT(*) FROM flight_map_nav_points')->fetchColumn();
+    $total = (int) db()
+        ->query('SELECT COUNT(*) FROM flight_map_nav_points')
+        ->fetchColumn();
     $byKind = [];
-    $stmt = db()->query('SELECT kind, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY kind ORDER BY kind');
+    $stmt = db()->query(
+        'SELECT kind, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY kind ORDER BY kind',
+    );
     foreach ($stmt->fetchAll() ?: [] as $row) {
-        $byKind[(string) ($row['kind'] ?? 'unknown')] = (int) ($row['row_count'] ?? 0);
+        $byKind[(string) ($row['kind'] ?? 'unknown')] = (int) (
+            $row['row_count'] ?? 0
+        );
     }
     $bySource = [];
-    $stmt = db()->query('SELECT source, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY source ORDER BY source');
+    $stmt = db()->query(
+        'SELECT source, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY source ORDER BY source',
+    );
     foreach ($stmt->fetchAll() ?: [] as $row) {
         $source = trim((string) ($row['source'] ?? ''));
-        $bySource[$source !== '' ? $source : 'manual'] = (int) ($row['row_count'] ?? 0);
+        $bySource[$source !== '' ? $source : 'manual'] = (int) (
+            $row['row_count'] ?? 0
+        );
     }
     return ['total' => $total, 'by_kind' => $byKind, 'by_source' => $bySource];
 }
@@ -199,12 +214,15 @@ function flight_maps_model_navdata_status(): array
  * @param string $now Snapshot timestamp shared by all replacement rows.
  * @return int Number of stale source rows deleted after the upsert pass.
  */
-function flight_maps_model_replace_navdata(array $rows, string $source, string $now): int
-{
+function flight_maps_model_replace_navdata(
+    array $rows,
+    string $source,
+    string $now,
+): int {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $insertSql = "INSERT INTO flight_map_nav_points (
+        $insertSql = 'INSERT INTO flight_map_nav_points (
             ident,
             kind,
             region,
@@ -220,18 +238,18 @@ function flight_maps_model_replace_navdata(array $rows, string $source, string $
             longitude = VALUES(longitude),
             source = VALUES(source),
             cycle = VALUES(cycle),
-            updated_at = VALUES(updated_at)";
+            updated_at = VALUES(updated_at)';
         // Bound prepared-statement parameters while reducing 100,000 individual
         // round trips to roughly 500 batches. The transaction remains atomic.
         foreach (array_chunk($rows, FLIGHT_MAPS_NAVDATA_BATCH_ROWS) as $batch) {
             $placeholders = array_fill(
                 0,
                 count($batch),
-                '(?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                '(?, ?, ?, ?, ?, ?, ?, ?, ?)',
             );
             $stmt = $pdo->prepare(sprintf(
                 $insertSql,
-                implode(', ', $placeholders)
+                implode(', ', $placeholders),
             ));
             $parameters = [];
             foreach ($batch as $row) {
@@ -245,12 +263,14 @@ function flight_maps_model_replace_navdata(array $rows, string $source, string $
                     $row['source'],
                     $row['cycle'],
                     $row['created_at'],
-                    $row['updated_at']
+                    $row['updated_at'],
                 );
             }
             $stmt->execute($parameters);
         }
-        $deleteStmt = $pdo->prepare('DELETE FROM flight_map_nav_points WHERE source = ? AND updated_at <> ?');
+        $deleteStmt = $pdo->prepare(
+            'DELETE FROM flight_map_nav_points WHERE source = ? AND updated_at <> ?',
+        );
         $deleteStmt->execute([$source, $now]);
         $deleted = (int) $deleteStmt->rowCount();
         $pdo->commit();

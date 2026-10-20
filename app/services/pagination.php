@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\public_base_url;
@@ -52,23 +51,33 @@ use function Gallery\Core\url_for;
  */
 
 const CMS_PAGINATION_PARAM = 'list_page';
+
 const CMS_PAGINATION_DEFAULT_COLUMNS = 3;
+
 const CMS_PAGINATION_DEFAULT_ROWS = 3;
+
 const CMS_PAGINATION_MAX_COLUMNS = 12;
+
 const CMS_PAGINATION_MAX_ROWS = 50;
 
 /**
  * Clamp one pagination dimension to a safe positive integer range.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Candidate passed to FILTER_VALIDATE_INT; integer-compatible scalar input is clamped to the range, and invalid/non-scalar input uses the default.
  * @param int $default Default value when no explicit value is available.
  * @param int $maximum Maximum value.
- * @return int Integer result for the caller.
+ * @return int Validated positive integer in the inclusive range 1..$maximum, or $default when the input fails integer validation.
  */
-function pagination_dimension_value(mixed $value, int $default, int $maximum): int
-{
+function pagination_dimension_value(
+    mixed $value,
+    int $default,
+    int $maximum,
+): int {
     // $number stores the normalized integer candidate before range clamping.
-    $number = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => $maximum]]);
+    $number = filter_var($value, FILTER_VALIDATE_INT, ['options' => [
+        'min_range' => 1,
+        'max_range' => $maximum,
+    ]]);
     if ($number === false) {
         return $default;
     }
@@ -78,8 +87,8 @@ function pagination_dimension_value(mixed $value, int $default, int $maximum): i
 /**
  * Return sanitized global pagination settings for public gallery lists.
  *
- * @param ?array $context Context value.
- * @return array Structured result data for the caller.
+ * @param ?array<string,mixed> $context Reserved listing context for future scoped settings.
+ * @return array{enabled:bool,columns:int,rows:int,items_per_page:int} Sanitized site-wide pagination settings.
  */
 function pagination_global_settings(?array $context = null): array
 {
@@ -90,9 +99,20 @@ function pagination_global_settings(?array $context = null): array
     // $enabled stores whether public gallery and photo lists should be sliced.
     $enabled = app_setting('pagination_enabled', '0') === '1';
     // $columns stores the sanitized column count used to derive items per page.
-    $columns = pagination_dimension_value(app_setting('pagination_columns', (string) CMS_PAGINATION_DEFAULT_COLUMNS), CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS);
+    $columns = pagination_dimension_value(
+        app_setting(
+            'pagination_columns',
+            (string) CMS_PAGINATION_DEFAULT_COLUMNS,
+        ),
+        CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
     // $rows stores the sanitized row count used to derive items per page.
-    $rows = pagination_dimension_value(app_setting('pagination_rows', (string) CMS_PAGINATION_DEFAULT_ROWS), CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS);
+    $rows = pagination_dimension_value(
+        app_setting('pagination_rows', (string) CMS_PAGINATION_DEFAULT_ROWS),
+        CMS_PAGINATION_DEFAULT_ROWS,
+        CMS_PAGINATION_MAX_ROWS,
+    );
 
     return [
         'enabled' => $enabled,
@@ -110,13 +130,24 @@ function pagination_global_settings(?array $context = null): array
  * The global pagination switch remains authoritative; this setting only
  * overrides the tag-page grid dimensions and resulting page capacity.
  *
- * @return array{enabled: bool, columns: int, rows: int, items_per_page: int, grid_columns_enabled: bool, grid_source: string}
+ * @return array{enabled:bool,columns:int,rows:int,items_per_page:int,grid_columns_enabled:bool,grid_source:string} Effective tag landing-page grid settings with the global pagination switch.
  */
 function tag_page_gallery_grid_settings(): array
 {
     $global = pagination_global_settings(['listing' => 'tag_galleries']);
-    $columns = pagination_dimension_value(app_setting('tag_page_gallery_grid_columns', (string) $global['columns']), (int) $global['columns'], CMS_PAGINATION_MAX_COLUMNS);
-    $rows = pagination_dimension_value(app_setting('tag_page_gallery_grid_rows', (string) $global['rows']), (int) $global['rows'], CMS_PAGINATION_MAX_ROWS);
+    $columns = pagination_dimension_value(
+        app_setting(
+            'tag_page_gallery_grid_columns',
+            (string) $global['columns'],
+        ),
+        (int) $global['columns'],
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
+    $rows = pagination_dimension_value(
+        app_setting('tag_page_gallery_grid_rows', (string) $global['rows']),
+        (int) $global['rows'],
+        CMS_PAGINATION_MAX_ROWS,
+    );
 
     return [
         'enabled' => !empty($global['enabled']),
@@ -139,7 +170,9 @@ function pagination_current_page(string $parameterName = CMS_PAGINATION_PARAM): 
     // $rawValue stores the untrusted GET value before validation.
     $rawValue = request_data('query')[$parameterName] ?? 1;
     // $page stores the validated current-page candidate.
-    $page = filter_var($rawValue, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $page = filter_var($rawValue, FILTER_VALIDATE_INT, ['options' => [
+        'min_range' => 1,
+    ]]);
     return $page === false ? 1 : (int) $page;
 }
 
@@ -151,18 +184,33 @@ function pagination_current_page(string $parameterName = CMS_PAGINATION_PARAM): 
  * @param int $columns Columns value.
  * @param int $rows Rows to process.
  * @param string $parameterName Parameter name value.
- * @param ?array $baseQuery Base query value.
+ * @param ?array<string,string|int|float|bool|null> $baseQuery Route and filter query values to preserve in generated links.
  * @param ?callable $urlBuilder Url builder URL.
- * @return array Structured result data for the caller.
+ * @return array{parameter:string,current_page:int,total_pages:int,offset:int,limit:int,pagination_needed:bool,previous_url:string,next_url:string,page_urls:list<array{page:int,url:string,current:bool}>} Clamped page window and its navigation URLs.
  */
-function pagination_model(int $totalItems, int $currentPage, int $columns, int $rows, string $parameterName = CMS_PAGINATION_PARAM, ?array $baseQuery = null, ?callable $urlBuilder = null): array
-{
+function pagination_model(
+    int $totalItems,
+    int $currentPage,
+    int $columns,
+    int $rows,
+    string $parameterName = CMS_PAGINATION_PARAM,
+    ?array $baseQuery = null,
+    ?callable $urlBuilder = null,
+): array {
     // $safeTotal stores the non-negative item count used by all calculations.
     $safeTotal = max(0, $totalItems);
     // $safeColumns stores the sanitized column setting for this model.
-    $safeColumns = pagination_dimension_value($columns, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS);
+    $safeColumns = pagination_dimension_value(
+        $columns,
+        CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
     // $safeRows stores the sanitized row setting for this model.
-    $safeRows = pagination_dimension_value($rows, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS);
+    $safeRows = pagination_dimension_value(
+        $rows,
+        CMS_PAGINATION_DEFAULT_ROWS,
+        CMS_PAGINATION_MAX_ROWS,
+    );
     // $limit stores the effective list size, always derived from columns and rows.
     $limit = $safeColumns * $safeRows;
     // $totalPages stores at least one page so invalid page values can clamp safely.
@@ -181,25 +229,49 @@ function pagination_model(int $totalItems, int $currentPage, int $columns, int $
         'offset' => $offset,
         'limit' => $limit,
         'pagination_needed' => $isNeeded,
-        'previous_url' => $page > 1 ? pagination_page_url($parameterName, $page - 1, $baseQuery, $urlBuilder) : '',
-        'next_url' => $page < $totalPages ? pagination_page_url($parameterName, $page + 1, $baseQuery, $urlBuilder) : '',
-        'page_urls' => pagination_page_urls($parameterName, $page, $totalPages, $baseQuery, $urlBuilder),
+        'previous_url' => $page > 1
+            ? pagination_page_url(
+                $parameterName,
+                $page - 1,
+                $baseQuery,
+                $urlBuilder,
+            )
+            : '',
+        'next_url' => $page < $totalPages
+            ? pagination_page_url(
+                $parameterName,
+                $page + 1,
+                $baseQuery,
+                $urlBuilder,
+            )
+            : '',
+        'page_urls' => pagination_page_urls(
+            $parameterName,
+            $page,
+            $totalPages,
+            $baseQuery,
+            $urlBuilder,
+        ),
     ];
 }
 
 /**
  * Return the current list sliced only when pagination is enabled and useful.
  *
- * @param array $items Items value.
- * @param array $pagination Pagination value.
- * @return array Structured result data for the caller.
+ * @param list<mixed> $items Listing rows in display order.
+ * @param array{pagination_needed?:bool,offset?:int,limit?:int} $pagination Pagination model fields used for slicing.
+ * @return list<mixed> Original rows when pagination is inactive, otherwise the current page slice.
  */
 function pagination_slice_items(array $items, array $pagination): array
 {
     if (empty($pagination['pagination_needed'])) {
         return $items;
     }
-    return array_slice($items, (int) $pagination['offset'], (int) $pagination['limit']);
+    return array_slice(
+        $items,
+        (int) $pagination['offset'],
+        (int) $pagination['limit'],
+    );
 }
 
 /**
@@ -207,12 +279,16 @@ function pagination_slice_items(array $items, array $pagination): array
  *
  * @param string $parameterName Parameter name value.
  * @param int $pageNumber Page number value.
- * @param ?array $baseQuery Base query value.
- * @param ?callable $urlBuilder Url builder URL.
- * @return string Text result for the caller.
+ * @param ?array<string,string|int|float|bool|null> $baseQuery Route and filter query values to preserve.
+ * @param ?callable(int):string $urlBuilder Optional page-number URL builder.
+ * @return string URL for the requested page with route and active filters preserved.
  */
-function pagination_page_url(string $parameterName, int $pageNumber, ?array $baseQuery = null, ?callable $urlBuilder = null): string
-{
+function pagination_page_url(
+    string $parameterName,
+    int $pageNumber,
+    ?array $baseQuery = null,
+    ?callable $urlBuilder = null,
+): string {
     if ($urlBuilder !== null) {
         return (string) $urlBuilder($pageNumber);
     }
@@ -236,15 +312,31 @@ function pagination_page_url(string $parameterName, int $pageNumber, ?array $bas
  * @param string $parameterName Parameter name value.
  * @param int $currentPage Current page value.
  * @param int $totalPages Total pages value.
- * @param ?array $baseQuery Base query value.
- * @param ?callable $urlBuilder Url builder URL.
- * @return array Structured result data for the caller.
+ * @param ?array<string,string|int|float|bool|null> $baseQuery Route and filter query values to preserve.
+ * @param ?callable(int):string $urlBuilder Optional page-number URL builder.
+ * @return list<array{page:int,url:string,current:bool}> Compact page controls with their URLs and current-page marker.
  */
-function pagination_page_urls(string $parameterName, int $currentPage, int $totalPages, ?array $baseQuery = null, ?callable $urlBuilder = null): array
-{
+function pagination_page_urls(
+    string $parameterName,
+    int $currentPage,
+    int $totalPages,
+    ?array $baseQuery = null,
+    ?callable $urlBuilder = null,
+): array {
     // $pages stores the candidate page numbers before deduplication and sorting.
-    $pages = [1, $totalPages, $currentPage - 2, $currentPage - 1, $currentPage, $currentPage + 1, $currentPage + 2];
-    $pages = array_values(array_unique(array_filter($pages, static fn (int $page): bool => $page >= 1 && $page <= $totalPages)));
+    $pages = [
+        1,
+        $totalPages,
+        $currentPage - 2,
+        $currentPage - 1,
+        $currentPage,
+        $currentPage + 1,
+        $currentPage + 2,
+    ];
+    $pages = array_values(array_unique(array_filter(
+        $pages,
+        static fn(int $page): bool => $page >= 1 && $page <= $totalPages,
+    )));
     sort($pages);
 
     // $urls stores the compact page model used by the renderer.
@@ -252,31 +344,41 @@ function pagination_page_urls(string $parameterName, int $currentPage, int $tota
     foreach ($pages as $page) {
         $urls[] = [
             'page' => $page,
-            'url' => pagination_page_url($parameterName, $page, $baseQuery, $urlBuilder),
+            'url' => pagination_page_url(
+                $parameterName,
+                $page,
+                $baseQuery,
+                $urlBuilder,
+            ),
             'current' => $page === $currentPage,
         ];
     }
     return $urls;
 }
 
-
 /**
  * Return a grid column class matching the active pagination column setting.
  *
- * @param array $settings Settings used by this workflow.
- * @return string Text result for the caller.
+ * @param array{enabled?:bool,grid_columns_enabled?:bool,columns?:int} $settings Pagination settings controlling whether and how the grid class is emitted.
+ * @return string Grid column class, or an empty string when the grid override is inactive.
  */
 function pagination_grid_columns_class(array $settings): string
 {
-    if (empty($settings['enabled']) && empty($settings['grid_columns_enabled'])) {
+    if (
+        empty($settings['enabled'])
+        && empty($settings['grid_columns_enabled'])
+    ) {
         return '';
     }
 
     // $columns stores the safe configured column count used by CSS grid classes.
-    $columns = pagination_dimension_value($settings['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS);
+    $columns = pagination_dimension_value(
+        $settings['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
     return ' pagination-grid-columns-' . $columns;
 }
-
 
 /**
  * Return an initial sizes attribute for paginated photo thumbnails.
@@ -286,8 +388,8 @@ function pagination_grid_columns_class(array $settings): string
  * conservative initial hint, then its optional near-viewport module measures the
  * actual rendered width before selecting a larger inert candidate.
  *
- * @param array $settings Settings used by this workflow.
- * @return string Text result for the caller.
+ * @param array{enabled?:bool,columns?:int} $settings Effective pagination grid settings.
+ * @return string Responsive image sizes hint matching the selected-gallery grid.
  */
 function pagination_photo_thumbnail_sizes_attribute(array $settings): string
 {
@@ -296,25 +398,42 @@ function pagination_photo_thumbnail_sizes_attribute(array $settings): string
     }
 
     // $columns stores the safe configured column count used by the responsive image hint.
-    $columns = pagination_dimension_value($settings['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS);
+    $columns = pagination_dimension_value(
+        $settings['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
     // $desktopGapAllowance stores a small viewport deduction for page padding and grid gaps.
     $desktopGapAllowance = max(2, min(12, $columns + 2));
 
-    return '(min-width: 48rem) calc((' . (100 - $desktopGapAllowance) . 'vw) / ' . $columns . '), 94vw';
+    return (
+        '(min-width: 48rem) calc(('
+            . (100 - $desktopGapAllowance)
+            . 'vw) / '
+            . $columns
+            . '), 94vw'
+    );
 }
-
 
 /**
  * Return a query suffix for clean pagination links while removing route state.
  *
- * @param array $removeNames Remove names value.
- * @return string Text result for the caller.
+ * @param list<string> $removeNames Additional query keys to omit from the clean URL.
+ * @return string Encoded query suffix, or an empty string when no filter state remains.
  */
 function pagination_clean_query_suffix(array $removeNames = []): string
 {
     // $query stores current GET parameters that should survive clean pagination links.
     $query = request_data('query');
-    foreach (array_merge(['page', 'public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', CMS_PAGINATION_PARAM], $removeNames) as $name) {
+    foreach (array_merge([
+        'page',
+        'public_path',
+        'gallery_path',
+        'slug',
+        'gallery_page',
+        'photo_page',
+        CMS_PAGINATION_PARAM,
+    ], $removeNames) as $name) {
         unset($query[$name]);
     }
 
@@ -328,13 +447,16 @@ function pagination_clean_query_suffix(array $removeNames = []): string
 /**
  * Build a clean public gallery pagination URL.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row used to resolve its public URL.
  * @param int $pageNumber Page number value.
- * @param string $listing Listing value.
- * @return string Text result for the caller.
+ * @param string $listing Listing segment; subgalleries selects the child-gallery route.
+ * @return string Clean gallery pagination URL with active filters preserved.
  */
-function pagination_gallery_clean_url(array $gallery, int $pageNumber, string $listing = 'photos'): string
-{
+function pagination_gallery_clean_url(
+    array $gallery,
+    int $pageNumber,
+    string $listing = 'photos',
+): string {
     // $baseUrl stores the gallery URL without a trailing slash for path appending.
     $baseUrl = rtrim(gallery_public_url($gallery), '/');
     // $safePage stores the requested page number normalized for URL output.
@@ -345,7 +467,11 @@ function pagination_gallery_clean_url(array $gallery, int $pageNumber, string $l
     }
 
     if ($listing === 'subgalleries') {
-        return $baseUrl . '/galleries/' . $safePage . '/' . pagination_clean_query_suffix();
+        return $baseUrl
+            . '/galleries/'
+            . $safePage
+            . '/'
+            . pagination_clean_query_suffix();
     }
 
     return $baseUrl . '/' . $safePage . '/' . pagination_clean_query_suffix();
@@ -364,5 +490,9 @@ function pagination_home_gallery_clean_url(int $pageNumber): string
     if ($safePage <= 1) {
         return public_base_url() . '/' . pagination_clean_query_suffix();
     }
-    return public_base_url() . '/galleries/' . $safePage . '/' . pagination_clean_query_suffix();
+    return public_base_url()
+        . '/galleries/'
+        . $safePage
+        . '/'
+        . pagination_clean_query_suffix();
 }

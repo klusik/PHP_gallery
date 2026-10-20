@@ -60,8 +60,13 @@ use function Gallery\Core\unique_slug;
  */
 function gallery_migration_gallery_metadata(array $gallery): array
 {
-    if (array_key_exists('cover_image_ids', $gallery) && !gallery_cover_selection_storage_valid($gallery)) {
-        throw new RuntimeException('Gallery cover selection metadata is invalid and cannot be exported safely.');
+    if (
+        array_key_exists('cover_image_ids', $gallery)
+        && !gallery_cover_selection_storage_valid($gallery)
+    ) {
+        throw new RuntimeException(
+            'Gallery cover selection metadata is invalid and cannot be exported safely.',
+        );
     }
     $fields = [
         'title',
@@ -90,23 +95,40 @@ function gallery_migration_gallery_metadata(array $gallery): array
         'nsfw_enabled',
     ];
 
-    $metadata = ['description_layout_semantics_version' => GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION];
+    $metadata = [
+        'description_layout_semantics_version' =>
+            GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
+    ];
     foreach ($fields as $field) {
         if (array_key_exists($field, $gallery)) {
             $metadata[$field] = $gallery[$field];
         }
     }
 
-    $metadata['tags'] = function_exists('Gallery\\Services\\tag_names_for_entity') ? tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
+    $metadata['tags'] = function_exists(
+        'Gallery\\Services\\tag_names_for_entity',
+    )
+        ? tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0))
+        : '';
     $coverSelection = null;
-    if (array_key_exists('cover_image_ids', $gallery) && $gallery['cover_image_ids'] !== null) {
+    if (
+        array_key_exists('cover_image_ids', $gallery)
+        && $gallery['cover_image_ids'] !== null
+    ) {
         // Export only current direct images owned by this gallery. The existing
         // per-image map will reconcile these source IDs when the job is applied.
         $coverSelection = [];
         foreach (gallery_cover_selection_ids($gallery) as $sourceImageId) {
             $sourceImage = find_image($sourceImageId, true);
-            if ($sourceImage && (int) ($sourceImage['gallery_id'] ?? 0) === (int) ($gallery['id'] ?? 0)
-                && !str_contains((string) ($sourceImage['relative_path'] ?? ''), '/')) {
+            if (
+                $sourceImage
+                && (int) ($sourceImage['gallery_id'] ?? 0)
+                    === (int) ($gallery['id'] ?? 0)
+                && !str_contains(
+                    (string) ($sourceImage['relative_path'] ?? ''),
+                    '/',
+                )
+            ) {
                 $coverSelection[] = $sourceImageId;
             }
         }
@@ -114,15 +136,33 @@ function gallery_migration_gallery_metadata(array $gallery): array
         $metadata['cover_selection_source_ids'] = $coverSelection;
     }
     $primaryId = (int) ($gallery['cover_image_id'] ?? 0);
-    $primaryImage = $coverSelection === null && $primaryId > 0 ? find_image($primaryId, true) : null;
+    $primaryImage =
+        $coverSelection === null && $primaryId > 0
+            ? find_image($primaryId, true)
+            : null;
     $metadata['cover_source_id'] = $coverSelection !== null
-        ? ($coverSelection[0] ?? 0)
-        : ($primaryImage && (int) ($primaryImage['gallery_id'] ?? 0) === (int) ($gallery['id'] ?? 0)
-            && !str_contains((string) ($primaryImage['relative_path'] ?? ''), '/') ? $primaryId : 0);
+        ? $coverSelection[0] ?? 0
+        : (
+            $primaryImage
+                && (int) ($primaryImage['gallery_id'] ?? 0)
+                === (int) ($gallery['id'] ?? 0)
+                && !str_contains(
+                    (string) ($primaryImage['relative_path'] ?? ''),
+                    '/',
+                )
+                    ? $primaryId
+                    : 0
+        );
     if (content_localization_schema_ready('gallery')) {
-        $metadata['content_language'] = content_language_normalize($gallery['content_language'] ?? null);
-        $translationRows = content_translation_rows('gallery', [(int) ($gallery['id'] ?? 0)]);
-        $metadata['translations'] = $translationRows[(int) ($gallery['id'] ?? 0)] ?? [];
+        $metadata['content_language'] = content_language_normalize(
+            $gallery['content_language'] ?? null,
+        );
+        $translationRows = content_translation_rows('gallery', [
+            (int) ($gallery['id'] ?? 0),
+        ]);
+        $metadata['translations'] = $translationRows[(int) (
+            $gallery['id'] ?? 0
+        )] ?? [];
     }
     return $metadata;
 }
@@ -167,7 +207,9 @@ function gallery_migration_image_metadata(array $image): array
 
     $metadata = [
         'source_id' => (int) ($image['id'] ?? 0),
-        'tags' => function_exists('Gallery\\Services\\tag_names_for_entity') ? tag_names_for_entity('image', (int) ($image['id'] ?? 0)) : '',
+        'tags' => function_exists('Gallery\\Services\\tag_names_for_entity')
+            ? tag_names_for_entity('image', (int) ($image['id'] ?? 0))
+            : '',
     ];
     foreach ($fields as $field) {
         if (array_key_exists($field, $image)) {
@@ -175,9 +217,14 @@ function gallery_migration_image_metadata(array $image): array
         }
     }
     if (content_localization_schema_ready('image')) {
-        $metadata['content_language'] = content_language_normalize($image['content_language'] ?? null);
-        $translationRows = content_translation_rows('image', [(int) ($image['id'] ?? 0)]);
-        $metadata['translations'] = $translationRows[(int) ($image['id'] ?? 0)] ?? [];
+        $metadata['content_language'] = content_language_normalize(
+            $image['content_language'] ?? null,
+        );
+        $translationRows = content_translation_rows('image', [
+            (int) ($image['id'] ?? 0),
+        ]);
+        $metadata['translations'] = $translationRows[(int) ($image['id'] ?? 0)]
+        ?? [];
     }
 
     return $metadata;
@@ -190,8 +237,10 @@ function gallery_migration_image_metadata(array $image): array
  * @param string $fallback Fallback value.
  * @return string Text result for the caller.
  */
-function gallery_migration_asset_mime(string $path, string $fallback = 'application/octet-stream'): string
-{
+function gallery_migration_asset_mime(
+    string $path,
+    string $fallback = 'application/octet-stream',
+): string {
     $info = @getimagesize($path);
     if (is_array($info) && !empty($info['mime'])) {
         return (string) $info['mime'];

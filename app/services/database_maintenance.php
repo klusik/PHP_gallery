@@ -81,23 +81,30 @@ use function Gallery\Core\storage_observer_add;
 use function Gallery\Core\pending_migration_files;
 use function Gallery\Core\discover_migration_files;
 use function Gallery\Core\run_migrations;
-use function Gallery\Models\database_maintenance_model_applied_migration_versions;
+use function Gallery\Models\database_maintenance_model_applied_migration_versions
+;
 use function Gallery\Models\database_maintenance_model_duplicate_rule;
 use function Gallery\Models\database_maintenance_model_execute_cleanup_rule;
 use function Gallery\Models\database_maintenance_model_expiry_rule;
-use function Gallery\Models\database_maintenance_model_inspect_cleanup_candidates;
+use function Gallery\Models\database_maintenance_model_inspect_cleanup_candidates
+;
 use function Gallery\Models\database_maintenance_model_orphan_rule;
 use function Gallery\Models\database_maintenance_model_run_table_operation;
 use function Gallery\Models\database_maintenance_model_schema_inventory_rows;
-use function Gallery\Models\database_maintenance_model_thumbnail_distribution_rows;
+use function Gallery\Models\database_maintenance_model_thumbnail_distribution_rows
+;
 use function Gallery\Models\database_maintenance_model_write_cleanup_audit;
 
 require_once __DIR__ . '/../runtime/storage_observer.php';
 
 const DATABASE_MAINTENANCE_REPORT_FILE = 'admin-database-maintenance-report.json';
+
 const DATABASE_MAINTENANCE_STATE_SETTING = 'database_maintenance_cleanup_state';
+
 const DATABASE_MAINTENANCE_DEFAULT_BATCH_SIZE = 250;
+
 const DATABASE_MAINTENANCE_MAX_BATCH_SIZE = 1000;
+
 const DATABASE_MAINTENANCE_REPAIR_VERSION = '202607250001_database_maintenance_schema_repair';
 
 /**
@@ -110,10 +117,16 @@ function database_maintenance_project_root(): string
 
 /**
  * Return the report cache path.
+ *
+ * @return string Absolute path to the cached maintenance report.
  */
 function database_maintenance_report_path(): string
 {
-    return database_maintenance_project_root() . '/cache/' . DATABASE_MAINTENANCE_REPORT_FILE;
+    return (
+        database_maintenance_project_root()
+            . '/cache/'
+            . DATABASE_MAINTENANCE_REPORT_FILE
+    );
 }
 
 /**
@@ -126,7 +139,12 @@ function database_maintenance_report_path(): string
  */
 function database_maintenance_table_policies(): array
 {
-    $protected = static fn (string $category, string $owner, string $reason, string $optimize = 'manual'): array => [
+    $protected = static fn(
+        string $category,
+        string $owner,
+        string $reason,
+        string $optimize = 'manual',
+    ): array => [
         'category' => $category,
         'owner' => $owner,
         'orphan_rule' => 'Disabled. No generic deletion semantics are assumed.',
@@ -136,7 +154,14 @@ function database_maintenance_table_policies(): array
         'cleanup_mode' => 'disabled',
         'physical_optimization' => $optimize,
     ];
-    $derived = static fn (string $category, string $owner, string $orphan, string $retention = 'No age-based cleanup.', string $duplicate = 'Unique constraints define logical identity.', string $mode = 'manual'): array => [
+    $derived = static fn(
+        string $category,
+        string $owner,
+        string $orphan,
+        string $retention = 'No age-based cleanup.',
+        string $duplicate = 'Unique constraints define logical identity.',
+        string $mode = 'manual',
+    ): array => [
         'category' => $category,
         'owner' => $owner,
         'orphan_rule' => $orphan,
@@ -148,8 +173,16 @@ function database_maintenance_table_policies(): array
     ];
 
     return [
-        'galleries' => $protected('gallery/content data', 'Filesystem gallery folder and gallery metadata', 'Valid gallery content is always protected.'),
-        'images' => $protected('gallery/content data', 'Gallery and source image', 'Valid image content is always protected.'),
+        'galleries' => $protected(
+            'gallery/content data',
+            'Filesystem gallery folder and gallery metadata',
+            'Valid gallery content is always protected.',
+        ),
+        'images' => $protected(
+            'gallery/content data',
+            'Gallery and source image',
+            'Valid image content is always protected.',
+        ),
         'duplicate_photo_ledger_pairs' => $protected(
             'administrator workflow state',
             'Per-administrator reviewed duplicate image relationships',
@@ -266,7 +299,11 @@ function database_maintenance_table_policies(): array
             'cache_key is unique; deterministic duplicate survivor is the lowest id.',
             'automatic',
         ),
-        'users' => $protected('authentication and accounts', 'Administrator account', 'Accounts are never removed by database maintenance.'),
+        'users' => $protected(
+            'authentication and accounts',
+            'Administrator account',
+            'Accounts are never removed by database maintenance.',
+        ),
         'admin_remember_tokens' => $derived(
             'authentication and accounts',
             'Administrator persistent login token',
@@ -335,7 +372,11 @@ function database_maintenance_table_policies(): array
             'Maintenance Center persisted job history',
             'Retention is owned only by the Maintenance Center history policy; active checkpoints are never generic-cleanup candidates.',
         ),
-        'telemetry_settings' => $protected('telemetry/analytics', 'Telemetry configuration', 'Never deleted by generic database cleanup.'),
+        'telemetry_settings' => $protected(
+            'telemetry/analytics',
+            'Telemetry configuration',
+            'Never deleted by generic database cleanup.',
+        ),
         'telemetry_sessions' => $protected(
             'telemetry/analytics',
             'Anonymous telemetry session data',
@@ -361,8 +402,16 @@ function database_maintenance_table_policies(): array
             'Database query aggregates',
             'Retention is owned by the separate telemetry maintenance workflow.',
         ),
-        'telemetry_job_runs' => $protected('telemetry/analytics', 'Telemetry maintenance job history', 'Never deleted by generic database cleanup.'),
-        'schema_migrations' => $protected('migration/system tables', 'Current migration audit trail', 'Migration audit rows are immutable.'),
+        'telemetry_job_runs' => $protected(
+            'telemetry/analytics',
+            'Telemetry maintenance job history',
+            'Never deleted by generic database cleanup.',
+        ),
+        'schema_migrations' => $protected(
+            'migration/system tables',
+            'Current migration audit trail',
+            'Migration audit rows are immutable.',
+        ),
         'migrations' => $protected(
             'migration/system tables',
             'Legacy migration audit trail when present',
@@ -397,7 +446,9 @@ function database_maintenance_schema_inventory(): array
 {
     $databaseName = admin_database_usage_current_database_name();
     if ($databaseName === '') {
-        throw new RuntimeException('Current database name could not be detected.');
+        throw new RuntimeException(
+            'Current database name could not be detected.',
+        );
     }
     $rows = database_maintenance_model_schema_inventory_rows($databaseName);
     return database_maintenance_normalize_inventory(
@@ -405,7 +456,7 @@ function database_maintenance_schema_inventory(): array
         (array) ($rows['tables'] ?? []),
         (array) ($rows['columns'] ?? []),
         (array) ($rows['indexes'] ?? []),
-        (array) ($rows['constraints'] ?? [])
+        (array) ($rows['constraints'] ?? []),
     );
 }
 
@@ -416,9 +467,13 @@ function database_maintenance_schema_inventory(): array
  * @param array<int, mixed> $parameters Bound parameters.
  * @return array<int, array<string, mixed>> Rows.
  */
-function database_maintenance_query_schema(string $sql, array $parameters): array
-{
-    throw new \LogicException('Raw information_schema SQL is model-owned. Use database_maintenance_schema_inventory().');
+function database_maintenance_query_schema(
+    string $sql,
+    array $parameters,
+): array {
+    throw new \LogicException(
+        'Raw information_schema SQL is model-owned. Use database_maintenance_schema_inventory().',
+    );
 }
 
 /**
@@ -434,35 +489,80 @@ function database_maintenance_query_schema(string $sql, array $parameters): arra
  * @param array<int, array<string, mixed>> $constraintRows Constraint metadata rows.
  * @return array<string, mixed> Normalized inventory.
  */
-function database_maintenance_normalize_inventory(string $databaseName, array $tableRows, array $columnRows, array $indexRows, array $constraintRows): array
-{
+function database_maintenance_normalize_inventory(
+    string $databaseName,
+    array $tableRows,
+    array $columnRows,
+    array $indexRows,
+    array $constraintRows,
+): array {
     $policies = database_maintenance_table_policies();
     $tables = [];
 
     foreach ($tableRows as $row) {
-        $tableName = trim((string) ($row['TABLE_NAME'] ?? $row['table_name'] ?? ''));
+        $tableName = trim(
+            (string) ($row['TABLE_NAME'] ?? $row['table_name'] ?? ''),
+        );
         if ($tableName === '') {
             continue;
         }
-        $dataBytes = max(0, (int) ($row['DATA_LENGTH'] ?? $row['data_length'] ?? 0));
-        $indexBytes = max(0, (int) ($row['INDEX_LENGTH'] ?? $row['index_length'] ?? 0));
-        $policy = $policies[strtolower($tableName)] ?? database_maintenance_unknown_policy($tableName);
+        $dataBytes = max(
+            0,
+            (int) ($row['DATA_LENGTH'] ?? $row['data_length'] ?? 0),
+        );
+        $indexBytes = max(
+            0,
+            (int) ($row['INDEX_LENGTH'] ?? $row['index_length'] ?? 0),
+        );
+        $policy = $policies[strtolower(
+            $tableName,
+        )] ?? database_maintenance_unknown_policy($tableName);
         $tables[$tableName] = [
             'table_name' => $tableName,
             'category' => (string) $policy['category'],
             'policy' => $policy,
             'engine' => (string) ($row['ENGINE'] ?? $row['engine'] ?? ''),
-            'collation' => (string) ($row['TABLE_COLLATION'] ?? $row['table_collation'] ?? ''),
-            'charset' => database_maintenance_charset_from_collation((string) ($row['TABLE_COLLATION'] ?? $row['table_collation'] ?? '')),
-            'estimated_rows' => max(0, (int) ($row['TABLE_ROWS'] ?? $row['table_rows'] ?? 0)),
+            'collation' => (string) (
+                $row['TABLE_COLLATION']
+                ?? $row['table_collation']
+                ?? ''
+            ),
+            'charset' => database_maintenance_charset_from_collation(
+                (string) (
+                    $row['TABLE_COLLATION']
+                    ?? $row['table_collation']
+                    ?? ''
+                ),
+            ),
+            'estimated_rows' => max(
+                0,
+                (int) ($row['TABLE_ROWS'] ?? $row['table_rows'] ?? 0),
+            ),
             'data_bytes' => $dataBytes,
             'index_bytes' => $indexBytes,
             'total_bytes' => $dataBytes + $indexBytes,
-            'reclaimable_bytes_estimate' => max(0, (int) ($row['DATA_FREE'] ?? $row['data_free'] ?? 0)),
-            'auto_increment' => isset($row['AUTO_INCREMENT']) ? (int) $row['AUTO_INCREMENT'] : null,
-            'created_at' => (string) ($row['CREATE_TIME'] ?? $row['create_time'] ?? ''),
-            'updated_at' => (string) ($row['UPDATE_TIME'] ?? $row['update_time'] ?? ''),
-            'comment' => (string) ($row['TABLE_COMMENT'] ?? $row['table_comment'] ?? ''),
+            'reclaimable_bytes_estimate' => max(
+                0,
+                (int) ($row['DATA_FREE'] ?? $row['data_free'] ?? 0),
+            ),
+            'auto_increment' => isset($row['AUTO_INCREMENT'])
+                ? (int) $row['AUTO_INCREMENT']
+                : null,
+            'created_at' => (string) (
+                $row['CREATE_TIME']
+                ?? $row['create_time']
+                ?? ''
+            ),
+            'updated_at' => (string) (
+                $row['UPDATE_TIME']
+                ?? $row['update_time']
+                ?? ''
+            ),
+            'comment' => (string) (
+                $row['TABLE_COMMENT']
+                ?? $row['table_comment']
+                ?? ''
+            ),
             'columns' => [],
             'primary_key' => [],
             'unique_keys' => [],
@@ -475,30 +575,79 @@ function database_maintenance_normalize_inventory(string $databaseName, array $t
 
     foreach ($columnRows as $row) {
         $tableName = (string) ($row['TABLE_NAME'] ?? $row['table_name'] ?? '');
-        $columnName = (string) ($row['COLUMN_NAME'] ?? $row['column_name'] ?? '');
+        $columnName = (string) (
+            $row['COLUMN_NAME']
+            ?? $row['column_name']
+            ?? ''
+        );
         if (!isset($tables[$tableName]) || $columnName === '') {
             continue;
         }
-        $dataType = strtolower((string) ($row['DATA_TYPE'] ?? $row['data_type'] ?? ''));
+        $dataType = strtolower(
+            (string) ($row['DATA_TYPE'] ?? $row['data_type'] ?? ''),
+        );
         $column = [
             'name' => $columnName,
-            'position' => (int) ($row['ORDINAL_POSITION'] ?? $row['ordinal_position'] ?? 0),
+            'position' => (int) (
+                $row['ORDINAL_POSITION']
+                ?? $row['ordinal_position']
+                ?? 0
+            ),
             'data_type' => $dataType,
-            'column_type' => (string) ($row['COLUMN_TYPE'] ?? $row['column_type'] ?? ''),
-            'nullable' => strtoupper((string) ($row['IS_NULLABLE'] ?? $row['is_nullable'] ?? 'NO')) === 'YES',
-            'default' => $row['COLUMN_DEFAULT'] ?? $row['column_default'] ?? null,
-            'character_set' => (string) ($row['CHARACTER_SET_NAME'] ?? $row['character_set_name'] ?? ''),
-            'collation' => (string) ($row['COLLATION_NAME'] ?? $row['collation_name'] ?? ''),
+            'column_type' => (string) (
+                $row['COLUMN_TYPE']
+                ?? $row['column_type']
+                ?? ''
+            ),
+            'nullable' =>
+                strtoupper(
+                    (string) (
+                        $row['IS_NULLABLE']
+                        ?? $row['is_nullable']
+                        ?? 'NO'
+                    ),
+                ) === 'YES',
+            'default' =>
+                $row['COLUMN_DEFAULT'] ?? $row['column_default'] ?? null,
+            'character_set' => (string) (
+                $row['CHARACTER_SET_NAME']
+                ?? $row['character_set_name']
+                ?? ''
+            ),
+            'collation' => (string) (
+                $row['COLLATION_NAME']
+                ?? $row['collation_name']
+                ?? ''
+            ),
             'key' => (string) ($row['COLUMN_KEY'] ?? $row['column_key'] ?? ''),
             'extra' => (string) ($row['EXTRA'] ?? $row['extra'] ?? ''),
-            'comment' => (string) ($row['COLUMN_COMMENT'] ?? $row['column_comment'] ?? ''),
+            'comment' => (string) (
+                $row['COLUMN_COMMENT']
+                ?? $row['column_comment']
+                ?? ''
+            ),
         ];
         $tables[$tableName]['columns'][$columnName] = $column;
-        if (in_array($dataType, ['tinytext', 'text', 'mediumtext', 'longtext', 'tinyblob', 'blob', 'mediumblob', 'longblob', 'json'], true)) {
+        if (in_array(
+            $dataType,
+            [
+                'tinytext',
+                'text',
+                'mediumtext',
+                'longtext',
+                'tinyblob',
+                'blob',
+                'mediumblob',
+                'longblob',
+                'json',
+            ],
+            true,
+        )) {
             $tables[$tableName]['text_blob_json_columns'][] = $columnName;
         }
         if (in_array($dataType, ['enum', 'set'], true)) {
-            $tables[$tableName]['enum_set_columns'][$columnName] = $column['column_type'];
+            $tables[$tableName]['enum_set_columns'][$columnName] =
+                $column['column_type'];
         }
     }
 
@@ -510,13 +659,30 @@ function database_maintenance_normalize_inventory(string $databaseName, array $t
             continue;
         }
         $indexes[$tableName][$indexName]['name'] = $indexName;
-        $indexes[$tableName][$indexName]['unique'] = (int) ($row['NON_UNIQUE'] ?? $row['non_unique'] ?? 1) === 0;
-        $indexes[$tableName][$indexName]['type'] = (string) ($row['INDEX_TYPE'] ?? $row['index_type'] ?? '');
+        $indexes[$tableName][$indexName]['unique'] =
+            (int) ($row['NON_UNIQUE'] ?? $row['non_unique'] ?? 1) === 0;
+        $indexes[$tableName][$indexName]['type'] = (string) (
+            $row['INDEX_TYPE']
+            ?? $row['index_type']
+            ?? ''
+        );
         $indexes[$tableName][$indexName]['columns'][] = [
-            'name' => (string) ($row['COLUMN_NAME'] ?? $row['column_name'] ?? ''),
-            'position' => (int) ($row['SEQ_IN_INDEX'] ?? $row['seq_in_index'] ?? 0),
-            'prefix_length' => isset($row['SUB_PART']) ? (int) $row['SUB_PART'] : null,
-            'cardinality' => isset($row['CARDINALITY']) ? (int) $row['CARDINALITY'] : null,
+            'name' => (string) (
+                $row['COLUMN_NAME']
+                ?? $row['column_name']
+                ?? ''
+            ),
+            'position' => (int) (
+                $row['SEQ_IN_INDEX']
+                ?? $row['seq_in_index']
+                ?? 0
+            ),
+            'prefix_length' => isset($row['SUB_PART'])
+                ? (int) $row['SUB_PART']
+                : null,
+            'cardinality' => isset($row['CARDINALITY'])
+                ? (int) $row['CARDINALITY']
+                : null,
         ];
     }
     foreach ($indexes as $tableName => $tableIndexes) {
@@ -533,19 +699,47 @@ function database_maintenance_normalize_inventory(string $databaseName, array $t
 
     foreach ($constraintRows as $row) {
         $tableName = (string) ($row['TABLE_NAME'] ?? $row['table_name'] ?? '');
-        $constraintName = (string) ($row['CONSTRAINT_NAME'] ?? $row['constraint_name'] ?? '');
-        $referencedTable = (string) ($row['REFERENCED_TABLE_NAME'] ?? $row['referenced_table_name'] ?? '');
-        if (!isset($tables[$tableName]) || $constraintName === '' || $referencedTable === '') {
+        $constraintName = (string) (
+            $row['CONSTRAINT_NAME']
+            ?? $row['constraint_name']
+            ?? ''
+        );
+        $referencedTable = (string) (
+            $row['REFERENCED_TABLE_NAME']
+            ?? $row['referenced_table_name']
+            ?? ''
+        );
+        if (
+            !isset($tables[$tableName])
+            || $constraintName === ''
+            || $referencedTable === ''
+        ) {
             continue;
         }
-        $tables[$tableName]['foreign_keys'][$constraintName]['name'] = $constraintName;
-        $tables[$tableName]['foreign_keys'][$constraintName]['referenced_table'] = $referencedTable;
-        $tables[$tableName]['foreign_keys'][$constraintName]['update_rule'] = (string) ($row['UPDATE_RULE'] ?? $row['update_rule'] ?? '');
-        $tables[$tableName]['foreign_keys'][$constraintName]['delete_rule'] = (string) ($row['DELETE_RULE'] ?? $row['delete_rule'] ?? '');
+        $tables[$tableName]['foreign_keys'][$constraintName]['name'] =
+            $constraintName;
+        $tables[$tableName]['foreign_keys'][$constraintName]['referenced_table'] =
+            $referencedTable;
+        $tables[$tableName]['foreign_keys'][$constraintName]['update_rule'] =
+            (string) ($row['UPDATE_RULE'] ?? $row['update_rule'] ?? '');
+        $tables[$tableName]['foreign_keys'][$constraintName]['delete_rule'] =
+            (string) ($row['DELETE_RULE'] ?? $row['delete_rule'] ?? '');
         $tables[$tableName]['foreign_keys'][$constraintName]['columns'][] = [
-            'column' => (string) ($row['COLUMN_NAME'] ?? $row['column_name'] ?? ''),
-            'referenced_column' => (string) ($row['REFERENCED_COLUMN_NAME'] ?? $row['referenced_column_name'] ?? ''),
-            'position' => (int) ($row['ORDINAL_POSITION'] ?? $row['ordinal_position'] ?? 0),
+            'column' => (string) (
+                $row['COLUMN_NAME']
+                ?? $row['column_name']
+                ?? ''
+            ),
+            'referenced_column' => (string) (
+                $row['REFERENCED_COLUMN_NAME']
+                ?? $row['referenced_column_name']
+                ?? ''
+            ),
+            'position' => (int) (
+                $row['ORDINAL_POSITION']
+                ?? $row['ordinal_position']
+                ?? 0
+            ),
         ];
     }
 
@@ -573,9 +767,13 @@ function database_maintenance_charset_from_collation(string $collation): string
  * @param array<string, mixed> $inventory Inventory.
  * @param string $tableName Table name.
  * @param array<int, string> $columns Required columns.
+ * @return bool Whether the named table and all requested columns are present.
  */
-function database_maintenance_inventory_has(array $inventory, string $tableName, array $columns = []): bool
-{
+function database_maintenance_inventory_has(
+    array $inventory,
+    string $tableName,
+    array $columns = [],
+): bool {
     $table = $inventory['tables'][$tableName] ?? null;
     if (!is_array($table)) {
         return false;
@@ -595,19 +793,30 @@ function database_maintenance_inventory_has(array $inventory, string $tableName,
  */
 function database_maintenance_migration_audit(): array
 {
-    $migrationDirectory = database_maintenance_project_root() . '/database/migrations';
+    $migrationDirectory =
+        database_maintenance_project_root() . '/database/migrations';
     $files = discover_migration_files($migrationDirectory);
     $tables = [];
     $versions = [];
 
-    $touchTable = static function (array &$audit, string $tableName, string $version): string {
+    $touchTable = static function (
+        array &$audit,
+        string $tableName,
+        string $version,
+    ): string {
         $tableName = strtolower(trim($tableName));
         if ($tableName !== '') {
             $audit[$tableName]['versions'][] = $version;
         }
         return $tableName;
     };
-    $appendObject = static function (array &$audit, string $tableName, string $section, string $objectName, string $version) use ($touchTable): void {
+    $appendObject = static function (
+        array &$audit,
+        string $tableName,
+        string $section,
+        string $objectName,
+        string $version,
+    ) use ($touchTable): void {
         $tableName = $touchTable($audit, $tableName, $version);
         $objectName = trim($objectName);
         if ($tableName !== '' && $objectName !== '') {
@@ -617,16 +826,27 @@ function database_maintenance_migration_audit(): array
 
     foreach ($files as $file) {
         $version = basename($file, '.php');
-        $source = (string) storage_observer_call('fs.read.inspection_migration',
-            static fn(): string|false => file_get_contents($file));
+        $source =
+            (string) storage_observer_call('fs.read.inspection_migration', static fn(): string|false => file_get_contents(
+                $file,
+            ));
         $versions[] = $version;
 
-        preg_match_all('/\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|ALTER\s+TABLE\s+|REFERENCES\s+)`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $source, $tableMatches);
+        preg_match_all(
+            '/\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|ALTER\s+TABLE\s+|REFERENCES\s+)`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+            $source,
+            $tableMatches,
+        );
         foreach (array_unique($tableMatches[1] ?? []) as $tableName) {
             $touchTable($tables, (string) $tableName, $version);
         }
 
-        preg_match_all('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([\s\S]*?)\)\s*ENGINE\s*=/i', $source, $createMatches, PREG_SET_ORDER);
+        preg_match_all(
+            '/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([\s\S]*?)\)\s*ENGINE\s*=/i',
+            $source,
+            $createMatches,
+            PREG_SET_ORDER,
+        );
         foreach ($createMatches as $match) {
             $tableName = $touchTable($tables, (string) $match[1], $version);
             $body = (string) $match[2];
@@ -635,82 +855,274 @@ function database_maintenance_migration_audit(): array
                 if ($line === '') {
                     continue;
                 }
-                if (preg_match('/^`?([A-Za-z_][A-Za-z0-9_]*)`?\s+/', $line, $columnMatch) === 1) {
+                if (
+                    preg_match(
+                        '/^`?([A-Za-z_][A-Za-z0-9_]*)`?\s+/',
+                        $line,
+                        $columnMatch,
+                    ) === 1
+                ) {
                     $candidate = strtoupper((string) $columnMatch[1]);
-                    if (!in_array($candidate, ['PRIMARY', 'UNIQUE', 'KEY', 'INDEX', 'CONSTRAINT', 'FOREIGN', 'CHECK'], true)) {
-                        $appendObject($tables, $tableName, 'added_columns', (string) $columnMatch[1], $version);
+                    if (!in_array(
+                        $candidate,
+                        [
+                            'PRIMARY',
+                            'UNIQUE',
+                            'KEY',
+                            'INDEX',
+                            'CONSTRAINT',
+                            'FOREIGN',
+                            'CHECK',
+                        ],
+                        true,
+                    )) {
+                        $appendObject(
+                            $tables,
+                            $tableName,
+                            'added_columns',
+                            (string) $columnMatch[1],
+                            $version,
+                        );
                     }
                 }
                 if (preg_match('/^PRIMARY\s+KEY\b/i', $line) === 1) {
-                    $appendObject($tables, $tableName, 'added_indexes', 'PRIMARY', $version);
+                    $appendObject(
+                        $tables,
+                        $tableName,
+                        'added_indexes',
+                        'PRIMARY',
+                        $version,
+                    );
                 }
-                if (preg_match('/^(?:UNIQUE\s+)?(?:KEY|INDEX)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $line, $indexMatch) === 1) {
-                    $appendObject($tables, $tableName, 'added_indexes', (string) $indexMatch[1], $version);
+                if (
+                    preg_match(
+                        '/^(?:UNIQUE\s+)?(?:KEY|INDEX)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+                        $line,
+                        $indexMatch,
+                    ) === 1
+                ) {
+                    $appendObject(
+                        $tables,
+                        $tableName,
+                        'added_indexes',
+                        (string) $indexMatch[1],
+                        $version,
+                    );
                 }
-                if (preg_match('/^CONSTRAINT\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+FOREIGN\s+KEY\b/i', $line, $foreignMatch) === 1) {
-                    $appendObject($tables, $tableName, 'added_foreign_keys', (string) $foreignMatch[1], $version);
+                if (
+                    preg_match(
+                        '/^CONSTRAINT\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+FOREIGN\s+KEY\b/i',
+                        $line,
+                        $foreignMatch,
+                    ) === 1
+                ) {
+                    $appendObject(
+                        $tables,
+                        $tableName,
+                        'added_foreign_keys',
+                        (string) $foreignMatch[1],
+                        $version,
+                    );
                 }
             }
         }
 
         $alterMatches = [];
-        preg_match_all('/"ALTER\s+TABLE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?([\s\S]*?)"\s*[,;)]/i', $source, $doubleQuotedAlters, PREG_SET_ORDER);
-        preg_match_all("/'ALTER\\s+TABLE\\s+`?([A-Za-z_][A-Za-z0-9_]*)`?([\\s\\S]*?)'\\s*[,;)]/i", $source, $singleQuotedAlters, PREG_SET_ORDER);
+        preg_match_all(
+            '/"ALTER\s+TABLE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?([\s\S]*?)"\s*[,;)]/i',
+            $source,
+            $doubleQuotedAlters,
+            PREG_SET_ORDER,
+        );
+        preg_match_all(
+            "/'ALTER\\s+TABLE\\s+`?([A-Za-z_][A-Za-z0-9_]*)`?([\\s\\S]*?)'\\s*[,;)]/i",
+            $source,
+            $singleQuotedAlters,
+            PREG_SET_ORDER,
+        );
         $alterMatches = array_merge($doubleQuotedAlters, $singleQuotedAlters);
         foreach ($alterMatches as $match) {
             $tableName = $touchTable($tables, (string) $match[1], $version);
             $body = (string) $match[2];
-            preg_match_all('/\bADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $body, $addedColumns);
+            preg_match_all(
+                '/\bADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+                $body,
+                $addedColumns,
+            );
             foreach ($addedColumns[1] ?? [] as $columnName) {
-                if (!in_array(strtoupper((string) $columnName), ['PRIMARY', 'UNIQUE', 'KEY', 'INDEX', 'CONSTRAINT', 'FOREIGN', 'CHECK'], true)) {
-                    $appendObject($tables, $tableName, 'added_columns', (string) $columnName, $version);
+                if (!in_array(
+                    strtoupper((string) $columnName),
+                    [
+                        'PRIMARY',
+                        'UNIQUE',
+                        'KEY',
+                        'INDEX',
+                        'CONSTRAINT',
+                        'FOREIGN',
+                        'CHECK',
+                    ],
+                    true,
+                )) {
+                    $appendObject(
+                        $tables,
+                        $tableName,
+                        'added_columns',
+                        (string) $columnName,
+                        $version,
+                    );
                 }
             }
-            preg_match_all('/\bDROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $body, $droppedColumns);
+            preg_match_all(
+                '/\bDROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+                $body,
+                $droppedColumns,
+            );
             foreach ($droppedColumns[1] ?? [] as $columnName) {
-                $appendObject($tables, $tableName, 'dropped_columns', (string) $columnName, $version);
+                $appendObject(
+                    $tables,
+                    $tableName,
+                    'dropped_columns',
+                    (string) $columnName,
+                    $version,
+                );
             }
-            preg_match_all('/\b(?:CHANGE\s+COLUMN\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+`?([A-Za-z_][A-Za-z0-9_]*)`?|RENAME\s+COLUMN\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+TO\s+`?([A-Za-z_][A-Za-z0-9_]*)`?)/i', $body, $renamedColumns, PREG_SET_ORDER);
+            preg_match_all(
+                '/\b(?:CHANGE\s+COLUMN\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+`?([A-Za-z_][A-Za-z0-9_]*)`?|RENAME\s+COLUMN\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+TO\s+`?([A-Za-z_][A-Za-z0-9_]*)`?)/i',
+                $body,
+                $renamedColumns,
+                PREG_SET_ORDER,
+            );
             foreach ($renamedColumns as $renameMatch) {
-                $from = (string) ($renameMatch[1] !== '' ? $renameMatch[1] : $renameMatch[3]);
-                $to = (string) ($renameMatch[2] !== '' ? $renameMatch[2] : $renameMatch[4]);
+                $from = (string) (
+                    $renameMatch[1] !== '' ? $renameMatch[1] : $renameMatch[3]
+                );
+                $to = (string) (
+                    $renameMatch[2] !== '' ? $renameMatch[2] : $renameMatch[4]
+                );
                 if ($from !== '' && $to !== '') {
-                    $tables[$tableName]['renamed_columns'][$from][$to][] = $version;
+                    $tables[$tableName]['renamed_columns'][$from][$to][] =
+                        $version;
                 }
             }
-            preg_match_all('/\bADD\s+(?:UNIQUE\s+)?(?:KEY|INDEX)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $body, $addedIndexes);
+            preg_match_all(
+                '/\bADD\s+(?:UNIQUE\s+)?(?:KEY|INDEX)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+                $body,
+                $addedIndexes,
+            );
             foreach ($addedIndexes[1] ?? [] as $indexName) {
-                $appendObject($tables, $tableName, 'added_indexes', (string) $indexName, $version);
+                $appendObject(
+                    $tables,
+                    $tableName,
+                    'added_indexes',
+                    (string) $indexName,
+                    $version,
+                );
             }
-            preg_match_all('/\bDROP\s+(?:KEY|INDEX)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $body, $droppedIndexes);
+            preg_match_all(
+                '/\bDROP\s+(?:KEY|INDEX)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+                $body,
+                $droppedIndexes,
+            );
             foreach ($droppedIndexes[1] ?? [] as $indexName) {
-                $appendObject($tables, $tableName, 'dropped_indexes', (string) $indexName, $version);
+                $appendObject(
+                    $tables,
+                    $tableName,
+                    'dropped_indexes',
+                    (string) $indexName,
+                    $version,
+                );
             }
-            preg_match_all('/\bADD\s+CONSTRAINT\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+FOREIGN\s+KEY\b/i', $body, $addedForeignKeys);
+            preg_match_all(
+                '/\bADD\s+CONSTRAINT\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+FOREIGN\s+KEY\b/i',
+                $body,
+                $addedForeignKeys,
+            );
             foreach ($addedForeignKeys[1] ?? [] as $constraintName) {
-                $appendObject($tables, $tableName, 'added_foreign_keys', (string) $constraintName, $version);
+                $appendObject(
+                    $tables,
+                    $tableName,
+                    'added_foreign_keys',
+                    (string) $constraintName,
+                    $version,
+                );
             }
-            preg_match_all('/\bDROP\s+FOREIGN\s+KEY\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $body, $droppedForeignKeys);
+            preg_match_all(
+                '/\bDROP\s+FOREIGN\s+KEY\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+                $body,
+                $droppedForeignKeys,
+            );
             foreach ($droppedForeignKeys[1] ?? [] as $constraintName) {
-                $appendObject($tables, $tableName, 'dropped_foreign_keys', (string) $constraintName, $version);
+                $appendObject(
+                    $tables,
+                    $tableName,
+                    'dropped_foreign_keys',
+                    (string) $constraintName,
+                    $version,
+                );
             }
         }
 
-        preg_match_all('/CREATE\s+(?:UNIQUE\s+)?INDEX\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $source, $createIndexMatches, PREG_SET_ORDER);
+        preg_match_all(
+            '/CREATE\s+(?:UNIQUE\s+)?INDEX\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i',
+            $source,
+            $createIndexMatches,
+            PREG_SET_ORDER,
+        );
         foreach ($createIndexMatches as $match) {
-            $appendObject($tables, (string) $match[2], 'added_indexes', (string) $match[1], $version);
+            $appendObject(
+                $tables,
+                (string) $match[2],
+                'added_indexes',
+                (string) $match[1],
+                $version,
+            );
         }
 
-        if (str_contains($source, 'database_maintenance_schema_repair_migration_definition')) {
-            foreach (['images', 'image_thumbnail_variants', 'database_maintenance_audit_log'] as $repairTable) {
+        if (str_contains(
+            $source,
+            'database_maintenance_schema_repair_migration_definition',
+        )) {
+            foreach ([
+                'images',
+                'image_thumbnail_variants',
+                'database_maintenance_audit_log',
+            ] as $repairTable) {
                 $repairTable = $touchTable($tables, $repairTable, $version);
-                $tables[$repairTable]['repair_callbacks']['run_database_maintenance_schema_repair'][] = $version;
+                $tables[$repairTable]['repair_callbacks']['run_database_maintenance_schema_repair'][] =
+                    $version;
             }
-            foreach (['id', 'operation_id', 'rule_key', 'table_name', 'category', 'reason', 'identifier_columns_json', 'removed_identifiers_json', 'deleted_count', 'created_at'] as $auditColumn) {
-                $appendObject($tables, 'database_maintenance_audit_log', 'added_columns', $auditColumn, $version);
+            foreach ([
+                'id',
+                'operation_id',
+                'rule_key',
+                'table_name',
+                'category',
+                'reason',
+                'identifier_columns_json',
+                'removed_identifiers_json',
+                'deleted_count',
+                'created_at',
+            ] as $auditColumn) {
+                $appendObject(
+                    $tables,
+                    'database_maintenance_audit_log',
+                    'added_columns',
+                    $auditColumn,
+                    $version,
+                );
             }
-            foreach (['PRIMARY', 'database_maintenance_audit_operation_index', 'database_maintenance_audit_table_created_index'] as $auditIndex) {
-                $appendObject($tables, 'database_maintenance_audit_log', 'added_indexes', $auditIndex, $version);
+            foreach ([
+                'PRIMARY',
+                'database_maintenance_audit_operation_index',
+                'database_maintenance_audit_table_created_index',
+            ] as $auditIndex) {
+                $appendObject(
+                    $tables,
+                    'database_maintenance_audit_log',
+                    'added_indexes',
+                    $auditIndex,
+                    $version,
+                );
             }
         }
     }
@@ -777,7 +1189,13 @@ function database_maintenance_sql_literals(string $source): array
             continue;
         }
         if ($type === T_END_HEREDOC) {
-            if ($insideHeredoc && preg_match('/\b(?:SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ANALYZE|OPTIMIZE)\b/i', $heredoc) === 1) {
+            if (
+                $insideHeredoc
+                && preg_match(
+                    '/\b(?:SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ANALYZE|OPTIMIZE)\b/i',
+                    $heredoc,
+                ) === 1
+            ) {
                 $literals[] = $heredoc;
             }
             $heredoc = '';
@@ -800,7 +1218,12 @@ function database_maintenance_sql_literals(string $source): array
         } else {
             $literal = stripcslashes($literal);
         }
-        if (preg_match('/\b(?:SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ANALYZE|OPTIMIZE)\b/i', $literal) === 1) {
+        if (
+            preg_match(
+                '/\b(?:SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|ANALYZE|OPTIMIZE)\b/i',
+                $literal,
+            ) === 1
+        ) {
             $literals[] = $literal;
         }
     }
@@ -823,13 +1246,17 @@ function database_maintenance_sql_literals(string $source): array
  *     the default empty history uses only current column identities.
  * @return MaintenanceCodeAudit Scoped lexical and same-literal SQL evidence.
  */
-function database_maintenance_code_audit(array $inventory, array $migrationAudit = []): array
-{
+function database_maintenance_code_audit(
+    array $inventory,
+    array $migrationAudit = [],
+): array {
     $root = database_maintenance_project_root();
     $scanRoots = ['app', 'public', 'scripts', 'tests'];
     $scanExtensions = ['php', 'inc', 'phtml', 'sql'];
     $files = storage_observer_call('inspection.code.discovery', static function () use (
-        $root, $scanRoots, $scanExtensions
+        $root,
+        $scanRoots,
+        $scanExtensions,
     ): array {
         $files = [];
         foreach ($scanRoots as $relativeRoot) {
@@ -837,9 +1264,21 @@ function database_maintenance_code_audit(array $inventory, array $migrationAudit
             if (!is_dir($directory)) {
                 continue;
             }
-            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS));
+            $iterator =
+                new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(
+                    $directory,
+                    \FilesystemIterator::SKIP_DOTS,
+                ));
             foreach ($iterator as $file) {
-                if ($file->isFile() && in_array(strtolower($file->getExtension()), $scanExtensions, true) && $file->getPathname() !== __FILE__) {
+                if (
+                    $file->isFile()
+                    && in_array(
+                        strtolower($file->getExtension()),
+                        $scanExtensions,
+                        true,
+                    )
+                    && $file->getPathname() !== __FILE__
+                ) {
                     $files[] = $file->getPathname();
                 }
             }
@@ -857,35 +1296,65 @@ function database_maintenance_code_audit(array $inventory, array $migrationAudit
     // Table/column vocabulary is constant across the source corpus.
     $tableColumns = [];
     foreach ((array) ($inventory['tables'] ?? []) as $tableName => $table) {
-        $migrationTable = (array) ($migrationAudit['tables'][strtolower((string) $tableName)] ?? []);
+        $migrationTable = (array) (
+            $migrationAudit['tables'][strtolower((string) $tableName)] ?? []
+        );
         $tableColumns[$tableName] = array_values(array_unique(array_merge(
             array_keys((array) ($table['columns'] ?? [])),
             array_keys((array) ($migrationTable['added_columns'] ?? [])),
             array_keys((array) ($migrationTable['dropped_columns'] ?? [])),
-            array_keys((array) ($migrationTable['renamed_columns'] ?? []))
+            array_keys((array) ($migrationTable['renamed_columns'] ?? [])),
         )));
     }
     $references = [];
     foreach ($files as $file) {
-        $source = (string) storage_observer_call('fs.read.inspection_source',
-            static fn(): string|false => file_get_contents($file));
+        $source =
+            (string) storage_observer_call('fs.read.inspection_source', static fn(): string|false => file_get_contents(
+                $file,
+            ));
         $relative = str_replace('\\', '/', substr($file, strlen($root) + 1));
-        database_maintenance_accumulate_source($references, $tableColumns, $source, $relative);
+        database_maintenance_accumulate_source(
+            $references,
+            $tableColumns,
+            $source,
+            $relative,
+        );
     }
 
     foreach ($references as &$reference) {
-        foreach (['files', 'production_files', 'test_files', 'sql_files', 'production_sql_files', 'test_sql_files'] as $listKey) {
-            $reference[$listKey] = array_values(array_unique((array) ($reference[$listKey] ?? [])));
+        foreach ([
+            'files',
+            'production_files',
+            'test_files',
+            'sql_files',
+            'production_sql_files',
+            'test_sql_files',
+        ] as $listKey) {
+            $reference[$listKey] = array_values(array_unique(
+                (array) ($reference[$listKey] ?? []),
+            ));
         }
-        foreach ((array) ($reference['columns'] ?? []) as $columnName => $columnFiles) {
-            $reference['columns'][$columnName] = array_values(array_unique($columnFiles));
+        foreach ((array) (
+            $reference['columns'] ?? []
+        ) as $columnName => $columnFiles) {
+            $reference['columns'][$columnName] = array_values(array_unique(
+                $columnFiles,
+            ));
         }
-        foreach ((array) ($reference['column_table_context_files'] ?? []) as $columnName => $columnFiles) {
-            $reference['column_table_context_files'][$columnName] = array_values(array_unique($columnFiles));
+        foreach ((array) (
+            $reference['column_table_context_files'] ?? []
+        ) as $columnName => $columnFiles) {
+            $reference['column_table_context_files'][$columnName] = array_values(array_unique(
+                $columnFiles,
+            ));
         }
-        foreach ((array) ($reference['column_sql_references'] ?? []) as $columnName => $details) {
+        foreach ((array) (
+            $reference['column_sql_references'] ?? []
+        ) as $columnName => $details) {
             foreach (['files', 'production_files', 'test_files'] as $listKey) {
-                $reference['column_sql_references'][$columnName][$listKey] = array_values(array_unique((array) ($details[$listKey] ?? [])));
+                $reference['column_sql_references'][$columnName][$listKey] = array_values(array_unique(
+                    (array) ($details[$listKey] ?? []),
+                ));
             }
         }
     }
@@ -914,29 +1383,40 @@ function database_maintenance_accumulate_source(
     array &$references,
     array $tableColumns,
     string $source,
-    string $relative
+    string $relative,
 ): void {
     $scope = str_starts_with($relative, 'tests/') ? 'test' : 'production';
     $sqlLiterals = strtolower(pathinfo($relative, PATHINFO_EXTENSION)) === 'sql'
         ? [$source]
-        : storage_observer_call('inspection.code.sql_literals',
-            static fn(): array => database_maintenance_sql_literals($source));
-    storage_observer_add('counts.inspection.sql_literals', count($sqlLiterals));
-    $sourceWords = storage_observer_call('inspection.code.index_words',
-        static fn(): array => database_maintenance_identifier_words($source));
-    $sqlWords = storage_observer_call('inspection.code.index_sql_words',
-        static fn(): array => array_map(
-            static fn(string $literal): array => database_maintenance_identifier_words($literal),
-            $sqlLiterals
+        : storage_observer_call('inspection.code.sql_literals', static fn(): array => database_maintenance_sql_literals(
+            $source,
         ));
+    storage_observer_add('counts.inspection.sql_literals', count($sqlLiterals));
+    $sourceWords = storage_observer_call('inspection.code.index_words', static fn(): array => database_maintenance_identifier_words(
+        $source,
+    ));
+    $sqlWords = storage_observer_call('inspection.code.index_sql_words', static fn(): array => array_map(
+        static fn(string $literal): array => database_maintenance_identifier_words(
+            $literal,
+        ),
+        $sqlLiterals,
+    ));
 
     storage_observer_call('inspection.code.references', static function () use (
-        &$references, $tableColumns, $source, $sqlLiterals,
-        $relative, $scope, $sourceWords, $sqlWords
+        &$references,
+        $tableColumns,
+        $source,
+        $sqlLiterals,
+        $relative,
+        $scope,
+        $sourceWords,
+        $sqlWords,
     ): void {
         foreach ($tableColumns as $tableName => $columnNames) {
             $tableMentioned = database_maintenance_has_identifier(
-                (string) $tableName, $sourceWords, $source
+                (string) $tableName,
+                $sourceWords,
+                $source,
             );
             if ($tableMentioned) {
                 $references[$tableName]['files'][] = $relative;
@@ -945,8 +1425,11 @@ function database_maintenance_accumulate_source(
 
             $tableSqlPositions = [];
             foreach ($sqlLiterals as $position => $literal) {
-                if (database_maintenance_has_identifier((string) $tableName,
-                    $sqlWords[$position], $literal)) {
+                if (database_maintenance_has_identifier(
+                    (string) $tableName,
+                    $sqlWords[$position],
+                    $literal,
+                )) {
                     $tableSqlPositions[] = $position;
                 }
             }
@@ -956,25 +1439,42 @@ function database_maintenance_accumulate_source(
             }
 
             foreach ($columnNames as $columnName) {
-                if (database_maintenance_has_identifier((string) $columnName, $sourceWords, $source)) {
-                    $references[$tableName]['columns'][$columnName][] = $relative;
+                if (database_maintenance_has_identifier(
+                    (string) $columnName,
+                    $sourceWords,
+                    $source,
+                )) {
+                    $references[$tableName]['columns'][$columnName][] =
+                        $relative;
                     if ($tableMentioned) {
-                        $references[$tableName]['column_table_context_files'][$columnName][] = $relative;
+                        $references[$tableName]['column_table_context_files'][$columnName][] =
+                            $relative;
                     }
                 }
                 foreach ($tableSqlPositions as $position) {
-                    if (!database_maintenance_has_identifier((string) $columnName,
-                        $sqlWords[$position], $sqlLiterals[$position])) {
+                    if (!database_maintenance_has_identifier(
+                        (string) $columnName,
+                        $sqlWords[$position],
+                        $sqlLiterals[$position],
+                    )) {
                         continue;
                     }
-                    $references[$tableName]['column_sql_references'][$columnName]['files'][] = $relative;
-                    $references[$tableName]['column_sql_references'][$columnName][$scope . '_files'][] = $relative;
+                    $references[$tableName]['column_sql_references'][$columnName]['files'][] =
+                        $relative;
+                    $references[$tableName]['column_sql_references'][$columnName][$scope
+                        . '_files'][] = $relative;
                     break;
                 }
             }
-            storage_observer_add('counts.inspection.column_checks', count($columnNames));
+            storage_observer_add(
+                'counts.inspection.column_checks',
+                count($columnNames),
+            );
         }
-        storage_observer_add('counts.inspection.table_checks', count($tableColumns));
+        storage_observer_add(
+            'counts.inspection.table_checks',
+            count($tableColumns),
+        );
     });
 }
 
@@ -999,14 +1499,16 @@ function database_maintenance_identifier_words(string $source): array
 function database_maintenance_has_identifier(
     string $identifier,
     array $words,
-    string $source
+    string $source,
 ): bool {
     if (preg_match('/^[A-Za-z0-9_]+$/D', $identifier) === 1) {
         return isset($words[strtolower($identifier)]);
     }
     // Permanent compatibility for non-ASCII/punctuation identifiers: their
     // legacy regex semantics cannot be represented by the ASCII word index.
-    return preg_match('/\b' . preg_quote($identifier, '/') . '\b/i', $source) === 1;
+    return (
+        preg_match('/\b' . preg_quote($identifier, '/') . '\b/i', $source) === 1
+    );
 }
 
 /**
@@ -1016,23 +1518,48 @@ function database_maintenance_has_identifier(
  * @param array<string, mixed> $codeAudit Code audit.
  * @return array<int, array<string, mixed>> Findings.
  */
-function database_maintenance_legacy_schema_findings(array $inventory, array $codeAudit): array
-{
+function database_maintenance_legacy_schema_findings(
+    array $inventory,
+    array $codeAudit,
+): array {
     $findings = [];
     $legacyThumbnailColumns = [
-        'gallery_id', 'thumbnail_rel_path', 'source_width', 'source_height',
-        'source_mime_type', 'source_file_size', 'source_modified_at',
-        'source_checksum_sha256', 'source_exif_orientation', 'source_exif_json',
+        'gallery_id',
+        'thumbnail_rel_path',
+        'source_width',
+        'source_height',
+        'source_mime_type',
+        'source_file_size',
+        'source_modified_at',
+        'source_checksum_sha256',
+        'source_exif_orientation',
+        'source_exif_json',
     ];
     foreach ($legacyThumbnailColumns as $columnName) {
-        if (!database_maintenance_inventory_has($inventory, 'image_thumbnail_variants', [$columnName])) {
+        if (!database_maintenance_inventory_has(
+            $inventory,
+            'image_thumbnail_variants',
+            [$columnName],
+        )) {
             continue;
         }
-        $files = (array) ($codeAudit['references']['image_thumbnail_variants']['columns'][$columnName] ?? []);
-        $sqlReference = (array) ($codeAudit['references']['image_thumbnail_variants']['column_sql_references'][$columnName] ?? []);
+        $files = (array) (
+            $codeAudit['references']['image_thumbnail_variants']['columns'][$columnName]
+            ?? []
+        );
+        $sqlReference = (array) (
+            $codeAudit['references']['image_thumbnail_variants']['column_sql_references'][$columnName]
+            ?? []
+        );
         $productionSqlFiles = (array) ($sqlReference['production_files'] ?? []);
         if ($sqlReference === [] && !isset($codeAudit['reference_model'])) {
-            $productionSqlFiles = array_values(array_filter($files, static fn (string $file): bool => !str_starts_with($file, 'tests/')));
+            $productionSqlFiles = array_values(array_filter(
+                $files,
+                static fn(string $file): bool => !str_starts_with(
+                    $file,
+                    'tests/',
+                ),
+            ));
         }
         $knownCompatibilityFiles = [
             'app/services/thumbnail_metadata.php',
@@ -1040,19 +1567,31 @@ function database_maintenance_legacy_schema_findings(array $inventory, array $co
             'app/services/site_maintenance.php',
             'app/migration_repairs.php',
         ];
-        $compatibilityFiles = array_values(array_filter($files, static fn (string $file): bool => in_array($file, $knownCompatibilityFiles, true)));
-        $nonCompatibilitySqlFiles = array_values(array_diff($productionSqlFiles, $knownCompatibilityFiles));
+        $compatibilityFiles = array_values(array_filter($files, static fn(string $file): bool => in_array(
+            $file,
+            $knownCompatibilityFiles,
+            true,
+        )));
+        $nonCompatibilitySqlFiles = array_values(array_diff(
+            $productionSqlFiles,
+            $knownCompatibilityFiles,
+        ));
         $findings[] = [
             'object_type' => 'column',
             'table_name' => 'image_thumbnail_variants',
             'object_name' => $columnName,
-            'status' => $nonCompatibilitySqlFiles === [] ? 'obsolete_compatibility_only' : 'review',
-            'confidence' => $nonCompatibilitySqlFiles === [] ? 'high' : 'medium',
+            'status' => $nonCompatibilitySqlFiles === []
+                ? 'obsolete_compatibility_only'
+                : 'review',
+            'confidence' => $nonCompatibilitySqlFiles === []
+                ? 'high'
+                : 'medium',
             'reason' => 'The 202606130001 compaction migration moved source metadata to images and attempted to drop this duplicated derivative payload column. Production SQL references were checked separately from broad word matches; remaining known uses are compatibility gates or the conditional data-copy repair.',
             'code_reference_files' => $files,
             'production_sql_reference_files' => $productionSqlFiles,
             'compatibility_reference_files' => $compatibilityFiles,
-            'non_compatibility_sql_reference_files' => $nonCompatibilitySqlFiles,
+            'non_compatibility_sql_reference_files' =>
+                $nonCompatibilitySqlFiles,
             'repair_version' => DATABASE_MAINTENANCE_REPAIR_VERSION,
         ];
     }
@@ -1073,7 +1612,9 @@ function database_maintenance_legacy_schema_findings(array $inventory, array $co
             'repair_version' => DATABASE_MAINTENANCE_REPAIR_VERSION,
         ];
     }
-    foreach (['image_thumbnail_variants_gallery_id_foreign'] as $foreignKeyName) {
+    foreach ([
+        'image_thumbnail_variants_gallery_id_foreign',
+    ] as $foreignKeyName) {
         if (!isset($table['foreign_keys'][$foreignKeyName])) {
             continue;
         }
@@ -1099,10 +1640,13 @@ function database_maintenance_legacy_schema_findings(array $inventory, array $co
  * identity, the table is report-only and receives no automatic cleanup rule.
  *
  * @param array<string, mixed> $inventory Current schema inventory.
+ * @param string $tableName Table whose stable row identity is required.
  * @return array<int, string> Identity column names.
  */
-function database_maintenance_table_identity_columns(array $inventory, string $tableName): array
-{
+function database_maintenance_table_identity_columns(
+    array $inventory,
+    string $tableName,
+): array {
     $table = (array) ($inventory['tables'][$tableName] ?? []);
     $columns = [];
     foreach ((array) ($table['primary_key'] ?? []) as $column) {
@@ -1129,65 +1673,304 @@ function database_maintenance_table_identity_columns(array $inventory, string $t
 function database_maintenance_cleanup_rules(array $inventory): array
 {
     $rules = [];
-    $addOrphan = static function (string $key, string $table, string $column, string $parent, string $parentColumn, string $reason) use (&$rules, $inventory): void {
-        $identityColumns = database_maintenance_table_identity_columns($inventory, $table);
-        if ($identityColumns === [] || !database_maintenance_inventory_has($inventory, $table, [$column]) || !database_maintenance_inventory_has($inventory, $parent, [$parentColumn])) {
+    $addOrphan = static function (
+        string $key,
+        string $table,
+        string $column,
+        string $parent,
+        string $parentColumn,
+        string $reason,
+    ) use (&$rules, $inventory): void {
+        $identityColumns = database_maintenance_table_identity_columns(
+            $inventory,
+            $table,
+        );
+        if (
+            $identityColumns === []
+            || !database_maintenance_inventory_has(
+                $inventory,
+                $table,
+                [$column],
+            )
+            || !database_maintenance_inventory_has(
+                $inventory,
+                $parent,
+                [$parentColumn],
+            )
+        ) {
             return;
         }
-        $rules[] = database_maintenance_model_orphan_rule($key, $table, $column, $parent, $parentColumn, $reason, $identityColumns);
+        $rules[] = database_maintenance_model_orphan_rule(
+            $key,
+            $table,
+            $column,
+            $parent,
+            $parentColumn,
+            $reason,
+            $identityColumns,
+        );
     };
 
-    $addOrphan('gallery_tags_missing_gallery', 'gallery_tags', 'gallery_id', 'galleries', 'id', 'Gallery/tag link references a gallery that does not exist.');
-    $addOrphan('gallery_tags_missing_tag', 'gallery_tags', 'tag_id', 'tags', 'id', 'Gallery/tag link references a tag that does not exist.');
-    $addOrphan('image_tags_missing_image', 'image_tags', 'image_id', 'images', 'id', 'Image/tag link references an image that does not exist.');
-    $addOrphan('image_tags_missing_tag', 'image_tags', 'tag_id', 'tags', 'id', 'Image/tag link references a tag that does not exist.');
-    $addOrphan('image_votes_missing_image', 'image_votes', 'image_id', 'images', 'id', 'Vote references an image that does not exist.');
-    $addOrphan('picture_game_votes_missing_gallery', 'picture_game_votes', 'gallery_id', 'galleries', 'id', 'Picture-game vote references a gallery that does not exist.');
+    $addOrphan(
+        'gallery_tags_missing_gallery',
+        'gallery_tags',
+        'gallery_id',
+        'galleries',
+        'id',
+        'Gallery/tag link references a gallery that does not exist.',
+    );
+    $addOrphan(
+        'gallery_tags_missing_tag',
+        'gallery_tags',
+        'tag_id',
+        'tags',
+        'id',
+        'Gallery/tag link references a tag that does not exist.',
+    );
+    $addOrphan(
+        'image_tags_missing_image',
+        'image_tags',
+        'image_id',
+        'images',
+        'id',
+        'Image/tag link references an image that does not exist.',
+    );
+    $addOrphan(
+        'image_tags_missing_tag',
+        'image_tags',
+        'tag_id',
+        'tags',
+        'id',
+        'Image/tag link references a tag that does not exist.',
+    );
+    $addOrphan(
+        'image_votes_missing_image',
+        'image_votes',
+        'image_id',
+        'images',
+        'id',
+        'Vote references an image that does not exist.',
+    );
+    $addOrphan(
+        'picture_game_votes_missing_gallery',
+        'picture_game_votes',
+        'gallery_id',
+        'galleries',
+        'id',
+        'Picture-game vote references a gallery that does not exist.',
+    );
     foreach (['image_a_id', 'image_b_id', 'winner_image_id'] as $column) {
-        $addOrphan('picture_game_votes_missing_' . $column, 'picture_game_votes', $column, 'images', 'id', 'Picture-game vote references an image that does not exist.');
+        $addOrphan(
+            'picture_game_votes_missing_' . $column,
+            'picture_game_votes',
+            $column,
+            'images',
+            'id',
+            'Picture-game vote references an image that does not exist.',
+        );
     }
-    $addOrphan('zip_archives_missing_gallery', 'zip_archives', 'gallery_id', 'galleries', 'id', 'Gallery-scoped ZIP metadata references a deleted gallery. Filesystem ZIPs are not deleted.');
-    $addOrphan('gallery_upload_tokens_missing_gallery', 'gallery_upload_tokens', 'gallery_id', 'galleries', 'id', 'Upload credential references a gallery that does not exist.');
-    $addOrphan('gallery_flight_maps_missing_gallery', 'gallery_flight_maps', 'gallery_id', 'galleries', 'id', 'Flight-map metadata references a gallery that does not exist.');
-    $addOrphan('image_ai_metadata_missing_image', 'image_ai_metadata', 'image_id', 'images', 'id', 'AI metadata references an image that does not exist.');
-    $addOrphan('image_ai_jobs_missing_gallery', 'image_ai_analysis_jobs', 'gallery_id', 'galleries', 'id', 'AI job references a gallery that does not exist.');
-    $addOrphan('image_ai_jobs_missing_image', 'image_ai_analysis_jobs', 'image_id', 'images', 'id', 'AI job references an image that does not exist.');
-    $addOrphan('thumbnail_variants_missing_image', 'image_thumbnail_variants', 'image_id', 'images', 'id', 'Thumbnail metadata references an image that does not exist. No thumbnail file is deleted.');
-    $addOrphan('remember_tokens_missing_user', 'admin_remember_tokens', 'user_id', 'users', 'id', 'Persistent login token references a user that does not exist.');
-    $addOrphan('password_reset_missing_user', 'password_reset_tokens', 'user_id', 'users', 'id', 'Password reset token references a user that does not exist.');
-    $addOrphan('google_accounts_missing_user', 'user_google_accounts', 'user_id', 'users', 'id', 'Google account link references a user that does not exist.');
-    $addOrphan('openai_settings_missing_user', 'user_openai_text_settings', 'user_id', 'users', 'id', 'OpenAI profile references a user that does not exist.');
-    $addOrphan('navigation_accounts_missing_user', 'navigation_data_accounts', 'user_id', 'users', 'id', 'Navigation provider account references a user that does not exist.');
-    $addOrphan('webdav_tokens_missing_user', 'mobile_webdav_upload_tokens', 'user_id', 'users', 'id', 'WebDAV credential references a user that does not exist.');
-    $addOrphan('webdav_tokens_missing_gallery', 'mobile_webdav_upload_tokens', 'gallery_id', 'galleries', 'id', 'WebDAV credential references a gallery that does not exist.');
+    $addOrphan(
+        'zip_archives_missing_gallery',
+        'zip_archives',
+        'gallery_id',
+        'galleries',
+        'id',
+        'Gallery-scoped ZIP metadata references a deleted gallery. Filesystem ZIPs are not deleted.',
+    );
+    $addOrphan(
+        'gallery_upload_tokens_missing_gallery',
+        'gallery_upload_tokens',
+        'gallery_id',
+        'galleries',
+        'id',
+        'Upload credential references a gallery that does not exist.',
+    );
+    $addOrphan(
+        'gallery_flight_maps_missing_gallery',
+        'gallery_flight_maps',
+        'gallery_id',
+        'galleries',
+        'id',
+        'Flight-map metadata references a gallery that does not exist.',
+    );
+    $addOrphan(
+        'image_ai_metadata_missing_image',
+        'image_ai_metadata',
+        'image_id',
+        'images',
+        'id',
+        'AI metadata references an image that does not exist.',
+    );
+    $addOrphan(
+        'image_ai_jobs_missing_gallery',
+        'image_ai_analysis_jobs',
+        'gallery_id',
+        'galleries',
+        'id',
+        'AI job references a gallery that does not exist.',
+    );
+    $addOrphan(
+        'image_ai_jobs_missing_image',
+        'image_ai_analysis_jobs',
+        'image_id',
+        'images',
+        'id',
+        'AI job references an image that does not exist.',
+    );
+    $addOrphan(
+        'thumbnail_variants_missing_image',
+        'image_thumbnail_variants',
+        'image_id',
+        'images',
+        'id',
+        'Thumbnail metadata references an image that does not exist. No thumbnail file is deleted.',
+    );
+    $addOrphan(
+        'remember_tokens_missing_user',
+        'admin_remember_tokens',
+        'user_id',
+        'users',
+        'id',
+        'Persistent login token references a user that does not exist.',
+    );
+    $addOrphan(
+        'password_reset_missing_user',
+        'password_reset_tokens',
+        'user_id',
+        'users',
+        'id',
+        'Password reset token references a user that does not exist.',
+    );
+    $addOrphan(
+        'google_accounts_missing_user',
+        'user_google_accounts',
+        'user_id',
+        'users',
+        'id',
+        'Google account link references a user that does not exist.',
+    );
+    $addOrphan(
+        'openai_settings_missing_user',
+        'user_openai_text_settings',
+        'user_id',
+        'users',
+        'id',
+        'OpenAI profile references a user that does not exist.',
+    );
+    $addOrphan(
+        'navigation_accounts_missing_user',
+        'navigation_data_accounts',
+        'user_id',
+        'users',
+        'id',
+        'Navigation provider account references a user that does not exist.',
+    );
+    $addOrphan(
+        'webdav_tokens_missing_user',
+        'mobile_webdav_upload_tokens',
+        'user_id',
+        'users',
+        'id',
+        'WebDAV credential references a user that does not exist.',
+    );
+    $addOrphan(
+        'webdav_tokens_missing_gallery',
+        'mobile_webdav_upload_tokens',
+        'gallery_id',
+        'galleries',
+        'id',
+        'WebDAV credential references a gallery that does not exist.',
+    );
 
     $expiryDefinitions = [
-        ['expired_admin_remember_tokens', 'admin_remember_tokens', ['expires_at', 'revoked_at'], 'Persistent login token is expired or explicitly revoked.'],
-        ['expired_password_reset_tokens', 'password_reset_tokens', ['expires_at', 'used_at'], 'Password reset token is expired or already used.'],
-        ['expired_navigation_cache', 'navigation_data_cache', ['expires_at'], 'Navigation cache row has an explicit expires_at value in the past.'],
-        ['expired_auth_rate_limits', 'auth_rate_limits', ['last_attempt_at', 'locked_until'], 'Authentication throttle state is outside the application 24-hour cleanup policy.'],
+        [
+            'expired_admin_remember_tokens',
+            'admin_remember_tokens',
+            ['expires_at', 'revoked_at'],
+            'Persistent login token is expired or explicitly revoked.',
+        ],
+        [
+            'expired_password_reset_tokens',
+            'password_reset_tokens',
+            ['expires_at', 'used_at'],
+            'Password reset token is expired or already used.',
+        ],
+        [
+            'expired_navigation_cache',
+            'navigation_data_cache',
+            ['expires_at'],
+            'Navigation cache row has an explicit expires_at value in the past.',
+        ],
+        [
+            'expired_auth_rate_limits',
+            'auth_rate_limits',
+            ['last_attempt_at', 'locked_until'],
+            'Authentication throttle state is outside the application 24-hour cleanup policy.',
+        ],
     ];
     foreach ($expiryDefinitions as [$key, $table, $columns, $reason]) {
         if (!database_maintenance_inventory_has($inventory, $table, $columns)) {
             continue;
         }
-        $identityColumns = database_maintenance_table_identity_columns($inventory, $table);
+        $identityColumns = database_maintenance_table_identity_columns(
+            $inventory,
+            $table,
+        );
         if ($identityColumns === []) {
             continue;
         }
-        $rules[] = database_maintenance_model_expiry_rule($key, $table, $reason, $identityColumns);
+        $rules[] = database_maintenance_model_expiry_rule(
+            $key,
+            $table,
+            $reason,
+            $identityColumns,
+        );
     }
 
     $duplicateDefinitions = [
-        ['thumbnail_variant_duplicates', 'image_thumbnail_variants', 'id', ['image_id', 'size_px', 'format'], 'Duplicate thumbnail metadata logical identity; keep the lowest id.'],
-        ['image_ai_metadata_duplicates', 'image_ai_metadata', 'id', ['image_id', 'model_name', 'model_version'], 'Duplicate AI metadata logical identity; keep the lowest id.'],
-        ['navigation_cache_duplicates', 'navigation_data_cache', 'id', ['cache_key'], 'Duplicate navigation cache key; keep the lowest id.'],
+        [
+            'thumbnail_variant_duplicates',
+            'image_thumbnail_variants',
+            'id',
+            ['image_id', 'size_px', 'format'],
+            'Duplicate thumbnail metadata logical identity; keep the lowest id.',
+        ],
+        [
+            'image_ai_metadata_duplicates',
+            'image_ai_metadata',
+            'id',
+            ['image_id', 'model_name', 'model_version'],
+            'Duplicate AI metadata logical identity; keep the lowest id.',
+        ],
+        [
+            'navigation_cache_duplicates',
+            'navigation_data_cache',
+            'id',
+            ['cache_key'],
+            'Duplicate navigation cache key; keep the lowest id.',
+        ],
     ];
-    foreach ($duplicateDefinitions as [$key, $table, $idColumn, $identityColumns, $reason]) {
-        if (!database_maintenance_inventory_has($inventory, $table, array_merge([$idColumn], $identityColumns))) {
+    foreach ($duplicateDefinitions as [
+        $key,
+        $table,
+        $idColumn,
+        $identityColumns,
+        $reason,
+    ]) {
+        if (!database_maintenance_inventory_has(
+            $inventory,
+            $table,
+            array_merge([$idColumn], $identityColumns),
+        )) {
             continue;
         }
-        $rules[] = database_maintenance_model_duplicate_rule($key, $table, $idColumn, $identityColumns, $reason);
+        $rules[] = database_maintenance_model_duplicate_rule(
+            $key,
+            $table,
+            $idColumn,
+            $identityColumns,
+            $reason,
+        );
     }
 
     return $rules;
@@ -1195,10 +1978,28 @@ function database_maintenance_cleanup_rules(array $inventory): array
 
 /**
  * Build one predicate-based cleanup rule.
+ *
+ * @param string $key Stable cleanup-rule key.
+ * @param string $table Table name targeted by the rule.
+ * @param string $category Cleanup category.
+ * @param string $confidence Confidence label for the predicate.
+ * @param string $reason Human-readable cleanup rationale.
+ * @param string $predicate Legacy raw predicate text, no longer accepted here.
+ * @param array<int, string> $identityColumns Stable row identity columns.
+ * @return never This retired raw-SQL helper always throws; semantic rule builders own predicates.
  */
-function database_maintenance_make_rule(string $key, string $table, string $category, string $confidence, string $reason, string $predicate, array $identityColumns): array
-{
-    throw new \LogicException('Raw database-maintenance predicates are model-owned. Use semantic cleanup-rule builders.');
+function database_maintenance_make_rule(
+    string $key,
+    string $table,
+    string $category,
+    string $confidence,
+    string $reason,
+    string $predicate,
+    array $identityColumns,
+): never {
+    throw new \LogicException(
+        'Raw database-maintenance predicates are model-owned. Use semantic cleanup-rule builders.',
+    );
 }
 
 /**
@@ -1207,11 +2008,27 @@ function database_maintenance_make_rule(string $key, string $table, string $cate
  * The lowest numeric id survives. The nested derived table avoids MySQL's
  * restriction on modifying a table selected directly by the same statement.
  *
+ * @param string $key Stable cleanup-rule key.
+ * @param string $table Table name targeted by the rule.
+ * @param string $idColumn Numeric identifier column used to retain the lowest id.
  * @param array<int, string> $identityColumns Logical identity columns.
+ * @param string $reason Human-readable duplicate cleanup rationale.
+ * @return array<string, mixed> Duplicate cleanup rule built by the model owner.
  */
-function database_maintenance_make_duplicate_rule(string $key, string $table, string $idColumn, array $identityColumns, string $reason): array
-{
-    return database_maintenance_model_duplicate_rule($key, $table, $idColumn, $identityColumns, $reason);
+function database_maintenance_make_duplicate_rule(
+    string $key,
+    string $table,
+    string $idColumn,
+    array $identityColumns,
+    string $reason,
+): array {
+    return database_maintenance_model_duplicate_rule(
+        $key,
+        $table,
+        $idColumn,
+        $identityColumns,
+        $reason,
+    );
 }
 
 /**
@@ -1237,11 +2054,20 @@ function database_maintenance_inspect_cleanup_candidates(array $rules): array
  * @param array<int, string> $supportedFormats Active thumbnail formats.
  * @return array<string, mixed> Structured thumbnail-specific audit.
  */
-function database_maintenance_normalize_thumbnail_distribution(array $rows, array $configuredSizes, array $supportedFormats): array
-{
-    $configuredSizes = array_values(array_unique(array_filter(array_map('intval', $configuredSizes), static fn (int $size): bool => $size > 0)));
+function database_maintenance_normalize_thumbnail_distribution(
+    array $rows,
+    array $configuredSizes,
+    array $supportedFormats,
+): array {
+    $configuredSizes = array_values(array_unique(array_filter(
+        array_map('intval', $configuredSizes),
+        static fn(int $size): bool => $size > 0,
+    )));
     sort($configuredSizes, SORT_NUMERIC);
-    $supportedFormats = array_values(array_unique(array_filter(array_map(static fn (mixed $format): string => strtolower(trim((string) $format)), $supportedFormats))));
+    $supportedFormats = array_values(array_unique(array_filter(array_map(
+        static fn(mixed $format): string => strtolower(trim((string) $format)),
+        $supportedFormats,
+    ))));
     sort($supportedFormats, SORT_STRING);
 
     $distribution = [];
@@ -1252,10 +2078,24 @@ function database_maintenance_normalize_thumbnail_distribution(array $rows, arra
     $totalRows = 0;
     foreach ($rows as $row) {
         $size = (int) ($row['size_px'] ?? $row['SIZE_PX'] ?? 0);
-        $format = strtolower(trim((string) ($row['format'] ?? $row['FORMAT'] ?? '')));
-        $status = strtolower(trim((string) ($row['status'] ?? $row['STATUS'] ?? 'unknown')));
-        $count = max(0, (int) ($row['row_count'] ?? $row['ROW_COUNT'] ?? $row['variant_count'] ?? 0));
-        $supported = in_array($size, $configuredSizes, true) && in_array($format, $supportedFormats, true);
+        $format = strtolower(trim(
+            (string) ($row['format'] ?? $row['FORMAT'] ?? ''),
+        ));
+        $status = strtolower(trim(
+            (string) ($row['status'] ?? $row['STATUS'] ?? 'unknown'),
+        ));
+        $count = max(
+            0,
+            (int) (
+                $row['row_count']
+                ?? $row['ROW_COUNT']
+                ?? $row['variant_count']
+                ?? 0
+            ),
+        );
+        $supported =
+            in_array($size, $configuredSizes, true)
+            && in_array($format, $supportedFormats, true);
         $entry = [
             'size_px' => $size,
             'format' => $format,
@@ -1265,9 +2105,13 @@ function database_maintenance_normalize_thumbnail_distribution(array $rows, arra
         ];
         $distribution[] = $entry;
         $totalRows += $count;
-        $statusTotals[$entry['status']] = (int) ($statusTotals[$entry['status']] ?? 0) + $count;
-        $formatTotals[$format !== '' ? $format : 'unknown'] = (int) ($formatTotals[$format !== '' ? $format : 'unknown'] ?? 0) + $count;
-        $sizeTotals[(string) $size] = (int) ($sizeTotals[(string) $size] ?? 0) + $count;
+        $statusTotals[$entry['status']] =
+            (int) ($statusTotals[$entry['status']] ?? 0) + $count;
+        $formatTotals[$format !== '' ? $format : 'unknown'] =
+            (int) ($formatTotals[$format !== '' ? $format : 'unknown'] ?? 0)
+            + $count;
+        $sizeTotals[(string) $size] =
+            (int) ($sizeTotals[(string) $size] ?? 0) + $count;
         if (!$supported) {
             $unsupported[] = $entry;
         }
@@ -1284,7 +2128,10 @@ function database_maintenance_normalize_thumbnail_distribution(array $rows, arra
         'format_totals' => $formatTotals,
         'size_totals' => $sizeTotals,
         'unsupported_distribution' => $unsupported,
-        'unsupported_row_count' => array_sum(array_map(static fn (array $entry): int => (int) $entry['row_count'], $unsupported)),
+        'unsupported_row_count' => array_sum(array_map(
+            static fn(array $entry): int => (int) $entry['row_count'],
+            $unsupported,
+        )),
         'unsupported_cleanup_mode' => 'report_only',
         'note' => 'Unsupported variants are reported for review and are never removed automatically.',
     ];
@@ -1298,7 +2145,11 @@ function database_maintenance_normalize_thumbnail_distribution(array $rows, arra
  */
 function database_maintenance_thumbnail_distribution(array $inventory): array
 {
-    if (!database_maintenance_inventory_has($inventory, 'image_thumbnail_variants', ['size_px', 'format', 'status'])) {
+    if (!database_maintenance_inventory_has(
+        $inventory,
+        'image_thumbnail_variants',
+        ['size_px', 'format', 'status'],
+    )) {
         return [
             'available' => false,
             'metadata_only' => true,
@@ -1313,7 +2164,14 @@ function database_maintenance_thumbnail_distribution(array $inventory): array
     $supportedFormats = ['jpg', 'webp'];
     $rows = database_maintenance_model_thumbnail_distribution_rows();
 
-    return ['available' => true] + database_maintenance_normalize_thumbnail_distribution($rows, $configuredSizes, $supportedFormats);
+    return (
+        ['available' => true]
+            + database_maintenance_normalize_thumbnail_distribution(
+                $rows,
+                $configuredSizes,
+                $supportedFormats,
+            )
+    );
 }
 
 /**
@@ -1325,53 +2183,107 @@ function database_maintenance_thumbnail_distribution(array $inventory): array
 function database_maintenance_inspect(): array
 {
     $startedAt = microtime(true);
-    $inventory = storage_observer_call('inspection.schema',
-        static fn(): array => database_maintenance_schema_inventory());
-    $migrationAudit = storage_observer_call('inspection.migrations',
-        static fn(): array => database_maintenance_migration_audit());
-    $codeAudit = storage_observer_call('inspection.code',
-        static fn(): array => database_maintenance_code_audit($inventory, $migrationAudit));
-    $rules = storage_observer_call('inspection.cleanup_rules',
-        static fn(): array => database_maintenance_cleanup_rules($inventory));
-    $candidates = storage_observer_call('inspection.cleanup_counts',
-        static fn(): array => database_maintenance_inspect_cleanup_candidates($rules));
-    $legacyFindings = storage_observer_call('inspection.legacy_findings',
-        static fn(): array => database_maintenance_legacy_schema_findings($inventory, $codeAudit));
+    $inventory = storage_observer_call('inspection.schema', static fn(): array => database_maintenance_schema_inventory());
+    $migrationAudit = storage_observer_call('inspection.migrations', static fn(): array => database_maintenance_migration_audit());
+    $codeAudit = storage_observer_call('inspection.code', static fn(): array => database_maintenance_code_audit(
+        $inventory,
+        $migrationAudit,
+    ));
+    $rules = storage_observer_call('inspection.cleanup_rules', static fn(): array => database_maintenance_cleanup_rules(
+        $inventory,
+    ));
+    $candidates = storage_observer_call('inspection.cleanup_counts', static fn(): array => database_maintenance_inspect_cleanup_candidates(
+        $rules,
+    ));
+    $legacyFindings = storage_observer_call('inspection.legacy_findings', static fn(): array => database_maintenance_legacy_schema_findings(
+        $inventory,
+        $codeAudit,
+    ));
 
     storage_observer_call('inspection.enrich_report', static function () use (
-        &$inventory, $migrationAudit, $codeAudit
+        &$inventory,
+        $migrationAudit,
+        $codeAudit,
     ): void {
         foreach ($inventory['tables'] as $tableName => &$table) {
-            $tableMigrationAudit = (array) ($migrationAudit['tables'][strtolower((string) $tableName)] ?? []);
+            $tableMigrationAudit = (array) (
+                $migrationAudit['tables'][strtolower((string) $tableName)] ?? []
+            );
             $table['migration_audit'] = $tableMigrationAudit;
-            $table['code_reference_files'] = $codeAudit['references'][$tableName]['files'] ?? [];
-            $table['code_sql_reference_files'] = $codeAudit['references'][$tableName]['sql_files'] ?? [];
-            $table['production_sql_reference_files'] = $codeAudit['references'][$tableName]['production_sql_files'] ?? [];
-            $table['test_sql_reference_files'] = $codeAudit['references'][$tableName]['test_sql_files'] ?? [];
+            $table['code_reference_files'] = $codeAudit['references'][$tableName]['files']
+            ?? [];
+            $table['code_sql_reference_files'] = $codeAudit['references'][$tableName]['sql_files']
+            ?? [];
+            $table['production_sql_reference_files'] = $codeAudit['references'][$tableName]['production_sql_files']
+            ?? [];
+            $table['test_sql_reference_files'] = $codeAudit['references'][$tableName]['test_sql_files']
+            ?? [];
             $currentColumnNames = array_keys((array) ($table['columns'] ?? []));
             $historicalColumnNames = array_values(array_unique(array_merge(
-                array_keys((array) ($tableMigrationAudit['added_columns'] ?? [])),
-                array_keys((array) ($tableMigrationAudit['dropped_columns'] ?? []))
+                array_keys(
+                    (array) ($tableMigrationAudit['added_columns'] ?? []),
+                ),
+                array_keys(
+                    (array) ($tableMigrationAudit['dropped_columns'] ?? []),
+                ),
             )));
             $table['historical_columns_absent_from_current_schema'] = [];
-            foreach (array_values(array_diff($historicalColumnNames, $currentColumnNames)) as $historicalColumnName) {
-                $table['historical_columns_absent_from_current_schema'][$historicalColumnName] = [
-                    'added_versions' => (array) ($tableMigrationAudit['added_columns'][$historicalColumnName] ?? []),
-                    'dropped_versions' => (array) ($tableMigrationAudit['dropped_columns'][$historicalColumnName] ?? []),
-                    'current_code_reference_files' => (array) ($codeAudit['references'][$tableName]['columns'][$historicalColumnName] ?? []),
-                    'production_sql_reference_files' => (array) ($codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['production_files'] ?? []),
-                    'test_sql_reference_files' => (array) ($codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['test_files'] ?? []),
-                ];
+            foreach (array_values(array_diff(
+                $historicalColumnNames,
+                $currentColumnNames,
+            )) as $historicalColumnName) {
+                $table['historical_columns_absent_from_current_schema'][$historicalColumnName] =
+                    [
+                        'added_versions' => (array) (
+                            $tableMigrationAudit['added_columns'][$historicalColumnName]
+                            ?? []
+                        ),
+                        'dropped_versions' => (array) (
+                            $tableMigrationAudit['dropped_columns'][$historicalColumnName]
+                            ?? []
+                        ),
+                        'current_code_reference_files' => (array) (
+                            $codeAudit['references'][$tableName]['columns'][$historicalColumnName]
+                            ?? []
+                        ),
+                        'production_sql_reference_files' => (array) (
+                            $codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['production_files']
+                            ?? []
+                        ),
+                        'test_sql_reference_files' => (array) (
+                            $codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['test_files']
+                            ?? []
+                        ),
+                    ];
             }
-            foreach ((array) ($table['columns'] ?? []) as $columnName => &$column) {
+            foreach ((array) (
+                $table['columns'] ?? []
+            ) as $columnName => &$column) {
                 $column['migration_audit'] = [
-                    'added_versions' => (array) ($tableMigrationAudit['added_columns'][$columnName] ?? []),
-                    'dropped_versions' => (array) ($tableMigrationAudit['dropped_columns'][$columnName] ?? []),
-                    'rename_history' => (array) ($tableMigrationAudit['renamed_columns'][$columnName] ?? []),
+                    'added_versions' => (array) (
+                        $tableMigrationAudit['added_columns'][$columnName] ?? []
+                    ),
+                    'dropped_versions' => (array) (
+                        $tableMigrationAudit['dropped_columns'][$columnName]
+                        ?? []
+                    ),
+                    'rename_history' => (array) (
+                        $tableMigrationAudit['renamed_columns'][$columnName]
+                        ?? []
+                    ),
                 ];
-                $column['code_reference_files'] = (array) ($codeAudit['references'][$tableName]['columns'][$columnName] ?? []);
-                $column['production_sql_reference_files'] = (array) ($codeAudit['references'][$tableName]['column_sql_references'][$columnName]['production_files'] ?? []);
-                $column['test_sql_reference_files'] = (array) ($codeAudit['references'][$tableName]['column_sql_references'][$columnName]['test_files'] ?? []);
+                $column['code_reference_files'] = (array) (
+                    $codeAudit['references'][$tableName]['columns'][$columnName]
+                    ?? []
+                );
+                $column['production_sql_reference_files'] = (array) (
+                    $codeAudit['references'][$tableName]['column_sql_references'][$columnName]['production_files']
+                    ?? []
+                );
+                $column['test_sql_reference_files'] = (array) (
+                    $codeAudit['references'][$tableName]['column_sql_references'][$columnName]['test_files']
+                    ?? []
+                );
             }
             unset($column);
         }
@@ -1388,23 +2300,38 @@ function database_maintenance_inspect(): array
         'cleanup_candidates' => $candidates,
         'legacy_schema_findings' => $legacyFindings,
         'table_specific_audit' => [
-            'image_thumbnail_variants' => storage_observer_call('inspection.thumbnail_distribution',
-                static fn(): array => database_maintenance_thumbnail_distribution($inventory)),
+            'image_thumbnail_variants' => storage_observer_call('inspection.thumbnail_distribution', static fn(): array => database_maintenance_thumbnail_distribution(
+                $inventory,
+            )),
         ],
         'protected_tables' => database_maintenance_protected_tables($inventory),
         'physical_space_reclaimed' => false,
         'physical_optimization_note' => 'Inspection and logical cleanup do not reclaim table files. OPTIMIZE TABLE remains a separate manually selected action.',
     ];
 
-    storage_observer_call('inspection.save_report',
-        static function () use ($report): void { database_maintenance_save_report($report); });
+    storage_observer_call('inspection.save_report', static function () use (
+        $report,
+    ): void {
+        database_maintenance_save_report($report);
+    });
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event('info', 'database_maintenance.inspected', 'Admin inspected the complete application database.', [
-            'table_count' => (int) ($inventory['table_count'] ?? 0),
-            'cleanup_candidate_count' => array_sum(array_map(static fn (array $candidate): int => (int) ($candidate['candidate_count'] ?? 0), $candidates)),
-            'legacy_schema_finding_count' => count($legacyFindings),
-            'duration_seconds' => $report['duration_seconds'],
-        ], ['category' => 'database', 'severity' => 'notice']);
+        admin_log_event(
+            'info',
+            'database_maintenance.inspected',
+            'Admin inspected the complete application database.',
+            [
+                'table_count' => (int) ($inventory['table_count'] ?? 0),
+                'cleanup_candidate_count' => array_sum(array_map(
+                    static fn(array $candidate): int => (int) (
+                        $candidate['candidate_count'] ?? 0
+                    ),
+                    $candidates,
+                )),
+                'legacy_schema_finding_count' => count($legacyFindings),
+                'duration_seconds' => $report['duration_seconds'],
+            ],
+            ['category' => 'database', 'severity' => 'notice'],
+        );
     }
     return $report;
 }
@@ -1419,7 +2346,10 @@ function database_maintenance_protected_tables(array $inventory): array
 {
     $protected = [];
     foreach ((array) ($inventory['tables'] ?? []) as $tableName => $table) {
-        if ((string) ($table['policy']['cleanup_mode'] ?? 'disabled') !== 'automatic') {
+        if (
+            (string) ($table['policy']['cleanup_mode'] ?? 'disabled')
+            !== 'automatic'
+        ) {
             $protected[] = (string) $tableName;
         }
     }
@@ -1429,24 +2359,46 @@ function database_maintenance_protected_tables(array $inventory): array
 
 /**
  * Save the latest report atomically when the cache directory is writable.
+ *
+ * @param array<string, mixed> $report Maintenance report to serialize.
+ * @return void Atomically replaces the cached report or throws on failure.
  */
 function database_maintenance_save_report(array $report): void
 {
     $path = database_maintenance_report_path();
     $directory = dirname($path);
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Database maintenance report directory could not be created.');
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Database maintenance report directory could not be created.',
+        );
     }
-    $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    $json = json_encode(
+        $report,
+        JSON_PRETTY_PRINT
+            | JSON_UNESCAPED_SLASHES
+            | JSON_UNESCAPED_UNICODE
+            | JSON_THROW_ON_ERROR,
+    );
     $temporaryPath = $path . '.tmp-' . bin2hex(random_bytes(4));
-    if (file_put_contents($temporaryPath, $json, LOCK_EX) === false || !@rename($temporaryPath, $path)) {
+    if (
+        file_put_contents($temporaryPath, $json, LOCK_EX) === false
+        || !@rename($temporaryPath, $path)
+    ) {
         @unlink($temporaryPath);
-        throw new RuntimeException('Database maintenance report could not be written.');
+        throw new RuntimeException(
+            'Database maintenance report could not be written.',
+        );
     }
 }
 
 /**
  * Load the latest cached report without starting a new audit.
+ *
+ * @return array<string, mixed>|null Decoded cached report, or null when it is unavailable or invalid.
  */
 function database_maintenance_load_report(): ?array
 {
@@ -1455,7 +2407,12 @@ function database_maintenance_load_report(): ?array
         return null;
     }
     try {
-        $decoded = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        $decoded = json_decode(
+            (string) file_get_contents($path),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
         return is_array($decoded) ? $decoded : null;
     } catch (Throwable) {
         return null;
@@ -1469,16 +2426,25 @@ function database_maintenance_load_report(): ?array
  */
 function database_maintenance_cleanup_state(): array
 {
-    $decoded = json_decode((string) app_setting(DATABASE_MAINTENANCE_STATE_SETTING, '{}'), true);
+    $decoded = json_decode(
+        (string) app_setting(DATABASE_MAINTENANCE_STATE_SETTING, '{}'),
+        true,
+    );
     return is_array($decoded) ? $decoded : [];
 }
 
 /**
  * Persist cleanup state.
+ *
+ * @param array<string, mixed> $state Normalized resumable cleanup state.
+ * @return void Stores the JSON-encoded state in the application setting.
  */
 function database_maintenance_set_cleanup_state(array $state): void
 {
-    set_app_setting(DATABASE_MAINTENANCE_STATE_SETTING, json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+    set_app_setting(DATABASE_MAINTENANCE_STATE_SETTING, json_encode(
+        $state,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+    ));
 }
 
 /**
@@ -1490,15 +2456,26 @@ function database_maintenance_set_cleanup_state(array $state): void
  *
  * @param array<string, mixed> $state Current operation state.
  * @param array<string, mixed> $rule Cleanup rule.
+ * @param int $beforeCount Candidate count before the committed batch.
+ * @param int $deletedCount Rows deleted by the committed batch.
+ * @param int $remainingCount Candidate rows remaining after the batch.
  * @return array<string, mixed> Updated state.
  */
-function database_maintenance_record_live_progress(array $state, array $rule, int $beforeCount, int $deletedCount, int $remainingCount): array
-{
+function database_maintenance_record_live_progress(
+    array $state,
+    array $rule,
+    int $beforeCount,
+    int $deletedCount,
+    int $remainingCount,
+): array {
     $key = (string) ($rule['key'] ?? '');
     $processedRules = array_values((array) ($state['processed_rules'] ?? []));
     $matchedIndex = null;
     foreach ($processedRules as $index => $processedRule) {
-        if (empty($processedRule['dry_run']) && (string) ($processedRule['key'] ?? '') === $key) {
+        if (
+            empty($processedRule['dry_run'])
+            && (string) ($processedRule['key'] ?? '') === $key
+        ) {
             $matchedIndex = $index;
             break;
         }
@@ -1519,18 +2496,26 @@ function database_maintenance_record_live_progress(array $state, array $rule, in
             'dry_run' => false,
             'error' => '',
         ];
-        $state['candidate_rows'] = (int) ($state['candidate_rows'] ?? 0) + $beforeCount;
+        $state['candidate_rows'] =
+            (int) ($state['candidate_rows'] ?? 0) + $beforeCount;
     } else {
         $processedRules[$matchedIndex]['last_before_count'] = $beforeCount;
-        $processedRules[$matchedIndex]['deleted_count'] = (int) ($processedRules[$matchedIndex]['deleted_count'] ?? 0) + $deletedCount;
-        $processedRules[$matchedIndex]['removed_identifier_count'] = (int) ($processedRules[$matchedIndex]['removed_identifier_count'] ?? 0) + $deletedCount;
+        $processedRules[$matchedIndex]['deleted_count'] =
+            (int) ($processedRules[$matchedIndex]['deleted_count'] ?? 0)
+            + $deletedCount;
+        $processedRules[$matchedIndex]['removed_identifier_count'] =
+            (int) (
+                $processedRules[$matchedIndex]['removed_identifier_count'] ?? 0
+            ) + $deletedCount;
         $processedRules[$matchedIndex]['remaining_count'] = $remainingCount;
-        $processedRules[$matchedIndex]['batch_count'] = (int) ($processedRules[$matchedIndex]['batch_count'] ?? 0) + 1;
+        $processedRules[$matchedIndex]['batch_count'] =
+            (int) ($processedRules[$matchedIndex]['batch_count'] ?? 0) + 1;
         $processedRules[$matchedIndex]['error'] = '';
     }
 
     $state['processed_rules'] = $processedRules;
-    $state['deleted_rows'] = (int) ($state['deleted_rows'] ?? 0) + $deletedCount;
+    $state['deleted_rows'] =
+        (int) ($state['deleted_rows'] ?? 0) + $deletedCount;
     return $state;
 }
 
@@ -1541,23 +2526,58 @@ function database_maintenance_record_live_progress(array $state, array $rule, in
  * processes one bounded batch per rule and persists the next rule index, making
  * retries safe after timeouts or shared-hosting request limits.
  *
- * @return array<string, mixed> Operation state.
+ * @param bool $dryRun Whether to count candidates without deleting rows.
+ * @param int $batchSize Maximum deletion batch size per rule.
+ * @param bool $restart Whether to start a new cleanup operation.
+ * @return array<string, mixed> Operation state, including progress, per-rule results, errors, and completion status.
  */
-function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABASE_MAINTENANCE_DEFAULT_BATCH_SIZE, bool $restart = false): array
-{
+function database_maintenance_cleanup_step(
+    bool $dryRun,
+    int $batchSize = DATABASE_MAINTENANCE_DEFAULT_BATCH_SIZE,
+    bool $restart = false,
+): array {
     mutation_schema_assert_known(
         database_maintenance_mutation_schema_status(),
-        $dryRun ? 'database_maintenance.cleanup_dry_run' : 'database_maintenance.cleanup_live',
-        'Database cleanup is temporarily unavailable because migration schema state could not be verified. No cleanup step was started.'
+        $dryRun
+            ? 'database_maintenance.cleanup_dry_run'
+            : 'database_maintenance.cleanup_live',
+        'Database cleanup is temporarily unavailable because migration schema state could not be verified. No cleanup step was started.',
     );
     $batchSize = max(1, min(DATABASE_MAINTENANCE_MAX_BATCH_SIZE, $batchSize));
     $inventory = database_maintenance_schema_inventory();
-    $rules = array_values(array_filter(database_maintenance_cleanup_rules($inventory), static fn (array $rule): bool => !empty($rule['automatic']) && (string) ($rule['confidence'] ?? '') === 'high'));
-    if (!$dryRun && !database_maintenance_inventory_has($inventory, 'database_maintenance_audit_log', ['operation_id', 'rule_key', 'table_name', 'reason', 'removed_identifiers_json', 'deleted_count'])) {
-        throw new RuntimeException('Live cleanup requires the database_maintenance_audit_log table. Apply the database maintenance schema migration first.');
+    $rules = array_values(array_filter(
+        database_maintenance_cleanup_rules($inventory),
+        static fn(array $rule): bool => (
+            !empty($rule['automatic'])
+            && (string) ($rule['confidence'] ?? '') === 'high'
+        ),
+    ));
+    if (
+        !$dryRun
+        && !database_maintenance_inventory_has(
+            $inventory,
+            'database_maintenance_audit_log',
+            [
+                'operation_id',
+                'rule_key',
+                'table_name',
+                'reason',
+                'removed_identifiers_json',
+                'deleted_count',
+            ],
+        )
+    ) {
+        throw new RuntimeException(
+            'Live cleanup requires the database_maintenance_audit_log table. Apply the database maintenance schema migration first.',
+        );
     }
     $state = database_maintenance_cleanup_state();
-    if ($restart || $state === [] || (bool) ($state['dry_run'] ?? false) !== $dryRun || !empty($state['completed'])) {
+    if (
+        $restart
+        || $state === []
+        || (bool) ($state['dry_run'] ?? false) !== $dryRun
+        || !empty($state['completed'])
+    ) {
         $state = [
             'operation_id' => bin2hex(random_bytes(8)),
             'started_at_utc' => gmdate('c'),
@@ -1582,17 +2602,23 @@ function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABA
 
     if ($dryRun) {
         $candidates = database_maintenance_inspect_cleanup_candidates($rules);
-        $state['processed_rules'] = array_map(static fn (array $candidate): array => [
-            'key' => (string) $candidate['key'],
-            'table_name' => (string) $candidate['table_name'],
-            'category' => (string) $candidate['category'],
-            'reason' => (string) $candidate['reason'],
-            'candidate_count' => (int) ($candidate['candidate_count'] ?? 0),
-            'deleted_count' => 0,
-            'dry_run' => true,
-            'error' => (string) ($candidate['inspection_error'] ?? ''),
-        ], $candidates);
-        $state['candidate_rows'] = array_sum(array_column($state['processed_rules'], 'candidate_count'));
+        $state['processed_rules'] = array_map(
+            static fn(array $candidate): array => [
+                'key' => (string) $candidate['key'],
+                'table_name' => (string) $candidate['table_name'],
+                'category' => (string) $candidate['category'],
+                'reason' => (string) $candidate['reason'],
+                'candidate_count' => (int) ($candidate['candidate_count'] ?? 0),
+                'deleted_count' => 0,
+                'dry_run' => true,
+                'error' => (string) ($candidate['inspection_error'] ?? ''),
+            ],
+            $candidates,
+        );
+        $state['candidate_rows'] = array_sum(array_column(
+            $state['processed_rules'],
+            'candidate_count',
+        ));
         $state['rule_index'] = count($rules);
         $state['completed'] = true;
         $state['updated_at_utc'] = gmdate('c');
@@ -1615,15 +2641,25 @@ function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABA
         $execution = database_maintenance_model_execute_cleanup_rule(
             $rule,
             $batchSize,
-            (string) ($state['operation_id'] ?? '')
+            (string) ($state['operation_id'] ?? ''),
         );
         $beforeCount = max(0, (int) ($execution['before_count'] ?? 0));
         $deleted = max(0, (int) ($execution['deleted_count'] ?? 0));
         $remaining = max(0, (int) ($execution['remaining_count'] ?? 0));
         if ($deleted > 0) {
-            database_maintenance_log_cleanup_batch($rule, $deleted, (string) ($state['operation_id'] ?? ''));
+            database_maintenance_log_cleanup_batch(
+                $rule,
+                $deleted,
+                (string) ($state['operation_id'] ?? ''),
+            );
         }
-        $state = database_maintenance_record_live_progress($state, $rule, $beforeCount, $deleted, $remaining);
+        $state = database_maintenance_record_live_progress(
+            $state,
+            $rule,
+            $beforeCount,
+            $deleted,
+            $remaining,
+        );
         if ($remaining === 0) {
             $state['rule_index'] = $ruleIndex + 1;
         }
@@ -1653,10 +2689,25 @@ function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABA
  *
  * @param array<string, mixed> $rule Cleanup rule.
  * @param array<int, array<string, mixed>> $identifiers Removed row identities.
+ * @param PDO $pdo Connection participating in the cleanup transaction.
+ * @param int $deletedCount Number of rows deleted by this batch.
+ * @param string $operationId Stable cleanup operation identifier.
+ * @return void Writes exact deleted identities transactionally; throws on failure.
  */
-function database_maintenance_write_cleanup_audit(PDO $pdo, array $rule, array $identifiers, int $deletedCount, string $operationId): void
-{
-    database_maintenance_model_write_cleanup_audit($pdo, $rule, $identifiers, $deletedCount, $operationId);
+function database_maintenance_write_cleanup_audit(
+    PDO $pdo,
+    array $rule,
+    array $identifiers,
+    int $deletedCount,
+    string $operationId,
+): void {
+    database_maintenance_model_write_cleanup_audit(
+        $pdo,
+        $rule,
+        $identifiers,
+        $deletedCount,
+        $operationId,
+    );
 }
 
 /**
@@ -1667,21 +2718,33 @@ function database_maintenance_write_cleanup_audit(PDO $pdo, array $rule, array $
  * Admin log UI but is not relied upon for audit integrity.
  *
  * @param array<string, mixed> $rule Cleanup rule.
+ * @param int $deletedCount Number of rows deleted by this batch.
+ * @param string $operationId Stable cleanup operation identifier.
+ * @return void Emits the secondary Admin log event when the logger is available.
  */
-function database_maintenance_log_cleanup_batch(array $rule, int $deletedCount, string $operationId): void
-{
+function database_maintenance_log_cleanup_batch(
+    array $rule,
+    int $deletedCount,
+    string $operationId,
+): void {
     if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
-    admin_log_event('info', 'database_maintenance.cleanup_batch', 'Admin committed one bounded batch of safe database cleanup.', [
-        'operation_id' => $operationId,
-        'table_name' => (string) ($rule['table_name'] ?? ''),
-        'category' => (string) ($rule['category'] ?? ''),
-        'reason' => (string) ($rule['reason'] ?? ''),
-        'deleted_count' => $deletedCount,
-        'transactional_audit_table' => 'database_maintenance_audit_log',
-        'filesystem_deletions' => 0,
-    ], ['category' => 'database', 'severity' => 'notice']);
+    admin_log_event(
+        'info',
+        'database_maintenance.cleanup_batch',
+        'Admin committed one bounded batch of safe database cleanup.',
+        [
+            'operation_id' => $operationId,
+            'table_name' => (string) ($rule['table_name'] ?? ''),
+            'category' => (string) ($rule['category'] ?? ''),
+            'reason' => (string) ($rule['reason'] ?? ''),
+            'deleted_count' => $deletedCount,
+            'transactional_audit_table' => 'database_maintenance_audit_log',
+            'filesystem_deletions' => 0,
+        ],
+        ['category' => 'database', 'severity' => 'notice'],
+    );
 }
 
 /**
@@ -1699,10 +2762,16 @@ function database_maintenance_log_cleanup(array $state): void
     }
     admin_log_event(
         !empty($state['failed']) ? 'error' : 'info',
-        'database_maintenance.cleanup_' . (!empty($state['dry_run']) ? 'dry_run' : 'completed'),
-        !empty($state['dry_run']) ? 'Admin ran a database cleanup dry-run.' : 'Admin ran bounded safe database cleanup.',
+        'database_maintenance.cleanup_'
+            . (!empty($state['dry_run']) ? 'dry_run' : 'completed'),
+        !empty($state['dry_run'])
+            ? 'Admin ran a database cleanup dry-run.'
+            : 'Admin ran bounded safe database cleanup.',
         $state,
-        ['category' => 'database', 'severity' => !empty($state['failed']) ? 'error' : 'notice'],
+        [
+            'category' => 'database',
+            'severity' => !empty($state['failed']) ? 'error' : 'notice',
+        ],
     );
 }
 
@@ -1720,7 +2789,10 @@ function database_maintenance_schema_repair_plan(): array
     $inventory = database_maintenance_schema_inventory();
     $migrationAudit = database_maintenance_migration_audit();
     $codeAudit = database_maintenance_code_audit($inventory, $migrationAudit);
-    $findings = database_maintenance_legacy_schema_findings($inventory, $codeAudit);
+    $findings = database_maintenance_legacy_schema_findings(
+        $inventory,
+        $codeAudit,
+    );
     return [
         'ok' => true,
         'dry_run' => true,
@@ -1745,21 +2817,35 @@ function database_maintenance_schema_repair_readiness(): array
     mutation_schema_assert_known(
         $schemaStatus,
         'database_maintenance.schema_repair_readiness',
-        'Database schema repair is temporarily unavailable because migration schema state could not be verified. No migration was started.'
+        'Database schema repair is temporarily unavailable because migration schema state could not be verified. No migration was started.',
     );
-    $files = discover_migration_files(database_maintenance_project_root() . '/database/migrations');
+    $files = discover_migration_files(
+        database_maintenance_project_root() . '/database/migrations',
+    );
     $applied = [];
     if (schema_inspection_is_available($schemaStatus)) {
         $applied = database_maintenance_model_applied_migration_versions();
     }
-    $pendingFiles = pending_migration_files($files, array_map('strval', $applied));
-    $pendingVersions = array_map(static fn (string $file): string => basename($file, '.php'), $pendingFiles);
+    $pendingFiles = pending_migration_files($files, array_map(
+        'strval',
+        $applied,
+    ));
+    $pendingVersions = array_map(static fn(string $file): string => basename(
+        $file,
+        '.php',
+    ), $pendingFiles);
     return [
         'repair_version' => DATABASE_MAINTENANCE_REPAIR_VERSION,
         'pending_versions' => $pendingVersions,
         'ready' => $pendingVersions === [DATABASE_MAINTENANCE_REPAIR_VERSION],
-        'already_applied' => !in_array(DATABASE_MAINTENANCE_REPAIR_VERSION, $pendingVersions, true),
-        'blocked_by_other_migrations' => array_values(array_diff($pendingVersions, [DATABASE_MAINTENANCE_REPAIR_VERSION])),
+        'already_applied' => !in_array(
+            DATABASE_MAINTENANCE_REPAIR_VERSION,
+            $pendingVersions,
+            true,
+        ),
+        'blocked_by_other_migrations' => array_values(array_diff($pendingVersions, [
+            DATABASE_MAINTENANCE_REPAIR_VERSION,
+        ])),
     ];
 }
 
@@ -1776,16 +2862,33 @@ function database_maintenance_apply_schema_repair(): array
 {
     $readiness = database_maintenance_schema_repair_readiness();
     if (!empty($readiness['already_applied'])) {
-        return ['ok' => true, 'applied' => [], 'message' => 'The database maintenance schema repair is already applied.'] + $readiness;
+        return [
+            'ok' => true,
+            'applied' => [],
+            'message' => 'The database maintenance schema repair is already applied.',
+        ] + $readiness;
     }
     if (empty($readiness['ready'])) {
-        throw new RuntimeException('Schema repair is blocked because other migrations are pending: ' . implode(', ', (array) $readiness['blocked_by_other_migrations']) . '. Apply normal migrations first, then inspect again.');
+        throw new RuntimeException(
+            'Schema repair is blocked because other migrations are pending: '
+                . implode(
+                    ', ',
+                    (array) $readiness['blocked_by_other_migrations'],
+                )
+                . '. Apply normal migrations first, then inspect again.',
+        );
     }
     $applied = run_migrations();
     if ($applied !== [DATABASE_MAINTENANCE_REPAIR_VERSION]) {
-        throw new RuntimeException('Unexpected migration set was applied during schema repair.');
+        throw new RuntimeException(
+            'Unexpected migration set was applied during schema repair.',
+        );
     }
-    return ['ok' => true, 'applied' => $applied, 'message' => 'Legacy schema repair migration applied.'] + $readiness;
+    return [
+        'ok' => true,
+        'applied' => $applied,
+        'message' => 'Legacy schema repair migration applied.',
+    ] + $readiness;
 }
 
 /**
@@ -1795,9 +2898,14 @@ function database_maintenance_apply_schema_repair(): array
  * @param array<string, mixed> $inventory Inventory.
  * @return array<int, string> Existing table names.
  */
-function database_maintenance_selected_tables(array $selectedTables, array $inventory): array
-{
-    $existing = array_fill_keys(array_keys((array) ($inventory['tables'] ?? [])), true);
+function database_maintenance_selected_tables(
+    array $selectedTables,
+    array $inventory,
+): array {
+    $existing = array_fill_keys(
+        array_keys((array) ($inventory['tables'] ?? [])),
+        true,
+    );
     $selected = [];
     foreach ($selectedTables as $tableName) {
         $tableName = trim((string) $tableName);
@@ -1816,16 +2924,23 @@ function database_maintenance_selected_tables(array $selectedTables, array $inve
  * @param array<string, mixed>|null $inventory Optional current inventory fixture.
  * @return array<string, mixed> Dry-run report.
  */
-function database_maintenance_table_operation_plan(string $operation, array $selectedTables, ?array $inventory = null): array
-{
+function database_maintenance_table_operation_plan(
+    string $operation,
+    array $selectedTables,
+    ?array $inventory = null,
+): array {
     $operation = strtoupper($operation);
     if (!in_array($operation, ['ANALYZE', 'OPTIMIZE'], true)) {
-        throw new RuntimeException('Unsupported database table maintenance operation.');
+        throw new RuntimeException(
+            'Unsupported database table maintenance operation.',
+        );
     }
     $inventory = $inventory ?? database_maintenance_schema_inventory();
     $tables = database_maintenance_selected_tables($selectedTables, $inventory);
     if ($tables === []) {
-        throw new RuntimeException('Select at least one current database table.');
+        throw new RuntimeException(
+            'Select at least one current database table.',
+        );
     }
     $tablePlans = [];
     foreach ($tables as $tableName) {
@@ -1837,7 +2952,9 @@ function database_maintenance_table_operation_plan(string $operation, array $sel
             'data_bytes' => (int) ($table['data_bytes'] ?? 0),
             'index_bytes' => (int) ($table['index_bytes'] ?? 0),
             'total_bytes' => (int) ($table['total_bytes'] ?? 0),
-            'reclaimable_bytes_estimate' => (int) ($table['reclaimable_bytes_estimate'] ?? 0),
+            'reclaimable_bytes_estimate' => (int) (
+                $table['reclaimable_bytes_estimate'] ?? 0
+            ),
         ];
     }
     return [
@@ -1845,8 +2962,14 @@ function database_maintenance_table_operation_plan(string $operation, array $sel
         'dry_run' => true,
         'operation' => $operation,
         'table_count' => count($tablePlans),
-        'allocated_bytes' => array_sum(array_column($tablePlans, 'total_bytes')),
-        'reclaimable_bytes_estimate' => array_sum(array_column($tablePlans, 'reclaimable_bytes_estimate')),
+        'allocated_bytes' => array_sum(array_column(
+            $tablePlans,
+            'total_bytes',
+        )),
+        'reclaimable_bytes_estimate' => array_sum(array_column(
+            $tablePlans,
+            'reclaimable_bytes_estimate',
+        )),
         'table_plans' => $tablePlans,
         'operation_executed' => false,
         'generated_at_utc' => gmdate('c'),
@@ -1861,7 +2984,10 @@ function database_maintenance_table_operation_plan(string $operation, array $sel
  */
 function database_maintenance_preview_optimize_tables(array $selectedTables): array
 {
-    return database_maintenance_table_operation_plan('OPTIMIZE', $selectedTables);
+    return database_maintenance_table_operation_plan(
+        'OPTIMIZE',
+        $selectedTables,
+    );
 }
 
 /**
@@ -1883,7 +3009,10 @@ function database_maintenance_analyze_tables(array $selectedTables): array
  */
 function database_maintenance_optimize_tables(array $selectedTables): array
 {
-    return database_maintenance_run_table_operation('OPTIMIZE', $selectedTables);
+    return database_maintenance_run_table_operation(
+        'OPTIMIZE',
+        $selectedTables,
+    );
 }
 
 /**
@@ -1893,16 +3022,22 @@ function database_maintenance_optimize_tables(array $selectedTables): array
  * @param array<int, string> $selectedTables Selected tables.
  * @return array<string, mixed> Report.
  */
-function database_maintenance_run_table_operation(string $operation, array $selectedTables): array
-{
+function database_maintenance_run_table_operation(
+    string $operation,
+    array $selectedTables,
+): array {
     $operation = strtoupper($operation);
     if (!in_array($operation, ['ANALYZE', 'OPTIMIZE'], true)) {
-        throw new RuntimeException('Unsupported database table maintenance operation.');
+        throw new RuntimeException(
+            'Unsupported database table maintenance operation.',
+        );
     }
     $inventory = database_maintenance_schema_inventory();
     $tables = database_maintenance_selected_tables($selectedTables, $inventory);
     if ($tables === []) {
-        throw new RuntimeException('Select at least one current database table.');
+        throw new RuntimeException(
+            'Select at least one current database table.',
+        );
     }
     $reports = [];
     foreach ($tables as $tableName) {
@@ -1910,20 +3045,34 @@ function database_maintenance_run_table_operation(string $operation, array $sele
             $reports[] = [
                 'table_name' => $tableName,
                 'status' => 'ok',
-                'messages' => admin_database_usage_normalize_analyze_messages(database_maintenance_model_run_table_operation($operation, $tableName)),
+                'messages' => admin_database_usage_normalize_analyze_messages(database_maintenance_model_run_table_operation(
+                    $operation,
+                    $tableName,
+                )),
             ];
         } catch (Throwable $exception) {
-            $reports[] = ['table_name' => $tableName, 'status' => 'failed', 'messages' => [], 'error' => $exception->getMessage()];
+            $reports[] = [
+                'table_name' => $tableName,
+                'status' => 'failed',
+                'messages' => [],
+                'error' => $exception->getMessage(),
+            ];
         }
     }
-    $failed = count(array_filter($reports, static fn (array $report): bool => (string) ($report['status'] ?? '') !== 'ok'));
+    $failed = count(array_filter(
+        $reports,
+        static fn(array $report): bool => (
+            (string) ($report['status'] ?? '') !== 'ok'
+        ),
+    ));
     $result = [
         'ok' => $failed === 0,
         'operation' => $operation,
         'table_count' => count($tables),
         'failed_table_count' => $failed,
         'table_reports' => $reports,
-        'physical_optimization_executed' => $operation === 'OPTIMIZE' && $failed === 0,
+        'physical_optimization_executed' =>
+            $operation === 'OPTIMIZE' && $failed === 0,
         'physical_space_reclaimed' => null,
         'physical_space_note' => $operation === 'OPTIMIZE'
             ? 'OPTIMIZE TABLE completed for the successful selections, but actual filesystem reduction depends on the storage engine and hosting environment.'
@@ -1936,7 +3085,10 @@ function database_maintenance_run_table_operation(string $operation, array $sele
             'database_maintenance.' . strtolower($operation),
             'Admin ran ' . $operation . ' TABLE for selected tables.',
             $result,
-            ['category' => 'database', 'severity' => $failed === 0 ? 'notice' : 'warning'],
+            [
+                'category' => 'database',
+                'severity' => $failed === 0 ? 'notice' : 'warning',
+            ],
         );
     }
     return $result;

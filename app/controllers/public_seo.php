@@ -60,7 +60,7 @@ use function Gallery\Services\translation_active_language;
  *
  * @param array<string,mixed> $gallery Gallery row.
  * @param array<int,array<string,mixed>> $images Public gallery images.
- * @return array<string,mixed>
+ * @return array{title:string,description:string,canonical:string,preview_image:?string,site_name:string,og_locale:string} Canonical and social metadata passed to the SEO view.
  */
 function public_seo_tags_view_model(array $gallery, array $images = []): array
 {
@@ -70,7 +70,9 @@ function public_seo_tags_view_model(array $gallery, array $images = []): array
         'canonical' => canonical_url_for_gallery($gallery),
         'preview_image' => gallery_social_preview_image($gallery, $images),
         'site_name' => site_name(),
-        'og_locale' => content_language_og_locale(translation_active_language()),
+        'og_locale' => content_language_og_locale(
+            translation_active_language(),
+        ),
     ];
 }
 
@@ -80,10 +82,14 @@ function public_seo_tags_view_model(array $gallery, array $images = []): array
  * @param array<string,mixed> $gallery Gallery row.
  * @param array<int,array<string,mixed>> $images Public gallery images.
  * @param array<int,array<string,mixed>> $publicMediaManifest Request-local media manifest keyed by image id.
- * @return array<string,mixed>
+ * @phpstan-type PublicGalleryJsonLd array{'@context':string,'@type':string,name:string,description:string,url:string,image:list<array{'@type':string,position:int,name:string,description:string,contentUrl:string,thumbnailUrl:string,url:string,width?:int,height?:int,dateModified?:string}>,keywords?:list<string>}
+ * @return PublicGalleryJsonLd Prepared ImageGallery structured data for the JSON-LD view.
  */
-function public_gallery_json_ld_view_model(array $gallery, array $images = [], array $publicMediaManifest = []): array
-{
+function public_gallery_json_ld_view_model(
+    array $gallery,
+    array $images = [],
+    array $publicMediaManifest = [],
+): array {
     $items = [];
     $position = 1;
     $jsonLdImages = array_slice($images, 0, 20);
@@ -94,14 +100,16 @@ function public_gallery_json_ld_view_model(array $gallery, array $images = [], a
             continue;
         }
         $imageName = image_alt_text($image, $gallery, $position);
-        $manifestEntry = is_array($publicMediaManifest[(int) ($image['id'] ?? 0)] ?? null)
+        $manifestEntry = is_array(
+            $publicMediaManifest[(int) ($image['id'] ?? 0)] ?? null,
+        )
             ? $publicMediaManifest[(int) ($image['id'] ?? 0)]
             : [];
         $contentUrl = (string) ($manifestEntry['seo_content_url'] ?? '');
         if ($contentUrl === '') {
             $contentUrl = public_render_profile_with_thumbnail_purpose(
                 'seo json-ld visible content 1200 fallback',
-                static fn (): string => thumbnail_url($image, 1200, 'jpg')
+                static fn(): string => thumbnail_url($image, 1200, 'jpg'),
             );
         } else {
             public_render_profile_count('seo_json_ld_manifest_hits');
@@ -110,7 +118,7 @@ function public_gallery_json_ld_view_model(array $gallery, array $images = [], a
         if ($thumbnailUrl === '') {
             $thumbnailUrl = public_render_profile_with_thumbnail_purpose(
                 'seo json-ld thumbnail 800 fallback',
-                static fn (): string => thumbnail_url($image, 800, 'jpg')
+                static fn(): string => thumbnail_url($image, 800, 'jpg'),
             );
         } else {
             public_render_profile_count('seo_json_ld_manifest_hits');
@@ -120,7 +128,9 @@ function public_gallery_json_ld_view_model(array $gallery, array $images = [], a
             '@type' => 'ImageObject',
             'position' => $position++,
             'name' => $imageName,
-            'description' => trim((string) ($image['description'] ?? '')) !== '' ? trim((string) $image['description']) : $imageName,
+            'description' => trim((string) ($image['description'] ?? '')) !== ''
+                ? trim((string) $image['description'])
+                : $imageName,
             'contentUrl' => absolute_public_url($contentUrl),
             'thumbnailUrl' => absolute_public_url($thumbnailUrl),
             'url' => absolute_public_url(image_public_url($image, $gallery)),
@@ -131,7 +141,9 @@ function public_gallery_json_ld_view_model(array $gallery, array $images = [], a
         if (!empty($image['height'])) {
             $item['height'] = (int) $image['height'];
         }
-        $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified($image));
+        $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified(
+            $image,
+        ));
         if ($dateModified !== null) {
             $item['dateModified'] = $dateModified;
         }

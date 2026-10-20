@@ -36,7 +36,7 @@
 declare(strict_types=1);
 
 return [
-    "ALTER TABLE admin_logs
+    'ALTER TABLE admin_logs
         ADD KEY admin_logs_created_id_index (created_at, id),
-        ADD KEY admin_logs_grouping_created_index (event_key, level, category, severity, created_at, id)",
+        ADD KEY admin_logs_grouping_created_index (event_key, level, category, severity, created_at, id)',
 ];

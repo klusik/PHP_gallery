@@ -20,6 +20,7 @@ namespace Gallery\Services;
  * Rationale: Control messages contain only bounded identities and credentials, never media.
  */
 const COOPERATIVE_PAIRING_MAX_BYTES = 16384;
+
 /**
  * Limit the invitation acceptance window.
  * Type: int. Units: seconds. Scope: bilateral pairing.

@@ -42,11 +42,14 @@ use function Gallery\Services\t;
 /**
  * Render accessible public pagination controls for one listing.
  *
- * @param array $pagination Prepared pagination data.
+ * @param array{pagination_needed:bool,previous_url:string,next_url:string,page_urls:list<array{page:int,url:string,current:bool}>} $pagination Prepared page window and its navigation URLs.
  * @param string $label Optional translated navigation label.
+ * @return void Emits the navigation when pagination is needed.
  */
-function view_render_pagination_controls(array $pagination, string $label = ''): void
-{
+function view_render_pagination_controls(
+    array $pagination,
+    string $label = '',
+): void {
     if (empty($pagination['pagination_needed'])) {
         return;
     }
@@ -54,9 +57,17 @@ function view_render_pagination_controls(array $pagination, string $label = ''):
     $navLabel = $label !== '' ? $label : t('pagination.label', 'Pagination');
     echo '<nav class="pagination" aria-label="' . e($navLabel) . '">';
     if ((string) $pagination['previous_url'] !== '') {
-        echo '<a class="pagination-link" href="' . e((string) $pagination['previous_url']) . '">' . e(t('pagination.previous', 'Previous')) . '</a>';
+        echo
+            '<a class="pagination-link" href="'
+                . e((string) $pagination['previous_url'])
+                . '">'
+                . e(t('pagination.previous', 'Previous'))
+                . '</a>';
     } else {
-        echo '<span class="pagination-link is-disabled" aria-disabled="true">' . e(t('pagination.previous', 'Previous')) . '</span>';
+        echo
+            '<span class="pagination-link is-disabled" aria-disabled="true">'
+                . e(t('pagination.previous', 'Previous'))
+                . '</span>';
     }
 
     // $previousPage stores the last rendered page number so gaps can be shown.
@@ -64,22 +75,44 @@ function view_render_pagination_controls(array $pagination, string $label = ''):
     foreach ((array) $pagination['page_urls'] as $pageLink) {
         // $pageNumber stores the visible page number for this link.
         $pageNumber = (int) $pageLink['page'];
-        if ($previousPage > 0 && $pageNumber > $previousPage + 1) {
+        if ($previousPage > 0 && $pageNumber > ($previousPage + 1)) {
             echo '<span class="pagination-gap" aria-hidden="true">...</span>';
         }
         if (!empty($pageLink['current'])) {
-            echo '<span class="pagination-link is-current" aria-current="page">' . $pageNumber . '</span>';
+            echo
+                '<span class="pagination-link is-current" aria-current="page">'
+                    . $pageNumber
+                    . '</span>';
         } else {
-            echo '<a class="pagination-link" href="' . e((string) $pageLink['url']) . '">' . $pageNumber . '</a>';
+            echo
+                '<a class="pagination-link" href="'
+                    . e((string) $pageLink['url'])
+                    . '">'
+                    . $pageNumber
+                    . '</a>';
         }
         $previousPage = $pageNumber;
     }
 
     if ((string) $pagination['next_url'] !== '') {
-        echo '<a class="pagination-link" href="' . e((string) $pagination['next_url']) . '">' . e(t('pagination.next', 'Next')) . '</a>';
+        echo
+            '<a class="pagination-link" href="'
+                . e((string) $pagination['next_url'])
+                . '">'
+                . e(t('pagination.next', 'Next'))
+                . '</a>';
     } else {
-        echo '<span class="pagination-link is-disabled" aria-disabled="true">' . e(t('pagination.next', 'Next')) . '</span>';
+        echo
+            '<span class="pagination-link is-disabled" aria-disabled="true">'
+                . e(t('pagination.next', 'Next'))
+                . '</span>';
     }
-    echo '<span class="pagination-status">' . e(t('pagination.status', 'Page {current} of {total}', ['current' => (string) $pagination['current_page'], 'total' => (string) $pagination['total_pages']])) . '</span>';
+    echo
+        '<span class="pagination-status">'
+            . e(t('pagination.status', 'Page {current} of {total}', [
+                'current' => (string) $pagination['current_page'],
+                'total' => (string) $pagination['total_pages'],
+            ]))
+            . '</span>';
     echo '</nav>';
 }

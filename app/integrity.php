@@ -75,7 +75,7 @@ function integrity_cache_path(): string
 /**
  * Return paths that should never be reported as unknown installation files.
  *
- * @return array Structured result data for the caller.
+ * @return array{ok:bool,error:string,manifest:array{version?:string,files?:array<string,string>}} Load status and validated manifest data.
  */
 function integrity_ignored_unknown_patterns(): array
 {
@@ -113,7 +113,6 @@ function integrity_is_ignored_unknown_path(string $relativePath): bool
     }
     return false;
 }
-
 
 /**
  * Calculate a stable SHA-256 hash for text-like core files.
@@ -168,7 +167,7 @@ function integrity_manifest_fingerprint(): string
 /**
  * Load the core manifest from disk.
  *
- * @return array Structured result data for the caller.
+ * @return array{ok:bool,error:string,manifest:array<string,mixed>} Manifest status, error detail, and decoded manifest data.
  */
 function integrity_load_manifest(): array
 {
@@ -177,7 +176,12 @@ function integrity_load_manifest(): array
     if (!is_file($manifestPath)) {
         return [
             'ok' => false,
-            'error' => function_exists('Gallery\\Services\\t') ? t('integrity.error.manifest_missing', 'Core manifest is missing.') : 'Core manifest is missing.',
+            'error' => function_exists('Gallery\\Services\\t')
+                ? t(
+                    'integrity.error.manifest_missing',
+                    'Core manifest is missing.',
+                )
+                : 'Core manifest is missing.',
             'manifest' => [],
         ];
     }
@@ -187,17 +191,31 @@ function integrity_load_manifest(): array
     if ($manifestJson === false || trim($manifestJson) === '') {
         return [
             'ok' => false,
-            'error' => function_exists('Gallery\\Services\\t') ? t('integrity.error.manifest_empty', 'Core manifest is empty or unreadable.') : 'Core manifest is empty or unreadable.',
+            'error' => function_exists('Gallery\\Services\\t')
+                ? t(
+                    'integrity.error.manifest_empty',
+                    'Core manifest is empty or unreadable.',
+                )
+                : 'Core manifest is empty or unreadable.',
             'manifest' => [],
         ];
     }
 
     // $manifest stores an intermediate value used by the surrounding gallery workflow.
     $manifest = json_decode($manifestJson, true);
-    if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest['files'])) {
+    if (
+        !is_array($manifest)
+        || !isset($manifest['files'])
+        || !is_array($manifest['files'])
+    ) {
         return [
             'ok' => false,
-            'error' => function_exists('Gallery\\Services\\t') ? t('integrity.error.manifest_invalid', 'Core manifest is invalid JSON or does not contain a files object.') : 'Core manifest is invalid JSON or does not contain a files object.',
+            'error' => function_exists('Gallery\\Services\\t')
+                ? t(
+                    'integrity.error.manifest_invalid',
+                    'Core manifest is invalid JSON or does not contain a files object.',
+                )
+                : 'Core manifest is invalid JSON or does not contain a files object.',
             'manifest' => [],
         ];
     }
@@ -220,7 +238,9 @@ function integrity_discover_core_like_files(): array
 {
     return array_values(array_filter(
         release_file_policy_archive_owned_candidates(integrity_root_path()),
-        static fn(string $path): bool => release_file_policy_is_integrity_path($path)
+        static fn(string $path): bool => release_file_policy_is_integrity_path(
+            $path,
+        ),
     ));
 }
 
@@ -266,7 +286,11 @@ function integrity_calculate_status(): array
 
     foreach ($manifestFiles as $relativePath => $expectedHash) {
         // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
-        $normalizedPath = str_replace('\\', '/', ltrim((string) $relativePath, '/'));
+        $normalizedPath = str_replace(
+            '\\',
+            '/',
+            ltrim((string) $relativePath, '/'),
+        );
         // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
         $absolutePath = $rootPath . '/' . $normalizedPath;
         if (!is_file($absolutePath)) {
@@ -283,8 +307,12 @@ function integrity_calculate_status(): array
 
     // $manifestPathSet stores an intermediate value used by the surrounding gallery workflow.
     $manifestPathSet = array_fill_keys(array_map(
-        static fn (string $path): string => str_replace('\\', '/', ltrim($path, '/')),
-        array_keys($manifestFiles)
+        static fn(string $path): string => str_replace(
+            '\\',
+            '/',
+            ltrim($path, '/'),
+        ),
+        array_keys($manifestFiles),
     ), true);
 
     try {
@@ -320,7 +348,8 @@ function integrity_calculate_status(): array
 /**
  * Save the integrity status cache if the cache directory is writable.
  *
- * @param array $status Status value.
+ * @param array{checked_at:int,checked_at_iso:string,status:string,version:string,hash_mode:string,manifest_fingerprint:string,manifest_error:string,modified:list<string>,missing:list<string>,unknown:list<string>,ignored_unknown_count:int} $status Integrity status to cache.
+ * @return void Writes the status JSON when the cache directory exists.
  */
 function integrity_write_cached_status(array $status): void
 {
@@ -335,7 +364,7 @@ function integrity_write_cached_status(array $status): void
     @file_put_contents(
         $cachePath,
         json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
-        LOCK_EX
+        LOCK_EX,
     );
 }
 
@@ -343,7 +372,7 @@ function integrity_write_cached_status(array $status): void
  * Return the cached integrity status or calculate a fresh status when needed.
  *
  * @param bool $forceRefresh Force refresh value.
- * @return array Structured result data for the caller.
+ * @return array{checked_at:int,checked_at_iso:string,status:string,version:string,hash_mode:string,manifest_fingerprint:string,manifest_error:string,modified:list<string>,missing:list<string>,unknown:list<string>,ignored_unknown_count:int} Cached or freshly calculated integrity status.
  */
 function integrity_status(bool $forceRefresh = false): array
 {
@@ -355,17 +384,29 @@ function integrity_status(bool $forceRefresh = false): array
         // $cacheJson stores an intermediate value used by the surrounding gallery workflow.
         $cacheJson = file_get_contents($cachePath);
         // $cachedStatus stores an intermediate value used by the surrounding gallery workflow.
-        $cachedStatus = $cacheJson === false ? null : json_decode($cacheJson, true);
+        $cachedStatus = $cacheJson === false
+            ? null
+            : json_decode($cacheJson, true);
         if (is_array($cachedStatus) && isset($cachedStatus['checked_at'])) {
             // $age stores an intermediate value used by the surrounding gallery workflow.
             $age = time() - (int) $cachedStatus['checked_at'];
             // $cachedManifestFingerprint stores an intermediate value used by the surrounding gallery workflow.
-            $cachedManifestFingerprint = (string) ($cachedStatus['manifest_fingerprint'] ?? '');
+            $cachedManifestFingerprint = (string) (
+                $cachedStatus['manifest_fingerprint'] ?? ''
+            );
             // $manifestMatchesCache stores an intermediate value used by the surrounding gallery workflow.
-            $manifestMatchesCache = $currentManifestFingerprint !== ''
-                && hash_equals($currentManifestFingerprint, $cachedManifestFingerprint);
+            $manifestMatchesCache =
+                $currentManifestFingerprint !== ''
+                && hash_equals(
+                    $currentManifestFingerprint,
+                    $cachedManifestFingerprint,
+                );
 
-            if ($manifestMatchesCache && $age >= 0 && $age < CMS_INTEGRITY_CACHE_TTL) {
+            if (
+                $manifestMatchesCache
+                && $age >= 0
+                && $age < CMS_INTEGRITY_CACHE_TTL
+            ) {
                 return $cachedStatus;
             }
         }
@@ -388,7 +429,10 @@ function integrity_status_label(string $status): string
     return match ($status) {
         'ok' => t('admin.integrity.status_ok', 'OK'),
         'warning' => t('admin.integrity.status_warning', 'Warning'),
-        'modified' => t('admin.integrity.status_modified', 'Modified core files'),
+        'modified' => t(
+            'admin.integrity.status_modified',
+            'Modified core files',
+        ),
         'error' => t('admin.integrity.status_error', 'Integrity check error'),
         default => t('admin.integrity.status_unknown', 'Unknown'),
     };

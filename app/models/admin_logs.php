@@ -83,6 +83,8 @@ function admin_log_model_schema_ready(): bool
  *
  * This compatibility repair remains intentionally explicit because older
  * installations may reach the logs screen before the corresponding migration.
+
+ * @return bool True when the table and required workflow columns/index are available; false on inspection or repair failure.
  */
 function admin_log_model_ensure_status_schema(): bool
 {
@@ -91,17 +93,29 @@ function admin_log_model_ensure_status_schema(): bool
         if (!$tableExists || !$tableExists->fetch()) {
             return false;
         }
-        $statusColumn = db()->query("SHOW COLUMNS FROM admin_logs LIKE 'status'");
+        $statusColumn = db()->query(
+            "SHOW COLUMNS FROM admin_logs LIKE 'status'",
+        );
         if (!$statusColumn || !$statusColumn->fetch()) {
-            db()->exec("ALTER TABLE admin_logs ADD COLUMN status ENUM('todo','doing','done','waiting') NOT NULL DEFAULT 'todo' AFTER level");
+            db()->exec(
+                "ALTER TABLE admin_logs ADD COLUMN status ENUM('todo','doing','done','waiting') NOT NULL DEFAULT 'todo' AFTER level",
+            );
         }
-        $statusUpdatedAtColumn = db()->query("SHOW COLUMNS FROM admin_logs LIKE 'status_updated_at'");
+        $statusUpdatedAtColumn = db()->query(
+            "SHOW COLUMNS FROM admin_logs LIKE 'status_updated_at'",
+        );
         if (!$statusUpdatedAtColumn || !$statusUpdatedAtColumn->fetch()) {
-            db()->exec("ALTER TABLE admin_logs ADD COLUMN status_updated_at DATETIME NULL AFTER status");
+            db()->exec(
+                'ALTER TABLE admin_logs ADD COLUMN status_updated_at DATETIME NULL AFTER status',
+            );
         }
-        $statusIndex = db()->query("SHOW INDEX FROM admin_logs WHERE Key_name = 'admin_logs_status_created_index'");
+        $statusIndex = db()->query(
+            "SHOW INDEX FROM admin_logs WHERE Key_name = 'admin_logs_status_created_index'",
+        );
         if (!$statusIndex || !$statusIndex->fetch()) {
-            db()->exec("ALTER TABLE admin_logs ADD KEY admin_logs_status_created_index (status, created_at)");
+            db()->exec(
+                'ALTER TABLE admin_logs ADD KEY admin_logs_status_created_index (status, created_at)',
+            );
         }
         return true;
     } catch (Throwable) {
@@ -116,8 +130,10 @@ function admin_log_model_ensure_status_schema(): bool
  * @param array{failure_code?:string,exception_class?:string,sqlstate?:string,driver_code?:int,field?:string}|null $diagnostic Optional safe receipt without raw SQL/messages; field is restricted to known log-column identifiers.
  * @return bool True when an insert was executed successfully.
  */
-function admin_log_model_insert_available(array $values, ?array &$diagnostic = null): bool
-{
+function admin_log_model_insert_available(
+    array $values,
+    ?array &$diagnostic = null,
+): bool {
     $diagnostic = [];
     try {
         $columnsAvailable = admin_log_model_columns();
@@ -142,23 +158,52 @@ function admin_log_model_insert_available(array $values, ?array &$diagnostic = n
             return false;
         }
 
-        $stmt = db()->prepare('INSERT INTO admin_logs (' . implode(', ', $insertColumns) . ') VALUES (' . implode(', ', $placeholders) . ')');
+        $stmt = db()->prepare(
+            'INSERT INTO admin_logs ('
+                . implode(', ', $insertColumns)
+                . ') VALUES ('
+                . implode(', ', $placeholders)
+                . ')',
+        );
         $ok = $stmt->execute($params);
         if (!$ok) {
             $diagnostic['failure_code'] = 'log_insert_refused';
         }
         return $ok;
     } catch (Throwable $exception) {
-        $diagnostic = ['failure_code' => 'log_insert_exception', 'exception_class' => $exception::class];
+        $diagnostic = [
+            'failure_code' => 'log_insert_exception',
+            'exception_class' => $exception::class,
+        ];
         if ($exception instanceof \PDOException) {
             $state = (string) $exception->getCode();
             if (preg_match('/^[A-Z0-9]{5}$/D', $state) === 1) {
                 $diagnostic['sqlstate'] = $state;
             }
             $diagnostic['driver_code'] = (int) ($exception->errorInfo[1] ?? 0);
-            if ($diagnostic['driver_code'] === 1406
-                && preg_match("/Data too long for column '([a-z_]+)'/i", $exception->getMessage(), $match) === 1
-                && in_array($match[1], ['request_id', 'event_key', 'message', 'route_name', 'subject_type', 'category', 'severity', 'level', 'context_json'], true)) {
+            if (
+                $diagnostic['driver_code'] === 1406
+                && preg_match(
+                    "/Data too long for column '([a-z_]+)'/i",
+                    $exception->getMessage(),
+                    $match,
+                ) === 1
+                && in_array(
+                    $match[1],
+                    [
+                        'request_id',
+                        'event_key',
+                        'message',
+                        'route_name',
+                        'subject_type',
+                        'category',
+                        'severity',
+                        'level',
+                        'context_json',
+                    ],
+                    true,
+                )
+            ) {
                 $diagnostic['field'] = $match[1];
             }
         }
@@ -191,7 +236,9 @@ function admin_log_model_group_hash_sql(string $tableAlias = 'l'): string
 /** Return the normalized SQL sort direction for Admin log time ordering. */
 function admin_log_model_time_sort(array $filters): string
 {
-    return strtolower((string) ($filters['time_sort'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+    return strtolower((string) ($filters['time_sort'] ?? 'desc')) === 'asc'
+        ? 'ASC'
+        : 'DESC';
 }
 
 /**
@@ -202,10 +249,16 @@ function admin_log_model_time_sort(array $filters): string
  * @param array<int,string> $validStatuses Allowed workflow statuses.
  * @param array<int,string> $validCategories Allowed categories.
  * @param array<int,string> $validSeverities Allowed severities.
- * @return array{where_sql:string,params:array<int,mixed>}
+
+ * @return array{where_sql:string,params:list<string>} SQL predicate generated from semantic filters and its bound values.
  */
-function admin_log_model_filter_sql(?string $status, array $filters, array $validStatuses, array $validCategories, array $validSeverities): array
-{
+function admin_log_model_filter_sql(
+    ?string $status,
+    array $filters,
+    array $validStatuses,
+    array $validCategories,
+    array $validSeverities,
+): array {
     $params = [];
     $where = [];
     if ($status !== null && in_array($status, $validStatuses, true)) {
@@ -213,7 +266,11 @@ function admin_log_model_filter_sql(?string $status, array $filters, array $vali
         $params[] = $status;
     }
     $category = (string) ($filters['category'] ?? '');
-    if (admin_log_model_column_exists('category') && $category !== '' && in_array($category, $validCategories, true)) {
+    if (
+        admin_log_model_column_exists('category')
+        && $category !== ''
+        && in_array($category, $validCategories, true)
+    ) {
         $where[] = 'l.category = ?';
         $params[] = $category;
     }
@@ -231,13 +288,20 @@ function admin_log_model_filter_sql(?string $status, array $filters, array $vali
             }
         }
         if ($normalized !== []) {
-            $where[] = 'l.severity IN (' . implode(', ', array_fill(0, count($normalized), '?')) . ')';
+            $where[] =
+                'l.severity IN ('
+                . implode(', ', array_fill(0, count($normalized), '?'))
+                . ')';
             array_push($params, ...$normalized);
         }
     }
     $query = trim((string) ($filters['q'] ?? ''));
     if ($query !== '') {
-        $searchColumns = ['l.event_key LIKE ?', 'l.message LIKE ?', 'l.context_json LIKE ?'];
+        $searchColumns = [
+            'l.event_key LIKE ?',
+            'l.message LIKE ?',
+            'l.context_json LIKE ?',
+        ];
         $needle = '%' . $query . '%';
         $params[] = $needle;
         $params[] = $needle;
@@ -257,35 +321,95 @@ function admin_log_model_filter_sql(?string $status, array $filters, array $vali
     ];
 }
 
-/** Return recent Admin log rows with usernames. */
+/**
+ * Return recent Admin log rows with usernames.
+ * @param int $limit Maximum recent rows to return before the model safety clamp.
+ * @return list<array<string,int|string|null>> Recent log rows joined with usernames.
+ */
 function admin_log_model_recent(int $limit): array
 {
     $safeLimit = max(1, min(50, $limit));
-    $stmt = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC, l.id DESC LIMIT ' . $safeLimit);
+    $stmt = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC, l.id DESC LIMIT '
+            . $safeLimit,
+    );
     $stmt->execute();
     return $stmt->fetchAll();
 }
 
-/** Return filtered Admin log rows. */
-function admin_log_model_list(?string $status, int $limit, array $filters, int $offset, array $validStatuses, array $validCategories, array $validSeverities): array
-{
-    $filter = admin_log_model_filter_sql($status, $filters, $validStatuses, $validCategories, $validSeverities);
+/**
+ * Return filtered Admin log rows.
+ * @param ?string $status Optional workflow status filter.
+ * @param int $limit Maximum rows to return before the model safety clamp.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated semantic category, severity, query, and time-order filters.
+ * @param int $offset Nonnegative result offset.
+ * @param list<string> $validStatuses Allowed workflow status values.
+ * @param list<string> $validCategories Allowed category values.
+ * @param list<string> $validSeverities Allowed severity values.
+ * @return list<array<string,int|string|null>> Filtered log rows with grouping and time-boundary metadata.
+ */
+function admin_log_model_list(
+    ?string $status,
+    int $limit,
+    array $filters,
+    int $offset,
+    array $validStatuses,
+    array $validCategories,
+    array $validSeverities,
+): array {
+    $filter = admin_log_model_filter_sql(
+        $status,
+        $filters,
+        $validStatuses,
+        $validCategories,
+        $validSeverities,
+    );
     $timeSort = admin_log_model_time_sort($filters);
     $idSort = $timeSort === 'ASC' ? 'ASC' : 'DESC';
-    $sql = 'SELECT l.*, u.username, 1 AS group_count, ' . admin_log_model_group_hash_sql('l') . ' AS group_hash, l.created_at AS first_created_at, l.created_at AS latest_created_at FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
+    $sql =
+        'SELECT l.*, u.username, 1 AS group_count, '
+        . admin_log_model_group_hash_sql('l')
+        . ' AS group_hash, l.created_at AS first_created_at, l.created_at AS latest_created_at FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
         . $filter['where_sql']
-        . ' ORDER BY l.created_at ' . $timeSort . ', l.id ' . $idSort
-        . ' LIMIT ' . max(1, min(500, $limit)) . ' OFFSET ' . max(0, $offset);
+        . ' ORDER BY l.created_at '
+        . $timeSort
+        . ', l.id '
+        . $idSort
+        . ' LIMIT '
+        . max(1, min(500, $limit))
+        . ' OFFSET '
+        . max(0, $offset);
     $stmt = db()->prepare($sql);
     $stmt->execute($filter['params']);
     return $stmt->fetchAll();
 }
 
-/** Return the number of filtered Admin log rows. */
-function admin_log_model_count(?string $status, array $filters, array $validStatuses, array $validCategories, array $validSeverities): int
-{
-    $filter = admin_log_model_filter_sql($status, $filters, $validStatuses, $validCategories, $validSeverities);
-    $stmt = db()->prepare('SELECT COUNT(*) FROM admin_logs l' . $filter['where_sql']);
+/**
+ * Return the number of filtered Admin log rows.
+ * @param ?string $status Optional workflow status filter.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated semantic category, severity, and query filters.
+ * @param list<string> $validStatuses Allowed workflow status values.
+ * @param list<string> $validCategories Allowed category values.
+ * @param list<string> $validSeverities Allowed severity values.
+ * @return int Number of rows matching the supplied filters.
+ */
+function admin_log_model_count(
+    ?string $status,
+    array $filters,
+    array $validStatuses,
+    array $validCategories,
+    array $validSeverities,
+): int {
+    $filter = admin_log_model_filter_sql(
+        $status,
+        $filters,
+        $validStatuses,
+        $validCategories,
+        $validSeverities,
+    );
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM admin_logs l' . $filter['where_sql'],
+    );
     $stmt->execute($filter['params']);
     return max(0, (int) $stmt->fetchColumn());
 }
@@ -300,58 +424,164 @@ function admin_log_model_count(?string $status, array $filters, array $validStat
  * @param array<int,string> $severities Supported severity keys.
  * @return array<int,array<string,int|string|null>> Raw log rows including usernames.
  */
-function admin_log_model_filtered_export_batch(array $filters, ?string $cursorTime, int $cursorId, int $limit, array $categories, array $severities): array
-{
-    $filter = admin_log_model_filter_sql(null, $filters, [], $categories, $severities);
+function admin_log_model_filtered_export_batch(
+    array $filters,
+    ?string $cursorTime,
+    int $cursorId,
+    int $limit,
+    array $categories,
+    array $severities,
+): array {
+    $filter = admin_log_model_filter_sql(
+        null,
+        $filters,
+        [],
+        $categories,
+        $severities,
+    );
     $order = admin_log_model_time_sort($filters);
     $comparison = $order === 'ASC' ? '>' : '<';
     $where = $filter['where_sql'];
     $params = $filter['params'];
     if ($cursorTime !== null) {
-        $where .= ($where === '' ? ' WHERE ' : ' AND ') . '(l.created_at ' . $comparison . ' ? OR (l.created_at = ? AND l.id ' . $comparison . ' ?))';
+        $where .=
+            ($where === '' ? ' WHERE ' : ' AND ')
+            . '(l.created_at '
+            . $comparison
+            . ' ? OR (l.created_at = ? AND l.id '
+            . $comparison
+            . ' ?))';
         array_push($params, $cursorTime, $cursorTime, $cursorId);
     }
-    $statement = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
-        . $where . ' ORDER BY l.created_at ' . $order . ', l.id ' . $order . ' LIMIT ' . max(1, $limit));
+    $statement = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
+            . $where
+            . ' ORDER BY l.created_at '
+            . $order
+            . ', l.id '
+            . $order
+            . ' LIMIT '
+            . max(1, $limit),
+    );
     $statement->execute($params);
     return $statement->fetchAll();
 }
 
-/** Return grouped Admin log rows. */
-function admin_log_model_grouped_list(?string $status, int $limit, array $filters, int $offset, array $validStatuses, array $validCategories, array $validSeverities): array
-{
-    $filter = admin_log_model_filter_sql($status, $filters, $validStatuses, $validCategories, $validSeverities);
+/**
+ * Return grouped Admin log rows.
+ * @param ?string $status Optional workflow status filter.
+ * @param int $limit Maximum groups to return before the model safety clamp.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated semantic filters including sort direction.
+ * @param int $offset Nonnegative result offset.
+ * @param list<string> $validStatuses Allowed workflow status values.
+ * @param list<string> $validCategories Allowed category values.
+ * @param list<string> $validSeverities Allowed severity values.
+ * @return list<array<string,int|string|null>> Representative grouped log rows with count/hash and date boundaries.
+ */
+function admin_log_model_grouped_list(
+    ?string $status,
+    int $limit,
+    array $filters,
+    int $offset,
+    array $validStatuses,
+    array $validCategories,
+    array $validSeverities,
+): array {
+    $filter = admin_log_model_filter_sql(
+        $status,
+        $filters,
+        $validStatuses,
+        $validCategories,
+        $validSeverities,
+    );
     $timeSort = admin_log_model_time_sort($filters);
     $idSort = $timeSort === 'ASC' ? 'ASC' : 'DESC';
-    $groupBy = array_map(static fn (string $column): string => 'l.' . $column, admin_log_model_group_columns());
+    $groupBy = array_map(
+        static fn(string $column): string => 'l.' . $column,
+        admin_log_model_group_columns(),
+    );
     $representativeIdSql = $timeSort === 'ASC' ? 'MIN(l.id)' : 'MAX(l.id)';
-    $sortColumn = $timeSort === 'ASC' ? 'grouped.first_created_at' : 'grouped.latest_created_at';
-    $groupSql = 'SELECT ' . $representativeIdSql . ' AS representative_id, ' . admin_log_model_group_hash_sql('l') . ' AS group_hash, COUNT(*) AS group_count, MIN(l.created_at) AS first_created_at, MAX(l.created_at) AS latest_created_at FROM admin_logs l'
-        . $filter['where_sql'] . ' GROUP BY ' . implode(', ', $groupBy);
-    $sql = 'SELECT l.*, u.username, grouped.group_count, grouped.group_hash, grouped.first_created_at, grouped.latest_created_at FROM (' . $groupSql . ') grouped'
+    $sortColumn = $timeSort === 'ASC'
+        ? 'grouped.first_created_at'
+        : 'grouped.latest_created_at';
+    $groupSql =
+        'SELECT '
+        . $representativeIdSql
+        . ' AS representative_id, '
+        . admin_log_model_group_hash_sql('l')
+        . ' AS group_hash, COUNT(*) AS group_count, MIN(l.created_at) AS first_created_at, MAX(l.created_at) AS latest_created_at FROM admin_logs l'
+        . $filter['where_sql']
+        . ' GROUP BY '
+        . implode(', ', $groupBy);
+    $sql =
+        'SELECT l.*, u.username, grouped.group_count, grouped.group_hash, grouped.first_created_at, grouped.latest_created_at FROM ('
+        . $groupSql
+        . ') grouped'
         . ' INNER JOIN admin_logs l ON l.id = grouped.representative_id'
         . ' LEFT JOIN users u ON u.id = l.user_id'
-        . ' ORDER BY ' . $sortColumn . ' ' . $timeSort . ', grouped.representative_id ' . $idSort
-        . ' LIMIT ' . max(1, min(500, $limit)) . ' OFFSET ' . max(0, $offset);
+        . ' ORDER BY '
+        . $sortColumn
+        . ' '
+        . $timeSort
+        . ', grouped.representative_id '
+        . $idSort
+        . ' LIMIT '
+        . max(1, min(500, $limit))
+        . ' OFFSET '
+        . max(0, $offset);
     $stmt = db()->prepare($sql);
     $stmt->execute($filter['params']);
     return $stmt->fetchAll();
 }
 
-/** Return the number of grouped Admin log rows. */
-function admin_log_model_grouped_count(?string $status, array $filters, array $validStatuses, array $validCategories, array $validSeverities): int
-{
-    $filter = admin_log_model_filter_sql($status, $filters, $validStatuses, $validCategories, $validSeverities);
-    $groupBy = array_map(static fn (string $column): string => 'l.' . $column, admin_log_model_group_columns());
-    $sql = 'SELECT COUNT(*) FROM (SELECT 1 FROM admin_logs l' . $filter['where_sql'] . ' GROUP BY ' . implode(', ', $groupBy) . ') grouped_count';
+/**
+ * Return the number of grouped Admin log rows.
+ * @param ?string $status Optional workflow status filter.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated semantic category, severity, and query filters.
+ * @param list<string> $validStatuses Allowed workflow status values.
+ * @param list<string> $validCategories Allowed category values.
+ * @param list<string> $validSeverities Allowed severity values.
+ * @return int Number of grouped buckets matching the supplied filters.
+ */
+function admin_log_model_grouped_count(
+    ?string $status,
+    array $filters,
+    array $validStatuses,
+    array $validCategories,
+    array $validSeverities,
+): int {
+    $filter = admin_log_model_filter_sql(
+        $status,
+        $filters,
+        $validStatuses,
+        $validCategories,
+        $validSeverities,
+    );
+    $groupBy = array_map(
+        static fn(string $column): string => 'l.' . $column,
+        admin_log_model_group_columns(),
+    );
+    $sql =
+        'SELECT COUNT(*) FROM (SELECT 1 FROM admin_logs l'
+        . $filter['where_sql']
+        . ' GROUP BY '
+        . implode(', ', $groupBy)
+        . ') grouped_count';
     $stmt = db()->prepare($sql);
     $stmt->execute($filter['params']);
     return max(0, (int) $stmt->fetchColumn());
 }
 
-/** Build indexed predicates matching the group represented by one log row. */
-function admin_log_model_group_member_filter(array $entry, string $tableAlias = 'l'): array
-{
+/**
+ * Build indexed predicates matching the group represented by one log row.
+ * @param array<string,int|string|null> $entry Representative grouped log row whose event/category/severity fields define the group.
+ * @param string $tableAlias SQL alias for the Admin log table.
+ * @return array{where_sql:string,params:list<string>} Group-member predicate and bound group values.
+ */
+function admin_log_model_group_member_filter(
+    array $entry,
+    string $tableAlias = 'l',
+): array {
     $where = [];
     $params = [];
     foreach (admin_log_model_group_columns() as $column) {
@@ -361,23 +591,47 @@ function admin_log_model_group_member_filter(array $entry, string $tableAlias = 
     return ['where_sql' => implode(' AND ', $where), 'params' => $params];
 }
 
-/** Return one bounded page of raw rows represented by a grouped Admin log entry. */
-function admin_log_model_group_member_page(array $entry, int $limit, int $offset): array
-{
+/**
+ * Return one bounded page of raw rows represented by a grouped Admin log entry.
+ * @param array<string,int|string|null> $entry Representative grouped log row defining the group.
+ * @param int $limit Maximum rows in the page before the model safety clamp.
+ * @param int $offset Nonnegative result offset.
+ * @return list<array<string,int|string|null>> Descending raw log rows for the requested group page.
+ */
+function admin_log_model_group_member_page(
+    array $entry,
+    int $limit,
+    int $offset,
+): array {
     $filter = admin_log_model_group_member_filter($entry, 'l');
     $stmt = db()->prepare(
         'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
-        . ' WHERE ' . $filter['where_sql']
-        . ' ORDER BY l.created_at DESC, l.id DESC'
-        . ' LIMIT ' . max(1, min(500, $limit)) . ' OFFSET ' . max(0, $offset)
+            . ' WHERE '
+            . $filter['where_sql']
+            . ' ORDER BY l.created_at DESC, l.id DESC'
+            . ' LIMIT '
+            . max(1, min(500, $limit))
+            . ' OFFSET '
+            . max(0, $offset),
     );
     $stmt->execute($filter['params']);
     return $stmt->fetchAll();
 }
 
-/** Return one descending keyset batch of grouped members for streaming exports. */
-function admin_log_model_group_member_export_batch(array $entry, ?string $beforeCreatedAt, int $beforeId, int $limit): array
-{
+/**
+ * Return one descending keyset batch of grouped members for streaming exports.
+ * @param array<string,int|string|null> $entry Representative grouped log row defining the group.
+ * @param ?string $beforeCreatedAt Exclusive timestamp cursor, or null for the first batch.
+ * @param int $beforeId Exclusive log-id cursor paired with the timestamp.
+ * @param int $limit Maximum batch size before the model safety clamp.
+ * @return list<array<string,int|string|null>> Descending keyset batch of raw group members.
+ */
+function admin_log_model_group_member_export_batch(
+    array $entry,
+    ?string $beforeCreatedAt,
+    int $beforeId,
+    int $limit,
+): array {
     $filter = admin_log_model_group_member_filter($entry, 'l');
     $whereSql = $filter['where_sql'];
     $params = $filter['params'];
@@ -389,25 +643,36 @@ function admin_log_model_group_member_export_batch(array $entry, ?string $before
     }
     $stmt = db()->prepare(
         'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
-        . ' WHERE ' . $whereSql
-        . ' ORDER BY l.created_at DESC, l.id DESC LIMIT ' . max(50, min(2000, $limit))
+            . ' WHERE '
+            . $whereSql
+            . ' ORDER BY l.created_at DESC, l.id DESC LIMIT '
+            . max(50, min(2000, $limit)),
     );
     $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
-/** Return aggregate timestamps and count for one grouped Admin log entry. */
+/**
+ * Return aggregate timestamps and count for one grouped Admin log entry.
+ * @param array<string,int|string|null> $entry Representative grouped log row defining the group.
+ * @return array{group_count:int,first_created_at:string,latest_created_at:string} Aggregate size and timestamp boundaries for the group.
+ */
 function admin_log_model_group_member_summary(array $entry): array
 {
     $filter = admin_log_model_group_member_filter($entry, 'l');
     $stmt = db()->prepare(
         'SELECT COUNT(*) AS group_count, MIN(l.created_at) AS first_created_at, MAX(l.created_at) AS latest_created_at'
-        . ' FROM admin_logs l WHERE ' . $filter['where_sql']
+            . ' FROM admin_logs l WHERE '
+            . $filter['where_sql'],
     );
     $stmt->execute($filter['params']);
     $summary = $stmt->fetch();
     if (!is_array($summary)) {
-        return ['group_count' => 0, 'first_created_at' => '', 'latest_created_at' => ''];
+        return [
+            'group_count' => 0,
+            'first_created_at' => '',
+            'latest_created_at' => '',
+        ];
     }
     return [
         'group_count' => max(0, (int) ($summary['group_count'] ?? 0)),
@@ -416,63 +681,110 @@ function admin_log_model_group_member_summary(array $entry): array
     ];
 }
 
-/** Return raw rows belonging to the requested grouped hashes. */
-function admin_log_model_group_member_rows(array $groupHashes, int $limit): array
-{
+/**
+ * Return raw rows belonging to the requested grouped hashes.
+ * @param list<string> $groupHashes Group hashes whose raw rows are requested.
+ * @param int $limit Maximum rows returned before the model safety clamp.
+ * @return list<array<string,int|string|null>> Descending raw rows matching the requested group hashes.
+ */
+function admin_log_model_group_member_rows(
+    array $groupHashes,
+    int $limit,
+): array {
     $normalized = [];
     foreach ($groupHashes as $groupHash) {
         $groupHash = trim((string) $groupHash);
-        if ($groupHash !== '') $normalized[$groupHash] = true;
+        if ($groupHash !== '')
+            $normalized[$groupHash] = true;
     }
     $hashes = array_keys($normalized);
-    if ($hashes === []) return [];
+    if ($hashes === [])
+        return [];
     $hashSql = admin_log_model_group_hash_sql('l');
-    $sql = 'SELECT l.*, u.username, ' . $hashSql . ' AS group_hash FROM admin_logs l'
+    $sql =
+        'SELECT l.*, u.username, '
+        . $hashSql
+        . ' AS group_hash FROM admin_logs l'
         . ' LEFT JOIN users u ON u.id = l.user_id'
-        . ' WHERE ' . $hashSql . ' IN (' . implode(', ', array_fill(0, count($hashes), '?')) . ')'
+        . ' WHERE '
+        . $hashSql
+        . ' IN ('
+        . implode(', ', array_fill(0, count($hashes), '?'))
+        . ')'
         . ' ORDER BY l.created_at DESC, l.id DESC'
-        . ' LIMIT ' . max(1, min(2000, $limit));
+        . ' LIMIT '
+        . max(1, min(2000, $limit));
     $stmt = db()->prepare($sql);
     $stmt->execute($hashes);
     return $stmt->fetchAll();
 }
 
-/** Return every Admin log row for full exports. */
+/**
+ * Return every Admin log row for full exports.
+ * @return list<array<string,int|string|null>> All raw log rows joined with usernames in chronological order.
+ */
 function admin_log_model_export_rows(): array
 {
-    $stmt = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at ASC, l.id ASC');
+    $stmt = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at ASC, l.id ASC',
+    );
     $stmt->execute();
     return $stmt->fetchAll();
 }
 
-/** Return one ascending id-based export batch. */
+/**
+ * Return one ascending id-based export batch.
+ * @param int $afterId Exclusive log-id cursor.
+ * @param int $limit Maximum rows in the batch before the model safety clamp.
+ * @return list<array<string,int|string|null>> Ascending log-id batch joined with usernames.
+ */
 function admin_log_model_export_row_batch(int $afterId, int $limit): array
 {
     $stmt = db()->prepare(
         'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
-        . ' WHERE l.id > ? ORDER BY l.id ASC LIMIT ' . max(50, min(2000, $limit))
+            . ' WHERE l.id > ? ORDER BY l.id ASC LIMIT '
+            . max(50, min(2000, $limit)),
     );
     $stmt->execute([max(0, $afterId)]);
     return $stmt->fetchAll();
 }
 
-/** Return one Admin log entry with username data. */
+/**
+ * Return one Admin log entry with username data.
+ * @param int $logId Stable Admin log row identifier.
+ * @return ?array<string,int|string|null> Matching log row joined with its username, or null when absent.
+ */
 function admin_log_model_find(int $logId): ?array
 {
-    $stmt = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id WHERE l.id = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id WHERE l.id = ? LIMIT 1',
+    );
     $stmt->execute([$logId]);
     $entry = $stmt->fetch();
     return is_array($entry) ? $entry : null;
 }
 
-/** Update one Admin log row status and verify the stored value. */
-function admin_log_model_update_status(int $logId, string $status, string $now): bool
-{
+/**
+ * Update one Admin log row status and verify the stored value.
+ * @param int $logId Stable Admin log row identifier.
+ * @param string $status New normalized workflow status.
+ * @param string $now SQL timestamp recorded for the status update.
+ * @return bool True when the requested status was persisted and verified; false when no matching row changed.
+ */
+function admin_log_model_update_status(
+    int $logId,
+    string $status,
+    string $now,
+): bool {
     if ($status === 'done' && admin_log_model_column_exists('resolved_at')) {
-        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ?, resolved_at = COALESCE(resolved_at, ?) WHERE id = ?');
+        $stmt = db()->prepare(
+            'UPDATE admin_logs SET status = ?, status_updated_at = ?, resolved_at = COALESCE(resolved_at, ?) WHERE id = ?',
+        );
         $stmt->execute([$status, $now, $now, $logId]);
     } else {
-        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ? WHERE id = ?');
+        $stmt = db()->prepare(
+            'UPDATE admin_logs SET status = ?, status_updated_at = ? WHERE id = ?',
+        );
         $stmt->execute([$status, $now, $logId]);
     }
     if ((int) $stmt->rowCount() <= 0) {
@@ -483,15 +795,32 @@ function admin_log_model_update_status(int $logId, string $status, string $now):
     return $check->fetchColumn() === $status;
 }
 
-/** Update every Admin log row represented by one grouped hash. */
-function admin_log_model_update_group_status(string $groupHash, string $status, string $now): int
-{
+/**
+ * Update every Admin log row represented by one grouped hash.
+ * @param string $groupHash Stable hash identifying the grouped log bucket.
+ * @param string $status New normalized workflow status.
+ * @param string $now SQL timestamp recorded for the status update.
+ * @return int Number of log rows whose group status was updated.
+ */
+function admin_log_model_update_group_status(
+    string $groupHash,
+    string $status,
+    string $now,
+): int {
     $hashSql = admin_log_model_group_hash_sql('admin_logs');
     if ($status === 'done' && admin_log_model_column_exists('resolved_at')) {
-        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ?, resolved_at = COALESCE(resolved_at, ?) WHERE ' . $hashSql . ' = ?');
+        $stmt = db()->prepare(
+            'UPDATE admin_logs SET status = ?, status_updated_at = ?, resolved_at = COALESCE(resolved_at, ?) WHERE '
+                . $hashSql
+                . ' = ?',
+        );
         $stmt->execute([$status, $now, $now, $groupHash]);
     } else {
-        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ? WHERE ' . $hashSql . ' = ?');
+        $stmt = db()->prepare(
+            'UPDATE admin_logs SET status = ?, status_updated_at = ? WHERE '
+                . $hashSql
+                . ' = ?',
+        );
         $stmt->execute([$status, $now, $groupHash]);
     }
     return (int) $stmt->rowCount();

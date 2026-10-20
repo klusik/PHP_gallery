@@ -43,32 +43,69 @@ use function Gallery\Core\e;
  * Render the Admin feature settings page body.
  *
  * @param array<string, mixed> $viewModel Prepared feature-settings presentation model.
+ * @return void Emit the feature settings form and prepared capability summaries.
  */
 function view_render_admin_features_page(array $viewModel): void
 {
-    echo '<section class="hero admin-features-hero"><div><p class="admin-kicker">' . e((string) ($viewModel['kicker'] ?? '')) . '</p><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1><p class="muted">' . e((string) ($viewModel['description'] ?? '')) . '</p></div>';
-    echo '<div class="admin-hero-actions"><a class="button secondary" href="' . e((string) ($viewModel['dashboard_url'] ?? '')) . '">' . e((string) ($viewModel['back_label'] ?? '')) . '</a></div></section>';
+    echo
+        '<section class="hero admin-features-hero"><div><p class="admin-kicker">'
+            . e((string) ($viewModel['kicker'] ?? ''))
+            . '</p><h1>'
+            . e((string) ($viewModel['title'] ?? ''))
+            . '</h1><p class="muted">'
+            . e((string) ($viewModel['description'] ?? ''))
+            . '</p></div>';
+    echo
+        '<div class="admin-hero-actions"><a class="button secondary" href="'
+            . e((string) ($viewModel['dashboard_url'] ?? ''))
+            . '">'
+            . e((string) ($viewModel['back_label'] ?? ''))
+            . '</a></div></section>';
 
     if ((string) ($viewModel['notice'] ?? '') !== '') {
-        echo '<div class="notice">' . e((string) $viewModel['notice']) . '</div>';
+        echo
+            '<div class="notice">'
+                . e((string) $viewModel['notice'])
+                . '</div>';
     }
     if ((string) ($viewModel['save_error'] ?? '') !== '') {
-        echo '<div class="notice error">' . e((string) $viewModel['save_error']) . '</div>';
+        echo
+            '<div class="notice error">'
+                . e((string) $viewModel['save_error'])
+                . '</div>';
     }
 
     $summary = (array) ($viewModel['summary'] ?? []);
-    echo '<section class="panel admin-feature-summary-panel"><h2>' . e((string) ($viewModel['summary_title'] ?? '')) . '</h2>';
+    echo
+        '<section class="panel admin-feature-summary-panel"><h2>'
+            . e((string) ($viewModel['summary_title'] ?? ''))
+            . '</h2>';
     echo '<div class="admin-metric-grid">';
     view_render_admin_feature_metric((array) ($summary['enabled'] ?? []));
     view_render_admin_feature_metric((array) ($summary['disabled'] ?? []));
     view_render_admin_feature_metric((array) ($summary['total'] ?? []));
     echo '</div></section>';
 
-    echo '<form method="post" class="admin-feature-form">' . csrf_field() . '<input type="hidden" name="feature_registry_revision" value="' . e((string) ($viewModel['registry_revision'] ?? '')) . '">';
+    echo
+        '<form method="post" class="admin-feature-form">'
+            . csrf_field()
+            . '<input type="hidden" name="feature_registry_revision" value="'
+            . e((string) ($viewModel['registry_revision'] ?? ''))
+            . '">';
     foreach ((array) ($viewModel['groups'] ?? []) as $group) {
-        view_render_admin_feature_group((array) $group, (string) ($viewModel['group_kicker'] ?? ''));
+        view_render_admin_feature_group(
+            (array) $group,
+            (string) ($viewModel['group_kicker'] ?? ''),
+        );
     }
-    echo '<div class="admin-sticky-actions"><button type="submit">' . e((string) ($viewModel['save_label'] ?? '')) . '</button><a class="button secondary" href="' . e((string) ($viewModel['reset_url'] ?? '')) . '">' . e((string) ($viewModel['reset_label'] ?? '')) . '</a></div>';
+    echo
+        '<div class="admin-sticky-actions"><button type="submit">'
+            . e((string) ($viewModel['save_label'] ?? ''))
+            . '</button><a class="button secondary" href="'
+            . e((string) ($viewModel['reset_url'] ?? ''))
+            . '">'
+            . e((string) ($viewModel['reset_label'] ?? ''))
+            . '</a></div>';
     echo '</form>';
 }
 
@@ -79,7 +116,14 @@ function view_render_admin_features_page(array $viewModel): void
  */
 function view_render_admin_feature_metric(array $metric): void
 {
-    echo '<article class="admin-metric-card"><span>' . e((string) ($metric['label'] ?? '')) . '</span><strong>' . (int) ($metric['value'] ?? 0) . '</strong><small>' . e((string) ($metric['help'] ?? '')) . '</small></article>';
+    echo
+        '<article class="admin-metric-card"><span>'
+            . e((string) ($metric['label'] ?? ''))
+            . '</span><strong>'
+            . (int) ($metric['value'] ?? 0)
+            . '</strong><small>'
+            . e((string) ($metric['help'] ?? ''))
+            . '</small></article>';
 }
 
 /**
@@ -87,11 +131,24 @@ function view_render_admin_feature_metric(array $metric): void
  *
  * @param array<string, mixed> $group Prepared group presentation model.
  * @param string $groupKicker Group kicker label.
+ * @return void Emit the group heading and its prepared feature cards.
  */
-function view_render_admin_feature_group(array $group, string $groupKicker): void
-{
-    echo '<section class="panel admin-feature-group" id="admin-feature-group-' . e((string) ($group['key'] ?? '')) . '">';
-    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e($groupKicker) . '</p><h2>' . e((string) ($group['label'] ?? '')) . '</h2></div><p class="muted">' . e((string) ($group['description'] ?? '')) . '</p></div>';
+function view_render_admin_feature_group(
+    array $group,
+    string $groupKicker,
+): void {
+    echo
+        '<section class="panel admin-feature-group" id="admin-feature-group-'
+            . e((string) ($group['key'] ?? ''))
+            . '">';
+    echo
+        '<div class="admin-panel-heading"><div><p class="admin-kicker">'
+            . e($groupKicker)
+            . '</p><h2>'
+            . e((string) ($group['label'] ?? ''))
+            . '</h2></div><p class="muted">'
+            . e((string) ($group['description'] ?? ''))
+            . '</p></div>';
     echo '<div class="admin-feature-grid">';
     foreach ((array) ($group['features'] ?? []) as $feature) {
         view_render_admin_feature_card((array) $feature);
@@ -107,41 +164,93 @@ function view_render_admin_feature_group(array $group, string $groupKicker): voi
  */
 function view_render_admin_feature_card(array $feature): void
 {
-    echo '<article class="admin-feature-card' . e((string) ($feature['card_class'] ?? '')) . '">';
-    echo '<input type="checkbox" name="enabled_features[]" value="' . e((string) ($feature['key'] ?? '')) . '" aria-label="' . e((string) ($feature['label'] ?? '')) . '"' . (!empty($feature['configured']) ? ' checked' : '') . (!empty($feature['editable']) ? '' : ' disabled') . '>';
-    echo '<span class="admin-feature-card-body"><strong>' . e((string) ($feature['label'] ?? '')) . '</strong><small>' . e((string) ($feature['description'] ?? '')) . '</small>';
+    echo
+        '<article class="admin-feature-card'
+            . e((string) ($feature['card_class'] ?? ''))
+            . '">';
+    echo
+        '<input type="checkbox" name="enabled_features[]" value="'
+            . e((string) ($feature['key'] ?? ''))
+            . '" aria-label="'
+            . e((string) ($feature['label'] ?? ''))
+            . '"'
+            . (!empty($feature['configured']) ? ' checked' : '')
+            . (!empty($feature['editable']) ? '' : ' disabled')
+            . '>';
+    echo
+        '<span class="admin-feature-card-body"><strong>'
+            . e((string) ($feature['label'] ?? ''))
+            . '</strong><small>'
+            . e((string) ($feature['description'] ?? ''))
+            . '</small>';
 
     $badges = (array) ($feature['badges'] ?? []);
     if ($badges !== []) {
         echo '<span class="admin-feature-badges">';
         foreach ($badges as $badge) {
-            echo '<span class="admin-feature-badge">' . e((string) $badge) . '</span>';
+            echo
+                '<span class="admin-feature-badge">'
+                    . e((string) $badge)
+                    . '</span>';
         }
         echo '</span>';
     }
 
     echo '<span class="admin-feature-policy-state">';
-    echo '<span>' . e((string) ($feature['configured_state_label'] ?? '')) . '</span>';
-    echo '<span>' . e((string) ($feature['effective_state_label'] ?? '')) . '</span>';
+    echo
+        '<span>'
+            . e((string) ($feature['configured_state_label'] ?? ''))
+            . '</span>';
+    echo
+        '<span>'
+            . e((string) ($feature['effective_state_label'] ?? ''))
+            . '</span>';
     echo '</span>';
-    echo '<small class="admin-feature-storage-source">' . e((string) ($feature['storage_source_label'] ?? '')) . '</small>';
+    echo
+        '<small class="admin-feature-storage-source">'
+            . e((string) ($feature['storage_source_label'] ?? ''))
+            . '</small>';
 
     if ((string) ($feature['schema_state_label'] ?? '') !== '') {
-        echo '<small class="admin-feature-schema-state">' . e((string) $feature['schema_state_label']) . '</small>';
+        echo
+            '<small class="admin-feature-schema-state">'
+                . e((string) $feature['schema_state_label'])
+                . '</small>';
     }
     if ((string) ($feature['blocker_label'] ?? '') !== '') {
-        echo '<small class="admin-feature-blocker">' . e((string) $feature['blocker_label']) . '</small>';
+        echo
+            '<small class="admin-feature-blocker">'
+                . e((string) $feature['blocker_label'])
+                . '</small>';
     }
     if ((string) ($feature['context_hint'] ?? '') !== '') {
-        echo '<small class="admin-feature-context">' . e((string) $feature['context_hint']) . '</small>';
+        echo
+            '<small class="admin-feature-context">'
+                . e((string) $feature['context_hint'])
+                . '</small>';
     }
     if ((string) ($feature['settings_url'] ?? '') !== '') {
         $panelAttributes = !empty($feature['settings_panel'])
-            ? ' data-gallery-side-panel-link data-admin-side-panel-workflow="cooperative_pairing" data-admin-side-panel-title="' . e((string) $feature['label']) . '" data-gallery-side-panel-url="' . e((string) $feature['settings_url'] . '&panel=1') . '"' : '';
-        echo '<a class="admin-feature-settings-link" href="' . e((string) $feature['settings_url']) . '"' . $panelAttributes . '>' . e((string) ($feature['settings_label'] ?? '')) . '</a>';
+            ? ' data-gallery-side-panel-link data-admin-side-panel-workflow="cooperative_pairing" data-admin-side-panel-title="'
+            . e((string) $feature['label'])
+            . '" data-gallery-side-panel-url="'
+            . e((string) $feature['settings_url'] . '&panel=1')
+            . '"'
+            : '';
+        echo
+            '<a class="admin-feature-settings-link" href="'
+                . e((string) $feature['settings_url'])
+                . '"'
+                . $panelAttributes
+                . '>'
+                . e((string) ($feature['settings_label'] ?? ''))
+                . '</a>';
     }
 
     echo '<code>' . e((string) ($feature['key'] ?? '')) . '</code></span>';
-    echo '<span class="admin-feature-state">' . e((string) ($feature['effective_state'] ?? '')) . '</span>';
+    echo
+        '<span class="admin-feature-state">'
+            . e((string) ($feature['effective_state'] ?? ''))
+            . '</span>';
     echo '</article>';
 }

@@ -38,7 +38,6 @@ declare(strict_types=1);
 
 namespace Gallery\Models;
 
-
 /**
  * Return a placeholder list for a bounded identifier collection.
  *
@@ -65,18 +64,23 @@ function public_search_model_primary_gallery_title_rows(
     array $scores,
     bool $listedOnly,
     ?array $contextGallery,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $prefix = public_search_model_prefix_pattern($query);
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     $titleExact = (int) ($scores['exact'] ?? 0);
     $titleNormalizedExact = (int) ($scores['normalized_exact'] ?? 0);
     $titlePrefix = (int) ($scores['prefix'] ?? 0);
     $titleSubstring = (int) ($scores['substring'] ?? 0);
 
-    $sql = "SELECT g.id, g.title,
+    $sql =
+        "SELECT g.id, g.title,
             CASE
                 WHEN LOWER(g.title) = LOWER(?) THEN $titleExact
                 WHEN LOWER(TRIM(g.title)) = LOWER(?) THEN $titleNormalizedExact
@@ -92,7 +96,7 @@ function public_search_model_primary_gallery_title_rows(
     return public_search_diagnostics_fetch_all(
         'primary.gallery_title_candidates',
         $sql,
-        array_merge([$query, $query, $prefix, $like], $contextParams, [$like])
+        array_merge([$query, $query, $prefix, $like], $contextParams, [$like]),
     );
 }
 
@@ -113,17 +117,22 @@ function public_search_model_primary_gallery_tag_rows(
     array $scores,
     bool $listedOnly,
     ?array $contextGallery,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $prefix = public_search_model_prefix_pattern($query);
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     $tagExact = (int) ($scores['exact'] ?? 0);
     $tagPrefix = (int) ($scores['prefix'] ?? 0);
     $tagSubstring = (int) ($scores['substring'] ?? 0);
 
-    $sql = "SELECT g.id, g.title,
+    $sql =
+        "SELECT g.id, g.title,
             MAX(CASE
                 WHEN LOWER(t.name) = LOWER(?) THEN $tagExact
                 WHEN t.name LIKE ? THEN $tagPrefix
@@ -141,7 +150,7 @@ function public_search_model_primary_gallery_tag_rows(
     return public_search_diagnostics_fetch_all(
         'primary.gallery_tag_candidates',
         $sql,
-        array_merge([$query, $prefix, $like, $like], $contextParams)
+        array_merge([$query, $prefix, $like, $like], $contextParams),
     );
 }
 
@@ -161,7 +170,7 @@ function public_search_model_gallery_rows_by_ids(array $ids): array
     return public_search_diagnostics_fetch_all(
         'hydrate.gallery_rows',
         $sql,
-        $ids
+        $ids,
     );
 }
 
@@ -186,7 +195,7 @@ function public_search_model_gallery_tag_name_rows(array $ids): array
     return public_search_diagnostics_fetch_all(
         'hydrate.gallery_tag_names',
         $sql,
-        $ids
+        $ids,
     );
 }
 
@@ -205,17 +214,22 @@ function public_search_model_media_image_name_rows(
     array $scores,
     bool $listedOnly,
     ?array $contextGallery,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $prefix = public_search_model_prefix_pattern($query);
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     $exactScore = (int) ($scores['exact'] ?? 0);
     $prefixScore = (int) ($scores['prefix'] ?? 0);
     $substringScore = (int) ($scores['substring'] ?? 0);
 
-    $sql = "SELECT i.id, i.filename, i.title,
+    $sql =
+        "SELECT i.id, i.filename, i.title,
             CASE
                 WHEN LOWER(i.filename) = LOWER(?) OR LOWER(COALESCE(i.title, '')) = LOWER(?) THEN $exactScore
                 WHEN i.filename LIKE ? OR i.title LIKE ? THEN $prefixScore
@@ -232,7 +246,11 @@ function public_search_model_media_image_name_rows(
     return public_search_diagnostics_fetch_all(
         'media.image_name_candidates',
         $sql,
-        array_merge([$query, $query, $prefix, $prefix, $like, $like], $contextParams, [$like, $like])
+        array_merge(
+            [$query, $query, $prefix, $prefix, $like, $like],
+            $contextParams,
+            [$like, $like],
+        ),
     );
 }
 
@@ -254,17 +272,22 @@ function public_search_model_media_image_tag_rows(
     array $scores,
     bool $listedOnly,
     ?array $contextGallery,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $prefix = public_search_model_prefix_pattern($query);
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     $exactScore = (int) ($scores['exact'] ?? 0);
     $prefixScore = (int) ($scores['prefix'] ?? 0);
     $substringScore = (int) ($scores['substring'] ?? 0);
 
-    $sql = "SELECT i.id, i.filename, i.title, tag_match.match_score
+    $sql =
+        "SELECT i.id, i.filename, i.title, tag_match.match_score
         FROM (
             SELECT it.image_id,
                 MAX(CASE
@@ -287,7 +310,7 @@ function public_search_model_media_image_tag_rows(
     return public_search_diagnostics_fetch_all(
         'media.image_tag_candidates',
         $sql,
-        array_merge([$query, $prefix, $like, $like], $contextParams)
+        array_merge([$query, $prefix, $like, $like], $contextParams),
     );
 }
 
@@ -299,12 +322,19 @@ function public_search_model_media_image_tag_rows(
  * @param ?array $contextGallery Optional gallery branch context.
  * @return array<int, array<string, mixed>> Image rows.
  */
-function public_search_model_media_image_rows_by_ids(array $ids, bool $listedOnly, ?array $contextGallery): array
-{
+function public_search_model_media_image_rows_by_ids(
+    array $ids,
+    bool $listedOnly,
+    ?array $contextGallery,
+): array {
     if ($ids === []) {
         return [];
     }
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     $placeholders = public_search_model_placeholders($ids);
     $sql = "SELECT i.*
         FROM images i
@@ -315,7 +345,7 @@ function public_search_model_media_image_rows_by_ids(array $ids, bool $listedOnl
     return public_search_diagnostics_fetch_all(
         'hydrate.image_rows',
         $sql,
-        array_merge($ids, $contextParams)
+        array_merge($ids, $contextParams),
     );
 }
 
@@ -340,7 +370,7 @@ function public_search_model_image_tag_name_rows(array $ids): array
     return public_search_diagnostics_fetch_all(
         'hydrate.image_tag_names',
         $sql,
-        $ids
+        $ids,
     );
 }
 
@@ -368,7 +398,7 @@ function public_search_model_compound_term_condition(
     bool $translated,
     string $language,
     bool $aiReady,
-    bool $newOnly = false
+    bool $newOnly = false,
 ): array {
     $like = public_search_model_like_pattern($term);
     $conditions = [];
@@ -392,9 +422,12 @@ function public_search_model_compound_term_condition(
             $tagParts[] = 't.description LIKE ?';
         }
         if ($tagParts !== []) {
-            $conditions[] = 'EXISTS (SELECT 1 FROM gallery_tags gt '
+            $conditions[] =
+                'EXISTS (SELECT 1 FROM gallery_tags gt '
                 . 'INNER JOIN tags t ON t.id = gt.tag_id '
-                . 'WHERE gt.gallery_id = g.id AND (' . implode(' OR ', $tagParts) . '))';
+                . 'WHERE gt.gallery_id = g.id AND ('
+                . implode(' OR ', $tagParts)
+                . '))';
             foreach ($tagParts as $_) {
                 $params[] = $like;
             }
@@ -409,9 +442,11 @@ function public_search_model_compound_term_condition(
                 $translationParts[] = 'tr.description LIKE ?';
             }
             if ($translationParts !== []) {
-                $conditions[] = 'EXISTS (SELECT 1 FROM gallery_translations tr '
+                $conditions[] =
+                    'EXISTS (SELECT 1 FROM gallery_translations tr '
                     . 'WHERE tr.gallery_id = g.id AND tr.language_code = ? AND ('
-                    . implode(' OR ', $translationParts) . '))';
+                    . implode(' OR ', $translationParts)
+                    . '))';
                 $params[] = $language;
                 foreach ($translationParts as $_) {
                     $params[] = $like;
@@ -437,22 +472,27 @@ function public_search_model_compound_term_condition(
             $tagParts[] = 't.description LIKE ?';
         }
         if ($tagParts !== []) {
-            $conditions[] = 'EXISTS (SELECT 1 FROM image_tags it '
+            $conditions[] =
+                'EXISTS (SELECT 1 FROM image_tags it '
                 . 'INNER JOIN tags t ON t.id = it.tag_id '
-                . 'WHERE it.image_id = i.id AND (' . implode(' OR ', $tagParts) . '))';
+                . 'WHERE it.image_id = i.id AND ('
+                . implode(' OR ', $tagParts)
+                . '))';
             foreach ($tagParts as $_) {
                 $params[] = $like;
             }
         }
 
         if ($translated && $phase === 'deep') {
-            $conditions[] = 'EXISTS (SELECT 1 FROM image_translations tr '
+            $conditions[] =
+                'EXISTS (SELECT 1 FROM image_translations tr '
                 . 'WHERE tr.image_id = i.id AND tr.language_code = ? '
                 . 'AND (tr.title LIKE ? OR tr.description LIKE ?))';
             array_push($params, $language, $like, $like);
         }
         if ($aiReady && $phase === 'deep') {
-            $conditions[] = 'EXISTS (SELECT 1 FROM image_ai_metadata m '
+            $conditions[] =
+                'EXISTS (SELECT 1 FROM image_ai_metadata m '
                 . 'WHERE m.image_id = i.id AND m.searchable_text LIKE ?)';
             $params[] = $like;
         }
@@ -481,16 +521,22 @@ function public_search_model_compound_expression(
     string $phase,
     bool $translated,
     string $language,
-    bool $aiReady
+    bool $aiReady,
 ): array {
     $alternatives = [];
     $params = [];
     foreach ($groups as $group) {
         $required = [];
         foreach ($group as $term) {
-            [$condition, $termParams] = public_search_model_compound_term_condition(
-                $kind, $phase, $term, $translated, $language, $aiReady
-            );
+            [$condition, $termParams] =
+                public_search_model_compound_term_condition(
+                    $kind,
+                    $phase,
+                    $term,
+                    $translated,
+                    $language,
+                    $aiReady,
+                );
             $required[] = $condition;
             array_push($params, ...$termParams);
         }
@@ -498,7 +544,12 @@ function public_search_model_compound_expression(
             $alternatives[] = '(' . implode(' AND ', $required) . ')';
         }
     }
-    return [$alternatives === [] ? '0 = 1' : '(' . implode(' OR ', $alternatives) . ')', $params];
+    return [
+        $alternatives === []
+            ? '0 = 1'
+            : '(' . implode(' OR ', $alternatives) . ')',
+        $params,
+    ];
 }
 
 /**
@@ -518,7 +569,7 @@ function public_search_model_compound_new_source_condition(
     string $phase,
     bool $translated,
     string $language,
-    bool $aiReady
+    bool $aiReady,
 ): array {
     if ($phase === 'primary' || $phase === 'media') {
         return ['1 = 1', []];
@@ -527,14 +578,24 @@ function public_search_model_compound_new_source_condition(
     $params = [];
     foreach ($groups as $group) {
         foreach ($group as $term) {
-            [$condition, $termParams] = public_search_model_compound_term_condition(
-                $kind, $phase, $term, $translated, $language, $aiReady, true
-            );
+            [$condition, $termParams] =
+                public_search_model_compound_term_condition(
+                    $kind,
+                    $phase,
+                    $term,
+                    $translated,
+                    $language,
+                    $aiReady,
+                    true,
+                );
             $conditions[] = $condition;
             array_push($params, ...$termParams);
         }
     }
-    return [$conditions === [] ? '0 = 1' : '(' . implode(' OR ', $conditions) . ')', $params];
+    return [
+        $conditions === [] ? '0 = 1' : '(' . implode(' OR ', $conditions) . ')',
+        $params,
+    ];
 }
 
 /**
@@ -560,28 +621,46 @@ function public_search_model_compound_gallery_rows(
     ?array $contextGallery,
     bool $translated,
     string $language,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
-    [$listing, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listing, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     [$required, $matchParams] = public_search_model_compound_expression(
-        $groups, 'gallery', $phase, $translated, $language, false
+        $groups,
+        'gallery',
+        $phase,
+        $translated,
+        $language,
+        false,
     );
-    [$newSource, $newParams] = public_search_model_compound_new_source_condition(
-        $groups, 'gallery', $phase, $translated, $language, false
-    );
+    [$newSource, $newParams] =
+        public_search_model_compound_new_source_condition(
+            $groups,
+            'gallery',
+            $phase,
+            $translated,
+            $language,
+            false,
+        );
     $joined = implode(' ', $groups[0] ?? []);
     $first = (string) ($groups[0][0] ?? '');
     $scoreParams = [
-        $joined, public_search_model_prefix_pattern($joined),
-        public_search_model_like_pattern($first), public_search_model_like_pattern($first),
+        $joined,
+        public_search_model_prefix_pattern($joined),
+        public_search_model_like_pattern($first),
+        public_search_model_like_pattern($first),
     ];
     $descriptionScore = '';
     if ($phase !== 'primary') {
         $descriptionScore = 'WHEN g.description LIKE ? THEN 520';
         $scoreParams[] = public_search_model_like_pattern($first);
     }
-    $sql = "SELECT g.id, g.title,
+    $sql =
+        "SELECT g.id, g.title,
             CASE
                 WHEN LOWER(g.title) = LOWER(?) THEN 1200
                 WHEN g.title LIKE ? THEN 1100
@@ -603,7 +682,7 @@ function public_search_model_compound_gallery_rows(
     return public_search_diagnostics_fetch_all(
         'compound.' . $phase . '.gallery_candidates',
         $sql,
-        array_merge($scoreParams, $contextParams, $matchParams, $newParams)
+        array_merge($scoreParams, $contextParams, $matchParams, $newParams),
     );
 }
 
@@ -628,16 +707,31 @@ function public_search_model_compound_image_rows(
     bool $translated,
     string $language,
     bool $aiReady,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
-    [$listing, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
+    [$listing, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
     [$required, $matchParams] = public_search_model_compound_expression(
-        $groups, 'photo', $phase, $translated, $language, $aiReady
+        $groups,
+        'photo',
+        $phase,
+        $translated,
+        $language,
+        $aiReady,
     );
-    [$newSource, $newParams] = public_search_model_compound_new_source_condition(
-        $groups, 'photo', $phase, $translated, $language, $aiReady
-    );
+    [$newSource, $newParams] =
+        public_search_model_compound_new_source_condition(
+            $groups,
+            'photo',
+            $phase,
+            $translated,
+            $language,
+            $aiReady,
+        );
     $joined = implode(' ', $groups[0] ?? []);
     $first = (string) ($groups[0][0] ?? '');
     $prefix = public_search_model_prefix_pattern($joined);
@@ -648,7 +742,8 @@ function public_search_model_compound_image_rows(
         $descriptionScore = 'WHEN i.description LIKE ? THEN 420';
         $scoreParams[] = $like;
     }
-    $sql = "SELECT i.id, i.filename, i.title,
+    $sql =
+        "SELECT i.id, i.filename, i.title,
             CASE
                 WHEN LOWER(i.filename) = LOWER(?) OR LOWER(COALESCE(i.title, '')) = LOWER(?) THEN 900
                 WHEN i.filename LIKE ? OR i.title LIKE ? THEN 820
@@ -672,7 +767,7 @@ function public_search_model_compound_image_rows(
     return public_search_diagnostics_fetch_all(
         'compound.' . $phase . '.image_candidates',
         $sql,
-        array_merge($scoreParams, $contextParams, $matchParams, $newParams)
+        array_merge($scoreParams, $contextParams, $matchParams, $newParams),
     );
 }
 

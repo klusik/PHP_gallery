@@ -51,8 +51,11 @@ require __DIR__ . '/../app/bootstrap_full.php';
  * @param ?string $default Default value when no explicit value is available.
  * @return ?string Text result for the caller.
  */
-function site_maintenance_cli_option(array $arguments, string $name, ?string $default = null): ?string
-{
+function site_maintenance_cli_option(
+    array $arguments,
+    string $name,
+    ?string $default = null,
+): ?string {
     $prefix = '--' . $name . '=';
     foreach ($arguments as $argument) {
         if (str_starts_with((string) $argument, $prefix)) {
@@ -65,7 +68,13 @@ function site_maintenance_cli_option(array $arguments, string $name, ?string $de
 $arguments = $argv ?? [];
 $force = in_array('--force', $arguments, true);
 $quiet = in_array('--quiet', $arguments, true);
-$timeBudget = (int) (site_maintenance_cli_option($arguments, 'time-budget', (string) site_maintenance_time_budget_seconds()) ?? site_maintenance_time_budget_seconds());
+$timeBudget = (int) (
+    site_maintenance_cli_option(
+        $arguments,
+        'time-budget',
+        (string) site_maintenance_time_budget_seconds(),
+    ) ?? site_maintenance_time_budget_seconds()
+);
 
 try {
     $result = site_maintenance_run([
@@ -76,15 +85,28 @@ try {
     ]);
 
     if (!$quiet || empty($result['skipped'])) {
-        echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        echo
+            json_encode(
+                $result,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES,
+            ) . PHP_EOL;
     }
 
     exit(!empty($result['ok']) ? 0 : 1);
 } catch (Throwable $exception) {
-    fwrite(STDERR, json_encode([
-        'ok' => false,
-        'error' => 'maintenance_exception',
-        'exception_class' => get_class($exception),
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    fwrite(
+        STDERR,
+        json_encode(
+            [
+                'ok' => false,
+                'error' => 'maintenance_exception',
+                'exception_class' => get_class($exception),
+            ],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        )
+            . PHP_EOL,
+    );
     exit(1);
 }

@@ -31,7 +31,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS viewer_email_change_requests (
+    'CREATE TABLE IF NOT EXISTS viewer_email_change_requests (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         new_email VARCHAR(190) NOT NULL,
@@ -49,5 +49,5 @@ return [
         KEY viewer_email_change_target_state_index (normalized_new_email, consumed_at, cancelled_at, expires_at),
         KEY viewer_email_change_expiry_index (expires_at),
         CONSTRAINT viewer_email_change_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

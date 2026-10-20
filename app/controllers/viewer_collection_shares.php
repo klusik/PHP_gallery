@@ -35,7 +35,6 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Views\view_public_noindex_meta;
-
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\append_cms_head_extras;
 use function Gallery\Core\e;
@@ -76,11 +75,14 @@ function viewer_collection_share_public_headers(): void
 
 /**
  * Redirect with 303 See Other after a successful bearer-token exchange or owner POST mutation.
+ *
+ * @param string $url Destination URL for the redirect.
+ * @return never Sends a 303 redirect and terminates the request.
  */
 function viewer_collection_share_redirect_see_other(string $url): never
 {
     header('Location: ' . $url, true, 303);
-    exit;
+    exit();
 }
 
 /**
@@ -96,9 +98,15 @@ function viewer_collection_share_secret_flash_key(int $collectionId): string
  *
  * The complete secret is consumed from a one-time flash only. Normal share state contains no
  * plaintext token and therefore can show only creation/expiry metadata plus replace/revoke controls.
+ *
+ * @param array{id:int|string} $viewer Authenticated viewer row.
+ * @param int $collectionId Collection whose share state is shown.
+ * @return void Renders the owner share controls when eligible.
  */
-function render_viewer_collection_share_owner_section(array $viewer, int $collectionId): void
-{
+function render_viewer_collection_share_owner_section(
+    array $viewer,
+    int $collectionId,
+): void {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     if ($viewerAccountId <= 0 || $collectionId <= 0) {
         return;
@@ -109,21 +117,31 @@ function render_viewer_collection_share_owner_section(array $viewer, int $collec
     $newSecretUrl = '';
     if ($available) {
         $share = viewer_collection_share_state($viewerAccountId, $collectionId);
-        $newSecretUrl = (string) (flash_message(viewer_collection_share_secret_flash_key($collectionId)) ?? '');
+        $newSecretUrl = (string) (
+            flash_message(viewer_collection_share_secret_flash_key(
+                $collectionId,
+            )) ?? ''
+        );
     }
 
     \Gallery\Views\view_render_viewer_collection_share_owner_section([
         'available' => $available,
         'share' => $share,
         'new_secret_url' => $newSecretUrl,
-        'replace_url' => url_for('viewer_collection_share_replace', ['collection_id' => $collectionId]),
-        'revoke_url' => url_for('viewer_collection_share_revoke', ['collection_id' => $collectionId]),
+        'replace_url' => url_for('viewer_collection_share_replace', [
+            'collection_id' => $collectionId,
+        ]),
+        'revoke_url' => url_for('viewer_collection_share_revoke', [
+            'collection_id' => $collectionId,
+        ]),
         'csrf_token' => $available ? viewer_csrf_token() : '',
     ]);
 }
 
 /**
  * Create or replace the current viewer's one collection share.
+ *
+ * @return void Processes the request and emits a response or redirect.
  */
 function cms_viewer_collection_share_replace(): void
 {
@@ -138,7 +156,9 @@ function cms_viewer_collection_share_replace(): void
     if (!viewer_verify_csrf_or_render_error()) {
         return;
     }
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
     if ($collectionId <= 0) {
         viewer_collection_render_not_found();
         return;
@@ -149,8 +169,13 @@ function cms_viewer_collection_share_replace(): void
         $secretUrl = absolute_public_url(url_for('viewer_collection_share_exchange', [
             'token' => (string) $result['token'],
         ]));
-        flash_message(viewer_collection_share_secret_flash_key($collectionId), $secretUrl);
-        viewer_collection_share_redirect_see_other(url_for('viewer_collection', ['collection_id' => $collectionId]));
+        flash_message(
+            viewer_collection_share_secret_flash_key($collectionId),
+            $secretUrl,
+        );
+        viewer_collection_share_redirect_see_other(url_for('viewer_collection', [
+            'collection_id' => $collectionId,
+        ]));
     }
     $reason = (string) ($result['reason'] ?? 'unavailable');
     if ($reason === 'not_found') {
@@ -158,14 +183,28 @@ function cms_viewer_collection_share_replace(): void
         return;
     }
     if ($reason === 'rate_limited') {
-        viewer_collection_render_error(t('viewer.collection_share.rate_limited', 'Too many share links were created recently. Please try again later.'), 429);
+        viewer_collection_render_error(
+            t(
+                'viewer.collection_share.rate_limited',
+                'Too many share links were created recently. Please try again later.',
+            ),
+            429,
+        );
         return;
     }
-    viewer_collection_render_error(t('viewer.collection_share.unavailable', 'Collection sharing is temporarily unavailable.'), 503);
+    viewer_collection_render_error(
+        t(
+            'viewer.collection_share.unavailable',
+            'Collection sharing is temporarily unavailable.',
+        ),
+        503,
+    );
 }
 
 /**
  * Revoke the current viewer's active share without requiring the secret token in the browser.
+ *
+ * @return void Processes the request and emits a response or redirect.
  */
 function cms_viewer_collection_share_revoke(): void
 {
@@ -180,7 +219,9 @@ function cms_viewer_collection_share_revoke(): void
     if (!viewer_verify_csrf_or_render_error()) {
         return;
     }
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
     if ($collectionId <= 0) {
         viewer_collection_render_not_found();
         return;
@@ -188,13 +229,21 @@ function cms_viewer_collection_share_revoke(): void
 
     $result = viewer_collection_share_revoke($viewer, $collectionId);
     if (!empty($result['ok'])) {
-        viewer_collection_share_redirect_see_other(url_for('viewer_collection', ['collection_id' => $collectionId]));
+        viewer_collection_share_redirect_see_other(url_for('viewer_collection', [
+            'collection_id' => $collectionId,
+        ]));
     }
     if (($result['reason'] ?? '') === 'not_found') {
         viewer_collection_render_not_found();
         return;
     }
-    viewer_collection_render_error(t('viewer.collection_share.unavailable', 'Collection sharing is temporarily unavailable.'), 503);
+    viewer_collection_render_error(
+        t(
+            'viewer.collection_share.unavailable',
+            'Collection sharing is temporarily unavailable.',
+        ),
+        503,
+    );
 }
 
 /**
@@ -220,6 +269,8 @@ function cms_viewer_collection_share_exchange(): void
 
 /**
  * Render one clean token-free shared collection using live recipient-context source authorization.
+ *
+ * @return void Validates the bearer grant and renders the shared collection or an error.
  */
 function cms_viewer_collection_shared(): void
 {
@@ -229,7 +280,9 @@ function cms_viewer_collection_shared(): void
         cms_not_found();
         return;
     }
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
     if ($collectionId <= 0) {
         cms_not_found();
         return;
@@ -243,8 +296,8 @@ function cms_viewer_collection_shared(): void
     $collection = $shared['collection'];
     $references = $shared['references'];
     $authorizedById = viewer_source_images_resolve_authorized(array_map(
-        static fn (array $reference): int => (int) $reference['image_id'],
-        $references
+        static fn(array $reference): int => (int) $reference['image_id'],
+        $references,
     ));
     $visible = [];
     foreach ($references as $reference) {
@@ -255,7 +308,10 @@ function cms_viewer_collection_shared(): void
     }
     $hiddenCount = max(0, count($references) - count($visible));
 
-    $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
+    $candidateSizes = array_values(array_filter(
+        thumbnail_sizes(),
+        static fn(int $size): bool => $size <= 960,
+    ));
     if ($candidateSizes === []) {
         $candidateSizes = [300];
     }
@@ -275,7 +331,7 @@ function cms_viewer_collection_shared(): void
                 '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw',
                 image_alt_text($image, $gallery, $index + 1),
                 $index,
-                $bundle
+                $bundle,
             ),
             'title' => public_image_display_title($image, $gallery),
         ];
@@ -285,8 +341,14 @@ function cms_viewer_collection_shared(): void
         'title' => (string) $collection['title'],
         'cards' => $cards,
         'empty_message' => count($references) > 0
-            ? t('viewer.collection_share.none_available', 'No items in this shared collection are currently available to you.')
-            : t('viewer.collection_share.empty', 'This shared collection is empty.'),
+            ? t(
+                'viewer.collection_share.none_available',
+                'No items in this shared collection are currently available to you.',
+            )
+            : t(
+                'viewer.collection_share.empty',
+                'This shared collection is empty.',
+            ),
         'hidden_count' => $hiddenCount,
     ]);
 }

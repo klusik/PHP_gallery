@@ -41,38 +41,53 @@ namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
 use function Gallery\Core\response_status_code;
-
 use Throwable;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\pending_migrations_exist;
 use function Gallery\Core\url_for;
-use function Gallery\Models\site_maintenance_model_count_thumbnail_variants_missing_galleries;
-use function Gallery\Models\site_maintenance_model_count_thumbnail_variants_missing_images;
-use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_galleries;
-use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_images;
+use function Gallery\Models\site_maintenance_model_count_thumbnail_variants_missing_galleries
+;
+use function Gallery\Models\site_maintenance_model_count_thumbnail_variants_missing_images
+;
+use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_galleries
+;
+use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_images
+;
 use function Gallery\Models\site_maintenance_model_source_images_after_id;
 use function Gallery\Models\site_maintenance_model_total_source_image_count;
 use function Gallery\Models\maintenance_center_model_mutation_owner;
 
 const SITE_MAINTENANCE_STATE_SETTING = 'site_maintenance_run_state';
+
 const SITE_MAINTENANCE_LAST_RESULT_SETTING = 'site_maintenance_last_result';
+
 const SITE_MAINTENANCE_LAST_SUCCESS_SETTING = 'site_maintenance_last_success';
+
 const SITE_MAINTENANCE_LAST_FAILURE_SETTING = 'site_maintenance_last_failure';
+
 const SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING = 'site_maintenance_last_completed_date';
+
 const SITE_MAINTENANCE_LAST_COMPLETED_AT_SETTING = 'site_maintenance_last_completed_at';
+
 const SITE_MAINTENANCE_REQUEST_TRIGGER_TOUCH_FILE = 'request-trigger.touch';
+
 const SITE_MAINTENANCE_RUNTIME_RESERVE_SECONDS = 8;
+
 const SITE_MAINTENANCE_MIN_SECONDS_BEFORE_WEB_REPAIR = 6.0;
+
 const SITE_MAINTENANCE_WEB_REPAIR_MAX_BYTES = 25165824;
+
 const SITE_MAINTENANCE_WEB_REPAIR_MAX_PIXELS = 36000000;
+
 const SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES = 180;
+
 const SITE_MAINTENANCE_MIN_WINDOW_MINUTES = 15;
+
 const SITE_MAINTENANCE_MAX_WINDOW_MINUTES = 1440;
+
 const SITE_MAINTENANCE_MIN_CHAIN_SECONDS_LEFT = 10;
-
-
 
 /**
  * Return whether scheduled automatic site maintenance is enabled.
@@ -91,7 +106,10 @@ function site_maintenance_enabled(): bool
  */
 function site_maintenance_utc_time(): string
 {
-    return site_maintenance_normalize_utc_time((string) app_setting('site_maintenance_utc_time', '00:00'));
+    return site_maintenance_normalize_utc_time((string) app_setting(
+        'site_maintenance_utc_time',
+        '00:00',
+    ));
 }
 
 /**
@@ -120,8 +138,8 @@ function site_maintenance_window_minutes(): int
     return site_maintenance_normalize_window_minutes(
         (int) app_setting(
             'site_maintenance_window_minutes',
-            (string) SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES
-        )
+            (string) SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES,
+        ),
     );
 }
 
@@ -133,7 +151,10 @@ function site_maintenance_window_minutes(): int
  */
 function site_maintenance_normalize_window_minutes(int $minutes): int
 {
-    return max(SITE_MAINTENANCE_MIN_WINDOW_MINUTES, min(SITE_MAINTENANCE_MAX_WINDOW_MINUTES, $minutes));
+    return max(SITE_MAINTENANCE_MIN_WINDOW_MINUTES, min(
+        SITE_MAINTENANCE_MAX_WINDOW_MINUTES,
+        $minutes,
+    ));
 }
 
 /**
@@ -149,7 +170,8 @@ function site_maintenance_window_hours_to_minutes(string $value): int
         return SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES;
     }
 
-    return site_maintenance_normalize_window_minutes((int) round(((float) $normalized) * 60));
+    return site_maintenance_normalize_window_minutes((int) round((float) $normalized
+        * 60));
 }
 
 /**
@@ -160,7 +182,12 @@ function site_maintenance_window_hours_to_minutes(string $value): int
  */
 function site_maintenance_window_hours_value(int $minutes): string
 {
-    $value = number_format(site_maintenance_normalize_window_minutes($minutes) / 60, 2, '.', '');
+    $value = number_format(
+        site_maintenance_normalize_window_minutes($minutes) / 60,
+        2,
+        '.',
+        '',
+    );
     return rtrim(rtrim($value, '0'), '.');
 }
 
@@ -171,7 +198,10 @@ function site_maintenance_window_hours_value(int $minutes): string
  */
 function site_maintenance_batch_size(): int
 {
-    return max(1, min(50, (int) app_setting('site_maintenance_batch_size', '20')));
+    return max(1, min(
+        50,
+        (int) app_setting('site_maintenance_batch_size', '20'),
+    ));
 }
 
 /**
@@ -181,7 +211,10 @@ function site_maintenance_batch_size(): int
  */
 function site_maintenance_time_budget_seconds(): int
 {
-    return max(3, min(120, (int) app_setting('site_maintenance_time_budget_seconds', '20')));
+    return max(3, min(
+        120,
+        (int) app_setting('site_maintenance_time_budget_seconds', '20'),
+    ));
 }
 
 /**
@@ -224,7 +257,12 @@ function site_maintenance_effective_time_budget_seconds(int $requestedSeconds): 
  */
 function site_maintenance_manual_time_budget_seconds(): int
 {
-    return min(12, site_maintenance_effective_time_budget_seconds(site_maintenance_time_budget_seconds()));
+    return min(
+        12,
+        site_maintenance_effective_time_budget_seconds(
+            site_maintenance_time_budget_seconds(),
+        ),
+    );
 }
 
 /**
@@ -261,9 +299,11 @@ function site_maintenance_has_web_repair_runtime(float $deadline): bool
         return site_maintenance_runtime_remaining_seconds($deadline) > 1.0;
     }
 
-    return site_maintenance_runtime_remaining_seconds($deadline) >= SITE_MAINTENANCE_MIN_SECONDS_BEFORE_WEB_REPAIR;
+    return (
+        site_maintenance_runtime_remaining_seconds($deadline)
+            >= SITE_MAINTENANCE_MIN_SECONDS_BEFORE_WEB_REPAIR
+    );
 }
-
 
 /**
  * Return whether normal page requests may trigger scheduled maintenance after the response.
@@ -272,7 +312,10 @@ function site_maintenance_has_web_repair_runtime(float $deadline): bool
  */
 function site_maintenance_request_trigger_enabled(): bool
 {
-    return (string) app_setting('site_maintenance_request_trigger_enabled', '1') !== '0';
+    return (
+        (string) app_setting('site_maintenance_request_trigger_enabled', '1')
+            !== '0'
+    );
 }
 
 /**
@@ -282,7 +325,13 @@ function site_maintenance_request_trigger_enabled(): bool
  */
 function site_maintenance_request_trigger_interval_seconds(): int
 {
-    return max(30, min(1800, (int) app_setting('site_maintenance_request_trigger_interval_seconds', '60')));
+    return max(30, min(
+        1800,
+        (int) app_setting(
+            'site_maintenance_request_trigger_interval_seconds',
+            '60',
+        ),
+    ));
 }
 
 /**
@@ -302,15 +351,29 @@ function set_site_maintenance_settings(
     int $batchSize,
     int $timeBudgetSeconds,
     bool $requestTriggerEnabled = true,
-    int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES
-): void
-{
+    int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES,
+): void {
     set_app_setting('site_maintenance_enabled', $enabled ? '1' : '0');
-    set_app_setting('site_maintenance_utc_time', site_maintenance_normalize_utc_time($utcTime));
-    set_app_setting('site_maintenance_batch_size', (string) max(1, min(50, $batchSize)));
-    set_app_setting('site_maintenance_time_budget_seconds', (string) max(3, min(120, $timeBudgetSeconds)));
-    set_app_setting('site_maintenance_request_trigger_enabled', $requestTriggerEnabled ? '1' : '0');
-    set_app_setting('site_maintenance_window_minutes', (string) site_maintenance_normalize_window_minutes($windowMinutes));
+    set_app_setting(
+        'site_maintenance_utc_time',
+        site_maintenance_normalize_utc_time($utcTime),
+    );
+    set_app_setting(
+        'site_maintenance_batch_size',
+        (string) max(1, min(50, $batchSize)),
+    );
+    set_app_setting(
+        'site_maintenance_time_budget_seconds',
+        (string) max(3, min(120, $timeBudgetSeconds)),
+    );
+    set_app_setting(
+        'site_maintenance_request_trigger_enabled',
+        $requestTriggerEnabled ? '1' : '0',
+    );
+    set_app_setting(
+        'site_maintenance_window_minutes',
+        (string) site_maintenance_normalize_window_minutes($windowMinutes),
+    );
 }
 
 /**
@@ -361,7 +424,9 @@ function site_maintenance_token_is_valid(string $token): bool
  */
 function site_maintenance_cron_url(): string
 {
-    return absolute_public_url(url_for('site_maintenance_cron', ['token' => site_maintenance_token()]));
+    return absolute_public_url(url_for('site_maintenance_cron', [
+        'token' => site_maintenance_token(),
+    ]));
 }
 
 /**
@@ -371,8 +436,15 @@ function site_maintenance_cron_url(): string
  */
 function site_maintenance_cache_dir(): string
 {
-    $root = defined('CACHE_LIFECYCLE_TEST_ROOT') ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
-    $dir = $root . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'site-maintenance';
+    $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
+        ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
+        : dirname(__DIR__, 2);
+    $dir =
+        $root
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'site-maintenance';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -408,12 +480,16 @@ function site_maintenance_state(): array
 /**
  * Persist the current maintenance run state.
  *
- * @param array $state State value.
+ * @param array{version?:int,status?:string,cycle_date?:string,source?:string,phase?:string,cursor_image_id?:int,current_image_id?:int,totals?:array<string,mixed>,cleanup?:array<string,mixed>,cleanup_diagnostics?:array<string,mixed>} $state Mutable maintenance checkpoint fields.
+ * @return void
  */
 function site_maintenance_save_state(array $state): void
 {
     $state['updated_at'] = now_sql();
-    set_app_setting(SITE_MAINTENANCE_STATE_SETTING, json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    set_app_setting(SITE_MAINTENANCE_STATE_SETTING, json_encode(
+        $state,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    ));
 }
 
 /**
@@ -427,11 +503,15 @@ function site_maintenance_reset_state(): void
 /**
  * Decode the last stored maintenance result for Admin display.
  *
- * @return array<string mixed>.
+ * @return array<string,mixed> Persisted last-run summary, or an empty array
+ *     when no valid result has been stored.
  */
 function site_maintenance_last_result(): array
 {
-    $json = trim((string) app_setting(SITE_MAINTENANCE_LAST_RESULT_SETTING, ''));
+    $json = trim((string) app_setting(
+        SITE_MAINTENANCE_LAST_RESULT_SETTING,
+        '',
+    ));
     if ($json === '') {
         return [];
     }
@@ -443,11 +523,15 @@ function site_maintenance_last_result(): array
 /**
  * Store a compact result summary for Admin display.
  *
- * @param array $result Result value.
+ * @param array{ok?:bool,busy?:bool,skipped?:bool,done?:bool,has_more?:bool,status?:string,phase?:string,cycle_date?:string,forced?:bool,steps?:int,batch_results?:list<array<string,mixed>>,state?:array<string,mixed>,schedule?:array<string,mixed>,reason?:string,error?:string} $result Compact run result or safe admission failure.
+ * @return void
  */
 function site_maintenance_store_last_result(array $result): void
 {
-    set_app_setting(SITE_MAINTENANCE_LAST_RESULT_SETTING, json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    set_app_setting(SITE_MAINTENANCE_LAST_RESULT_SETTING, json_encode(
+        $result,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    ));
 }
 
 /**
@@ -458,7 +542,14 @@ function site_maintenance_store_last_result(array $result): void
  */
 function site_maintenance_last_outcome(string $settingKey): array
 {
-    if (!in_array($settingKey, [SITE_MAINTENANCE_LAST_SUCCESS_SETTING, SITE_MAINTENANCE_LAST_FAILURE_SETTING], true)) {
+    if (!in_array(
+        $settingKey,
+        [
+            SITE_MAINTENANCE_LAST_SUCCESS_SETTING,
+            SITE_MAINTENANCE_LAST_FAILURE_SETTING,
+        ],
+        true,
+    )) {
         return [];
     }
     $json = trim((string) app_setting($settingKey, ''));
@@ -486,23 +577,47 @@ function site_maintenance_last_failure(): array
  *
  * @param string $settingKey Constrained success/failure setting key.
  * @param array<string,mixed> $outcome Privacy-safe outcome fields.
+ * @return void
  */
-function site_maintenance_store_outcome(string $settingKey, array $outcome): void
-{
-    if (!in_array($settingKey, [SITE_MAINTENANCE_LAST_SUCCESS_SETTING, SITE_MAINTENANCE_LAST_FAILURE_SETTING], true)) {
+function site_maintenance_store_outcome(
+    string $settingKey,
+    array $outcome,
+): void {
+    if (!in_array(
+        $settingKey,
+        [
+            SITE_MAINTENANCE_LAST_SUCCESS_SETTING,
+            SITE_MAINTENANCE_LAST_FAILURE_SETTING,
+        ],
+        true,
+    )) {
         return;
     }
     $safe = [
         'status' => substr((string) ($outcome['status'] ?? ''), 0, 24),
-        'occurred_at' => substr((string) ($outcome['occurred_at'] ?? now_sql()), 0, 32),
+        'occurred_at' => substr(
+            (string) ($outcome['occurred_at'] ?? now_sql()),
+            0,
+            32,
+        ),
         'cycle_date' => substr((string) ($outcome['cycle_date'] ?? ''), 0, 32),
         'source' => substr((string) ($outcome['source'] ?? ''), 0, 32),
         'operation' => substr((string) ($outcome['operation'] ?? ''), 0, 80),
         'error_code' => substr((string) ($outcome['error_code'] ?? ''), 0, 80),
-        'exception_class' => substr((string) ($outcome['exception_class'] ?? ''), 0, 160),
-        'duration_ms' => max(0, min(86_400_000, (int) ($outcome['duration_ms'] ?? 0))),
+        'exception_class' => substr(
+            (string) ($outcome['exception_class'] ?? ''),
+            0,
+            160,
+        ),
+        'duration_ms' => max(0, min(
+            86_400_000,
+            (int) ($outcome['duration_ms'] ?? 0),
+        )),
     ];
-    set_app_setting($settingKey, json_encode($safe, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    set_app_setting($settingKey, json_encode(
+        $safe,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    ));
 }
 
 /** Return a stable, privacy-safe cleanup exception code. */
@@ -520,33 +635,63 @@ function site_maintenance_cleanup_error_code(Throwable $exception): string
  * @param array<string,mixed> $state Active maintenance state.
  * @return array{ok:bool,value:mixed,diagnostic:array<string,mixed>} Result and bounded diagnostic.
  */
-function site_maintenance_run_cleanup_operation(string $operation, callable $callback, array $state): array
-{
+function site_maintenance_run_cleanup_operation(
+    string $operation,
+    callable $callback,
+    array $state,
+): array {
     $startedAt = microtime(true);
     try {
         $value = $callback();
-        if ($operation === 'cache_lifecycle' && is_array($value) && ($value['skipped'] ?? false) !== true
-            && function_exists(__NAMESPACE__ . '\\cache_cleanup_diagnostic_event')) {
+        if (
+            $operation === 'cache_lifecycle'
+            && is_array($value)
+            && ($value['skipped'] ?? false) !== true
+            && function_exists(__NAMESPACE__
+                . '\\cache_cleanup_diagnostic_event')
+        ) {
             $status = cache_lifecycle_status();
-            cache_cleanup_diagnostic_event(cache_cleanup_diagnostic_id((string) ($value['id'] ?? '')), 'lifecycle_scheduled_checkpoint',
-                ['source'=>(string) ($state['source'] ?? 'scheduled'),'ok'=>!empty($value['ok']),
-                    'phase'=>$status['phase'],'files'=>$status['files'],'bytes'=>$status['bytes'],
-                    'candidates'=>$status['candidates'],'candidate_bytes'=>$status['candidate_bytes'],
-                    'removed'=>$status['removed'],'bytes_removed'=>$status['bytes_removed'],'errors'=>$status['errors'],
-                    'blocked'=>$status['blocked'],'failure_code'=>$status['last_error']]);
+            cache_cleanup_diagnostic_event(
+                cache_cleanup_diagnostic_id((string) ($value['id'] ?? '')),
+                'lifecycle_scheduled_checkpoint',
+                [
+                    'source' => (string) ($state['source'] ?? 'scheduled'),
+                    'ok' => !empty($value['ok']),
+                    'phase' => $status['phase'],
+                    'files' => $status['files'],
+                    'bytes' => $status['bytes'],
+                    'candidates' => $status['candidates'],
+                    'candidate_bytes' => $status['candidate_bytes'],
+                    'removed' => $status['removed'],
+                    'bytes_removed' => $status['bytes_removed'],
+                    'errors' => $status['errors'],
+                    'blocked' => $status['blocked'],
+                    'failure_code' => $status['last_error'],
+                ],
+            );
         }
-        $lifecycleOk = $operation !== 'cache_lifecycle' || !is_array($value) || !array_key_exists('ok', $value) || !empty($value['ok']);
+        $lifecycleOk =
+            $operation !== 'cache_lifecycle'
+            || !is_array($value)
+            || !array_key_exists('ok', $value)
+            || !empty($value['ok']);
         return [
             'ok' => $lifecycleOk,
             'value' => $value,
             'diagnostic' => [
                 'operation' => $operation,
                 'status' => $lifecycleOk ? 'completed' : 'blocked',
-                'duration_ms' => max(0, (int) round((microtime(true) - $startedAt) * 1000)),
+                'duration_ms' => max(
+                    0,
+                    (int) round((microtime(true) - $startedAt) * 1000),
+                ),
             ],
         ];
     } catch (Throwable $exception) {
-        $durationMs = max(0, (int) round((microtime(true) - $startedAt) * 1000));
+        $durationMs = max(
+            0,
+            (int) round((microtime(true) - $startedAt) * 1000),
+        );
         $errorCode = site_maintenance_cleanup_error_code($exception);
         $diagnostic = [
             'operation' => $operation,
@@ -555,10 +700,19 @@ function site_maintenance_run_cleanup_operation(string $operation, callable $cal
             'exception_class' => get_class($exception),
             'duration_ms' => $durationMs,
         ];
-        if ($operation === 'updater_cache_gc' && !empty($state['cache_run_id'])) {
-            $safe = cache_cleanup_diagnostic_event((string) $state['cache_run_id'], 'failed',
-                ['reason' => 'worker_owner', 'elapsed_ms' => $durationMs], $exception);
-            $diagnostic['error_code'] = (string) ($safe['failure_code'] ?? $errorCode);
+        if (
+            $operation === 'updater_cache_gc'
+            && !empty($state['cache_run_id'])
+        ) {
+            $safe = cache_cleanup_diagnostic_event(
+                (string) $state['cache_run_id'],
+                'failed',
+                ['reason' => 'worker_owner', 'elapsed_ms' => $durationMs],
+                $exception,
+            );
+            $diagnostic['error_code'] = (string) (
+                $safe['failure_code'] ?? $errorCode
+            );
         }
         site_maintenance_store_outcome(SITE_MAINTENANCE_LAST_FAILURE_SETTING, [
             'status' => 'failed',
@@ -570,9 +724,15 @@ function site_maintenance_run_cleanup_operation(string $operation, callable $cal
             'exception_class' => get_class($exception),
             'duration_ms' => $durationMs,
         ]);
-        site_maintenance_log_event('warning', 'site_maintenance.cleanup_failed', 'Optional site maintenance cleanup failed.', $diagnostic, [
-            'severity' => 'warning',
-        ]);
+        site_maintenance_log_event(
+            'warning',
+            'site_maintenance.cleanup_failed',
+            'Optional site maintenance cleanup failed.',
+            $diagnostic,
+            [
+                'severity' => 'warning',
+            ],
+        );
         return [
             'ok' => false,
             'value' => null,
@@ -601,8 +761,13 @@ function site_maintenance_schedule_due_state(?int $now = null): array
     $candidateStarts = [$todayStart, $todayStart - 86400];
     $activeStart = null;
     foreach ($candidateStarts as $candidateStart) {
-        if ($now >= $candidateStart && $now < ($candidateStart + $windowSeconds)) {
-            $activeStart = $activeStart === null ? $candidateStart : max($activeStart, $candidateStart);
+        if (
+            $now >= $candidateStart
+            && $now < ($candidateStart + $windowSeconds)
+        ) {
+            $activeStart = $activeStart === null
+                ? $candidateStart
+                : max($activeStart, $candidateStart);
         }
     }
 
@@ -639,7 +804,8 @@ function site_maintenance_schedule_due_state(?int $now = null): array
  *
  * @param string $cycleDate Cycle date value.
  * @param string $source Source value.
- * @return array<string mixed>.
+ * @return array<string,mixed> New checkpoint with cycle metadata, image cursor,
+ *     counters, cleanup phase data, and thumbnail metadata snapshot.
  */
 function site_maintenance_new_state(string $cycleDate, string $source): array
 {
@@ -661,7 +827,9 @@ function site_maintenance_new_state(string $cycleDate, string $source): array
         'totals' => site_maintenance_empty_totals(),
         'cleanup' => [],
         'cleanup_diagnostics' => [],
-        'thumbnail_metadata_start_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot')
+        'thumbnail_metadata_start_snapshot' => function_exists(
+            'Gallery\\Services\\thumbnail_metadata_storage_snapshot',
+        )
             ? thumbnail_metadata_storage_snapshot()
             : [],
     ];
@@ -691,7 +859,6 @@ function site_maintenance_empty_totals(): array
         'errors' => [],
     ];
 }
-
 
 /**
  * Return the total number of original image rows in the gallery library.
@@ -729,19 +896,29 @@ function site_maintenance_append_error(array $errors, string $error): array
 /**
  * Run maintenance with a non-waiting filesystem lock.
  *
- * @param callable $callback Callback invoked by this workflow.
- * @return array<string mixed>.
+ * @param callable():array<string,mixed> $callback Operation performed under
+ *     the exclusive non-waiting maintenance lock.
+ * @return array{ok:false,busy:false,error:string}|array{ok:true,busy:true,skipped:true,reason:string}|array<string,mixed> Callback result or lock admission outcome.
  */
 function site_maintenance_with_lock(callable $callback): array
 {
     $handle = @fopen(site_maintenance_lock_path(), 'c');
     if (!$handle) {
-        return ['ok' => false, 'busy' => false, 'error' => 'Could not open site maintenance lock file.'];
+        return [
+            'ok' => false,
+            'busy' => false,
+            'error' => 'Could not open site maintenance lock file.',
+        ];
     }
 
     if (!flock($handle, LOCK_EX | LOCK_NB)) {
         fclose($handle);
-        return ['ok' => true, 'busy' => true, 'skipped' => true, 'reason' => 'maintenance_already_running'];
+        return [
+            'ok' => true,
+            'busy' => true,
+            'skipped' => true,
+            'reason' => 'maintenance_already_running',
+        ];
     }
 
     try {
@@ -752,7 +929,6 @@ function site_maintenance_with_lock(callable $callback): array
     }
 }
 
-
 /**
  * Return the touch-file path used to throttle automatic request-trigger attempts.
  *
@@ -760,7 +936,11 @@ function site_maintenance_with_lock(callable $callback): array
  */
 function site_maintenance_request_trigger_touch_path(): string
 {
-    return site_maintenance_cache_dir() . DIRECTORY_SEPARATOR . SITE_MAINTENANCE_REQUEST_TRIGGER_TOUCH_FILE;
+    return (
+        site_maintenance_cache_dir()
+            . DIRECTORY_SEPARATOR
+            . SITE_MAINTENANCE_REQUEST_TRIGGER_TOUCH_FILE
+    );
 }
 
 /**
@@ -778,7 +958,12 @@ function site_maintenance_request_trigger_recently_attempted(?int $now = null): 
     }
 
     $mtime = filemtime($path) ?: 0;
-    return $mtime > 0 && ($now - $mtime) < site_maintenance_request_trigger_interval_seconds();
+    return (
+        $mtime > 0
+            && (
+                $now - $mtime
+            ) < site_maintenance_request_trigger_interval_seconds()
+    );
 }
 
 /**
@@ -815,7 +1000,10 @@ function site_maintenance_route_allows_request_trigger(string $page): bool
  */
 function site_maintenance_request_trigger_due(?int $now = null): bool
 {
-    if (!site_maintenance_enabled() || !site_maintenance_request_trigger_enabled()) {
+    if (
+        !site_maintenance_enabled()
+        || !site_maintenance_request_trigger_enabled()
+    ) {
         return false;
     }
 
@@ -833,15 +1021,18 @@ function site_maintenance_request_trigger_due(?int $now = null): bool
         return true;
     }
 
-    $lastCompletedDate = trim((string) app_setting(SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING, ''));
+    $lastCompletedDate = trim((string) app_setting(
+        SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING,
+        '',
+    ));
     return $lastCompletedDate !== $schedule['date'];
 }
-
 
 /**
  * Fire the hidden web cron endpoint without waiting for its JSON response.
  *
- * @param array $queryParams Query params value.
+ * @param array<string,string|int|float|bool|null> $queryParams Scalar query
+ *     parameters added to the private cron URL.
  * @return bool True when the condition matches.
  */
 function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
@@ -852,7 +1043,8 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
     ], $queryParams);
     $url = site_maintenance_cron_url();
     $separator = str_contains($url, '?') ? '&' : '?';
-    $url .= $separator . http_build_query($queryParams, '', '&', PHP_QUERY_RFC3986);
+    $url .=
+        $separator . http_build_query($queryParams, '', '&', PHP_QUERY_RFC3986);
     $parts = parse_url($url);
     if (!is_array($parts) || empty($parts['host']) || empty($parts['path'])) {
         return false;
@@ -861,7 +1053,9 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
     $scheme = strtolower((string) ($parts['scheme'] ?? 'http'));
     $host = (string) $parts['host'];
     $port = (int) ($parts['port'] ?? ($scheme === 'https' ? 443 : 80));
-    $target = (string) $parts['path'] . (isset($parts['query']) ? '?' . $parts['query'] : '');
+    $target =
+        (string) $parts['path']
+        . (isset($parts['query']) ? '?' . $parts['query'] : '');
     $transport = $scheme === 'https' ? 'ssl://' . $host : $host;
     $handle = @fsockopen($transport, $port, $errno, $errstr, 2.0);
     if (!$handle) {
@@ -869,16 +1063,23 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
     }
 
     stream_set_timeout($handle, 2);
-    $hostHeader = $host . (($scheme === 'https' && $port !== 443) || ($scheme === 'http' && $port !== 80) ? ':' . $port : '');
-    $request = "GET " . $target . " HTTP/1.1
-";
-    $request .= "Host: " . $hostHeader . "
-";
-    $request .= "User-Agent: PHP-Gallery-Site-Maintenance
-";
-    $request .= "Connection: Close
+    $hostHeader =
+        $host
+        . (
+            ($scheme === 'https' && $port !== 443)
+            || ($scheme === 'http' && $port !== 80)
+                ? ':' . $port
+                : ''
+        );
+    $request = 'GET ' . $target . ' HTTP/1.1
+';
+    $request .= 'Host: ' . $hostHeader . '
+';
+    $request .= 'User-Agent: PHP-Gallery-Site-Maintenance
+';
+    $request .= 'Connection: Close
 
-";
+';
     fwrite($handle, $request);
     fclose($handle);
     return true;
@@ -892,8 +1093,10 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
 function site_maintenance_fire_cache_chain(string $ticket): bool
 {
     require_once __DIR__ . '/cache_lifecycle_storage.php';
-    if (!cache_lifecycle_chain_runtime_available()
-        || preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1) {
+    if (
+        !cache_lifecycle_chain_runtime_available()
+        || preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1
+    ) {
         return false;
     }
     return site_maintenance_fire_background_worker(false, $ticket);
@@ -911,14 +1114,23 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
 function site_maintenance_fire_background_worker(
     bool $telemetryOnly,
     string $ticket = '',
-    string $updateTicket = ''
-): bool
-{
+    string $updateTicket = '',
+): bool {
     $updaterOnly = $updateTicket !== '';
-    if (!function_exists('stream_socket_client')
-        || ($updaterOnly
-            ? $telemetryOnly || $ticket !== '' || preg_match('/^[a-f0-9]{64}$/D', $updateTicket) !== 1
-            : ($telemetryOnly ? $ticket !== '' : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1))) {
+    if (
+        !function_exists('stream_socket_client')
+        || (
+            $updaterOnly
+                ? $telemetryOnly
+                || $ticket !== ''
+                || preg_match('/^[a-f0-9]{64}$/D', $updateTicket) !== 1
+                : (
+                    $telemetryOnly
+                        ? $ticket !== ''
+                        : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+                )
+        )
+    ) {
         return false;
     }
     // Keep the existing single-worker protection for autonomous updater hops.
@@ -934,51 +1146,93 @@ function site_maintenance_fire_background_worker(
     // a caller-selected URL, so a public visit cannot redirect the secret.
     $base = rtrim((string) (cms_config()['base_url'] ?? ''), '/');
     $parts = parse_url($base);
-    if (!is_array($parts) || !in_array($parts['scheme'] ?? '', ['http','https'], true)
-        || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
-        || preg_match('/[\x00-\x20\x7f]/', $base) === 1) return false;
+    if (
+        !is_array($parts)
+        || !in_array($parts['scheme'] ?? '', ['http', 'https'], true)
+        || empty($parts['host'])
+        || isset($parts['user'])
+        || isset($parts['pass'])
+        || isset($parts['query'])
+        || isset($parts['fragment'])
+        || preg_match('/[\x00-\x20\x7f]/', $base) === 1
+    )
+        return false;
     $host = (string) $parts['host'];
     $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80));
-    if ($port < 1 || $port > 65535) return false;
-    $payload = $updaterOnly ? ['update_ticket' => $updateTicket]
-        : ($telemetryOnly ? ['telemetry_only' => 1]
-            : ['cache_only' => 1, 'cache_ticket' => $ticket]);
+    if ($port < 1 || $port > 65535)
+        return false;
+    $payload = $updaterOnly
+        ? ['update_ticket' => $updateTicket]
+        : (
+            $telemetryOnly
+                ? ['telemetry_only' => 1]
+                : ['cache_only' => 1, 'cache_ticket' => $ticket]
+        );
     $body = http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
-    $target = rtrim((string) ($parts['path'] ?? ''), '/') . '/index.php?page=site_maintenance_cron';
-    $hostHeader = $host . (
-        ($parts['scheme'] === 'https' && $port === 443)
+    $target =
+        rtrim((string) ($parts['path'] ?? ''), '/')
+        . '/index.php?page=site_maintenance_cron';
+    $hostHeader =
+        $host
+        . (
+            ($parts['scheme'] === 'https' && $port === 443)
             || ($parts['scheme'] === 'http' && $port === 80)
-            ? ''
-            : ':' . $port
-    );
+                ? ''
+                : ':' . $port
+        );
     $context = stream_context_create([
         'ssl' => [
-            'verify_peer'=>true,
-            'verify_peer_name'=>true,
-            'allow_self_signed'=>false,
-            'peer_name'=>$host
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+            'allow_self_signed' => false,
+            'peer_name' => $host,
         ],
     ]);
     // Bound each connection and the complete write admission.
     // Type: int. Units: seconds. Scope: one asynchronous maintenance handoff.
     // Consumers: stream connection, write timeout and write deadline. Rationale: a one-second limit prevents a stalled loopback from turning the public kickoff into a long network wait.
     $transportSeconds = 1;
-    $socket = @stream_socket_client(($parts['scheme'] === 'https' ? 'tls://' : 'tcp://') . $host . ':' . $port,
-        $errorCode, $errorMessage, (float) $transportSeconds, STREAM_CLIENT_CONNECT, $context);
-    if (!is_resource($socket)) return false;
+    $socket = @stream_socket_client(
+        ($parts['scheme'] === 'https' ? 'tls://' : 'tcp://')
+            . $host
+            . ':'
+            . $port,
+        $errorCode,
+        $errorMessage,
+        (float) $transportSeconds,
+        STREAM_CLIENT_CONNECT,
+        $context,
+    );
+    if (!is_resource($socket))
+        return false;
     try {
         stream_set_timeout($socket, $transportSeconds);
-        $agent = $updaterOnly ? 'PHP-Gallery-Update-Worker'
-            : ($telemetryOnly ? 'PHP-Gallery-Telemetry-Worker' : 'PHP-Gallery-Cache-Worker');
-        $request = 'POST ' . $target . " HTTP/1.1\r\nHost: " . $hostHeader
-            . "\r\nX-Site-Maintenance-Token: " . site_maintenance_token()
-            . "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " . strlen($body)
-            . "\r\nUser-Agent: " . $agent . "\r\nConnection: close\r\n\r\n" . $body;
+        $agent = $updaterOnly
+            ? 'PHP-Gallery-Update-Worker'
+            : (
+                $telemetryOnly
+                    ? 'PHP-Gallery-Telemetry-Worker'
+                    : 'PHP-Gallery-Cache-Worker'
+            );
+        $request =
+            'POST '
+            . $target
+            . " HTTP/1.1\r\nHost: "
+            . $hostHeader
+            . "\r\nX-Site-Maintenance-Token: "
+            . site_maintenance_token()
+            . "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: "
+            . strlen($body)
+            . "\r\nUser-Agent: "
+            . $agent
+            . "\r\nConnection: close\r\n\r\n"
+            . $body;
         $offset = 0;
         $deadline = microtime(true) + $transportSeconds;
         while ($offset < strlen($request) && microtime(true) < $deadline) {
             $written = @fwrite($socket, substr($request, $offset));
-            if ($written === false || $written === 0) return false;
+            if ($written === false || $written === 0)
+                return false;
             $offset += $written;
         }
         return $offset === strlen($request);
@@ -1010,16 +1264,36 @@ function site_maintenance_finish_response_before_background_work(): bool
     }
 
     if (function_exists('fastcgi_finish_request')) {
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'called');
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_note_response_detach'))
+            admin_test_run_note_response_detach(
+                'fastcgi_finish_request',
+                'called',
+            );
         $finished = @fastcgi_finish_request();
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'returned');
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_note_response_detach'))
+            admin_test_run_note_response_detach(
+                'fastcgi_finish_request',
+                'returned',
+            );
         return $finished;
     }
 
     if (function_exists('litespeed_finish_request')) {
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'called');
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_note_response_detach'))
+            admin_test_run_note_response_detach(
+                'litespeed_finish_request',
+                'called',
+            );
         $finished = @litespeed_finish_request() !== false;
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'returned');
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_note_response_detach'))
+            admin_test_run_note_response_detach(
+                'litespeed_finish_request',
+                'returned',
+            );
     }
     return $finished;
 }
@@ -1041,13 +1315,17 @@ function site_maintenance_request_trigger_can_detach_response(): bool
         return false;
     }
 
-    return function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+    return (
+        function_exists('fastcgi_finish_request')
+            || function_exists('litespeed_finish_request')
+    );
 }
 
 /**
  * Return whether a maintenance result should immediately queue another safe web slice.
  *
- * @param array $result Result value.
+ * @param array{ok?:bool,busy?:bool,has_more?:bool} $result Run status fields
+ *     used to decide whether another web slice is safe.
  * @return bool True when the condition matches.
  */
 function site_maintenance_should_chain_after_result(array $result): bool
@@ -1056,11 +1334,18 @@ function site_maintenance_should_chain_after_result(array $result): bool
         return false;
     }
 
-    if (!site_maintenance_enabled() || !site_maintenance_request_trigger_enabled()) {
+    if (
+        !site_maintenance_enabled()
+        || !site_maintenance_request_trigger_enabled()
+    ) {
         return false;
     }
 
-    if (empty($result['ok']) || !empty($result['busy']) || empty($result['has_more'])) {
+    if (
+        empty($result['ok'])
+        || !empty($result['busy'])
+        || empty($result['has_more'])
+    ) {
         return false;
     }
 
@@ -1069,7 +1354,10 @@ function site_maintenance_should_chain_after_result(array $result): bool
         return false;
     }
 
-    return (int) ($schedule['seconds_until_window_end'] ?? 0) >= SITE_MAINTENANCE_MIN_CHAIN_SECONDS_LEFT;
+    return (
+        (int) ($schedule['seconds_until_window_end'] ?? 0)
+            >= SITE_MAINTENANCE_MIN_CHAIN_SECONDS_LEFT
+    );
 }
 
 /**
@@ -1093,35 +1381,53 @@ function site_maintenance_queue_next_chained_slice(): bool
  * @param callable(string):mixed|null $loadDependencies Optional reviewed kernel module loader for admitted shutdown work.
  * @return void Registers private telemetry handoffs and bounded cache opportunities independently of Admin thumbnail windows; the Admin fallback retains its eligibility.
  */
-function site_maintenance_register_request_trigger(string $page, ?callable $loadDependencies = null): void
-{
+function site_maintenance_register_request_trigger(
+    string $page,
+    ?callable $loadDependencies = null,
+): void {
     site_maintenance_register_telemetry_trigger($page);
     site_maintenance_register_cache_trigger($page, $loadDependencies);
     if (PHP_SAPI === 'cli') {
         return;
     }
 
-    $method = strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'));
+    $method = strtoupper(
+        (string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'),
+    );
     if (!in_array($method, ['GET', 'HEAD'], true)) {
         return;
     }
 
-    if (!site_maintenance_route_allows_request_trigger($page)
+    if (
+        !site_maintenance_route_allows_request_trigger($page)
         || !site_maintenance_request_trigger_can_detach_response()
-        || !site_maintenance_request_trigger_due()) {
+        || !site_maintenance_request_trigger_due()
+    ) {
         return;
     }
 
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-        admin_test_run_record_maintenance_event('site_maintenance', 'scheduled_after_response', ['source' => 'request_trigger_inline']);
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event(
+            'site_maintenance',
+            'scheduled_after_response',
+            ['source' => 'request_trigger_inline'],
+        );
     }
-    register_shutdown_function(static function () use ($loadDependencies): void {
+    register_shutdown_function(static function () use (
+        $loadDependencies,
+    ): void {
         if (!site_maintenance_request_trigger_due()) {
             return;
         }
 
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('site_maintenance', 'execution_begin', ['source' => 'request_trigger_inline']);
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event(
+                'site_maintenance',
+                'execution_begin',
+                ['source' => 'request_trigger_inline'],
+            );
         }
         site_maintenance_mark_request_trigger_attempt();
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -1139,8 +1445,13 @@ function site_maintenance_register_request_trigger(string $page, ?callable $load
             'time_budget_seconds' => site_maintenance_time_budget_seconds(),
             'chain' => true,
         ]);
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('site_maintenance', 'execution_end', ['source' => 'request_trigger_inline']);
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event(
+                'site_maintenance',
+                'execution_end',
+                ['source' => 'request_trigger_inline'],
+            );
         }
     });
 }
@@ -1155,25 +1466,46 @@ function site_maintenance_register_request_trigger(string $page, ?callable $load
  */
 function site_maintenance_register_telemetry_trigger(string $page): void
 {
-    if (PHP_SAPI === 'cli' || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
-        || strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'GET'
+    if (
+        PHP_SAPI === 'cli'
+        || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
+        || strtoupper(
+            (string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'),
+        ) !== 'GET'
         || array_key_exists('preview', request_data('query'))
         || !feature_capability_effective_enabled('telemetry')
-        || !telemetry_setting_enabled('telemetry_enabled', '0')) {
+        || !telemetry_setting_enabled('telemetry_enabled', '0')
+    ) {
         return;
     }
     register_shutdown_function(static function (): void {
-        if (response_status_code() < 200 || response_status_code() >= 300
+        if (
+            response_status_code() < 200
+            || response_status_code() >= 300
             || error_get_last() !== null
-                && in_array(error_get_last()['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            && in_array(
+                error_get_last()['type'],
+                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR],
+                true,
+            )
+        ) {
             return;
         }
         $lock = false;
         try {
             $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
-                ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
-            application_update_assert_safe_target($root, 'cache/site-maintenance/telemetry-trigger.lock', true);
-            application_update_assert_safe_target($root, 'cache/site-maintenance/telemetry-trigger.touch', true);
+                ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
+                : dirname(__DIR__, 2);
+            application_update_assert_safe_target(
+                $root,
+                'cache/site-maintenance/telemetry-trigger.lock',
+                true,
+            );
+            application_update_assert_safe_target(
+                $root,
+                'cache/site-maintenance/telemetry-trigger.touch',
+                true,
+            );
             $directory = site_maintenance_cache_dir();
             $lock = @fopen($directory . '/telemetry-trigger.lock', 'c');
             if (!is_resource($lock) || !flock($lock, LOCK_EX | LOCK_NB)) {
@@ -1181,8 +1513,16 @@ function site_maintenance_register_telemetry_trigger(string $page): void
             }
             $touch = $directory . '/telemetry-trigger.touch';
             clearstatcache(true, $touch);
-            $interval = max(1, (int) \Gallery\Core\cms_runtime_limit('telemetry.maintenance_retry_seconds'));
-            if (is_file($touch) && time() - (int) filemtime($touch) < $interval) {
+            $interval = max(
+                1,
+                (int) \Gallery\Core\cms_runtime_limit(
+                    'telemetry.maintenance_retry_seconds',
+                ),
+            );
+            if (
+                is_file($touch)
+                && (time() - (int) filemtime($touch)) < $interval
+            ) {
                 return;
             }
             if (session_status() === PHP_SESSION_ACTIVE) {
@@ -1213,16 +1553,26 @@ function site_maintenance_register_telemetry_trigger(string $page): void
 function site_maintenance_telemetry_worker_run(): array
 {
     try {
-        if (!feature_capability_effective_enabled('telemetry')
-            || !telemetry_setting_enabled('telemetry_enabled', '0')) {
+        if (
+            !feature_capability_effective_enabled('telemetry')
+            || !telemetry_setting_enabled('telemetry_enabled', '0')
+        ) {
             return ['ok' => true, 'skipped' => true, 'reason' => 'disabled'];
         }
         if (maintenance_center_model_mutation_owner(true) !== null) {
-            return ['ok' => true, 'skipped' => true, 'reason' => 'central_maintenance_active'];
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'central_maintenance_active',
+            ];
         }
         return telemetry_run_scheduled_maintenance();
     } catch (Throwable) {
-        return ['ok' => false, 'has_more' => true, 'error' => 'maintenance_unavailable'];
+        return [
+            'ok' => false,
+            'has_more' => true,
+            'error' => 'maintenance_unavailable',
+        ];
     }
 }
 
@@ -1232,46 +1582,103 @@ function site_maintenance_telemetry_worker_run(): array
  * @param callable(string):mixed|null $loadDependencies Reviewed kernel loader invoked only after an admitted successful response.
  * @return void Retains a nonblocking foreground lease until shutdown, then optionally advances the existing cache owner and writes one bounded continuation request; failures never replace the page response.
  */
-function site_maintenance_register_cache_trigger(string $page, ?callable $loadDependencies = null): void
-{
-    if (PHP_SAPI === 'cli' || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
-        || strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'GET'
-        || !feature_capability_effective_enabled('automatic_cache_cleanup')) return;
+function site_maintenance_register_cache_trigger(
+    string $page,
+    ?callable $loadDependencies = null,
+): void {
+    if (
+        PHP_SAPI === 'cli'
+        || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
+        || strtoupper(
+            (string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'),
+        ) !== 'GET'
+        || !feature_capability_effective_enabled('automatic_cache_cleanup')
+    )
+        return;
     try {
         // Guard the complete ancestry before touching coordination metadata.
-        $root = defined('CACHE_LIFECYCLE_TEST_ROOT') ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
-        application_update_assert_safe_target($root, 'cache/site-maintenance/visitor.lock', true);
-        application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-signal', true);
-        application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-attempt', true);
+        $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
+            ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
+            : dirname(__DIR__, 2);
+        application_update_assert_safe_target(
+            $root,
+            'cache/site-maintenance/visitor.lock',
+            true,
+        );
+        application_update_assert_safe_target(
+            $root,
+            'cache/site-maintenance/visitor-signal',
+            true,
+        );
+        application_update_assert_safe_target(
+            $root,
+            'cache/site-maintenance/visitor-attempt',
+            true,
+        );
         $directory = site_maintenance_cache_dir();
         $foreground = @fopen($directory . '/visitor.lock', 'c');
-        if (!is_resource($foreground)) return;
+        if (!is_resource($foreground))
+            return;
         // Visitors never wait for GC. A signal also detects arrivals during a
         // burst when its exclusive lease cannot reveal queued PHP requests.
-        @file_put_contents($directory . '/visitor-signal', (string) hrtime(true));
+        @file_put_contents(
+            $directory . '/visitor-signal',
+            (string) hrtime(true),
+        );
         $held = flock($foreground, LOCK_SH | LOCK_NB);
-        register_shutdown_function(static function () use ($foreground, $held, $directory, $root, $loadDependencies): void {
-            if ($held) flock($foreground, LOCK_UN);
+        register_shutdown_function(static function () use (
+            $foreground,
+            $held,
+            $directory,
+            $root,
+            $loadDependencies,
+        ): void {
+            if ($held)
+                flock($foreground, LOCK_UN);
             fclose($foreground);
-            if (response_status_code() >= 400 || error_get_last() !== null
-                && in_array(error_get_last()['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) return;
+            if (
+                response_status_code() >= 400
+                || error_get_last() !== null
+                && in_array(
+                    error_get_last()['type'],
+                    [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR],
+                    true,
+                )
+            )
+                return;
             try {
                 // Load the shared interval only inside an admitted shutdown
                 // callback; unrelated routes and CLI probes need no cache owner.
                 require_once __DIR__ . '/cache_lifecycle_storage.php';
-                application_update_assert_safe_target($root, 'cache/site-maintenance/visitor-attempt', true);
+                application_update_assert_safe_target(
+                    $root,
+                    'cache/site-maintenance/visitor-attempt',
+                    true,
+                );
                 clearstatcache(true, $directory . '/visitor-attempt');
                 // Throttle all visitors together; the worker repeats this check
                 // under the scheduler lock to close concurrent admission races.
-                if (is_file($directory . '/visitor-attempt') && time() - (int) filemtime($directory . '/visitor-attempt') < CACHE_LIFECYCLE_REFRESH_SECONDS) return;
-                if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
-                $detached = site_maintenance_request_trigger_can_detach_response();
+                if (
+                    is_file($directory . '/visitor-attempt')
+                    && (
+                        time()
+                        - (int) filemtime($directory . '/visitor-attempt')
+                    ) < CACHE_LIFECYCLE_REFRESH_SECONDS
+                )
+                    return;
+                if (session_status() === PHP_SESSION_ACTIVE)
+                    session_write_close();
+                $detached =
+                    site_maintenance_request_trigger_can_detach_response();
                 if ($detached) {
                     ignore_user_abort(true);
-                    $detached = site_maintenance_finish_response_before_background_work();
+                    $detached =
+                        site_maintenance_finish_response_before_background_work();
                 }
-                if ($loadDependencies !== null) $loadDependencies('site-maintenance-work');
-                else require_once __DIR__ . '/cache_lifecycle.php';
+                if ($loadDependencies !== null)
+                    $loadDependencies('site-maintenance-work');
+                else
+                    require_once __DIR__ . '/cache_lifecycle.php';
                 cache_lifecycle_visitor_run($detached);
                 cache_lifecycle_chain_start();
             } catch (Throwable) {
@@ -1299,17 +1706,25 @@ function site_maintenance_run(array $options = []): array
     // Explicit workers load their owner; passive/public registration stays lightweight.
     require_once __DIR__ . '/cache_lifecycle.php';
     $force = !empty($options['force']);
-    $chain = array_key_exists('chain', $options) ? !empty($options['chain']) : false;
+    $chain = array_key_exists('chain', $options)
+        ? !empty($options['chain'])
+        : false;
     $cacheOnly = !empty($options['cache_only']);
-    if ($cacheOnly) $chain = false;
+    if ($cacheOnly)
+        $chain = false;
     $cacheRunId = (string) ($options['cache_run_id'] ?? '');
     $source = trim((string) ($options['source'] ?? 'cron'));
     $requestedTimeBudgetSeconds = isset($options['time_budget_seconds'])
         ? max(1, min(120, (int) $options['time_budget_seconds']))
         : site_maintenance_time_budget_seconds();
-    $timeBudgetSeconds = site_maintenance_effective_time_budget_seconds($requestedTimeBudgetSeconds);
+    $timeBudgetSeconds = site_maintenance_effective_time_budget_seconds(
+        $requestedTimeBudgetSeconds,
+    );
 
-    @set_time_limit(max(30, $timeBudgetSeconds + SITE_MAINTENANCE_RUNTIME_RESERVE_SECONDS));
+    @set_time_limit(max(
+        30,
+        $timeBudgetSeconds + SITE_MAINTENANCE_RUNTIME_RESERVE_SECONDS,
+    ));
 
     // A durable Maintenance Center job owns the installation-wide mutation claim
     // across browser-driven requests. Scheduled/manual legacy maintenance must
@@ -1319,7 +1734,11 @@ function site_maintenance_run(array $options = []): array
     }
     $centralOwner = maintenance_center_model_mutation_owner();
     if (is_array($centralOwner)) {
-        if ($cacheOnly && $source !== 'admin_cache_manual') cache_lifecycle_scheduler_deferred($source, 'central_maintenance_active');
+        if ($cacheOnly && $source !== 'admin_cache_manual')
+            cache_lifecycle_scheduler_deferred(
+                $source,
+                'central_maintenance_active',
+            );
         return [
             'ok' => true,
             'busy' => true,
@@ -1333,40 +1752,93 @@ function site_maintenance_run(array $options = []): array
     // Retention has its own lock, throttle, checkpoint and failure evidence.
     // Run it even when thumbnail work is busy, failed or outside its time window.
     $telemetryStarted = microtime(true);
-    $telemetry = !$cacheOnly && function_exists(__NAMESPACE__ . '\\telemetry_run_scheduled_maintenance')
-        ? telemetry_run_scheduled_maintenance() : ['skipped' => true];
-    $timeBudgetSeconds = max(1, $timeBudgetSeconds - (int) ceil(microtime(true) - $telemetryStarted));
+    $telemetry = !$cacheOnly
+    && function_exists(__NAMESPACE__ . '\\telemetry_run_scheduled_maintenance')
+        ? telemetry_run_scheduled_maintenance()
+        : ['skipped' => true];
+    $timeBudgetSeconds = max(
+        1,
+        $timeBudgetSeconds - (int) ceil(microtime(true) - $telemetryStarted),
+    );
     $cacheCleanup = null;
     $cacheLifecycle = null;
     $siteLockEntered = false;
-    $result = site_maintenance_with_lock(static function () use ($force, $source, $timeBudgetSeconds, $cacheOnly, $cacheRunId, &$cacheCleanup, &$cacheLifecycle, &$siteLockEntered): array {
+    $result = site_maintenance_with_lock(static function () use (
+        $force,
+        $source,
+        $timeBudgetSeconds,
+        $cacheOnly,
+        $cacheRunId,
+        &$cacheCleanup,
+        &$cacheLifecycle,
+        &$siteLockEntered,
+    ): array {
         $siteLockEntered = true;
         if ($cacheRunId !== '') {
-            cache_cleanup_diagnostic_event($cacheRunId, 'lock_acquired', ['lock' => 'site_maintenance']);
+            cache_cleanup_diagnostic_event($cacheRunId, 'lock_acquired', [
+                'lock' => 'site_maintenance',
+            ]);
         }
         // The central claim and this legacy worker lock also cover independent GC.
         // Run before thumbnail enable/window/completion checks, never on a public
         // rendering path. The owner adds its own updater-start lock and throttle.
-        $cacheAllowed = in_array($source, ['admin_manual', 'admin_cache_manual'], true)
+        $cacheAllowed =
+            in_array($source, ['admin_manual', 'admin_cache_manual'], true)
             || feature_capability_effective_enabled('automatic_cache_cleanup');
-        if ($cacheAllowed && function_exists(__NAMESPACE__ . '\\application_update_run_scheduled_cache_cleanup')) {
+        if (
+            $cacheAllowed
+            && function_exists(__NAMESPACE__
+                . '\\application_update_run_scheduled_cache_cleanup')
+        ) {
             $cacheCleanup = site_maintenance_run_cleanup_operation(
                 'updater_cache_gc',
-                static fn (): array => application_update_run_scheduled_cache_cleanup($force, $cacheRunId),
-                ['source' => $source, 'cache_run_id' => $cacheRunId]
+                static fn(): array => application_update_run_scheduled_cache_cleanup(
+                    $force,
+                    $cacheRunId,
+                ),
+                ['source' => $source, 'cache_run_id' => $cacheRunId],
             );
         }
         if ($cacheOnly) {
             if ($source !== 'admin_cache_manual') {
-                $cacheLifecycle = site_maintenance_run_cleanup_operation('cache_lifecycle', static fn (): array => cache_lifecycle_scheduled_run($timeBudgetSeconds, $source), ['source'=>$source]);
+                $cacheLifecycle = site_maintenance_run_cleanup_operation(
+                    'cache_lifecycle',
+                    static fn(): array => cache_lifecycle_scheduled_run(
+                        $timeBudgetSeconds,
+                        $source,
+                    ),
+                    ['source' => $source],
+                );
             }
-            return ['ok' => $cacheCleanup !== null || $cacheLifecycle !== null,
-                'done' => ($cacheCleanup === null || !empty($cacheCleanup['value']['done']))
-                    && ($cacheLifecycle === null || !empty($cacheLifecycle['value']['done'])),
-                'skipped' => ($cacheCleanup === null || !empty($cacheCleanup['value']['skipped']))
-                    && ($cacheLifecycle === null || ($cacheLifecycle['value']['skipped'] ?? false) === true), 'reason' => 'cache_only'];
+            return [
+                'ok' => $cacheCleanup !== null || $cacheLifecycle !== null,
+                'done' =>
+                    (
+                        $cacheCleanup === null
+                        || !empty($cacheCleanup['value']['done'])
+                    )
+                        && (
+                            $cacheLifecycle === null
+                            || !empty($cacheLifecycle['value']['done'])
+                        ),
+                'skipped' =>
+                    (
+                        $cacheCleanup === null
+                        || !empty($cacheCleanup['value']['skipped'])
+                    )
+                        && (
+                            $cacheLifecycle === null
+                            || ($cacheLifecycle['value']['skipped'] ?? false)
+                            === true
+                        ),
+                'reason' => 'cache_only',
+            ];
         }
-        $cacheLifecycle = site_maintenance_run_cleanup_operation('cache_lifecycle', static fn (): array => cache_lifecycle_scheduled_slice($force), ['source'=>$source]);
+        $cacheLifecycle = site_maintenance_run_cleanup_operation(
+            'cache_lifecycle',
+            static fn(): array => cache_lifecycle_scheduled_slice($force),
+            ['source' => $source],
+        );
         if (!site_maintenance_enabled() && !$force) {
             return [
                 'ok' => true,
@@ -1380,7 +1852,10 @@ function site_maintenance_run(array $options = []): array
         $state = site_maintenance_state();
         $isRunning = (string) ($state['status'] ?? '') === 'running';
         $schedule = site_maintenance_schedule_due_state();
-        $lastCompletedDate = trim((string) app_setting(SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING, ''));
+        $lastCompletedDate = trim((string) app_setting(
+            SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING,
+            '',
+        ));
 
         if (!$force && empty($schedule['within_window'])) {
             if ($isRunning) {
@@ -1393,7 +1868,9 @@ function site_maintenance_run(array $options = []): array
                 'busy' => false,
                 'skipped' => true,
                 'has_more' => $isRunning,
-                'reason' => $isRunning ? 'outside_maintenance_window_active_cycle_paused' : 'outside_maintenance_window',
+                'reason' => $isRunning
+                    ? 'outside_maintenance_window_active_cycle_paused'
+                    : 'outside_maintenance_window',
                 'enabled' => site_maintenance_enabled(),
                 'scheduled_at_utc' => $schedule['scheduled_at'],
                 'window_ends_at_utc' => $schedule['window_ends_at'],
@@ -1404,12 +1881,20 @@ function site_maintenance_run(array $options = []): array
         }
 
         if (!$isRunning) {
-            if (!$force && (!$schedule['due'] || $lastCompletedDate === $schedule['date'])) {
+            if (
+                !$force
+                && (
+                    !$schedule['due']
+                    || $lastCompletedDate === $schedule['date']
+                )
+            ) {
                 return [
                     'ok' => true,
                     'busy' => false,
                     'skipped' => true,
-                    'reason' => $lastCompletedDate === $schedule['date'] ? 'already_completed_today' : 'not_due_yet',
+                    'reason' => $lastCompletedDate === $schedule['date']
+                        ? 'already_completed_today'
+                        : 'not_due_yet',
                     'enabled' => site_maintenance_enabled(),
                     'scheduled_at_utc' => $schedule['scheduled_at'],
                     'window_ends_at_utc' => $schedule['window_ends_at'],
@@ -1418,24 +1903,40 @@ function site_maintenance_run(array $options = []): array
                 ];
             }
 
-            $cycleDate = $force ? 'manual-' . gmdate('Y-m-d-His') : $schedule['date'];
+            $cycleDate = $force
+                ? 'manual-' . gmdate('Y-m-d-His')
+                : $schedule['date'];
             $state = site_maintenance_new_state($cycleDate, $source);
             site_maintenance_save_state($state);
-            site_maintenance_log_event('info', 'site_maintenance.started', 'Site maintenance cycle started.', [
-                'cycle_date' => $cycleDate,
-                'source' => $source,
-                'forced' => $force,
-                'batch_size' => site_maintenance_batch_size(),
-                'time_budget_seconds' => $timeBudgetSeconds,
-                'window_minutes' => site_maintenance_window_minutes(),
-                'window_ends_at_utc' => $schedule['window_ends_at'],
-                'php_max_execution_time' => site_maintenance_php_max_execution_seconds(),
-                'thumbnail_metadata_start_snapshot' => is_array($state['thumbnail_metadata_start_snapshot'] ?? null) ? $state['thumbnail_metadata_start_snapshot'] : [],
-            ]);
+            site_maintenance_log_event(
+                'info',
+                'site_maintenance.started',
+                'Site maintenance cycle started.',
+                [
+                    'cycle_date' => $cycleDate,
+                    'source' => $source,
+                    'forced' => $force,
+                    'batch_size' => site_maintenance_batch_size(),
+                    'time_budget_seconds' => $timeBudgetSeconds,
+                    'window_minutes' => site_maintenance_window_minutes(),
+                    'window_ends_at_utc' => $schedule['window_ends_at'],
+                    'php_max_execution_time' =>
+                        site_maintenance_php_max_execution_seconds(),
+                    'thumbnail_metadata_start_snapshot' => is_array(
+                        $state['thumbnail_metadata_start_snapshot'] ?? null,
+                    )
+                        ? $state['thumbnail_metadata_start_snapshot']
+                        : [],
+                ],
+            );
         }
 
         try {
-            $result = site_maintenance_run_active_state($state, $timeBudgetSeconds, $force);
+            $result = site_maintenance_run_active_state(
+                $state,
+                $timeBudgetSeconds,
+                $force,
+            );
             site_maintenance_store_last_result($result);
             return $result;
         } catch (Throwable $exception) {
@@ -1444,7 +1945,8 @@ function site_maintenance_run(array $options = []): array
             $state['error_code'] = 'maintenance_exception';
             $state['exception_class'] = get_class($exception);
             site_maintenance_save_state($state);
-            $durationMs = site_maintenance_state_duration_seconds($state) * 1000;
+            $durationMs =
+                site_maintenance_state_duration_seconds($state) * 1000;
             $failure = [
                 'status' => 'failed',
                 'occurred_at' => (string) $state['finished_at'],
@@ -1455,7 +1957,10 @@ function site_maintenance_run(array $options = []): array
                 'exception_class' => get_class($exception),
                 'duration_ms' => $durationMs,
             ];
-            site_maintenance_store_outcome(SITE_MAINTENANCE_LAST_FAILURE_SETTING, $failure);
+            site_maintenance_store_outcome(
+                SITE_MAINTENANCE_LAST_FAILURE_SETTING,
+                $failure,
+            );
             $result = [
                 'ok' => false,
                 'busy' => false,
@@ -1465,30 +1970,51 @@ function site_maintenance_run(array $options = []): array
                 'state' => site_maintenance_public_state($state),
             ];
             site_maintenance_store_last_result($result);
-            site_maintenance_log_event('error', 'site_maintenance.failed', 'Site maintenance cycle failed.', [
-                'operation' => (string) ($state['phase'] ?? 'maintenance'),
-                'error_code' => 'maintenance_exception',
-                'exception_class' => get_class($exception),
-                'duration_ms' => $durationMs,
-            ], ['severity' => 'error']);
+            site_maintenance_log_event(
+                'error',
+                'site_maintenance.failed',
+                'Site maintenance cycle failed.',
+                [
+                    'operation' => (string) ($state['phase'] ?? 'maintenance'),
+                    'error_code' => 'maintenance_exception',
+                    'exception_class' => get_class($exception),
+                    'duration_ms' => $durationMs,
+                ],
+                ['severity' => 'error'],
+            );
             return $result;
         }
     });
 
     if ($cacheRunId !== '' && $siteLockEntered) {
-        cache_cleanup_diagnostic_event($cacheRunId, 'lock_released', ['lock' => 'site_maintenance']);
+        cache_cleanup_diagnostic_event($cacheRunId, 'lock_released', [
+            'lock' => 'site_maintenance',
+        ]);
     }
-    if ($cacheOnly && $source !== 'admin_cache_manual' && !$siteLockEntered) cache_lifecycle_scheduler_deferred($source, 'site_maintenance_busy');
-    if ($cacheRunId !== '' && $cacheCleanup === null && empty($result['busy'])) {
-        $failureCode = $siteLockEntered ? 'worker_unavailable' : 'site_lock_open_failed';
-        cache_cleanup_diagnostic_event($cacheRunId, 'failed', ['failure_code' => $failureCode]);
+    if ($cacheOnly && $source !== 'admin_cache_manual' && !$siteLockEntered)
+        cache_lifecycle_scheduler_deferred($source, 'site_maintenance_busy');
+    if (
+        $cacheRunId !== ''
+        && $cacheCleanup === null
+        && empty($result['busy'])
+    ) {
+        $failureCode = $siteLockEntered
+            ? 'worker_unavailable'
+            : 'site_lock_open_failed';
+        cache_cleanup_diagnostic_event($cacheRunId, 'failed', [
+            'failure_code' => $failureCode,
+        ]);
         $result['ok'] = false;
         $result['reason'] = $failureCode;
     }
     $result['telemetry'] = $telemetry;
     if ($cacheLifecycle !== null) {
         $result['cache_lifecycle'] = $cacheLifecycle;
-        if (empty($cacheLifecycle['ok']) || empty($cacheLifecycle['value']['ok'])) $result['ok'] = false;
+        if (
+            empty($cacheLifecycle['ok'])
+            || empty($cacheLifecycle['value']['ok'])
+        )
+            $result['ok'] = false;
     }
     if ($cacheCleanup !== null) {
         $result['cache_gc'] = $cacheCleanup;
@@ -1497,23 +2023,26 @@ function site_maintenance_run(array $options = []): array
         }
     }
     if ($chain && site_maintenance_should_chain_after_result($result)) {
-        $result['continuation_queued'] = site_maintenance_queue_next_chained_slice();
+        $result['continuation_queued'] =
+            site_maintenance_queue_next_chained_slice();
     }
 
     return $result;
 }
 
-
 /**
  * Continue the active maintenance state until the time budget is almost exhausted.
  *
- * @param array $state State value.
+ * @param array<string,mixed> $state Mutable maintenance checkpoint.
  * @param int $timeBudgetSeconds Time budget seconds value.
  * @param bool $forced Forced value.
- * @return array<string mixed>.
+ * @return array{ok:true,busy:false,skipped:false,done:bool,has_more:bool,status:string,phase:string,cycle_date:string,forced:bool,steps:int,batch_results:list<array<string,mixed>>,state:array<string,mixed>,schedule:array<string,mixed>} Bounded run result and public state snapshot.
  */
-function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds, bool $forced): array
-{
+function site_maintenance_run_active_state(
+    array $state,
+    int $timeBudgetSeconds,
+    bool $forced,
+): array {
     $deadline = microtime(true) + max(1, $timeBudgetSeconds);
     $steps = 0;
     $batchResults = [];
@@ -1553,27 +2082,51 @@ function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds,
         $cycleDate = (string) ($state['cycle_date'] ?? '');
         if ($cycleDate !== '' && !str_starts_with($cycleDate, 'manual-')) {
             $completionSchedule = site_maintenance_schedule_due_state();
-            $completionDate = (string) ($completionSchedule['date'] ?? $cycleDate);
-            set_app_setting(SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING, $completionDate !== '' ? $completionDate : $cycleDate);
+            $completionDate = (string) (
+                $completionSchedule['date'] ?? $cycleDate
+            );
+            set_app_setting(
+                SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING,
+                $completionDate !== '' ? $completionDate : $cycleDate,
+            );
         }
         set_app_setting(SITE_MAINTENANCE_LAST_COMPLETED_AT_SETTING, now_sql());
         thumbnail_maintenance_summary_cache_clear();
-        $state['thumbnail_metadata_end_snapshot'] = function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
+        $state['thumbnail_metadata_end_snapshot'] = function_exists(
+            'Gallery\\Services\\thumbnail_metadata_storage_snapshot',
+        )
+            ? thumbnail_metadata_storage_snapshot()
+            : [];
         site_maintenance_save_state($state);
-        site_maintenance_log_event('info', 'site_maintenance.completed', 'Site maintenance cycle completed.', [
-            'cycle_date' => $cycleDate,
-            'state' => site_maintenance_public_state($state),
-            'thumbnail_metadata_start_snapshot' => is_array($state['thumbnail_metadata_start_snapshot'] ?? null) ? $state['thumbnail_metadata_start_snapshot'] : [],
-            'thumbnail_metadata_end_snapshot' => is_array($state['thumbnail_metadata_end_snapshot'] ?? null) ? $state['thumbnail_metadata_end_snapshot'] : [],
-            'duration_from_state_seconds' => site_maintenance_state_duration_seconds($state),
-        ]);
+        site_maintenance_log_event(
+            'info',
+            'site_maintenance.completed',
+            'Site maintenance cycle completed.',
+            [
+                'cycle_date' => $cycleDate,
+                'state' => site_maintenance_public_state($state),
+                'thumbnail_metadata_start_snapshot' => is_array(
+                    $state['thumbnail_metadata_start_snapshot'] ?? null,
+                )
+                    ? $state['thumbnail_metadata_start_snapshot']
+                    : [],
+                'thumbnail_metadata_end_snapshot' => is_array(
+                    $state['thumbnail_metadata_end_snapshot'] ?? null,
+                )
+                    ? $state['thumbnail_metadata_end_snapshot']
+                    : [],
+                'duration_from_state_seconds' =>
+                    site_maintenance_state_duration_seconds($state),
+            ],
+        );
         site_maintenance_store_outcome(SITE_MAINTENANCE_LAST_SUCCESS_SETTING, [
             'status' => 'completed',
             'occurred_at' => (string) ($state['finished_at'] ?? now_sql()),
             'cycle_date' => $cycleDate,
             'source' => (string) ($state['source'] ?? ''),
             'operation' => 'site_maintenance_cycle',
-            'duration_ms' => site_maintenance_state_duration_seconds($state) * 1000,
+            'duration_ms' =>
+                site_maintenance_state_duration_seconds($state) * 1000,
         ]);
     }
 
@@ -1583,9 +2136,9 @@ function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds,
 /**
  * Run one persisted maintenance step and mutate the supplied state.
  *
- * @param array $state State value.
+ * @param array<string,mixed> $state Mutable maintenance checkpoint.
  * @param float $deadline Deadline value.
- * @return array<string mixed>.
+ * @return array{worked:false,phase:string}|array{worked:bool,phase:string,cleanup:array<string,mixed>,cleanup_diagnostics:array<string,mixed>}|array{worked:true,phase:string,processed_images:0,seen_images:0,next_phase:string}|array{worked:bool,phase:string,processed_images:int,seen_images:int,created:int,skipped:int,failed:int,deferred:int,interrupted:int,metadata_rows_refreshed:int,metadata_source_syncs:int,duration_seconds:float,cursor_image_id:int} Progress for one thumbnail or cleanup step.
  */
 function site_maintenance_run_one_step(array &$state, float $deadline): array
 {
@@ -1606,32 +2159,56 @@ function site_maintenance_run_one_step(array &$state, float $deadline): array
 /**
  * Process a bounded thumbnail check and repair step.
  *
- * @param array $state State value.
+ * @param array<string,mixed> $state Mutable maintenance checkpoint.
  * @param float $deadline Deadline value.
- * @return array<string mixed>.
+ * @return array{worked:true,phase:string,processed_images:0,seen_images:0,next_phase:string}|array{worked:bool,phase:string,processed_images:int,seen_images:int,created:int,skipped:int,failed:int,deferred:int,interrupted:int,metadata_rows_refreshed:int,metadata_source_syncs:int,duration_seconds:float,cursor_image_id:int} Thumbnail scan progress or phase-transition marker.
  */
-function site_maintenance_process_thumbnail_step(array &$state, float $deadline): array
-{
+function site_maintenance_process_thumbnail_step(
+    array &$state,
+    float $deadline,
+): array {
     site_maintenance_record_interrupted_thumbnail_attempt($state);
 
     $cursorImageId = max(0, (int) ($state['cursor_image_id'] ?? 0));
     $batchSize = site_maintenance_batch_size();
-    $images = site_maintenance_model_source_images_after_id($cursorImageId, $batchSize);
+    $images = site_maintenance_model_source_images_after_id(
+        $cursorImageId,
+        $batchSize,
+    );
 
     if (!$images) {
         $state['phase'] = 'cleanups';
         $state['cursor_image_id'] = 0;
         $state['current_image_id'] = 0;
         $state['current_image_started_at'] = null;
-        site_maintenance_log_event('info', 'site_maintenance.thumbnails_checked', 'Site maintenance thumbnail scan finished.', [
-            'cycle_date' => (string) ($state['cycle_date'] ?? ''),
-            'totals' => is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals(),
-            'thumbnail_metadata_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
-        ]);
-        return ['worked' => true, 'phase' => 'thumbnails', 'processed_images' => 0, 'seen_images' => 0, 'next_phase' => 'cleanups'];
+        site_maintenance_log_event(
+            'info',
+            'site_maintenance.thumbnails_checked',
+            'Site maintenance thumbnail scan finished.',
+            [
+                'cycle_date' => (string) ($state['cycle_date'] ?? ''),
+                'totals' => is_array($state['totals'] ?? null)
+                    ? $state['totals']
+                    : site_maintenance_empty_totals(),
+                'thumbnail_metadata_snapshot' => function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_storage_snapshot',
+                )
+                    ? thumbnail_metadata_storage_snapshot()
+                    : [],
+            ],
+        );
+        return [
+            'worked' => true,
+            'phase' => 'thumbnails',
+            'processed_images' => 0,
+            'seen_images' => 0,
+            'next_phase' => 'cleanups',
+        ];
     }
 
-    $totals = is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals();
+    $totals = is_array($state['totals'] ?? null)
+        ? $state['totals']
+        : site_maintenance_empty_totals();
     $galleryCache = [];
     $step = site_maintenance_empty_totals();
     $stepStartedAt = microtime(true);
@@ -1654,10 +2231,15 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         $stepBeforeImage = $step;
         $galleryId = (int) ($image['gallery_id'] ?? 0);
         if (!array_key_exists($galleryId, $galleryCache)) {
-            $galleryCache[$galleryId] = $galleryId > 0 ? find_gallery($galleryId) : null;
+            $galleryCache[$galleryId] = $galleryId > 0
+                ? find_gallery($galleryId)
+                : null;
         }
 
-        $state['cursor_image_id'] = max((int) ($state['cursor_image_id'] ?? 0), $imageId);
+        $state['cursor_image_id'] = max(
+            (int) ($state['cursor_image_id'] ?? 0),
+            $imageId,
+        );
         $state['current_image_id'] = $imageId;
         $state['current_image_started_at'] = now_sql();
         $totals['images_seen'] = (int) ($totals['images_seen'] ?? 0) + 1;
@@ -1666,47 +2248,87 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         site_maintenance_save_state($state);
 
         if (!$galleryCache[$galleryId]) {
-            $message = 'Gallery row was not found for image id ' . $imageId . '.';
+            $message =
+                'Gallery row was not found for image id ' . $imageId . '.';
             $totals['failed'] = (int) ($totals['failed'] ?? 0) + 1;
             $step['failed'] = (int) ($step['failed'] ?? 0) + 1;
-            $totals['errors'] = site_maintenance_append_error((array) ($totals['errors'] ?? []), $message);
-            $step['errors'] = site_maintenance_append_error((array) ($step['errors'] ?? []), $message);
+            $totals['errors'] = site_maintenance_append_error(
+                (array) ($totals['errors'] ?? []),
+                $message,
+            );
+            $step['errors'] = site_maintenance_append_error(
+                (array) ($step['errors'] ?? []),
+                $message,
+            );
             site_maintenance_finish_current_image($state, $totals);
             continue;
         }
 
-        $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId]);
+        $status = thumbnail_maintenance_status(
+            $image,
+            $galleryCache[$galleryId],
+        );
         $required = max(0, (int) ($status['required'] ?? 0));
         $missing = max(0, (int) ($status['missing'] ?? 0));
         $validVariants = max(0, $required - $missing);
-        $invalidDeleted = max(0, (int) ($status['invalid_geometry_deleted'] ?? 0));
+        $invalidDeleted = max(
+            0,
+            (int) ($status['invalid_geometry_deleted'] ?? 0),
+        );
 
         $metadataRowsWritten = (int) ($status['metadata_rows_written'] ?? 0);
         $metadataSourceSyncs = (int) ($status['metadata_source_syncs'] ?? 0);
-        $totals['webp_skipped'] = (int) ($totals['webp_skipped'] ?? 0) + (int) ($status['webp_skipped'] ?? 0);
-        $totals['invalid_geometry_deleted'] = (int) ($totals['invalid_geometry_deleted'] ?? 0) + $invalidDeleted;
-        $totals['metadata_rows_refreshed'] = (int) ($totals['metadata_rows_refreshed'] ?? 0) + $metadataRowsWritten;
-        $totals['metadata_source_syncs'] = (int) ($totals['metadata_source_syncs'] ?? 0) + $metadataSourceSyncs;
-        $step['webp_skipped'] = (int) ($step['webp_skipped'] ?? 0) + (int) ($status['webp_skipped'] ?? 0);
-        $step['invalid_geometry_deleted'] = (int) ($step['invalid_geometry_deleted'] ?? 0) + $invalidDeleted;
-        $step['metadata_rows_refreshed'] = (int) ($step['metadata_rows_refreshed'] ?? 0) + $metadataRowsWritten;
-        $step['metadata_source_syncs'] = (int) ($step['metadata_source_syncs'] ?? 0) + $metadataSourceSyncs;
+        $totals['webp_skipped'] =
+            (int) ($totals['webp_skipped'] ?? 0)
+            + (int) ($status['webp_skipped'] ?? 0);
+        $totals['invalid_geometry_deleted'] =
+            (int) ($totals['invalid_geometry_deleted'] ?? 0) + $invalidDeleted;
+        $totals['metadata_rows_refreshed'] =
+            (int) ($totals['metadata_rows_refreshed'] ?? 0)
+            + $metadataRowsWritten;
+        $totals['metadata_source_syncs'] =
+            (int) ($totals['metadata_source_syncs'] ?? 0)
+            + $metadataSourceSyncs;
+        $step['webp_skipped'] =
+            (int) ($step['webp_skipped'] ?? 0)
+            + (int) ($status['webp_skipped'] ?? 0);
+        $step['invalid_geometry_deleted'] =
+            (int) ($step['invalid_geometry_deleted'] ?? 0) + $invalidDeleted;
+        $step['metadata_rows_refreshed'] =
+            (int) ($step['metadata_rows_refreshed'] ?? 0)
+            + $metadataRowsWritten;
+        $step['metadata_source_syncs'] =
+            (int) ($step['metadata_source_syncs'] ?? 0) + $metadataSourceSyncs;
 
         if ($missing <= 0) {
-            $totals['thumbs_skipped'] = (int) ($totals['thumbs_skipped'] ?? 0) + $validVariants;
-            $step['thumbs_skipped'] = (int) ($step['thumbs_skipped'] ?? 0) + $validVariants;
+            $totals['thumbs_skipped'] =
+                (int) ($totals['thumbs_skipped'] ?? 0) + $validVariants;
+            $step['thumbs_skipped'] =
+                (int) ($step['thumbs_skipped'] ?? 0) + $validVariants;
             site_maintenance_finish_current_image($state, $totals);
             continue;
         }
 
-        $totals['images_with_repairs_needed'] = (int) ($totals['images_with_repairs_needed'] ?? 0) + 1;
-        $totals['variants_missing_or_invalid'] = (int) ($totals['variants_missing_or_invalid'] ?? 0) + $missing;
-        $step['images_with_repairs_needed'] = (int) ($step['images_with_repairs_needed'] ?? 0) + 1;
-        $step['variants_missing_or_invalid'] = (int) ($step['variants_missing_or_invalid'] ?? 0) + $missing;
+        $totals['images_with_repairs_needed'] =
+            (int) ($totals['images_with_repairs_needed'] ?? 0) + 1;
+        $totals['variants_missing_or_invalid'] =
+            (int) ($totals['variants_missing_or_invalid'] ?? 0) + $missing;
+        $step['images_with_repairs_needed'] =
+            (int) ($step['images_with_repairs_needed'] ?? 0) + 1;
+        $step['variants_missing_or_invalid'] =
+            (int) ($step['variants_missing_or_invalid'] ?? 0) + $missing;
 
-        $repairDecision = site_maintenance_thumbnail_repair_decision($image, $galleryCache[$galleryId], $deadline, (string) ($state['source'] ?? ''));
+        $repairDecision = site_maintenance_thumbnail_repair_decision(
+            $image,
+            $galleryCache[$galleryId],
+            $deadline,
+            (string) ($state['source'] ?? ''),
+        );
         if (empty($repairDecision['allowed'])) {
-            if ((string) ($repairDecision['reason'] ?? '') === 'not_enough_runtime_left') {
+            if (
+                (string) ($repairDecision['reason'] ?? '')
+                === 'not_enough_runtime_left'
+            ) {
                 $totals = $totalsBeforeImage;
                 $step = $stepBeforeImage;
                 array_pop($stepImageIds);
@@ -1717,38 +2339,82 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
                 site_maintenance_save_state($state);
                 break;
             }
-            $message = 'Deferred thumbnail repair for image id ' . $imageId . ': ' . (string) ($repairDecision['reason'] ?? 'not_allowed');
-            $totals['images_deferred'] = (int) ($totals['images_deferred'] ?? 0) + 1;
-            $totals['thumbs_skipped'] = (int) ($totals['thumbs_skipped'] ?? 0) + $validVariants;
-            $step['images_deferred'] = (int) ($step['images_deferred'] ?? 0) + 1;
-            $step['thumbs_skipped'] = (int) ($step['thumbs_skipped'] ?? 0) + $validVariants;
-            $totals['errors'] = site_maintenance_append_error((array) ($totals['errors'] ?? []), $message);
-            $step['errors'] = site_maintenance_append_error((array) ($step['errors'] ?? []), $message);
+            $message =
+                'Deferred thumbnail repair for image id '
+                . $imageId
+                . ': '
+                . (string) ($repairDecision['reason'] ?? 'not_allowed');
+            $totals['images_deferred'] =
+                (int) ($totals['images_deferred'] ?? 0) + 1;
+            $totals['thumbs_skipped'] =
+                (int) ($totals['thumbs_skipped'] ?? 0) + $validVariants;
+            $step['images_deferred'] =
+                (int) ($step['images_deferred'] ?? 0) + 1;
+            $step['thumbs_skipped'] =
+                (int) ($step['thumbs_skipped'] ?? 0) + $validVariants;
+            $totals['errors'] = site_maintenance_append_error(
+                (array) ($totals['errors'] ?? []),
+                $message,
+            );
+            $step['errors'] = site_maintenance_append_error(
+                (array) ($step['errors'] ?? []),
+                $message,
+            );
             site_maintenance_finish_current_image($state, $totals);
             continue;
         }
 
-        $result = create_image_thumbnails_result($image, $galleryCache[$galleryId], null, [
-            'prefer_imagick_webp_exif' => false,
-        ]);
+        $result = create_image_thumbnails_result(
+            $image,
+            $galleryCache[$galleryId],
+            null,
+            [
+                'prefer_imagick_webp_exif' => false,
+            ],
+        );
 
-        $totals['images_processed'] = (int) ($totals['images_processed'] ?? 0) + 1;
-        $totals['thumbs_created'] = (int) ($totals['thumbs_created'] ?? 0) + (int) ($result['created'] ?? 0);
-        $totals['thumbs_skipped'] = (int) ($totals['thumbs_skipped'] ?? 0) + (int) ($result['skipped'] ?? 0);
-        $totals['webp_skipped'] = (int) ($totals['webp_skipped'] ?? 0) + (int) ($result['webp_skipped'] ?? 0);
-        $totals['failed'] = (int) ($totals['failed'] ?? 0) + (int) ($result['failed'] ?? 0);
-        $totals['invalid_geometry_deleted'] = (int) ($totals['invalid_geometry_deleted'] ?? 0) + (int) ($result['invalid_geometry_deleted'] ?? 0);
+        $totals['images_processed'] =
+            (int) ($totals['images_processed'] ?? 0) + 1;
+        $totals['thumbs_created'] =
+            (int) ($totals['thumbs_created'] ?? 0)
+            + (int) ($result['created'] ?? 0);
+        $totals['thumbs_skipped'] =
+            (int) ($totals['thumbs_skipped'] ?? 0)
+            + (int) ($result['skipped'] ?? 0);
+        $totals['webp_skipped'] =
+            (int) ($totals['webp_skipped'] ?? 0)
+            + (int) ($result['webp_skipped'] ?? 0);
+        $totals['failed'] =
+            (int) ($totals['failed'] ?? 0) + (int) ($result['failed'] ?? 0);
+        $totals['invalid_geometry_deleted'] =
+            (int) ($totals['invalid_geometry_deleted'] ?? 0)
+            + (int) ($result['invalid_geometry_deleted'] ?? 0);
 
         $step['images_processed'] = (int) ($step['images_processed'] ?? 0) + 1;
-        $step['thumbs_created'] = (int) ($step['thumbs_created'] ?? 0) + (int) ($result['created'] ?? 0);
-        $step['thumbs_skipped'] = (int) ($step['thumbs_skipped'] ?? 0) + (int) ($result['skipped'] ?? 0);
-        $step['webp_skipped'] = (int) ($step['webp_skipped'] ?? 0) + (int) ($result['webp_skipped'] ?? 0);
-        $step['failed'] = (int) ($step['failed'] ?? 0) + (int) ($result['failed'] ?? 0);
-        $step['invalid_geometry_deleted'] = (int) ($step['invalid_geometry_deleted'] ?? 0) + (int) ($result['invalid_geometry_deleted'] ?? 0);
+        $step['thumbs_created'] =
+            (int) ($step['thumbs_created'] ?? 0)
+            + (int) ($result['created'] ?? 0);
+        $step['thumbs_skipped'] =
+            (int) ($step['thumbs_skipped'] ?? 0)
+            + (int) ($result['skipped'] ?? 0);
+        $step['webp_skipped'] =
+            (int) ($step['webp_skipped'] ?? 0)
+            + (int) ($result['webp_skipped'] ?? 0);
+        $step['failed'] =
+            (int) ($step['failed'] ?? 0) + (int) ($result['failed'] ?? 0);
+        $step['invalid_geometry_deleted'] =
+            (int) ($step['invalid_geometry_deleted'] ?? 0)
+            + (int) ($result['invalid_geometry_deleted'] ?? 0);
 
         foreach ((array) ($result['errors'] ?? []) as $error) {
-            $totals['errors'] = site_maintenance_append_error((array) ($totals['errors'] ?? []), (string) $error);
-            $step['errors'] = site_maintenance_append_error((array) ($step['errors'] ?? []), (string) $error);
+            $totals['errors'] = site_maintenance_append_error(
+                (array) ($totals['errors'] ?? []),
+                (string) $error,
+            );
+            $step['errors'] = site_maintenance_append_error(
+                (array) ($step['errors'] ?? []),
+                (string) $error,
+            );
         }
 
         site_maintenance_finish_current_image($state, $totals);
@@ -1758,19 +2424,36 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
     $step['image_ids'] = $stepImageIds;
     $state['totals'] = $totals;
     $state['last_step_at'] = now_sql();
-    $state['last_step_summary'] = site_maintenance_step_summary($step, (int) ($state['cursor_image_id'] ?? 0));
+    $state['last_step_summary'] = site_maintenance_step_summary(
+        $step,
+        (int) ($state['cursor_image_id'] ?? 0),
+    );
     site_maintenance_save_state($state);
 
     if ((int) ($step['images_seen'] ?? 0) > 0) {
-        site_maintenance_log_event('info', 'site_maintenance.slice_progress', 'Site maintenance checked one thumbnail slice.', [
-            'cycle_date' => (string) ($state['cycle_date'] ?? ''),
-            'phase' => 'thumbnails',
-            'cursor_image_id' => (int) ($state['cursor_image_id'] ?? 0),
-            'step' => site_maintenance_step_summary($step, (int) ($state['cursor_image_id'] ?? 0)),
-            'image_ids' => $stepImageIds,
-            'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
-            'thumbnail_metadata_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
-        ]);
+        site_maintenance_log_event(
+            'info',
+            'site_maintenance.slice_progress',
+            'Site maintenance checked one thumbnail slice.',
+            [
+                'cycle_date' => (string) ($state['cycle_date'] ?? ''),
+                'phase' => 'thumbnails',
+                'cursor_image_id' => (int) ($state['cursor_image_id'] ?? 0),
+                'step' => site_maintenance_step_summary(
+                    $step,
+                    (int) ($state['cursor_image_id'] ?? 0),
+                ),
+                'image_ids' => $stepImageIds,
+                'duration_seconds' => (float) (
+                    $step['duration_seconds'] ?? 0.0
+                ),
+                'thumbnail_metadata_snapshot' => function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_storage_snapshot',
+                )
+                    ? thumbnail_metadata_storage_snapshot()
+                    : [],
+            ],
+        );
     }
 
     $worked = (int) ($step['images_seen'] ?? 0) > 0;
@@ -1785,7 +2468,9 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         'failed' => (int) ($step['failed'] ?? 0),
         'deferred' => (int) ($step['images_deferred'] ?? 0),
         'interrupted' => (int) ($step['images_interrupted'] ?? 0),
-        'metadata_rows_refreshed' => (int) ($step['metadata_rows_refreshed'] ?? 0),
+        'metadata_rows_refreshed' => (int) (
+            $step['metadata_rows_refreshed'] ?? 0
+        ),
         'metadata_source_syncs' => (int) ($step['metadata_source_syncs'] ?? 0),
         'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
         'cursor_image_id' => (int) ($state['cursor_image_id'] ?? 0),
@@ -1795,11 +2480,14 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
 /**
  * Clear the current image marker after one image was safely checked.
  *
- * @param array $state State value.
- * @param array $totals Totals value.
+ * @param array<string,mixed> $state Mutable maintenance checkpoint.
+ * @param array{images_seen?:int,images_processed?:int,images_interrupted?:int,images_with_repairs_needed?:int,images_deferred?:int,thumbs_created?:int,thumbs_skipped?:int,variants_missing_or_invalid?:int,webp_skipped?:int,failed?:int,invalid_geometry_deleted?:int,metadata_rows_refreshed?:int,metadata_source_syncs?:int,errors?:list<string>} $totals Current accumulated counters.
+ * @return void
  */
-function site_maintenance_finish_current_image(array &$state, array $totals): void
-{
+function site_maintenance_finish_current_image(
+    array &$state,
+    array $totals,
+): void {
     $state['current_image_id'] = 0;
     $state['current_image_started_at'] = null;
     $state['totals'] = $totals;
@@ -1819,16 +2507,24 @@ function site_maintenance_step_summary(array $step, int $cursorImageId): array
         'images_checked' => (int) ($step['images_seen'] ?? 0),
         'repair_attempts' => (int) ($step['images_processed'] ?? 0),
         'repairs_needed' => (int) ($step['images_with_repairs_needed'] ?? 0),
-        'variants_missing_or_invalid' => (int) ($step['variants_missing_or_invalid'] ?? 0),
+        'variants_missing_or_invalid' => (int) (
+            $step['variants_missing_or_invalid'] ?? 0
+        ),
         'thumbnails_created' => (int) ($step['thumbs_created'] ?? 0),
         'valid_thumbnails_reused' => (int) ($step['thumbs_skipped'] ?? 0),
-        'invalid_thumbnails_removed' => (int) ($step['invalid_geometry_deleted'] ?? 0),
-        'metadata_rows_refreshed' => (int) ($step['metadata_rows_refreshed'] ?? 0),
+        'invalid_thumbnails_removed' => (int) (
+            $step['invalid_geometry_deleted'] ?? 0
+        ),
+        'metadata_rows_refreshed' => (int) (
+            $step['metadata_rows_refreshed'] ?? 0
+        ),
         'metadata_source_syncs' => (int) ($step['metadata_source_syncs'] ?? 0),
         'deferred_images' => (int) ($step['images_deferred'] ?? 0),
         'failed_images' => (int) ($step['failed'] ?? 0),
         'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
-        'image_id_range' => !empty($step['image_ids']) ? [min($step['image_ids']), max($step['image_ids'])] : [],
+        'image_id_range' => !empty($step['image_ids'])
+            ? [min($step['image_ids']), max($step['image_ids'])]
+            : [],
         'cursor_image_id' => $cursorImageId,
     ];
 }
@@ -1842,49 +2538,82 @@ function site_maintenance_step_summary(array $step, int $cursorImageId): array
 function site_maintenance_source_allows_full_thumbnail_repair(string $source): bool
 {
     $source = strtolower(trim($source));
-    return in_array($source, [
-        'cli_cron',
-        'web_cron',
-        'request_trigger',
-        'request_trigger_inline',
-        'maintenance_chain',
-    ], true);
+    return in_array(
+        $source,
+        [
+            'cli_cron',
+            'web_cron',
+            'request_trigger',
+            'request_trigger_inline',
+            'maintenance_chain',
+        ],
+        true,
+    );
 }
 
 /**
  * Decide whether a missing thumbnail repair may be attempted in this process.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{relative_path?:string,filename?:string} $image Source image
+ *     path fields used by repair policy.
+ * @param array{folder_path:string} $gallery Owning gallery path used to
+ *     resolve the source file.
  * @param float $deadline Deadline value.
  * @param string $source Source value.
  * @return array{allowed:bool,reason:string,source_bytes:int,pixels:int} Structured result data for the caller.
  */
-function site_maintenance_thumbnail_repair_decision(array $image, array $gallery, float $deadline, string $source = ''): array
-{
+function site_maintenance_thumbnail_repair_decision(
+    array $image,
+    array $gallery,
+    float $deadline,
+    string $source = '',
+): array {
     if (!site_maintenance_has_web_repair_runtime($deadline)) {
-        return ['allowed' => false, 'reason' => 'not_enough_runtime_left', 'source_bytes' => 0, 'pixels' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'not_enough_runtime_left',
+            'source_bytes' => 0,
+            'pixels' => 0,
+        ];
     }
 
     if (PHP_SAPI === 'cli') {
-        return ['allowed' => true, 'reason' => 'cli_runner', 'source_bytes' => 0, 'pixels' => 0];
+        return [
+            'allowed' => true,
+            'reason' => 'cli_runner',
+            'source_bytes' => 0,
+            'pixels' => 0,
+        ];
     }
 
-    $fullRepairSource = site_maintenance_source_allows_full_thumbnail_repair($source);
+    $fullRepairSource =
+        site_maintenance_source_allows_full_thumbnail_repair($source);
 
     try {
         $sourcePath = image_abs_path($image, $gallery);
     } catch (Throwable) {
-        return ['allowed' => false, 'reason' => 'source_path_unavailable', 'source_bytes' => 0, 'pixels' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'source_path_unavailable',
+            'source_bytes' => 0,
+            'pixels' => 0,
+        ];
     }
 
     if (!is_file($sourcePath)) {
-        return ['allowed' => false, 'reason' => 'source_file_missing', 'source_bytes' => 0, 'pixels' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'source_file_missing',
+            'source_bytes' => 0,
+            'pixels' => 0,
+        ];
     }
 
     $sourceBytes = (int) (filesize($sourcePath) ?: 0);
     $info = @getimagesize($sourcePath);
-    $sourcePixels = is_array($info) ? max(0, (int) ($info[0] ?? 0) * (int) ($info[1] ?? 0)) : 0;
+    $sourcePixels = is_array($info)
+        ? max(0, (int) ($info[0] ?? 0) * (int) ($info[1] ?? 0))
+        : 0;
 
     if (image_uses_dng_display_derivatives($image)) {
         if ($fullRepairSource) {
@@ -1892,14 +2621,14 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
                 'allowed' => true,
                 'reason' => 'scheduled_dng_repair_allowed',
                 'source_bytes' => $sourceBytes,
-                'pixels' => $sourcePixels
+                'pixels' => $sourcePixels,
             ];
         }
         return [
             'allowed' => false,
             'reason' => 'dng_repair_requires_scheduled_or_cli_maintenance',
             'source_bytes' => $sourceBytes,
-            'pixels' => $sourcePixels
+            'pixels' => $sourcePixels,
         ];
     }
 
@@ -1908,7 +2637,7 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
             'allowed' => true,
             'reason' => 'scheduled_repair_allowed',
             'source_bytes' => $sourceBytes,
-            'pixels' => $sourcePixels
+            'pixels' => $sourcePixels,
         ];
     }
 
@@ -1917,7 +2646,7 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
             'allowed' => false,
             'reason' => 'source_file_too_large_for_web_repair',
             'source_bytes' => $sourceBytes,
-            'pixels' => $sourcePixels
+            'pixels' => $sourcePixels,
         ];
     }
 
@@ -1926,17 +2655,23 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
             'allowed' => false,
             'reason' => 'source_dimensions_too_large_for_web_repair',
             'source_bytes' => $sourceBytes,
-            'pixels' => $sourcePixels
+            'pixels' => $sourcePixels,
         ];
     }
 
-    return ['allowed' => true, 'reason' => 'web_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+    return [
+        'allowed' => true,
+        'reason' => 'web_repair_allowed',
+        'source_bytes' => $sourceBytes,
+        'pixels' => $sourcePixels,
+    ];
 }
 
 /**
  * Convert a previously fatal thumbnail attempt into a recorded failure and move on.
  *
- * @param array $state State value.
+ * @param array<string,mixed> $state Mutable maintenance checkpoint.
+ * @return void
  */
 function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): void
 {
@@ -1945,11 +2680,20 @@ function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): v
         return;
     }
 
-    $totals = is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals();
-    $message = 'Previous thumbnail maintenance attempt was interrupted while processing image id ' . $currentImageId . '. The cursor was advanced so the daily cycle cannot get stuck on one hazardous file.';
+    $totals = is_array($state['totals'] ?? null)
+        ? $state['totals']
+        : site_maintenance_empty_totals();
+    $message =
+        'Previous thumbnail maintenance attempt was interrupted while processing image id '
+        . $currentImageId
+        . '. The cursor was advanced so the daily cycle cannot get stuck on one hazardous file.';
     $totals['failed'] = (int) ($totals['failed'] ?? 0) + 1;
-    $totals['images_interrupted'] = (int) ($totals['images_interrupted'] ?? 0) + 1;
-    $totals['errors'] = site_maintenance_append_error((array) ($totals['errors'] ?? []), $message);
+    $totals['images_interrupted'] =
+        (int) ($totals['images_interrupted'] ?? 0) + 1;
+    $totals['errors'] = site_maintenance_append_error(
+        (array) ($totals['errors'] ?? []),
+        $message,
+    );
 
     $state['totals'] = $totals;
     $state['current_image_id'] = 0;
@@ -1964,29 +2708,52 @@ function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): v
  * @param float $deadline Caller deadline in microtime seconds; registered cleanup owners retain their own bounded admission budgets.
  * @return array{worked:bool,phase:string,cleanup:array<string,mixed>,cleanup_diagnostics:array<string,mixed>} Completed owner outcomes and safe diagnostics; automatic OFF skips cache payload owners while explicit Admin work and unrelated maintenance remain available.
  */
-function site_maintenance_process_cleanup_step(array &$state, float $deadline): array
-{
+function site_maintenance_process_cleanup_step(
+    array &$state,
+    float $deadline,
+): array {
     unset($deadline); // Cleanup callbacks own their own bounded work limits.
     $cleanup = [];
     $diagnostics = [];
-    $cacheAllowed = ($state['source'] ?? '') === 'admin_manual'
+    $cacheAllowed =
+        ($state['source'] ?? '') === 'admin_manual'
         || feature_capability_effective_enabled('automatic_cache_cleanup');
 
-    $run = static function (string $operation, callable $callback) use (&$cleanup, &$diagnostics, $state): void {
-        $result = site_maintenance_run_cleanup_operation($operation, $callback, $state);
+    $run = static function (string $operation, callable $callback) use (
+        &$cleanup,
+        &$diagnostics,
+        $state,
+    ): void {
+        $result = site_maintenance_run_cleanup_operation(
+            $operation,
+            $callback,
+            $state,
+        );
         $diagnostics[$operation] = $result['diagnostic'];
-        $cleanup[$operation] = !empty($result['ok']) ? $result['value'] : 'failed';
+        $cleanup[$operation] = !empty($result['ok'])
+            ? $result['value']
+            : 'failed';
     };
 
-    if ($cacheAllowed && function_exists(__NAMESPACE__ . '\cleanup_download_manifest_cache')) {
+    if (
+        $cacheAllowed
+        && function_exists(__NAMESPACE__ . '\cleanup_download_manifest_cache')
+    ) {
         $run('download_manifests', static fn() => cleanup_download_manifest_cache());
     }
 
-    if ($cacheAllowed && function_exists(__NAMESPACE__ . '\cleanup_legacy_download_artifact_cache')) {
+    if (
+        $cacheAllowed
+        && function_exists(__NAMESPACE__
+            . '\cleanup_legacy_download_artifact_cache')
+    ) {
         $run('legacy_download_artifacts', static fn() => cleanup_legacy_download_artifact_cache());
     }
 
-    if ($cacheAllowed && function_exists(__NAMESPACE__ . '\\cleanup_expired_zip_cache')) {
+    if (
+        $cacheAllowed
+        && function_exists(__NAMESPACE__ . '\\cleanup_expired_zip_cache')
+    ) {
         $run('zip_cache', static fn() => cleanup_expired_zip_cache());
     }
 
@@ -1997,13 +2764,19 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         });
     }
 
-    if (function_exists(__NAMESPACE__ . '\auth_account_cleanup_password_reset_tokens')
+    if (
+        function_exists(__NAMESPACE__
+            . '\auth_account_cleanup_password_reset_tokens')
         && function_exists(__NAMESPACE__ . '\auth_password_reset_schema_status')
         && function_exists(__NAMESPACE__ . '\auth_schema_assert_known')
-        && function_exists(__NAMESPACE__ . '\schema_inspection_is_available')) {
+        && function_exists(__NAMESPACE__ . '\schema_inspection_is_available')
+    ) {
         $run('password_reset_tokens', static function (): string {
             $passwordResetSchemaStatus = auth_password_reset_schema_status();
-            auth_schema_assert_known($passwordResetSchemaStatus, 'auth_password_reset');
+            auth_schema_assert_known(
+                $passwordResetSchemaStatus,
+                'auth_password_reset',
+            );
             if (!schema_inspection_is_available($passwordResetSchemaStatus)) {
                 return 'schema_missing';
             }
@@ -2012,15 +2785,19 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         });
     }
 
-    if (function_exists('Gallery\Services\viewer_security_maintenance_cleanup')) {
+    if (function_exists(
+        'Gallery\Services\viewer_security_maintenance_cleanup',
+    )) {
         $run('viewer_security', static fn() => viewer_security_maintenance_cleanup());
     }
 
-    if (function_exists('Gallery\Services\reconcile_gallery_trash_transitional_entries')) {
+    if (function_exists(
+        'Gallery\Services\reconcile_gallery_trash_transitional_entries',
+    )) {
         // Recover deterministic stale PREPARING/RESTORING/PURGING operations before
         // selecting new expired entries. Ambiguous states fail closed as BROKEN.
-        $run('gallery_trash_reconciliation', static fn() => reconcile_gallery_trash_transitional_entries(
-            min(100, max(1, gallery_trash_purge_batch_size()))
+        $run('gallery_trash_reconciliation', static fn(): array => reconcile_gallery_trash_transitional_entries(
+            min(100, max(1, gallery_trash_purge_batch_size())),
         ));
     }
 
@@ -2032,11 +2809,18 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
 
     // Telemetry now runs independently before the site-maintenance lock/thumbnail phase.
 
-    if (function_exists('Gallery\Services\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (
+        function_exists('Gallery\Services\thumbnail_metadata_schema_ready')
+        && thumbnail_metadata_schema_ready()
+    ) {
         $run('thumbnail_metadata_orphans_deleted', static fn() => site_maintenance_delete_orphan_thumbnail_metadata());
     }
 
-    $run('pending_migrations', static fn(): bool => function_exists('Gallery\Core\pending_migrations_exist') ? pending_migrations_exist() : false);
+    $run('pending_migrations', static fn(): bool => function_exists(
+        'Gallery\Core\pending_migrations_exist',
+    )
+            ? pending_migrations_exist()
+            : false);
 
     $state['cleanup'] = $cleanup;
     $state['cleanup_diagnostics'] = $diagnostics;
@@ -2060,24 +2844,38 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
  */
 function site_maintenance_delete_orphan_thumbnail_metadata(?int $limitPerRelation = null): int
 {
-    if (!function_exists('Gallery\Services\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
+    if (
+        !function_exists('Gallery\Services\db_table_exists')
+        || !db_table_exists('image_thumbnail_variants')
+    ) {
         return 0;
     }
 
-    $limitPerRelation = $limitPerRelation === null ? null : max(1, $limitPerRelation);
+    $limitPerRelation = $limitPerRelation === null
+        ? null
+        : max(1, $limitPerRelation);
     $deleted = 0;
     try {
-        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_images($limitPerRelation);
+        $deleted +=
+            site_maintenance_model_delete_thumbnail_variants_missing_images(
+                $limitPerRelation,
+            );
     } catch (Throwable) {
         return $deleted;
     }
 
-    if (!function_exists('Gallery\Services\db_column_exists') || !db_column_exists('image_thumbnail_variants', 'gallery_id')) {
+    if (
+        !function_exists('Gallery\Services\db_column_exists')
+        || !db_column_exists('image_thumbnail_variants', 'gallery_id')
+    ) {
         return $deleted;
     }
 
     try {
-        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_galleries($limitPerRelation);
+        $deleted +=
+            site_maintenance_model_delete_thumbnail_variants_missing_galleries(
+                $limitPerRelation,
+            );
     } catch (Throwable) {
         return $deleted;
     }
@@ -2105,8 +2903,8 @@ function site_maintenance_state_duration_seconds(array $state): int
 /**
  * Return a compact state object safe to show in Admin or JSON responses.
  *
- * @param array $state State value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $state State fields projected for public display.
+ * @return array{status:string,cycle_date:string,source:string,phase:string,window_paused_at:string,cursor_image_id:int,current_image_id:int,current_image_started_at:string,started_at:string,updated_at:string,finished_at:string,error_code:string,exception_class:string,last_step_at:string,last_step_summary:array<string,mixed>,totals:array<string,mixed>,cleanup:array<string,mixed>,cleanup_diagnostics:array<string,mixed>,thumbnail_metadata_start_snapshot:array<string,mixed>,thumbnail_metadata_end_snapshot:array<string,mixed>} Safe state summary without private checkpoint fields.
  */
 function site_maintenance_public_state(array $state): array
 {
@@ -2118,19 +2916,37 @@ function site_maintenance_public_state(array $state): array
         'window_paused_at' => (string) ($state['window_paused_at'] ?? ''),
         'cursor_image_id' => (int) ($state['cursor_image_id'] ?? 0),
         'current_image_id' => (int) ($state['current_image_id'] ?? 0),
-        'current_image_started_at' => (string) ($state['current_image_started_at'] ?? ''),
+        'current_image_started_at' => (string) (
+            $state['current_image_started_at'] ?? ''
+        ),
         'started_at' => (string) ($state['started_at'] ?? ''),
         'updated_at' => (string) ($state['updated_at'] ?? ''),
         'finished_at' => (string) ($state['finished_at'] ?? ''),
         'error_code' => (string) ($state['error_code'] ?? ''),
         'exception_class' => (string) ($state['exception_class'] ?? ''),
         'last_step_at' => (string) ($state['last_step_at'] ?? ''),
-        'last_step_summary' => is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [],
-        'totals' => is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals(),
-        'cleanup' => is_array($state['cleanup'] ?? null) ? $state['cleanup'] : [],
-        'cleanup_diagnostics' => is_array($state['cleanup_diagnostics'] ?? null) ? $state['cleanup_diagnostics'] : [],
-        'thumbnail_metadata_start_snapshot' => is_array($state['thumbnail_metadata_start_snapshot'] ?? null) ? $state['thumbnail_metadata_start_snapshot'] : [],
-        'thumbnail_metadata_end_snapshot' => is_array($state['thumbnail_metadata_end_snapshot'] ?? null) ? $state['thumbnail_metadata_end_snapshot'] : [],
+        'last_step_summary' => is_array($state['last_step_summary'] ?? null)
+            ? $state['last_step_summary']
+            : [],
+        'totals' => is_array($state['totals'] ?? null)
+            ? $state['totals']
+            : site_maintenance_empty_totals(),
+        'cleanup' => is_array($state['cleanup'] ?? null)
+            ? $state['cleanup']
+            : [],
+        'cleanup_diagnostics' => is_array($state['cleanup_diagnostics'] ?? null)
+            ? $state['cleanup_diagnostics']
+            : [],
+        'thumbnail_metadata_start_snapshot' => is_array(
+            $state['thumbnail_metadata_start_snapshot'] ?? null,
+        )
+            ? $state['thumbnail_metadata_start_snapshot']
+            : [],
+        'thumbnail_metadata_end_snapshot' => is_array(
+            $state['thumbnail_metadata_end_snapshot'] ?? null,
+        )
+            ? $state['thumbnail_metadata_end_snapshot']
+            : [],
     ];
 }
 
@@ -2152,19 +2968,31 @@ function site_maintenance_status(): array
         'batch_size' => site_maintenance_batch_size(),
         'time_budget_seconds' => site_maintenance_time_budget_seconds(),
         'window_minutes' => site_maintenance_window_minutes(),
-        'window_hours_value' => site_maintenance_window_hours_value(site_maintenance_window_minutes()),
+        'window_hours_value' => site_maintenance_window_hours_value(
+            site_maintenance_window_minutes(),
+        ),
         'request_trigger_enabled' => site_maintenance_request_trigger_enabled(),
-        'request_trigger_supported' => site_maintenance_request_trigger_can_detach_response(),
-        'request_trigger_interval_seconds' => site_maintenance_request_trigger_interval_seconds(),
+        'request_trigger_supported' =>
+            site_maintenance_request_trigger_can_detach_response(),
+        'request_trigger_interval_seconds' =>
+            site_maintenance_request_trigger_interval_seconds(),
         'total_source_images' => site_maintenance_total_source_image_count(),
         'cron_url' => site_maintenance_cron_url(),
         'scheduled_at_utc' => $schedule['scheduled_at'],
         'window_ends_at_utc' => $schedule['window_ends_at'],
         'within_window' => !empty($schedule['within_window']),
         'seconds_until' => $schedule['seconds_until'],
-        'seconds_until_window_end' => (int) ($schedule['seconds_until_window_end'] ?? 0),
-        'last_completed_date' => trim((string) app_setting(SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING, '')),
-        'last_completed_at' => trim((string) app_setting(SITE_MAINTENANCE_LAST_COMPLETED_AT_SETTING, '')),
+        'seconds_until_window_end' => (int) (
+            $schedule['seconds_until_window_end'] ?? 0
+        ),
+        'last_completed_date' => trim((string) app_setting(
+            SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING,
+            '',
+        )),
+        'last_completed_at' => trim((string) app_setting(
+            SITE_MAINTENANCE_LAST_COMPLETED_AT_SETTING,
+            '',
+        )),
         'state' => $state ? site_maintenance_public_state($state) : [],
         'last_result' => site_maintenance_last_result(),
         'last_success' => site_maintenance_last_success(),
@@ -2180,19 +3008,33 @@ function site_maintenance_status(): array
  * @param string $id Exact preview identity required for continuation and approval.
  * @return array<string,mixed> Lifecycle state or safe busy/refusal marker; no action bypasses a central mutation claim.
  */
-function site_maintenance_cache_lifecycle_action(string $action, string $id): array
-{
-    if (is_array(maintenance_center_model_mutation_owner())) return ['ok'=>false,'reason'=>'central_maintenance_active'];
-    $result = site_maintenance_with_lock(static function () use ($action, $id): array {
+function site_maintenance_cache_lifecycle_action(
+    string $action,
+    string $id,
+): array {
+    if (is_array(maintenance_center_model_mutation_owner()))
+        return ['ok' => false, 'reason' => 'central_maintenance_active'];
+    $result = site_maintenance_with_lock(static function () use (
+        $action,
+        $id,
+    ): array {
         return match ($action) {
             'inventory_start' => cache_lifecycle_inventory_start(),
-            'inventory_step' => $id !== '' ? cache_lifecycle_inventory_slice($id) : ['ok'=>false,'reason'=>'missing_cache_preview'],
+            'inventory_step' => $id !== ''
+                ? cache_lifecycle_inventory_slice($id)
+                : ['ok' => false, 'reason' => 'missing_cache_preview'],
             'cleanup_start' => cache_lifecycle_cleanup_start($id),
-            'cleanup_step' => $id !== '' ? cache_lifecycle_cleanup_slice($id) : ['ok'=>false,'reason'=>'missing_cache_preview'],
-            default => ['ok'=>false,'reason'=>'invalid_cache_action'],
+            'cleanup_step' => $id !== ''
+                ? cache_lifecycle_cleanup_slice($id)
+                : ['ok' => false, 'reason' => 'missing_cache_preview'],
+            default => ['ok' => false, 'reason' => 'invalid_cache_action'],
         };
     });
-    return !empty($result['busy']) ? array_replace($result, ['ok'=>false]) : $result;
+    return (
+        !empty($result['busy'])
+            ? array_replace($result, ['ok' => false])
+            : $result
+    );
 }
 
 /**
@@ -2203,10 +3045,19 @@ function site_maintenance_cache_cleanup_summary(): array
 {
     try {
         $status = application_update_cache_cleanup_status();
-        return ['available' => true, 'pending' => $status['pending'],
-            'blocked' => $status['blocked'], 'bytes_reclaimed' => $status['bytes_reclaimed']];
+        return [
+            'available' => true,
+            'pending' => $status['pending'],
+            'blocked' => $status['blocked'],
+            'bytes_reclaimed' => $status['bytes_reclaimed'],
+        ];
     } catch (Throwable) {
-        return ['available' => false, 'pending' => false, 'blocked' => false, 'bytes_reclaimed' => 0];
+        return [
+            'available' => false,
+            'pending' => false,
+            'blocked' => false,
+            'bytes_reclaimed' => 0,
+        ];
     }
 }
 
@@ -2216,11 +3067,17 @@ function site_maintenance_cache_cleanup_summary(): array
  * @param string $level Level value.
  * @param string $eventKey Event key value.
  * @param string $message Message value.
- * @param array $context Context value.
- * @param array $options Optional behavior flags.
+ * @param array<string,mixed> $context Structured operational event context.
+ * @param array<string,mixed> $options Optional admin-log category and subject fields.
+ * @return void
  */
-function site_maintenance_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-{
+function site_maintenance_log_event(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context = [],
+    array $options = [],
+): void {
     if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
@@ -2235,22 +3092,34 @@ function site_maintenance_log_event(string $level, string $eventKey, string $mes
     admin_log_event($level, $eventKey, $message, $context, $options);
 }
 
-
 /**
  * Count safe orphan thumbnail metadata without deleting rows.
  *
- * @return array{available:bool,missing_images:int,missing_galleries:int,total:int}
+ * @return array{available:bool,missing_images:int,missing_galleries:int,total:int} Availability and safe orphan row counts; counts are zero when inspection is unavailable.
  */
 function site_maintenance_thumbnail_orphan_analysis(): array
 {
-    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
-        return ['available' => false, 'missing_images' => 0, 'missing_galleries' => 0, 'total' => 0];
+    if (
+        !function_exists('Gallery\\Services\\db_table_exists')
+        || !db_table_exists('image_thumbnail_variants')
+    ) {
+        return [
+            'available' => false,
+            'missing_images' => 0,
+            'missing_galleries' => 0,
+            'total' => 0,
+        ];
     }
     try {
-        $missingImages = site_maintenance_model_count_thumbnail_variants_missing_images();
+        $missingImages =
+            site_maintenance_model_count_thumbnail_variants_missing_images();
         $missingGalleries = 0;
-        if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('image_thumbnail_variants', 'gallery_id')) {
-            $missingGalleries = site_maintenance_model_count_thumbnail_variants_missing_galleries();
+        if (
+            function_exists('Gallery\\Services\\db_column_exists')
+            && db_column_exists('image_thumbnail_variants', 'gallery_id')
+        ) {
+            $missingGalleries =
+                site_maintenance_model_count_thumbnail_variants_missing_galleries();
         }
         return [
             'available' => true,
@@ -2259,6 +3128,11 @@ function site_maintenance_thumbnail_orphan_analysis(): array
             'total' => $missingImages + $missingGalleries,
         ];
     } catch (Throwable) {
-        return ['available' => false, 'missing_images' => 0, 'missing_galleries' => 0, 'total' => 0];
+        return [
+            'available' => false,
+            'missing_images' => 0,
+            'missing_galleries' => 0,
+            'total' => 0,
+        ];
     }
 }

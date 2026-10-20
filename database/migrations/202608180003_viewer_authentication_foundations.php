@@ -36,9 +36,9 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS viewer_account_state (
+    'CREATE TABLE IF NOT EXISTS viewer_account_state (
         state_key VARCHAR(64) NOT NULL PRIMARY KEY,
         account_count INT UNSIGNED NOT NULL DEFAULT 0,
         updated_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

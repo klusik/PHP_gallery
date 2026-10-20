@@ -1,5 +1,158 @@
 # Patch notes
 
+## Version 0.137.8
+
+Standardized PHP documentation, type contracts, and source formatting across
+PHP Gallery's runtime, administration, public presentation, maintenance tools,
+database migrations, and regression tests. Adapted source-level assertions to
+the reformatted code and recorded immutable provenance for this release. The
+reviewed changes focused on maintainability rather than new gallery features.
+
+### Highlights
+
+#### PHP documentation and type-contract cleanup
+
+- Expanded and corrected PHPDoc on existing functions and methods, replacing
+  generic array descriptions with more specific lists, associative-array shapes,
+  parameter meanings, and documented return values where supported by the code.
+- Added missing `@return void` annotations and clarified callable contracts,
+  including gallery lookup/cache helpers, Smart Gallery operations, request
+  bootstrap, viewer accounts, maintenance services, and test fixtures.
+- Standardized existing file-level module headers and comment formatting while
+  retaining their project metadata and documentation responsibilities.
+- Applied the cleanup across 1,164 PHP source and test files, including
+  controllers, services, models, views, CLI scripts, and migration definitions.
+
+#### Consistent PHP source layout
+
+- Reformatted long function signatures, argument lists, closures, conditional
+  expressions, arrays, and chained operations for more consistent indentation
+  and line wrapping in existing code.
+- Normalized declaration braces, optional trailing argument commas, and selected
+  existing PHP string literals. Updated the formatting of migration declarations
+  without introducing a new migration file.
+- Refreshed source formatting in existing administrative, public-facing, and
+  background-maintenance code. These edits did not introduce a new visitor or
+  administrator feature in the reviewed release commits.
+
+#### Formatting-resistant regression contracts
+
+- Updated source-inspection assertions to recognize equivalent multiline PHP
+  expressions and optional terminal commas instead of depending on one exact
+  whitespace layout.
+- Adapted JavaScript regression checks for the PDF Documents tab, Admin side
+  panel and gallery refresh, cover selection, and slideshow controls to the
+  reformatted PHP views and controller calls.
+- Strengthened the hero-tag model test fixture with a dedicated statement
+  interface and explicit row/parameter contracts; this interface was confined
+  to `tests/hero_tag_theme_model_test.php`.
+
+#### Release provenance
+
+- Added immutable release records in `.github/release-origins/v_0.137.8.json`
+  and `.github/release-predecessors/v_0.137.8.json`, referencing
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+- Recorded the selected `develop` source commit, the prior stable tag
+  `v_0.137.7`, and the predecessor's commit and tree identifiers to support
+  release qualification and historical traceability.
+
+### Technical Details
+
+#### Runtime, services, and controllers
+
+- Updated existing PHPDoc and formatting in `app/bootstrap/request.php`,
+  `app/bootstrap/routing.php`, and related bootstrap modules covering request
+  setup, routing, session handling, and viewer identity context.
+- Clarified array and collection contracts in
+  `app/services/gallery_lookup.php`, including cached child-gallery rows,
+  batch preloading, and gallery-tree traversal helpers.
+- Reformatted existing services for Smart Galleries, image processing,
+  thumbnails, gallery migrations, downloads, upload automation, schema policy,
+  viewer accounts, telemetry, maintenance, and background updates.
+- Standardized controller layout across gallery editing, PDF and SimBrief
+  documents, diagnostics, administration, public gallery rendering, and the
+  other existing routes, without adding a new route in the supplied change set.
+
+#### Presentation and frontend contracts
+
+- Reformatted PHP view templates for the gallery lightbox, Smart Galleries,
+  breadcrumbs, navigation, public content, and administrative workflows,
+  including `app/views/public_gallery_lightbox.php`.
+- Adjusted source-level browser tests in
+  `tests/admin_pdf_documents_workflow_scenarios.mjs`,
+  `tests/admin_side_panel_gallery_refresh_test.mjs`,
+  `tests/admin_side_panel_created_gallery_refresh_test.mjs`,
+  `tests/admin_side_panel_delegation/cover_stars.mjs`, and
+  `tests/lightbox_slideshow_speed_test.mjs` to accept multiline PHP syntax.
+  Their existing behavior checks remained focused on the same UI contracts.
+
+#### Database and configuration
+
+- Normalized the PHP formatting and, where applicable, SQL string quoting in
+  existing files under `database/migrations/`, including
+  `database/migrations/202604270001_initial_schema.php`.
+- Retained the existing migration-file inventory; no new database migration
+  was added in the reviewed file list. The release did not document any new
+  table, index, schema transition, or database feature.
+- Reformatted existing settings in `app/configuration_defaults.php` and
+  `config.example.php`; refreshed `app/core-manifest.json` with the changed
+  source set. No new configuration option was evidenced.
+
+#### Tests and source contracts
+
+- Updated PHP regression and contract tests in `tests/`, including the
+  documentation, source-type, readability, authentication, schema-policy,
+  gallery-editor, and viewer-security test families.
+- Adjusted source assertions to use token-aware or whitespace-tolerant
+  inspection where formatted declarations and calls no longer matched
+  literal single-line fragments. Related helpers included
+  `tests/support/php_source.php` and
+  `tests/support/gallery_edit_writer_source.php`.
+- Added the test-local `HeroTagThemeStatementFixture` interface, documenting
+  `execute()` input and `fetchAll()` result shapes, and used it as the return
+  contract for the hero-tag SQL fixture's statement adapter.
+- Reformatted existing test fixtures and checks; the supplied evidence did
+  not include a completed test-run result, so this entry makes no assertion
+  that a particular CI suite passed.
+
+#### Developer and release tooling
+
+- Reformatted documentation and PHP source-contract utilities under
+  `scripts/` and `scripts/source_contracts/`, including the checker in
+  `scripts/check_source_documentation.php`.
+- Updated the layout of existing release-note and qualification helpers in
+  `.github/scripts/patch_notes_ai.php`,
+  `.github/scripts/patch_notes_ai_chunks.php`,
+  `.github/scripts/patch_notes_handoff.php`, and
+  `.github/scripts/prepare_release_candidate.php`.
+- Initialized the two version-specific provenance JSON files with the
+  selected source and predecessor metadata. The evidence did not establish
+  a new release workflow, qualification result, tag, or published artifact.
+
+### User Impact
+
+#### For visitors
+
+- No new public-gallery feature or intentional visitor-facing workflow change
+  was identified in the reviewed documentation and formatting cleanup.
+
+#### For administrators
+
+- No new Admin setting, screen, or operation was introduced by the documented
+  change set. Existing administrative implementation and view source became
+  more consistently formatted and documented.
+
+#### For maintainers
+
+- Improved code navigation and review of function parameters, return values,
+  collection shapes, and responsibilities across a large portion of the PHP
+  application and its test suite.
+- Reduced formatting sensitivity in source-based regression assertions,
+  helping equivalent multiline code satisfy the same structural checks.
+- Added release-origin and predecessor records for reproducible release
+  qualification and audit of the `v_0.137.8` source lineage.
+
 ## Version 0.137.7
 
 Improved the Windows uploader’s update notice so it resized to fit updated status text and its full action row, and advanced the uploader source version to 0.7.1. Initialized immutable release-origin and predecessor records for this PHP Gallery release.

@@ -37,13 +37,18 @@ use function Gallery\Core\db;
  *
  * @param string $inactiveBefore Rows older than this timestamp are stale.
  * @param string $now Current SQL timestamp.
+ * @return void Deletes stale unlocked and expired locked throttle rows.
  */
 function auth_throttle_model_cleanup(string $inactiveBefore, string $now): void
 {
-    $stmt = db()->prepare('DELETE FROM auth_rate_limits WHERE locked_until IS NULL AND last_attempt_at < ?');
+    $stmt = db()->prepare(
+        'DELETE FROM auth_rate_limits WHERE locked_until IS NULL AND last_attempt_at < ?',
+    );
     $stmt->execute([$inactiveBefore]);
 
-    $stmt = db()->prepare('DELETE FROM auth_rate_limits WHERE locked_until IS NOT NULL AND locked_until < ? AND last_attempt_at < ?');
+    $stmt = db()->prepare(
+        'DELETE FROM auth_rate_limits WHERE locked_until IS NOT NULL AND locked_until < ? AND last_attempt_at < ?',
+    );
     $stmt->execute([$now, $inactiveBefore]);
 }
 
@@ -56,7 +61,9 @@ function auth_throttle_model_cleanup(string $inactiveBefore, string $now): void
  */
 function auth_throttle_model_row(string $bucket, string $subjectHash): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM auth_rate_limits WHERE bucket = ? AND subject_hash = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT * FROM auth_rate_limits WHERE bucket = ? AND subject_hash = ? LIMIT 1',
+    );
     $stmt->execute([$bucket, $subjectHash]);
     $row = $stmt->fetch();
     return $row ?: null;
@@ -68,10 +75,16 @@ function auth_throttle_model_row(string $bucket, string $subjectHash): ?array
  * @param string $bucket Application-owned bucket identifier.
  * @param string $subjectHash Privacy-safe subject hash.
  * @param string $now Current SQL timestamp.
+ * @return void Inserts a new throttle window or resets the existing one.
  */
-function auth_throttle_model_reset_window(string $bucket, string $subjectHash, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO auth_rate_limits (bucket, subject_hash, attempts, first_attempt_at, last_attempt_at, locked_until) VALUES (?, ?, 1, ?, ?, NULL) ON DUPLICATE KEY UPDATE attempts = 1, first_attempt_at = VALUES(first_attempt_at), last_attempt_at = VALUES(last_attempt_at), locked_until = NULL');
+function auth_throttle_model_reset_window(
+    string $bucket,
+    string $subjectHash,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO auth_rate_limits (bucket, subject_hash, attempts, first_attempt_at, last_attempt_at, locked_until) VALUES (?, ?, 1, ?, ?, NULL) ON DUPLICATE KEY UPDATE attempts = 1, first_attempt_at = VALUES(first_attempt_at), last_attempt_at = VALUES(last_attempt_at), locked_until = NULL',
+    );
     $stmt->execute([$bucket, $subjectHash, $now, $now]);
 }
 
@@ -83,10 +96,18 @@ function auth_throttle_model_reset_window(string $bucket, string $subjectHash, s
  * @param int $attempts Current attempt count.
  * @param string $now Current SQL timestamp.
  * @param ?string $lockedUntil Optional lock expiry timestamp.
+ * @return void Persists the attempt count and lock state.
  */
-function auth_throttle_model_update_attempts(string $bucket, string $subjectHash, int $attempts, string $now, ?string $lockedUntil): void
-{
-    $stmt = db()->prepare('UPDATE auth_rate_limits SET attempts = ?, last_attempt_at = ?, locked_until = ? WHERE bucket = ? AND subject_hash = ?');
+function auth_throttle_model_update_attempts(
+    string $bucket,
+    string $subjectHash,
+    int $attempts,
+    string $now,
+    ?string $lockedUntil,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE auth_rate_limits SET attempts = ?, last_attempt_at = ?, locked_until = ? WHERE bucket = ? AND subject_hash = ?',
+    );
     $stmt->execute([$attempts, $now, $lockedUntil, $bucket, $subjectHash]);
 }
 
@@ -95,9 +116,12 @@ function auth_throttle_model_update_attempts(string $bucket, string $subjectHash
  *
  * @param string $bucket Application-owned bucket identifier.
  * @param string $subjectHash Privacy-safe subject hash.
+ * @return void Deletes the subject's throttle row.
  */
 function auth_throttle_model_clear(string $bucket, string $subjectHash): void
 {
-    $stmt = db()->prepare('DELETE FROM auth_rate_limits WHERE bucket = ? AND subject_hash = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM auth_rate_limits WHERE bucket = ? AND subject_hash = ?',
+    );
     $stmt->execute([$bucket, $subjectHash]);
 }

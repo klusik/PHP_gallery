@@ -41,14 +41,20 @@ declare(strict_types=1);
 /**
  * Throw when a visibility expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Value expected to match strictly, including its collection shape.
+ * @param TActual $actual Value compared by strict equality, including its collection shape.
  * @param string $label Label value.
+ * @return void Returns normally only when expected and actual match strictly.
  */
 function assert_same_value(mixed $expected, mixed $actual, string $label): void
 {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
@@ -64,19 +70,26 @@ function test_normalize_gallery_visibility(string $visibility): string
     if ($visibility === 'draft' || $visibility === 'unlisted') {
         return 'unpublished';
     }
-    return in_array($visibility, ['public', 'unpublished', 'private'], true) ? $visibility : 'unpublished';
+    return in_array($visibility, ['public', 'unpublished', 'private'], true)
+        ? $visibility
+        : 'unpublished';
 }
 
 /**
  * Return one gallery's effective visibility, including legacy access_listing rows.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{visibility?:string,access_listing?:string} $gallery Visibility and legacy listing fields used to derive the effective state.
  * @return string Text result for the caller.
  */
 function test_gallery_effective_visibility(array $gallery): string
 {
-    $visibility = test_normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
-    if ($visibility === 'public' && (string) ($gallery['access_listing'] ?? 'listed') === 'unlisted') {
+    $visibility = test_normalize_gallery_visibility(
+        (string) ($gallery['visibility'] ?? 'unpublished'),
+    );
+    if (
+        $visibility === 'public'
+        && (string) ($gallery['access_listing'] ?? 'listed') === 'unlisted'
+    ) {
         return 'unpublished';
     }
     return $visibility;
@@ -85,7 +98,7 @@ function test_gallery_effective_visibility(array $gallery): string
 /**
  * Return whether a gallery appears in normal listing pages.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{visibility?:string,access_listing?:string} $gallery Visibility and legacy listing fields; omitted fields use public-model defaults.
  * @return bool True when the condition matches.
  */
 function test_gallery_is_listed(array $gallery): bool
@@ -96,77 +109,119 @@ function test_gallery_is_listed(array $gallery): bool
 /**
  * Return whether a gallery opens by normal public URL for anonymous visitors.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{visibility?:string,access_listing?:string} $gallery Visibility and legacy listing fields; omitted fields use public-model defaults.
  * @return bool True when the condition matches.
  */
 function test_gallery_allows_direct_url(array $gallery): bool
 {
-    return in_array(test_gallery_effective_visibility($gallery), ['public', 'unpublished'], true);
+    return in_array(
+        test_gallery_effective_visibility($gallery),
+        ['public', 'unpublished'],
+        true,
+    );
 }
 
 /**
  * Return whether a listing card must hide the real cover thumbnail.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{visibility?:string,access_listing?:string,access_mode?:string} $gallery Visibility, listing and access-mode fields used to decide whether the cover is locked.
  * @return bool True when the condition matches.
  */
 function test_gallery_card_uses_locked_cover(array $gallery): bool
 {
-    return test_gallery_is_listed($gallery) && (string) ($gallery['access_mode'] ?? 'normal') === 'password';
+    return (
+        test_gallery_is_listed($gallery)
+            && (string) ($gallery['access_mode'] ?? 'normal') === 'password'
+    );
 }
 
 $cases = [
     'public gallery listed and visible' => [
-        'gallery' => ['visibility' => 'public', 'access_listing' => 'listed', 'access_mode' => 'normal'],
+        'gallery' => [
+            'visibility' => 'public',
+            'access_listing' => 'listed',
+            'access_mode' => 'normal',
+        ],
         'listed' => true,
         'direct_url' => true,
         'locked_cover' => false,
         'effective' => 'public',
     ],
-    'unpublished gallery hidden from listings but accessible by direct link' => [
-        'gallery' => ['visibility' => 'unpublished', 'access_listing' => 'unlisted', 'access_mode' => 'normal'],
-        'listed' => false,
-        'direct_url' => true,
-        'locked_cover' => false,
-        'effective' => 'unpublished',
-    ],
+    'unpublished gallery hidden from listings but accessible by direct link' =>
+        [
+            'gallery' => [
+                'visibility' => 'unpublished',
+                'access_listing' => 'unlisted',
+                'access_mode' => 'normal',
+            ],
+            'listed' => false,
+            'direct_url' => true,
+            'locked_cover' => false,
+            'effective' => 'unpublished',
+        ],
     'private gallery hidden from listings' => [
-        'gallery' => ['visibility' => 'private', 'access_listing' => 'unlisted', 'access_mode' => 'normal'],
+        'gallery' => [
+            'visibility' => 'private',
+            'access_listing' => 'unlisted',
+            'access_mode' => 'normal',
+        ],
         'listed' => false,
         'direct_url' => false,
         'locked_cover' => false,
         'effective' => 'private',
     ],
     'password-protected public gallery shows covered thumbnail' => [
-        'gallery' => ['visibility' => 'public', 'access_listing' => 'listed', 'access_mode' => 'password'],
+        'gallery' => [
+            'visibility' => 'public',
+            'access_listing' => 'listed',
+            'access_mode' => 'password',
+        ],
         'listed' => true,
         'direct_url' => true,
         'locked_cover' => true,
         'effective' => 'public',
     ],
-    'password-protected unpublished gallery stays hidden but direct-linkable' => [
-        'gallery' => ['visibility' => 'unpublished', 'access_listing' => 'unlisted', 'access_mode' => 'password'],
-        'listed' => false,
-        'direct_url' => true,
-        'locked_cover' => false,
-        'effective' => 'unpublished',
-    ],
-    'password-protected private gallery stays hidden and not normally direct-linkable' => [
-        'gallery' => ['visibility' => 'private', 'access_listing' => 'unlisted', 'access_mode' => 'password'],
-        'listed' => false,
-        'direct_url' => false,
-        'locked_cover' => false,
-        'effective' => 'private',
-    ],
+    'password-protected unpublished gallery stays hidden but direct-linkable' =>
+        [
+            'gallery' => [
+                'visibility' => 'unpublished',
+                'access_listing' => 'unlisted',
+                'access_mode' => 'password',
+            ],
+            'listed' => false,
+            'direct_url' => true,
+            'locked_cover' => false,
+            'effective' => 'unpublished',
+        ],
+    'password-protected private gallery stays hidden and not normally direct-linkable' =>
+        [
+            'gallery' => [
+                'visibility' => 'private',
+                'access_listing' => 'unlisted',
+                'access_mode' => 'password',
+            ],
+            'listed' => false,
+            'direct_url' => false,
+            'locked_cover' => false,
+            'effective' => 'private',
+        ],
     'legacy draft maps to unpublished' => [
-        'gallery' => ['visibility' => 'draft', 'access_listing' => 'listed', 'access_mode' => 'normal'],
+        'gallery' => [
+            'visibility' => 'draft',
+            'access_listing' => 'listed',
+            'access_mode' => 'normal',
+        ],
         'listed' => false,
         'direct_url' => true,
         'locked_cover' => false,
         'effective' => 'unpublished',
     ],
     'legacy public unlisted maps to unpublished' => [
-        'gallery' => ['visibility' => 'public', 'access_listing' => 'unlisted', 'access_mode' => 'normal'],
+        'gallery' => [
+            'visibility' => 'public',
+            'access_listing' => 'unlisted',
+            'access_mode' => 'normal',
+        ],
         'listed' => false,
         'direct_url' => true,
         'locked_cover' => false,
@@ -175,10 +230,26 @@ $cases = [
 ];
 
 foreach ($cases as $label => $case) {
-    assert_same_value($case['effective'], test_gallery_effective_visibility($case['gallery']), $label . ': effective visibility');
-    assert_same_value($case['listed'], test_gallery_is_listed($case['gallery']), $label . ': listing visibility');
-    assert_same_value($case['direct_url'], test_gallery_allows_direct_url($case['gallery']), $label . ': direct URL access');
-    assert_same_value($case['locked_cover'], test_gallery_card_uses_locked_cover($case['gallery']), $label . ': locked cover behavior');
+    assert_same_value(
+        $case['effective'],
+        test_gallery_effective_visibility($case['gallery']),
+        $label . ': effective visibility',
+    );
+    assert_same_value(
+        $case['listed'],
+        test_gallery_is_listed($case['gallery']),
+        $label . ': listing visibility',
+    );
+    assert_same_value(
+        $case['direct_url'],
+        test_gallery_allows_direct_url($case['gallery']),
+        $label . ': direct URL access',
+    );
+    assert_same_value(
+        $case['locked_cover'],
+        test_gallery_card_uses_locked_cover($case['gallery']),
+        $label . ': locked cover behavior',
+    );
 }
 
 echo "Gallery visibility model tests passed.\n";

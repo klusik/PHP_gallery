@@ -57,8 +57,10 @@ namespace Gallery\Services {
     }
 
     /** Save selected defaults only after the gallery mutation. @param int $userId Administrator ID. @param array<string,mixed> $input Submitted fields. @return void Record persistence. */
-    function gallery_creation_preferences_remember(int $userId, array $input): void
-    {
+    function gallery_creation_preferences_remember(
+        int $userId,
+        array $input,
+    ): void {
         if ($userId !== 11) {
             throw new \RuntimeException('Wrong preference owner.');
         }
@@ -74,8 +76,13 @@ namespace Gallery\Services {
 
 namespace Gallery\Controllers {
     /** Save or refuse the fixture gallery mutation. @param array<string,mixed> $gallery Gallery row. @param array<string,mixed> $input Submitted fields. @param array<string,mixed> $files Upload descriptors. @param string $returnTab Active tab. @param bool $completeForm Complete form marker. @return array<string,mixed> Fixture save result. */
-    function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
-    {
+    function admin_save_gallery_from_input(
+        array $gallery,
+        array $input,
+        array $files,
+        string $returnTab,
+        bool $completeForm = true,
+    ): array {
         $GLOBALS['defaults_save_order'][] = 'save';
         if ($GLOBALS['defaults_save_failure']) {
             throw new \RuntimeException('Gallery save refused.');
@@ -97,7 +104,9 @@ namespace Gallery\Controllers {
 }
 
 namespace {
-    require_once dirname(__DIR__) . '/app/controllers/admin_galleries_edit_page/post_actions.php';
+    require_once
+        dirname(__DIR__)
+            . '/app/controllers/admin_galleries_edit_page/post_actions.php';
 
     /** Require one observed fixture postcondition. @param bool $condition Observed state. @param string $message Failure explanation. @return void Throw on failure. */
     function defaults_save_assert(bool $condition, string $message): void
@@ -108,8 +117,11 @@ namespace {
     }
 
     /** Run one direct-page editor save through its redirect sentinel. @param array<string,mixed> $post Submitted fields. @param bool $available Preference storage state. @param bool $failGallerySave Whether gallery persistence fails. @return list<string> Observed operation order. */
-    function defaults_save_run(array $post, bool $available, bool $failGallerySave): array
-    {
+    function defaults_save_run(
+        array $post,
+        bool $available,
+        bool $failGallerySave,
+    ): array {
         $GLOBALS['defaults_save_order'] = [];
         $GLOBALS['defaults_save_available'] = $available;
         $GLOBALS['defaults_save_failure'] = $failGallerySave;
@@ -117,33 +129,65 @@ namespace {
         $_FILES = [];
         $_SESSION = [];
         try {
-            \Gallery\Controllers\admin_edit_gallery_handle_save(['id' => 7], 'admin-edit-identity');
-            throw new \RuntimeException('Editor did not complete the fixture response.');
+            \Gallery\Controllers\admin_edit_gallery_handle_save([
+                'id' => 7,
+            ], 'admin-edit-identity');
+            throw new \RuntimeException(
+                'Editor did not complete the fixture response.',
+            );
         } catch (\RuntimeException $exception) {
-            if (!str_starts_with($exception->getMessage(), 'redirect:/edit?id=7')) {
+            if (!str_starts_with(
+                $exception->getMessage(),
+                'redirect:/edit?id=7',
+            )) {
                 throw $exception;
             }
         }
         return $GLOBALS['defaults_save_order'];
     }
 
-    defaults_save_assert(defaults_save_run([
-        'remember_simbrief_pilot_id' => '1',
-        'simbrief_pilot_id' => 'pilot-11',
-    ], true, false) === ['available', 'validate', 'save', 'remember', 'flash', 'redirect'],
-        'Editor did not validate before save and remember defaults after save.');
+    defaults_save_assert(
+        defaults_save_run(
+            [
+                'remember_simbrief_pilot_id' => '1',
+                'simbrief_pilot_id' => 'pilot-11',
+            ],
+            true,
+            false,
+        ) === [
+            'available',
+            'validate',
+            'save',
+            'remember',
+            'flash',
+            'redirect',
+        ],
+        'Editor did not validate before save and remember defaults after save.',
+    );
 
-    defaults_save_assert(defaults_save_run([
-        'remember_simbrief_pilot_id' => '1',
-        'simbrief_pilot_id' => 'pilot-11',
-    ], false, false) === ['available', 'flash', 'redirect'],
-        'Unavailable default storage must refuse before the gallery mutation.');
+    defaults_save_assert(
+        defaults_save_run(
+            [
+                'remember_simbrief_pilot_id' => '1',
+                'simbrief_pilot_id' => 'pilot-11',
+            ],
+            false,
+            false,
+        ) === ['available', 'flash', 'redirect'],
+        'Unavailable default storage must refuse before the gallery mutation.',
+    );
 
-    defaults_save_assert(defaults_save_run([
-        'remember_simbrief_pilot_id' => '1',
-        'simbrief_pilot_id' => 'pilot-11',
-    ], true, true) === ['available', 'validate', 'save', 'flash', 'redirect'],
-        'Failed gallery save must not update personal defaults.');
+    defaults_save_assert(
+        defaults_save_run(
+            [
+                'remember_simbrief_pilot_id' => '1',
+                'simbrief_pilot_id' => 'pilot-11',
+            ],
+            true,
+            true,
+        ) === ['available', 'validate', 'save', 'flash', 'redirect'],
+        'Failed gallery save must not update personal defaults.',
+    );
 
     fwrite(STDOUT, "Gallery editor creation defaults save: PASS\n");
 }

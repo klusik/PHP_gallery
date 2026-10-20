@@ -16,10 +16,10 @@
  *   - Verify every current viewer route and Admin viewer-management entry belongs to the wrapper
  *   - Verify hidden Admin navigation and maintained translations are wired to the registered feature
  *   - Audit existing feature-menu and route-map references against the canonical feature registry
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
@@ -30,10 +30,16 @@ namespace Gallery\Core {
         return $GLOBALS['viewer_feature_wrapper_config'] ?? [];
     }
 
-    /** Database stub required only for symbol binding in the included viewer service. */
-    function db(): object
+    /**
+     * Database stub required only for symbol binding in the included viewer service.
+     *
+     * @return never Always throws when the fixture attempts database access.
+     */
+    function db(): never
     {
-        throw new \RuntimeException('Database access is not expected in viewer_feature_wrapper_test.php.');
+        throw new \RuntimeException(
+            'Database access is not expected in viewer_feature_wrapper_test.php.',
+        );
     }
 
     /** Deterministic SQL timestamp stub required only for symbol binding. */
@@ -44,9 +50,21 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
-    /** Minimal translation stub for registry definitions. */
-    function t(string $key, string|array|null $fallback = null, array $parameters = []): string
-    {
+    /**
+     * Minimal translation stub for registry definitions.
+     *
+     * @param string $key Translation lookup key.
+     * @param string|array<string,string|int|float|bool|null>|null $fallback
+     *   Text fallback or placeholder values keyed by name.
+     * @param array<string,string|int|float|bool|null> $parameters
+     *   Placeholder values keyed by name.
+     * @return string Fallback text with placeholders replaced, or the lookup key.
+     */
+    function t(
+        string $key,
+        string|array|null $fallback = null,
+        array $parameters = [],
+    ): string {
         $text = is_string($fallback) ? $fallback : $key;
         foreach ($parameters as $name => $value) {
             $text = str_replace('{' . $name . '}', (string) $value, $text);
@@ -54,10 +72,19 @@ namespace Gallery\Services {
         return $text;
     }
 
-    /** Return one in-memory app setting for the focused feature test. */
+    /**
+     * Return one in-memory app setting for the focused feature test.
+     *
+     * @param string $key Setting name to read.
+     * @param string|null $default Value returned when the setting is absent.
+     * @return string|null Stored setting value or the supplied default.
+     */
     function app_setting(string $key, ?string $default = null): ?string
     {
-        return array_key_exists($key, $GLOBALS['viewer_feature_wrapper_settings'] ?? [])
+        return array_key_exists(
+            $key,
+            $GLOBALS['viewer_feature_wrapper_settings'] ?? [],
+        )
             ? (string) $GLOBALS['viewer_feature_wrapper_settings'][$key]
             : $default;
     }
@@ -70,6 +97,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__ . '/support/php_source.php';
     use function Gallery\Services\feature_flag_default_enabled;
     use function Gallery\Services\feature_flag_definitions;
     use function Gallery\Services\feature_flag_enabled;
@@ -101,11 +129,26 @@ namespace {
         ],
     ];
 
-    viewer_feature_wrapper_assert(feature_flag_exists('viewer_accounts'), 'Viewer accounts must be registered on Admin > Features.');
-    viewer_feature_wrapper_assert(!feature_flag_default_enabled('viewer_accounts'), 'The viewer-account master feature must default to disabled.');
-    viewer_feature_wrapper_assert(!feature_flag_enabled('viewer_accounts'), 'Missing persisted master state must keep viewer accounts disabled.');
-    viewer_feature_wrapper_assert(!viewer_accounts_enabled(), 'An enabled historical viewer mode must not bypass the disabled master wrapper.');
-    viewer_feature_wrapper_assert(viewer_registration_mode() === 'disabled', 'The master wrapper must force effective viewer registration mode to disabled.');
+    viewer_feature_wrapper_assert(
+        feature_flag_exists('viewer_accounts'),
+        'Viewer accounts must be registered on Admin > Features.',
+    );
+    viewer_feature_wrapper_assert(
+        !feature_flag_default_enabled('viewer_accounts'),
+        'The viewer-account master feature must default to disabled.',
+    );
+    viewer_feature_wrapper_assert(
+        !feature_flag_enabled('viewer_accounts'),
+        'Missing persisted master state must keep viewer accounts disabled.',
+    );
+    viewer_feature_wrapper_assert(
+        !viewer_accounts_enabled(),
+        'An enabled historical viewer mode must not bypass the disabled master wrapper.',
+    );
+    viewer_feature_wrapper_assert(
+        viewer_registration_mode() === 'disabled',
+        'The master wrapper must force effective viewer registration mode to disabled.',
+    );
 
     $establishedFeatures = [
         'public_search',
@@ -127,92 +170,189 @@ namespace {
         'telemetry',
     ];
     foreach ($establishedFeatures as $feature) {
-        viewer_feature_wrapper_assert(feature_flag_default_enabled($feature), 'Existing feature default changed unexpectedly: ' . $feature);
-        viewer_feature_wrapper_assert(feature_flag_enabled($feature), 'Existing feature must retain enabled-by-default compatibility: ' . $feature);
+        viewer_feature_wrapper_assert(
+            feature_flag_default_enabled($feature),
+            'Existing feature default changed unexpectedly: ' . $feature,
+        );
+        viewer_feature_wrapper_assert(
+            feature_flag_enabled($feature),
+            'Existing feature must retain enabled-by-default compatibility: '
+                . $feature,
+        );
     }
 
     set_feature_flag_enabled('viewer_accounts', true);
-    viewer_feature_wrapper_assert(feature_flag_enabled('viewer_accounts'), 'Admin feature setting must enable the master wrapper.');
-    viewer_feature_wrapper_assert(viewer_accounts_enabled(), 'Master wrapper plus historical invite-only mode must enable viewer authentication.');
-    viewer_feature_wrapper_assert(viewer_registration_mode() === 'invite_only', 'Enabled wrapper must reveal the existing subordinate invite-only mode.');
+    viewer_feature_wrapper_assert(
+        feature_flag_enabled('viewer_accounts'),
+        'Admin feature setting must enable the master wrapper.',
+    );
+    viewer_feature_wrapper_assert(
+        viewer_accounts_enabled(),
+        'Master wrapper plus historical invite-only mode must enable viewer authentication.',
+    );
+    viewer_feature_wrapper_assert(
+        viewer_registration_mode() === 'invite_only',
+        'Enabled wrapper must reveal the existing subordinate invite-only mode.',
+    );
 
     set_feature_flag_enabled('viewer_accounts', false);
-    viewer_feature_wrapper_assert(!viewer_accounts_enabled(), 'Disabling the wrapper must immediately fail viewer authority closed.');
-    viewer_feature_wrapper_assert(viewer_registration_mode() === 'disabled', 'Disabling the wrapper must hide subordinate registration mode.');
+    viewer_feature_wrapper_assert(
+        !viewer_accounts_enabled(),
+        'Disabling the wrapper must immediately fail viewer authority closed.',
+    );
+    viewer_feature_wrapper_assert(
+        viewer_registration_mode() === 'disabled',
+        'Disabling the wrapper must hide subordinate registration mode.',
+    );
 
     $definitions = feature_flag_definitions();
     // The 35 established capabilities plus independent PDF/music masters.
-    viewer_feature_wrapper_assert(count($definitions) === 37
-        && isset($definitions['automatic_cache_cleanup'],
-            $definitions['gallery_pdf_documents'], $definitions['gallery_music']),
-        'Feature registry must include all 37 canonical capabilities.');
-    viewer_feature_wrapper_assert(!feature_flag_default_enabled('admin_test_runs'), 'Admin test-run diagnostics must remain disabled by default.');
+    viewer_feature_wrapper_assert(
+        count($definitions) === 37
+            && isset(
+                $definitions['automatic_cache_cleanup'],
+                $definitions['gallery_pdf_documents'],
+                $definitions['gallery_music'],
+            ),
+        'Feature registry must include all 37 canonical capabilities.',
+    );
+    viewer_feature_wrapper_assert(
+        !feature_flag_default_enabled('admin_test_runs'),
+        'Admin test-run diagnostics must remain disabled by default.',
+    );
 
     $routeMap = feature_flag_route_map();
     foreach ($routeMap as $route => $feature) {
-        viewer_feature_wrapper_assert(feature_flag_exists($feature), 'Feature route references an unregistered switch: ' . $route . ' -> ' . $feature);
+        viewer_feature_wrapper_assert(
+            feature_flag_exists($feature),
+            'Feature route references an unregistered switch: '
+                . $route
+                . ' -> '
+                . $feature,
+        );
     }
-    viewer_feature_wrapper_assert(feature_flag_for_route('admin_viewer_invitations') === 'viewer_accounts', 'Admin viewer management route must be owned by the master wrapper.');
-
-    $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
-    preg_match_all("/'(viewer_[a-z0-9_]+)'\\s*=>/", $dispatch, $viewerRouteMatches);
-    $viewerRoutes = array_values(array_unique($viewerRouteMatches[1] ?? []));
-    viewer_feature_wrapper_assert(count($viewerRoutes) >= 20, 'Expected the complete current viewer route family to be discoverable in the dispatcher.');
-    foreach ($viewerRoutes as $route) {
-        viewer_feature_wrapper_assert(feature_flag_for_route($route) === 'viewer_accounts', 'Viewer route escaped the master wrapper: ' . $route);
-    }
-
-    $adminChrome = (string) file_get_contents($root . '/app/views/admin_chrome.php');
     viewer_feature_wrapper_assert(
-        str_contains($adminChrome, "'page' => 'admin_viewer_invitations'")
-            && str_contains($adminChrome, "'feature' => 'viewer_accounts'"),
-        'Admin Viewer accounts navigation must be hidden by the master feature switch.'
+        feature_flag_for_route('admin_viewer_invitations')
+            === 'viewer_accounts',
+        'Admin viewer management route must be owned by the master wrapper.',
     );
-    preg_match_all("/'feature'\\s*=>\\s*'([a-z0-9_]+)'/", $adminChrome, $menuFeatureMatches);
+
+    $dispatch = (string) file_get_contents($root
+        . '/app/bootstrap/dispatch.php');
+    preg_match_all(
+        "/'(viewer_[a-z0-9_]+)'\\s*=>/",
+        $dispatch,
+        $viewerRouteMatches,
+    );
+    $viewerRoutes = array_values(array_unique($viewerRouteMatches[1] ?? []));
+    viewer_feature_wrapper_assert(
+        count($viewerRoutes) >= 20,
+        'Expected the complete current viewer route family to be discoverable in the dispatcher.',
+    );
+    foreach ($viewerRoutes as $route) {
+        viewer_feature_wrapper_assert(
+            feature_flag_for_route($route) === 'viewer_accounts',
+            'Viewer route escaped the master wrapper: ' . $route,
+        );
+    }
+
+    $adminChrome = (string) file_get_contents($root
+        . '/app/views/admin_chrome.php');
+    viewer_feature_wrapper_assert(
+        php_source_contains($adminChrome, "'page' => 'admin_viewer_invitations'")
+            && php_source_contains($adminChrome, "'feature' => 'viewer_accounts'"),
+        'Admin Viewer accounts navigation must be hidden by the master feature switch.',
+    );
+    preg_match_all(
+        "/'feature'\\s*=>\\s*'([a-z0-9_]+)'/",
+        $adminChrome,
+        $menuFeatureMatches,
+    );
     foreach (array_unique($menuFeatureMatches[1] ?? []) as $feature) {
-        viewer_feature_wrapper_assert(feature_flag_exists($feature), 'Admin menu references an unregistered feature switch: ' . $feature);
+        viewer_feature_wrapper_assert(
+            feature_flag_exists($feature),
+            'Admin menu references an unregistered feature switch: ' . $feature,
+        );
     }
 
     $publicLayout = (string) file_get_contents($root . '/app/views/layout.php');
-    $sharedLayoutController = (string) file_get_contents($root . '/app/controllers/shared_layout.php');
+    $sharedLayoutController = (string) file_get_contents($root
+        . '/app/controllers/shared_layout.php');
     viewer_feature_wrapper_assert(
-        str_contains($sharedLayoutController, "\$viewerAccounts = \$bodyClass === 'public-page' && viewer_accounts_enabled();")
-            && str_contains($publicLayout, "if (\$bodyClass === 'public-page' && !empty(\$model['viewer_accounts_enabled']))"),
-        'Public Viewer Login/Account navigation must remain behind the effective viewer-account gate.'
+        php_source_contains(
+            $sharedLayoutController,
+            "\$viewerAccounts = \$bodyClass === 'public-page' && viewer_accounts_enabled();",
+        )
+            && php_source_contains(
+                $publicLayout,
+                "if (\$bodyClass === 'public-page' && !empty(\$model['viewer_accounts_enabled']))",
+            ),
+        'Public Viewer Login/Account navigation must remain behind the effective viewer-account gate.',
     );
 
     $featureService = module_source($root . '/app/services/feature_flags.php');
-    $dispatchSource = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
+    $dispatchSource = (string) file_get_contents($root
+        . '/app/bootstrap/dispatch.php');
     viewer_feature_wrapper_assert(
-        ($definitions['viewer_accounts']['route_prefixes'] ?? []) === ['viewer_'],
-        'The canonical capability registry must own the complete viewer_* route family.'
+        ($definitions['viewer_accounts']['route_prefixes'] ?? []) === [
+            'viewer_',
+        ],
+        'The canonical capability registry must own the complete viewer_* route family.',
     );
     viewer_feature_wrapper_assert(
-        str_contains($featureService, 'if (!$isAdmin)')
-            && str_contains($featureService, "'status' => 404")
-            && str_contains($featureService, "'error' => 'not_found'")
-            && str_contains($dispatchSource, 'http_response_code((int) ($decision[\'status\'] ?? 404));'),
-        'Disabled public viewer routes must look unavailable rather than advertise the hidden subsystem.'
+        php_source_contains($featureService, 'if (!$isAdmin)')
+            && php_source_contains($featureService, "'status' => 404")
+            && php_source_contains($featureService, "'error' => 'not_found'")
+            && php_source_contains(
+                $dispatchSource,
+                'http_response_code((int) ($decision[\'status\'] ?? 404));',
+            ),
+        'Disabled public viewer routes must look unavailable rather than advertise the hidden subsystem.',
     );
 
     $servicesLoader = (string) file_get_contents($root . '/app/services.php');
-    $featureLoaderPosition = strpos($servicesLoader, "'/services/feature_flags.php'");
-    $viewerLoaderPosition = strpos($servicesLoader, "'/services/viewer_accounts.php'");
+    $featureLoaderPosition = strpos(
+        $servicesLoader,
+        "'/services/feature_flags.php'",
+    );
+    $viewerLoaderPosition = strpos(
+        $servicesLoader,
+        "'/services/viewer_accounts.php'",
+    );
     viewer_feature_wrapper_assert(
-        is_int($featureLoaderPosition) && is_int($viewerLoaderPosition) && $featureLoaderPosition < $viewerLoaderPosition,
-        'Production service loading must establish the master feature service before viewer_accounts.php.'
+        is_int($featureLoaderPosition)
+            && is_int($viewerLoaderPosition)
+            && $featureLoaderPosition < $viewerLoaderPosition,
+        'Production service loading must establish the master feature service before viewer_accounts.php.',
     );
 
     foreach (['en', 'cs', 'de', 'sv'] as $language) {
-        $catalog = json_decode((string) file_get_contents($root . '/app/lang/' . $language . '.json'), true);
-        viewer_feature_wrapper_assert(is_array($catalog), 'Translation catalog failed to decode: ' . $language);
+        $catalog = json_decode(
+            (string) file_get_contents(
+                $root . '/app/lang/' . $language . '.json',
+            ),
+            true,
+        );
+        viewer_feature_wrapper_assert(
+            is_array($catalog),
+            'Translation catalog failed to decode: ' . $language,
+        );
         foreach ([
             'admin.features.group.accounts',
             'admin.features.group.accounts_help',
             'admin.features.viewer_accounts.label',
             'admin.features.viewer_accounts.description',
         ] as $key) {
-            viewer_feature_wrapper_assert(isset($catalog[$key]) && is_string($catalog[$key]) && $catalog[$key] !== '', 'Missing master viewer feature translation ' . $key . ' in ' . $language . '.');
+            viewer_feature_wrapper_assert(
+                isset($catalog[$key])
+                    && is_string($catalog[$key])
+                    && $catalog[$key] !== '',
+                'Missing master viewer feature translation '
+                    . $key
+                    . ' in '
+                    . $language
+                    . '.',
+            );
         }
     }
 

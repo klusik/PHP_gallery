@@ -61,7 +61,11 @@ function admin_settings_browser_upload_definitions(): array
 {
     $settings = browser_upload_settings();
     $definitions = [];
-    foreach (['default_worker_count', 'max_worker_count', 'hard_worker_cap'] as $name) {
+    foreach ([
+        'default_worker_count',
+        'max_worker_count',
+        'hard_worker_cap',
+    ] as $name) {
         $definitions['browser_upload_' . $name] = [
             'current' => (string) $settings[$name],
             'default' => (string) browser_upload_default_settings()[$name],
@@ -86,7 +90,9 @@ function admin_settings_browser_upload_definitions(): array
     ];
     $definitions['browser_upload_zip_size_threshold_ratio'] = [
         'current' => (string) $settings['zip_size_threshold_ratio'],
-        'default' => (string) cms_runtime_limit('browser_upload.default_zip_ratio'),
+        'default' => (string) cms_runtime_limit(
+            'browser_upload.default_zip_ratio',
+        ),
         'validation' => [
             'min' => cms_runtime_limit('browser_upload.min_zip_ratio'),
             'max' => cms_runtime_limit('browser_upload.max_zip_ratio'),
@@ -95,7 +101,9 @@ function admin_settings_browser_upload_definitions(): array
     ];
     $definitions['browser_upload_max_items_per_batch'] = [
         'current' => (string) $settings['max_items_per_batch'],
-        'default' => (string) cms_runtime_limit('browser_upload.default_max_items_per_batch'),
+        'default' => (string) cms_runtime_limit(
+            'browser_upload.default_max_items_per_batch',
+        ),
         'validation' => [
             'min' => cms_runtime_limit('browser_upload.min_items_per_batch'),
             'max' => cms_runtime_limit('browser_upload.max_items_per_batch'),
@@ -136,27 +144,40 @@ function admin_settings_browser_upload_definitions(): array
  * @param string|int|float|bool $value Submitted scalar value, with sizes expressed in MB.
  * @return string Canonical validated scalar value.
  */
-function admin_settings_browser_upload_normalize_value(string $id, mixed $value): string
-{
+function admin_settings_browser_upload_normalize_value(
+    string $id,
+    mixed $value,
+): string {
     $definition = admin_settings_browser_upload_definitions()[$id] ?? null;
     if ($definition === null || !is_scalar($value)) {
         throw new InvalidArgumentException('Invalid browser upload setting.');
     }
     $value = trim((string) $value);
     if ($id === 'browser_upload_enabled') {
-        return admin_upload_auto_rename_setting_normalize($value === '' ? '0' : $value);
+        return admin_upload_auto_rename_setting_normalize(
+            $value === '' ? '0' : $value,
+        );
     }
     $validation = $definition['validation'];
     if (isset($validation['allowed'])) {
         if (!in_array($value, $validation['allowed'], true)) {
-            throw new InvalidArgumentException('Choose a supported upload batch policy.');
+            throw new InvalidArgumentException(
+                'Choose a supported upload batch policy.',
+            );
         }
         return $value;
     }
     $integer = $validation['step'] === 1;
-    if (!preg_match($integer ? '/^\d+$/' : '/^\d+(?:\.\d+)?$/', $value)
-        || !is_finite((float) $value) || (float) $value < $validation['min'] || (float) $value > $validation['max']) {
-        throw new InvalidArgumentException(t('admin.settings.uploads.invalid_number', 'Enter a number within the displayed limits.'));
+    if (
+        !preg_match($integer ? '/^\d+$/' : '/^\d+(?:\.\d+)?$/', $value)
+        || !is_finite((float) $value)
+        || (float) $value < $validation['min']
+        || (float) $value > $validation['max']
+    ) {
+        throw new InvalidArgumentException(t(
+            'admin.settings.uploads.invalid_number',
+            'Enter a number within the displayed limits.',
+        ));
     }
     return $integer ? (string) (int) $value : (string) (float) $value;
 }
@@ -176,14 +197,24 @@ function admin_settings_browser_upload_values(array $values): array
     $input = [];
     foreach ($definitions as $id => $definition) {
         $input[$id] = array_key_exists($id, $values)
-            ? admin_settings_browser_upload_normalize_value($id, $values[$id]) : $definition['current'];
+            ? admin_settings_browser_upload_normalize_value($id, $values[$id])
+            : $definition['current'];
     }
-    if ((int) $input['browser_upload_default_worker_count'] > (int) $input['browser_upload_max_worker_count']
-        || (int) $input['browser_upload_max_worker_count'] > (int) $input['browser_upload_hard_worker_cap']) {
-        throw new InvalidArgumentException(t('admin.settings.uploads.invalid_workers', 'Default workers must not exceed maximum workers, and maximum workers must not exceed the hard cap.'));
+    if (
+        (int) $input['browser_upload_default_worker_count']
+            > (int) $input['browser_upload_max_worker_count']
+        || (int) $input['browser_upload_max_worker_count']
+            > (int) $input['browser_upload_hard_worker_cap']
+    ) {
+        throw new InvalidArgumentException(t(
+            'admin.settings.uploads.invalid_workers',
+            'Default workers must not exceed maximum workers, and maximum workers must not exceed the hard cap.',
+        ));
     }
-    $input['browser_upload_max_zip_batch_megabytes'] = $input['browser_upload_max_zip_batch_bytes'];
-    $input['browser_thumbnail_rebuild_source_chunk_megabytes'] = $input['browser_thumbnail_rebuild_source_chunk_bytes'];
+    $input['browser_upload_max_zip_batch_megabytes'] =
+        $input['browser_upload_max_zip_batch_bytes'];
+    $input['browser_thumbnail_rebuild_source_chunk_megabytes'] =
+        $input['browser_thumbnail_rebuild_source_chunk_bytes'];
     return $input;
 }
 
@@ -244,7 +275,6 @@ function admin_settings_sections(): array
             'description' => 'Sensitive, destructive, or specialized configuration remains on dedicated Admin pages.',
         ],
     ];
-
 }
 
 /**
@@ -267,7 +297,7 @@ function admin_settings_specialized_catalog(): array
             'Manage curated public text, links, page scope and placements independently from Theme settings.',
             'admin_theme',
             ['widgets' => '1'],
-            ''
+            '',
         ],
         [
             'theme_accent',
@@ -276,7 +306,7 @@ function admin_settings_specialized_catalog(): array
             'Buttons, selected pagination, and important public links.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-colors'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_accent_dark',
@@ -285,7 +315,7 @@ function admin_settings_specialized_catalog(): array
             'Hover states, outlines, and secondary public actions.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_paper',
@@ -294,7 +324,7 @@ function admin_settings_specialized_catalog(): array
             'Base public page color behind all content.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_panel',
@@ -303,7 +333,7 @@ function admin_settings_specialized_catalog(): array
             'Background color for public cards and panels.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_gallery_panel',
@@ -312,7 +342,7 @@ function admin_settings_specialized_catalog(): array
             'Background used by gallery-specific cards and image panels.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_header_text',
@@ -321,7 +351,7 @@ function admin_settings_specialized_catalog(): array
             'Color of the main site title in the public header.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_hero_text',
@@ -330,7 +360,7 @@ function admin_settings_specialized_catalog(): array
             'Color of open-gallery title and hero text.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_radius',
@@ -339,7 +369,7 @@ function admin_settings_specialized_catalog(): array
             'Global public corner-radius style.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_font',
@@ -348,7 +378,7 @@ function admin_settings_specialized_catalog(): array
             'Classic serif or clean sans-serif public typography.',
             'admin_theme',
             [],
-            'admin-theme-appearance-subtab-colors'
+            'admin-theme-appearance-subtab-colors',
         ],
         [
             'theme_page_width_custom',
@@ -357,7 +387,7 @@ function admin_settings_specialized_catalog(): array
             'Custom public container width in pixels.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_gps_pin_enabled',
@@ -366,7 +396,7 @@ function admin_settings_specialized_catalog(): array
             'Show a GPS pin on photo cards with location metadata.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_gps_pin_background_enabled',
@@ -375,7 +405,7 @@ function admin_settings_specialized_catalog(): array
             'Show the background underlay behind photo-card GPS pins.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_gps_pin_size',
@@ -384,7 +414,7 @@ function admin_settings_specialized_catalog(): array
             'Diameter of the GPS marker on public photo cards.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_gps_pin_background_size',
@@ -393,7 +423,7 @@ function admin_settings_specialized_catalog(): array
             'Diameter of the GPS marker background badge.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_hero_tag_display_all',
@@ -401,8 +431,10 @@ function admin_settings_specialized_catalog(): array
             'Display all gallery hero tags',
             'Show every gallery tag immediately instead of using expansion.',
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
-            'admin-theme-tab-appearance'
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_hero_tag_scrollbar_enabled',
@@ -410,8 +442,10 @@ function admin_settings_specialized_catalog(): array
             'Hero tag scrollbar',
             'Use bounded scrolling when a gallery has many hero tags.',
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
-            'admin-theme-tab-appearance'
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_hero_tag_scrollbar_rows',
@@ -419,8 +453,10 @@ function admin_settings_specialized_catalog(): array
             'Hero tag scrollbar rows',
             'Maximum visible tag rows before hero-tag scrolling begins.',
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
-            'admin-theme-tab-appearance'
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
+            'admin-theme-tab-appearance',
         ],
         [
             'theme_live_preview',
@@ -429,7 +465,7 @@ function admin_settings_specialized_catalog(): array
             'Preview public Theme colors, corners, typography, width, and identity.',
             'admin_theme',
             ['appearance_subtab' => 'admin-theme-appearance-subtab-preview'],
-            'admin-theme-tab-appearance'
+            'admin-theme-tab-appearance',
         ],
 
         // Theme: layout, cards, grids, shortcuts, lightbox, and media.
@@ -440,7 +476,7 @@ function admin_settings_specialized_catalog(): array
             'Configure public-header shortcuts to the main page or selected galleries.',
             'admin_theme',
             [],
-            'admin-theme-tab-layout'
+            'admin-theme-tab-layout',
         ],
         [
             'theme_gallery_count_badge_mode',
@@ -449,7 +485,7 @@ function admin_settings_specialized_catalog(): array
             'Choose public, all, both, or hidden for admins; visitors see only public counts.',
             'admin_theme',
             [],
-            'admin-gallery-count-badge'
+            'admin-gallery-count-badge',
         ],
         [
             'theme_gallery_count_badge_icons_enabled',
@@ -458,7 +494,7 @@ function admin_settings_specialized_catalog(): array
             'Show or hide count icons independently of the display mode.',
             'admin_theme',
             [],
-            'admin-gallery-count-badge'
+            'admin-gallery-count-badge',
         ],
         [
             'reset_all_gallery_grid_overrides',
@@ -467,7 +503,7 @@ function admin_settings_specialized_catalog(): array
             'Clear every per-gallery custom grid and stale gallery.json grid key.',
             'admin_theme',
             [],
-            'admin-home-grid'
+            'admin-home-grid',
         ],
         [
             'theme_header_branding',
@@ -476,7 +512,7 @@ function admin_settings_specialized_catalog(): array
             'Upload, position, size, crop, or remove the public header branding asset.',
             'admin_theme',
             [],
-            'admin-theme-tab-media'
+            'admin-theme-tab-media',
         ],
         [
             'theme_background_image',
@@ -485,7 +521,7 @@ function admin_settings_specialized_catalog(): array
             'Upload, position, size, or remove the public page background.',
             'admin_theme',
             [],
-            'admin-theme-tab-media'
+            'admin-theme-tab-media',
         ],
         [
             'theme_favicon',
@@ -494,7 +530,7 @@ function admin_settings_specialized_catalog(): array
             'Upload, crop, generate, or remove browser and shortcut icons.',
             'admin_theme',
             [],
-            'admin-theme-tab-media'
+            'admin-theme-tab-media',
         ],
         [
             'theme_media_cleanup',
@@ -503,7 +539,7 @@ function admin_settings_specialized_catalog(): array
             'Remove superseded generated Theme media files safely.',
             'admin_theme',
             [],
-            'admin-theme-tab-media'
+            'admin-theme-tab-media',
         ],
         [
             'theme_language_catalog',
@@ -512,7 +548,7 @@ function admin_settings_specialized_catalog(): array
             'Select the active public language catalog.',
             'admin_theme',
             [],
-            'admin-theme-tab-language'
+            'admin-theme-tab-language',
         ],
         [
             'theme_language_editor',
@@ -521,7 +557,7 @@ function admin_settings_specialized_catalog(): array
             'Search and edit individual translation strings in an installed language pack.',
             'admin_theme',
             [],
-            'admin-theme-tab-language'
+            'admin-theme-tab-language',
         ],
         [
             'theme_language_import',
@@ -530,7 +566,7 @@ function admin_settings_specialized_catalog(): array
             'Import a translated JSON language catalog.',
             'admin_theme',
             [],
-            'admin-theme-tab-language'
+            'admin-theme-tab-language',
         ],
         [
             'theme_language_export',
@@ -539,7 +575,7 @@ function admin_settings_specialized_catalog(): array
             'Download an installed language catalog for editing or backup.',
             'admin_theme',
             [],
-            'admin-theme-tab-language'
+            'admin-theme-tab-language',
         ],
         [
             'theme_custom_css_editor',
@@ -548,7 +584,7 @@ function admin_settings_specialized_catalog(): array
             'Edit raw custom public stylesheet rules.',
             'admin_theme',
             ['css_editor' => 1],
-            'admin-theme-tab-custom-css'
+            'admin-theme-tab-custom-css',
         ],
         [
             'theme_custom_css_preset',
@@ -557,7 +593,7 @@ function admin_settings_specialized_catalog(): array
             'Select and apply a built-in custom CSS starting point.',
             'admin_theme',
             [],
-            'admin-theme-tab-custom-css'
+            'admin-theme-tab-custom-css',
         ],
         [
             'theme_custom_css_import',
@@ -566,7 +602,7 @@ function admin_settings_specialized_catalog(): array
             'Upload a custom stylesheet into the Theme editor.',
             'admin_theme',
             [],
-            'admin-theme-tab-custom-css'
+            'admin-theme-tab-custom-css',
         ],
 
         // Gallery-scoped upload credentials remain specialized.
@@ -577,7 +613,7 @@ function admin_settings_specialized_catalog(): array
             'Create, revoke, and inspect gallery-scoped upload API credentials.',
             'admin_api_manager',
             [],
-            ''
+            '',
         ],
 
         // Telemetry and privacy.
@@ -588,9 +624,17 @@ function admin_settings_specialized_catalog(): array
             'Collect anonymous browser performance measurements.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
-        ['telemetry_cache_enabled', 'privacy', 'Cache telemetry', 'Collect thumbnail and media cache-hit/miss metrics.', 'admin_telemetry', [], ''],
+        [
+            'telemetry_cache_enabled',
+            'privacy',
+            'Cache telemetry',
+            'Collect thumbnail and media cache-hit/miss metrics.',
+            'admin_telemetry',
+            [],
+            '',
+        ],
         [
             'telemetry_database_enabled',
             'privacy',
@@ -598,7 +642,7 @@ function admin_settings_specialized_catalog(): array
             'Collect bounded query timing and database operation metrics.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_respect_dnt',
@@ -607,7 +651,7 @@ function admin_settings_specialized_catalog(): array
             'Suppress public telemetry when the browser requests Do Not Track.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_admin_excluded',
@@ -616,7 +660,7 @@ function admin_settings_specialized_catalog(): array
             'Do not count signed-in Admin browsing in public usage metrics.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_max_photo_view_seconds',
@@ -625,7 +669,7 @@ function admin_settings_specialized_catalog(): array
             'Cap engagement time contributed by one open photo.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_raw_retention_days',
@@ -634,7 +678,7 @@ function admin_settings_specialized_catalog(): array
             'Days to retain detailed anonymous telemetry events.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_hourly_retention_days',
@@ -643,7 +687,7 @@ function admin_settings_specialized_catalog(): array
             'Days to retain compact hourly aggregate metrics.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_database_retention_days',
@@ -652,7 +696,7 @@ function admin_settings_specialized_catalog(): array
             'Days to retain SQL query fingerprints independently of usage statistics.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
         [
             'telemetry_daily_retention_days',
@@ -661,9 +705,17 @@ function admin_settings_specialized_catalog(): array
             'Days to retain long-term daily aggregate metrics.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
-        ['telemetry_export', 'privacy', 'Telemetry HTML export', 'Generate a private aggregated telemetry report.', 'admin_telemetry', [], ''],
+        [
+            'telemetry_export',
+            'privacy',
+            'Telemetry HTML export',
+            'Generate a private aggregated telemetry report.',
+            'admin_telemetry',
+            [],
+            '',
+        ],
         [
             'telemetry_maintenance',
             'privacy',
@@ -671,7 +723,7 @@ function admin_settings_specialized_catalog(): array
             'Run telemetry rollup, retention, and maintenance jobs.',
             'admin_telemetry',
             [],
-            ''
+            '',
         ],
 
         // Scheduled maintenance, thumbnails, navigation, diagnostics, and operations.
@@ -682,7 +734,7 @@ function admin_settings_specialized_catalog(): array
             'Choose modern WebP-only support or legacy JPEG fallback generation.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'thumbnail_exact_scan',
@@ -691,7 +743,7 @@ function admin_settings_specialized_catalog(): array
             'Scan every expected thumbnail variant and report missing files.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'thumbnail_rebuild',
@@ -700,7 +752,7 @@ function admin_settings_specialized_catalog(): array
             'Generate missing or refreshed thumbnail variants.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'thumbnail_cache_cleanup',
@@ -709,7 +761,7 @@ function admin_settings_specialized_catalog(): array
             'Remove generated thumbnail cache through protected maintenance controls.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'archive_downloads',
@@ -718,7 +770,7 @@ function admin_settings_specialized_catalog(): array
             'Configure and maintain generated gallery download archives.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'media_renamer',
@@ -727,7 +779,7 @@ function admin_settings_specialized_catalog(): array
             'Preview and apply safe filename normalization for gallery media.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_request_trigger_enabled',
@@ -736,7 +788,7 @@ function admin_settings_specialized_catalog(): array
             'Allow authenticated Admin dashboard requests to schedule due maintenance without using public visitor traffic.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_utc_time',
@@ -745,7 +797,7 @@ function admin_settings_specialized_catalog(): array
             'Daily UTC start time for scheduled maintenance.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_window_minutes',
@@ -754,7 +806,7 @@ function admin_settings_specialized_catalog(): array
             'Overall time window in which scheduled maintenance may run.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_batch_size',
@@ -763,7 +815,7 @@ function admin_settings_specialized_catalog(): array
             'Maximum images inspected by one internal maintenance batch.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_time_budget_seconds',
@@ -772,7 +824,7 @@ function admin_settings_specialized_catalog(): array
             'Maximum execution time allocated to one maintenance request.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_run_now',
@@ -781,7 +833,7 @@ function admin_settings_specialized_catalog(): array
             'Run one bounded safe maintenance check immediately.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_reset_state',
@@ -790,7 +842,7 @@ function admin_settings_specialized_catalog(): array
             'Clear interrupted scheduled-maintenance progress safely.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'site_maintenance_rotate_token',
@@ -799,7 +851,7 @@ function admin_settings_specialized_catalog(): array
             'Invalidate the existing secret web-cron URL and issue a new token.',
             'admin',
             ['maintenance_tab' => 'media'],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
         [
             'navigation_data_accounts',
@@ -808,7 +860,7 @@ function admin_settings_specialized_catalog(): array
             'Configure source accounts used to download flight navigation data.',
             'admin_navdata',
             [],
-            ''
+            '',
         ],
         [
             'navigation_data_update',
@@ -817,10 +869,26 @@ function admin_settings_specialized_catalog(): array
             'Download, import, and inspect flight-map navigation datasets.',
             'admin_navdata',
             [],
-            ''
+            '',
         ],
-        ['admin_logs', 'advanced', 'Admin operational logs', 'Filter, review, resolve, archive, and inspect application events.', 'admin_logs', [], ''],
-        ['application_updates', 'advanced', 'Application updates', 'Check, download, verify, and apply PHP Gallery updates.', 'admin_update', [], ''],
+        [
+            'admin_logs',
+            'advanced',
+            'Admin operational logs',
+            'Filter, review, resolve, archive, and inspect application events.',
+            'admin_logs',
+            [],
+            '',
+        ],
+        [
+            'application_updates',
+            'advanced',
+            'Application updates',
+            'Check, download, verify, and apply PHP Gallery updates.',
+            'admin_update',
+            [],
+            '',
+        ],
         [
             'integrity_check',
             'advanced',
@@ -828,7 +896,7 @@ function admin_settings_specialized_catalog(): array
             'Compare deployed core files with the release integrity manifest.',
             'admin_integrity',
             [],
-            ''
+            '',
         ],
         [
             'runtime_diagnostics',
@@ -837,9 +905,17 @@ function admin_settings_specialized_catalog(): array
             'Inspect PHP, image libraries, upload limits, and conversion capability.',
             'admin',
             [],
-            'admin-tab-maintenance'
+            'admin-tab-maintenance',
         ],
-        ['feature_flags', 'advanced', 'Feature visibility', 'Enable or hide optional and unfinished application features.', 'admin_features', [], ''],
+        [
+            'feature_flags',
+            'advanced',
+            'Feature visibility',
+            'Enable or hide optional and unfinished application features.',
+            'admin_features',
+            [],
+            '',
+        ],
         [
             'gallery_report',
             'advanced',
@@ -847,7 +923,7 @@ function admin_settings_specialized_catalog(): array
             'Generate the detailed HTML storage, database, telemetry, EXIF, GPS, and runtime report.',
             'admin_gallery_report',
             [],
-            ''
+            '',
         ],
         [
             'database_audit',
@@ -856,7 +932,7 @@ function admin_settings_specialized_catalog(): array
             'Inspect every table, column, key, migration reference, and storage estimate.',
             'admin_storage_statistics',
             ['tab' => 'maintenance'],
-            ''
+            '',
         ],
         [
             'database_safe_cleanup',
@@ -865,7 +941,7 @@ function admin_settings_specialized_catalog(): array
             'Preview or remove high-confidence orphaned and expired rows in bounded batches.',
             'admin_storage_statistics',
             ['tab' => 'maintenance'],
-            ''
+            '',
         ],
         [
             'database_schema_repair',
@@ -874,7 +950,7 @@ function admin_settings_specialized_catalog(): array
             'Preview and apply the dedicated idempotent schema repair migration.',
             'admin_storage_statistics',
             ['tab' => 'maintenance'],
-            ''
+            '',
         ],
         [
             'database_analyze',
@@ -883,7 +959,7 @@ function admin_settings_specialized_catalog(): array
             'Refresh optimizer statistics for explicitly selected tables.',
             'admin_storage_statistics',
             ['tab' => 'maintenance'],
-            ''
+            '',
         ],
         [
             'database_optimize',
@@ -892,13 +968,37 @@ function admin_settings_specialized_catalog(): array
             'Rebuild explicitly selected tables to reclaim estimated free space.',
             'admin_storage_statistics',
             ['tab' => 'maintenance'],
-            ''
+            '',
         ],
 
         // Account, authentication, mail, linked services, and user preferences.
-        ['account_username', 'advanced', 'Administrator username', 'Change the signed-in administrator account name.', 'admin_account', [], ''],
-        ['account_password', 'advanced', 'Administrator password', 'Change the signed-in administrator password.', 'admin_account', [], ''],
-        ['password_reset_enabled', 'advanced', 'Password reset', 'Enable or disable administrator password recovery by email.', 'admin_account', [], ''],
+        [
+            'account_username',
+            'advanced',
+            'Administrator username',
+            'Change the signed-in administrator account name.',
+            'admin_account',
+            [],
+            '',
+        ],
+        [
+            'account_password',
+            'advanced',
+            'Administrator password',
+            'Change the signed-in administrator password.',
+            'admin_account',
+            [],
+            '',
+        ],
+        [
+            'password_reset_enabled',
+            'advanced',
+            'Password reset',
+            'Enable or disable administrator password recovery by email.',
+            'admin_account',
+            [],
+            '',
+        ],
         [
             'password_reset_transport',
             'advanced',
@@ -906,7 +1006,7 @@ function admin_settings_specialized_catalog(): array
             'Choose PHP mail or authenticated SMTP delivery.',
             'admin_account',
             [],
-            ''
+            '',
         ],
         [
             'password_reset_from_email',
@@ -915,7 +1015,7 @@ function admin_settings_specialized_catalog(): array
             'Sender email address used for recovery messages.',
             'admin_account',
             [],
-            ''
+            '',
         ],
         [
             'password_reset_from_name',
@@ -924,7 +1024,7 @@ function admin_settings_specialized_catalog(): array
             'Readable sender name used for recovery messages.',
             'admin_account',
             [],
-            ''
+            '',
         ],
         [
             'password_reset_token_lifetime_minutes',
@@ -933,10 +1033,26 @@ function admin_settings_specialized_catalog(): array
             'Minutes before a password-reset link expires.',
             'admin_account',
             [],
-            ''
+            '',
         ],
-        ['password_reset_smtp_host', 'advanced', 'SMTP host', 'Mail server hostname for password recovery.', 'admin_account', [], ''],
-        ['password_reset_smtp_port', 'advanced', 'SMTP port', 'Mail server port for password recovery.', 'admin_account', [], ''],
+        [
+            'password_reset_smtp_host',
+            'advanced',
+            'SMTP host',
+            'Mail server hostname for password recovery.',
+            'admin_account',
+            [],
+            '',
+        ],
+        [
+            'password_reset_smtp_port',
+            'advanced',
+            'SMTP port',
+            'Mail server port for password recovery.',
+            'admin_account',
+            [],
+            '',
+        ],
         [
             'password_reset_smtp_encryption',
             'advanced',
@@ -944,9 +1060,17 @@ function admin_settings_specialized_catalog(): array
             'TLS or connection security mode for password-reset mail.',
             'admin_account',
             [],
-            ''
+            '',
         ],
-        ['password_reset_smtp_username', 'advanced', 'SMTP username', 'Authentication username for password-reset mail.', 'admin_account', [], ''],
+        [
+            'password_reset_smtp_username',
+            'advanced',
+            'SMTP username',
+            'Authentication username for password-reset mail.',
+            'admin_account',
+            [],
+            '',
+        ],
         [
             'google_account_linking',
             'advanced',
@@ -954,7 +1078,7 @@ function admin_settings_specialized_catalog(): array
             'Connect or disconnect a Google identity for administrator sign-in.',
             'admin_account',
             [],
-            ''
+            '',
         ],
         [
             'openai_text_assist_enabled',
@@ -963,36 +1087,111 @@ function admin_settings_specialized_catalog(): array
             'Enable or disable per-user AI-assisted Admin text generation.',
             'admin_account',
             [],
-            ''
+            '',
         ],
-        ['openai_api_key', 'advanced', 'OpenAI API key', 'Configure the per-user secret used by Admin text assistance.', 'admin_account', [], ''],
-        ['openai_model', 'advanced', 'OpenAI model', 'Select the model used by Admin text assistance.', 'admin_account', [], ''],
+        [
+            'openai_api_key',
+            'advanced',
+            'OpenAI API key',
+            'Configure the per-user secret used by Admin text assistance.',
+            'admin_account',
+            [],
+            '',
+        ],
+        [
+            'openai_model',
+            'advanced',
+            'OpenAI model',
+            'Select the model used by Admin text assistance.',
+            'admin_account',
+            [],
+            '',
+        ],
     ];
 
     $entries = [];
-    foreach ($definitions as [$id, $group, $label, $description, $route, $params, $fragment]) {
-        $entries[$id] = admin_settings_entry($id, $group, $label, $description, '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), $route, $params, $fragment, false, str_contains($id, 'password') || str_contains($id, 'token') || str_contains($id, 'api_key') ? 'secret' : 'normal');
+    foreach ($definitions as [
+        $id,
+        $group,
+        $label,
+        $description,
+        $route,
+        $params,
+        $fragment,
+    ]) {
+        $entries[$id] = admin_settings_entry(
+            $id,
+            $group,
+            $label,
+            $description,
+            '',
+            'specialized',
+            '',
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
+            $route,
+            $params,
+            $fragment,
+            false,
+            str_contains($id, 'password')
+            || str_contains($id, 'token')
+            || str_contains($id, 'api_key')
+                ? 'secret'
+                : 'normal',
+        );
         $entries[$id]['discovery_only'] = true;
     }
     if (feature_capability_effective_enabled('cooperative_galleries')) {
         $entries['cooperative_friendships'] = admin_settings_entry(
-            'cooperative_friendships', 'advanced',
+            'cooperative_friendships',
+            'advanced',
             t('admin.cooperative.ui.title', 'Friendly galleries'),
-            t('admin.cooperative.ui.intro', 'Connect two installations by invitation. Friendship alone does not share any albums or photographs.'),
-            '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'),
-            'admin_cooperative_galleries', [], '', false
+            t(
+                'admin.cooperative.ui.intro',
+                'Connect two installations by invitation. Friendship alone does not share any albums or photographs.',
+            ),
+            '',
+            'specialized',
+            '',
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
+            'admin_cooperative_galleries',
+            [],
+            '',
+            false,
         );
         $entries['cooperative_friendships']['specialized_panel_workflow'] = 'cooperative_pairing';
-        $entries['cooperative_friendships']['specialized_panel_url'] = admin_settings_specialized_url('admin_cooperative_galleries', ['panel' => '1']);
+        $entries['cooperative_friendships']['specialized_panel_url'] = admin_settings_specialized_url('admin_cooperative_galleries', [
+            'panel' => '1',
+        ]);
         $entries['cooperative_collaborations'] = admin_settings_entry(
-            'cooperative_collaborations', 'advanced',
+            'cooperative_collaborations',
+            'advanced',
             t('admin.cooperative.review.title', 'Album collaborations'),
-            t('admin.cooperative.review.intro', 'Review the exact participants and sharing permissions before approving. Each installation decides independently. Shared photographs and email invitations require explicit participant approval.'),
-            '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'),
-            'admin_cooperative_collaborations', [], '', false
+            t(
+                'admin.cooperative.review.intro',
+                'Review the exact participants and sharing permissions before approving. Each installation decides independently. Shared photographs and email invitations require explicit participant approval.',
+            ),
+            '',
+            'specialized',
+            '',
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
+            'admin_cooperative_collaborations',
+            [],
+            '',
+            false,
         );
         $entries['cooperative_collaborations']['specialized_panel_workflow'] = 'cooperative_proposals';
-        $entries['cooperative_collaborations']['specialized_panel_url'] = admin_settings_specialized_url('admin_cooperative_collaborations', ['panel' => '1']);
+        $entries['cooperative_collaborations']['specialized_panel_url'] = admin_settings_specialized_url('admin_cooperative_collaborations', [
+            'panel' => '1',
+        ]);
     }
     if (function_exists('Gallery\\Services\\feature_flag_definitions')) {
         foreach (feature_flag_definitions() as $featureKey => $definition) {
@@ -1001,12 +1200,17 @@ function admin_settings_specialized_catalog(): array
                 $id,
                 'advanced',
                 (string) ($definition['label'] ?? $featureKey),
-                (string) ($definition['description'] ?? 'Optional application feature visibility.'),
+                (string) (
+                    $definition['description']
+                    ?? 'Optional application feature visibility.'
+                ),
                 feature_flag_setting_key((string) $featureKey),
                 'summary',
                 '1',
-                feature_capability_configured_enabled((string) $featureKey) ? '1' : '0',
-                'admin_features'
+                feature_capability_configured_enabled((string) $featureKey)
+                    ? '1'
+                    : '0',
+                'admin_features',
             );
             $entries[$id]['discovery_only'] = true;
         }
@@ -1023,7 +1227,9 @@ function admin_settings_specialized_catalog(): array
 function admin_settings_section_normalize(mixed $section): string
 {
     $candidate = strtolower(trim((string) $section));
-    return array_key_exists($candidate, admin_settings_sections()) ? $candidate : 'general';
+    return array_key_exists($candidate, admin_settings_sections())
+        ? $candidate
+        : 'general';
 }
 
 /**
@@ -1045,14 +1251,19 @@ function admin_settings_section_id(string $section): string
  * @param bool $includeFragment Whether a section deep-link fragment should be appended.
  * @return string Admin URL.
  */
-function admin_settings_url(?string $section = null, ?string $return = null, bool $includeFragment = false): string
-{
+function admin_settings_url(
+    ?string $section = null,
+    ?string $return = null,
+    bool $includeFragment = false,
+): string {
     $params = [];
     $fragment = '';
     if ($section !== null && trim($section) !== '') {
         $section = admin_settings_section_normalize($section);
         $params['section'] = $section;
-        $fragment = $includeFragment ? '#' . admin_settings_section_id($section) : '';
+        $fragment = $includeFragment
+            ? '#' . admin_settings_section_id($section)
+            : '';
     }
     if ($return !== null && trim($return) !== '') {
         $params['return'] = preg_replace('/[^a-z0-9_.:-]/i', '', $return) ?: '';
@@ -1068,8 +1279,11 @@ function admin_settings_url(?string $section = null, ?string $return = null, boo
  * @param string $fragment Optional fragment without leading hash.
  * @return string Admin URL.
  */
-function admin_settings_specialized_url(string $route, array $params = [], string $fragment = ''): string
-{
+function admin_settings_specialized_url(
+    string $route,
+    array $params = [],
+    string $fragment = '',
+): string {
     $url = url_for($route, $params);
     return $fragment !== '' ? $url . '#' . ltrim($fragment, '#') : $url;
 }
@@ -1093,7 +1307,9 @@ function admin_settings_has_explicit_value(string $key): bool
  */
 function admin_settings_bool_label(bool $value): string
 {
-    return $value ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled');
+    return $value
+        ? t('admin.common.enabled', 'Enabled')
+        : t('admin.common.disabled', 'Disabled');
 }
 
 /**
@@ -1123,7 +1339,11 @@ function admin_settings_sensitive_status(string $key): string
 function admin_settings_registry(bool $includeSessionSettings = false): array
 {
     $pagination = pagination_global_settings();
-    $homeGrid = function_exists('Gallery\\Services\\main_page_gallery_grid_settings') ? main_page_gallery_grid_settings() : $pagination;
+    $homeGrid = function_exists(
+        'Gallery\\Services\\main_page_gallery_grid_settings',
+    )
+        ? main_page_gallery_grid_settings()
+        : $pagination;
     $tagGrid = tag_page_gallery_grid_settings();
     $browserDefinitions = admin_settings_browser_upload_definitions();
     $theme = theme_settings();
@@ -1175,7 +1395,13 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'admin-theme-tab-language',
             true,
             'normal',
-            ['allowed' => function_exists('Gallery\\Services\\translation_supported_languages') ? translation_supported_languages() : ['en', 'cs', 'de', 'sv']],
+            [
+                'allowed' => function_exists(
+                    'Gallery\\Services\\translation_supported_languages',
+                )
+                    ? translation_supported_languages()
+                    : ['en', 'cs', 'de', 'sv'],
+            ],
         ),
         'public_language_selector_enabled' => admin_settings_entry(
             'public_language_selector_enabled',
@@ -1247,7 +1473,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'admin',
             [],
             'admin-tab-maintenance',
-            (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('public_search')),
+            !function_exists(
+                'Gallery\\Services\\feature_capability_effective_enabled',
+            )
+                || feature_capability_effective_enabled('public_search'),
         ),
 
         'theme_page_width' => admin_settings_entry(
@@ -1273,7 +1502,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'vertical',
             theme_gallery_description_layout(),
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
             'admin-theme-tab-appearance',
         ),
         'theme_breadcrumb_style' => admin_settings_entry(
@@ -1309,14 +1540,23 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Default number of columns used by paginated public lists.',
             'pagination_columns',
             'number',
-            defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_COLUMNS') ? (string) CMS_PAGINATION_DEFAULT_COLUMNS : '4',
+            defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_COLUMNS')
+                ? (string) CMS_PAGINATION_DEFAULT_COLUMNS
+                : '4',
             (string) ($pagination['columns'] ?? 4),
             'admin_theme',
             [],
             'admin-theme-tab-layout',
             false,
             'normal',
-            ['min' => 1, 'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_COLUMNS') ? CMS_PAGINATION_MAX_COLUMNS : 12],
+            [
+                'min' => 1,
+                'max' => defined(
+                    'Gallery\\Services\\CMS_PAGINATION_MAX_COLUMNS',
+                )
+                    ? CMS_PAGINATION_MAX_COLUMNS
+                    : 12,
+            ],
         ),
         'pagination_rows' => admin_settings_entry(
             'pagination_rows',
@@ -1325,14 +1565,21 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Default number of rows per paginated public list.',
             'pagination_rows',
             'number',
-            defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_ROWS') ? (string) CMS_PAGINATION_DEFAULT_ROWS : '5',
+            defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_ROWS')
+                ? (string) CMS_PAGINATION_DEFAULT_ROWS
+                : '5',
             (string) ($pagination['rows'] ?? 5),
             'admin_theme',
             [],
             'admin-theme-tab-layout',
             false,
             'normal',
-            ['min' => 1, 'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_ROWS') ? CMS_PAGINATION_MAX_ROWS : 50],
+            [
+                'min' => 1,
+                'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_ROWS')
+                    ? CMS_PAGINATION_MAX_ROWS
+                    : 50,
+            ],
         ),
         'home_gallery_grid_columns' => admin_settings_entry(
             'home_gallery_grid_columns',
@@ -1371,7 +1618,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             (string) ($pagination['columns'] ?? 4),
             (string) ($tagGrid['columns'] ?? 4),
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
             'admin-theme-tab-appearance',
         ),
         'tag_page_gallery_grid_rows' => admin_settings_entry(
@@ -1384,7 +1633,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             (string) ($pagination['rows'] ?? 5),
             (string) ($tagGrid['rows'] ?? 5),
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
             'admin-theme-tab-appearance',
         ),
         'tag_page_gallery_description_layout' => admin_settings_entry(
@@ -1397,7 +1648,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             theme_gallery_description_layout(),
             tag_page_gallery_description_layout(),
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
             'admin-theme-tab-appearance',
         ),
         'theme_hero_tag_visible_limit' => admin_settings_entry(
@@ -1410,7 +1663,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '20',
             (string) theme_hero_tag_visible_limit(),
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
             'admin-theme-tab-appearance',
         ),
         'theme_hero_tag_sort_mode' => admin_settings_entry(
@@ -1423,7 +1678,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'usage',
             theme_hero_tag_sort_mode(),
             'admin_theme',
-            ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'],
+            [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ],
             'admin-theme-tab-appearance',
         ),
         'theme_gallery_info_motion_ms' => admin_settings_entry(
@@ -1460,7 +1717,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin_tags',
         ),
 
@@ -1534,7 +1794,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'thumbnail_background_warmup_enabled',
             'summary',
             '1',
-            function_exists('Gallery\Services\thumbnail_warmup_enabled') && thumbnail_warmup_enabled() ? '1' : '0',
+            function_exists('Gallery\Services\thumbnail_warmup_enabled')
+            && thumbnail_warmup_enabled()
+                ? '1'
+                : '0',
             'admin',
             ['maintenance_tab' => 'media'],
             'admin-tab-maintenance',
@@ -1760,7 +2023,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'telemetry_public_usage_enabled',
             'summary',
             '0',
-            telemetry_setting_enabled('telemetry_public_usage_enabled', '0') ? '1' : '0',
+            telemetry_setting_enabled('telemetry_public_usage_enabled', '0')
+                ? '1'
+                : '0',
             'admin_telemetry',
             [],
             '',
@@ -1822,7 +2087,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'remote_favicon_discovery_enabled',
             'checkbox',
             '1',
-            app_setting('remote_favicon_discovery_enabled', '1') !== '0' ? '1' : '0',
+            app_setting('remote_favicon_discovery_enabled', '1') !== '0'
+                ? '1'
+                : '0',
             'admin_features',
             [],
             '',
@@ -1837,7 +2104,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'gallery_trash_enabled',
             'summary',
             '1',
-            function_exists('Gallery\Services\gallery_trash_enabled') && gallery_trash_enabled() ? '1' : '0',
+            function_exists('Gallery\Services\gallery_trash_enabled')
+            && gallery_trash_enabled()
+                ? '1'
+                : '0',
             'admin_trash',
             [],
             '',
@@ -1852,7 +2122,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'gallery_trash_auto_purge_enabled',
             'summary',
             '0',
-            function_exists('Gallery\Services\gallery_trash_auto_purge_enabled') && gallery_trash_auto_purge_enabled() ? '1' : '0',
+            function_exists('Gallery\Services\gallery_trash_auto_purge_enabled')
+            && gallery_trash_auto_purge_enabled()
+                ? '1'
+                : '0',
             'admin_trash',
             [],
             '',
@@ -1867,7 +2140,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'gallery_trash_retention_days',
             'summary',
             '30',
-            function_exists('Gallery\Services\gallery_trash_retention_days') ? (string) gallery_trash_retention_days() : '30',
+            function_exists('Gallery\Services\gallery_trash_retention_days')
+                ? (string) gallery_trash_retention_days()
+                : '30',
             'admin_trash',
             [],
             '',
@@ -1882,7 +2157,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'gallery_trash_purge_batch',
             'summary',
             '5',
-            function_exists('Gallery\Services\gallery_trash_purge_batch_size') ? (string) gallery_trash_purge_batch_size() : '5',
+            function_exists('Gallery\Services\gallery_trash_purge_batch_size')
+                ? (string) gallery_trash_purge_batch_size()
+                : '5',
             'admin_trash',
             [],
             '',
@@ -1897,7 +2174,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'application_autoupdate_enabled',
             'summary',
             '1',
-            function_exists('Gallery\Services\application_autoupdate_enabled') && application_autoupdate_enabled() ? '1' : '0',
+            function_exists('Gallery\Services\application_autoupdate_enabled')
+            && application_autoupdate_enabled()
+                ? '1'
+                : '0',
             'admin_update',
             [],
             '',
@@ -1912,7 +2192,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'site_maintenance_enabled',
             'summary',
             '1',
-            function_exists('Gallery\\Services\\site_maintenance_enabled') && site_maintenance_enabled() ? '1' : '0',
+            function_exists('Gallery\\Services\\site_maintenance_enabled')
+            && site_maintenance_enabled()
+                ? '1'
+                : '0',
             'admin',
             [],
             'admin-tab-maintenance',
@@ -1958,7 +2241,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin_storage_statistics',
             ['tab' => 'maintenance'],
             '',
@@ -1973,7 +2259,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'custom_css_preset',
             'specialized',
             '',
-            (string) app_setting('custom_css_preset', '') !== '' ? t('admin.settings.status.configured', 'Configured') : t('admin.settings.status.not_configured', 'Not configured'),
+            (string) app_setting('custom_css_preset', '') !== ''
+                ? t('admin.settings.status.configured', 'Configured')
+                : t('admin.settings.status.not_configured', 'Not configured'),
             'admin_theme',
             [],
             'admin-theme-tab-custom-css',
@@ -1988,7 +2276,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin_theme',
             [],
             'admin-theme-tab-media',
@@ -2003,7 +2294,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin_theme',
             [],
             'admin-theme-tab-language',
@@ -2018,7 +2312,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin_api_manager',
             [],
             '',
@@ -2033,7 +2330,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin',
             [],
             'admin-tab-maintenance',
@@ -2048,7 +2348,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             '',
             'specialized',
             '',
-            t('admin.settings.status.specialized_only', 'Specialized page only'),
+            t(
+                'admin.settings.status.specialized_only',
+                'Specialized page only',
+            ),
             'admin_account',
             [],
             '',
@@ -2060,7 +2363,22 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
     $registry = array_replace($registry, admin_settings_specialized_catalog());
     if ($includeSessionSettings) {
         // This is the existing private Admin/browser preference, never a second site-wide setting.
-        $registry['admin_language'] = admin_settings_entry('admin_language', 'general', 'Application language', 'Language of the administrator interface in this browser. Visitor language is configured separately.', '', 'select', translation_default_language(), translation_active_language(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => translation_supported_languages()]);
+        $registry['admin_language'] = admin_settings_entry(
+            'admin_language',
+            'general',
+            'Application language',
+            'Language of the administrator interface in this browser. Visitor language is configured separately.',
+            '',
+            'select',
+            translation_default_language(),
+            translation_active_language(),
+            'admin_theme',
+            [],
+            'admin-theme-tab-language',
+            true,
+            'normal',
+            ['allowed' => translation_supported_languages()],
+        );
         $registry['admin_language']['explicit'] = true;
         $registry['admin_language']['source'] = 'session';
     }
@@ -2087,16 +2405,33 @@ function admin_settings_owner_for_id(string $id): string
     if ($id === 'base_url') {
         return 'config.php / site_url';
     }
-    if (in_array($id, ['site_name', 'url_rewrite_enabled', 'dev_mode_enabled', 'remote_favicon_discovery_enabled'], true)) {
+    if (in_array(
+        $id,
+        [
+            'site_name',
+            'url_rewrite_enabled',
+            'dev_mode_enabled',
+            'remote_favicon_discovery_enabled',
+        ],
+        true,
+    )) {
         return 'app_settings';
     }
-    if (in_array($id, ['admin_language', 'public_language'], true) || str_starts_with($id, 'public_language_selector_')) {
+    if (
+        in_array($id, ['admin_language', 'public_language'], true)
+        || str_starts_with($id, 'public_language_selector_')
+    ) {
         return 'translations';
     }
     if ($id === 'public_home_search_enabled') {
         return 'public_search';
     }
-    if (str_starts_with($id, 'theme_') || str_starts_with($id, 'tag_page_') || str_starts_with($id, 'pagination_') || str_starts_with($id, 'home_gallery_grid_')) {
+    if (
+        str_starts_with($id, 'theme_')
+        || str_starts_with($id, 'tag_page_')
+        || str_starts_with($id, 'pagination_')
+        || str_starts_with($id, 'home_gallery_grid_')
+    ) {
         return 'theme / pagination';
     }
     if ($id === 'public_thumbnail_rendering_mode') {
@@ -2105,7 +2440,11 @@ function admin_settings_owner_for_id(string $id): string
     if ($id === 'exif_gps_maps_default_enabled') {
         return 'exif';
     }
-    if (str_starts_with($id, 'browser_upload_') || str_starts_with($id, 'browser_thumbnail_') || str_starts_with($id, 'admin_upload_')) {
+    if (
+        str_starts_with($id, 'browser_upload_')
+        || str_starts_with($id, 'browser_thumbnail_')
+        || str_starts_with($id, 'admin_upload_')
+    ) {
         return 'browser_uploads / admin_uploads';
     }
     if (str_starts_with($id, 'telemetry_')) {
@@ -2114,7 +2453,11 @@ function admin_settings_owner_for_id(string $id): string
     if (str_starts_with($id, 'seo_request_guard_')) {
         return 'seo_request_guard';
     }
-    if (in_array($id, ['password_reset_smtp_password', 'account_credentials'], true)) {
+    if (in_array(
+        $id,
+        ['password_reset_smtp_password', 'account_credentials'],
+        true,
+    )) {
         return 'admin_auth';
     }
     if ($id === 'site_maintenance_token') {
@@ -2158,10 +2501,14 @@ function admin_settings_entry(
     bool $centralEditable = false,
     string $sensitivity = 'normal',
     array $validation = [],
-    bool $migrationRequired = false
+    bool $migrationRequired = false,
 ): array {
-    $explicit = $id === 'base_url' ? true : ($key !== '' ? admin_settings_has_explicit_value($key) : false);
-    $inheritable = str_starts_with($key, 'tag_page_') || str_starts_with($key, 'home_gallery_grid_');
+    $explicit = $id === 'base_url'
+        ? true
+        : ($key !== '' ? admin_settings_has_explicit_value($key) : false);
+    $inheritable =
+        str_starts_with($key, 'tag_page_')
+        || str_starts_with($key, 'home_gallery_grid_');
     return [
         'id' => $id,
         'group' => admin_settings_section_normalize($group),
@@ -2171,13 +2518,17 @@ function admin_settings_entry(
         'description_key' => 'admin.settings.item.' . $id . '.hint',
         'key' => $key,
         'input_type' => $inputType,
-        'default_resolver' => static fn (): mixed => $default,
-        'current_resolver' => static fn (): mixed => $current,
+        'default_resolver' => static fn(): mixed => $default,
+        'current_resolver' => static fn(): mixed => $current,
         'default' => $default,
         'current' => $current,
         'explicit' => $explicit,
-        'source' => $explicit ? 'configured' : ($inheritable ? 'inherited' : 'default'),
-        'fallback_behavior' => $inheritable ? 'inherits_global' : 'default_resolver',
+        'source' => $explicit
+            ? 'configured'
+            : ($inheritable ? 'inherited' : 'default'),
+        'fallback_behavior' => $inheritable
+            ? 'inherits_global'
+            : 'default_resolver',
         'owner' => admin_settings_owner_for_id($id),
         'central_editable' => $centralEditable,
         'sensitivity' => $sensitivity,
@@ -2185,11 +2536,33 @@ function admin_settings_entry(
         'specialized_route' => $specializedRoute,
         'specialized_params' => $specializedParams,
         'specialized_fragment' => $specializedFragment,
-        'specialized_url' => $specializedRoute !== '' ? admin_settings_specialized_url($specializedRoute, $specializedParams, $specializedFragment) : '',
+        'specialized_url' => $specializedRoute !== ''
+            ? admin_settings_specialized_url(
+                $specializedRoute,
+                $specializedParams,
+                $specializedFragment,
+            )
+            : '',
         'migration_required' => $migrationRequired,
-        'normalization_callback' => $centralEditable ? 'Gallery\\Services\\admin_settings_normalize_editable_value' : null,
-        'save_callback' => $centralEditable ? 'Gallery\\Services\\admin_settings_save_editable_value' : null,
-        'content_revision' => $id === 'public_thumbnail_rendering_mode' || in_array($key, ['theme_lightbox_browsing_mode', 'theme_gallery_description_layout', 'theme_breadcrumb_style', 'theme_hero_tag_visible_limit', 'theme_hero_tag_sort_mode'], true),
+        'normalization_callback' => $centralEditable
+            ? 'Gallery\\Services\\admin_settings_normalize_editable_value'
+            : null,
+        'save_callback' => $centralEditable
+            ? 'Gallery\\Services\\admin_settings_save_editable_value'
+            : null,
+        'content_revision' =>
+            $id === 'public_thumbnail_rendering_mode'
+                || in_array(
+                    $key,
+                    [
+                        'theme_lightbox_browsing_mode',
+                        'theme_gallery_description_layout',
+                        'theme_breadcrumb_style',
+                        'theme_hero_tag_visible_limit',
+                        'theme_hero_tag_sort_mode',
+                    ],
+                    true,
+                ),
     ];
 }
 
@@ -2202,7 +2575,10 @@ function admin_settings_entry(
 function admin_settings_registry_for_section(string $section): array
 {
     $section = admin_settings_section_normalize($section);
-    return array_filter(admin_settings_registry(), static fn (array $entry): bool => ($entry['group'] ?? '') === $section);
+    return array_filter(
+        admin_settings_registry(),
+        static fn(array $entry): bool => ($entry['group'] ?? '') === $section,
+    );
 }
 
 /**
@@ -2212,10 +2588,14 @@ function admin_settings_registry_for_section(string $section): array
  * @param string|bool|int|array<string,mixed>|list<string>|null $value Submitted value.
  * @return string|bool|int|array<string,mixed>|list<string>|null Normalized scalar or structured setting payload owned by its canonical service.
  */
-function admin_settings_normalize_editable_value(array $entry, mixed $value): mixed
-{
+function admin_settings_normalize_editable_value(
+    array $entry,
+    mixed $value,
+): mixed {
     if (empty($entry['central_editable'])) {
-        throw new InvalidArgumentException('Setting is not centrally editable.');
+        throw new InvalidArgumentException(
+            'Setting is not centrally editable.',
+        );
     }
 
     $id = (string) ($entry['id'] ?? '');
@@ -2228,8 +2608,17 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     if ($id === 'admin_upload_client_format_mode') {
         return admin_upload_client_format_mode_validate($value);
     }
-    if (in_array($id, ['admin_upload_auto_rename_enabled', 'admin_legacy_upload_navigation_enabled'], true)) {
-        return admin_upload_auto_rename_setting_normalize($value === '' ? '0' : $value);
+    if (in_array(
+        $id,
+        [
+            'admin_upload_auto_rename_enabled',
+            'admin_legacy_upload_navigation_enabled',
+        ],
+        true,
+    )) {
+        return admin_upload_auto_rename_setting_normalize(
+            $value === '' ? '0' : $value,
+        );
     }
     if ($id === 'base_url') {
         return site_url_normalize($value);
@@ -2241,7 +2630,10 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     if (in_array($id, ['admin_language', 'public_language'], true)) {
         $normalized = translation_normalize_language_code((string) $value);
         if ($normalized === '' || !translation_language_allowed($normalized)) {
-            throw new InvalidArgumentException(t('admin.settings.error.invalid_language', 'Choose a supported public language.'));
+            throw new InvalidArgumentException(t(
+                'admin.settings.error.invalid_language',
+                'Choose a supported public language.',
+            ));
         }
         return $normalized;
     }
@@ -2249,9 +2641,13 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
         return !empty($value) ? '1' : '0';
     }
     if ($id === 'public_language_selector_languages') {
-        $normalized = translation_public_language_selector_normalize_languages($value);
+        $normalized =
+            translation_public_language_selector_normalize_languages($value);
         if ($normalized === []) {
-            throw new InvalidArgumentException(t('admin.theme.language.viewer_languages_required', 'Enable at least one viewer language.'));
+            throw new InvalidArgumentException(t(
+                'admin.theme.language.viewer_languages_required',
+                'Enable at least one viewer language.',
+            ));
         }
         return $normalized;
     }
@@ -2263,14 +2659,26 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
             }
             // A submitted basic editor omits an unchecked checkbox; preserve all detailed design fields.
             $current['show_flags'] = !empty($value['show_flags']);
-            return translation_public_language_selector_design_normalize($current);
+            return translation_public_language_selector_design_normalize(
+                $current,
+            );
         }
         return translation_public_language_selector_design_normalize($value);
     }
     if ($id === 'public_thumbnail_rendering_mode') {
         return public_thumbnail_rendering_mode_normalize($value);
     }
-    if (in_array($id, ['url_rewrite_enabled', 'public_home_search_enabled', 'exif_gps_maps_default_enabled', 'dev_mode_enabled', 'remote_favicon_discovery_enabled'], true)) {
+    if (in_array(
+        $id,
+        [
+            'url_rewrite_enabled',
+            'public_home_search_enabled',
+            'exif_gps_maps_default_enabled',
+            'dev_mode_enabled',
+            'remote_favicon_discovery_enabled',
+        ],
+        true,
+    )) {
         return !empty($value) ? '1' : '0';
     }
 
@@ -2286,31 +2694,70 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
  */
 function admin_settings_save_editable_value(string $id, mixed $value): void
 {
-    if ($id === 'public_home_search_enabled' && function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
+    if (
+        $id === 'public_home_search_enabled'
+        && function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('public_search')
+    ) {
         throw new InvalidArgumentException('Public search is not available.');
     }
-    if ($id === 'exif_gps_maps_default_enabled' && !exif_gps_override_schema_ready()) {
-        throw new InvalidArgumentException('EXIF/GPS defaults require the current schema.');
+    if (
+        $id === 'exif_gps_maps_default_enabled'
+        && !exif_gps_override_schema_ready()
+    ) {
+        throw new InvalidArgumentException(
+            'EXIF/GPS defaults require the current schema.',
+        );
     }
 
     match ($id) {
-        'gallery_pdf_render_dpi' => set_app_setting('gallery_pdf_render_dpi', (string) gallery_pdf_render_dpi_validate((string) $value)),
-        'admin_legacy_upload_navigation_enabled' => set_app_setting('admin_legacy_upload_navigation_enabled', (string) $value === '1' ? '1' : '0'),
-        'admin_upload_client_format_mode' => save_admin_upload_client_format_mode($value),
-        'admin_upload_auto_rename_enabled' => save_admin_upload_auto_rename_setting($value),
+        'gallery_pdf_render_dpi' => set_app_setting(
+            'gallery_pdf_render_dpi',
+            (string) gallery_pdf_render_dpi_validate((string) $value),
+        ),
+        'admin_legacy_upload_navigation_enabled' => set_app_setting(
+            'admin_legacy_upload_navigation_enabled',
+            (string) $value === '1' ? '1' : '0',
+        ),
+        'admin_upload_client_format_mode'
+            => save_admin_upload_client_format_mode($value),
+        'admin_upload_auto_rename_enabled'
+            => save_admin_upload_auto_rename_setting($value),
         'base_url' => site_url_save((string) $value),
         'site_name' => set_site_name((string) $value),
         'public_language' => translation_set_public_language((string) $value),
         'admin_language' => translation_set_active_language((string) $value),
-        'public_language_selector_enabled' => translation_save_public_language_selector_settings((string) $value === '1', translation_public_language_selector_languages()),
-        'public_language_selector_languages' => translation_save_public_language_selector_settings(translation_public_language_selector_enabled(), is_array($value) ? $value : []),
-        'public_language_selector_design' => translation_save_public_language_selector_design($value),
-        'url_rewrite_enabled' => set_url_rewrite_enabled((string) $value === '1'),
-        'public_home_search_enabled' => set_public_home_search_enabled((string) $value === '1'),
-        'public_thumbnail_rendering_mode' => public_thumbnail_rendering_mode_save_with_revision((string) $value),
-        'exif_gps_maps_default_enabled' => set_exif_gps_default_enabled((string) $value === '1'),
+        'public_language_selector_enabled'
+            => translation_save_public_language_selector_settings(
+            (string) $value === '1',
+            translation_public_language_selector_languages(),
+        ),
+        'public_language_selector_languages'
+            => translation_save_public_language_selector_settings(
+            translation_public_language_selector_enabled(),
+            is_array($value) ? $value : [],
+        ),
+        'public_language_selector_design'
+            => translation_save_public_language_selector_design($value),
+        'url_rewrite_enabled' => set_url_rewrite_enabled((string) $value
+            === '1'),
+        'public_home_search_enabled'
+            => set_public_home_search_enabled((string) $value === '1'),
+        'public_thumbnail_rendering_mode'
+            => public_thumbnail_rendering_mode_save_with_revision(
+            (string) $value,
+        ),
+        'exif_gps_maps_default_enabled'
+            => set_exif_gps_default_enabled((string) $value === '1'),
         'dev_mode_enabled' => set_dev_mode_enabled((string) $value === '1'),
-        'remote_favicon_discovery_enabled' => set_app_setting('remote_favicon_discovery_enabled', (string) $value === '1' ? '1' : '0'),
-        default => throw new InvalidArgumentException('Unknown or non-editable central setting.'),
+        'remote_favicon_discovery_enabled' => set_app_setting(
+            'remote_favicon_discovery_enabled',
+            (string) $value === '1' ? '1' : '0',
+        ),
+        default => throw new InvalidArgumentException(
+            'Unknown or non-editable central setting.',
+        ),
     };
 }

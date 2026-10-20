@@ -16,7 +16,6 @@ declare(strict_types=1);
 namespace Gallery\Models;
 
 use function Gallery\Core\db;
-
 use const Gallery\Core\GALLERY_PICKER_SEARCH_PAGE_SIZE;
 
 require_once dirname(__DIR__) . '/policy_constants.php';
@@ -32,7 +31,9 @@ function gallery_picker_model_selection(int $galleryId): ?array
     if ($galleryId <= 0) {
         return null;
     }
-    $statement = db()->prepare('SELECT id, title, folder_path FROM galleries WHERE id = ? LIMIT 1');
+    $statement = db()->prepare(
+        'SELECT id, title, folder_path FROM galleries WHERE id = ? LIMIT 1',
+    );
     $statement->execute([$galleryId]);
     $row = $statement->fetch(\PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;
@@ -61,8 +62,12 @@ function gallery_picker_model_like_literal(string $text): string
  * @param ?string $excludedBranchPath Source path when descendants must also be omitted.
  * @return array<int,array<string,mixed>> At most thirty compact gallery rows.
  */
-function gallery_picker_model_search(string $query, int $afterId = 0, int $excludedGalleryId = 0, ?string $excludedBranchPath = null): array
-{
+function gallery_picker_model_search(
+    string $query,
+    int $afterId = 0,
+    int $excludedGalleryId = 0,
+    ?string $excludedBranchPath = null,
+): array {
     $sql = 'SELECT id, title, folder_path FROM galleries WHERE id > ? AND id <> ?';
     $parameters = [max(0, $afterId), max(0, $excludedGalleryId)];
     if ($query !== '') {
@@ -74,7 +79,9 @@ function gallery_picker_model_search(string $query, int $afterId = 0, int $exclu
     if ($excludedBranchPath !== null) {
         $sql .= " AND folder_path <> ? AND folder_path NOT LIKE ? ESCAPE '!'";
         $parameters[] = $excludedBranchPath;
-        $parameters[] = gallery_picker_model_like_literal(rtrim($excludedBranchPath, '/')) . '/%';
+        $parameters[] =
+            gallery_picker_model_like_literal(rtrim($excludedBranchPath, '/'))
+            . '/%';
     }
     $sql .= ' ORDER BY id ASC LIMIT ' . GALLERY_PICKER_SEARCH_PAGE_SIZE;
     $statement = db()->prepare($sql);

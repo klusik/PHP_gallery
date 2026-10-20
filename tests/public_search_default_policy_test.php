@@ -61,23 +61,47 @@ namespace Gallery\Services {
      * @param string $message Failure description.
      * @return void
      */
-    function public_search_default_assert(bool $condition, string $message): void
-    {
+    function public_search_default_assert(
+        bool $condition,
+        string $message,
+    ): void {
         if (!$condition) {
             throw new \RuntimeException($message);
         }
     }
 
-    public_search_default_assert(public_home_search_enabled(), 'An unset fresh or upgraded installation must default to visible search.');
-    public_search_default_assert($GLOBALS['public_search_default_writes'] === [], 'Resolving a default must not seed or overwrite preferences.');
+    public_search_default_assert(
+        public_home_search_enabled(),
+        'An unset fresh or upgraded installation must default to visible search.',
+    );
+    public_search_default_assert(
+        $GLOBALS['public_search_default_writes'] === [],
+        'Resolving a default must not seed or overwrite preferences.',
+    );
     set_public_home_search_enabled(false);
     $writes = $GLOBALS['public_search_default_writes'];
-    public_search_default_assert(!public_home_search_enabled(), 'An explicit saved OFF must override the default.');
-    public_search_default_assert($GLOBALS['public_search_default_writes'] === $writes, 'Reading saved OFF must not rewrite it.');
+    public_search_default_assert(
+        !public_home_search_enabled(),
+        'An explicit saved OFF must override the default.',
+    );
+    public_search_default_assert(
+        $GLOBALS['public_search_default_writes'] === $writes,
+        'Reading saved OFF must not rewrite it.',
+    );
     set_public_home_search_enabled(true);
-    public_search_default_assert(public_home_search_enabled(), 'An explicit saved ON must remain enabled.');
+    public_search_default_assert(
+        public_home_search_enabled(),
+        'An explicit saved ON must remain enabled.',
+    );
     $GLOBALS['public_search_default_capability'] = false;
-    public_search_default_assert(!public_home_search_enabled(), 'An unavailable capability must still gate explicit ON.');
-    public_search_default_assert($GLOBALS['public_search_default_store'][PUBLIC_HOME_SEARCH_SETTING] === '1', 'Capability OFF must preserve the saved display preference.');
+    public_search_default_assert(
+        !public_home_search_enabled(),
+        'An unavailable capability must still gate explicit ON.',
+    );
+    public_search_default_assert(
+        $GLOBALS['public_search_default_store'][PUBLIC_HOME_SEARCH_SETTING]
+            === '1',
+        'Capability OFF must preserve the saved display preference.',
+    );
     echo "Public search default policy tests passed.\n";
 }

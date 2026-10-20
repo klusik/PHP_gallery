@@ -49,7 +49,7 @@ use function Gallery\Core\url_for;
  * Build request concurrency statistics from completed request intervals.
  *
  * @param array<int,array<string,mixed>> $requests Completed request records.
- * @return array<string,mixed>
+ * @return array{completed_request_count:int,peak_concurrent_php_requests:int,peak_at_unix:float|null,distinct_pids:int,requests_by_pid:array<int,int>,aggregate_php_request_wall_ms:float,diagnostic_runner_intended_probe_concurrency:int,danger_threshold:int,dangerous_peak_detected:bool} Concurrency metrics calculated from request start/end intervals.
  */
 function admin_test_run_concurrency_summary(array $requests): array
 {
@@ -60,8 +60,18 @@ function admin_test_run_concurrency_summary(array $requests): array
         $start = (float) ($request['request_time_unix'] ?? 0.0);
         $end = (float) ($request['finished_at_unix'] ?? 0.0);
         if ($start > 0.0 && $end >= $start) {
-            $events[] = ['at' => $start, 'delta' => 1, 'type' => 'start', 'id' => (string) ($request['request_id'] ?? '')];
-            $events[] = ['at' => $end, 'delta' => -1, 'type' => 'end', 'id' => (string) ($request['request_id'] ?? '')];
+            $events[] = [
+                'at' => $start,
+                'delta' => 1,
+                'type' => 'start',
+                'id' => (string) ($request['request_id'] ?? ''),
+            ];
+            $events[] = [
+                'at' => $end,
+                'delta' => -1,
+                'type' => 'end',
+                'id' => (string) ($request['request_id'] ?? ''),
+            ];
             $duration += max(0.0, ($end - $start) * 1000);
         }
         $pid = (int) ($request['process']['pid'] ?? 0);
@@ -102,7 +112,7 @@ function admin_test_run_concurrency_summary(array $requests): array
  * Summarize database activity across every traced PHP request.
  *
  * @param array<int,array<string,mixed>> $requests Completed request records.
- * @return array<string,mixed>
+ * @return array<string, mixed> Database totals and rankings, including query/prepare/transaction counts, durations, failures, operation/table groupings, and slowest queries.
  */
 function admin_test_run_db_summary(array $requests): array
 {
@@ -127,24 +137,42 @@ function admin_test_run_db_summary(array $requests): array
         $totalMs += (float) ($dbState['query_total_ms'] ?? 0.0);
         $maxMs = max($maxMs, (float) ($dbState['query_max_ms'] ?? 0.0));
         foreach ((array) ($dbState['prepare_events'] ?? []) as $prepare) {
-            if (!is_array($prepare)) continue;
+            if (!is_array($prepare))
+                continue;
             $prepareCount++;
-            if (empty($prepare['ok'])) $prepareFailedCount++;
+            if (empty($prepare['ok']))
+                $prepareFailedCount++;
             $prepareTotalMs += (float) ($prepare['elapsed_ms'] ?? 0.0);
-            $prepareMaxMs = max($prepareMaxMs, (float) ($prepare['elapsed_ms'] ?? 0.0));
+            $prepareMaxMs = max(
+                $prepareMaxMs,
+                (float) ($prepare['elapsed_ms'] ?? 0.0),
+            );
         }
         $requestId = (string) ($request['request_id'] ?? '');
         $transactionBalance = 0;
-        foreach ((array) ($dbState['transaction_events'] ?? []) as $transaction) {
-            if (!is_array($transaction)) continue;
-            $transactionEvents[] = array_merge(['request_id' => $requestId], $transaction);
+        foreach ((array) (
+            $dbState['transaction_events'] ?? []
+        ) as $transaction) {
+            if (!is_array($transaction))
+                continue;
+            $transactionEvents[] = array_merge([
+                'request_id' => $requestId,
+            ], $transaction);
             if (empty($transaction['ok'])) {
                 $transactionFailedCount++;
                 continue;
             }
             $operation = (string) ($transaction['operation'] ?? '');
-            if ($operation === 'begin') $transactionBalance++;
-            if (($operation === 'commit' || $operation === 'rollback') && $transactionBalance > 0) $transactionBalance--;
+            if ($operation === 'begin')
+                $transactionBalance++;
+            if (
+                (
+                    $operation === 'commit'
+                    || $operation === 'rollback'
+                )
+                && $transactionBalance > 0
+            )
+                $transactionBalance--;
         }
         if ($transactionBalance !== 0) {
             $transactionBalances[$requestId] = $transactionBalance;
@@ -172,7 +200,12 @@ function admin_test_run_db_summary(array $requests): array
     }
     arsort($byOperation);
     arsort($byTable);
-    usort($slowest, static fn (array $a, array $b): int => $b['elapsed_ms'] <=> $a['elapsed_ms']);
+    usort(
+        $slowest,
+        static fn(array $a, array $b): int => (
+            $b['elapsed_ms'] <=> $a['elapsed_ms']
+        ),
+    );
     return [
         'query_count' => $queryCount,
         'failed_count' => $failed,

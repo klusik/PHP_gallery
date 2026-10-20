@@ -39,4 +39,7 @@ $projectRoot = dirname(__DIR__, 2);
 require_once $projectRoot . '/app/migration_repairs.php';
 
 $legacyPdo = isset($pdo) && $pdo instanceof \PDO ? $pdo : null;
-return \Gallery\Core\gallery_public_path_repair_migration_definition($legacyPdo, true);
+return \Gallery\Core\gallery_public_path_repair_migration_definition(
+    $legacyPdo,
+    true,
+);

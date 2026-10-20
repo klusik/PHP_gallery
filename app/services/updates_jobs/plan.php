@@ -88,31 +88,58 @@ function application_update_release_files(string $sourceRoot): array
  * @param array<int,string> $files Incoming project-relative files.
  * @return array<int,string> New or changed files, preserving activation order.
  */
-function application_update_changed_release_files(string $sourceRoot, string $destinationRoot, array $files): array
-{
+function application_update_changed_release_files(
+    string $sourceRoot,
+    string $destinationRoot,
+    array $files,
+): array {
     $changed = [];
     foreach ($files as $relative) {
         $relative = (string) $relative;
         application_update_assert_safe_target($sourceRoot, $relative);
-        application_update_assert_safe_target($destinationRoot, $relative, true);
-        $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        application_update_assert_safe_target(
+            $destinationRoot,
+            $relative,
+            true,
+        );
+        $source =
+            $sourceRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $destinationRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (!is_file($source) || is_link($source)) {
-            throw new RuntimeException('Prepared update source file is missing or unsafe.');
+            throw new RuntimeException(
+                'Prepared update source file is missing or unsafe.',
+            );
         }
         if (is_link($destination)) {
-            throw new RuntimeException('Updater refuses symbolic links in managed activation paths.');
+            throw new RuntimeException(
+                'Updater refuses symbolic links in managed activation paths.',
+            );
         }
         if (is_dir($destination)) {
-            throw new RuntimeException('Update cannot replace an active directory with a file.');
+            throw new RuntimeException(
+                'Update cannot replace an active directory with a file.',
+            );
         }
         if (is_file($destination)) {
             $sourceSize = filesize($source);
             $destinationSize = filesize($destination);
-            if ($sourceSize !== false && $destinationSize !== false && $sourceSize === $destinationSize) {
+            if (
+                $sourceSize !== false
+                && $destinationSize !== false
+                && $sourceSize === $destinationSize
+            ) {
                 $sourceHash = hash_file('sha256', $source);
                 $destinationHash = hash_file('sha256', $destination);
-                if (is_string($sourceHash) && is_string($destinationHash) && hash_equals($sourceHash, $destinationHash)) {
+                if (
+                    is_string($sourceHash)
+                    && is_string($destinationHash)
+                    && hash_equals($sourceHash, $destinationHash)
+                ) {
                     continue;
                 }
             }
@@ -133,26 +160,54 @@ function application_update_changed_release_files(string $sourceRoot, string $de
  * @param bool $cleanUnexpectedFiles Whether clean reinstall owns all non-protected paths.
  * @return array<int,string> Paths ordered deepest first.
  */
-function application_update_obsolete_paths(string $sourceRoot, string $destinationRoot, bool $cleanUnexpectedFiles): array
-{
+function application_update_obsolete_paths(
+    string $sourceRoot,
+    string $destinationRoot,
+    bool $cleanUnexpectedFiles,
+): array {
     if (!$cleanUnexpectedFiles) {
         $incoming = [];
-        foreach (application_update_release_files($sourceRoot) as $incomingPath) {
-            $incoming[release_file_policy_path_comparison_key($incomingPath)] = true;
+        foreach (application_update_release_files(
+            $sourceRoot,
+        ) as $incomingPath) {
+            $incoming[release_file_policy_path_comparison_key(
+                $incomingPath,
+            )] = true;
         }
         $removed = [];
-        foreach (release_file_policy_prior_updater_paths($destinationRoot) as $relative) {
-            if (isset($incoming[release_file_policy_path_comparison_key($relative)]) || application_update_path_is_protected($relative)) {
+        foreach (release_file_policy_prior_updater_paths(
+            $destinationRoot,
+        ) as $relative) {
+            if (
+                isset(
+                    $incoming[release_file_policy_path_comparison_key(
+                        $relative,
+                    )],
+                )
+                || application_update_path_is_protected($relative)
+            ) {
                 continue;
             }
-            application_update_assert_safe_target($destinationRoot, $relative, true);
-            $path = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            application_update_assert_safe_target(
+                $destinationRoot,
+                $relative,
+                true,
+            );
+            $path =
+                $destinationRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative);
             if (is_file($path) || is_link($path)) {
                 $removed[] = $relative;
             }
         }
         usort($removed, static function (string $left, string $right): int {
-            return substr_count($right, '/') <=> substr_count($left, '/') ?: strcmp($left, $right);
+            return (
+                substr_count($right, '/') <=> substr_count(
+                    $left,
+                    '/',
+                ) ?: strcmp($left, $right)
+            );
         });
         return $removed;
     }
@@ -160,22 +215,48 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
     $removed = [];
     $roots = [];
     if ($cleanUnexpectedFiles) {
-        foreach (new FilesystemIterator($destinationRoot, FilesystemIterator::SKIP_DOTS) as $entry) {
+        foreach (new FilesystemIterator(
+            $destinationRoot,
+            FilesystemIterator::SKIP_DOTS,
+        ) as $entry) {
             $relative = str_replace('\\', '/', $entry->getFilename());
-            if ($relative !== ''
-                && !application_update_path_is_protected($relative)) {
-                application_update_assert_safe_target($destinationRoot, $relative);
+            if (
+                $relative !== ''
+                && !application_update_path_is_protected($relative)
+            ) {
+                application_update_assert_safe_target(
+                    $destinationRoot,
+                    $relative,
+                );
                 $roots[] = $entry->getPathname();
             }
         }
     } else {
-        foreach (['app', 'public', 'database/migrations', 'scripts'] as $relativeRoot) {
-            $path = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
+        foreach ([
+            'app',
+            'public',
+            'database/migrations',
+            'scripts',
+        ] as $relativeRoot) {
+            $path =
+                $destinationRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
             if (file_exists($path) || is_link($path)) {
                 $roots[] = $path;
             }
         }
-        foreach (['index.php', 'install.php', 'reset.php', 'setup-gallery.php', 'deploy.bat', 'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md', 'config.example.php'] as $relativeFile) {
+        foreach ([
+            'index.php',
+            'install.php',
+            'reset.php',
+            'setup-gallery.php',
+            'deploy.bat',
+            'README.md',
+            'PATCH_NOTES.md',
+            'ARCHITECTURE.md',
+            'config.example.php',
+        ] as $relativeFile) {
             $path = $destinationRoot . '/' . $relativeFile;
             if (file_exists($path) || is_link($path)) {
                 $roots[] = $path;
@@ -187,7 +268,10 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
     // their parent directories are protected from recursive cleanup. Add them for
     // both normal updates and clean reinstalls without traversing gallery/cache data.
     foreach (application_update_managed_server_policy_files() as $relativeFile) {
-        $path = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativeFile);
+        $path =
+            $destinationRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativeFile);
         if (file_exists($path) || is_link($path)) {
             $roots[] = $path;
         }
@@ -195,7 +279,11 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
 
     $roots = array_values(array_unique($roots));
     foreach ($roots as $rootPath) {
-        $relativeRoot = str_replace('\\', '/', substr($rootPath, strlen($destinationRoot) + 1));
+        $relativeRoot = str_replace(
+            '\\',
+            '/',
+            substr($rootPath, strlen($destinationRoot) + 1),
+        );
         if ($relativeRoot === '') {
             continue;
         }
@@ -207,8 +295,17 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
             continue;
         }
         if (is_file($rootPath)) {
-            $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
-            if (!file_exists($source) && application_update_path_is_managed_by_updater($relativeRoot, $cleanUnexpectedFiles)) {
+            $source =
+                $sourceRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
+            if (
+                !file_exists($source)
+                && application_update_path_is_managed_by_updater(
+                    $relativeRoot,
+                    $cleanUnexpectedFiles,
+                )
+            ) {
                 $removed[] = $relativeRoot;
             }
             continue;
@@ -217,32 +314,72 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
             continue;
         }
 
-        $directory = new RecursiveDirectoryIterator($rootPath, FilesystemIterator::SKIP_DOTS);
+        $directory = new RecursiveDirectoryIterator(
+            $rootPath,
+            FilesystemIterator::SKIP_DOTS,
+        );
         $filter = new \RecursiveCallbackFilterIterator(
             $directory,
-            static function (\SplFileInfo $current) use ($destinationRoot): bool {
-                $relative = str_replace('\\', '/', substr($current->getPathname(), strlen($destinationRoot) + 1));
-                if ($relative === '' || application_update_path_is_protected($relative)) {
+            static function (\SplFileInfo $current) use (
+                $destinationRoot,
+            ): bool {
+                $relative = str_replace(
+                    '\\',
+                    '/',
+                    substr(
+                        $current->getPathname(),
+                        strlen($destinationRoot) + 1,
+                    ),
+                );
+                if (
+                    $relative === ''
+                    || application_update_path_is_protected($relative)
+                ) {
                     return false;
                 }
-                application_update_assert_safe_target($destinationRoot, $relative);
+                application_update_assert_safe_target(
+                    $destinationRoot,
+                    $relative,
+                );
                 return !$current->isLink();
-            }
+            },
         );
-        $iterator = new RecursiveIteratorIterator($filter, RecursiveIteratorIterator::CHILD_FIRST);
+        $iterator = new RecursiveIteratorIterator(
+            $filter,
+            RecursiveIteratorIterator::CHILD_FIRST,
+        );
         foreach ($iterator as $item) {
-            $relative = str_replace('\\', '/', substr($item->getPathname(), strlen($destinationRoot) + 1));
-            if ($relative === '' || !application_update_path_is_managed_by_updater($relative, $cleanUnexpectedFiles)) {
+            $relative = str_replace(
+                '\\',
+                '/',
+                substr($item->getPathname(), strlen($destinationRoot) + 1),
+            );
+            if (
+                $relative === ''
+                || !application_update_path_is_managed_by_updater(
+                    $relative,
+                    $cleanUnexpectedFiles,
+                )
+            ) {
                 continue;
             }
-            $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            $source =
+                $sourceRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative);
             if (!file_exists($source)) {
                 $removed[] = $relative;
             }
         }
 
-        if (application_update_path_is_managed_by_updater($relativeRoot, $cleanUnexpectedFiles)) {
-            $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
+        if (application_update_path_is_managed_by_updater(
+            $relativeRoot,
+            $cleanUnexpectedFiles,
+        )) {
+            $source =
+                $sourceRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
             if (!file_exists($source)) {
                 $removed[] = $relativeRoot;
             }
@@ -265,25 +402,34 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
  * @param array<int,string> $obsolete Obsolete destination paths.
  * @return array<int,string> File-level paths to snapshot or mark as newly created.
  */
-function application_update_backup_items_for_plan(string $root, array $files, array $obsolete): array
-{
+function application_update_backup_items_for_plan(
+    string $root,
+    array $files,
+    array $obsolete,
+): array {
     $items = [];
     foreach ($files as $relative) {
         $relative = (string) $relative;
         application_update_assert_safe_target($root, $relative, true);
-        $destination = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (is_link($destination)) {
-            throw new RuntimeException('Updater refuses symbolic links in managed activation paths.');
+            throw new RuntimeException(
+                'Updater refuses symbolic links in managed activation paths.',
+            );
         }
         if (is_dir($destination)) {
-            throw new RuntimeException('Update cannot replace an active directory with a file.');
+            throw new RuntimeException(
+                'Update cannot replace an active directory with a file.',
+            );
         }
         $items[$relative] = true;
     }
     foreach ($obsolete as $relative) {
         $relative = (string) $relative;
         application_update_assert_safe_target($root, $relative, true);
-        $destination = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (is_file($destination) || is_link($destination)) {
             $items[$relative] = true;
         }
@@ -303,38 +449,66 @@ function application_update_job_build_plan(array &$job): void
     if ($operation === 'rollback') {
         $sourceJobId = (string) ($job['parameters']['source_job_id'] ?? '');
         $sourceJobDir = application_update_job_dir($sourceJobId);
-        $metadata = application_update_read_json($sourceJobDir . '/rollback/metadata.json');
+        $metadata = application_update_read_json($sourceJobDir
+            . '/rollback/metadata.json');
         if ($metadata === [] || !is_dir($sourceJobDir . '/rollback/original')) {
-            throw new RuntimeException('Rollback source snapshot is incomplete.');
+            throw new RuntimeException(
+                'Rollback source snapshot is incomplete.',
+            );
         }
         $sourceRoot = $sourceJobDir . '/rollback/original';
         application_update_assert_gallery_edit_enforcement($sourceRoot);
         $rollbackIndex = array_values(array_unique(array_merge(
             (array) ($metadata['activation_files'] ?? []),
-            (array) ($metadata['obsolete_paths'] ?? [])
+            (array) ($metadata['obsolete_paths'] ?? []),
         )));
-        $rollbackFiles = release_file_policy_rollback_snapshot_paths($sourceRoot, $rollbackIndex);
+        $rollbackFiles = release_file_policy_rollback_snapshot_paths(
+            $sourceRoot,
+            $rollbackIndex,
+        );
         $job['checkpoints']['source_root'] = $sourceRoot;
         $files = application_update_changed_release_files(
             $sourceRoot,
             application_update_project_root(),
-            $rollbackFiles
+            $rollbackFiles,
         );
         $obsolete = [];
         foreach ((array) ($metadata['created_paths'] ?? []) as $relative) {
             $relative = application_update_safe_zip_entry((string) $relative);
-            if ($relative !== '' && !application_update_path_is_protected($relative)) {
+            if (
+                $relative !== ''
+                && !application_update_path_is_protected($relative)
+            ) {
                 $obsolete[] = $relative;
             }
         }
-        $job['checkpoints']['activation_files'] = array_values(array_unique($files));
-        $job['checkpoints']['obsolete_paths'] = array_values(array_unique($obsolete));
-        $job['checkpoints']['stage_index'] = (int) ($job['checkpoints']['stage_index'] ?? 0);
-        $job['checkpoints']['backup_index'] = (int) ($job['checkpoints']['backup_index'] ?? 0);
-        $job['checkpoints']['backup_items'] = application_update_backup_items_for_plan(application_update_project_root(), $files, $obsolete);
+        $job['checkpoints']['activation_files'] = array_values(array_unique(
+            $files,
+        ));
+        $job['checkpoints']['obsolete_paths'] = array_values(array_unique(
+            $obsolete,
+        ));
+        $job['checkpoints']['stage_index'] = (int) (
+            $job['checkpoints']['stage_index'] ?? 0
+        );
+        $job['checkpoints']['backup_index'] = (int) (
+            $job['checkpoints']['backup_index'] ?? 0
+        );
+        $job['checkpoints']['backup_items'] = application_update_backup_items_for_plan(
+            application_update_project_root(),
+            $files,
+            $obsolete,
+        );
         $job['checkpoints']['rollback_source_job_id'] = $sourceJobId;
-        $job['progress'] = ['current' => 0, 'total' => count($files), 'message' => 'Rollback activation plan prepared.', 'unit' => 'files'];
-        application_update_assert_activation_schema_known('application_update.job_rollback_activation');
+        $job['progress'] = [
+            'current' => 0,
+            'total' => count($files),
+            'message' => 'Rollback activation plan prepared.',
+            'unit' => 'files',
+        ];
+        application_update_assert_activation_schema_known(
+            'application_update.job_rollback_activation',
+        );
         application_update_save_job($job);
         return;
     }
@@ -344,63 +518,121 @@ function application_update_job_build_plan(array &$job): void
         throw new RuntimeException('Validated update source is missing.');
     }
     $root = application_update_project_root();
-    application_update_assert_activation_schema_known('application_update.job_activation');
+    application_update_assert_activation_schema_known(
+        'application_update.job_activation',
+    );
     application_update_assert_gallery_edit_enforcement($sourceRoot);
     $releaseFiles = application_update_release_files($sourceRoot);
     if ($releaseFiles === []) {
-        throw new RuntimeException('Validated update package contains no installable files.');
+        throw new RuntimeException(
+            'Validated update package contains no installable files.',
+        );
     }
-    $files = application_update_changed_release_files($sourceRoot, $root, $releaseFiles);
+    $files = application_update_changed_release_files(
+        $sourceRoot,
+        $root,
+        $releaseFiles,
+    );
     $cleanUnexpected = !empty($job['parameters']['clean_unexpected_files']);
-    $obsolete = application_update_obsolete_paths($sourceRoot, $root, $cleanUnexpected);
+    $obsolete = application_update_obsolete_paths(
+        $sourceRoot,
+        $root,
+        $cleanUnexpected,
+    );
 
     $job['checkpoints']['activation_files'] = $files;
     $job['checkpoints']['obsolete_paths'] = $obsolete;
-    $job['checkpoints']['stage_index'] = (int) ($job['checkpoints']['stage_index'] ?? 0);
-    $job['checkpoints']['backup_index'] = (int) ($job['checkpoints']['backup_index'] ?? 0);
-    $job['checkpoints']['backup_items'] = application_update_backup_items_for_plan(application_update_project_root(), $files, $obsolete);
-    $job['progress'] = ['current' => 0, 'total' => count($files), 'message' => 'Activation plan prepared.', 'unit' => 'files'];
+    $job['checkpoints']['stage_index'] = (int) (
+        $job['checkpoints']['stage_index'] ?? 0
+    );
+    $job['checkpoints']['backup_index'] = (int) (
+        $job['checkpoints']['backup_index'] ?? 0
+    );
+    $job['checkpoints']['backup_items'] = application_update_backup_items_for_plan(
+        application_update_project_root(),
+        $files,
+        $obsolete,
+    );
+    $job['progress'] = [
+        'current' => 0,
+        'total' => count($files),
+        'message' => 'Activation plan prepared.',
+        'unit' => 'files',
+    ];
     application_update_save_job($job);
 }
 
 /**
  * Copy and verify release files into the job ready tree in bounded batches.
  *
- * @param array $job Job state, updated by reference.
- * @param array $budget Worker budget.
+ * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
+ * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Worker time budget.
  * @return bool True when every activation file is staged.
  */
-function application_update_job_stage_files_slice(array &$job, array $budget): bool
-{
+function application_update_job_stage_files_slice(
+    array &$job,
+    array $budget,
+): bool {
     $jobDir = application_update_job_dir((string) $job['id']);
     $sourceRoot = (string) ($job['checkpoints']['source_root'] ?? '');
     $files = (array) ($job['checkpoints']['activation_files'] ?? []);
     $index = (int) ($job['checkpoints']['stage_index'] ?? 0);
     $processed = 0;
 
-    while ($index < count($files) && $processed < 40 && application_update_budget_allows($budget, 0.7)) {
+    while (
+        $index < count($files)
+        && $processed < 40
+        && application_update_budget_allows($budget, 0.7)
+    ) {
         $relative = (string) $files[$index];
-        $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        $destination = $jobDir . '/ready/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $source =
+            $sourceRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $jobDir
+            . '/ready/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         application_update_ensure_dir(dirname($destination));
-        if (!is_file($destination) || filesize($destination) !== filesize($source) || !hash_equals(hash_file('sha256', $source), hash_file('sha256', $destination))) {
+        if (
+            !is_file($destination)
+            || filesize($destination) !== filesize($source)
+            || !hash_equals(
+                hash_file('sha256', $source),
+                hash_file('sha256', $destination),
+            )
+        ) {
             $temporary = $destination . '.part';
             if (!copy($source, $temporary)) {
-                throw new RuntimeException('Could not stage a prepared update file.');
+                throw new RuntimeException(
+                    'Could not stage a prepared update file.',
+                );
             }
-            if (!hash_equals(hash_file('sha256', $source), hash_file('sha256', $temporary))) {
+            if (!hash_equals(
+                hash_file('sha256', $source),
+                hash_file('sha256', $temporary),
+            )) {
                 @unlink($temporary);
-                throw new RuntimeException('Prepared update file failed integrity verification.');
+                throw new RuntimeException(
+                    'Prepared update file failed integrity verification.',
+                );
             }
             if (!rename($temporary, $destination)) {
                 @unlink($temporary);
-                throw new RuntimeException('Could not commit a prepared update file.');
+                throw new RuntimeException(
+                    'Could not commit a prepared update file.',
+                );
             }
         }
         $index++;
         $processed++;
         $job['checkpoints']['stage_index'] = $index;
-        $job['progress'] = ['current' => $index, 'total' => count($files), 'message' => 'Staging release files outside the active installation.', 'unit' => 'files'];
+        $job['progress'] = [
+            'current' => $index,
+            'total' => count($files),
+            'message' => 'Staging release files outside the active installation.',
+            'unit' => 'files',
+        ];
         application_update_save_job($job);
     }
     return $index >= count($files);
@@ -417,8 +649,11 @@ function application_update_job_stage_files_slice(array &$job, array $budget): b
  * @param string $relative Project-relative path.
  * @return bool True when the path existed before activation.
  */
-function application_update_backup_path_to_directory(string $root, string $backupRoot, string $relative): bool
-{
+function application_update_backup_path_to_directory(
+    string $root,
+    string $backupRoot,
+    string $relative,
+): bool {
     application_update_ensure_dir($backupRoot);
     application_update_assert_safe_target($root, $relative, true);
     application_update_assert_safe_target($backupRoot, $relative, true);
@@ -427,47 +662,84 @@ function application_update_backup_path_to_directory(string $root, string $backu
         return false;
     }
     if (is_link($source)) {
-        throw new RuntimeException('Updater refuses to back up symbolic links in managed paths.');
+        throw new RuntimeException(
+            'Updater refuses to back up symbolic links in managed paths.',
+        );
     }
     if (is_file($source)) {
         $size = filesize($source);
-        if ($size === false || $size > 128 * 1024 * 1024) {
-            throw new RuntimeException('Managed active file is too large for a bounded rollback snapshot.');
+        if ($size === false || $size > (128 * 1024 * 1024)) {
+            throw new RuntimeException(
+                'Managed active file is too large for a bounded rollback snapshot.',
+            );
         }
-        $destination = $backupRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $backupRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         application_update_ensure_dir(dirname($destination));
         application_update_assert_safe_target($root, $relative);
         application_update_assert_safe_target($backupRoot, $relative, true);
         if (!is_file($destination)) {
             if (!copy($source, $destination)) {
-                throw new RuntimeException('Could not prepare rollback snapshot file.');
+                throw new RuntimeException(
+                    'Could not prepare rollback snapshot file.',
+                );
             }
         }
         return true;
     }
     if (is_dir($source)) {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
+            new RecursiveDirectoryIterator(
+                $source,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::SELF_FIRST,
         );
         foreach ($iterator as $item) {
             if ($item->isLink()) {
-                throw new RuntimeException('Updater refuses symbolic links in managed rollback paths.');
+                throw new RuntimeException(
+                    'Updater refuses symbolic links in managed rollback paths.',
+                );
             }
-            $suffix = str_replace('\\', '/', substr($item->getPathname(), strlen($source) + 1));
+            $suffix = str_replace(
+                '\\',
+                '/',
+                substr($item->getPathname(), strlen($source) + 1),
+            );
             $nestedRelative = $relative . '/' . $suffix;
             application_update_assert_safe_target($root, $nestedRelative);
-            application_update_assert_safe_target($backupRoot, $nestedRelative, true);
-            $destination = $backupRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $nestedRelative);
+            application_update_assert_safe_target(
+                $backupRoot,
+                $nestedRelative,
+                true,
+            );
+            $destination =
+                $backupRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $nestedRelative);
             if ($item->isDir()) {
                 application_update_ensure_dir($destination);
-                application_update_assert_safe_target($backupRoot, $nestedRelative);
+                application_update_assert_safe_target(
+                    $backupRoot,
+                    $nestedRelative,
+                );
             } else {
                 application_update_ensure_dir(dirname($destination));
                 application_update_assert_safe_target($root, $nestedRelative);
-                application_update_assert_safe_target($backupRoot, $nestedRelative, true);
-                if (!is_file($destination) && !copy($item->getPathname(), $destination)) {
-                    throw new RuntimeException('Could not prepare rollback snapshot directory.');
+                application_update_assert_safe_target(
+                    $backupRoot,
+                    $nestedRelative,
+                    true,
+                );
+                if (
+                    !is_file($destination)
+                    && !copy($item->getPathname(), $destination)
+                ) {
+                    throw new RuntimeException(
+                        'Could not prepare rollback snapshot directory.',
+                    );
                 }
             }
         }
@@ -479,8 +751,8 @@ function application_update_backup_path_to_directory(string $root, string $backu
 /**
  * Build the durable rollback snapshot in bounded batches before activation.
  *
- * @param array $job Job state, updated by reference.
- * @param array $budget Worker budget.
+ * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
+ * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Worker time budget.
  * @return bool True when rollback data is complete and closed on disk.
  */
 function application_update_job_backup_slice(array &$job, array $budget): bool
@@ -493,9 +765,17 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
     $createdPaths = (array) ($job['checkpoints']['created_paths'] ?? []);
     $processed = 0;
 
-    while ($index < count($items) && $processed < 30 && application_update_budget_allows($budget, 0.8)) {
+    while (
+        $index < count($items)
+        && $processed < 30
+        && application_update_budget_allows($budget, 0.8)
+    ) {
         $relative = (string) $items[$index];
-        $existed = application_update_backup_path_to_directory($root, $backupRoot, $relative);
+        $existed = application_update_backup_path_to_directory(
+            $root,
+            $backupRoot,
+            $relative,
+        );
         if (!$existed) {
             $createdPaths[$relative] = true;
         }
@@ -503,7 +783,12 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
         $processed++;
         $job['checkpoints']['backup_index'] = $index;
         $job['checkpoints']['created_paths'] = $createdPaths;
-        $job['progress'] = ['current' => $index, 'total' => count($items), 'message' => 'Preparing durable rollback snapshot.', 'unit' => 'paths'];
+        $job['progress'] = [
+            'current' => $index,
+            'total' => count($items),
+            'message' => 'Preparing durable rollback snapshot.',
+            'unit' => 'paths',
+        ];
         application_update_save_job($job);
     }
 
@@ -512,15 +797,31 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
             'job_id' => (string) $job['id'],
             'created_at' => time(),
             'created_paths' => array_keys($createdPaths),
-            'activation_files' => array_values((array) ($job['checkpoints']['activation_files'] ?? [])),
-            'obsolete_paths' => array_values((array) ($job['checkpoints']['obsolete_paths'] ?? [])),
+            'activation_files' => array_values(
+                (array) ($job['checkpoints']['activation_files'] ?? []),
+            ),
+            'obsolete_paths' => array_values(
+                (array) ($job['checkpoints']['obsolete_paths'] ?? []),
+            ),
             'settings_before' => [
-                'channel' => (string) app_setting('application_update_channel', 'stable'),
-                'beta_commit' => (string) app_setting('application_update_beta_commit', ''),
-                'beta_backup_path' => (string) app_setting('application_update_beta_backup_path', ''),
+                'channel' => (string) app_setting(
+                    'application_update_channel',
+                    'stable',
+                ),
+                'beta_commit' => (string) app_setting(
+                    'application_update_beta_commit',
+                    '',
+                ),
+                'beta_backup_path' => (string) app_setting(
+                    'application_update_beta_backup_path',
+                    '',
+                ),
             ],
         ];
-        application_update_write_json_atomic($jobDir . '/rollback/metadata.json', $metadata);
+        application_update_write_json_atomic(
+            $jobDir . '/rollback/metadata.json',
+            $metadata,
+        );
         $job['checkpoints']['backup_complete'] = true;
         application_update_save_job($job);
         return true;

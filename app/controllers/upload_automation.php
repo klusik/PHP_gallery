@@ -115,8 +115,9 @@ use function Gallery\Services\admin_log_event;
 /**
  * Send a JSON response for the upload automation endpoint.
  *
- * @param array $payload Payload value.
- * @param int $status Status value.
+ * @param array<string,mixed> $payload JSON response fields.
+ * @param int $status HTTP response status.
+ * @return void Emit the JSON response.
  */
 function upload_automation_json(array $payload, int $status = 200): void
 {
@@ -124,7 +125,6 @@ function upload_automation_json(array $payload, int $status = 200): void
     header('Content-Type: application/json');
     echo json_encode($payload);
 }
-
 
 /**
  * Decode the current upload automation JSON request body when present.
@@ -140,7 +140,13 @@ function upload_automation_json(array $payload, int $status = 200): void
 function upload_automation_json_request_payload(): array
 {
     // $contentType stores the request media type reported by the web server.
-    $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? ''));
+    $contentType = strtolower(
+        (string) (
+            $_SERVER['CONTENT_TYPE']
+            ?? $_SERVER['HTTP_CONTENT_TYPE']
+            ?? ''
+        ),
+    );
     if (!str_contains($contentType, 'application/json')) {
         return [];
     }
@@ -187,36 +193,69 @@ function upload_automation_request_action(array $jsonPayload): string
  * @param array<string,mixed> $gallery Gallery row for the authorized scope.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ * @return void Emit the action response or dispatch to its handler.
  */
-function upload_automation_handle_ai_action(string $action, int $galleryId, array $gallery, array $tokenRow, array $jsonPayload): void
-{
+function upload_automation_handle_ai_action(
+    string $action,
+    int $galleryId,
+    array $gallery,
+    array $tokenRow,
+    array $jsonPayload,
+): void {
     if (!feature_capability_effective_enabled('ai_image_metadata')) {
-        upload_automation_json(['ok' => false, 'error' => t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.')], 403);
+        upload_automation_json([
+            'ok' => false,
+            'error' => t(
+                'admin.gallery_editor.ai_reprocess_disabled',
+                'AI metadata is disabled in Admin > Features.',
+            ),
+        ], 403);
         return;
     }
 
     $schemaStatus = presentation_ai_image_analysis_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {
-            presentation_schema_log_degraded($schemaStatus, 'ai_worker_request');
-            upload_automation_json(['ok' => false, 'error' => 'AI image analysis storage could not be verified. Check Admin System Health and try again.'], 503);
+            presentation_schema_log_degraded(
+                $schemaStatus,
+                'ai_worker_request',
+            );
+            upload_automation_json([
+                'ok' => false,
+                'error' => 'AI image analysis storage could not be verified. Check Admin System Health and try again.',
+            ], 503);
         } else {
-            upload_automation_json(['ok' => false, 'error' => 'AI image analysis queue is not installed. Run pending database migrations first.'], 409);
+            upload_automation_json([
+                'ok' => false,
+                'error' => 'AI image analysis queue is not installed. Run pending database migrations first.',
+            ], 409);
         }
         return;
     }
 
     try {
         if ($action === 'ai_next_job') {
-            upload_automation_handle_ai_next_job($galleryId, $tokenRow, $jsonPayload);
+            upload_automation_handle_ai_next_job(
+                $galleryId,
+                $tokenRow,
+                $jsonPayload,
+            );
             return;
         }
         if ($action === 'ai_heartbeat') {
-            upload_automation_handle_ai_heartbeat($galleryId, $tokenRow, $jsonPayload);
+            upload_automation_handle_ai_heartbeat(
+                $galleryId,
+                $tokenRow,
+                $jsonPayload,
+            );
             return;
         }
         if ($action === 'ai_complete') {
-            upload_automation_handle_ai_complete($galleryId, $tokenRow, $jsonPayload);
+            upload_automation_handle_ai_complete(
+                $galleryId,
+                $tokenRow,
+                $jsonPayload,
+            );
             return;
         }
         if ($action === 'ai_asset') {
@@ -224,17 +263,31 @@ function upload_automation_handle_ai_action(string $action, int $galleryId, arra
             return;
         }
 
-        upload_automation_json(['ok' => false, 'error' => 'Unknown AI analysis action.'], 400);
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'Unknown AI analysis action.',
+        ], 400);
     } catch (PresentationSchemaUnavailableException $exception) {
-        upload_automation_json(['ok' => false, 'error' => 'AI image analysis storage could not be verified. Check Admin System Health and try again.'], 503);
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'AI image analysis storage could not be verified. Check Admin System Health and try again.',
+        ], 503);
     } catch (Throwable $exception) {
-        admin_log_event('error', 'upload_automation.ai_action_failed', 'AI image-analysis automation request failed.', [
-            'token_id' => (int) ($tokenRow['id'] ?? 0),
-            'gallery_id' => $galleryId,
-            'action' => $action,
-            'error_code' => schema_inspection_error_code($exception),
-        ]);
-        upload_automation_json(['ok' => false, 'error' => 'AI image analysis request could not be completed. Check the server log for the request context.'], 422);
+        admin_log_event(
+            'error',
+            'upload_automation.ai_action_failed',
+            'AI image-analysis automation request failed.',
+            [
+                'token_id' => (int) ($tokenRow['id'] ?? 0),
+                'gallery_id' => $galleryId,
+                'action' => $action,
+                'error_code' => schema_inspection_error_code($exception),
+            ],
+        );
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'AI image analysis request could not be completed. Check the server log for the request context.',
+        ], 422);
     }
 }
 
@@ -244,15 +297,38 @@ function upload_automation_handle_ai_action(string $action, int $galleryId, arra
  * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ * @return void Emit the claimed job or an empty-queue response.
  */
-function upload_automation_handle_ai_next_job(int $galleryId, array $tokenRow, array $jsonPayload): void
-{
-    $workerId = ai_image_analysis_normalize_worker_id((string) ($jsonPayload['worker_id'] ?? ''));
-    $modelName = ai_image_analysis_normalize_label((string) ($jsonPayload['model_name'] ?? ''), 'local-image-metadata');
-    $modelVersion = ai_image_analysis_normalize_label((string) ($jsonPayload['model_version'] ?? ''), '1');
-    $leaseSeconds = ai_image_analysis_normalize_lease_seconds((int) ($jsonPayload['lease_seconds'] ?? AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS));
+function upload_automation_handle_ai_next_job(
+    int $galleryId,
+    array $tokenRow,
+    array $jsonPayload,
+): void {
+    $workerId = ai_image_analysis_normalize_worker_id(
+        (string) ($jsonPayload['worker_id'] ?? ''),
+    );
+    $modelName = ai_image_analysis_normalize_label(
+        (string) ($jsonPayload['model_name'] ?? ''),
+        'local-image-metadata',
+    );
+    $modelVersion = ai_image_analysis_normalize_label(
+        (string) ($jsonPayload['model_version'] ?? ''),
+        '1',
+    );
+    $leaseSeconds = ai_image_analysis_normalize_lease_seconds(
+        (int) (
+            $jsonPayload['lease_seconds']
+            ?? AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS
+        ),
+    );
 
-    $job = ai_image_analysis_claim_next_job($galleryId, $workerId, $modelName, $modelVersion, $leaseSeconds);
+    $job = ai_image_analysis_claim_next_job(
+        $galleryId,
+        $workerId,
+        $modelName,
+        $modelVersion,
+        $leaseSeconds,
+    );
     mark_upload_automation_token_used((int) $tokenRow['id']);
 
     if ($job === null) {
@@ -265,15 +341,20 @@ function upload_automation_handle_ai_next_job(int $galleryId, array $tokenRow, a
         return;
     }
 
-    admin_log_event('info', 'upload_automation.ai_job_claimed', 'AI image-analysis job claimed by companion app worker.', [
-        'token_id' => (int) ($tokenRow['id'] ?? 0),
-        'gallery_id' => $galleryId,
-        'job_id' => (int) ($job['job_id'] ?? 0),
-        'image_id' => (int) ($job['image']['id'] ?? 0),
-        'worker_id' => $workerId,
-        'model_name' => $modelName,
-        'model_version' => $modelVersion,
-    ]);
+    admin_log_event(
+        'info',
+        'upload_automation.ai_job_claimed',
+        'AI image-analysis job claimed by companion app worker.',
+        [
+            'token_id' => (int) ($tokenRow['id'] ?? 0),
+            'gallery_id' => $galleryId,
+            'job_id' => (int) ($job['job_id'] ?? 0),
+            'image_id' => (int) ($job['image']['id'] ?? 0),
+            'worker_id' => $workerId,
+            'model_name' => $modelName,
+            'model_version' => $modelVersion,
+        ],
+    );
 
     upload_automation_json([
         'ok' => true,
@@ -288,17 +369,39 @@ function upload_automation_handle_ai_next_job(int $galleryId, array $tokenRow, a
  * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ * @return void Emit whether the active job lease was extended.
  */
-function upload_automation_handle_ai_heartbeat(int $galleryId, array $tokenRow, array $jsonPayload): void
-{
+function upload_automation_handle_ai_heartbeat(
+    int $galleryId,
+    array $tokenRow,
+    array $jsonPayload,
+): void {
     $jobId = (int) ($jsonPayload['job_id'] ?? 0);
     $claimToken = (string) ($jsonPayload['claim_token'] ?? '');
-    $leaseSeconds = ai_image_analysis_normalize_lease_seconds((int) ($jsonPayload['lease_seconds'] ?? AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS));
-    $progressPercent = max(0, min(99, (int) ($jsonPayload['progress_percent'] ?? 0)));
+    $leaseSeconds = ai_image_analysis_normalize_lease_seconds(
+        (int) (
+            $jsonPayload['lease_seconds']
+            ?? AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS
+        ),
+    );
+    $progressPercent = max(0, min(
+        99,
+        (int) ($jsonPayload['progress_percent'] ?? 0),
+    ));
     $message = (string) ($jsonPayload['message'] ?? 'Worker heartbeat.');
 
-    if (!ai_image_analysis_record_heartbeat($galleryId, $jobId, $claimToken, $leaseSeconds, $progressPercent, $message)) {
-        upload_automation_json(['ok' => false, 'error' => 'AI job claim is invalid or expired.'], 409);
+    if (!ai_image_analysis_record_heartbeat(
+        $galleryId,
+        $jobId,
+        $claimToken,
+        $leaseSeconds,
+        $progressPercent,
+        $message,
+    )) {
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'AI job claim is invalid or expired.',
+        ], 409);
         return;
     }
 
@@ -316,9 +419,13 @@ function upload_automation_handle_ai_heartbeat(int $galleryId, array $tokenRow, 
  * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ * @return void Emit the job completion or failure result.
  */
-function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, array $jsonPayload): void
-{
+function upload_automation_handle_ai_complete(
+    int $galleryId,
+    array $tokenRow,
+    array $jsonPayload,
+): void {
     $jobId = (int) ($jsonPayload['job_id'] ?? 0);
     $claimToken = (string) ($jsonPayload['claim_token'] ?? '');
     $status = (string) ($jsonPayload['status'] ?? 'succeeded');
@@ -326,20 +433,36 @@ function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, a
     if ($status === 'succeeded') {
         $metadata = $jsonPayload['metadata'] ?? [];
         if (!is_array($metadata)) {
-            throw new RuntimeException('AI metadata payload must be a JSON object.');
+            throw new RuntimeException(
+                'AI metadata payload must be a JSON object.',
+            );
         }
         $searchableText = (string) ($jsonPayload['searchable_text'] ?? '');
-        if (!ai_image_analysis_complete_success($galleryId, $jobId, $claimToken, $metadata, $searchableText)) {
-            upload_automation_json(['ok' => false, 'error' => 'AI job claim is invalid or expired.'], 409);
+        if (!ai_image_analysis_complete_success(
+            $galleryId,
+            $jobId,
+            $claimToken,
+            $metadata,
+            $searchableText,
+        )) {
+            upload_automation_json([
+                'ok' => false,
+                'error' => 'AI job claim is invalid or expired.',
+            ], 409);
             return;
         }
 
         mark_upload_automation_token_used((int) $tokenRow['id']);
-        admin_log_event('info', 'upload_automation.ai_job_completed', 'AI image-analysis job completed by companion app worker.', [
-            'token_id' => (int) ($tokenRow['id'] ?? 0),
-            'gallery_id' => $galleryId,
-            'job_id' => $jobId,
-        ]);
+        admin_log_event(
+            'info',
+            'upload_automation.ai_job_completed',
+            'AI image-analysis job completed by companion app worker.',
+            [
+                'token_id' => (int) ($tokenRow['id'] ?? 0),
+                'gallery_id' => $galleryId,
+                'job_id' => $jobId,
+            ],
+        );
         upload_automation_json([
             'ok' => true,
             'job_id' => $jobId,
@@ -349,19 +472,34 @@ function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, a
         return;
     }
 
-    $errorMessage = (string) ($jsonPayload['error'] ?? 'Worker failed without a detailed error.');
-    if (!ai_image_analysis_complete_failure($galleryId, $jobId, $claimToken, $errorMessage)) {
-        upload_automation_json(['ok' => false, 'error' => 'AI job claim is invalid or expired.'], 409);
+    $errorMessage = (string) (
+        $jsonPayload['error'] ?? 'Worker failed without a detailed error.'
+    );
+    if (!ai_image_analysis_complete_failure(
+        $galleryId,
+        $jobId,
+        $claimToken,
+        $errorMessage,
+    )) {
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'AI job claim is invalid or expired.',
+        ], 409);
         return;
     }
 
     mark_upload_automation_token_used((int) $tokenRow['id']);
-    admin_log_event('warning', 'upload_automation.ai_job_failed', 'AI image-analysis job failed and may be retried later.', [
-        'token_id' => (int) ($tokenRow['id'] ?? 0),
-        'gallery_id' => $galleryId,
-        'job_id' => $jobId,
-        'error' => ai_image_analysis_limit_text($errorMessage, 500),
-    ]);
+    admin_log_event(
+        'warning',
+        'upload_automation.ai_job_failed',
+        'AI image-analysis job failed and may be retried later.',
+        [
+            'token_id' => (int) ($tokenRow['id'] ?? 0),
+            'gallery_id' => $galleryId,
+            'job_id' => $jobId,
+            'error' => ai_image_analysis_limit_text($errorMessage, 500),
+        ],
+    );
     upload_automation_json([
         'ok' => true,
         'job_id' => $jobId,
@@ -374,6 +512,7 @@ function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, a
  * Stream the image asset for one active claimed AI job.
  *
  * @param int $galleryId Gallery identifier.
+ * @return void Stream the authorized asset or emit a JSON error.
  */
 function upload_automation_stream_ai_asset(int $galleryId): void
 {
@@ -381,16 +520,25 @@ function upload_automation_stream_ai_asset(int $galleryId): void
     $claimToken = (string) ($_POST['claim_token'] ?? '');
     $asset = ai_image_analysis_claimed_asset($galleryId, $jobId, $claimToken);
     if ($asset === null) {
-        upload_automation_json(['ok' => false, 'error' => 'AI job asset is not available or the claim expired.'], 409);
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'AI job asset is not available or the claim expired.',
+        ], 409);
         return;
     }
 
     $path = (string) $asset['path'];
     $mime = (string) $asset['mime'];
     $filename = basename((string) $asset['filename']);
-    header('Content-Type: ' . ($mime !== '' ? $mime : 'application/octet-stream'));
+    header(
+        'Content-Type: ' . ($mime !== '' ? $mime : 'application/octet-stream'),
+    );
     header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: attachment; filename="' . addcslashes($filename !== '' ? $filename : 'image.bin', "\"\\") . '"');
+    header(
+        'Content-Disposition: attachment; filename="'
+            . addcslashes($filename !== '' ? $filename : 'image.bin', "\"\\")
+            . '"',
+    );
     header('Cache-Control: no-store, private');
     header('Content-Length: ' . (int) filesize($path));
     readfile($path);
@@ -403,8 +551,10 @@ function upload_automation_stream_ai_asset(int $galleryId): void
  * @param string $name Exact field name to read.
  * @return string Trimmed scalar value, or an empty string for invalid input.
  */
-function upload_automation_flight_report_field(array $input, string $name): string
-{
+function upload_automation_flight_report_field(
+    array $input,
+    string $name,
+): string {
     $value = $input[$name] ?? null;
     return is_string($value) ? trim($value) : '';
 }
@@ -424,7 +574,7 @@ function upload_automation_handle_flight_report_action(
     int $galleryId,
     array $gallery,
     array $tokenRow,
-    array $jsonPayload
+    array $jsonPayload,
 ): void {
     // The authenticated route defers this attachment closure until a report action needs it.
     \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
@@ -432,15 +582,18 @@ function upload_automation_handle_flight_report_action(
     if ($action === 'flight_report_status') {
         if ($jsonPayload === []) {
             upload_automation_json(
-                ['ok' => false, 'error' => 'Report status requires a JSON request.'],
-                400
+                [
+                    'ok' => false,
+                    'error' => 'Report status requires a JSON request.',
+                ],
+                400,
             );
             return;
         }
         upload_automation_handle_flight_report_status(
             $gallery,
             $tokenRow,
-            $jsonPayload
+            $jsonPayload,
         );
         return;
     }
@@ -448,7 +601,7 @@ function upload_automation_handle_flight_report_action(
     upload_automation_handle_flight_report_upload(
         $galleryId,
         $gallery,
-        $tokenRow
+        $tokenRow,
     );
 }
 
@@ -463,14 +616,17 @@ function upload_automation_handle_flight_report_action(
 function upload_automation_handle_flight_report_status(
     array $gallery,
     array $tokenRow,
-    array $jsonPayload
+    array $jsonPayload,
 ): void {
     try {
         $status = upload_flight_report_status(
             $gallery,
             upload_automation_flight_report_field($jsonPayload, 'report_id'),
             upload_automation_flight_report_field($jsonPayload, 'language'),
-            strtolower(upload_automation_flight_report_field($jsonPayload, 'sha256'))
+            strtolower(upload_automation_flight_report_field(
+                $jsonPayload,
+                'sha256',
+            )),
         );
         try {
             mark_upload_automation_token_used((int) ($tokenRow['id'] ?? 0));
@@ -513,19 +669,26 @@ function upload_automation_handle_flight_report_status(
 function upload_automation_handle_flight_report_upload(
     int $galleryId,
     array $gallery,
-    array $tokenRow
+    array $tokenRow,
 ): void {
     $reportId = upload_automation_flight_report_field($_POST, 'report_id');
     $sessionId = upload_automation_flight_report_field($_POST, 'session_id');
     $language = upload_automation_flight_report_field($_POST, 'language');
-    $sha256 = strtolower(upload_automation_flight_report_field($_POST, 'sha256'));
+    $sha256 = strtolower(upload_automation_flight_report_field(
+        $_POST,
+        'sha256',
+    ));
     $upload = $_FILES['report'] ?? null;
-    $uploadError = is_array($upload) ? ($upload['error'] ?? null) : null;
-    $uploadPath = is_array($upload) ? ($upload['tmp_name'] ?? null) : null;
-    if (!is_array($upload) || !is_int($uploadError)
+    $uploadError = is_array($upload) ? $upload['error'] ?? null : null;
+    $uploadPath = is_array($upload) ? $upload['tmp_name'] ?? null : null;
+    if (
+        !is_array($upload)
+        || !is_int($uploadError)
         || $uploadError !== UPLOAD_ERR_OK
-        || !is_string($uploadPath) || $uploadPath === ''
-        || !is_uploaded_file($uploadPath)) {
+        || !is_string($uploadPath)
+        || $uploadPath === ''
+        || !is_uploaded_file($uploadPath)
+    ) {
         upload_automation_json([
             'ok' => false,
             'action' => 'flight_report',
@@ -543,7 +706,7 @@ function upload_automation_handle_flight_report_upload(
                 $reportId,
                 $sessionId,
                 $language,
-                $sha256
+                $sha256,
             ): array {
                 return upload_flight_report_attach(
                     $gallery,
@@ -551,9 +714,9 @@ function upload_automation_handle_flight_report_upload(
                     $reportId,
                     $sessionId,
                     $language,
-                    $sha256
+                    $sha256,
                 );
-            }
+            },
         );
         if ($result['conflict']) {
             upload_automation_json([
@@ -593,7 +756,10 @@ function upload_automation_handle_flight_report_upload(
 function cms_upload_automation_upload(): void
 {
     if (request_method() !== 'POST') {
-        upload_automation_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'Method not allowed.',
+        ], 405);
         return;
     }
 
@@ -609,17 +775,33 @@ function cms_upload_automation_upload(): void
     // $token stores the raw API key supplied by the watcher app.
     $token = upload_automation_request_token(
         (string) ($_SERVER['HTTP_X_GALLERY_API_KEY'] ?? ''),
-        (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''),
-        $_POST['api_key'] ?? ''
+        (string) (
+            $_SERVER['HTTP_AUTHORIZATION']
+            ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+            ?? ''
+        ),
+        $_POST['api_key'] ?? '',
     );
     // $tokenRow stores the database row that authorizes exactly one target gallery.
     $tokenRow = find_upload_automation_token($token);
     if (!$tokenRow) {
-        admin_log_event('warning', 'upload_automation.unauthorized', 'Upload automation request used a missing or invalid API key.', [
-            'remote_addr_present' => isset($_SERVER['REMOTE_ADDR']) && (string) $_SERVER['REMOTE_ADDR'] !== '',
-            'user_agent_present' => isset($_SERVER['HTTP_USER_AGENT']) && (string) $_SERVER['HTTP_USER_AGENT'] !== '',
-        ]);
-        upload_automation_json(['ok' => false, 'error' => 'Invalid or revoked API key.'], 401);
+        admin_log_event(
+            'warning',
+            'upload_automation.unauthorized',
+            'Upload automation request used a missing or invalid API key.',
+            [
+                'remote_addr_present' =>
+                    isset($_SERVER['REMOTE_ADDR'])
+                        && (string) $_SERVER['REMOTE_ADDR'] !== '',
+                'user_agent_present' =>
+                    isset($_SERVER['HTTP_USER_AGENT'])
+                        && (string) $_SERVER['HTTP_USER_AGENT'] !== '',
+            ],
+        );
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'Invalid or revoked API key.',
+        ], 401);
         return;
     }
 
@@ -628,7 +810,10 @@ function cms_upload_automation_upload(): void
     // $gallery stores the target gallery. The Python app does not choose this independently.
     $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     if (!$gallery) {
-        upload_automation_json(['ok' => false, 'error' => 'The gallery assigned to this API key no longer exists.'], 404);
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'The gallery assigned to this API key no longer exists.',
+        ], 404);
         return;
     }
 
@@ -647,13 +832,13 @@ function cms_upload_automation_upload(): void
             $galleryId,
             $gallery,
             $candidates,
-            $deepCheck
+            $deepCheck,
         );
         $inventoryResponse['capabilities'] = array_merge(
             is_array($inventoryResponse['capabilities'] ?? null)
                 ? $inventoryResponse['capabilities']
                 : [],
-            ['flight_reports_v1' => true]
+            ['flight_reports_v1' => true],
         );
         upload_automation_json($inventoryResponse);
         return;
@@ -665,26 +850,42 @@ function cms_upload_automation_upload(): void
             $galleryId,
             $gallery,
             $tokenRow,
-            $jsonPayload
+            $jsonPayload,
         );
         return;
     }
 
     if ($action === 'revoke') {
         $tokenId = (int) ($tokenRow['id'] ?? 0);
-        if ($tokenId <= 0 || !revoke_gallery_upload_automation_token($galleryId, $tokenId)) {
-            admin_log_event('error', 'upload_automation.revoke_failed', 'Upload automation API-key revocation failed.', [
-                'token_id' => $tokenId,
-                'gallery_id' => $galleryId,
-            ]);
-            upload_automation_json(['ok' => false, 'error' => 'API key could not be revoked.'], 422);
+        if (
+            $tokenId <= 0
+            || !revoke_gallery_upload_automation_token($galleryId, $tokenId)
+        ) {
+            admin_log_event(
+                'error',
+                'upload_automation.revoke_failed',
+                'Upload automation API-key revocation failed.',
+                [
+                    'token_id' => $tokenId,
+                    'gallery_id' => $galleryId,
+                ],
+            );
+            upload_automation_json([
+                'ok' => false,
+                'error' => 'API key could not be revoked.',
+            ], 422);
             return;
         }
 
-        admin_log_event('info', 'upload_automation.token_revoked', 'Upload automation API key revoked through the companion app.', [
-            'token_id' => $tokenId,
-            'gallery_id' => $galleryId,
-        ]);
+        admin_log_event(
+            'info',
+            'upload_automation.token_revoked',
+            'Upload automation API key revoked through the companion app.',
+            [
+                'token_id' => $tokenId,
+                'gallery_id' => $galleryId,
+            ],
+        );
         upload_automation_json([
             'ok' => true,
             'action' => 'revoke',
@@ -696,36 +897,59 @@ function cms_upload_automation_upload(): void
     }
 
     if (str_starts_with($action, 'ai_')) {
-        upload_automation_handle_ai_action($action, $galleryId, $gallery, $tokenRow, $jsonPayload);
+        upload_automation_handle_ai_action(
+            $action,
+            $galleryId,
+            $gallery,
+            $tokenRow,
+            $jsonPayload,
+        );
         return;
     }
 
     // $submittedGalleryId stores an optional client-side assertion, not the source of authority.
     $submittedGalleryId = (int) ($_POST['gallery_id'] ?? 0);
     if ($submittedGalleryId > 0 && $submittedGalleryId !== $galleryId) {
-        admin_log_event('warning', 'upload_automation.gallery_mismatch', 'Upload automation request tried to use an API key for a different gallery.', [
-            'token_id' => (int) $tokenRow['id'],
-            'token_gallery_id' => $galleryId,
-            'submitted_gallery_id' => $submittedGalleryId,
-        ]);
-        upload_automation_json(['ok' => false, 'error' => 'API key is not allowed to upload to the submitted gallery.'], 403);
+        admin_log_event(
+            'warning',
+            'upload_automation.gallery_mismatch',
+            'Upload automation request tried to use an API key for a different gallery.',
+            [
+                'token_id' => (int) $tokenRow['id'],
+                'token_gallery_id' => $galleryId,
+                'submitted_gallery_id' => $submittedGalleryId,
+            ],
+        );
+        upload_automation_json([
+            'ok' => false,
+            'error' => 'API key is not allowed to upload to the submitted gallery.',
+        ], 403);
         return;
     }
 
     try {
         // $files stores the multipart files in the same shape used by the browser upload form.
         $files = upload_automation_uploaded_files(
-            isset($_FILES['images']) && is_array($_FILES['images']) ? $_FILES['images'] : null,
-            isset($_FILES['image']) && is_array($_FILES['image']) ? $_FILES['image'] : null
+            isset($_FILES['images']) && is_array($_FILES['images'])
+                ? $_FILES['images']
+                : null,
+            isset($_FILES['image']) && is_array($_FILES['image'])
+                ? $_FILES['image']
+                : null,
         );
         // $imageClientIds stores optional request-local IDs aligned with images[].
-        $imageClientIds = upload_automation_image_client_ids($_POST['image_client_ids'] ?? []);
+        $imageClientIds = upload_automation_image_client_ids(
+            $_POST['image_client_ids'] ?? [],
+        );
         // $clientThumbnailEntries stores optional thumbnails generated by the companion app.
         $clientThumbnailEntries = upload_automation_client_thumbnail_entries(
-            isset($_FILES['client_thumbnails']) && is_array($_FILES['client_thumbnails']) ? $_FILES['client_thumbnails'] : null,
+            isset($_FILES['client_thumbnails'])
+            && is_array($_FILES['client_thumbnails'])
+                ? $_FILES['client_thumbnails']
+                : null,
             $_POST['thumbnail_client_ids'] ?? [],
             $_POST['thumbnail_sizes'] ?? [],
-            $_POST['thumbnail_formats'] ?? []
+            $_POST['thumbnail_formats'] ?? [],
         );
         // $simCameraMetadata stores optional Flight Simulator camera coordinates submitted by the companion app.
         $simCameraMetadata = upload_automation_sim_camera_metadata($_POST);
@@ -739,24 +963,50 @@ function cms_upload_automation_upload(): void
         // network uploads. The lock remains authoritative for other clients and
         // prevents two PHP workers from inserting the same discovered image row
         // concurrently.
-        $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use ($galleryId, $gallery, $entries, $clientThumbnailEntries, $imageClientIds, $simCameraMetadata, &$postUploadErrors): array {
+        $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use (
+            $galleryId,
+            $gallery,
+            $entries,
+            $clientThumbnailEntries,
+            $imageClientIds,
+            $simCameraMetadata,
+            &$postUploadErrors,
+        ): array {
             // $stored stores the existing upload pipeline result after filesystem storage and image scan.
             $stored = store_uploaded_gallery_images($galleryId, $entries);
             // Keep database-only watcher inventory authoritative immediately after this API upload.
             try {
-                $checksumResult = upload_automation_refresh_stored_checksums($galleryId, $gallery, $stored);
+                $checksumResult = upload_automation_refresh_stored_checksums(
+                    $galleryId,
+                    $gallery,
+                    $stored,
+                );
                 if ((int) ($checksumResult['failed'] ?? 0) > 0) {
-                    $postUploadErrors[] = 'Upload checksum indexing was incomplete: ' . implode('; ', array_slice((array) ($checksumResult['errors'] ?? []), 0, 3));
+                    $postUploadErrors[] =
+                        'Upload checksum indexing was incomplete: '
+                        . implode('; ', array_slice(
+                            (array) ($checksumResult['errors'] ?? []),
+                            0,
+                            3,
+                        ));
                 }
             } catch (Throwable $exception) {
-                $postUploadErrors[] = 'Upload checksum indexing failed: ' . $exception->getMessage();
+                $postUploadErrors[] =
+                    'Upload checksum indexing failed: '
+                    . $exception->getMessage();
             }
             // $simCameraResult stores the optional GPS metadata update for accepted screenshot uploads.
             $simCameraResult = ['attached' => 0, 'skipped' => 0, 'error' => ''];
             try {
-                $simCameraResult = upload_automation_apply_sim_camera_metadata($galleryId, $stored, $simCameraMetadata);
+                $simCameraResult = upload_automation_apply_sim_camera_metadata(
+                    $galleryId,
+                    $stored,
+                    $simCameraMetadata,
+                );
                 if ((string) ($simCameraResult['error'] ?? '') !== '') {
-                    $postUploadErrors[] = 'Flight Simulator camera metadata was skipped: ' . (string) $simCameraResult['error'];
+                    $postUploadErrors[] =
+                        'Flight Simulator camera metadata was skipped: '
+                        . (string) $simCameraResult['error'];
                 }
             } catch (Throwable $exception) {
                 $simCameraResult = [
@@ -764,13 +1014,26 @@ function cms_upload_automation_upload(): void
                     'skipped' => count((array) ($stored['image_ids'] ?? [])),
                     'error' => $exception->getMessage(),
                 ];
-                $postUploadErrors[] = 'Flight Simulator camera metadata failed: ' . $exception->getMessage();
+                $postUploadErrors[] =
+                    'Flight Simulator camera metadata failed: '
+                    . $exception->getMessage();
             }
 
             // $clientThumbnailResult stores the thumbnails installed from the client request.
-            $clientThumbnailResult = ['installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+            $clientThumbnailResult = [
+                'installed' => 0,
+                'skipped' => 0,
+                'failed' => 0,
+                'errors' => [],
+            ];
             try {
-                $clientThumbnailResult = upload_automation_install_client_thumbnails($galleryId, $gallery, $clientThumbnailEntries, $imageClientIds, $stored);
+                $clientThumbnailResult = upload_automation_install_client_thumbnails(
+                    $galleryId,
+                    $gallery,
+                    $clientThumbnailEntries,
+                    $imageClientIds,
+                    $stored,
+                );
             } catch (Throwable $exception) {
                 $clientThumbnailResult = [
                     'installed' => 0,
@@ -778,7 +1041,9 @@ function cms_upload_automation_upload(): void
                     'failed' => count($clientThumbnailEntries),
                     'errors' => [$exception->getMessage()],
                 ];
-                $postUploadErrors[] = 'Client thumbnail installation failed: ' . $exception->getMessage();
+                $postUploadErrors[] =
+                    'Client thumbnail installation failed: '
+                    . $exception->getMessage();
             }
 
             return [$stored, $clientThumbnailResult, $simCameraResult];
@@ -790,7 +1055,10 @@ function cms_upload_automation_upload(): void
         // $simCameraResult stores the optional camera-location metadata outcome.
         $simCameraResult = $uploadResult[2];
         // $createThumbnails stores whether the watcher asked the server to create derivatives immediately.
-        $createThumbnails = upload_automation_bool($_POST['create_thumbnails'] ?? '1', true);
+        $createThumbnails = upload_automation_bool(
+            $_POST['create_thumbnails'] ?? '1',
+            true,
+        );
         // $thumbnails stores the count of generated thumbnails and display derivatives.
         $thumbnails = 0;
         // $thumbnailFailed stores derivative failures reported by the thumbnail service.
@@ -807,16 +1075,23 @@ function cms_upload_automation_upload(): void
                         continue;
                     }
                     // $thumbnailResult stores per-image derivative generation counts.
-                    $thumbnailResult = create_image_thumbnails_result($image, $gallery);
+                    $thumbnailResult = create_image_thumbnails_result(
+                        $image,
+                        $gallery,
+                    );
                     $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
                     $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
-                    foreach ((array) ($thumbnailResult['errors'] ?? []) as $thumbnailError) {
+                    foreach ((array) (
+                        $thumbnailResult['errors'] ?? []
+                    ) as $thumbnailError) {
                         $thumbnailErrors[] = (string) $thumbnailError;
                     }
                 } catch (Throwable $exception) {
                     $thumbnailFailed++;
                     $thumbnailErrors[] = $exception->getMessage();
-                    $postUploadErrors[] = 'Thumbnail generation failed: ' . $exception->getMessage();
+                    $postUploadErrors[] =
+                        'Thumbnail generation failed: '
+                        . $exception->getMessage();
                 }
             }
         }
@@ -824,45 +1099,82 @@ function cms_upload_automation_upload(): void
         try {
             mark_upload_automation_token_used((int) $tokenRow['id']);
         } catch (Throwable $exception) {
-            $postUploadErrors[] = 'API-key last-used timestamp failed: ' . $exception->getMessage();
+            $postUploadErrors[] =
+                'API-key last-used timestamp failed: '
+                . $exception->getMessage();
         }
 
-        admin_log_event('info', 'upload_automation.images_uploaded', 'Upload automation stored images through the existing gallery upload pipeline.', [
-            'token_id' => (int) $tokenRow['id'],
-            'gallery_id' => $galleryId,
-            'folder_path' => (string) ($gallery['folder_path'] ?? ''),
-            'uploaded' => (int) ($stored['uploaded'] ?? 0),
-            'scanned' => (int) ($stored['scanned'] ?? 0),
-            'thumbnails' => $thumbnails,
-            'thumbnail_failed' => $thumbnailFailed,
-            'client_thumbnails_installed' => (int) ($clientThumbnailResult['installed'] ?? 0),
-            'client_thumbnails_skipped' => (int) ($clientThumbnailResult['skipped'] ?? 0),
-            'client_thumbnails_failed' => (int) ($clientThumbnailResult['failed'] ?? 0),
-            'sim_camera_metadata_attached' => (int) ($simCameraResult['attached'] ?? 0),
-            'sim_camera_metadata_skipped' => (int) ($simCameraResult['skipped'] ?? 0),
-            'post_upload_errors' => array_values(array_unique(array_filter($postUploadErrors))),
-            'filenames' => array_values((array) ($stored['filenames'] ?? [])),
-            'renamed' => (int) ($stored['renamed'] ?? 0),
-            'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
-        ]);
+        admin_log_event(
+            'info',
+            'upload_automation.images_uploaded',
+            'Upload automation stored images through the existing gallery upload pipeline.',
+            [
+                'token_id' => (int) $tokenRow['id'],
+                'gallery_id' => $galleryId,
+                'folder_path' => (string) ($gallery['folder_path'] ?? ''),
+                'uploaded' => (int) ($stored['uploaded'] ?? 0),
+                'scanned' => (int) ($stored['scanned'] ?? 0),
+                'thumbnails' => $thumbnails,
+                'thumbnail_failed' => $thumbnailFailed,
+                'client_thumbnails_installed' => (int) (
+                    $clientThumbnailResult['installed'] ?? 0
+                ),
+                'client_thumbnails_skipped' => (int) (
+                    $clientThumbnailResult['skipped'] ?? 0
+                ),
+                'client_thumbnails_failed' => (int) (
+                    $clientThumbnailResult['failed'] ?? 0
+                ),
+                'sim_camera_metadata_attached' => (int) (
+                    $simCameraResult['attached'] ?? 0
+                ),
+                'sim_camera_metadata_skipped' => (int) (
+                    $simCameraResult['skipped'] ?? 0
+                ),
+                'post_upload_errors' => array_values(array_unique(array_filter(
+                    $postUploadErrors,
+                ))),
+                'filenames' => array_values(
+                    (array) ($stored['filenames'] ?? []),
+                ),
+                'renamed' => (int) ($stored['renamed'] ?? 0),
+                'rename_failures' => array_values(
+                    (array) ($stored['rename_failures'] ?? []),
+                ),
+            ],
+        );
 
         upload_automation_json([
             'ok' => true,
             'gallery_id' => $galleryId,
             'gallery_title' => (string) ($gallery['title'] ?? ''),
             'gallery_url' => gallery_public_url($gallery),
-            'edit_url' => admin_edit_gallery_tab_url($galleryId, 'admin-edit-images'),
+            'edit_url' => admin_edit_gallery_tab_url(
+                $galleryId,
+                'admin-edit-images',
+            ),
             'uploaded' => (int) ($stored['uploaded'] ?? 0),
             'scanned' => (int) ($stored['scanned'] ?? 0),
-            'image_ids' => array_map('intval', (array) ($stored['image_ids'] ?? [])),
+            'image_ids' => array_map(
+                'intval',
+                (array) ($stored['image_ids'] ?? []),
+            ),
             'filenames' => array_values((array) ($stored['filenames'] ?? [])),
             'renamed' => (int) ($stored['renamed'] ?? 0),
-            'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
-            'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
+            'rename_warnings' => array_values(
+                (array) ($stored['rename_warnings'] ?? []),
+            ),
+            'rename_failures' => array_values(
+                (array) ($stored['rename_failures'] ?? []),
+            ),
             'thumbnails' => $thumbnails,
             'thumbnail_failed' => $thumbnailFailed,
-            'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
-            'post_upload_errors' => array_values(array_unique(array_filter($postUploadErrors))),
+            'thumbnail_errors' => array_values(array_unique(array_filter(
+                $thumbnailErrors,
+            ))),
+            'post_upload_errors' => array_values(array_unique(array_filter(
+                $postUploadErrors,
+            ))),
             'sim_camera_metadata' => [
                 'attached' => (int) ($simCameraResult['attached'] ?? 0),
                 'skipped' => (int) ($simCameraResult['skipped'] ?? 0),
@@ -872,21 +1184,33 @@ function cms_upload_automation_upload(): void
                 'installed' => (int) ($clientThumbnailResult['installed'] ?? 0),
                 'skipped' => (int) ($clientThumbnailResult['skipped'] ?? 0),
                 'failed' => (int) ($clientThumbnailResult['failed'] ?? 0),
-                'errors' => array_values((array) ($clientThumbnailResult['errors'] ?? [])),
+                'errors' => array_values(
+                    (array) ($clientThumbnailResult['errors'] ?? []),
+                ),
             ],
         ]);
     } catch (Throwable $exception) {
-        admin_log_event('error', 'upload_automation.upload_failed', 'Upload automation request failed.', [
-            'token_id' => (int) $tokenRow['id'],
-            'gallery_id' => $galleryId,
+        admin_log_event(
+            'error',
+            'upload_automation.upload_failed',
+            'Upload automation request failed.',
+            [
+                'token_id' => (int) $tokenRow['id'],
+                'gallery_id' => $galleryId,
+                'error' => $exception->getMessage(),
+            ],
+        );
+        upload_automation_json([
+            'ok' => false,
             'error' => $exception->getMessage(),
-        ]);
-        upload_automation_json(['ok' => false, 'error' => $exception->getMessage()], 422);
+        ], 422);
     }
 }
 
 /**
  * Generate or revoke a gallery-scoped upload automation API key from the admin UI.
+ *
+ * @return void Emit the mutation response or redirect to the token manager.
  */
 function cms_admin_upload_automation_token(): void
 {
@@ -900,7 +1224,9 @@ function cms_admin_upload_automation_token(): void
             upload_automation_token_json_response(admin_mutation_error_envelope(
                 t('auth.admin_required', 'Admin access is required.'),
                 'auth.admin_required',
-                upload_automation_token_mutation_descriptor((string) ($_POST['action'] ?? 'create'))
+                upload_automation_token_mutation_descriptor(
+                    (string) ($_POST['action'] ?? 'create'),
+                ),
             ), 403);
             return;
         }
@@ -909,7 +1235,9 @@ function cms_admin_upload_automation_token(): void
             upload_automation_token_json_response(admin_mutation_error_envelope(
                 t('security.invalid_csrf', 'Invalid CSRF token.'),
                 'security.invalid_csrf',
-                upload_automation_token_mutation_descriptor((string) ($_POST['action'] ?? 'create'))
+                upload_automation_token_mutation_descriptor(
+                    (string) ($_POST['action'] ?? 'create'),
+                ),
             ), 400);
             return;
         }
@@ -927,7 +1255,9 @@ function cms_admin_upload_automation_token(): void
             upload_automation_token_json_response(admin_mutation_error_envelope(
                 t('admin.gallery_not_found', 'Gallery not found.'),
                 'gallery.not_found',
-                upload_automation_token_mutation_descriptor((string) ($_POST['action'] ?? 'create'))
+                upload_automation_token_mutation_descriptor(
+                    (string) ($_POST['action'] ?? 'create'),
+                ),
             ), 404);
             return;
         }
@@ -951,27 +1281,51 @@ function cms_admin_upload_automation_token(): void
             // $tokenId stores the database row to revoke.
             $tokenId = (int) ($_POST['token_id'] ?? 0);
             if (!revoke_gallery_upload_automation_token($galleryId, $tokenId)) {
-                throw new RuntimeException(t('upload_automation.error.revoke_failed', 'The selected API key could not be revoked.'));
+                throw new RuntimeException(t(
+                    'upload_automation.error.revoke_failed',
+                    'The selected API key could not be revoked.',
+                ));
             }
-            admin_log_event('info', 'upload_automation.token_revoked', 'Admin revoked a gallery upload automation API key.', [
-                'gallery_id' => $galleryId,
-                'token_id' => $tokenId,
-            ]);
-            $notice = t('upload_automation.notice.revoked', 'Upload automation API key revoked.');
+            admin_log_event(
+                'info',
+                'upload_automation.token_revoked',
+                'Admin revoked a gallery upload automation API key.',
+                [
+                    'gallery_id' => $galleryId,
+                    'token_id' => $tokenId,
+                ],
+            );
+            $notice = t(
+                'upload_automation.notice.revoked',
+                'Upload automation API key revoked.',
+            );
             flash_message('admin_notice', $notice);
         } else {
             // $user stores the current admin user that created the key.
             $user = current_user();
             // $created stores the new API key. The raw token is put into the session for one display only.
-            $created = create_gallery_upload_automation_token($galleryId, $user ? (int) $user['id'] : null, (string) ($_POST['label'] ?? ''));
+            $created = create_gallery_upload_automation_token(
+                $galleryId,
+                $user ? (int) $user['id'] : null,
+                (string) ($_POST['label'] ?? ''),
+            );
             $tokenId = (int) $created['id'];
-            $_SESSION['upload_automation_new_token_' . $galleryId] = $created['token'];
-            admin_log_event('info', 'upload_automation.token_created', 'Admin created a gallery upload automation API key.', [
-                'gallery_id' => $galleryId,
-                'token_id' => $tokenId,
-                'label' => (string) $created['label'],
-            ]);
-            $notice = t('upload_automation.notice.created', 'Upload automation API key created. Copy it now. It will not be shown again.');
+            $_SESSION['upload_automation_new_token_' . $galleryId] =
+                $created['token'];
+            admin_log_event(
+                'info',
+                'upload_automation.token_created',
+                'Admin created a gallery upload automation API key.',
+                [
+                    'gallery_id' => $galleryId,
+                    'token_id' => $tokenId,
+                    'label' => (string) $created['label'],
+                ],
+            );
+            $notice = t(
+                'upload_automation.notice.created',
+                'Upload automation API key created. Copy it now. It will not be shown again.',
+            );
             flash_message('admin_notice', $notice);
         }
     } catch (Throwable $exception) {
@@ -980,11 +1334,19 @@ function cms_admin_upload_automation_token(): void
         if ($exception instanceof MutationSchemaUnavailableException) {
             $failureStatus = $exception->state === 'unknown' ? 503 : 409;
         }
-        admin_log_event('error', 'upload_automation.token_action_failed', 'Upload automation API-key management failed.', [
-            'gallery_id' => $galleryId,
-            'action' => $action === 'revoke' ? 'revoke' : 'create',
-            'schema_state' => $exception instanceof MutationSchemaUnavailableException ? $exception->state : 'not_schema_policy',
-        ]);
+        admin_log_event(
+            'error',
+            'upload_automation.token_action_failed',
+            'Upload automation API-key management failed.',
+            [
+                'gallery_id' => $galleryId,
+                'action' => $action === 'revoke' ? 'revoke' : 'create',
+                'schema_state' => $exception
+                instanceof MutationSchemaUnavailableException
+                    ? $exception->state
+                    : 'not_schema_policy',
+            ],
+        );
         flash_message('admin_notice', $notice);
     }
 
@@ -994,7 +1356,10 @@ function cms_admin_upload_automation_token(): void
         // $normalizedAction stores the stable lifecycle verb emitted by both canonical and compatibility fields.
         $normalizedAction = $action === 'revoke' ? 'revoke' : 'create';
         // $mutation stores typed identity for the API-key row changed by this request.
-        $mutation = upload_automation_token_mutation_descriptor($normalizedAction, $tokenId);
+        $mutation = upload_automation_token_mutation_descriptor(
+            $normalizedAction,
+            $tokenId,
+        );
         if ($actionOk) {
             // $payload stores the canonical side-panel completion envelope. API-key changes have no public gallery context.
             $payload = admin_mutation_success_envelope(
@@ -1002,7 +1367,7 @@ function cms_admin_upload_automation_token(): void
                 $mutation,
                 admin_mutation_panel_metadata('gallery-edit', $returnUrl, true),
                 [],
-                ['redirect_url' => $returnUrl]
+                ['redirect_url' => $returnUrl],
             );
         } else {
             // $payload stores a canonical expected-error envelope while preserving the direct-page fallback target.
@@ -1010,7 +1375,7 @@ function cms_admin_upload_automation_token(): void
                 $notice,
                 'upload_automation.token_' . $normalizedAction . '_failed',
                 $mutation,
-                ['redirect_url' => $returnUrl]
+                ['redirect_url' => $returnUrl],
             );
         }
 
@@ -1021,7 +1386,10 @@ function cms_admin_upload_automation_token(): void
             'action' => $normalizedAction,
             'token_id' => $tokenId,
         ];
-        upload_automation_token_json_response($payload, $actionOk ? 200 : $failureStatus);
+        upload_automation_token_json_response(
+            $payload,
+            $actionOk ? 200 : $failureStatus,
+        );
         return;
     }
 
@@ -1050,16 +1418,18 @@ function upload_automation_token_request_wants_json(): bool
  *
  * @param string $action Requested create or revoke action.
  * @param int $tokenId Created or revoked token row id when known.
- * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}
+ * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>} Typed descriptor for the token mutation.
  */
-function upload_automation_token_mutation_descriptor(string $action, int $tokenId = 0): array
-{
+function upload_automation_token_mutation_descriptor(
+    string $action,
+    int $tokenId = 0,
+): array {
     $normalizedAction = $action === 'revoke' ? 'revoke' : 'create';
     return admin_mutation_descriptor(
         'upload_automation.token.' . $normalizedAction,
         'upload_automation_token',
         $normalizedAction,
-        $tokenId > 0 ? [$tokenId] : []
+        $tokenId > 0 ? [$tokenId] : [],
     );
 }
 
@@ -1072,7 +1442,8 @@ function upload_automation_token_csrf_valid(): bool
 {
     // $token stores the submitted CSRF value from the API-key create or revoke form.
     $token = (string) ($_POST['csrf_token'] ?? '');
-    return $token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
+    return $token !== ''
+        && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
 }
 
 /**
@@ -1080,9 +1451,12 @@ function upload_automation_token_csrf_valid(): bool
  *
  * @param array<string,mixed> $payload JSON-safe response payload.
  * @param int $status HTTP status code to send with the response.
+ * @return void Emit the JSON response.
  */
-function upload_automation_token_json_response(array $payload, int $status = 200): void
-{
+function upload_automation_token_json_response(
+    array $payload,
+    int $status = 200,
+): void {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1115,7 +1489,9 @@ function upload_automation_token_return_url(int $galleryId): string
     }
 
     // $returnTab stores the older gallery-editor tab target used by existing forms.
-    $returnTab = admin_edit_gallery_tab_id((string) ($_POST['return_tab'] ?? '')) ?: 'admin-edit-api';
+    $returnTab = admin_edit_gallery_tab_id(
+        (string) ($_POST['return_tab'] ?? ''),
+    ) ?: 'admin-edit-api';
     return admin_edit_gallery_tab_url($galleryId, $returnTab);
 }
 
@@ -1161,11 +1537,14 @@ function upload_automation_return_url_allowed(string $url, int $galleryId): bool
 /**
  * Render gallery-scoped upload automation controls inside the image editor tab.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param string $returnTab Return tab value.
+ * @param array{id:int|string,title?:string,name?:string} $gallery Gallery row containing its id and display data.
+ * @param string $returnTab Admin editor tab to restore after token management.
+ * @return void Render the gallery-scoped token controls when the gallery id is valid.
  */
-function render_admin_gallery_upload_automation_panel(array $gallery, string $returnTab = 'admin-edit-api'): void
-{
+function render_admin_gallery_upload_automation_panel(
+    array $gallery,
+    string $returnTab = 'admin-edit-api',
+): void {
     $galleryId = (int) ($gallery['id'] ?? 0);
     if ($galleryId <= 0) {
         return;
@@ -1176,15 +1555,23 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
     if (!$schemaReady) {
         $schemaStatus = upload_automation_schema_status();
         $schemaMessage = schema_inspection_is_unknown($schemaStatus)
-            ? t('upload_automation.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified. No API-key changes are allowed until the database inspection succeeds.')
-            : t('upload_automation.migration_required', 'Upload automation needs a pending database migration before API keys can be generated.');
+            ? t(
+                'upload_automation.schema_unknown',
+                'Upload automation is temporarily unavailable because its database schema could not be verified. No API-key changes are allowed until the database inspection succeeds.',
+            )
+            : t(
+                'upload_automation.migration_required',
+                'Upload automation needs a pending database migration before API keys can be generated.',
+            );
     }
 
     $newToken = '';
     $tokens = [];
     $endpoint = '';
     if ($schemaReady) {
-        $newToken = (string) ($_SESSION['upload_automation_new_token_' . $galleryId] ?? '');
+        $newToken = (string) (
+            $_SESSION['upload_automation_new_token_' . $galleryId] ?? ''
+        );
         unset($_SESSION['upload_automation_new_token_' . $galleryId]);
         $tokens = gallery_upload_automation_tokens($galleryId);
         $endpoint = absolute_public_url(url_for('upload_automation_upload'));
@@ -1206,6 +1593,8 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
 
 /**
  * Render the admin-wide upload automation manager.
+ *
+ * @return void Render the manager page and its prepared token data.
  */
 function cms_admin_api_manager(): void
 {
@@ -1217,8 +1606,14 @@ function cms_admin_api_manager(): void
     if (!$schemaReady) {
         $schemaStatus = upload_automation_schema_status();
         $schemaMessage = schema_inspection_is_unknown($schemaStatus)
-            ? t('upload_automation.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified. No API-key changes are allowed until the database inspection succeeds.')
-            : t('upload_automation.migration_required', 'Upload automation needs a pending database migration before API keys can be generated.');
+            ? t(
+                'upload_automation.schema_unknown',
+                'Upload automation is temporarily unavailable because its database schema could not be verified. No API-key changes are allowed until the database inspection succeeds.',
+            )
+            : t(
+                'upload_automation.migration_required',
+                'Upload automation needs a pending database migration before API keys can be generated.',
+            );
     }
 
     $tokens = [];
@@ -1226,8 +1621,13 @@ function cms_admin_api_manager(): void
         foreach (upload_automation_tokens_for_manager() as $token) {
             $galleryId = (int) ($token['gallery_id'] ?? 0);
             $galleryTitle = (string) ($token['gallery_title'] ?? '');
-            $token['gallery_url'] = admin_edit_gallery_tab_url($galleryId, 'admin-edit-api');
-            $token['gallery_label'] = $galleryTitle !== '' ? $galleryTitle : ('#' . $galleryId);
+            $token['gallery_url'] = admin_edit_gallery_tab_url(
+                $galleryId,
+                'admin-edit-api',
+            );
+            $token['gallery_label'] = $galleryTitle !== ''
+                ? $galleryTitle
+                : '#' . $galleryId;
             $tokens[] = $token;
         }
     }

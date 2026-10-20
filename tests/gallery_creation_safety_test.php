@@ -46,7 +46,11 @@ namespace Gallery\Services {
      */
     function gallery_target_abs_path(string $relativePath): string
     {
-        if (!in_array($relativePath, ['missing', 'present', 'not-directory'], true)) {
+        if (!in_array(
+            $relativePath,
+            ['missing', 'present', 'not-directory'],
+            true,
+        )) {
             throw new \RuntimeException('Invalid fixture target.');
         }
         return galleries_root() . DIRECTORY_SEPARATOR . $relativePath;
@@ -88,25 +92,56 @@ namespace {
         }
     }
 
-    $GLOBALS['creationSafetyRoot'] = sys_get_temp_dir() . '/gallery-creation-safety-' . bin2hex(random_bytes(12));
+    $GLOBALS['creationSafetyRoot'] =
+        sys_get_temp_dir()
+        . '/gallery-creation-safety-'
+        . bin2hex(random_bytes(12));
     $root = $GLOBALS['creationSafetyRoot'];
-    creationSafetyCheck(mkdir($root, 0700), 'Could not create private test fixture.');
+    creationSafetyCheck(
+        mkdir($root, 0700),
+        'Could not create private test fixture.',
+    );
     try {
-        creationSafetyCheck(mkdir($root . '/present', 0700), 'Could not create fixture child.');
-        creationSafetyCheck(file_put_contents($root . '/not-directory', 'fixture') !== false, 'Could not create fixture file.');
-        creationSafetyCheck(gallery_creation_target_observation('missing') === FILESYSTEM_OBSERVATION_MISSING, 'Readable absent entry not recognized.');
-        creationSafetyCheck(gallery_creation_target_observation('present') === FILESYSTEM_OBSERVATION_AVAILABLE, 'Readable present directory not recognized.');
-        creationSafetyCheck(gallery_creation_target_observation('not-directory') === FILESYSTEM_OBSERVATION_UNKNOWN, 'A file must not qualify as a reusable directory.');
+        creationSafetyCheck(
+            mkdir($root . '/present', 0700),
+            'Could not create fixture child.',
+        );
+        creationSafetyCheck(
+            file_put_contents($root . '/not-directory', 'fixture') !== false,
+            'Could not create fixture file.',
+        );
+        creationSafetyCheck(
+            gallery_creation_target_observation('missing')
+                === FILESYSTEM_OBSERVATION_MISSING,
+            'Readable absent entry not recognized.',
+        );
+        creationSafetyCheck(
+            gallery_creation_target_observation('present')
+                === FILESYSTEM_OBSERVATION_AVAILABLE,
+            'Readable present directory not recognized.',
+        );
+        creationSafetyCheck(
+            gallery_creation_target_observation('not-directory')
+                === FILESYSTEM_OBSERVATION_UNKNOWN,
+            'A file must not qualify as a reusable directory.',
+        );
         $GLOBALS['creationSafetyOwner'] = 17;
         try {
             gallery_creation_assert_catalog_preserved('missing');
             throw new RuntimeException('Missing catalog path was allowed.');
         } catch (GalleryCatalogConflict $conflict) {
-            creationSafetyCheck($conflict->galleryId === 17, 'Conflicting catalog identity lost.');
+            creationSafetyCheck(
+                $conflict->galleryId === 17,
+                'Conflicting catalog identity lost.',
+            );
         }
         gallery_creation_assert_catalog_preserved('present');
         $GLOBALS['creationSafetyUnknown'] = true;
-        creationSafetyCheck(gallery_creation_target_observation('missing') === FILESYSTEM_OBSERVATION_UNKNOWN, 'Failed root observation became absence.');
+        creationSafetyCheck(
+            gallery_creation_target_observation('missing')
+                === FILESYSTEM_OBSERVATION_UNKNOWN,
+            'Failed root observation became absence.',
+        );
         $GLOBALS['creationSafetyOwner'] = 0;
         $refused = false;
         try {
@@ -114,12 +149,24 @@ namespace {
         } catch (RuntimeException) {
             $refused = true;
         }
-        creationSafetyCheck($refused, 'Unknown storage without a catalog owner was accepted.');
+        creationSafetyCheck(
+            $refused,
+            'Unknown storage without a catalog owner was accepted.',
+        );
         $GLOBALS['creationSafetyUnknown'] = false;
         gallery_creation_assert_catalog_preserved('missing');
-        $source = file_get_contents(dirname(__DIR__) . '/app/services/gallery_sidecars.php');
-        creationSafetyCheck(!str_contains($source, 'delete_missing_gallery_database_subtree_by_folder_path('), 'Create workflow regained implicit catalog deletion.');
-        echo "PASS gallery creation available/missing/unknown preserves catalog ownership\n";
+        $source = file_get_contents(
+            dirname(__DIR__) . '/app/services/gallery_sidecars.php',
+        );
+        creationSafetyCheck(
+            !str_contains(
+                $source,
+                'delete_missing_gallery_database_subtree_by_folder_path(',
+            ),
+            'Create workflow regained implicit catalog deletion.',
+        );
+        echo
+            "PASS gallery creation available/missing/unknown preserves catalog ownership\n";
     } finally {
         // Remove only explicitly created leaves inside this randomly named owned fixture.
         if (is_file($root . '/not-directory')) {

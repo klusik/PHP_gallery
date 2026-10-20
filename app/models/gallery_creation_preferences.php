@@ -38,7 +38,9 @@ use function Gallery\Core\db;
  */
 function gallery_creation_preferences_model_find(int $userId): ?array
 {
-    $stmt = db()->prepare('SELECT simbrief_pilot_id, simbrief_pilot_name, content_language FROM user_gallery_creation_preferences WHERE user_id = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT simbrief_pilot_id, simbrief_pilot_name, content_language FROM user_gallery_creation_preferences WHERE user_id = ? LIMIT 1',
+    );
     $stmt->execute([$userId]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -52,8 +54,20 @@ function gallery_creation_preferences_model_find(int $userId): ?array
  * @param string $now SQL timestamp for this mutation.
  * @return void Persist the selected values.
  */
-function gallery_creation_preferences_model_save(int $userId, array $values, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO user_gallery_creation_preferences (user_id, simbrief_pilot_id, simbrief_pilot_name, content_language, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE simbrief_pilot_id = VALUES(simbrief_pilot_id), simbrief_pilot_name = VALUES(simbrief_pilot_name), content_language = VALUES(content_language), updated_at = VALUES(updated_at)');
-    $stmt->execute([$userId, $values['simbrief_pilot_id'], $values['simbrief_pilot_name'], $values['content_language'], $now, $now]);
+function gallery_creation_preferences_model_save(
+    int $userId,
+    array $values,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO user_gallery_creation_preferences (user_id, simbrief_pilot_id, simbrief_pilot_name, content_language, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE simbrief_pilot_id = VALUES(simbrief_pilot_id), simbrief_pilot_name = VALUES(simbrief_pilot_name), content_language = VALUES(content_language), updated_at = VALUES(updated_at)',
+    );
+    $stmt->execute([
+        $userId,
+        $values['simbrief_pilot_id'],
+        $values['simbrief_pilot_name'],
+        $values['content_language'],
+        $now,
+        $now,
+    ]);
 }

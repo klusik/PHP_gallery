@@ -55,11 +55,16 @@ use function Gallery\Views\view_render_admin_gallery_report_export_html;
 
 /**
  * Render the complete gallery overview report generator page.
+ *
+ * @return void Renders the report page.
  */
 function cms_admin_gallery_report(): void
 {
     require_admin();
-    view_render_admin_gallery_report_page((string) flash_message('admin_notice'), feature_capability_effective_enabled('telemetry'));
+    view_render_admin_gallery_report_page(
+        (string) flash_message('admin_notice'),
+        feature_capability_effective_enabled('telemetry'),
+    );
 }
 
 /**
@@ -76,25 +81,48 @@ function cms_admin_gallery_report_generate(): void
 
     $bufferLevel = ob_get_level();
     $checkpoint = is_array($_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] ?? null)
-        ? $_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] : null;
+        ? $_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY]
+        : null;
     ob_start();
     try {
         verify_csrf();
         $action = (string) ($_POST['action'] ?? 'step');
         if ($action === 'start') {
-            $telemetryDays = max(1, min(ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS, (int) ($_POST['telemetry_days'] ?? ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS)));
-            $state = admin_gallery_report_start_job($checkpoint, $telemetryDays);
+            $telemetryDays = max(1, min(
+                ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS,
+                (int) (
+                    $_POST['telemetry_days']
+                    ?? ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS
+                ),
+            ));
+            $state = admin_gallery_report_start_job(
+                $checkpoint,
+                $telemetryDays,
+            );
         } else {
-            $batchSize = max(1, min(ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE)));
+            $batchSize = max(1, min(
+                ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE,
+                (int) (
+                    $_POST['batch_size']
+                    ?? ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE
+                ),
+            ));
             $state = admin_gallery_report_process_job($checkpoint, $batchSize);
         }
 
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
-        if (isset($state['_report_view_model']) && is_array($state['_report_view_model'])) {
-            $html = view_render_admin_gallery_report_export_html($state['_report_view_model']);
-            $filename = (string) ($state['filename'] ?? 'php-gallery-complete-overview.html');
+        if (
+            isset($state['_report_view_model'])
+            && is_array($state['_report_view_model'])
+        ) {
+            $html = view_render_admin_gallery_report_export_html(
+                $state['_report_view_model'],
+            );
+            $filename = (string) (
+                $state['filename'] ?? 'php-gallery-complete-overview.html'
+            );
             header('Content-Type: text/html; charset=utf-8');
             header('X-Gallery-Report-Complete: 1');
             header('X-Gallery-Report-Filename: ' . rawurlencode($filename));
@@ -107,9 +135,19 @@ function cms_admin_gallery_report_generate(): void
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
-        admin_log_event('error', 'admin_report.generate_failed', 'Admin complete gallery overview report generation failed.', [
-            'exception' => $exception->getMessage(),
-        ], ['category' => 'admin', 'severity' => 'error', 'route_name' => 'admin_gallery_report_generate']);
+        admin_log_event(
+            'error',
+            'admin_report.generate_failed',
+            'Admin complete gallery overview report generation failed.',
+            [
+                'exception' => $exception->getMessage(),
+            ],
+            [
+                'category' => 'admin',
+                'severity' => 'error',
+                'route_name' => 'admin_gallery_report_generate',
+            ],
+        );
         admin_gallery_report_json_response([
             'ok' => false,
             'status' => 'error',

@@ -37,7 +37,7 @@ function release_file_policy_root(string $rootPath): string
     $resolved = realpath($rootPath);
     if ($resolved === false || !is_dir($resolved)) {
         throw new RuntimeException(
-            'Production file policy root is unavailable.'
+            'Production file policy root is unavailable.',
         );
     }
     return $resolved;
@@ -62,53 +62,63 @@ function release_file_policy_read(string $rootPath): array
 {
     $root = release_file_policy_root($rootPath);
     $manifestPath = $root . '/app/production-files.json';
-    if (is_link($manifestPath)
+    if (
+        is_link($manifestPath)
         || !is_file($manifestPath)
         || !is_readable($manifestPath)
-       
-            || !release_file_policy_resolves_to_expected_path(
+        || !release_file_policy_resolves_to_expected_path(
             $root,
             'app/production-files.json',
-            $manifestPath
-        )) {
+            $manifestPath,
+        )
+    ) {
         throw new RuntimeException(
-            'Production file inventory is missing or unsafe.'
+            'Production file inventory is missing or unsafe.',
         );
     }
 
     $contents = file_get_contents($manifestPath);
     $manifest = $contents === false ? null : json_decode($contents, true);
-    if (!is_array($manifest)
+    if (
+        !is_array($manifest)
         || ($manifest['schema_version'] ?? null) !== 1
-        || !isset($manifest['production_files'], $manifest['updater_files'], $manifest[
-            'source_review_files'
-        ])
+        || !isset(
+            $manifest['production_files'],
+            $manifest['updater_files'],
+            $manifest['source_review_files'],
+        )
         || !is_array($manifest['production_files'])
         || !is_array($manifest['updater_files'])
         || !is_array($manifest['source_review_files'])
-        || (array_key_exists('companion_files', $manifest) && !is_array($manifest[
-            'companion_files'
-        ]))) {
+        || (
+            array_key_exists('companion_files', $manifest)
+            && !is_array($manifest['companion_files'])
+        )
+    ) {
         throw new RuntimeException(
-            'Production file inventory has an unsupported or invalid schema.'
+            'Production file inventory has an unsupported or invalid schema.',
         );
     }
 
-    $productionFiles = release_file_policy_validate_path_list($manifest[
-        'production_files'
-    ]);
+    $productionFiles = release_file_policy_validate_path_list(
+        $manifest['production_files'],
+    );
     // Schema-1 readers shipped before companion distribution ignore this
     //     additive field.
-    $companionFiles = release_file_policy_validate_path_list($manifest[
-        'companion_files'
-    ] ?? []);
-    $updaterFiles = release_file_policy_validate_path_list($manifest[
-        'updater_files'
-    ]);
-    $sourceReviewFiles = release_file_policy_validate_path_list($manifest[
-        'source_review_files'
-    ]);
-    $allPackagePaths = array_merge($productionFiles, $companionFiles, $sourceReviewFiles);
+    $companionFiles = release_file_policy_validate_path_list(
+        $manifest['companion_files'] ?? [],
+    );
+    $updaterFiles = release_file_policy_validate_path_list(
+        $manifest['updater_files'],
+    );
+    $sourceReviewFiles = release_file_policy_validate_path_list(
+        $manifest['source_review_files'],
+    );
+    $allPackagePaths = array_merge(
+        $productionFiles,
+        $companionFiles,
+        $sourceReviewFiles,
+    );
     sort($allPackagePaths, SORT_STRING);
     release_file_policy_validate_path_list($allPackagePaths);
     $productionSet = array_fill_keys($productionFiles, true);
@@ -116,44 +126,48 @@ function release_file_policy_read(string $rootPath): array
     foreach ($productionFiles as $path) {
         if (!release_file_policy_is_production_path($path)) {
             throw new RuntimeException(
-                'Production inventory contains a private or unapproved path.'
+                'Production inventory contains a private or unapproved path.',
             );
         }
     }
     foreach ($companionFiles as $path) {
-        if (!release_file_policy_is_production_path($path)
-           
-                || !release_file_policy_is_winapp_source_path($path)
-                || release_file_policy_is_updater_path($path)) {
+        if (
+            !release_file_policy_is_production_path($path)
+            || !release_file_policy_is_winapp_source_path($path)
+            || release_file_policy_is_updater_path($path)
+        ) {
             throw new RuntimeException(
-                'Companion inventory entries must be approved non-updater WinApp files.'
+                'Companion inventory entries must be approved non-updater WinApp files.',
             );
         }
     }
     foreach ($updaterFiles as $path) {
-        if (!isset($productionSet[$path])
-            || !release_file_policy_is_updater_path($path)) {
+        if (
+            !isset($productionSet[$path])
+            || !release_file_policy_is_updater_path($path)
+        ) {
             throw new RuntimeException(
-                'Updater inventory entries must be production package files.'
+                'Updater inventory entries must be production package files.',
             );
         }
     }
-    if (!isset($productionSet['app/production-files.json']) || !isset($updaterSet[
-        'app/production-files.json'
-    ])) {
+    if (
+        !isset($productionSet['app/production-files.json'])
+        || !isset($updaterSet['app/production-files.json'])
+    ) {
         throw new RuntimeException(
-            'The current package inventory must update its own sidecar.'
+            'The current package inventory must update its own sidecar.',
         );
     }
     foreach ($sourceReviewFiles as $path) {
         if (isset($productionSet[$path]) || isset($updaterSet[$path])) {
             throw new RuntimeException(
-                'Production and source-review inventory entries must be disjoint.'
+                'Production and source-review inventory entries must be disjoint.',
             );
         }
         if (!str_starts_with($path, 'tests/')) {
             throw new RuntimeException(
-                'Source-review inventory entries must remain under tests/.'
+                'Source-review inventory entries must remain under tests/.',
             );
         }
     }
@@ -178,39 +192,49 @@ function release_file_policy_is_production_path(string $relativePath): bool
     if (in_array($relativePath, release_file_policy_server_paths(), true)) {
         return true;
     }
-    if (in_array($relativePath, [
-        '.htaccess',
-        'index.php',
-        'install.php',
-        'reset.php',
-        'setup-gallery.php',
-        'config.example.php',
-        'deploy.bat',
-        'deploy.sh',
-        'README.md',
-        'PATCH_NOTES.md',
-        'ARCHITECTURE.md',
-        'CODEMAP.md',
-        'DATABASE.md',
-        'TESTING.md',
-        'LICENSE',
-        'CONTRIBUTING.md',
-        'ACCESSIBILITY.md',
-        'release-metadata.json',
-    ], true)) {
+    if (in_array(
+        $relativePath,
+        [
+            '.htaccess',
+            'index.php',
+            'install.php',
+            'reset.php',
+            'setup-gallery.php',
+            'config.example.php',
+            'deploy.bat',
+            'deploy.sh',
+            'README.md',
+            'PATCH_NOTES.md',
+            'ARCHITECTURE.md',
+            'CODEMAP.md',
+            'DATABASE.md',
+            'TESTING.md',
+            'LICENSE',
+            'CONTRIBUTING.md',
+            'ACCESSIBILITY.md',
+            'release-metadata.json',
+        ],
+        true,
+    )) {
         // Retired deployment names remain readable in installed schema-1
         //     sidecars.
         // Current generation and packaging exclude their removed source files.
         return true;
     }
-    if (in_array($relativePath, [
-        'config.php',
-        'app/bootstrap/config.php',
-        'public/assets/custom.css',
-        'public/assets/custom-overrides.css',
-        'public/assets/.custom-overrides.lock'
-    ], true)
-        || str_starts_with($relativePath, 'app/_for_codex/')) {
+    if (
+        in_array(
+            $relativePath,
+            [
+                'config.php',
+                'app/bootstrap/config.php',
+                'public/assets/custom.css',
+                'public/assets/custom-overrides.css',
+                'public/assets/.custom-overrides.lock',
+            ],
+            true,
+        )
+        || str_starts_with($relativePath, 'app/_for_codex/')
+    ) {
         return false;
     }
     $segments = explode('/', $relativePath);
@@ -219,15 +243,19 @@ function release_file_policy_is_production_path(string $relativePath): bool
             return false;
         }
     }
-    return str_starts_with($relativePath, 'app/')
-        || str_starts_with($relativePath, 'public/')
-        || str_starts_with($relativePath, 'scripts/')
-        || str_starts_with($relativePath, 'docs/')
-        || (str_starts_with($relativePath, 'database/migrations/'))
-        || release_file_policy_is_winapp_source_path($relativePath)
-       
-            || (str_starts_with($relativePath, 'custom_css/')
-            && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'css');
+    return (
+        str_starts_with($relativePath, 'app/')
+            || str_starts_with($relativePath, 'public/')
+            || str_starts_with($relativePath, 'scripts/')
+            || str_starts_with($relativePath, 'docs/')
+            || str_starts_with($relativePath, 'database/migrations/')
+            || release_file_policy_is_winapp_source_path($relativePath)
+            || (
+                str_starts_with($relativePath, 'custom_css/')
+                && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION))
+                === 'css'
+            )
+    );
 }
 
 /**
@@ -240,19 +268,33 @@ function release_file_policy_is_production_path(string $relativePath): bool
  */
 function release_file_policy_is_winapp_source_path(string $relativePath): bool
 {
-    if (in_array($relativePath, [
-        'winapp/README.md', 'winapp/VERSION', 'winapp/SimConnect.dll',
-        'winapp/build.bat', 'winapp/build_installer.py', 'winapp/installer.iss',
-        'winapp/gallery_http_monitor.py', 'winapp/gallery_watch_upload.pyw',
-        'winapp/install.bat', 'winapp/run_gallery_watcher.bat',
-        'winapp/requirements.txt', 'winapp/requirements-build.txt',
-        'winapp/assets/tray-icon.ico', 'winapp/assets/tray-icon.png',
-    ], true)) {
+    if (in_array(
+        $relativePath,
+        [
+            'winapp/README.md',
+            'winapp/VERSION',
+            'winapp/SimConnect.dll',
+            'winapp/build.bat',
+            'winapp/build_installer.py',
+            'winapp/installer.iss',
+            'winapp/gallery_http_monitor.py',
+            'winapp/gallery_watch_upload.pyw',
+            'winapp/install.bat',
+            'winapp/run_gallery_watcher.bat',
+            'winapp/requirements.txt',
+            'winapp/requirements-build.txt',
+            'winapp/assets/tray-icon.ico',
+            'winapp/assets/tray-icon.png',
+        ],
+        true,
+    )) {
         return true;
     }
 
-    return str_starts_with($relativePath, 'winapp/uploader/')
-        && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'py';
+    return (
+        str_starts_with($relativePath, 'winapp/uploader/')
+            && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'py'
+    );
 }
 
 /**
@@ -272,16 +314,18 @@ function release_file_policy_validate_path_list(array $paths): array
     $directoryKeys = [];
     $fileKeys = [];
     foreach ($paths as $path) {
-        if (!is_string($path)
-            || !release_file_policy_is_safe_relative_path($path)) {
+        if (
+            !is_string($path)
+            || !release_file_policy_is_safe_relative_path($path)
+        ) {
             throw new RuntimeException(
-                'Production file inventory contains an unsafe path.'
+                'Production file inventory contains an unsafe path.',
             );
         }
         $portableKey = release_file_policy_portable_path_key($path);
         if (isset($portableKeys[$portableKey])) {
             throw new RuntimeException(
-                'Production file inventory contains paths that collide on Windows.'
+                'Production file inventory contains paths that collide on Windows.',
             );
         }
         $portableKeys[$portableKey] = true;
@@ -290,23 +334,28 @@ function release_file_policy_validate_path_list(array $paths): array
         foreach ($segments as $index => $segment) {
             $prefix = $prefix === '' ? $segment : $prefix . '/' . $segment;
             $prefixKey = release_file_policy_portable_path_key($prefix);
-            if ((isset($portablePrefixes[$prefixKey])
-                && $portablePrefixes[$prefixKey] !== $prefix)
-               
-                    || ($index < count($segments) - 1
-                    && isset($fileKeys[$prefixKey]))) {
+            if (
+                (
+                    isset($portablePrefixes[$prefixKey])
+                    && $portablePrefixes[$prefixKey] !== $prefix
+                )
+                || (
+                    $index < (count($segments) - 1)
+                    && isset($fileKeys[$prefixKey])
+                )
+            ) {
                 throw new RuntimeException(
-                    'Production file inventory contains conflicting portable directory paths.'
+                    'Production file inventory contains conflicting portable directory paths.',
                 );
             }
             $portablePrefixes[$prefixKey] = $prefix;
-            if ($index < count($segments) - 1) {
+            if ($index < (count($segments) - 1)) {
                 $directoryKeys[$prefixKey] = true;
             }
         }
         if (isset($directoryKeys[$portableKey])) {
             throw new RuntimeException(
-                'Production file inventory contains a file/directory collision.'
+                'Production file inventory contains a file/directory collision.',
             );
         }
         $fileKeys[$portableKey] = true;
@@ -315,10 +364,12 @@ function release_file_policy_validate_path_list(array $paths): array
 
     $sorted = $validated;
     sort($sorted, SORT_STRING);
-    if ($validated !== $sorted
-        || count($validated) !== count(array_unique($validated))) {
+    if (
+        $validated !== $sorted
+        || count($validated) !== count(array_unique($validated))
+    ) {
         throw new RuntimeException(
-            'Production file inventory must be sorted and contain no duplicates.'
+            'Production file inventory must be sorted and contain no duplicates.',
         );
     }
 
@@ -338,11 +389,13 @@ function release_file_policy_portable_path_key(string $relativePath): string
     if (preg_match('/[^\x00-\x7F]/', $relativePath) !== 1) {
         return strtolower($relativePath);
     }
-    if (!function_exists('mb_strtolower')
+    if (
+        !function_exists('mb_strtolower')
         || !function_exists('mb_check_encoding')
-        || !mb_check_encoding($relativePath, 'UTF-8')) {
+        || !mb_check_encoding($relativePath, 'UTF-8')
+    ) {
         throw new RuntimeException(
-            'Non-ASCII package paths require UTF-8 case-fold support.'
+            'Non-ASCII package paths require UTF-8 case-fold support.',
         );
     }
     return strtolower(mb_strtolower($relativePath, 'UTF-8'));
@@ -372,13 +425,15 @@ function release_file_policy_path_comparison_key(string $relativePath): string
  */
 function release_file_policy_is_safe_relative_path(string $relativePath): bool
 {
-    if ($relativePath === ''
+    if (
+        $relativePath === ''
         || str_contains($relativePath, "\0")
         || str_contains($relativePath, "\r")
         || str_contains($relativePath, "\n")
         || str_contains($relativePath, '\\')
         || str_starts_with($relativePath, '/')
-        || str_contains($relativePath, ':')) {
+        || str_contains($relativePath, ':')
+    ) {
         return false;
     }
 
@@ -386,22 +441,28 @@ function release_file_policy_is_safe_relative_path(string $relativePath): bool
         if ($segment === '' || $segment === '.' || $segment === '..') {
             return false;
         }
-        if ($segment !== rtrim($segment, " .")) {
+        if ($segment !== rtrim($segment, ' .')) {
             return false;
         }
         if (preg_match('/[\x00-\x1F\x7F<>"|?*]/', $segment) === 1) {
             return false;
         }
         $deviceStem = strtoupper(explode('.', $segment, 2)[0]);
-        if (in_array($deviceStem, [
-            'CON',
-            'PRN',
-            'AUX',
-            'NUL',
-            'CONIN$',
-            'CONOUT$'
-        ], true)
-            || preg_match('/^(COM|LPT)([1-9]|¹|²|³)$/u', $deviceStem) === 1) {
+        if (
+            in_array(
+                $deviceStem,
+                [
+                    'CON',
+                    'PRN',
+                    'AUX',
+                    'NUL',
+                    'CONIN$',
+                    'CONOUT$',
+                ],
+                true,
+            )
+            || preg_match('/^(COM|LPT)([1-9]|¹|²|³)$/u', $deviceStem) === 1
+        ) {
             return false;
         }
     }
@@ -420,20 +481,20 @@ function release_file_policy_is_safe_relative_path(string $relativePath): bool
  */
 function release_file_policy_paths(
     string $rootPath,
-    string $profile = 'production'
-): array
-{
+    string $profile = 'production',
+): array {
     $inventory = release_file_policy_read($rootPath);
     if ($profile === 'production') {
-        $paths = array_merge($inventory['production_files'], $inventory[
-            'companion_files'
-        ]);
+        $paths = array_merge(
+            $inventory['production_files'],
+            $inventory['companion_files'],
+        );
         sort($paths, SORT_STRING);
     } elseif ($profile === 'updater') {
         $paths = $inventory['updater_files'];
     } else {
         throw new RuntimeException(
-            'Unknown production file inventory profile.'
+            'Unknown production file inventory profile.',
         );
     }
 
@@ -451,7 +512,10 @@ function release_file_policy_paths(
 function release_file_policy_server_paths(): array
 {
     return [
-        '.htaccess', 'app/.htaccess', 'database/.htaccess', 'scripts/.htaccess',
+        '.htaccess',
+        'app/.htaccess',
+        'database/.htaccess',
+        'scripts/.htaccess',
         'public/.htaccess',
         'galleries/.htaccess',
         'cache/.htaccess',
@@ -464,7 +528,8 @@ function release_file_policy_server_paths(): array
         '.github/.htaccess',
         '.agents/.htaccess',
         'winapp/.htaccess',
-        'data/admin-log-archives/.htaccess', 'data/gallery-trash/.htaccess',
+        'data/admin-log-archives/.htaccess',
+        'data/gallery-trash/.htaccess',
     ];
 }
 
@@ -477,14 +542,20 @@ function release_file_policy_server_paths(): array
  */
 function release_file_policy_is_updater_path(string $relativePath): bool
 {
-    if (in_array($relativePath, [
-        'config.php',
-        'app/bootstrap/config.php',
-        'public/assets/custom.css',
-        'public/assets/custom-overrides.css',
-        'public/assets/.custom-overrides.lock'
-    ], true)
-        || str_starts_with($relativePath, 'app/_for_codex/')) {
+    if (
+        in_array(
+            $relativePath,
+            [
+                'config.php',
+                'app/bootstrap/config.php',
+                'public/assets/custom.css',
+                'public/assets/custom-overrides.css',
+                'public/assets/.custom-overrides.lock',
+            ],
+            true,
+        )
+        || str_starts_with($relativePath, 'app/_for_codex/')
+    ) {
         return false;
     }
     if (in_array($relativePath, release_file_policy_server_paths(), true)) {
@@ -494,20 +565,27 @@ function release_file_policy_is_updater_path(string $relativePath): bool
         'app/',
         'public/',
         'scripts/',
-        'database/migrations/'
+        'database/migrations/',
     ] as $prefix) {
         if (str_starts_with($relativePath, $prefix)) {
             return true;
         }
     }
-    return in_array($relativePath, [
-        'index.php',
-        'install.php',
-        'reset.php',
-        'setup-gallery.php',
-        'deploy.bat',
-        'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md', 'config.example.php',
-    ], true);
+    return in_array(
+        $relativePath,
+        [
+            'index.php',
+            'install.php',
+            'reset.php',
+            'setup-gallery.php',
+            'deploy.bat',
+            'README.md',
+            'PATCH_NOTES.md',
+            'ARCHITECTURE.md',
+            'config.example.php',
+        ],
+        true,
+    );
 }
 
 /**
@@ -528,14 +606,20 @@ function release_file_policy_is_protected_path(string $relativePath): bool
         return false;
     }
     $portablePath = strtolower($relativePath);
-    if (in_array($portablePath, [
-        'config.php',
-        'app/bootstrap/config.php',
-        'public/assets/custom.css',
-        'public/assets/custom-overrides.css',
-        'public/assets/.custom-overrides.lock',
-        '.user.ini', 'php.ini', 'robots.txt',
-    ], true)) {
+    if (in_array(
+        $portablePath,
+        [
+            'config.php',
+            'app/bootstrap/config.php',
+            'public/assets/custom.css',
+            'public/assets/custom-overrides.css',
+            'public/assets/.custom-overrides.lock',
+            '.user.ini',
+            'php.ini',
+            'robots.txt',
+        ],
+        true,
+    )) {
         return true;
     }
     foreach ([
@@ -551,8 +635,10 @@ function release_file_policy_is_protected_path(string $relativePath): bool
         'app/_for_codex',
     ] as $directory) {
         $portableDirectory = strtolower($directory);
-        if ($portablePath === $portableDirectory
-            || str_starts_with($portablePath, $portableDirectory . '/')) {
+        if (
+            $portablePath === $portableDirectory
+            || str_starts_with($portablePath, $portableDirectory . '/')
+        ) {
             return true;
         }
     }
@@ -572,7 +658,8 @@ function release_file_policy_is_protected_path(string $relativePath): bool
 function release_file_policy_is_integrity_path(string $relativePath): bool
 {
     $relativePath = str_replace('\\', '/', ltrim($relativePath, '/'));
-    if ($relativePath === ''
+    if (
+        $relativePath === ''
         || $relativePath === 'app/core-manifest.json'
         || $relativePath === 'config.php'
         || $relativePath === 'app/bootstrap/config.php'
@@ -580,13 +667,15 @@ function release_file_policy_is_integrity_path(string $relativePath): bool
         || $relativePath === 'public/assets/custom-overrides.css'
         || $relativePath === 'public/assets/.custom-overrides.lock'
         || str_starts_with($relativePath, 'app/_for_codex/')
-       
-            || preg_match(
-                '#^(cache|data|galleries|custom_css|\.git|\.idea|\.vscode)/#',
-                $relativePath
-            ) === 1
-       
-            || preg_match('#(^|/)(\.DS_Store|Thumbs\.db|error_log)$#', $relativePath) === 1) {
+        || preg_match(
+            '#^(cache|data|galleries|custom_css|\.git|\.idea|\.vscode)/#',
+            $relativePath,
+        ) === 1
+        || preg_match(
+            '#(^|/)(\.DS_Store|Thumbs\.db|error_log)$#',
+            $relativePath,
+        ) === 1
+    ) {
         return false;
     }
     $rootFiles = [
@@ -608,19 +697,25 @@ function release_file_policy_is_integrity_path(string $relativePath): bool
         return false;
     }
     $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
-    return basename($relativePath) === '.htaccess'
-        || in_array($extension, [
-            'php',
-            'js',
-            'css',
-            'svg',
-            'md',
-            'bat',
-            'ps1',
-            'sh',
-            'json',
-            'htaccess'
-        ], true);
+    return (
+        basename($relativePath) === '.htaccess'
+            || in_array(
+                $extension,
+                [
+                    'php',
+                    'js',
+                    'css',
+                    'svg',
+                    'md',
+                    'bat',
+                    'ps1',
+                    'sh',
+                    'json',
+                    'htaccess',
+                ],
+                true,
+            )
+    );
 }
 
 /**
@@ -651,34 +746,40 @@ function release_file_policy_archive_updater_paths(string $sourceRoot): array
         $unexpected = array_values(array_diff($ownedActual, $expected));
         if ($unexpected !== []) {
             throw new RuntimeException(
-                'Update archive contains unexpected updater-owned files.'
+                'Update archive contains unexpected updater-owned files.',
             );
         }
         return ['files' => $expected, 'legacy' => false];
     }
 
     $manifestPath = $root . '/app/core-manifest.json';
-    if (is_link($manifestPath)
+    if (
+        is_link($manifestPath)
         || !is_file($manifestPath)
-        || !is_readable($manifestPath)) {
+        || !is_readable($manifestPath)
+    ) {
         throw new RuntimeException(
-            'Update archive has neither a current package inventory nor a legacy core manifest.'
+            'Update archive has neither a current package inventory nor a legacy core manifest.',
         );
     }
     $manifest = json_decode((string) file_get_contents($manifestPath), true);
-    if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest[
-        'files'
-    ])) {
+    if (
+        !is_array($manifest)
+        || !isset($manifest['files'])
+        || !is_array($manifest['files'])
+    ) {
         throw new RuntimeException(
-            'Legacy update archive core manifest is invalid.'
+            'Legacy update archive core manifest is invalid.',
         );
     }
     $files = [];
     foreach (array_keys($manifest['files']) as $path) {
-        if (!is_string($path)
-            || !release_file_policy_is_safe_relative_path($path)) {
+        if (
+            !is_string($path)
+            || !release_file_policy_is_safe_relative_path($path)
+        ) {
             throw new RuntimeException(
-                'Legacy update archive core manifest contains an unsafe path.'
+                'Legacy update archive core manifest contains an unsafe path.',
             );
         }
         if (release_file_policy_is_updater_path($path)) {
@@ -687,11 +788,13 @@ function release_file_policy_archive_updater_paths(string $sourceRoot): array
     }
     if ($files === []) {
         throw new RuntimeException(
-            'Legacy update archive core manifest contains no updater-owned paths.'
+            'Legacy update archive core manifest contains no updater-owned paths.',
         );
     }
     foreach (release_file_policy_server_paths() as $path) {
-        if (is_file($root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $path))) {
+        if (
+            is_file($root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $path))
+        ) {
             $files[] = $path;
         }
     }
@@ -704,7 +807,7 @@ function release_file_policy_archive_updater_paths(string $sourceRoot): array
     release_file_policy_assert_paths_exist($root, $files);
     if ($files === []) {
         throw new RuntimeException(
-            'Legacy update archive does not contain updater-managed files.'
+            'Legacy update archive does not contain updater-managed files.',
         );
     }
     return ['files' => $files, 'legacy' => true];
@@ -723,9 +826,8 @@ function release_file_policy_archive_updater_paths(string $sourceRoot): array
  *     untrusted.
  */
 function release_file_policy_prior_updater_paths(
-    string $installationRoot
-): array
-{
+    string $installationRoot,
+): array {
     $root = release_file_policy_root($installationRoot);
     $sidecar = $root . '/app/production-files.json';
     if (is_file($sidecar) && !is_link($sidecar)) {
@@ -736,22 +838,28 @@ function release_file_policy_prior_updater_paths(
         }
     }
     $manifestPath = $root . '/app/core-manifest.json';
-    if (is_link($manifestPath)
+    if (
+        is_link($manifestPath)
         || !is_file($manifestPath)
-        || !is_readable($manifestPath)) {
+        || !is_readable($manifestPath)
+    ) {
         return [];
     }
     $manifest = json_decode((string) file_get_contents($manifestPath), true);
-    if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest[
-        'files'
-    ])) {
+    if (
+        !is_array($manifest)
+        || !isset($manifest['files'])
+        || !is_array($manifest['files'])
+    ) {
         return [];
     }
     $files = [];
     foreach (array_keys($manifest['files']) as $path) {
-        if (is_string($path)
+        if (
+            is_string($path)
             && release_file_policy_is_safe_relative_path($path)
-            && release_file_policy_is_updater_path($path)) {
+            && release_file_policy_is_updater_path($path)
+        ) {
             $files[] = $path;
         }
     }
@@ -784,31 +892,39 @@ function release_file_policy_prior_updater_paths(
  */
 function release_file_policy_rollback_snapshot_paths(
     string $snapshotRoot,
-    array $indexedPaths
-): array
-{
+    array $indexedPaths,
+): array {
     $root = release_file_policy_root($snapshotRoot);
     $allowedFiles = [];
     $allowedDirectories = [];
     foreach ($indexedPaths as $path) {
-        if (!is_string($path)
+        if (
+            !is_string($path)
             || !release_file_policy_is_safe_relative_path($path)
-            || release_file_policy_is_protected_path($path)) {
+            || release_file_policy_is_protected_path($path)
+        ) {
             throw new RuntimeException(
-                'Rollback metadata contains an unsafe or protected path.'
+                'Rollback metadata contains an unsafe or protected path.',
             );
         }
         $key = release_file_policy_path_comparison_key($path);
-        $absolute = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path);
+        $absolute =
+            $root
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $path);
         if (is_link($absolute)) {
             throw new RuntimeException(
-                'Rollback metadata points through a symbolic link.'
+                'Rollback metadata points through a symbolic link.',
             );
         }
         if (file_exists($absolute)) {
-            if (!release_file_policy_resolves_to_expected_path($root, $path, $absolute)) {
+            if (!release_file_policy_resolves_to_expected_path(
+                $root,
+                $path,
+                $absolute,
+            )) {
                 throw new RuntimeException(
-                    'Rollback metadata points through a redirected directory.'
+                    'Rollback metadata points through a redirected directory.',
                 );
             }
             if (is_dir($absolute)) {
@@ -817,7 +933,7 @@ function release_file_policy_rollback_snapshot_paths(
                 $allowedFiles[$key] = true;
             } else {
                 throw new RuntimeException(
-                    'Rollback metadata points to a non-regular path.'
+                    'Rollback metadata points to a non-regular path.',
                 );
             }
         }
@@ -827,7 +943,7 @@ function release_file_policy_rollback_snapshot_paths(
     foreach ($files as $path) {
         if (release_file_policy_is_protected_path($path)) {
             throw new RuntimeException(
-                'Rollback snapshot contains an installation-owned or protected path.'
+                'Rollback snapshot contains an installation-owned or protected path.',
             );
         }
         $key = release_file_policy_path_comparison_key($path);
@@ -837,14 +953,20 @@ function release_file_policy_rollback_snapshot_paths(
         $prefix = '';
         foreach ($segments as $segment) {
             $prefix = $prefix === '' ? $segment : $prefix . '/' . $segment;
-            if (isset($allowedDirectories[release_file_policy_path_comparison_key($prefix)])) {
+            if (
+                isset(
+                    $allowedDirectories[release_file_policy_path_comparison_key(
+                        $prefix,
+                    )],
+                )
+            ) {
                 $indexed = true;
                 break;
             }
         }
         if (!$indexed) {
             throw new RuntimeException(
-                'Rollback snapshot contains a path absent from its trusted backup index.'
+                'Rollback snapshot contains a path absent from its trusted backup index.',
             );
         }
     }
@@ -868,28 +990,42 @@ function release_file_policy_archive_owned_candidates(string $root): array
         'app',
         'public',
         'scripts',
-        'database/migrations'
+        'database/migrations',
     ] as $directory) {
-        $absolute = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $directory);
+        $absolute =
+            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $directory);
         if (!file_exists($absolute) && !is_link($absolute)) {
             continue;
         }
         if (is_link($absolute) || !is_dir($absolute)) {
             throw new RuntimeException(
-                'Update archive contains an unsafe updater root.'
+                'Update archive contains an unsafe updater root.',
             );
         }
-        foreach (release_file_policy_enumerate_files($root, $directory) as $path) {
-            if (in_array($path, [
-                'public/assets/custom.css',
-                'public/assets/custom-overrides.css',
-                'public/assets/.custom-overrides.lock'
-            ], true)
+        foreach (release_file_policy_enumerate_files(
+            $root,
+            $directory,
+        ) as $path) {
+            if (
+                in_array(
+                    $path,
+                    [
+                        'public/assets/custom.css',
+                        'public/assets/custom-overrides.css',
+                        'public/assets/.custom-overrides.lock',
+                    ],
+                    true,
+                )
                 || str_starts_with($path, 'app/_for_codex/')
-                || in_array(basename($path), [
-                    '.DS_Store',
-                    'Thumbs.db'
-                ], true)) {
+                || in_array(
+                    basename($path),
+                    [
+                        '.DS_Store',
+                        'Thumbs.db',
+                    ],
+                    true,
+                )
+            ) {
                 continue;
             }
             $files[] = $path;
@@ -904,12 +1040,12 @@ function release_file_policy_archive_owned_candidates(string $root): array
         'README.md',
         'PATCH_NOTES.md',
         'ARCHITECTURE.md',
-        'config.example.php'
+        'config.example.php',
     ] as $path) {
         $absolute = $root . '/' . $path;
         if (is_link($absolute)) {
             throw new RuntimeException(
-                'Update archive contains an unsafe updater root file.'
+                'Update archive contains an unsafe updater root file.',
             );
         }
         if (is_file($absolute)) {
@@ -920,7 +1056,7 @@ function release_file_policy_archive_owned_candidates(string $root): array
         $absolute = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $path);
         if (is_link($absolute)) {
             throw new RuntimeException(
-                'Update archive contains an unsafe server policy file.'
+                'Update archive contains an unsafe server policy file.',
             );
         }
         if (is_file($absolute)) {
@@ -945,29 +1081,34 @@ function release_file_policy_archive_owned_candidates(string $root): array
  */
 function release_file_policy_enumerate_files(
     string $rootPath,
-    string $relativeDirectory = ''
-): array
-{
+    string $relativeDirectory = '',
+): array {
     $root = release_file_policy_root($rootPath);
-    if ($relativeDirectory !== ''
-        && !release_file_policy_is_safe_relative_path($relativeDirectory)) {
+    if (
+        $relativeDirectory !== ''
+        && !release_file_policy_is_safe_relative_path($relativeDirectory)
+    ) {
         throw new RuntimeException(
-            'The package traversal directory is unsafe.'
+            'The package traversal directory is unsafe.',
         );
     }
 
     $start = $relativeDirectory === ''
         ? $root
-        : $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDirectory);
-    if (is_link($start)
+        : $root
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativeDirectory);
+    if (
+        is_link($start)
         || !is_dir($start)
         || !release_file_policy_resolves_to_expected_path(
             $root,
             $relativeDirectory,
-            $start
-        )) {
+            $start,
+        )
+    ) {
         throw new RuntimeException(
-            'The package traversal directory is missing or unsafe.'
+            'The package traversal directory is missing or unsafe.',
         );
     }
 
@@ -983,17 +1124,25 @@ function release_file_policy_enumerate_files(
             if ($entry === '.' || $entry === '..') {
                 continue;
             }
-            $relative = $relativeParent === '' ? $entry : $relativeParent . '/' . $entry;
+            $relative = $relativeParent === ''
+                ? $entry
+                : $relativeParent . '/' . $entry;
             if (!release_file_policy_is_safe_relative_path($relative)) {
                 throw new RuntimeException(
-                    'The package tree contains an unsafe path.'
+                    'The package tree contains an unsafe path.',
                 );
             }
             $absolute = $directory . DIRECTORY_SEPARATOR . $entry;
-            if (is_link($absolute)
-                || !release_file_policy_resolves_to_expected_path($root, $relative, $absolute)) {
+            if (
+                is_link($absolute)
+                || !release_file_policy_resolves_to_expected_path(
+                    $root,
+                    $relative,
+                    $absolute,
+                )
+            ) {
                 throw new RuntimeException(
-                    'The package tree contains a symbolic link or redirected directory.'
+                    'The package tree contains a symbolic link or redirected directory.',
                 );
             }
             if (is_dir($absolute)) {
@@ -1002,7 +1151,7 @@ function release_file_policy_enumerate_files(
             }
             if (!is_file($absolute)) {
                 throw new RuntimeException(
-                    'The package tree contains a non-regular filesystem entry.'
+                    'The package tree contains a non-regular filesystem entry.',
                 );
             }
             $files[] = $relative;
@@ -1027,23 +1176,30 @@ function release_file_policy_enumerate_files(
 function release_file_policy_resolves_to_expected_path(
     string $root,
     string $relativePath,
-    string $absolutePath
-): bool
-{
+    string $absolutePath,
+): bool {
     $resolved = realpath($absolutePath);
     if ($resolved === false) {
         return false;
     }
     $expected = $relativePath === ''
         ? $root
-        : $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        : $root
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (DIRECTORY_SEPARATOR === '\\') {
         $matches = strcasecmp($resolved, $expected) === 0;
-        $contained = $relativePath === ''
-            || strncasecmp($resolved, $root . DIRECTORY_SEPARATOR, strlen($root) + 1) === 0;
+        $contained =
+            $relativePath === ''
+            || strncasecmp(
+                $resolved,
+                $root . DIRECTORY_SEPARATOR,
+                strlen($root) + 1,
+            ) === 0;
     } else {
         $matches = $resolved === $expected;
-        $contained = $relativePath === ''
+        $contained =
+            $relativePath === ''
             || str_starts_with($resolved, $root . DIRECTORY_SEPARATOR);
     }
     return $matches && $contained;
@@ -1061,14 +1217,13 @@ function release_file_policy_resolves_to_expected_path(
  */
 function release_file_policy_assert_paths_exist(
     string $rootPath,
-    array $paths
-): void
-{
+    array $paths,
+): void {
     $root = release_file_policy_root($rootPath);
     foreach ($paths as $relativePath) {
         if (!release_file_policy_is_safe_relative_path($relativePath)) {
             throw new RuntimeException(
-                'Production file inventory contains an unsafe path.'
+                'Production file inventory contains an unsafe path.',
             );
         }
 
@@ -1078,7 +1233,7 @@ function release_file_policy_assert_paths_exist(
             $candidate .= DIRECTORY_SEPARATOR . $segment;
             if (is_link($candidate)) {
                 throw new RuntimeException(
-                    'A production file path contains a symbolic link.'
+                    'A production file path contains a symbolic link.',
                 );
             }
             // Windows junction lstat may cache mode 0 despite is_link()
@@ -1086,21 +1241,25 @@ function release_file_policy_assert_paths_exist(
             // Read fresh following stat metadata; the exact realpath check
             //     below still rejects redirects.
             clearstatcache(true, $candidate);
-            if ($index < count($segments) - 1 && !is_dir($candidate)) {
+            if ($index < (count($segments) - 1) && !is_dir($candidate)) {
                 throw new RuntimeException(
-                    'A required production file parent directory is missing.'
+                    'A required production file parent directory is missing.',
                 );
             }
         }
 
         if (!is_file($candidate) || !is_readable($candidate)) {
             throw new RuntimeException(
-                'A required production file is missing or unreadable.'
+                'A required production file is missing or unreadable.',
             );
         }
-        if (!release_file_policy_resolves_to_expected_path($root, $relativePath, $candidate)) {
+        if (!release_file_policy_resolves_to_expected_path(
+            $root,
+            $relativePath,
+            $candidate,
+        )) {
             throw new RuntimeException(
-                'A production file path resolves outside the project root.'
+                'A production file path resolves outside the project root.',
             );
         }
     }
@@ -1125,7 +1284,7 @@ function release_file_policy_assert_paths_exist(
 function release_file_policy_verify_tree(
     string $stageRoot,
     string $sourceRoot,
-    string $profile = 'production'
+    string $profile = 'production',
 ): array {
     $root = release_file_policy_root($stageRoot);
     $expected = release_file_policy_paths($sourceRoot, $profile);

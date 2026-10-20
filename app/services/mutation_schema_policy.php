@@ -56,12 +56,13 @@ class MutationSchemaUnavailableException extends RuntimeException
      * @param string $state Observed schema capability state.
      * @param string $operation Stable refused-operation identifier.
      * @param string $message Safe caller-facing exception message.
+     * @return void Initializes the exception with the refusal context.
      */
     public function __construct(
         public readonly string $feature,
         public readonly string $state,
         public readonly string $operation,
-        string $message
+        string $message,
     ) {
         parent::__construct($message);
     }
@@ -77,10 +78,13 @@ class MutationSchemaUnavailableException extends RuntimeException
  * @param string $feature Stable capability identifier.
  * @param string $table Required table.
  * @param array<int,string> $columns Required columns.
- * @return array{state:string,feature:string,requirements:array}
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate capability state and inspected database objects.
  */
-function mutation_schema_table_columns_status(string $feature, string $table, array $columns): array
-{
+function mutation_schema_table_columns_status(
+    string $feature,
+    string $table,
+    array $columns,
+): array {
     $requirements = [schema_inspection_table($table)];
     if (schema_inspection_is_available($requirements[0])) {
         foreach ($columns as $column) {
@@ -95,7 +99,7 @@ function mutation_schema_table_columns_status(string $feature, string $table, ar
  *
  * @param string $feature Stable capability identifier.
  * @param array<string,array<int,string>> $tables Required columns keyed by table.
- * @return array{state:string,feature:string,requirements:array}
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate capability state and inspected database objects.
  */
 function mutation_schema_tables_status(string $feature, array $tables): array
 {
@@ -107,7 +111,10 @@ function mutation_schema_tables_status(string $feature, array $tables): array
             continue;
         }
         foreach ($columns as $column) {
-            $requirements[] = schema_inspection_column((string) $table, (string) $column);
+            $requirements[] = schema_inspection_column(
+                (string) $table,
+                (string) $column,
+            );
         }
     }
     return schema_inspection_feature($feature, $requirements);
@@ -123,7 +130,10 @@ function mutation_schema_affected_objects(array $status): array
 {
     $objects = [];
     foreach ((array) ($status['requirements'] ?? []) as $requirement) {
-        if (!is_array($requirement) || schema_inspection_is_available($requirement)) {
+        if (
+            !is_array($requirement)
+            || schema_inspection_is_available($requirement)
+        ) {
             continue;
         }
         $table = (string) ($requirement['table'] ?? '');
@@ -135,7 +145,10 @@ function mutation_schema_affected_objects(array $status): array
         ) {
             continue;
         }
-        $objects[] = $type === 'table' || $table === $object ? $table : $table . '.' . $object;
+        $objects[] =
+            $type === 'table' || $table === $object
+                ? $table
+                : $table . '.' . $object;
     }
     return array_values(array_unique($objects));
 }
@@ -143,8 +156,9 @@ function mutation_schema_affected_objects(array $status): array
 /**
  * Record one bounded schema-policy refusal for an administrator-facing mutation.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate schema inspection result.
  * @param string $operation Stable operation identifier.
+ * @return void Writes a bounded warning event when logging is available.
  */
 function mutation_schema_log_refusal(array $status, string $operation): void
 {
@@ -162,27 +176,34 @@ function mutation_schema_log_refusal(array $status, string $operation): void
     if (!in_array($state, ['missing', 'unknown'], true)) {
         $state = 'unknown';
     }
-    admin_log_event('warning', 'database.mutation_schema_refused', 'Database mutation was refused because required schema was not safely available.', [
-        'feature' => $feature,
-        'state' => $state,
-        'operation' => $operation,
-        'affected_objects' => mutation_schema_affected_objects($status),
-    ], ['category' => 'database', 'severity' => 'warning']);
+    admin_log_event(
+        'warning',
+        'database.mutation_schema_refused',
+        'Database mutation was refused because required schema was not safely available.',
+        [
+            'feature' => $feature,
+            'state' => $state,
+            'operation' => $operation,
+            'affected_objects' => mutation_schema_affected_objects($status),
+        ],
+        ['category' => 'database', 'severity' => 'warning'],
+    );
 }
 
 /**
  * Require a fully available schema capability before mutation begins.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate schema inspection result.
  * @param string $operation Stable operation identifier.
  * @param string $missingMessage Message for confirmed migration absence.
  * @param string $unknownMessage Message for metadata inspection failure.
+ * @return void Returns when available; otherwise throws the schema refusal exception.
  */
 function mutation_schema_assert_available(
     array $status,
     string $operation,
     string $missingMessage = 'Required database migration has not been applied.',
-    string $unknownMessage = 'Required database schema could not be verified. The mutation was not started.'
+    string $unknownMessage = 'Required database schema could not be verified. The mutation was not started.',
 ): void {
     if (schema_inspection_is_available($status)) {
         return;
@@ -193,7 +214,7 @@ function mutation_schema_assert_available(
         (string) ($status['feature'] ?? 'mutation_schema'),
         $state,
         $operation,
-        $state === 'missing' ? $missingMessage : $unknownMessage
+        $state === 'missing' ? $missingMessage : $unknownMessage,
     );
 }
 
@@ -204,12 +225,16 @@ function mutation_schema_assert_available(
  * creating missing schema, for example migration/repair/update activation.
  * Missing is safe because information_schema answered reliably. Unknown is not.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate schema inspection result.
  * @param string $operation Stable operation identifier.
  * @param string $unknownMessage Message for metadata inspection failure.
+ * @return void Returns for conclusive metadata; unknown state throws the refusal exception.
  */
-function mutation_schema_assert_known(array $status, string $operation, string $unknownMessage): void
-{
+function mutation_schema_assert_known(
+    array $status,
+    string $operation,
+    string $unknownMessage,
+): void {
     if (!schema_inspection_is_unknown($status)) {
         return;
     }
@@ -218,7 +243,7 @@ function mutation_schema_assert_known(array $status, string $operation, string $
         (string) ($status['feature'] ?? 'mutation_schema'),
         'unknown',
         $operation,
-        $unknownMessage
+        $unknownMessage,
     );
 }
 
@@ -235,15 +260,23 @@ function mutation_schema_assert_known(array $status, string $operation, string $
  * @param string $operation Stable operation identifier.
  * @return bool True only when both table and column are verified available.
  */
-function mutation_schema_optional_table_column_available(string $feature, string $table, string $column, string $operation): bool
-{
+function mutation_schema_optional_table_column_available(
+    string $feature,
+    string $table,
+    string $column,
+    string $operation,
+): bool {
     $tableStatus = schema_inspection_table($table);
     if (schema_inspection_is_missing($tableStatus)) {
         return false;
     }
     if (schema_inspection_is_unknown($tableStatus)) {
         $status = schema_inspection_feature($feature, [$tableStatus]);
-        mutation_schema_assert_known($status, $operation, 'Optional database dependency could not be inspected. The mutation was not started.');
+        mutation_schema_assert_known(
+            $status,
+            $operation,
+            'Optional database dependency could not be inspected. The mutation was not started.',
+        );
     }
 
     $columnStatus = schema_inspection_column($table, $column);
@@ -252,7 +285,11 @@ function mutation_schema_optional_table_column_available(string $feature, string
     }
     if (schema_inspection_is_unknown($columnStatus)) {
         $status = schema_inspection_feature($feature, [$columnStatus]);
-        mutation_schema_assert_known($status, $operation, 'Optional database dependency could not be inspected. The mutation was not started.');
+        mutation_schema_assert_known(
+            $status,
+            $operation,
+            'Optional database dependency could not be inspected. The mutation was not started.',
+        );
     }
     return true;
 }
@@ -269,8 +306,12 @@ function mutation_schema_optional_table_column_available(string $feature, string
  * @param string $operation Stable operation identifier.
  * @return bool True only when the table and every requested column are verified.
  */
-function mutation_schema_optional_table_columns_available(string $feature, string $table, array $columns, string $operation): bool
-{
+function mutation_schema_optional_table_columns_available(
+    string $feature,
+    string $table,
+    array $columns,
+    string $operation,
+): bool {
     $tableStatus = schema_inspection_table($table);
     if (schema_inspection_is_missing($tableStatus)) {
         return false;
@@ -279,7 +320,7 @@ function mutation_schema_optional_table_columns_available(string $feature, strin
         mutation_schema_assert_known(
             schema_inspection_feature($feature, [$tableStatus]),
             $operation,
-            'Optional database dependency could not be inspected. The mutation was not started.'
+            'Optional database dependency could not be inspected. The mutation was not started.',
         );
     }
 
@@ -292,7 +333,7 @@ function mutation_schema_optional_table_columns_available(string $feature, strin
             mutation_schema_assert_known(
                 schema_inspection_feature($feature, [$columnStatus]),
                 $operation,
-                'Optional database dependency could not be inspected. The mutation was not started.'
+                'Optional database dependency could not be inspected. The mutation was not started.',
             );
         }
     }
@@ -305,9 +346,19 @@ function mutation_schema_optional_table_columns_available(string $feature, strin
  * Confirmed absence allows the caller to omit optional imported metadata.
  * Unknown state aborts the mutation because guessing could create a partial or
  * internally inconsistent import.
+ *
+ * @param string $feature Stable capability identifier used in diagnostics.
+ * @param string $table Verified core table name.
+ * @param string $column Optional imported metadata column.
+ * @param string $operation Stable operation identifier for refusal logging.
+ * @return bool True when the column exists; false only for confirmed absence.
  */
-function mutation_schema_optional_column_available(string $feature, string $table, string $column, string $operation): bool
-{
+function mutation_schema_optional_column_available(
+    string $feature,
+    string $table,
+    string $column,
+    string $operation,
+): bool {
     $columnStatus = schema_inspection_column($table, $column);
     if (schema_inspection_is_missing($columnStatus)) {
         return false;
@@ -316,17 +367,27 @@ function mutation_schema_optional_column_available(string $feature, string $tabl
         mutation_schema_assert_known(
             schema_inspection_feature($feature, [$columnStatus]),
             $operation,
-            'Optional database column could not be inspected. The mutation was not started.'
+            'Optional database column could not be inspected. The mutation was not started.',
         );
     }
     return true;
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect the gallery and image columns needed for safe gallery deletion.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function gallery_deletion_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.gallery_delete', [
-        'galleries' => ['id', 'folder_path', 'cover_image_id', 'parent_id', 'updated_at'],
+        'galleries' => [
+            'id',
+            'folder_path',
+            'cover_image_id',
+            'parent_id',
+            'updated_at',
+        ],
         'images' => ['id', 'gallery_id'],
     ]);
 }
@@ -338,42 +399,64 @@ function gallery_deletion_schema_status(): array
  * so its own storage must be verified before the first destructive step. An
  * unknown state must never silently fall back to permanent deletion.
  *
- * @return array{state:string,feature:string,requirements:array}
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with the complete trash ledger requirements.
  */
 function gallery_trash_schema_status(): array
 {
-    return mutation_schema_table_columns_status('mutation.gallery_trash', 'gallery_trash_entries', [
-        'id',
-        'trash_token',
-        'status',
-        'original_folder_path',
-        'original_parent_folder_path',
-        'title',
-        'subtree_gallery_count',
-        'image_count',
-        'byte_size',
-        'snapshot_version',
-        'snapshot_json',
-        'trash_relative_path',
-        'deleted_by_user_id',
-        'deleted_from',
-        'deleted_at',
-        'purge_after',
-        'operation_started_at',
-        'restored_at',
-        'purged_at',
-        'last_error_code',
-        'created_at',
-        'updated_at',
-    ]);
+    return mutation_schema_table_columns_status(
+        'mutation.gallery_trash',
+        'gallery_trash_entries',
+        [
+            'id',
+            'trash_token',
+            'status',
+            'original_folder_path',
+            'original_parent_folder_path',
+            'title',
+            'subtree_gallery_count',
+            'image_count',
+            'byte_size',
+            'snapshot_version',
+            'snapshot_json',
+            'trash_relative_path',
+            'deleted_by_user_id',
+            'deleted_from',
+            'deleted_at',
+            'purge_after',
+            'operation_started_at',
+            'restored_at',
+            'purged_at',
+            'last_error_code',
+            'created_at',
+            'updated_at',
+        ],
+    );
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect gallery and image columns needed for safe gallery moves.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function gallery_move_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.gallery_move', [
-        'galleries' => ['id', 'folder_path', 'folder_path_hash', 'parent_id', 'cover_image_id', 'updated_at'],
-        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'sort_order', 'updated_at'],
+        'galleries' => [
+            'id',
+            'folder_path',
+            'folder_path_hash',
+            'parent_id',
+            'cover_image_id',
+            'updated_at',
+        ],
+        'images' => [
+            'id',
+            'gallery_id',
+            'relative_path',
+            'relative_path_hash',
+            'sort_order',
+            'updated_at',
+        ],
     ]);
 }
 
@@ -386,18 +469,46 @@ function gallery_image_move_journal_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.gallery_image_move_journal', [
         'galleries' => ['id', 'folder_path', 'cover_image_id', 'updated_at'],
-        'images' => ['id', 'gallery_id', 'relative_path', 'sort_order', 'updated_at'],
-        'gallery_image_move_journal' => ['operation_id', 'source_gallery_id', 'destination_gallery_id',
-            'state', 'database_committed', 'manifest_json', 'last_error_code', 'created_at', 'updated_at'],
+        'images' => [
+            'id',
+            'gallery_id',
+            'relative_path',
+            'sort_order',
+            'updated_at',
+        ],
+        'gallery_image_move_journal' => [
+            'operation_id',
+            'source_gallery_id',
+            'destination_gallery_id',
+            'state',
+            'database_committed',
+            'manifest_json',
+            'last_error_code',
+            'created_at',
+            'updated_at',
+        ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect the pair and gallery ledger columns used to persist duplicate review decisions.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function duplicate_photo_ledger_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.duplicate_photo_ledger', [
-        'duplicate_photo_ledger_pairs' => ['user_id', 'image_id_low', 'image_id_high', 'created_at'],
-        'duplicate_photo_ledger_galleries' => ['user_id', 'gallery_id', 'created_at'],
+        'duplicate_photo_ledger_pairs' => [
+            'user_id',
+            'image_id_low',
+            'image_id_high',
+            'created_at',
+        ],
+        'duplicate_photo_ledger_galleries' => [
+            'user_id',
+            'gallery_id',
+            'created_at',
+        ],
     ]);
 }
 
@@ -410,40 +521,103 @@ function upload_ingestion_schema_status(): array
         'galleries' => ['id', 'folder_path'],
         // New sources must opt into source-bound derivative identities; confirmed
         // absence is not a compatibility path for a newly committed image.
-        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'filename', 'sort_order', 'created_at', 'updated_at', 'thumbnail_source_identity_version'],
+        'images' => [
+            'id',
+            'gallery_id',
+            'relative_path',
+            'relative_path_hash',
+            'filename',
+            'sort_order',
+            'created_at',
+            'updated_at',
+            'thumbnail_source_identity_version',
+        ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect token storage columns required to create and use upload credentials.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function upload_automation_schema_status(): array
 {
-    return mutation_schema_table_columns_status('mutation.upload_automation', 'gallery_upload_tokens', [
-        'id', 'gallery_id', 'token_hash', 'label', 'active', 'created_by_user_id', 'created_at', 'last_used_at', 'revoked_at',
-    ]);
+    return mutation_schema_table_columns_status(
+        'mutation.upload_automation',
+        'gallery_upload_tokens',
+        [
+            'id',
+            'gallery_id',
+            'token_hash',
+            'label',
+            'active',
+            'created_by_user_id',
+            'created_at',
+            'last_used_at',
+            'revoked_at',
+        ],
+    );
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect token columns required to revoke upload automation credentials.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function upload_automation_revocation_schema_status(): array
 {
-    return mutation_schema_table_columns_status('mutation.upload_automation_revoke', 'gallery_upload_tokens', [
-        'id', 'gallery_id', 'active', 'revoked_at',
-    ]);
+    return mutation_schema_table_columns_status(
+        'mutation.upload_automation_revoke',
+        'gallery_upload_tokens',
+        [
+            'id',
+            'gallery_id',
+            'active',
+            'revoked_at',
+        ],
+    );
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect token storage columns required for mobile WebDAV authentication.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function mobile_webdav_schema_status(): array
 {
-    return mutation_schema_table_columns_status('mutation.mobile_webdav', 'mobile_webdav_upload_tokens', [
-        'id', 'user_id', 'gallery_id', 'label', 'username', 'password_hash', 'path_token', 'enabled', 'created_at', 'updated_at', 'last_used_at',
-    ]);
+    return mutation_schema_table_columns_status(
+        'mutation.mobile_webdav',
+        'mobile_webdav_upload_tokens',
+        [
+            'id',
+            'user_id',
+            'gallery_id',
+            'label',
+            'username',
+            'password_hash',
+            'path_token',
+            'enabled',
+            'created_at',
+            'updated_at',
+            'last_used_at',
+        ],
+    );
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect the token identity column required to revoke mobile WebDAV credentials.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function mobile_webdav_revocation_schema_status(): array
 {
-    return mutation_schema_table_columns_status('mutation.mobile_webdav_revoke', 'mobile_webdav_upload_tokens', [
-        'id',
-    ]);
+    return mutation_schema_table_columns_status(
+        'mutation.mobile_webdav_revoke',
+        'mobile_webdav_upload_tokens',
+        [
+            'id',
+        ],
+    );
 }
 
 /** Require complete target registration storage before migration asset writes.
@@ -453,26 +627,65 @@ function gallery_migration_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.gallery_migration', [
         'galleries' => ['id', 'folder_path', 'updated_at'],
-        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'created_at', 'updated_at', 'thumbnail_source_identity_version'],
+        'images' => [
+            'id',
+            'gallery_id',
+            'relative_path',
+            'relative_path_hash',
+            'created_at',
+            'updated_at',
+            'thumbnail_source_identity_version',
+        ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect variant columns required for thumbnail metadata mutations.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function thumbnail_metadata_mutation_schema_status(): array
 {
-    return mutation_schema_table_columns_status('mutation.thumbnail_metadata', 'image_thumbnail_variants', [
-        'image_id', 'size_px', 'format', 'width', 'height', 'file_size', 'modified_at', 'status', 'status_reason', 'checked_at', 'created_at', 'updated_at',
-    ]);
+    return mutation_schema_table_columns_status(
+        'mutation.thumbnail_metadata',
+        'image_thumbnail_variants',
+        [
+            'image_id',
+            'size_px',
+            'format',
+            'width',
+            'height',
+            'file_size',
+            'modified_at',
+            'status',
+            'status_reason',
+            'checked_at',
+            'created_at',
+            'updated_at',
+        ],
+    );
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect migration history storage required by database maintenance mutations.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function database_maintenance_mutation_schema_status(): array
 {
-    return schema_inspection_feature('mutation.database_maintenance', [schema_inspection_table('schema_migrations')]);
+    return schema_inspection_feature('mutation.database_maintenance', [schema_inspection_table(
+        'schema_migrations',
+    )]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/**
+ * Inspect migration history storage required to activate application updates.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state capability with inspected objects.
+ */
 function application_update_activation_schema_status(): array
 {
-    return schema_inspection_feature('mutation.application_update', [schema_inspection_table('schema_migrations')]);
+    return schema_inspection_feature('mutation.application_update', [schema_inspection_table(
+        'schema_migrations',
+    )]);
 }

@@ -46,7 +46,9 @@ function public_widget_model_list(bool $publishedOnly = false): array
  */
 function public_widget_model_find(string $widgetId): ?array
 {
-    $statement = db()->prepare('SELECT widget_id, title, content_md, status, page_scope, placement_mode, flow_slot, floating_anchor, x_permille, y_permille, width_px, mobile_fallback, appearance, sort_order, source_language, revision, created_at, updated_at FROM public_content_widgets WHERE widget_id = ? LIMIT 1');
+    $statement = db()->prepare(
+        'SELECT widget_id, title, content_md, status, page_scope, placement_mode, flow_slot, floating_anchor, x_permille, y_permille, width_px, mobile_fallback, appearance, sort_order, source_language, revision, created_at, updated_at FROM public_content_widgets WHERE widget_id = ? LIMIT 1',
+    );
     $statement->execute([$widgetId]);
     $row = $statement->fetch(\PDO::FETCH_ASSOC);
     return $row === false ? null : $row;
@@ -66,20 +68,49 @@ function public_widget_model_insert(array $row, string $now, int $limit): void
 {
     $pdo = db();
     if ($pdo->inTransaction() || !$pdo->beginTransaction()) {
-        throw new RuntimeException('Widget creation requires its own transaction.');
+        throw new RuntimeException(
+            'Widget creation requires its own transaction.',
+        );
     }
     try {
-        $statement = $pdo->query('SELECT widget_id FROM public_content_widgets ORDER BY widget_id FOR UPDATE');
+        $statement = $pdo->query(
+            'SELECT widget_id FROM public_content_widgets ORDER BY widget_id FOR UPDATE',
+        );
         if ($statement === false) {
             throw new RuntimeException('Widget capacity could not be checked.');
         }
         if (count($statement->fetchAll(\PDO::FETCH_COLUMN)) >= $limit) {
             throw new RuntimeException('Widget limit reached.');
         }
-        $columns = ['widget_id', 'title', 'content_md', 'status', 'page_scope', 'placement_mode', 'flow_slot', 'floating_anchor', 'x_permille', 'y_permille', 'width_px', 'mobile_fallback', 'appearance', 'sort_order', 'source_language', 'revision'];
+        $columns = [
+            'widget_id',
+            'title',
+            'content_md',
+            'status',
+            'page_scope',
+            'placement_mode',
+            'flow_slot',
+            'floating_anchor',
+            'x_permille',
+            'y_permille',
+            'width_px',
+            'mobile_fallback',
+            'appearance',
+            'sort_order',
+            'source_language',
+            'revision',
+        ];
         $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-        $sql = 'INSERT INTO public_content_widgets (' . implode(', ', $columns) . ', created_at, updated_at) VALUES (' . $placeholders . ', ?, ?)';
-        $values = array_map(static fn (string $field): int|string => $row[$field], $columns);
+        $sql =
+            'INSERT INTO public_content_widgets ('
+            . implode(', ', $columns)
+            . ', created_at, updated_at) VALUES ('
+            . $placeholders
+            . ', ?, ?)';
+        $values = array_map(
+            static fn(string $field): int|string => $row[$field],
+            $columns,
+        );
         $statement = $pdo->prepare($sql);
         $statement->execute([...$values, $now, $now]);
         if (!$pdo->commit()) {
@@ -102,11 +133,41 @@ function public_widget_model_insert(array $row, string $now, int $limit): void
  */
 function public_widget_model_replace(array $row, string $now): bool
 {
-    $columns = ['title', 'content_md', 'status', 'page_scope', 'placement_mode', 'flow_slot', 'floating_anchor', 'x_permille', 'y_permille', 'width_px', 'mobile_fallback', 'appearance', 'sort_order', 'source_language'];
-    $assignments = implode(', ', array_map(static fn (string $field): string => $field . ' = ?', $columns));
-    $statement = db()->prepare('UPDATE public_content_widgets SET ' . $assignments . ', revision = revision + 1, updated_at = ? WHERE widget_id = ? AND revision = ?');
-    $values = array_map(static fn (string $field): int|string => $row[$field], $columns);
-    $statement->execute([...$values, $now, $row['widget_id'], $row['revision']]);
+    $columns = [
+        'title',
+        'content_md',
+        'status',
+        'page_scope',
+        'placement_mode',
+        'flow_slot',
+        'floating_anchor',
+        'x_permille',
+        'y_permille',
+        'width_px',
+        'mobile_fallback',
+        'appearance',
+        'sort_order',
+        'source_language',
+    ];
+    $assignments = implode(', ', array_map(
+        static fn(string $field): string => $field . ' = ?',
+        $columns,
+    ));
+    $statement = db()->prepare(
+        'UPDATE public_content_widgets SET '
+            . $assignments
+            . ', revision = revision + 1, updated_at = ? WHERE widget_id = ? AND revision = ?',
+    );
+    $values = array_map(
+        static fn(string $field): int|string => $row[$field],
+        $columns,
+    );
+    $statement->execute([
+        ...$values,
+        $now,
+        $row['widget_id'],
+        $row['revision'],
+    ]);
     return $statement->rowCount() === 1;
 }
 
@@ -119,7 +180,9 @@ function public_widget_model_replace(array $row, string $now): bool
  */
 function public_widget_model_delete(string $widgetId, int $revision): bool
 {
-    $statement = db()->prepare('DELETE FROM public_content_widgets WHERE widget_id = ? AND revision = ?');
+    $statement = db()->prepare(
+        'DELETE FROM public_content_widgets WHERE widget_id = ? AND revision = ?',
+    );
     $statement->execute([$widgetId, $revision]);
     return $statement->rowCount() === 1;
 }
@@ -135,12 +198,21 @@ function public_widget_model_reorder(array $changes, string $now): bool
 {
     $pdo = db();
     if ($pdo->inTransaction() || !$pdo->beginTransaction()) {
-        throw new RuntimeException('Widget ordering requires its own transaction.');
+        throw new RuntimeException(
+            'Widget ordering requires its own transaction.',
+        );
     }
     try {
-        $statement = $pdo->prepare('UPDATE public_content_widgets SET sort_order = ?, revision = revision + 1, updated_at = ? WHERE widget_id = ? AND revision = ?');
+        $statement = $pdo->prepare(
+            'UPDATE public_content_widgets SET sort_order = ?, revision = revision + 1, updated_at = ? WHERE widget_id = ? AND revision = ?',
+        );
         foreach ($changes as $change) {
-            $statement->execute([$change['sort_order'], $now, $change['widget_id'], $change['revision']]);
+            $statement->execute([
+                $change['sort_order'],
+                $now,
+                $change['widget_id'],
+                $change['revision'],
+            ]);
             if ($statement->rowCount() !== 1) {
                 $pdo->rollBack();
                 return false;

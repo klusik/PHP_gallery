@@ -16,10 +16,10 @@
  *   - Batch-load translated overlays without public N+1 queries
  *   - Apply independent title and description fallback
  *   - Validate and persist Admin translation mutations
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
@@ -30,6 +30,7 @@ use RuntimeException;
 use function Gallery\Core\now_sql;
 
 const CONTENT_LOCALIZATION_ENTITY_GALLERY = 'gallery';
+
 const CONTENT_LOCALIZATION_ENTITY_IMAGE = 'image';
 
 /** @var null|callable(string,array<int>,?string):array<int,array<string,array<string,mixed>>> */
@@ -55,8 +56,11 @@ function content_supported_languages(): array
  */
 function content_localization_enabled(): bool
 {
-    return !function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled')
-        || feature_capability_effective_enabled('multilingual_content');
+    return (
+        !function_exists(__NAMESPACE__
+            . '\feature_capability_effective_enabled')
+            || feature_capability_effective_enabled('multilingual_content')
+    );
 }
 
 /**
@@ -84,7 +88,9 @@ function content_language_og_locale(string $language): string
 function content_language_normalize(mixed $language): ?string
 {
     $normalized = translation_normalize_language_code((string) $language);
-    return in_array($normalized, content_supported_languages(), true) ? $normalized : null;
+    return in_array($normalized, content_supported_languages(), true)
+        ? $normalized
+        : null;
 }
 
 /**
@@ -96,12 +102,22 @@ function content_language_normalize(mixed $language): ?string
 function content_localization_storage(string $entityType): array
 {
     if ($entityType === CONTENT_LOCALIZATION_ENTITY_GALLERY) {
-        return ['table' => 'gallery_translations', 'owner_column' => 'gallery_id', 'base_table' => 'galleries'];
+        return [
+            'table' => 'gallery_translations',
+            'owner_column' => 'gallery_id',
+            'base_table' => 'galleries',
+        ];
     }
     if ($entityType === CONTENT_LOCALIZATION_ENTITY_IMAGE) {
-        return ['table' => 'image_translations', 'owner_column' => 'image_id', 'base_table' => 'images'];
+        return [
+            'table' => 'image_translations',
+            'owner_column' => 'image_id',
+            'base_table' => 'images',
+        ];
     }
-    throw new InvalidArgumentException('Unsupported localized content entity type.');
+    throw new InvalidArgumentException(
+        'Unsupported localized content entity type.',
+    );
 }
 
 /**
@@ -131,7 +147,9 @@ function content_localization_schema_status(string $entityType): array
  */
 function content_localization_schema_ready(string $entityType): bool
 {
-    return schema_inspection_is_available(content_localization_schema_status($entityType));
+    return schema_inspection_is_available(content_localization_schema_status(
+        $entityType,
+    ));
 }
 
 /**
@@ -160,25 +178,38 @@ function content_localization_reset_request_cache(): void
  * @param ?string $language Optional single supported language.
  * @return array<int,array<string,array<string,mixed>>> Rows grouped by entity and language.
  */
-function content_translation_rows(string $entityType, array $entityIds, ?string $language = null): array
-{
+function content_translation_rows(
+    string $entityType,
+    array $entityIds,
+    ?string $language = null,
+): array {
     global $contentLocalizationLoaderForTests;
     $storage = content_localization_storage($entityType);
-    $entityIds = array_values(array_unique(array_filter(array_map('intval', $entityIds), static fn (int $id): bool => $id > 0)));
-    $language = $language === null ? null : content_language_normalize($language);
+    $entityIds = array_values(array_unique(array_filter(
+        array_map('intval', $entityIds),
+        static fn(int $id): bool => $id > 0,
+    )));
+    $language = $language === null
+        ? null
+        : content_language_normalize($language);
     if ($entityIds === []) {
         return [];
     }
 
     sort($entityIds);
-    $cacheKey = $entityType . ':' . implode(',', $entityIds) . ':' . ($language ?? '*');
+    $cacheKey =
+        $entityType . ':' . implode(',', $entityIds) . ':' . ($language ?? '*');
     $cache = $GLOBALS['content_localization_request_cache'] ?? [];
     if (isset($cache[$cacheKey])) {
         return $cache[$cacheKey];
     }
 
     if (is_callable($contentLocalizationLoaderForTests)) {
-        $grouped = $contentLocalizationLoaderForTests($entityType, $entityIds, $language);
+        $grouped = $contentLocalizationLoaderForTests(
+            $entityType,
+            $entityIds,
+            $language,
+        );
         $GLOBALS['content_localization_request_cache'][$cacheKey] = $grouped;
         return $grouped;
     }
@@ -188,9 +219,15 @@ function content_translation_rows(string $entityType, array $entityIds, ?string 
     }
 
     $grouped = [];
-    foreach (\Gallery\Models\content_localization_model_rows($entityType, $entityIds, $language) as $row) {
+    foreach (\Gallery\Models\content_localization_model_rows(
+        $entityType,
+        $entityIds,
+        $language,
+    ) as $row) {
         $ownerId = (int) ($row['owner_id'] ?? 0);
-        $rowLanguage = content_language_normalize($row['language_code'] ?? null);
+        $rowLanguage = content_language_normalize(
+            $row['language_code'] ?? null,
+        );
         if ($ownerId > 0 && $rowLanguage !== null) {
             $grouped[$ownerId][$rowLanguage] = $row;
         }
@@ -206,28 +243,47 @@ function content_translation_rows(string $entityType, array $entityIds, ?string 
  * @param string $language Requested viewer language.
  * @param array<string,array<string,mixed>> $translations Preloaded rows keyed by language.
  * @param bool $fallbackMissingFields Whether blank translated fields fall back independently.
- * @return array{title:string,description:string,requested_language:string,source_language:?string,title_source:string,description_source:string,translation:?array<string,mixed>}
+ * @return array{title:string,description:string,requested_language:string,source_language:?string,title_source:string,description_source:string,translation:?array<string,mixed>} Resolved authored fields with source/fallback language metadata and the selected translation row when present.
  */
-function content_localized_fields(array $entity, string $language, array $translations = [], bool $fallbackMissingFields = true): array
-{
-    $requested = content_language_normalize($language) ?? translation_default_language();
-    $sourceLanguage = content_language_normalize($entity['content_language'] ?? null);
-    $translation = content_localization_enabled() && isset($translations[$requested]) && is_array($translations[$requested]) ? $translations[$requested] : null;
+function content_localized_fields(
+    array $entity,
+    string $language,
+    array $translations = [],
+    bool $fallbackMissingFields = true,
+): array {
+    $requested = content_language_normalize(
+        $language,
+    ) ?? translation_default_language();
+    $sourceLanguage = content_language_normalize(
+        $entity['content_language'] ?? null,
+    );
+    $translation = content_localization_enabled()
+    && isset($translations[$requested])
+    && is_array($translations[$requested])
+        ? $translations[$requested]
+        : null;
     $baseTitle = trim((string) ($entity['title'] ?? ''));
     $baseDescription = (string) ($entity['description'] ?? '');
     $translatedTitle = trim((string) ($translation['title'] ?? ''));
     $translatedDescription = (string) ($translation['description'] ?? '');
     $useTranslation = $translation !== null && $requested !== $sourceLanguage;
-    $useTranslatedTitle = $useTranslation && ($translatedTitle !== '' || !$fallbackMissingFields);
-    $useTranslatedDescription = $useTranslation && (trim($translatedDescription) !== '' || !$fallbackMissingFields);
+    $useTranslatedTitle =
+        $useTranslation && ($translatedTitle !== '' || !$fallbackMissingFields);
+    $useTranslatedDescription =
+        $useTranslation
+        && (trim($translatedDescription) !== '' || !$fallbackMissingFields);
 
     return [
         'title' => $useTranslatedTitle ? $translatedTitle : $baseTitle,
-        'description' => $useTranslatedDescription ? $translatedDescription : $baseDescription,
+        'description' => $useTranslatedDescription
+            ? $translatedDescription
+            : $baseDescription,
         'requested_language' => $requested,
         'source_language' => $sourceLanguage,
         'title_source' => $useTranslatedTitle ? 'translation' : 'source',
-        'description_source' => $useTranslatedDescription ? 'translation' : 'source',
+        'description_source' => $useTranslatedDescription
+            ? 'translation'
+            : 'source',
         'translation' => $translation,
     ];
 }
@@ -240,13 +296,23 @@ function content_localized_fields(array $entity, string $language, array $transl
  * @param ?string $language Explicit language override, or null for the effective request language.
  * @return array<int,array<string,mixed>> Rows with resolved title/description and localization metadata.
  */
-function content_localize_entities(string $entityType, array $entities, ?string $language = null): array
-{
+function content_localize_entities(
+    string $entityType,
+    array $entities,
+    ?string $language = null,
+): array {
     $language = $language ?? translation_active_language();
     // Virtual Smart Gallery IDs belong to a separate table without authored
     // translations; they must never receive a physical gallery's overlay.
-    $ids = array_map(static fn (array $entity): int => !empty($entity['__smart_gallery']) ? 0 : (int) ($entity['id'] ?? 0), $entities);
-    $translations = content_localization_enabled() ? content_translation_rows($entityType, $ids, $language) : [];
+    $ids = array_map(
+        static fn(array $entity): int => !empty($entity['__smart_gallery'])
+            ? 0
+            : (int) ($entity['id'] ?? 0),
+        $entities,
+    );
+    $translations = content_localization_enabled()
+        ? content_translation_rows($entityType, $ids, $language)
+        : [];
     foreach ($entities as &$entity) {
         if (!empty($entity['__smart_gallery'])) {
             continue;
@@ -255,13 +321,26 @@ function content_localize_entities(string $entityType, array $entities, ?string 
         // Repeated presentation passes and language changes must resolve from
         // canonical source text, never from an earlier translated overlay.
         if (isset($entity['_content_localization'])) {
-            $entity['title'] = (string) ($entity['source_title'] ?? $entity['title'] ?? '');
-            $entity['description'] = (string) ($entity['source_description'] ?? $entity['description'] ?? '');
+            $entity['title'] = (string) (
+                $entity['source_title']
+                ?? $entity['title']
+                ?? ''
+            );
+            $entity['description'] = (string) (
+                $entity['source_description']
+                ?? $entity['description']
+                ?? ''
+            );
         }
         // A photo translation is one visible caption variant. Once present, its
         // blank field stays blank so source-language text is not mixed beneath
         // translated photo text. Galleries retain independent field fallback.
-        $resolved = content_localized_fields($entity, $language, $translations[$id] ?? [], $entityType !== 'image');
+        $resolved = content_localized_fields(
+            $entity,
+            $language,
+            $translations[$id] ?? [],
+            $entityType !== 'image',
+        );
         $entity['source_title'] = (string) ($entity['title'] ?? '');
         $entity['source_description'] = (string) ($entity['description'] ?? '');
         $entity['title'] = $resolved['title'];
@@ -280,8 +359,11 @@ function content_localize_entities(string $entityType, array $entities, ?string 
  * @param ?string $language Explicit language override, or null for the effective request language.
  * @return array<string,mixed> Localized entity row.
  */
-function content_localize_entity(string $entityType, array $entity, ?string $language = null): array
-{
+function content_localize_entity(
+    string $entityType,
+    array $entity,
+    ?string $language = null,
+): array {
     return content_localize_entities($entityType, [$entity], $language)[0];
 }
 
@@ -290,13 +372,20 @@ function content_localize_entity(string $entityType, array $entity, ?string $lan
  *
  * @param string $entityType Gallery or image architecture identifier.
  * @param int $entityId Owning entity identifier.
- * @param mixed $sourceLanguage Optional source language.
- * @param mixed $translations Submitted translations keyed by language.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $sourceLanguage Optional language-code candidate normalized against supported content languages.
+ * @param array<array-key,mixed>|scalar|object{}|resource|null $translations Submitted language-keyed rows shaped as array{title?:mixed,description?:mixed}; malformed rows and non-array input are treated as empty input.
+ * @return void Normalizes and persists the entity's source language and complete translation set, clearing the request cache afterward; invalid storage state throws RuntimeException.
  */
-function content_save_localizations(string $entityType, int $entityId, mixed $sourceLanguage, mixed $translations): void
-{
+function content_save_localizations(
+    string $entityType,
+    int $entityId,
+    mixed $sourceLanguage,
+    mixed $translations,
+): void {
     if ($entityId < 1 || !content_localization_schema_ready($entityType)) {
-        throw new RuntimeException('Multilingual content storage is unavailable. Apply pending database migrations and try again.');
+        throw new RuntimeException(
+            'Multilingual content storage is unavailable. Apply pending database migrations and try again.',
+        );
     }
     $normalizedSource = content_language_normalize($sourceLanguage);
     $submitted = is_array($translations) ? $translations : [];
@@ -306,13 +395,27 @@ function content_save_localizations(string $entityType, int $entityId, mixed $so
             $normalizedRows[$language] = null;
             continue;
         }
-        $row = is_array($submitted[$language] ?? null) ? $submitted[$language] : [];
+        $row = is_array($submitted[$language] ?? null)
+            ? $submitted[$language]
+            : [];
         $title = trim((string) ($row['title'] ?? ''));
         $description = (string) ($row['description'] ?? '');
-        $normalizedRows[$language] = ($title === '' && trim($description) === '')
-            ? null
-            : ['title' => $title !== '' ? $title : null, 'description' => trim($description) !== '' ? $description : null];
+        $normalizedRows[$language] =
+            $title === '' && trim($description) === ''
+                ? null
+                : [
+                    'title' => $title !== '' ? $title : null,
+                    'description' => trim($description) !== ''
+                        ? $description
+                        : null,
+                ];
     }
-    \Gallery\Models\content_localization_model_save($entityType, $entityId, $normalizedSource, $normalizedRows, now_sql());
+    \Gallery\Models\content_localization_model_save(
+        $entityType,
+        $entityId,
+        $normalizedSource,
+        $normalizedRows,
+        now_sql(),
+    );
     content_localization_reset_request_cache();
 }

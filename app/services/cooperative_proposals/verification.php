@@ -20,8 +20,11 @@ namespace Gallery\Services;
 function cooperative_verification_wait_until(array $group): ?int
 {
     $operation = $group['exchange']['verification']['operation'] ?? null;
-    if (is_array($operation) && is_int($operation['expires_at'] ?? null)
-        && $operation['expires_at'] > time()) {
+    if (
+        is_array($operation)
+        && is_int($operation['expires_at'] ?? null)
+        && $operation['expires_at'] > time()
+    ) {
         return $operation['expires_at'];
     }
     $retryAt = $group['exchange']['verification_retry_at'] ?? null;
@@ -38,18 +41,29 @@ function cooperative_verification_round(array $group, string $roundId): array
     cooperative_id_validate($roundId);
     $round = $group['exchange']['verification'] ?? null;
     $document = cooperative_proposal_document($group);
-    if (!is_array($round) || ($round['round_id'] ?? '') !== $roundId
-        || ($round['digest'] ?? '') !== $document['digest']) {
+    if (
+        !is_array($round)
+        || ($round['round_id'] ?? '') !== $roundId
+        || ($round['digest'] ?? '') !== $document['digest']
+    ) {
         throw new CooperativeException('verification_unavailable');
     }
     $now = time();
-    if (!is_int($round['started_at']) || !is_int($round['expires_at'])
-        || $round['expires_at'] !== $round['started_at'] + COOPERATIVE_VERIFICATION_TTL
-        || $now < $round['started_at'] || $now >= $round['expires_at']) {
+    if (
+        !is_int($round['started_at'])
+        || !is_int($round['expires_at'])
+        || $round['expires_at']
+            !== ($round['started_at'] + COOPERATIVE_VERIFICATION_TTL)
+        || $now < $round['started_at']
+        || $now >= $round['expires_at']
+    ) {
         throw new CooperativeException('verification_expired');
     }
     $own = cooperative_proposal_own_decision($group);
-    if ($own['decision'] !== 'approved' || $own['generations'] !== $round['own_generations']) {
+    if (
+        $own['decision'] !== 'approved'
+        || $own['generations'] !== $round['own_generations']
+    ) {
         throw new CooperativeException('consent_stale');
     }
     return $round;
@@ -77,10 +91,18 @@ function cooperative_verification_start(string $groupId, int $expected): array
     $document = cooperative_proposal_document($group);
     $now = time();
     $group['exchange']['lease'] = null;
-    $group['exchange']['verification'] = ['round_id' => cooperative_id_generate(), 'digest' => $document['digest'],
-        'started_at' => $now, 'expires_at' => $now + COOPERATIVE_VERIFICATION_TTL,
-        'own_generations' => $own['generations'], 'receipts' => []];
-    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save($stored, $group));
+    $group['exchange']['verification'] = [
+        'round_id' => cooperative_id_generate(),
+        'digest' => $document['digest'],
+        'started_at' => $now,
+        'expires_at' => $now + COOPERATIVE_VERIFICATION_TTL,
+        'own_generations' => $own['generations'],
+        'receipts' => [],
+    ];
+    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save(
+        $stored,
+        $group,
+    ));
 }
 
 /** Verify exactly one participant directly; failed retries cannot retain an older receipt.
@@ -90,8 +112,12 @@ function cooperative_verification_start(string $groupId, int $expected): array
  * @param string $remote Direct participant to contact at its stored paired origin.
  * @return array<string,mixed> Updated Admin projection; a negative reply remains non-authorizing.
  */
-function cooperative_verification_peer(string $groupId, int $expected, string $roundId, string $remote): array
-{
+function cooperative_verification_peer(
+    string $groupId,
+    int $expected,
+    string $roundId,
+    string $remote,
+): array {
     $stored = cooperative_proposal_exchange_load($groupId);
     if ($stored['storage_revision'] !== $expected) {
         throw new CooperativeException('revision_conflict');
@@ -100,7 +126,10 @@ function cooperative_verification_peer(string $groupId, int $expected, string $r
     $round = cooperative_verification_round($group, $roundId);
     cooperative_id_validate($remote);
     $local = cooperative_instance_id();
-    if ($remote === $local || !array_key_exists($remote, $round['own_generations'])) {
+    if (
+        $remote === $local
+        || !array_key_exists($remote, $round['own_generations'])
+    ) {
         throw new CooperativeException('proposal_unauthorized');
     }
     if (cooperative_verification_wait_until($group) !== null) {
@@ -117,24 +146,48 @@ function cooperative_verification_peer(string $groupId, int $expected, string $r
     $group['exchange']['lease'] = null;
     // A group has one owned network operation. Its nonce is local ownership only;
     // the wire challenge remains the fixed round identity and deadline.
-    $operation = ['nonce' => cooperative_id_generate(), 'round_id' => $roundId,
-        'peer_id' => $remote, 'expires_at' => min(time() + COOPERATIVE_CONSENT_RETRY_DELAY, $round['expires_at'])];
+    $operation = [
+        'nonce' => cooperative_id_generate(),
+        'round_id' => $roundId,
+        'peer_id' => $remote,
+        'expires_at' => min(
+            time() + COOPERATIVE_CONSENT_RETRY_DELAY,
+            $round['expires_at'],
+        ),
+    ];
     $group['exchange']['verification']['operation'] = $operation;
     // Persist a finite crash/lost-response cooldown before making the request.
     // This survives round replacement, so polling cannot evade a failed retry.
-    $group['exchange']['verification_retry_at'] = $operation['expires_at'] + COOPERATIVE_CONSENT_RETRY_DELAY;
+    $group['exchange']['verification_retry_at'] =
+        $operation['expires_at'] + COOPERATIVE_CONSENT_RETRY_DELAY;
     $stored = cooperative_proposal_exchange_save($stored, $group);
-    $message = ['protocol' => COOPERATIVE_PROTOCOL_VERSION, 'action' => 'verify',
-        'sender_id' => $local, 'recipient_id' => $remote, 'group_id' => $groupId,
-        'digest' => $document['digest'], 'challenge' => $roundId];
+    $message = [
+        'protocol' => COOPERATIVE_PROTOCOL_VERSION,
+        'action' => 'verify',
+        'sender_id' => $local,
+        'recipient_id' => $remote,
+        'group_id' => $groupId,
+        'digest' => $document['digest'],
+        'challenge' => $roundId,
+    ];
     $observedAt = time();
     try {
         $response = cooperative_proposal_request($peer, $message);
-        $receipt = cooperative_proposal_response_validate($response, $message, $document['body']);
+        $receipt = cooperative_proposal_response_validate(
+            $response,
+            $message,
+            $document['body'],
+        );
         $current = cooperative_proposal_exchange_load($groupId);
-        if ($current['storage_revision'] !== $stored['storage_revision']
-            || ($current['group']['exchange']['verification']['operation'] ?? null) !== $operation
-            || time() >= $operation['expires_at'] || cooperative_peer_status($remote) !== $peer) {
+        if (
+            $current['storage_revision'] !== $stored['storage_revision']
+            || (
+                $current['group']['exchange']['verification']['operation']
+                ?? null
+            ) !== $operation
+            || time() >= $operation['expires_at']
+            || cooperative_peer_status($remote) !== $peer
+        ) {
             throw new CooperativeException('revision_conflict');
         }
         cooperative_verification_round($current['group'], $roundId);
@@ -142,24 +195,43 @@ function cooperative_verification_peer(string $groupId, int $expected, string $r
         // Cleanup may only update the revision and nonce we reserved. A concurrent
         // decline, revocation or newer round wins even when the transport fails.
         $current = cooperative_proposal_exchange_load($groupId);
-        if ($current['storage_revision'] === $stored['storage_revision']
-            && ($current['group']['exchange']['verification']['operation'] ?? null) === $operation) {
+        if (
+            $current['storage_revision'] === $stored['storage_revision']
+            && (
+                $current['group']['exchange']['verification']['operation']
+                ?? null
+            ) === $operation
+        ) {
             $failed = $current['group'];
             unset($failed['exchange']['verification']['operation']);
-            $failed['exchange']['verification_retry_at'] = time() + COOPERATIVE_CONSENT_RETRY_DELAY;
+            $failed['exchange']['verification_retry_at'] =
+                time() + COOPERATIVE_CONSENT_RETRY_DELAY;
             try {
                 cooperative_proposal_exchange_save($current, $failed);
             } catch (CooperativeException $cleanupError) {
-                if ($cleanupError->reason !== 'revision_conflict') { throw $cleanupError; }
+                if ($cleanupError->reason !== 'revision_conflict') {
+                    throw $cleanupError;
+                }
             }
         }
         throw $error;
     }
-    unset($group['exchange']['verification']['operation'], $group['exchange']['verification_retry_at']);
-    $group['exchange']['verification']['receipts'][$remote] = $receipt + [
-        'challenge' => $roundId, 'observed_at' => $observedAt, 'peer_revision' => $peer['revision']];
-    $group['exchange']['observations'][$remote] = $receipt + ['observed_at' => $observedAt, 'peer_revision' => $peer['revision']];
-    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save($stored, $group));
+    unset(
+        $group['exchange']['verification']['operation'],
+        $group['exchange']['verification_retry_at'],
+    );
+    $group['exchange']['verification']['receipts'][$remote] = $receipt
+    + [
+        'challenge' => $roundId,
+        'observed_at' => $observedAt,
+        'peer_revision' => $peer['revision'],
+    ];
+    $group['exchange']['observations'][$remote] = $receipt
+    + ['observed_at' => $observedAt, 'peer_revision' => $peer['revision']];
+    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save(
+        $stored,
+        $group,
+    ));
 }
 
 /** Construct every direct friendship stamp from both independently observed endpoints.
@@ -167,8 +239,10 @@ function cooperative_verification_peer(string $groupId, int $expected, string $r
  * @param array<string,array<string,int>> $generations One directly verified map per participant.
  * @return array<string,string> Complete sorted pair-to-stamp mapping for this exact membership.
  */
-function cooperative_verification_evidence(array $body, array $generations): array
-{
+function cooperative_verification_evidence(
+    array $body,
+    array $generations,
+): array {
     $ids = array_column($body['members'], 'instance_id');
     sort($ids, SORT_STRING);
     $owners = array_keys($generations);
@@ -191,8 +265,16 @@ function cooperative_verification_evidence(array $body, array $generations): arr
         }
     }
     $evidence = [];
-    foreach (cooperative_friendship_pairs($body['members']) as [$first, $second]) {
-        $evidence[$first . ':' . $second] = cooperative_friendship_stamp($first, $generations[$first][$second], $second, $generations[$second][$first]);
+    foreach (cooperative_friendship_pairs($body['members']) as [
+        $first,
+        $second,
+    ]) {
+        $evidence[$first . ':' . $second] = cooperative_friendship_stamp(
+            $first,
+            $generations[$first][$second],
+            $second,
+            $generations[$second][$first],
+        );
     }
     return $evidence;
 }

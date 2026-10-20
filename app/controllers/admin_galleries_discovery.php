@@ -90,6 +90,8 @@ require_once dirname(__DIR__) . '/services/gallery_creation_preferences.php';
  * The visible page no longer performs filesystem recursion during initial
  * rendering. Browser-side JavaScript starts or resumes a small-batch discovery
  * job and renders the import table when the scan is complete.
+ *
+ * @return void Renders the page or delegates its Ajax request.
  */
 function cms_admin_discover(): void
 {
@@ -105,7 +107,11 @@ function cms_admin_discover(): void
         redirect_to(url_for('admin_discover'));
     }
 
-    $jobToken = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($_GET['job_token'] ?? '')) ?: '';
+    $jobToken = preg_replace(
+        '/[^A-Fa-f0-9]/',
+        '',
+        (string) ($_GET['job_token'] ?? ''),
+    ) ?: '';
 
     \Gallery\Views\view_render_admin_gallery_discovery_page([
         'title' => t('admin.galleries.discover_title'),
@@ -133,10 +139,23 @@ function cms_admin_discover_ajax(): void
         @set_time_limit(120);
 
         $action = (string) ($_POST['action'] ?? 'step');
-        $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($_POST['job_token'] ?? '')) ?: '';
-        $batchSize = max(1, min(ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE)));
+        $token = preg_replace(
+            '/[^A-Fa-f0-9]/',
+            '',
+            (string) ($_POST['job_token'] ?? ''),
+        ) ?: '';
+        $batchSize = max(1, min(
+            ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE,
+            (int) (
+                $_POST['batch_size']
+                ?? ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE
+            ),
+        ));
 
-        if (!isset($_SESSION['admin_gallery_discovery_jobs']) || !is_array($_SESSION['admin_gallery_discovery_jobs'])) {
+        if (
+            !isset($_SESSION['admin_gallery_discovery_jobs'])
+            || !is_array($_SESSION['admin_gallery_discovery_jobs'])
+        ) {
             $_SESSION['admin_gallery_discovery_jobs'] = [];
         }
         $jobs = &$_SESSION['admin_gallery_discovery_jobs'];
@@ -145,15 +164,29 @@ function cms_admin_discover_ajax(): void
         } elseif ($action === 'status') {
             $state = admin_gallery_discovery_job_status($token, $jobs);
         } else {
-            $state = admin_gallery_discovery_process_job($token, $jobs, $batchSize);
+            $state = admin_gallery_discovery_process_job(
+                $token,
+                $jobs,
+                $batchSize,
+            );
         }
 
         $payload = admin_gallery_discovery_controller_payload($state);
         $discardedOutput = (string) ob_get_clean();
         if (trim($discardedOutput) !== '') {
-            admin_log_event('warning', 'gallery.discovery_response_output_discarded', 'Gallery discovery produced output before its JSON response.', [
-                'discarded_output_preview' => mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500),
-            ], ['category' => 'other', 'severity' => 'warning']);
+            admin_log_event(
+                'warning',
+                'gallery.discovery_response_output_discarded',
+                'Gallery discovery produced output before its JSON response.',
+                [
+                    'discarded_output_preview' => mb_substr(
+                        trim(preg_replace('/\s+/', ' ', $discardedOutput)),
+                        0,
+                        500,
+                    ),
+                ],
+                ['category' => 'other', 'severity' => 'warning'],
+            );
         }
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
@@ -164,10 +197,22 @@ function cms_admin_discover_ajax(): void
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
-        admin_log_event('error', 'gallery.discovery_failed', 'Gallery discovery Ajax request failed.', [
-            'error' => $exception->getMessage(),
-            'discarded_output_preview' => $discardedOutput !== '' ? mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500) : null,
-        ], ['category' => 'other', 'severity' => 'error']);
+        admin_log_event(
+            'error',
+            'gallery.discovery_failed',
+            'Gallery discovery Ajax request failed.',
+            [
+                'error' => $exception->getMessage(),
+                'discarded_output_preview' => $discardedOutput !== ''
+                    ? mb_substr(
+                        trim(preg_replace('/\s+/', ' ', $discardedOutput)),
+                        0,
+                        500,
+                    )
+                    : null,
+            ],
+            ['category' => 'other', 'severity' => 'error'],
+        );
         admin_gallery_discovery_json_response([
             'ok' => false,
             'status' => 'error',
@@ -196,18 +241,35 @@ function admin_gallery_discovery_controller_payload(array $state): array
     if ($message === '') {
         if ($status === 'complete') {
             if ($candidateCount > 0) {
-                $message = t('admin.galleries.discovery_done_with_candidates', 'Discovery complete. Found {count} folder(s) that need a decision.', ['count' => (string) $candidateCount]);
+                $message = t(
+                    'admin.galleries.discovery_done_with_candidates',
+                    'Discovery complete. Found {count} folder(s) that need a decision.',
+                    ['count' => (string) $candidateCount],
+                );
             } elseif ($metadataOnlyCount > 0) {
-                $message = t('admin.galleries.discovery_done_metadata_only', 'Discovery complete. No importable photo folders found. Ignored {count} metadata-only folder(s).', ['count' => (string) $metadataOnlyCount]);
+                $message = t(
+                    'admin.galleries.discovery_done_metadata_only',
+                    'Discovery complete. No importable photo folders found. Ignored {count} metadata-only folder(s).',
+                    ['count' => (string) $metadataOnlyCount],
+                );
             } else {
                 $message = t('admin.galleries.discover_none_found');
             }
         } elseif ($status === 'missing') {
-            $message = t('admin.galleries.discovery_missing_job', 'Discovery progress expired. Start the scan again.');
+            $message = t(
+                'admin.galleries.discovery_missing_job',
+                'Discovery progress expired. Start the scan again.',
+            );
         } elseif ($status === 'error') {
-            $message = t('admin.galleries.discovery_failed', 'Gallery discovery failed.');
+            $message = t(
+                'admin.galleries.discovery_failed',
+                'Gallery discovery failed.',
+            );
         } else {
-            $message = t('admin.galleries.discovery_running', 'Scanning gallery folders...');
+            $message = t(
+                'admin.galleries.discovery_running',
+                'Scanning gallery folders...',
+            );
         }
     }
 
@@ -223,7 +285,9 @@ function admin_gallery_discovery_controller_payload(array $state): array
         'metadata_only_count' => $metadataOnlyCount,
         'percent' => (float) ($state['percent'] ?? 0.0),
         'message' => $message,
-        'result_url' => url_for('admin_discover', ['job_token' => (string) ($state['job_token'] ?? '')]),
+        'result_url' => url_for('admin_discover', [
+            'job_token' => (string) ($state['job_token'] ?? ''),
+        ]),
         'errors' => is_array($state['errors'] ?? null) ? $state['errors'] : [],
     ];
 
@@ -249,16 +313,20 @@ function admin_gallery_discovery_json_response(array $payload): void
  * Render the dynamic discovery shell used by the browser-side progress module.
  *
  * @param string $jobToken Existing completed or running job token from the query string.
+ * @return void Emits the discovery shell HTML.
  */
 function render_admin_gallery_discovery_shell(string $jobToken = ''): void
 {
-    \Gallery\Views\view_render_admin_gallery_discovery_shell(admin_gallery_discovery_shell_view_model($jobToken));
+    \Gallery\Views\view_render_admin_gallery_discovery_shell(admin_gallery_discovery_shell_view_model(
+        $jobToken,
+    ));
 }
 
 /**
  * Build presentation state for the browser-driven Admin gallery discovery shell.
  *
- * @return array<string,mixed> Discovery shell view model.
+ * @param string $jobToken Existing job token exposed to the browser.
+ * @return array{endpoint:string,import_url:string,csrf_token:string,job_token:string,intro:string,starting_message:string,move_placeholder:string,gallery_options_html:string} Browser discovery shell state.
  */
 function admin_gallery_discovery_shell_view_model(string $jobToken = ''): array
 {
@@ -267,15 +335,26 @@ function admin_gallery_discovery_shell_view_model(string $jobToken = ''): array
         'import_url' => url_for('admin_import'),
         'csrf_token' => csrf_token(),
         'job_token' => $jobToken,
-        'intro' => t('admin.galleries.discovery_intro', 'Discovery now runs in browser-driven batches, so large gallery folders no longer freeze the Admin page.'),
-        'starting_message' => t('admin.galleries.discovery_starting', 'Preparing gallery discovery...'),
-        'move_placeholder' => t('admin.galleries.discover_move_target_placeholder', 'Choose existing destination gallery'),
+        'intro' => t(
+            'admin.galleries.discovery_intro',
+            'Discovery now runs in browser-driven batches, so large gallery folders no longer freeze the Admin page.',
+        ),
+        'starting_message' => t(
+            'admin.galleries.discovery_starting',
+            'Preparing gallery discovery...',
+        ),
+        'move_placeholder' => t(
+            'admin.galleries.discover_move_target_placeholder',
+            'Choose existing destination gallery',
+        ),
         'gallery_options_html' => gallery_options_for_select(0),
     ];
 }
 
 /**
- * Handles cms admin import logic for the gallery application.
+ * Process the submitted discovery follow-up action.
+ *
+ * @return void Emits JSON or redirects after reporting the action result.
  */
 function cms_admin_import(): void
 {
@@ -285,18 +364,34 @@ function cms_admin_import(): void
     // $action stores the requested discovery follow-up operation from the dynamic table.
     $action = (string) ($_POST['discovery_action'] ?? 'import_in_place');
     // $wantsJson stores whether the browser-side thumbnail job expects a JSON result.
-    $wantsJson = !empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    $wantsJson =
+        !empty($_POST['ajax'])
+        || str_contains(
+            (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+            'application/json',
+        );
 
     if ($wantsJson) {
         // $result stores the selected discovery action result returned to JavaScript.
-        $result = admin_gallery_discovery_import_action_result($action, $_POST, false);
+        $result = admin_gallery_discovery_import_action_result(
+            $action,
+            $_POST,
+            false,
+        );
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(
+            $result,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         return;
     }
 
     // $result stores the selected discovery action result displayed after redirect.
-    $result = admin_gallery_discovery_import_action_result($action, $_POST, !empty($_POST['create_thumbnails']));
+    $result = admin_gallery_discovery_import_action_result(
+        $action,
+        $_POST,
+        !empty($_POST['create_thumbnails']),
+    );
     admin_gallery_discovery_flash_action_result($result);
     redirect_to(url_for('admin'));
 }
@@ -309,8 +404,11 @@ function cms_admin_import(): void
  * @param bool $createThumbnails Create thumbnails during the synchronous non-Ajax import path.
  * @return array<string, mixed> Action result for flash messages or JSON.
  */
-function admin_gallery_discovery_import_action_result(string $action, array $post, bool $createThumbnails): array
-{
+function admin_gallery_discovery_import_action_result(
+    string $action,
+    array $post,
+    bool $createThumbnails,
+): array {
     // $folders stores selected discovered folder paths from the browser table.
     $folders = is_array($post['folders'] ?? null) ? $post['folders'] : [];
 
@@ -319,7 +417,10 @@ function admin_gallery_discovery_import_action_result(string $action, array $pos
     }
 
     if ($action === 'move_photos') {
-        return admin_gallery_discovery_move_requested_photos($folders, (int) ($post['target_gallery_id'] ?? 0));
+        return admin_gallery_discovery_move_requested_photos(
+            $folders,
+            (int) ($post['target_gallery_id'] ?? 0),
+        );
     }
 
     // $result stores the legacy in-place import result.
@@ -338,6 +439,7 @@ function admin_gallery_discovery_import_action_result(string $action, array $pos
  * Store a human-readable flash message for a discovery follow-up action.
  *
  * @param array<string, mixed> $result Action result returned by the service layer.
+ * @return void Adds the action result to the Admin flash message queue.
  */
 function admin_gallery_discovery_flash_action_result(array $result): void
 {
@@ -348,28 +450,42 @@ function admin_gallery_discovery_flash_action_result(array $result): void
 
     $action = (string) ($result['action'] ?? 'import_in_place');
     if ($action === 'delete_from_disk') {
-        flash_message('admin_notice', t('admin.galleries.discover_delete_result', 'Deleted {folders} folder(s) and {files} file(s) from disk. Skipped {skipped} item(s).', [
-            'folders' => (string) (int) ($result['deleted_folders'] ?? 0),
-            'files' => (string) (int) ($result['deleted_files'] ?? 0),
-            'skipped' => (string) (int) ($result['skipped'] ?? 0),
-        ]));
+        flash_message('admin_notice', t(
+            'admin.galleries.discover_delete_result',
+            'Deleted {folders} folder(s) and {files} file(s) from disk. Skipped {skipped} item(s).',
+            [
+                'folders' => (string) (int) ($result['deleted_folders'] ?? 0),
+                'files' => (string) (int) ($result['deleted_files'] ?? 0),
+                'skipped' => (string) (int) ($result['skipped'] ?? 0),
+            ],
+        ));
         return;
     }
 
     if ($action === 'move_photos') {
-        flash_message('admin_notice', t('admin.galleries.discover_move_result', 'Moved {moved} photo file(s), scanned {images} image(s) into the destination gallery, and removed {folders} empty source folder(s).', [
-            'moved' => (string) (int) ($result['moved'] ?? 0),
-            'images' => (string) (int) ($result['scanned'] ?? 0),
-            'folders' => (string) (int) ($result['source_folders_cleaned'] ?? 0),
-        ]));
+        flash_message('admin_notice', t(
+            'admin.galleries.discover_move_result',
+            'Moved {moved} photo file(s), scanned {images} image(s) into the destination gallery, and removed {folders} empty source folder(s).',
+            [
+                'moved' => (string) (int) ($result['moved'] ?? 0),
+                'images' => (string) (int) ($result['scanned'] ?? 0),
+                'folders' => (string) (int) (
+                    $result['source_folders_cleaned'] ?? 0
+                ),
+            ],
+        ));
         return;
     }
 
-    flash_message('admin_notice', t('admin.galleries.import_result', 'Imported {galleries} gallery folder(s), scanned {images} image(s), and created {thumbnails} thumbnail(s).', [
-        'galleries' => (string) (int) ($result['imported'] ?? 0),
-        'images' => (string) (int) ($result['scanned'] ?? 0),
-        'thumbnails' => (string) (int) ($result['thumbnails'] ?? 0),
-    ]));
+    flash_message('admin_notice', t(
+        'admin.galleries.import_result',
+        'Imported {galleries} gallery folder(s), scanned {images} image(s), and created {thumbnails} thumbnail(s).',
+        [
+            'galleries' => (string) (int) ($result['imported'] ?? 0),
+            'images' => (string) (int) ($result['scanned'] ?? 0),
+            'thumbnails' => (string) (int) ($result['thumbnails'] ?? 0),
+        ],
+    ));
 }
 
 /**
@@ -381,8 +497,11 @@ function admin_gallery_discovery_flash_action_result(array $result): void
 function admin_operation_refusal_status(AdminOperationRefusal $refusal): int
 {
     return match ($refusal->reason) {
-        'operation_payload_invalid' => \Gallery\Core\HTTP_STATUS_UNPROCESSABLE_ENTITY,
-        'operation_storage_unavailable', 'operation_outcome_unknown' => \Gallery\Core\HTTP_STATUS_SERVICE_UNAVAILABLE,
+        'operation_payload_invalid'
+            => \Gallery\Core\HTTP_STATUS_UNPROCESSABLE_ENTITY,
+        'operation_storage_unavailable',
+        'operation_outcome_unknown',
+            => \Gallery\Core\HTTP_STATUS_SERVICE_UNAVAILABLE,
         default => \Gallery\Core\HTTP_STATUS_CONFLICT,
     };
 }
@@ -398,7 +517,9 @@ function cms_admin_new_gallery(): void
     // $prefillParentId stores the gallery that should be pre-selected when this form is opened from a public gallery page.
     $prefillParentId = selected_gallery_id_from_query('parent_id');
     // $prefillParentGallery stores the validated parent gallery record used for contextual helper text.
-    $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
+    $prefillParentGallery = $prefillParentId > 0
+        ? find_gallery($prefillParentId)
+        : null;
     // $isPanelRequest stores whether the create form should render as a reusable side-panel fragment.
     $isPanelRequest = admin_gallery_create_panel_request();
     // $error stores an intermediate value used by the surrounding gallery workflow.
@@ -408,22 +529,44 @@ function cms_admin_new_gallery(): void
         $operationClaim = null;
         header('Cache-Control: private, no-store');
         try {
-            $operationKey = admin_operation_require_key($_POST['operation_key'] ?? null);
+            $operationKey = admin_operation_require_key(
+                $_POST['operation_key'] ?? null,
+            );
             $input = admin_new_gallery_input_from_post();
             $draftRef = (string) ($input['simbrief_draft_ref'] ?? '');
             $draft = null;
             if ($draftRef !== '') {
-                if (!\Gallery\Services\feature_capability_effective_enabled('simbrief')) {
-                    throw new \RuntimeException('SimBrief integration is disabled. Remove the draft or enable the feature.');
+                if (!\Gallery\Services\feature_capability_effective_enabled(
+                    'simbrief',
+                )) {
+                    throw new \RuntimeException(
+                        'SimBrief integration is disabled. Remove the draft or enable the feature.',
+                    );
                 }
-                $draft = \Gallery\Services\simbrief_description_draft_read((int) (current_user()['id'] ?? 0), $draftRef);
+                $draft = \Gallery\Services\simbrief_description_draft_read(
+                    (int) (current_user()['id'] ?? 0),
+                    $draftRef,
+                );
             }
-            if ((!empty($input['remember_simbrief_pilot_id']) || !empty($input['remember_simbrief_pilot_name']) || !empty($input['remember_content_language']))
-                && !\Gallery\Services\gallery_creation_preferences_available()) {
-                throw new \RuntimeException('Gallery creation defaults are unavailable. Run pending migrations.');
+            if (
+                (
+                    !empty($input['remember_simbrief_pilot_id'])
+                    || !empty($input['remember_simbrief_pilot_name'])
+                    || !empty($input['remember_content_language'])
+                )
+                && !\Gallery\Services\gallery_creation_preferences_available()
+            ) {
+                throw new \RuntimeException(
+                    'Gallery creation defaults are unavailable. Run pending migrations.',
+                );
             }
             \Gallery\Services\gallery_creation_preferences_validate($input);
-            $operationClaim = admin_operation_begin((int) (current_user()['id'] ?? 0), $operationKey, 'gallery.create', admin_operation_fingerprint('gallery.create', $input));
+            $operationClaim = admin_operation_begin(
+                (int) (current_user()['id'] ?? 0),
+                $operationKey,
+                'gallery.create',
+                admin_operation_fingerprint('gallery.create', $input),
+            );
             if (!empty($operationClaim['replay'])) {
                 $response = $operationClaim['response'];
             } else {
@@ -432,26 +575,51 @@ function cms_admin_new_gallery(): void
                 $warnings = [];
                 if (is_array($draft)) {
                     try {
-                        $attached = \Gallery\Services\simbrief_description_draft_attach($gallery, $draft);
+                        $attached = \Gallery\Services\simbrief_description_draft_attach(
+                            $gallery,
+                            $draft,
+                        );
                         if (empty($attached['ofp']['saved'])) {
-                            $warnings[] = t('admin.simbrief.create_ofp_warning', 'The gallery was created, but its SimBrief OFP could not be saved.');
+                            $warnings[] = t(
+                                'admin.simbrief.create_ofp_warning',
+                                'The gallery was created, but its SimBrief OFP could not be saved.',
+                            );
                         }
                         if (empty($attached['route']['saved'])) {
-                            $warnings[] = t('admin.simbrief.create_route_warning', 'The gallery was created, but its flight route map could not be saved.');
+                            $warnings[] = t(
+                                'admin.simbrief.create_route_warning',
+                                'The gallery was created, but its flight route map could not be saved.',
+                            );
                         }
                     } catch (Throwable $exception) {
-                        $warnings[] = t('admin.simbrief.create_attach_warning', 'The gallery was created, but the SimBrief flight data could not be attached.');
+                        $warnings[] = t(
+                            'admin.simbrief.create_attach_warning',
+                            'The gallery was created, but the SimBrief flight data could not be attached.',
+                        );
                     }
                 }
-                if (!empty($input['remember_simbrief_pilot_id']) || !empty($input['remember_simbrief_pilot_name']) || !empty($input['remember_content_language'])) {
+                if (
+                    !empty($input['remember_simbrief_pilot_id'])
+                    || !empty($input['remember_simbrief_pilot_name'])
+                    || !empty($input['remember_content_language'])
+                ) {
                     try {
-                        \Gallery\Services\gallery_creation_preferences_remember((int) (current_user()['id'] ?? 0), $input);
+                        \Gallery\Services\gallery_creation_preferences_remember(
+                            (int) (current_user()['id'] ?? 0),
+                            $input,
+                        );
                     } catch (Throwable $exception) {
-                        $warnings[] = t('admin.gallery_editor.defaults_warning', 'The gallery was created, but your new defaults could not be saved.');
+                        $warnings[] = t(
+                            'admin.gallery_editor.defaults_warning',
+                            'The gallery was created, but your new defaults could not be saved.',
+                        );
                     }
                 }
                 $gallery['_creation_warnings'] = $warnings;
-                $response = admin_operation_complete($operationClaim, admin_new_gallery_success_response($gallery));
+                $response = admin_operation_complete(
+                    $operationClaim,
+                    admin_new_gallery_success_response($gallery),
+                );
             }
             if (admin_wants_json()) {
                 header('Content-Type: application/json');
@@ -462,12 +630,24 @@ function cms_admin_new_gallery(): void
             redirect_to((string) $response['fallback']['redirect_url']);
         } catch (Throwable $exception) {
             admin_operation_fail($operationClaim);
-            if ($operationClaim && empty($operationClaim['replay']) && !$exception instanceof AdminOperationRefusal && !$exception instanceof \Gallery\Services\GalleryCatalogConflict) {
-                $exception = new AdminOperationRefusal('operation_outcome_unknown', 'The operation may have changed gallery data. Retain its key and reconcile the original attempt before retrying replacement work.');
+            if (
+                $operationClaim
+                && empty($operationClaim['replay'])
+                && !$exception instanceof AdminOperationRefusal
+                && !
+                    $exception
+                    instanceof \Gallery\Services\GalleryCatalogConflict
+
+            ) {
+                $exception = new AdminOperationRefusal(
+                    'operation_outcome_unknown',
+                    'The operation may have changed gallery data. Retain its key and reconcile the original attempt before retrying replacement work.',
+                );
             }
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
-            $catalogConflict = $exception instanceof \Gallery\Services\GalleryCatalogConflict;
+            $catalogConflict =
+                $exception instanceof \Gallery\Services\GalleryCatalogConflict;
             $operationRefusal = $exception instanceof AdminOperationRefusal;
             if ($operationRefusal) {
                 http_response_code(admin_operation_refusal_status($exception));
@@ -475,14 +655,38 @@ function cms_admin_new_gallery(): void
             if ($catalogConflict) {
                 http_response_code(\Gallery\Core\HTTP_STATUS_CONFLICT);
             }
-            admin_log_event('error', 'gallery.folder_create_failed', t('admin.galleries.log_empty_folder_failed'), ['error' => $error]);
+            admin_log_event(
+                'error',
+                'gallery.folder_create_failed',
+                t('admin.galleries.log_empty_folder_failed'),
+                ['error' => $error],
+            );
             if (admin_wants_json()) {
-                http_response_code($operationRefusal ? admin_operation_refusal_status($exception) : ($catalogConflict ? \Gallery\Core\HTTP_STATUS_CONFLICT : 422));
+                http_response_code(
+                    $operationRefusal
+                        ? admin_operation_refusal_status($exception)
+                        : (
+                            $catalogConflict
+                                ? \Gallery\Core\HTTP_STATUS_CONFLICT
+                                : 422
+                        ),
+                );
                 header('Content-Type: application/json');
                 echo json_encode(admin_mutation_error_envelope(
                     $error,
-                    $operationRefusal ? $exception->reason : ($catalogConflict ? 'gallery_catalog_conflict' : 'gallery_create_failed'),
-                    admin_mutation_descriptor('gallery.create', 'gallery', 'create', $catalogConflict ? [$exception->galleryId] : [])
+                    $operationRefusal
+                        ? $exception->reason
+                        : (
+                            $catalogConflict
+                                ? 'gallery_catalog_conflict'
+                                : 'gallery_create_failed'
+                        ),
+                    admin_mutation_descriptor(
+                        'gallery.create',
+                        'gallery',
+                        'create',
+                        $catalogConflict ? [$exception->galleryId] : [],
+                    ),
                 ));
                 return;
             }
@@ -491,11 +695,17 @@ function cms_admin_new_gallery(): void
 
     if ($error !== '' && request_method() === 'POST') {
         $prefillParentId = (int) ($_POST['parent_id'] ?? $prefillParentId);
-        $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
+        $prefillParentGallery = $prefillParentId > 0
+            ? find_gallery($prefillParentId)
+            : null;
     }
     if ($isPanelRequest) {
         header('Content-Type: text/html; charset=UTF-8');
-        render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error);
+        render_admin_new_gallery_side_panel(
+            $prefillParentId,
+            $prefillParentGallery,
+            $error,
+        );
         return;
     }
 
@@ -504,14 +714,24 @@ function cms_admin_new_gallery(): void
         'dashboard_url' => url_for('admin'),
         'dashboard_label' => t('admin.common.back_to_dashboard'),
         'galleries_url' => url_for('home'),
-        'galleries_label' => t('admin.dashboard.open_galleries', 'Open galleries'),
-        'error_notice' => $error !== '' ? t('admin.galleries.create_failed', ['error' => $error]) : '',
+        'galleries_label' => t(
+            'admin.dashboard.open_galleries',
+            'Open galleries',
+        ),
+        'error_notice' => $error !== ''
+            ? t('admin.galleries.create_failed', ['error' => $error])
+            : '',
         'action_url' => url_for('admin_new_gallery'),
         'csrf_html' => csrf_field(),
-        'fields_html' => admin_gallery_discovery_capture_html(static function () use ($prefillParentId): void {
+        'fields_html' => admin_gallery_discovery_capture_html(static function () use (
+            $prefillParentId,
+        ): void {
             render_admin_new_gallery_fields($prefillParentId, false);
         }),
-        'submit_label' => t('admin.gallery_editor.create_gallery', 'Create gallery'),
+        'submit_label' => t(
+            'admin.gallery_editor.create_gallery',
+            'Create gallery',
+        ),
     ]);
 }
 
@@ -544,7 +764,10 @@ function admin_side_panel_request(): bool
 function admin_new_gallery_input_from_array(array $input): array
 {
     if (array_key_exists('simbrief_identifier', $input)) {
-        $input = \Gallery\Services\simbrief_description_expand_identifier_input($input);
+        $input =
+            \Gallery\Services\simbrief_description_expand_identifier_input(
+                $input,
+            );
     }
     // $normalized stores the create-gallery input contract used by all admin workflows.
     $normalized = [
@@ -553,19 +776,26 @@ function admin_new_gallery_input_from_array(array $input): array
         'description' => $input['description'] ?? '',
         'gallery_date' => $input['gallery_date'] ?? '',
         'gallery_date_end' => $input['gallery_date_end'] ?? '',
-        'visibility' => gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished')),
+        'visibility' => gallery_visibility_storage_value(
+            (string) ($input['visibility'] ?? 'unpublished'),
+        ),
         'parent_id' => $input['parent_id'] ?? 0,
         'voting_enabled' => $input['voting_enabled'] ?? 0,
         'show_filenames' => $input['show_filenames'] ?? 0,
-        'count_badge_visibility' => $input['count_badge_visibility'] ?? 'inherit',
+        'count_badge_visibility' =>
+            $input['count_badge_visibility'] ?? 'inherit',
         'tags' => $input['tags'] ?? '',
         'content_language' => $input['content_language'] ?? '',
-        'translations' => is_array($input['translations'] ?? null) ? $input['translations'] : [],
+        'translations' => is_array($input['translations'] ?? null)
+            ? $input['translations']
+            : [],
         'simbrief_draft_ref' => $input['simbrief_draft_ref'] ?? '',
         'simbrief_pilot_id' => $input['simbrief_pilot_id'] ?? '',
         'simbrief_pilot_name' => $input['simbrief_pilot_name'] ?? '',
-        'remember_simbrief_pilot_id' => $input['remember_simbrief_pilot_id'] ?? 0,
-        'remember_simbrief_pilot_name' => $input['remember_simbrief_pilot_name'] ?? 0,
+        'remember_simbrief_pilot_id' =>
+            $input['remember_simbrief_pilot_id'] ?? 0,
+        'remember_simbrief_pilot_name' =>
+            $input['remember_simbrief_pilot_name'] ?? 0,
         'remember_content_language' => $input['remember_content_language'] ?? 0,
     ];
     if (array_key_exists('sort_order', $input)) {
@@ -577,7 +807,7 @@ function admin_new_gallery_input_from_array(array $input): array
 /**
  * Read create-gallery POST values through the same input contract used by the direct admin page.
  *
- * @return array Structured result data for the caller.
+ * @return array<string, mixed> Normalized create-gallery POST values.
  */
 function admin_new_gallery_input_from_post(): array
 {
@@ -587,17 +817,22 @@ function admin_new_gallery_input_from_post(): array
 /**
  * Create a gallery through the shared admin create implementation.
  *
- * @param array $input Input value.
- * @return array Structured result data for the caller.
+ * @param array<string, mixed> $input Normalized create-gallery form values.
+ * @return array{id:int|string,folder_path:string} Persisted gallery data created from input.
  */
 function admin_create_gallery_from_input(array $input): array
 {
     // $gallery stores the persisted gallery returned by the service layer.
     $gallery = create_empty_gallery(admin_new_gallery_input_from_array($input));
-    admin_log_event('info', 'gallery.folder_created', t('admin.galleries.log_empty_folder_created'), [
-        'gallery_id' => (int) $gallery['id'],
-        'folder_path' => (string) $gallery['folder_path'],
-    ]);
+    admin_log_event(
+        'info',
+        'gallery.folder_created',
+        t('admin.galleries.log_empty_folder_created'),
+        [
+            'gallery_id' => (int) $gallery['id'],
+            'folder_path' => (string) $gallery['folder_path'],
+        ],
+    );
     return $gallery;
 }
 
@@ -612,22 +847,41 @@ function admin_new_gallery_success_response(array $gallery): array
     // $parentGalleryId stores the persisted parent selected by the admin create form.
     $parentGalleryId = (int) ($gallery['parent_id'] ?? 0);
     // $parentGallery stores the parent row used by the side-panel refresh contract.
-    $parentGallery = $parentGalleryId > 0 ? find_gallery($parentGalleryId, true) : null;
+    $parentGallery = $parentGalleryId > 0
+        ? find_gallery($parentGalleryId, true)
+        : null;
     // $parentGalleryUrl stores the public parent URL when the gallery was created below another gallery.
-    $parentGalleryUrl = is_array($parentGallery) ? gallery_public_url($parentGallery) : '';
+    $parentGalleryUrl = is_array($parentGallery)
+        ? gallery_public_url($parentGallery)
+        : '';
 
     // $galleryId stores the stable entity id returned to the completion coordinator.
     $galleryId = (int) $gallery['id'];
     // $galleryUrl stores the public location of the new gallery itself.
     $galleryUrl = gallery_public_url($gallery);
     // $editUrl stores the side-panel editor source and the classic fallback destination.
-    $editUrl = url_for('admin_edit_gallery', ['id' => $galleryId, 'created' => 1]);
+    $editUrl = url_for('admin_edit_gallery', [
+        'id' => $galleryId,
+        'created' => 1,
+    ]);
     // $refreshUrl stores the authoritative parent/root render source.
-    $refreshUrl = $parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home');
+    $refreshUrl = $parentGalleryUrl !== ''
+        ? $parentGalleryUrl
+        : url_for('home');
     // $envelope stores the canonical mutation completion contract used by new migrations.
     $envelope = admin_mutation_success_envelope(
-        t('admin.galleries.folder_created') . (!empty($gallery['_creation_warnings']) ? ' ' . implode(' ', (array) $gallery['_creation_warnings']) : ''),
-        admin_mutation_descriptor('gallery.create', 'gallery', 'create', [$galleryId]),
+        t('admin.galleries.folder_created')
+            . (
+                !empty($gallery['_creation_warnings'])
+                    ? ' ' . implode(' ', (array) $gallery['_creation_warnings'])
+                    : ''
+            ),
+        admin_mutation_descriptor(
+            'gallery.create',
+            'gallery',
+            'create',
+            [$galleryId],
+        ),
         admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
         [
             admin_mutation_public_gallery_context(
@@ -636,11 +890,14 @@ function admin_new_gallery_success_response(array $gallery): array
                 admin_mutation_gallery_membership_postcondition(
                     $galleryId,
                     $parentGalleryId,
-                    admin_mutation_gallery_is_rendered_in_context($gallery, $parentGalleryId)
-                )
+                    admin_mutation_gallery_is_rendered_in_context(
+                        $gallery,
+                        $parentGalleryId,
+                    ),
+                ),
             ),
         ],
-        ['redirect_url' => $editUrl]
+        ['redirect_url' => $editUrl],
     );
 
     // Temporary top-level fields keep the pre-Stage-1 upload/create adapters compatible.
@@ -683,29 +940,56 @@ function render_gallery_description_formatting_hint(): void
  * @param string $workflow Create/upload presentation workflow selected by the controller.
  * @return void Emit prepared fields with a bounded parent picker and replay key.
  */
-function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
-{
+function render_admin_new_gallery_fields(
+    int $prefillParentId,
+    bool $panelMode,
+    string $workflow = 'create',
+): void {
     $formModel = admin_gallery_form_view_model('gallery');
     if ($workflow === 'create' && request_method() === 'POST') {
         $formModel['submitted'] = admin_new_gallery_input_from_post();
-        $formModel['localization']['translations'] = $formModel['submitted']['translations'];
-        $formModel['date']['start_value'] = (string) ($_POST['gallery_date'] ?? '');
-        $formModel['date']['end_value'] = (string) ($_POST['gallery_date_end'] ?? '');
+        $formModel['localization']['translations'] =
+            $formModel['submitted']['translations'];
+        $formModel['date']['start_value'] = (string) (
+            $_POST['gallery_date'] ?? ''
+        );
+        $formModel['date']['end_value'] = (string) (
+            $_POST['gallery_date_end'] ?? ''
+        );
         $prefillParentId = (int) ($_POST['parent_id'] ?? $prefillParentId);
     }
-    $formModel['parent_picker_html'] = render_gallery_parent_picker($prefillParentId);
-    $formModel['operation_key'] = admin_operation_form_key($_POST['operation_key'] ?? null);
-    $visibility = (string) (($formModel['submitted'] ?? [])['visibility'] ?? 'unpublished');
-    $formModel['visibility_summary'] = function_exists('Gallery\\Services\\gallery_visibility_label')
-        ? \Gallery\Services\gallery_visibility_label($visibility) : $visibility;
+    $formModel['parent_picker_html'] =
+        render_gallery_parent_picker($prefillParentId);
+    $formModel['operation_key'] = admin_operation_form_key(
+        $_POST['operation_key'] ?? null,
+    );
+    $visibility = (string) (
+        ($formModel['submitted'] ?? [])['visibility'] ?? 'unpublished'
+    );
+    $formModel['visibility_summary'] = function_exists(
+        'Gallery\\Services\\gallery_visibility_label',
+    )
+        ? \Gallery\Services\gallery_visibility_label($visibility)
+        : $visibility;
     $parent = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
     $formModel['parent_summary'] = is_array($parent)
-        ? (string) ($parent['title'] ?? '') : t('admin.gallery_editor.no_parent', 'No parent');
-    $formModel['tag_suggestions_attribute'] = function_exists(__NAMESPACE__ . '\\admin_weighted_tag_suggestions_attribute')
-        ? admin_weighted_tag_suggestions_attribute($prefillParentId) : '';
-    $formModel['tag_datalist_html'] = function_exists(__NAMESPACE__ . '\\render_tag_datalist')
-        ? admin_gallery_discovery_capture_html(__NAMESPACE__ . '\\render_tag_datalist') : '';
-    view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow, $formModel);
+        ? (string) ($parent['title'] ?? '')
+        : t('admin.gallery_editor.no_parent', 'No parent');
+    $formModel['tag_suggestions_attribute'] = function_exists(__NAMESPACE__
+        . '\\admin_weighted_tag_suggestions_attribute')
+        ? admin_weighted_tag_suggestions_attribute($prefillParentId)
+        : '';
+    $formModel['tag_datalist_html'] = function_exists(__NAMESPACE__
+        . '\\render_tag_datalist')
+        ? admin_gallery_discovery_capture_html(__NAMESPACE__
+            . '\\render_tag_datalist')
+        : '';
+    view_render_admin_new_gallery_fields(
+        $prefillParentId,
+        $panelMode,
+        $workflow,
+        $formModel,
+    );
 }
 
 /**
@@ -716,26 +1000,53 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
  * @param string $error Safe validation/refusal message for the current form.
  * @return void Emit the focused creation panel with its retained or fresh operation key.
  */
-function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
-{
+function render_admin_new_gallery_side_panel(
+    int $prefillParentId,
+    ?array $prefillParentGallery,
+    string $error,
+): void {
     $formModel = admin_gallery_form_view_model('gallery');
     if ($error !== '' && request_method() === 'POST') {
         $formModel['submitted'] = admin_new_gallery_input_from_post();
-        $formModel['localization']['translations'] = $formModel['submitted']['translations'];
-        $formModel['date']['start_value'] = (string) ($_POST['gallery_date'] ?? '');
-        $formModel['date']['end_value'] = (string) ($_POST['gallery_date_end'] ?? '');
+        $formModel['localization']['translations'] =
+            $formModel['submitted']['translations'];
+        $formModel['date']['start_value'] = (string) (
+            $_POST['gallery_date'] ?? ''
+        );
+        $formModel['date']['end_value'] = (string) (
+            $_POST['gallery_date_end'] ?? ''
+        );
         $prefillParentId = (int) ($_POST['parent_id'] ?? $prefillParentId);
     }
-    $formModel['parent_picker_html'] = render_gallery_parent_picker($prefillParentId);
-    $formModel['operation_key'] = admin_operation_form_key($_POST['operation_key'] ?? null);
-    $visibility = (string) (($formModel['submitted'] ?? [])['visibility'] ?? 'unpublished');
-    $formModel['visibility_summary'] = function_exists('Gallery\\Services\\gallery_visibility_label')
-        ? \Gallery\Services\gallery_visibility_label($visibility) : $visibility;
+    $formModel['parent_picker_html'] =
+        render_gallery_parent_picker($prefillParentId);
+    $formModel['operation_key'] = admin_operation_form_key(
+        $_POST['operation_key'] ?? null,
+    );
+    $visibility = (string) (
+        ($formModel['submitted'] ?? [])['visibility'] ?? 'unpublished'
+    );
+    $formModel['visibility_summary'] = function_exists(
+        'Gallery\\Services\\gallery_visibility_label',
+    )
+        ? \Gallery\Services\gallery_visibility_label($visibility)
+        : $visibility;
     $formModel['parent_summary'] = is_array($prefillParentGallery)
-        ? (string) ($prefillParentGallery['title'] ?? '') : t('admin.gallery_editor.no_parent', 'No parent');
-    $formModel['tag_suggestions_attribute'] = function_exists(__NAMESPACE__ . '\\admin_weighted_tag_suggestions_attribute')
-        ? admin_weighted_tag_suggestions_attribute($prefillParentId) : '';
-    $formModel['tag_datalist_html'] = function_exists(__NAMESPACE__ . '\\render_tag_datalist')
-        ? admin_gallery_discovery_capture_html(__NAMESPACE__ . '\\render_tag_datalist') : '';
-    view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error, $formModel);
+        ? (string) ($prefillParentGallery['title'] ?? '')
+        : t('admin.gallery_editor.no_parent', 'No parent');
+    $formModel['tag_suggestions_attribute'] = function_exists(__NAMESPACE__
+        . '\\admin_weighted_tag_suggestions_attribute')
+        ? admin_weighted_tag_suggestions_attribute($prefillParentId)
+        : '';
+    $formModel['tag_datalist_html'] = function_exists(__NAMESPACE__
+        . '\\render_tag_datalist')
+        ? admin_gallery_discovery_capture_html(__NAMESPACE__
+            . '\\render_tag_datalist')
+        : '';
+    view_render_admin_new_gallery_side_panel(
+        $prefillParentId,
+        $prefillParentGallery,
+        $error,
+        $formModel,
+    );
 }

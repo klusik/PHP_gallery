@@ -35,7 +35,7 @@
 declare(strict_types=1);
 
 return [
-    "ALTER TABLE galleries ADD COLUMN banner_image_path VARCHAR(1024) NULL AFTER background_source",
-    "ALTER TABLE galleries ADD COLUMN logo_image_path VARCHAR(1024) NULL AFTER banner_image_path",
-    "ALTER TABLE galleries ADD COLUMN separator_image_path VARCHAR(1024) NULL AFTER logo_image_path",
+    'ALTER TABLE galleries ADD COLUMN banner_image_path VARCHAR(1024) NULL AFTER background_source',
+    'ALTER TABLE galleries ADD COLUMN logo_image_path VARCHAR(1024) NULL AFTER banner_image_path',
+    'ALTER TABLE galleries ADD COLUMN separator_image_path VARCHAR(1024) NULL AFTER logo_image_path',
 ];

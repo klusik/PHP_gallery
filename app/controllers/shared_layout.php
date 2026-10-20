@@ -91,19 +91,44 @@ use function Gallery\Services\viewer_http_open_registration_available;
 function shared_layout_admin_stylesheet_files(): array
 {
     return [
-        'assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css', 'assets/styles/admin.css',
-        'assets/styles/admin-layout.css', 'assets/styles/admin-dashboard.css', 'assets/styles/admin-maintenance-center.css',
-        'assets/styles/admin-telemetry.css', 'assets/styles/admin-logs.css', 'assets/styles/admin-subtabs.css',
-        'assets/styles/admin-theme-preview.css', 'assets/styles/admin-setup-wizard.css', 'assets/styles/admin-reordering.css',
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/admin.css',
+        'assets/styles/admin-layout.css',
+        'assets/styles/admin-dashboard.css',
+        'assets/styles/admin-maintenance-center.css',
+        'assets/styles/admin-telemetry.css',
+        'assets/styles/admin-logs.css',
+        'assets/styles/admin-subtabs.css',
+        'assets/styles/admin-theme-preview.css',
+        'assets/styles/admin-setup-wizard.css',
+        'assets/styles/admin-reordering.css',
         'assets/styles/admin-public-widgets.css',
-        'assets/styles/admin-media-tools.css', 'assets/styles/admin-theme-editor.css', 'assets/styles/admin-theme-media.css',
-        'assets/styles/admin-theme-layout.css', 'assets/styles/admin-theme-language.css', 'assets/styles/admin-theme-custom-css.css',
-        'assets/styles/admin-gallery-list.css', 'assets/styles/admin-smart-galleries.css', 'assets/styles/admin-gallery-title-completion.css',
-        'assets/styles/admin-patch-notes.css', 'assets/styles/admin-update.css', 'assets/styles/admin-tags.css',
-        'assets/styles/side-panel.css', 'assets/styles/admin-gallery-create.css', 'assets/styles/admin-duplicate-photo-detector.css',
-        'assets/styles/admin-cinematic.css', 'assets/styles/admin-settings.css', 'assets/styles/utilities.css',
-        'assets/styles.css', 'assets/styles/admin-gallery-api.css', 'assets/styles/admin-gallery-access.css',
-        'assets/styles/admin-gallery-display.css', 'assets/styles/admin-gallery-media.css', 'assets/styles/breadcrumbs.css',
+        'assets/styles/admin-media-tools.css',
+        'assets/styles/admin-theme-editor.css',
+        'assets/styles/admin-theme-media.css',
+        'assets/styles/admin-theme-layout.css',
+        'assets/styles/admin-theme-language.css',
+        'assets/styles/admin-theme-custom-css.css',
+        'assets/styles/admin-gallery-list.css',
+        'assets/styles/admin-smart-galleries.css',
+        'assets/styles/admin-gallery-title-completion.css',
+        'assets/styles/admin-patch-notes.css',
+        'assets/styles/admin-update.css',
+        'assets/styles/admin-tags.css',
+        'assets/styles/side-panel.css',
+        'assets/styles/admin-gallery-create.css',
+        'assets/styles/admin-duplicate-photo-detector.css',
+        'assets/styles/admin-cinematic.css',
+        'assets/styles/admin-settings.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
+        'assets/styles/admin-gallery-api.css',
+        'assets/styles/admin-gallery-access.css',
+        'assets/styles/admin-gallery-display.css',
+        'assets/styles/admin-gallery-media.css',
+        'assets/styles/breadcrumbs.css',
     ];
 }
 
@@ -114,8 +139,14 @@ function shared_layout_admin_stylesheet_files(): array
 function shared_layout_public_stylesheet_files(): array
 {
     return [
-        'assets/styles/base.css', 'assets/styles/public.css', 'assets/styles/lightbox.css',
-        'assets/styles/public-shared.css', 'assets/styles/public-content-widgets.css', 'assets/styles/utilities.css', 'assets/styles.css', 'assets/styles/breadcrumbs.css',
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/public-shared.css',
+        'assets/styles/public-content-widgets.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
+        'assets/styles/breadcrumbs.css',
     ];
 }
 
@@ -126,18 +157,33 @@ function shared_layout_public_stylesheet_files(): array
  * @param bool $anonymousPreview Whether an Admin selected the anonymous visitor presentation.
  * @return list<string> Ordered stylesheet paths matching the prior layout cascade.
  */
-function shared_layout_stylesheet_files_for_context(string $bodyClass, ?array $user, bool $anonymousPreview): array
-{
+function shared_layout_stylesheet_files_for_context(
+    string $bodyClass,
+    ?array $user,
+    bool $anonymousPreview,
+): array {
     if ($bodyClass !== 'admin-page' && ($user === null || $anonymousPreview)) {
         return shared_layout_public_stylesheet_files();
     }
     $files = shared_layout_admin_stylesheet_files();
-    if ($bodyClass !== 'admin-page' && !in_array('assets/styles/public-content-widgets.css', $files, true)) {
+    if (
+        $bodyClass !== 'admin-page'
+        && !in_array('assets/styles/public-content-widgets.css', $files, true)
+    ) {
         $files[] = 'assets/styles/public-content-widgets.css';
     }
-    if ($bodyClass !== 'admin-page' && $user !== null && !$anonymousPreview && !in_array('assets/styles/public-shared.css', $files, true)) {
-        $lightboxIndex = array_search('assets/styles/lightbox.css', $files, true);
-        $insertAt = $lightboxIndex === false ? 2 : ((int) $lightboxIndex + 1);
+    if (
+        $bodyClass !== 'admin-page'
+        && $user !== null
+        && !$anonymousPreview
+        && !in_array('assets/styles/public-shared.css', $files, true)
+    ) {
+        $lightboxIndex = array_search(
+            'assets/styles/lightbox.css',
+            $files,
+            true,
+        );
+        $insertAt = $lightboxIndex === false ? 2 : (int) $lightboxIndex + 1;
         array_splice($files, $insertAt, 0, ['assets/styles/public-shared.css']);
     }
     return $files;
@@ -161,33 +207,53 @@ function shared_layout_stylesheet_urls(
     bool $visualPreview,
     array $theme,
     string $customCssUrl,
-    int $customCssVersion
+    int $customCssVersion,
 ): array {
     $urls = [];
-    foreach (shared_layout_stylesheet_files_for_context($bodyClass, $user, $anonymousPreview) as $styleFile) {
+    foreach (shared_layout_stylesheet_files_for_context(
+        $bodyClass,
+        $user,
+        $anonymousPreview,
+    ) as $styleFile) {
         $stylePath = dirname(__DIR__, 2) . '/public/' . $styleFile;
         if (!is_file($stylePath)) {
             continue;
         }
         $href = $visualPreview
-            ? shared_layout_preview_asset_href($styleFile, 'v=' . rawurlencode((string) filemtime($stylePath)), $anonymousPreview)
+            ? shared_layout_preview_asset_href(
+                $styleFile,
+                'v=' . rawurlencode((string) filemtime($stylePath)),
+                $anonymousPreview,
+            )
             : asset_url($styleFile) . '?v=' . filemtime($stylePath);
         $urls[] = $href;
     }
     if ($customCssUrl !== '') {
         $urls[] = $visualPreview
-            ? shared_layout_preview_asset_href('assets/custom.css', 'v=' . rawurlencode((string) $customCssVersion), $anonymousPreview)
+            ? shared_layout_preview_asset_href(
+                'assets/custom.css',
+                'v=' . rawurlencode((string) $customCssVersion),
+                $anonymousPreview,
+            )
             : $customCssUrl . '?v=' . rawurlencode((string) $customCssVersion);
     }
     $themeCssUrl = $visualPreview
         ? shared_layout_preview_route_href('theme_css', $anonymousPreview)
         : url_for('theme_css');
-    $urls[] = $themeCssUrl . '&v=' . rawurlencode((string) theme_cache_key($theme));
-    $mobileCssPath = dirname(__DIR__, 2) . '/public/assets/styles/mobile-gallery.css';
+    $urls[] =
+        $themeCssUrl . '&v=' . rawurlencode((string) theme_cache_key($theme));
+    $mobileCssPath =
+        dirname(__DIR__, 2) . '/public/assets/styles/mobile-gallery.css';
     if (is_file($mobileCssPath)) {
         $urls[] = $visualPreview
-            ? shared_layout_preview_asset_href('assets/styles/mobile-gallery.css', 'v=' . rawurlencode((string) filemtime($mobileCssPath)), $anonymousPreview)
-            : asset_url('assets/styles/mobile-gallery.css') . '?v=' . filemtime($mobileCssPath);
+            ? shared_layout_preview_asset_href(
+                'assets/styles/mobile-gallery.css',
+                'v=' . rawurlencode((string) filemtime($mobileCssPath)),
+                $anonymousPreview,
+            )
+            : asset_url('assets/styles/mobile-gallery.css')
+            . '?v='
+            . filemtime($mobileCssPath);
     }
     return $urls;
 }
@@ -199,8 +265,11 @@ function shared_layout_stylesheet_urls(
  * @param bool $anonymous Whether the current visual preview uses anonymous visitor visibility.
  * @return string Same-origin mounted stylesheet URL with inherited preview context.
  */
-function shared_layout_preview_asset_href(string $assetPath, string $query, bool $anonymous): string
-{
+function shared_layout_preview_asset_href(
+    string $assetPath,
+    string $query,
+    bool $anonymous,
+): string {
     $url = asset_url($assetPath);
     if ($query !== '') {
         $url .= (str_contains($url, '?') ? '&' : '?') . ltrim($query, '?&');
@@ -226,10 +295,13 @@ function shared_layout_preview_route_href(string $page, bool $anonymous): string
  * @param ?array $currentGallery Current gallery row or null.
  * @param bool $publicOnly Whether unpublished/private gallery assets must remain hidden.
  * @param string $bodyClass Resolved page family class.
- * @return array{banner_url:string,logo_url:string,separator_url:string}
+ * @return array{banner_url:string,logo_url:string,separator_url:string} Resolved artwork URLs for the public header, with empty values when unavailable.
  */
-function shared_layout_branding_model(?array $currentGallery, bool $publicOnly, string $bodyClass): array
-{
+function shared_layout_branding_model(
+    ?array $currentGallery,
+    bool $publicOnly,
+    string $bodyClass,
+): array {
     $model = [
         'banner_url' => '',
         'logo_url' => '',
@@ -240,9 +312,21 @@ function shared_layout_branding_model(?array $currentGallery, bool $publicOnly, 
     }
 
     if ($currentGallery !== null && gallery_branding_schema_ready()) {
-        $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
-        $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
-        $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
+        $model['banner_url'] = gallery_branding_asset_url(
+            $currentGallery,
+            'banner',
+            $publicOnly,
+        );
+        $model['logo_url'] = gallery_branding_asset_url(
+            $currentGallery,
+            'logo',
+            $publicOnly,
+        );
+        $model['separator_url'] = gallery_branding_asset_url(
+            $currentGallery,
+            'separator',
+            $publicOnly,
+        );
     }
     if ($model['banner_url'] === '') {
         $model['banner_url'] = theme_branding_asset_url('banner');
@@ -258,10 +342,12 @@ function shared_layout_branding_model(?array $currentGallery, bool $publicOnly, 
  *
  * @param string $requestUri Current request URI.
  * @param string $scriptName Current front-controller script name.
- * @return array<string, mixed>
+ * @return array{enabled:bool,items?:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool} Prepared language-selector state, including enabled selector choices when available.
  */
-function shared_layout_language_selector_model(string $requestUri, string $scriptName): array
-{
+function shared_layout_language_selector_model(
+    string $requestUri,
+    string $scriptName,
+): array {
     if (!translation_public_language_selector_enabled()) {
         return ['enabled' => false, 'items' => []];
     }
@@ -272,23 +358,38 @@ function shared_layout_language_selector_model(string $requestUri, string $scrip
     $preset = (string) ($design['preset'] ?? 'default');
     $items = [];
     foreach (translation_public_language_selector_languages() as $language) {
-        $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
+        $presentation = $presentations[$language] ?? [
+            'name' => strtoupper($language),
+            'flag_asset' => '',
+        ];
         $items[] = [
             'code' => $language,
-            'name' => trim((string) ($presentation['name'] ?? strtoupper($language))),
+            'name' => trim(
+                (string) ($presentation['name'] ?? strtoupper($language)),
+            ),
             'flag_asset' => trim((string) ($presentation['flag_asset'] ?? '')),
             'active' => $language === $activeLanguage,
-            'url' => translation_public_language_url($language, $requestUri, $scriptName),
+            'url' => translation_public_language_url(
+                $language,
+                $requestUri,
+                $scriptName,
+            ),
         ];
     }
 
     return [
         'enabled' => true,
-        'classes' => 'public-language-switcher language-preset-' . $preset
-            . ' language-orientation-' . (string) ($design['orientation'] ?? 'horizontal')
-            . ' language-density-' . (string) ($design['density'] ?? 'normal')
-            . ' language-align-' . (string) ($design['alignment'] ?? 'end')
-            . ' language-active-' . (string) ($design['active_style'] ?? 'filled'),
+        'classes' =>
+            'public-language-switcher language-preset-'
+                . $preset
+                . ' language-orientation-'
+                . (string) ($design['orientation'] ?? 'horizontal')
+                . ' language-density-'
+                . (string) ($design['density'] ?? 'normal')
+                . ' language-align-'
+                . (string) ($design['alignment'] ?? 'end')
+                . ' language-active-'
+                . (string) ($design['active_style'] ?? 'filled'),
         'style' => translation_public_language_selector_design_style($design),
         'show_codes' => !empty($design['show_codes']),
         'show_names' => !empty($design['show_names']),
@@ -306,16 +407,29 @@ function shared_layout_admin_chrome_model(): array
 {
     $updatePending = application_update_pending();
     $featureEnabled = [];
-    foreach (['smart_galleries', 'mobile_webdav', 'media_renamer', 'upload_api', 'telemetry', 'complete_gallery_report', 'navigation_data', 'viewer_accounts'] as $featureKey) {
-        $featureEnabled[$featureKey] = feature_capability_effective_enabled($featureKey);
+    foreach ([
+        'smart_galleries',
+        'mobile_webdav',
+        'media_renamer',
+        'upload_api',
+        'telemetry',
+        'complete_gallery_report',
+        'navigation_data',
+        'viewer_accounts',
+    ] as $featureKey) {
+        $featureEnabled[$featureKey] =
+            feature_capability_effective_enabled($featureKey);
     }
 
     return [
         'update_pending' => $updatePending,
         'update_label' => application_update_nav_label($updatePending),
         'feature_enabled' => $featureEnabled,
-        'admin_legacy_upload_navigation_enabled' => admin_legacy_upload_navigation_enabled(),
-        'theme_widgets_active' => ($_GET['widgets'] ?? null) === '1' || array_key_exists('widget_action', $_POST),
+        'admin_legacy_upload_navigation_enabled' =>
+            admin_legacy_upload_navigation_enabled(),
+        'theme_widgets_active' =>
+            ($_GET['widgets'] ?? null) === '1'
+                || array_key_exists('widget_action', $_POST),
     ];
 }
 
@@ -338,41 +452,51 @@ function shared_layout_header_model(
     string $requestUri,
     string $scriptName,
     string $page,
-    string $headExtras = ''
+    string $headExtras = '',
 ): array {
     $user = current_user();
     $anonymousPreview = admin_anonymous_preview_active();
     $siteName = site_name();
     $theme = theme_settings();
-    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
+    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup'
+        ? 'admin-page'
+        : 'public-page';
     // The shared error layout also renders denied requests, so a raw marker must not activate privileged preview metadata.
     $previewDecision = \Gallery\Services\public_visual_preview_request_decision(
         $page,
         strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')),
         is_array($user) && (string) ($user['role'] ?? '') === 'admin',
-        $requestQuery
+        $requestQuery,
     );
-    $visualPreview = !empty($previewDecision['active']) && !empty($previewDecision['allowed']);
+    $visualPreview =
+        !empty($previewDecision['active'])
+        && !empty($previewDecision['allowed']);
     // Media authorization failures reuse the public layout but do not load the deferred document-only background resolver.
-    $visualPreviewDocument = $visualPreview && in_array($page, ['home', 'gallery'], true);
-    $visualBackgroundContext = $visualPreviewDocument && $bodyClass === 'public-page'
+    $visualPreviewDocument =
+        $visualPreview && in_array($page, ['home', 'gallery'], true);
+    $visualBackgroundContext = $visualPreviewDocument
+    && $bodyClass === 'public-page'
         ? theme_background_visual_editor_context($currentGallery, $publicOnly)
         : null;
     $favoritePublicOnly = !$user || $anonymousPreview;
     $viewerAccounts = $bodyClass === 'public-page' && viewer_accounts_enabled();
     $viewerPrincipal = $anonymousPreview ? null : current_viewer();
-    $adminTestRunEligible = !\Gallery\Services\public_visual_preview_is_active($requestQuery)
+    $adminTestRunEligible =
+        !\Gallery\Services\public_visual_preview_is_active($requestQuery)
         && $bodyClass === 'public-page'
         && $user
         && !$anonymousPreview
         && in_array($page, ['gallery', 'smart_gallery'], true);
-    $updatePending = $user && !$anonymousPreview && $bodyClass === 'public-page' ? application_update_pending() : false;
+    $updatePending =
+        $user && !$anonymousPreview && $bodyClass === 'public-page'
+            ? application_update_pending()
+            : false;
     $customCssUrl = custom_css_url();
     $overrideCssUrl = '';
     if ($bodyClass === 'public-page') {
         try {
             $overrideCssUrl = custom_css_overrides_state()['url'];
-        } catch (\RuntimeException | \InvalidArgumentException) {
+        } catch (\RuntimeException|\InvalidArgumentException) {
             // An unreadable optional asset cannot prevent the visitor or administrator from opening the site.
             $overrideCssUrl = '';
         }
@@ -380,13 +504,15 @@ function shared_layout_header_model(
     $customCssVersion = 0;
     if ($customCssUrl) {
         $customCssPath = custom_css_path();
-        $customCssVersion = is_file($customCssPath) ? (int) filemtime($customCssPath) : 0;
+        $customCssVersion = is_file($customCssPath)
+            ? (int) filemtime($customCssPath)
+            : 0;
     }
     if ($visualPreview && $overrideCssUrl !== '') {
         $overrideCssUrl = shared_layout_preview_asset_href(
             'assets/custom-overrides.css',
             (string) (parse_url($overrideCssUrl, PHP_URL_QUERY) ?? ''),
-            $anonymousPreview
+            $anonymousPreview,
         );
     }
     $stylesheetUrls = shared_layout_stylesheet_urls(
@@ -396,7 +522,7 @@ function shared_layout_header_model(
         $visualPreview,
         $theme,
         (string) ($customCssUrl ?: ''),
-        $customCssVersion
+        $customCssVersion,
     );
 
     return [
@@ -405,7 +531,12 @@ function shared_layout_header_model(
         'site_name' => $siteName,
         'theme' => $theme,
         'body_class' => $bodyClass,
-        'page_width_class' => $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '',
+        'page_width_class' => $bodyClass === 'public-page'
+            ? ' page-width-'
+            . theme_page_width_mode(
+                (string) ($theme['page_width'] ?? 'default'),
+            )
+            : '',
         'active_language' => translation_active_language(),
         'favicon_url' => favicon_asset_url(),
         'favicon_version' => (string) app_setting('favicon_version', '1'),
@@ -414,25 +545,52 @@ function shared_layout_header_model(
         'custom_css_overrides_url' => $overrideCssUrl,
         'stylesheet_urls' => $stylesheetUrls,
         'head_extras' => $headExtras,
-        'canonical_url' => $bodyClass === 'public-page'
+        'canonical_url' =>
+            $bodyClass === 'public-page'
             && stripos($headExtras, 'rel="canonical"') === false
             && stripos($headExtras, "rel='canonical'") === false
-                ? seo_request_guard_public_canonical_url($page, $currentGallery, $requestQuery)
+                ? seo_request_guard_public_canonical_url(
+                    $page,
+                    $currentGallery,
+                    $requestQuery,
+                )
                 : '',
-        'dev_mode_active' => (bool) ($user && !$anonymousPreview && dev_mode_enabled()),
-        'branding' => shared_layout_branding_model($currentGallery, $publicOnly, $bodyClass),
+        'dev_mode_active' => (bool) (
+            $user
+            && !$anonymousPreview
+            && dev_mode_enabled()
+        ),
+        'branding' => shared_layout_branding_model(
+            $currentGallery,
+            $publicOnly,
+            $bodyClass,
+        ),
         'visual_background' => $visualBackgroundContext,
-        'language_selector' => $bodyClass === 'public-page' ? shared_layout_language_selector_model($requestUri, $scriptName) : ['enabled' => false, 'items' => []],
-        'favorite_gallery_items' => theme_favorite_gallery_navigation_items($favoritePublicOnly),
+        'language_selector' => $bodyClass === 'public-page'
+            ? shared_layout_language_selector_model($requestUri, $scriptName)
+            : ['enabled' => false, 'items' => []],
+        'favorite_gallery_items' =>
+            theme_favorite_gallery_navigation_items($favoritePublicOnly),
         'viewer_accounts_enabled' => $viewerAccounts,
         'viewer_logged_in' => $viewerAccounts && $viewerPrincipal !== null,
-        'viewer_open_registration' => $viewerAccounts && viewer_http_open_registration_available(),
+        'viewer_open_registration' =>
+            $viewerAccounts && viewer_http_open_registration_available(),
         'update_pending' => $updatePending,
-        'update_label' => $updatePending || ($user && !$anonymousPreview && $bodyClass === 'public-page') ? application_update_nav_label($updatePending) : '',
-        'admin_test_runs_enabled' => $adminTestRunEligible && feature_capability_effective_enabled('admin_test_runs'),
-        'admin_test_run_active' => $adminTestRunEligible && admin_test_run_active(),
-        'admin_login_return' => str_starts_with($page, 'viewer_') ? '' : current_login_return_target(),
-        'admin_chrome' => $bodyClass === 'admin-page' && $user ? shared_layout_admin_chrome_model() : [],
+        'update_label' => $updatePending
+        || ($user && !$anonymousPreview && $bodyClass === 'public-page')
+            ? application_update_nav_label($updatePending)
+            : '',
+        'admin_test_runs_enabled' =>
+            $adminTestRunEligible
+                && feature_capability_effective_enabled('admin_test_runs'),
+        'admin_test_run_active' =>
+            $adminTestRunEligible && admin_test_run_active(),
+        'admin_login_return' => str_starts_with($page, 'viewer_')
+            ? ''
+            : current_login_return_target(),
+        'admin_chrome' => $bodyClass === 'admin-page' && $user
+            ? shared_layout_admin_chrome_model()
+            : [],
     ];
 }
 
@@ -444,7 +602,9 @@ function shared_layout_header_model(
  */
 function shared_layout_browser_i18n_language(?string $language = null): string
 {
-    $candidate = translation_normalize_language_code((string) ($language ?? ''));
+    $candidate = translation_normalize_language_code((string) (
+        $language ?? ''
+    ));
     if ($candidate !== '' && translation_language_allowed($candidate)) {
         return $candidate;
     }
@@ -458,8 +618,10 @@ function shared_layout_browser_i18n_language(?string $language = null): string
  * @param ?string $fallbackLanguage Additional fallback catalog, defaulting to the configured site language.
  * @return array{language:string,strings:array<string,mixed>} Resolved language and merged browser translation catalog.
  */
-function shared_layout_browser_i18n_model(?string $language = null, ?string $fallbackLanguage = null): array
-{
+function shared_layout_browser_i18n_model(
+    ?string $language = null,
+    ?string $fallbackLanguage = null,
+): array {
     $resolvedLanguage = shared_layout_browser_i18n_language($language);
     $defaultLanguage = $fallbackLanguage !== null
         ? shared_layout_browser_i18n_language($fallbackLanguage)
@@ -468,7 +630,7 @@ function shared_layout_browser_i18n_model(?string $language = null, ?string $fal
         'language' => $resolvedLanguage,
         'strings' => array_merge(
             translation_load_language($defaultLanguage),
-            translation_load_language($resolvedLanguage)
+            translation_load_language($resolvedLanguage),
         ),
     ];
 }
@@ -509,8 +671,10 @@ function shared_layout_browser_i18n_cache_key(?string $language = null): string
  * @param ?string $language Requested language code.
  * @return string Route URL for the browser translation asset.
  */
-function shared_layout_browser_i18n_asset_url(bool $isAdminPage, ?string $language = null): string
-{
+function shared_layout_browser_i18n_asset_url(
+    bool $isAdminPage,
+    ?string $language = null,
+): string {
     $resolvedLanguage = shared_layout_browser_i18n_language($language);
     return url_for($isAdminPage ? 'admin_browser_i18n' : 'browser_i18n', [
         'scope' => $isAdminPage ? 'admin' : 'public',
@@ -523,7 +687,7 @@ function shared_layout_browser_i18n_asset_url(bool $isAdminPage, ?string $langua
  * Prepare shared footer state before the View renders it.
  *
  * @param string $page Current route/page identifier.
- * @return array<string, mixed>
+ * @return array{has_admin_shell:bool,github_project_url:string,is_admin_page:bool,user:?array<string,mixed>,anonymous_preview:bool,browser_i18n_asset_url:string,admin_test_run_panel:array<string,mixed>} Prepared shared footer state for the current route.
  */
 function shared_layout_footer_model(string $page): array
 {
@@ -535,7 +699,10 @@ function shared_layout_footer_model(string $page): array
         'is_admin_page' => $isAdminPage,
         'user' => is_array($user) ? $user : null,
         'anonymous_preview' => admin_anonymous_preview_active(),
-        'browser_i18n_asset_url' => shared_layout_browser_i18n_asset_url($isAdminPage, translation_active_language()),
+        'browser_i18n_asset_url' => shared_layout_browser_i18n_asset_url(
+            $isAdminPage,
+            translation_active_language(),
+        ),
         'admin_test_run_panel' => admin_test_run_panel_model(),
     ];
 }

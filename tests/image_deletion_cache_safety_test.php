@@ -39,14 +39,21 @@ namespace Gallery\Services {
      * @param array<string,mixed> $image Fixture source row.
      * @return string Legacy basename stem.
      */
-    function thumbnail_filename_stem(array $image): string { return pathinfo((string) $image['filename'], PATHINFO_FILENAME); }
+    function thumbnail_filename_stem(array $image): string
+    {
+        return pathinfo((string) $image['filename'], PATHINFO_FILENAME);
+    }
 
     /**
      * Confirm source membership in the isolated deletion fixture.
      * @param array<string,mixed> $image Fixture source row.
      * @return string Existing fixture derivative stem.
      */
-    function thumbnail_source_identity_invalidation_stem(array $image): string { return thumbnail_filename_stem($image); }
+    function thumbnail_source_identity_invalidation_stem(array $image): string
+    {
+        return thumbnail_filename_stem($image);
+    }
+
     /**
      * Return the small configured size set used by this isolated filesystem test.
      *
@@ -60,17 +67,28 @@ namespace Gallery\Services {
     /**
      * Build one test thumbnail path using the production naming convention.
      *
-     * @param array $image Image row.
-     * @param array $gallery Gallery row.
+     * @param array{id:int,filename:string} $image Image identity and filename.
+     * @param array{id:int,folder_path:string} $gallery Owning gallery identity and folder.
      * @param int $size Thumbnail size.
      * @param string $format Thumbnail format.
      * @return string Absolute test path.
      */
-    function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
-    {
+    function thumbnail_abs_path(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format = 'jpg',
+    ): string {
         unset($gallery);
-        return (string) $GLOBALS['deletion_test_thumbs'] . DIRECTORY_SEPARATOR
-            . pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.' . $format;
+        return (
+            (string) $GLOBALS['deletion_test_thumbs']
+                . DIRECTORY_SEPARATOR
+                . pathinfo((string) $image['filename'], PATHINFO_FILENAME)
+                . '_thumb'
+                . $size
+                . '.'
+                . $format
+        );
     }
 
     /**
@@ -97,8 +115,10 @@ namespace Gallery\Services {
      * @param string $thumbnailPath Candidate path.
      * @return bool True for contained paths.
      */
-    function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thumbnailPath): bool
-    {
+    function thumbnail_path_inside_existing_gallery(
+        string $galleryRoot,
+        string $thumbnailPath,
+    ): bool {
         $root = rtrim(str_replace('\\', '/', $galleryRoot), '/') . '/';
         $path = str_replace('\\', '/', $thumbnailPath);
         return str_starts_with($path, $root);
@@ -138,7 +158,11 @@ namespace {
         }
     }
 
-    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-delete-cache-' . bin2hex(random_bytes(5));
+    $root =
+        sys_get_temp_dir()
+        . DIRECTORY_SEPARATOR
+        . 'php-gallery-delete-cache-'
+        . bin2hex(random_bytes(5));
     $thumbs = $root . DIRECTORY_SEPARATOR . 'thumbs';
     mkdir($thumbs, 0775, true);
     $GLOBALS['deletion_test_thumbs'] = $thumbs;
@@ -148,34 +172,71 @@ namespace {
         $gallery = ['id' => 9, 'folder_path' => 'sample'];
         $current = $thumbs . DIRECTORY_SEPARATOR . 'sample_thumb300.jpg';
         $oldSize = $thumbs . DIRECTORY_SEPARATOR . 'sample_thumb777.webp';
-        $temporary = $thumbs . DIRECTORY_SEPARATOR . 'sample_thumb600.jpg.a1b2c3d4e5f6.tmp.jpg';
+        $temporary =
+            $thumbs
+            . DIRECTORY_SEPARATOR
+            . 'sample_thumb600.jpg.a1b2c3d4e5f6.tmp.jpg';
         $unrelated = $thumbs . DIRECTORY_SEPARATOR . 'other_thumb777.webp';
         foreach ([$current, $oldSize, $temporary, $unrelated] as $path) {
             file_put_contents($path, 'x');
         }
 
-        $paths = gallery_image_deletion_derivative_paths($image, $gallery, $root);
-        assert_deletion_cache_true(in_array($current, $paths, true), 'Current configured thumbnail must be deleted.');
-        assert_deletion_cache_true(in_array($oldSize, $paths, true), 'Stale old-size thumbnail must be deleted.');
-        assert_deletion_cache_true(in_array($temporary, $paths, true), 'Interrupted thumbnail temporary file must be deleted.');
-        assert_deletion_cache_true(!in_array($unrelated, $paths, true), 'Unrelated image thumbnail must not be deleted.');
+        $paths = gallery_image_deletion_derivative_paths(
+            $image,
+            $gallery,
+            $root,
+        );
+        assert_deletion_cache_true(
+            in_array($current, $paths, true),
+            'Current configured thumbnail must be deleted.',
+        );
+        assert_deletion_cache_true(
+            in_array($oldSize, $paths, true),
+            'Stale old-size thumbnail must be deleted.',
+        );
+        assert_deletion_cache_true(
+            in_array($temporary, $paths, true),
+            'Interrupted thumbnail temporary file must be deleted.',
+        );
+        assert_deletion_cache_true(
+            !in_array($unrelated, $paths, true),
+            'Unrelated image thumbnail must not be deleted.',
+        );
 
         $original = $root . DIRECTORY_SEPARATOR . 'sample.jpg';
         file_put_contents($original, 'source');
         $staged = gallery_stage_file_for_deletion($original, $root);
-        assert_deletion_cache_true(!is_file($original), 'Staging must remove the original live media path.');
-        assert_deletion_cache_true(is_file($staged['staged']), 'Staging must preserve rollback bytes under a quarantine path.');
+        assert_deletion_cache_true(
+            !is_file($original),
+            'Staging must remove the original live media path.',
+        );
+        assert_deletion_cache_true(
+            is_file($staged['staged']),
+            'Staging must preserve rollback bytes under a quarantine path.',
+        );
         gallery_restore_staged_deletion_files([$staged]);
-        assert_deletion_cache_true(is_file($original), 'Rollback must restore the original live media path.');
+        assert_deletion_cache_true(
+            is_file($original),
+            'Rollback must restore the original live media path.',
+        );
 
         $staged = gallery_stage_file_for_deletion($original, $root);
-        assert_deletion_cache_true(gallery_finalize_staged_deletion_files([$staged]) === 0, 'Final staged-file cleanup must succeed.');
-        assert_deletion_cache_true(!is_file($original) && !is_file($staged['staged']), 'Committed deletion must leave neither live nor staged source bytes.');
+        assert_deletion_cache_true(
+            gallery_finalize_staged_deletion_files([$staged]) === 0,
+            'Final staged-file cleanup must succeed.',
+        );
+        assert_deletion_cache_true(
+            !is_file($original) && !is_file($staged['staged']),
+            'Committed deletion must leave neither live nor staged source bytes.',
+        );
     } finally {
         if (is_dir($root)) {
             $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::CHILD_FIRST
+                new RecursiveDirectoryIterator(
+                    $root,
+                    FilesystemIterator::SKIP_DOTS,
+                ),
+                RecursiveIteratorIterator::CHILD_FIRST,
             );
             foreach ($iterator as $entry) {
                 if ($entry->isDir()) {

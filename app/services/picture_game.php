@@ -67,7 +67,10 @@ use function Gallery\Models\picture_game_model_top_images;
  */
 function picture_game_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_picture_game_schema_status(), 'picture_game_render');
+    return presentation_schema_render_available(
+        presentation_picture_game_schema_status(),
+        'picture_game_render',
+    );
 }
 
 /**
@@ -77,21 +80,31 @@ function picture_game_schema_ready(): bool
  */
 function gallery_voting_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_voting_schema_status(), 'image_voting_render');
+    return presentation_schema_render_available(
+        presentation_voting_schema_status(),
+        'image_voting_render',
+    );
 }
 
 /**
  * Return true when a gallery allows public voting controls.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{voting_enabled?:int|string|null} $gallery Gallery voting setting row.
  * @return bool True when the condition matches.
  */
 function gallery_voting_allowed(array $gallery): bool
 {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('image_voting')) {
+    if (
+        function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('image_voting')
+    ) {
         return false;
     }
-    return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
+    return (
+        gallery_voting_schema_ready()
+            && (int) ($gallery['voting_enabled'] ?? 0) === 1
+    );
 }
 
 /**
@@ -115,8 +128,8 @@ function sync_gallery_voting_game_state(): int
  * Enabling a parent gallery makes its public descendants available for that
  * gallery's game, so meta-galleries can opt in their whole visible branch.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array{folder_path:string} $gallery Gallery row whose public branch is checked.
+ * @return list<int> Unique enabled public gallery IDs.
  */
 function picture_game_gallery_ids(array $gallery): array
 {
@@ -125,7 +138,10 @@ function picture_game_gallery_ids(array $gallery): array
     try {
         gallery_visibility_assert_public_policy_available();
         gallery_access_assert_public_policy_available();
-        $rows = picture_game_model_gallery_branch_rows($folderPath, gallery_access_schema_ready());
+        $rows = picture_game_model_gallery_branch_rows(
+            $folderPath,
+            gallery_access_schema_ready(),
+        );
     } catch (PDOException) {
         return [];
     }
@@ -138,12 +154,17 @@ function picture_game_gallery_ids(array $gallery): array
             continue;
         }
         // Variable $candidatePath stores this steps working value.
-        $candidatePath = normalize_relative_path((string) $candidate['folder_path']);
+        $candidatePath = normalize_relative_path(
+            (string) $candidate['folder_path'],
+        );
         if ((int) ($candidate['picture_game_enabled'] ?? 0) === 1) {
             $enabledPaths[] = $candidatePath;
         }
         foreach ($enabledPaths as $enabledPath) {
-            if ($candidatePath === $enabledPath || str_starts_with($candidatePath, $enabledPath . '/')) {
+            if (
+                $candidatePath === $enabledPath
+                || str_starts_with($candidatePath, $enabledPath . '/')
+            ) {
                 $ids[] = (int) $candidate['id'];
                 break;
             }
@@ -155,8 +176,8 @@ function picture_game_gallery_ids(array $gallery): array
 /**
  * Return public direct images that may participate in one gallery's game.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array{id:int|string,folder_path:string} $gallery Gallery row anchoring the game branch.
+ * @return list<array<string,int|string|null>> Visible image rows eligible for the game.
  */
 function picture_game_images(array $gallery): array
 {
@@ -171,15 +192,22 @@ function picture_game_images(array $gallery): array
     if (!$galleryIds) {
         return $cache[$cacheKey] = [];
     }
-    $rows = picture_game_model_images($galleryIds, gallery_filename_display_schema_ready());
+    $rows = picture_game_model_images(
+        $galleryIds,
+        gallery_filename_display_schema_ready(),
+    );
     $galleryCache = [(int) $gallery['id'] => $gallery];
     $visible = [];
     foreach ($rows as $image) {
         $imageGalleryId = (int) $image['gallery_id'];
         if (!array_key_exists($imageGalleryId, $galleryCache)) {
-            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId)
+            ?: $gallery;
         }
-        if (public_image_visible_to_current_visitor($image, $galleryCache[$imageGalleryId])) {
+        if (public_image_visible_to_current_visitor(
+            $image,
+            $galleryCache[$imageGalleryId],
+        )) {
             $visible[] = $image;
         }
     }
@@ -193,12 +221,14 @@ function picture_game_images(array $gallery): array
  * visible. Loading every eligible image from a large gallery branch is reserved
  * for the game route itself, where the full candidate set is actually needed.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,folder_path:string} $gallery Gallery row anchoring the game branch.
  * @param int $minimum Minimum number of visible images required.
  * @return int Integer result for the caller.
  */
-function picture_game_available_image_count(array $gallery, int $minimum = 2): int
-{
+function picture_game_available_image_count(
+    array $gallery,
+    int $minimum = 2,
+): int {
     // $minimum stores the smallest useful threshold for this availability check.
     $minimum = max(1, $minimum);
     // Variable $galleryIds stores this steps working value.
@@ -207,12 +237,13 @@ function picture_game_available_image_count(array $gallery, int $minimum = 2): i
         return 0;
     }
 
-    $excludeNsfw = nsfw_guard_schema_ready() && !visitor_can_access_nsfw_content();
+    $excludeNsfw =
+        nsfw_guard_schema_ready() && !visitor_can_access_nsfw_content();
     $rows = picture_game_model_images(
         $galleryIds,
         gallery_filename_display_schema_ready(),
         $excludeNsfw,
-        $minimum
+        $minimum,
     );
 
     // $galleryCache stores gallery rows reused for final visitor-specific checks.
@@ -223,9 +254,13 @@ function picture_game_available_image_count(array $gallery, int $minimum = 2): i
         // $imageGalleryId stores the owning gallery id for this candidate image.
         $imageGalleryId = (int) $image['gallery_id'];
         if (!array_key_exists($imageGalleryId, $galleryCache)) {
-            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId)
+            ?: $gallery;
         }
-        if (public_image_visible_to_current_visitor($image, $galleryCache[$imageGalleryId])) {
+        if (public_image_visible_to_current_visitor(
+            $image,
+            $galleryCache[$imageGalleryId],
+        )) {
             $visibleCount++;
         }
         if ($visibleCount >= $minimum) {
@@ -239,13 +274,17 @@ function picture_game_available_image_count(array $gallery, int $minimum = 2): i
 /**
  * Return whether one gallery has enough opted-in public images for a game.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param ?array $images Images value.
+ * @param array{id:int|string} $gallery Gallery identifier context.
+ * @param ?list<array<string,int|string|null>> $images Optional eligible image rows; loaded when omitted.
  * @return bool True when the condition matches.
  */
 function picture_game_available(array $gallery, ?array $images = null): bool
 {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('picture_game')) {
+    if (
+        function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('picture_game')
+    ) {
         return false;
     }
     if ($images !== null) {
@@ -264,7 +303,13 @@ function picture_game_voter_hash(): string
     // Variable $user stores this steps working value.
     $user = current_user();
     if ($user) {
-        return hash('sha256', 'user|' . (int) $user['id'] . '|' . (string) cms_config()['visitor_vote_secret']);
+        return hash(
+            'sha256',
+            'user|'
+                . (int) $user['id']
+                . '|'
+                . (string) cms_config()['visitor_vote_secret'],
+        );
     }
     return visitor_hash();
 }
@@ -274,24 +319,30 @@ function picture_game_voter_hash(): string
  *
  * @param int $firstImageId First image id identifier.
  * @param int $secondImageId Second image id identifier.
- * @return array Structured result data for the caller.
+ * @return array{0:int,1:int} Sorted image IDs for a stable pair key.
  */
 function picture_game_pair_key(int $firstImageId, int $secondImageId): array
 {
-    return [min($firstImageId, $secondImageId), max($firstImageId, $secondImageId)];
+    return [
+        min($firstImageId, $secondImageId),
+        max($firstImageId, $secondImageId),
+    ];
 }
 
 /**
  * Return the next unplayed image pair for this voter in one gallery context.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param ?array $images Images value.
- * @return ?array Structured result data for the caller.
+ * @param array{id:int|string} $gallery Gallery identifier context.
+ * @param ?list<array<string,int|string|null>> $images Optional eligible image rows; loaded when omitted.
+ * @return array{left:array<string,int|string|null>,right:array<string,int|string|null>,remaining_pairs:int,total_pairs:int}|null Next unseen pair, or null when none remain.
  */
 function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 {
     $schemaStatus = presentation_picture_game_schema_status();
-    presentation_schema_assert_write_available($schemaStatus, 'picture_game_pair_display');
+    presentation_schema_assert_write_available(
+        $schemaStatus,
+        'picture_game_pair_display',
+    );
     // Variable $images stores this steps working value.
     $images ??= picture_game_images($gallery);
     if (count($images) < 2) {
@@ -308,14 +359,20 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
     $voterHash = picture_game_voter_hash();
     // Variable $seen stores this steps working value.
     $seen = [];
-    foreach (picture_game_model_seen_pairs((int) $gallery['id'], $voterHash) as $row) {
+    foreach (picture_game_model_seen_pairs(
+        (int) $gallery['id'],
+        $voterHash,
+    ) as $row) {
         $seen[(int) $row['image_a_id'] . ':' . (int) $row['image_b_id']] = true;
     }
     // Variable $pairs stores this steps working value.
     $pairs = [];
     for ($i = 0, $count = count($ids); $i < $count; $i++) {
         for ($j = $i + 1; $j < $count; $j++) {
-            [$imageAId, $imageBId] = picture_game_pair_key((int) $ids[$i], (int) $ids[$j]);
+            [$imageAId, $imageBId] = picture_game_pair_key(
+                (int) $ids[$i],
+                (int) $ids[$j],
+            );
             // $key stores an intermediate value used by the surrounding gallery workflow.
             $key = $imageAId . ':' . $imageBId;
             if (!isset($seen[$key])) {
@@ -334,28 +391,37 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
         (int) $pair[0],
         (int) $pair[1],
         $voterHash,
-        now_sql()
+        now_sql(),
     );
     return [
         'left' => $imageById[$pair[0]],
         'right' => $imageById[$pair[1]],
         'remaining_pairs' => count($pairs),
-        'total_pairs' => (int) (count($ids) * (count($ids) - 1) / 2),
+        'total_pairs' => (int) ((count($ids) * (count($ids) - 1)) / 2),
     ];
 }
 
 /**
  * Record one picture-game selection and upvote only the chosen image.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery identifier context.
  * @param int $leftImageId Left image id identifier.
  * @param int $rightImageId Right image id identifier.
  * @param int $winnerImageId Winner image id identifier.
- * @param ?array $images Images value.
+ * @param ?list<array<string,int|string|null>> $images Optional eligible image rows; loaded when omitted.
+ * @return void
  */
-function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId, ?array $images = null): void
-{
-    presentation_schema_assert_write_available(presentation_picture_game_schema_status(), 'picture_game_vote');
+function record_picture_game_vote(
+    array $gallery,
+    int $leftImageId,
+    int $rightImageId,
+    int $winnerImageId,
+    ?array $images = null,
+): void {
+    presentation_schema_assert_write_available(
+        presentation_picture_game_schema_status(),
+        'picture_game_vote',
+    );
     [$imageAId, $imageBId] = picture_game_pair_key($leftImageId, $rightImageId);
     if (!in_array($winnerImageId, [$imageAId, $imageBId], true)) {
         throw new RuntimeException('Selected image is not part of this pair.');
@@ -363,8 +429,14 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
     // Variable $allowedIds stores this steps working value.
     $images ??= picture_game_images($gallery);
     // $allowedIds stores an intermediate value used by the surrounding gallery workflow.
-    $allowedIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
-    if (!in_array($imageAId, $allowedIds, true) || !in_array($imageBId, $allowedIds, true)) {
+    $allowedIds = array_map(
+        static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
+    if (
+        !in_array($imageAId, $allowedIds, true)
+        || !in_array($imageBId, $allowedIds, true)
+    ) {
         throw new RuntimeException('Image pair is not available in this game.');
     }
     // Variable $voterHash stores this steps working value.
@@ -379,26 +451,36 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
         $voterHash,
         $user ? (int) $user['id'] : null,
         $user ? '' : visitor_hash(),
-        now_sql()
+        now_sql(),
     );
 }
 
 /**
  * Return top global picture-game winners for one gallery context.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery identifier context.
  * @param int $limit Maximum number of items.
- * @param ?array $images Images value.
- * @return array Structured result data for the caller.
+ * @param ?list<array<string,int|string|null>> $images Optional eligible image rows; loaded when omitted.
+ * @return list<array<string,int|string|null>> Winning image rows ordered by vote count.
  */
-function picture_game_top_images(array $gallery, int $limit = 3, ?array $images = null): array
-{
+function picture_game_top_images(
+    array $gallery,
+    int $limit = 3,
+    ?array $images = null,
+): array {
     // Variable $images stores this steps working value.
     $images ??= picture_game_images($gallery);
     if (!$images) {
         return [];
     }
     // Variable $ids stores this steps working value.
-    $ids = array_map(static fn (array $image): int => (int) $image['id'], $images);
-    return picture_game_model_top_images($ids, gallery_filename_display_schema_ready(), max(1, $limit));
+    $ids = array_map(
+        static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
+    return picture_game_model_top_images(
+        $ids,
+        gallery_filename_display_schema_ready(),
+        max(1, $limit),
+    );
 }

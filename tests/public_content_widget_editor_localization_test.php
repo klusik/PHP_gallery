@@ -25,7 +25,11 @@ namespace Gallery\Core {
      */
     function e(string|int|float|bool|null $value): string
     {
-        return htmlspecialchars($value === null ? '' : (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars(
+            $value === null ? '' : (string) $value,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 }
 
@@ -40,7 +44,7 @@ namespace Gallery\Services {
     function t(string $key, ?string $default = null): string
     {
         $catalog = $GLOBALS['public_widget_editor_locale_test_catalog'] ?? [];
-        $value = is_array($catalog) ? ($catalog[$key] ?? null) : null;
+        $value = is_array($catalog) ? $catalog[$key] ?? null : null;
         if (is_string($value)) {
             return $value;
         }
@@ -53,9 +57,16 @@ namespace {
 
     $root = dirname(__DIR__);
     require_once $root . '/app/views/admin_public_widgets.php';
-    $english = json_decode((string) file_get_contents($root . '/app/lang/en.json'), true, 512, JSON_THROW_ON_ERROR);
+    $english = json_decode(
+        (string) file_get_contents($root . '/app/lang/en.json'),
+        true,
+        512,
+        JSON_THROW_ON_ERROR,
+    );
     if (!is_array($english)) {
-        throw new \RuntimeException('English widget editor catalog did not decode to a dictionary.');
+        throw new \RuntimeException(
+            'English widget editor catalog did not decode to a dictionary.',
+        );
     }
 
     $languages = ['en', 'cs', 'de', 'sv'];
@@ -120,55 +131,98 @@ namespace {
     $themePreviewCopyRequirements = [
         'en' => [
             'admin.widgets.preview_theme_hint' => [
-                'Home page', 'when available', 'public root Gallery', 'anonymously accessible',
-                'actual markup and Theme CSS', 'Scripts and forms are disabled',
-                'sanitized unsaved draft', 'nothing is saved',
+                'Home page',
+                'when available',
+                'public root Gallery',
+                'anonymously accessible',
+                'actual markup and Theme CSS',
+                'Scripts and forms are disabled',
+                'sanitized unsaved draft',
+                'nothing is saved',
             ],
             'admin.widgets.preview_theme_floating' => [
-                'simulated', 'preview geometry', 'safe position', 'normal page-flow zone',
+                'simulated',
+                'preview geometry',
+                'safe position',
+                'normal page-flow zone',
             ],
             'admin.widgets.preview_theme_ready' => [
-                'selected public page', 'unsaved draft', 'simulated', 'not saved',
+                'selected public page',
+                'unsaved draft',
+                'simulated',
+                'not saved',
             ],
         ],
         'cs' => [
             'admin.widgets.preview_theme_hint' => [
-                'veřejné úvodní stránky', 'pokud je dostupná', 'veřejné kořenové galerie',
-                'anonymním návštěvníkům', 'skutečné rozhraní a CSS motivu',
-                'Skripty a formuláře jsou vypnuté', 'sanitovaný neuložený návrh', 'nic se neukládá',
+                'veřejné úvodní stránky',
+                'pokud je dostupná',
+                'veřejné kořenové galerie',
+                'anonymním návštěvníkům',
+                'skutečné rozhraní a CSS motivu',
+                'Skripty a formuláře jsou vypnuté',
+                'sanitovaný neuložený návrh',
+                'nic se neukládá',
             ],
             'admin.widgets.preview_theme_floating' => [
-                'simuluje', 'geometrie náhledu', 'bezpečnou polohu', 'běžné oblasti toku stránky',
+                'simuluje',
+                'geometrie náhledu',
+                'bezpečnou polohu',
+                'běžné oblasti toku stránky',
             ],
             'admin.widgets.preview_theme_ready' => [
-                'vybrané veřejné stránky', 'neuložený návrh', 'simulované', 'neukládají',
+                'vybrané veřejné stránky',
+                'neuložený návrh',
+                'simulované',
+                'neukládají',
             ],
         ],
         'de' => [
             'admin.widgets.preview_theme_hint' => [
-                'öffentlichen Startseite', 'sofern verfügbar', 'öffentlichen Root-Galerie',
-                'anonymen Besuchern zugänglich', 'echte Markup und Theme-CSS',
-                'Skripte und Formulare sind deaktiviert', 'bereinigte, ungespeicherte Entwurf',
+                'öffentlichen Startseite',
+                'sofern verfügbar',
+                'öffentlichen Root-Galerie',
+                'anonymen Besuchern zugänglich',
+                'echte Markup und Theme-CSS',
+                'Skripte und Formulare sind deaktiviert',
+                'bereinigte, ungespeicherte Entwurf',
                 'nichts wird gespeichert',
             ],
             'admin.widgets.preview_theme_floating' => [
-                'simuliert', 'Geometrie der Vorschau', 'sichere Position', 'normalen Seitenflussbereich',
+                'simuliert',
+                'Geometrie der Vorschau',
+                'sichere Position',
+                'normalen Seitenflussbereich',
             ],
             'admin.widgets.preview_theme_ready' => [
-                'ausgewählten öffentlichen Seite', 'ungespeicherte Entwurf', 'simuliert', 'nicht gespeichert',
+                'ausgewählten öffentlichen Seite',
+                'ungespeicherte Entwurf',
+                'simuliert',
+                'nicht gespeichert',
             ],
         ],
         'sv' => [
             'admin.widgets.preview_theme_hint' => [
-                'offentliga startsidan', 'när det finns ett sådant', 'offentligt rotgalleri',
-                'tillgängligt för anonyma besökare', 'faktiska HTML-strukturen och temats CSS',
-                'Skript och formulär är avstängda', 'sanerade, osparade utkastet', 'inget sparas',
+                'offentliga startsidan',
+                'när det finns ett sådant',
+                'offentligt rotgalleri',
+                'tillgängligt för anonyma besökare',
+                'faktiska HTML-strukturen och temats CSS',
+                'Skript och formulär är avstängda',
+                'sanerade, osparade utkastet',
+                'inget sparas',
             ],
             'admin.widgets.preview_theme_floating' => [
-                'simuleras', 'förhandsvisningens geometri', 'säker position', 'vanliga sidflödesområde',
+                'simuleras',
+                'förhandsvisningens geometri',
+                'säker position',
+                'vanliga sidflödesområde',
             ],
             'admin.widgets.preview_theme_ready' => [
-                'valda offentliga sidan', 'osparade utkastet', 'simuleras', 'sparas inte',
+                'valda offentliga sidan',
+                'osparade utkastet',
+                'simuleras',
+                'sparas inte',
             ],
         ],
     ];
@@ -189,15 +243,30 @@ namespace {
 
     foreach ($languages as $language) {
         $path = $root . '/app/lang/' . $language . '.json';
-        $catalog = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        $catalog = json_decode(
+            (string) file_get_contents($path),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
         if (!is_array($catalog)) {
-            throw new \RuntimeException('Widget editor catalog did not decode for ' . $language . '.');
+            throw new \RuntimeException(
+                'Widget editor catalog did not decode for ' . $language . '.',
+            );
         }
         foreach ($themePreviewCopyRequirements[$language] as $key => $requiredFragments) {
             $translated = $catalog[$key] ?? null;
             foreach ($requiredFragments as $fragment) {
-                if (!is_string($translated) || !str_contains($translated, $fragment)) {
-                    throw new \RuntimeException('Theme preview copy omits required meaning for ' . $language . ': ' . $key);
+                if (
+                    !is_string($translated)
+                    || !str_contains($translated, $fragment)
+                ) {
+                    throw new \RuntimeException(
+                        'Theme preview copy omits required meaning for '
+                            . $language
+                            . ': '
+                            . $key,
+                    );
                 }
             }
         }
@@ -242,82 +311,210 @@ namespace {
         foreach ($themePreviewTextKeys as $label => $key) {
             $translated = (string) ($catalog[$key] ?? '');
             $tag = $label === 'title' ? 'h3' : 'p class="muted"';
-            $expected = '<' . $tag . '>'
-                . htmlspecialchars($translated, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
-                . '</' . ($label === 'title' ? 'h3' : 'p') . '>';
+            $expected =
+                '<'
+                . $tag
+                . '>'
+                . htmlspecialchars(
+                    $translated,
+                    ENT_QUOTES | ENT_SUBSTITUTE,
+                    'UTF-8',
+                )
+                . '</'
+                . ($label === 'title' ? 'h3' : 'p')
+                . '>';
             if ($translated === '' || !str_contains($html, $expected)) {
-                throw new RuntimeException('Theme preview copy is not localized for ' . $language . ': ' . $key);
+                throw new RuntimeException(
+                    'Theme preview copy is not localized for '
+                        . $language
+                        . ': '
+                        . $key,
+                );
             }
         }
 
-        if (!str_contains($html, '<p role="status" data-widget-theme-status></p>')
-            || !str_contains($html, '<div class="public-widgets-theme-frame-wrap" data-widget-theme-frame-wrap hidden></div>')) {
-            throw new \RuntimeException('Theme preview status or frame container is missing for ' . $language . '.');
+        if (
+            !str_contains(
+                $html,
+                '<p role="status" data-widget-theme-status></p>',
+            )
+            || !str_contains(
+                $html,
+                '<div class="public-widgets-theme-frame-wrap" data-widget-theme-frame-wrap hidden></div>',
+            )
+        ) {
+            throw new \RuntimeException(
+                'Theme preview status or frame container is missing for '
+                    . $language
+                    . '.',
+            );
         }
 
-        if (preg_match('/data-widget-i18n="([^"]*)"/', $html, $widgetI18nMatch) !== 1) {
-            throw new \RuntimeException('Widget editor browser labels are missing for ' . $language . '.');
+        if (
+            preg_match('/data-widget-i18n="([^"]*)"/', $html, $widgetI18nMatch)
+            !== 1
+        ) {
+            throw new \RuntimeException(
+                'Widget editor browser labels are missing for '
+                    . $language
+                    . '.',
+            );
         }
-        $browserLabelsJson = html_entity_decode($widgetI18nMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $browserLabels = json_decode($browserLabelsJson, true, 512, JSON_THROW_ON_ERROR);
+        $browserLabelsJson = html_entity_decode(
+            $widgetI18nMatch[1],
+            ENT_QUOTES | ENT_HTML5,
+            'UTF-8',
+        );
+        $browserLabels = json_decode(
+            $browserLabelsJson,
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
         if (!is_array($browserLabels)) {
-            throw new \RuntimeException('Widget editor browser labels did not decode for ' . $language . '.');
+            throw new \RuntimeException(
+                'Widget editor browser labels did not decode for '
+                    . $language
+                    . '.',
+            );
         }
         foreach ($themePreviewBrowserLabelKeys as $label => $key) {
             $translated = $catalog[$key] ?? null;
-            if (!is_string($translated) || $translated === '' || ($browserLabels[$label] ?? null) !== $translated) {
-                throw new \RuntimeException('Theme preview browser label is not localized for ' . $language . ': ' . $key);
+            if (
+                !is_string($translated)
+                || $translated === ''
+                || ($browserLabels[$label] ?? null) !== $translated
+            ) {
+                throw new \RuntimeException(
+                    'Theme preview browser label is not localized for '
+                        . $language
+                        . ': '
+                        . $key,
+                );
             }
         }
 
         if ($language !== 'en') {
-            foreach (array_unique(array_merge(array_values($themePreviewTextKeys), array_values($themePreviewBrowserLabelKeys))) as $key) {
+            foreach (array_unique(array_merge(
+                array_values($themePreviewTextKeys),
+                array_values($themePreviewBrowserLabelKeys),
+            )) as $key) {
                 if (($catalog[$key] ?? null) === ($english[$key] ?? null)) {
-                    throw new \RuntimeException('English Theme preview text leaked into ' . $language . ': ' . $key);
+                    throw new \RuntimeException(
+                        'English Theme preview text leaked into '
+                            . $language
+                            . ': '
+                            . $key,
+                    );
                 }
             }
         }
 
         foreach ($labelKeys as $field => $key) {
-            $label = htmlspecialchars((string) ($catalog[$key] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $expectedPrefix = '<label for="public-widget-' . $field . '">' . $label . '<select';
+            $label = htmlspecialchars(
+                (string) ($catalog[$key] ?? ''),
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+            );
+            $expectedPrefix =
+                '<label for="public-widget-'
+                . $field
+                . '">'
+                . $label
+                . '<select';
             if ($label === '' || !str_contains($html, $expectedPrefix)) {
-                throw new \RuntimeException('Widget editor field label is not localized for ' . $language . ': ' . $field);
+                throw new \RuntimeException(
+                    'Widget editor field label is not localized for '
+                        . $language
+                        . ': '
+                        . $field,
+                );
             }
         }
 
         foreach ($optionKeys as $field => $options) {
-            $selectPattern = '/<select id="public-widget-' . preg_quote($field, '/') . '"(?:\s+[^>]*)?>(.*?)<\/select>/s';
+            $selectPattern =
+                '/<select id="public-widget-'
+                . preg_quote($field, '/')
+                . '"(?:\s+[^>]*)?>(.*?)<\/select>/s';
             if (preg_match($selectPattern, $html, $selectMatch) !== 1) {
-                throw new \RuntimeException('Widget editor select is missing for ' . $language . ': ' . $field);
+                throw new \RuntimeException(
+                    'Widget editor select is missing for '
+                        . $language
+                        . ': '
+                        . $field,
+                );
             }
             foreach ($options as $value => $key) {
                 $translated = (string) ($catalog[$key] ?? '');
-                $optionPattern = '/<option value="' . preg_quote((string) $value, '/') . '"(?: selected)?>(.*?)<\/option>/s';
-                if ($translated === '' || preg_match($optionPattern, $selectMatch[1], $optionMatch) !== 1) {
-                    throw new \RuntimeException('Widget editor option is missing for ' . $language . ': ' . $key);
+                $optionPattern =
+                    '/<option value="'
+                    . preg_quote((string) $value, '/')
+                    . '"(?: selected)?>(.*?)<\/option>/s';
+                if (
+                    $translated === ''
+                    || preg_match($optionPattern, $selectMatch[1], $optionMatch)
+                        !== 1
+                ) {
+                    throw new \RuntimeException(
+                        'Widget editor option is missing for '
+                            . $language
+                            . ': '
+                            . $key,
+                    );
                 }
-                $renderedText = html_entity_decode($optionMatch[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $renderedText = html_entity_decode(
+                    $optionMatch[1],
+                    ENT_QUOTES | ENT_HTML5,
+                    'UTF-8',
+                );
                 if ($renderedText !== $translated) {
-                    throw new \RuntimeException('Widget editor option is not translated for ' . $language . ': ' . $key);
+                    throw new \RuntimeException(
+                        'Widget editor option is not translated for '
+                            . $language
+                            . ': '
+                            . $key,
+                    );
                 }
             }
         }
 
-        $summary = '<small>'
-            . htmlspecialchars((string) ($catalog['admin.widgets.state.published'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        $summary =
+            '<small>'
+            . htmlspecialchars(
+                (string) ($catalog['admin.widgets.state.published'] ?? ''),
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+            )
             . ' · '
-            . htmlspecialchars((string) ($catalog['admin.widgets.scope.gallery'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            . htmlspecialchars(
+                (string) ($catalog['admin.widgets.scope.gallery'] ?? ''),
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+            )
             . ' · '
-            . htmlspecialchars((string) ($catalog['admin.widgets.mode.floating'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            . htmlspecialchars(
+                (string) ($catalog['admin.widgets.mode.floating'] ?? ''),
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+            )
             . '</small>';
         if (!str_contains($html, $summary)) {
-            throw new \RuntimeException('Widget list placement summary is not localized for ' . $language . '.');
+            throw new \RuntimeException(
+                'Widget list placement summary is not localized for '
+                    . $language
+                    . '.',
+            );
         }
         if ($language !== 'en') {
             foreach ($sourceLanguageKeys as $key) {
                 if (($catalog[$key] ?? null) === ($english[$key] ?? null)) {
-                    throw new \RuntimeException('English source-language label leaked into ' . $language . ': ' . $key);
+                    throw new \RuntimeException(
+                        'English source-language label leaked into '
+                            . $language
+                            . ': '
+                            . $key,
+                    );
                 }
             }
         }

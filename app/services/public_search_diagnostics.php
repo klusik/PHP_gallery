@@ -46,7 +46,9 @@ use function Gallery\Models\public_search_diagnostics_profile_start;
 use function Gallery\Models\public_search_diagnostics_profile_stop;
 
 const PUBLIC_SEARCH_DIAGNOSTICS_REPORT_VERSION = 1;
+
 const PUBLIC_SEARCH_DIAGNOSTICS_DEFAULT_RUNS = 3;
+
 const PUBLIC_SEARCH_DIAGNOSTICS_MAX_RUNS = 5;
 
 /**
@@ -65,11 +67,16 @@ function public_search_diagnostics_normalize_runs(int $runs): int
  * @param bool $includeExplain Whether captured statements should be explained.
  * @return array<string, mixed> Portable diagnostics report.
  */
-function public_search_diagnostics_run(string $query, int $runs = PUBLIC_SEARCH_DIAGNOSTICS_DEFAULT_RUNS, bool $includeExplain = true): array
-{
+function public_search_diagnostics_run(
+    string $query,
+    int $runs = PUBLIC_SEARCH_DIAGNOSTICS_DEFAULT_RUNS,
+    bool $includeExplain = true,
+): array {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
-        throw new \InvalidArgumentException('Search diagnostics require at least two query characters.');
+        throw new \InvalidArgumentException(
+            'Search diagnostics require at least two query characters.',
+        );
     }
 
     $runs = public_search_diagnostics_normalize_runs($runs);
@@ -115,7 +122,10 @@ function public_search_diagnostics_run(string $query, int $runs = PUBLIC_SEARCH_
                 'phase' => $phase,
                 'elapsed_ms' => round($elapsedMs, 3),
                 'db_elapsed_ms' => round($dbElapsedMs, 3),
-                'php_overhead_ms' => round(max(0.0, $elapsedMs - $dbElapsedMs), 3),
+                'php_overhead_ms' => round(
+                    max(0.0, $elapsedMs - $dbElapsedMs),
+                    3,
+                ),
                 'query_count' => count($queries),
                 'result_count' => count($results),
                 'error_class' => $errorClass,
@@ -134,16 +144,31 @@ function public_search_diagnostics_run(string $query, int $runs = PUBLIC_SEARCH_
         'search_state' => [
             'public_home_search_enabled' => public_home_search_enabled(),
             'ai_metadata_ready' => public_search_ai_metadata_ready(),
-            'content_localization_enabled' => function_exists(__NAMESPACE__ . '\\content_localization_enabled') ? content_localization_enabled() : false,
-            'active_language' => function_exists(__NAMESPACE__ . '\\translation_active_language') ? translation_active_language() : '',
+            'content_localization_enabled' => function_exists(__NAMESPACE__
+                . '\\content_localization_enabled')
+                ? content_localization_enabled()
+                : false,
+            'active_language' => function_exists(__NAMESPACE__
+                . '\\translation_active_language')
+                ? translation_active_language()
+                : '',
         ],
         'phase_runs' => $phaseRuns,
-        'phase_summary' => public_search_diagnostics_phase_summary($phaseRuns, $phases),
-        'query_summary' => public_search_diagnostics_query_summary($allQueryRuns),
+        'phase_summary' => public_search_diagnostics_phase_summary(
+            $phaseRuns,
+            $phases,
+        ),
+        'query_summary' =>
+            public_search_diagnostics_query_summary($allQueryRuns),
         'database' => public_search_diagnostics_database_snapshot(),
-        'explain' => $includeExplain ? public_search_diagnostics_explain_queries($firstRunQueries) : [],
+        'explain' => $includeExplain
+            ? public_search_diagnostics_explain_queries($firstRunQueries)
+            : [],
         'explain_included' => $includeExplain,
-        'diagnostic_elapsed_ms' => round(max(0.0, (hrtime(true) - $reportStartedAt) / 1_000_000), 3),
+        'diagnostic_elapsed_ms' => round(
+            max(0.0, (hrtime(true) - $reportStartedAt) / 1_000_000),
+            3,
+        ),
         'notes' => [
             'Run 1 can include cold-cache effects; later runs are useful for warm-cache comparison.',
             'Table row counts come from information_schema and may be estimates for InnoDB.',
@@ -183,8 +208,10 @@ function public_search_diagnostics_result_summary(array $results): array
  * @param array<int, string> $phases Stable phase order.
  * @return array<string, array<string, int|float>> Phase statistics.
  */
-function public_search_diagnostics_phase_summary(array $phaseRuns, array $phases): array
-{
+function public_search_diagnostics_phase_summary(
+    array $phaseRuns,
+    array $phases,
+): array {
     $summary = [];
     foreach ($phases as $phase) {
         $elapsed = [];
@@ -201,10 +228,13 @@ function public_search_diagnostics_phase_summary(array $phaseRuns, array $phases
         $summary[$phase] = array_merge(
             public_search_diagnostics_numeric_stats($elapsed),
             [
-                'db_avg_ms' => round(public_search_diagnostics_average($dbElapsed), 3),
+                'db_avg_ms' => round(
+                    public_search_diagnostics_average($dbElapsed),
+                    3,
+                ),
                 'result_min' => $resultCounts === [] ? 0 : min($resultCounts),
                 'result_max' => $resultCounts === [] ? 0 : max($resultCounts),
-            ]
+            ],
         );
     }
     return $summary;
@@ -243,7 +273,7 @@ function public_search_diagnostics_query_summary(array $queries): array
             [
                 'rows_min' => $returned === [] ? 0 : min($returned),
                 'rows_max' => $returned === [] ? 0 : max($returned),
-            ]
+            ],
         );
     }
     return $summary;
@@ -253,7 +283,7 @@ function public_search_diagnostics_query_summary(array $queries): array
  * Return average/min/median/max timing metrics.
  *
  * @param array<int, float> $values Numeric values.
- * @return array<string, float>
+ * @return array{avg_ms:float,min_ms:float,median_ms:float,max_ms:float} Rounded timing summary; empty input yields zero for each metric.
  */
 function public_search_diagnostics_numeric_stats(array $values): array
 {
@@ -268,9 +298,9 @@ function public_search_diagnostics_numeric_stats(array $values): array
     sort($values, SORT_NUMERIC);
     $count = count($values);
     $middle = intdiv($count, 2);
-    $median = $count % 2 === 1
+    $median = ($count % 2) === 1
         ? $values[$middle]
-        : (($values[$middle - 1] + $values[$middle]) / 2);
+        : ($values[$middle - 1] + $values[$middle]) / 2;
     return [
         'avg_ms' => round(public_search_diagnostics_average($values), 3),
         'min_ms' => round((float) $values[0], 3),
@@ -296,9 +326,16 @@ function public_search_diagnostics_average(array $values): float
  * Encode a portable pretty-printed diagnostic report.
  *
  * @param array<string, mixed> $report Diagnostic report.
+ * @return string Pretty-printed UTF-8 JSON, or an empty JSON object if encoding fails.
  */
 function public_search_diagnostics_encode_report(array $report): string
 {
-    $encoded = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    $encoded = json_encode(
+        $report,
+        JSON_PRETTY_PRINT
+            | JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+            | JSON_INVALID_UTF8_SUBSTITUTE,
+    );
     return is_string($encoded) ? $encoded : '{}';
 }

@@ -38,24 +38,44 @@ use Throwable;
 use function Gallery\Models\maintenance_center_model_job;
 use function Gallery\Models\maintenance_center_model_latest_actor_job;
 use function Gallery\Models\maintenance_center_model_latest_completed_job;
-use function Gallery\Models\maintenance_center_model_latest_unfinished_actor_job;
+use function Gallery\Models\maintenance_center_model_latest_unfinished_actor_job
+;
 use function Gallery\Models\maintenance_center_model_mutation_owner;
 use function Gallery\Models\maintenance_center_model_schema_ready;
 
-/** Log one bounded central lifecycle event without raw exception/request payloads. */
-function maintenance_center_log_lifecycle(string $level, string $eventKey, string $message, int $jobId, array $context = []): void
-{
+/** Log one bounded central lifecycle event without raw exception/request payloads.
+ * @param string $level Lifecycle event severity.
+ * @param string $eventKey Stable lifecycle event identifier.
+ * @param string $message Safe human-readable failure message.
+ * @param int $jobId Maintenance Center job identifier.
+ * @param array<string,mixed> $context Shared task context containing prior analysis results and job state.
+ * @return void Attempts to append a bounded lifecycle event; logging failures are swallowed.
+ */
+function maintenance_center_log_lifecycle(
+    string $level,
+    string $eventKey,
+    string $message,
+    int $jobId,
+    array $context = [],
+): void {
     if (!function_exists(__NAMESPACE__ . '\\admin_log_event')) {
         return;
     }
     $safe = ['job_id' => max(0, $jobId)];
     foreach (array_slice($context, 0, 10, true) as $key => $value) {
         if (is_scalar($value) || $value === null) {
-            $safe[(string) $key] = is_string($value) ? mb_substr($value, 0, 180) : $value;
+            $safe[(string) $key] = is_string($value)
+                ? mb_substr($value, 0, 180)
+                : $value;
         }
     }
     try {
-        admin_log_event($level, $eventKey, $message, $safe, ['category' => 'maintenance', 'severity' => $level === 'error' ? 'error' : ($level === 'warning' ? 'warning' : 'notice')]);
+        admin_log_event($level, $eventKey, $message, $safe, [
+            'category' => 'maintenance',
+            'severity' => $level === 'error'
+                ? 'error'
+                : ($level === 'warning' ? 'warning' : 'notice'),
+        ]);
     } catch (Throwable) {
         // Logging must never change an already persisted maintenance outcome.
     }
@@ -70,7 +90,11 @@ function maintenance_center_present_plan(array $plan): array
         if (!is_array($task)) {
             continue;
         }
-        $fallback = (string) ($task['label'] ?? $task['key'] ?? 'Maintenance task');
+        $fallback = (string) (
+            $task['label']
+            ?? $task['key']
+            ?? 'Maintenance task'
+        );
         $key = (string) ($task['label_key'] ?? '');
         $task['display_label'] = $key !== '' ? t($key, $fallback) : $fallback;
         $tasks[] = $task;
@@ -99,16 +123,35 @@ function maintenance_center_job_status(int $jobId, int $actorId): array
     return maintenance_center_present_job($row);
 }
 
-/** Convert one persisted row to a bounded presentation model. */
+/** Convert one persisted row to a bounded presentation model.
+ * @param array<string,mixed> $row Persisted maintenance job row.
+ * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.
+ */
 function maintenance_center_present_job(array $row): array
 {
-    $state = maintenance_center_json_decode(isset($row['state_json']) ? (string) $row['state_json'] : null);
-    $plan = maintenance_center_json_decode(isset($row['plan_json']) ? (string) $row['plan_json'] : null);
+    $state = maintenance_center_json_decode(
+        isset($row['state_json']) ? (string) $row['state_json'] : null,
+    );
+    $plan = maintenance_center_json_decode(
+        isset($row['plan_json']) ? (string) $row['plan_json'] : null,
+    );
     $execution = (array) ($state['execution'] ?? []);
-    $selected = array_values(array_map('strval', (array) ($execution['selected_tasks'] ?? [])));
+    $selected = array_values(array_map(
+        'strval',
+        (array) ($execution['selected_tasks'] ?? []),
+    ));
     $taskIndex = max(0, (int) ($execution['task_index'] ?? 0));
-    $currentTask = (string) ($state['current_task'] ?? ($selected[$taskIndex] ?? ''));
-    $freshness = $plan !== [] && in_array((string) ($row['status'] ?? ''), ['ready', 'running', 'paused'], true)
+    $currentTask = (string) (
+        $state['current_task']
+        ?? $selected[$taskIndex]
+        ?? ''
+    );
+    $freshness = $plan !== []
+    && in_array(
+        (string) ($row['status'] ?? ''),
+        ['ready', 'running', 'paused'],
+        true,
+    )
         ? maintenance_center_plan_freshness($row, $plan)
         : ['fresh' => true, 'checks' => []];
     $startedAt = (string) ($row['started_at'] ?? '');
@@ -130,7 +173,10 @@ function maintenance_center_present_job(array $row): array
         'phase' => (string) ($row['phase'] ?? ''),
         'progress_done' => max(0, (int) ($row['progress_done'] ?? 0)),
         'progress_total' => max(0, (int) ($row['progress_total'] ?? 0)),
-        'progress_percent' => max(0.0, min(100.0, (float) ($row['progress_percent'] ?? 0))),
+        'progress_percent' => max(0.0, min(
+            100.0,
+            (float) ($row['progress_percent'] ?? 0),
+        )),
         'cancel_requested' => !empty($row['cancel_requested']),
         'created_at' => (string) ($row['created_at'] ?? ''),
         'started_at' => $startedAt,
@@ -149,14 +195,20 @@ function maintenance_center_present_job(array $row): array
         'current_subtask' => (string) ($state['current_subtask'] ?? ''),
         'selected_tasks' => $selected,
         'task_index' => $taskIndex,
-        'activity' => array_values(array_slice((array) ($state['activity'] ?? []), -40)),
+        'activity' => array_values(array_slice(
+            (array) ($state['activity'] ?? []),
+            -40,
+        )),
         'warnings' => array_values((array) ($state['warnings'] ?? [])),
         'errors' => array_values((array) ($state['errors'] ?? [])),
         'report' => maintenance_center_report_from_state($state),
     ];
 }
 
-/** Return compact installation-wide state for the Dashboard card. */
+/** Return compact installation-wide state for the Dashboard card.
+ * @param int|null $actorId Administrator account identifier.
+ * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.
+ */
 function maintenance_center_dashboard_status(?int $actorId = null): array
 {
     $schemaReady = maintenance_center_model_schema_ready();
@@ -174,37 +226,69 @@ function maintenance_center_dashboard_status(?int $actorId = null): array
         ];
     }
     $owner = maintenance_center_model_mutation_owner();
-    $unfinished = $actorId !== null && $actorId > 0 ? maintenance_center_model_latest_unfinished_actor_job($actorId) : null;
+    $unfinished =
+        $actorId !== null && $actorId > 0
+            ? maintenance_center_model_latest_unfinished_actor_job($actorId)
+            : null;
     $lastCompleted = maintenance_center_model_latest_completed_job();
     $candidate = is_array($owner) ? $owner : $unfinished;
     return [
         'available' => true,
         'schema_ready' => true,
         'active' => is_array($owner),
-        'resumable' => is_array($unfinished) && in_array((string) ($unfinished['status'] ?? ''), ['analyzing', 'ready', 'running', 'paused'], true),
-        'active_job_id' => is_array($candidate) ? max(0, (int) ($candidate['id'] ?? 0)) : 0,
-        'active_status' => is_array($candidate) ? (string) ($candidate['status'] ?? '') : '',
-        'active_progress_percent' => is_array($candidate) ? max(0.0, min(100.0, (float) ($candidate['progress_percent'] ?? 0))) : 0.0,
-        'last_completed_at' => is_array($lastCompleted) ? (string) ($lastCompleted['finished_at'] ?? '') : '',
-        'last_completed_job_id' => is_array($lastCompleted) ? max(0, (int) ($lastCompleted['id'] ?? 0)) : 0,
+        'resumable' =>
+            is_array($unfinished)
+                && in_array(
+                    (string) ($unfinished['status'] ?? ''),
+                    ['analyzing', 'ready', 'running', 'paused'],
+                    true,
+                ),
+        'active_job_id' => is_array($candidate)
+            ? max(0, (int) ($candidate['id'] ?? 0))
+            : 0,
+        'active_status' => is_array($candidate)
+            ? (string) ($candidate['status'] ?? '')
+            : '',
+        'active_progress_percent' => is_array($candidate)
+            ? max(0.0, min(
+                100.0,
+                (float) ($candidate['progress_percent'] ?? 0),
+            ))
+            : 0.0,
+        'last_completed_at' => is_array($lastCompleted)
+            ? (string) ($lastCompleted['finished_at'] ?? '')
+            : '',
+        'last_completed_job_id' => is_array($lastCompleted)
+            ? max(0, (int) ($lastCompleted['id'] ?? 0))
+            : 0,
     ];
 }
 
-/** Return the complete dedicated-page model for one administrator. */
+/** Return the complete dedicated-page model for one administrator.
+ * @param int $actorId Administrator account identifier.
+ * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.
+ */
 function maintenance_center_page_model(int $actorId): array
 {
     $dashboard = maintenance_center_dashboard_status($actorId);
     $owner = maintenance_center_model_mutation_owner();
-    $blockedByOtherJob = is_array($owner) && (int) ($owner['actor_id'] ?? 0) !== $actorId;
+    $blockedByOtherJob =
+        is_array($owner) && (int) ($owner['actor_id'] ?? 0) !== $actorId;
     $latest = maintenance_center_model_latest_actor_job($actorId);
-    $job = !$blockedByOtherJob && is_array($latest) ? maintenance_center_present_job($latest) : null;
-    $installationBlocker = $blockedByOtherJob ? [
-        'job_id' => max(0, (int) ($owner['id'] ?? 0)),
-        'status' => (string) ($owner['status'] ?? ''),
-        'phase' => (string) ($owner['phase'] ?? ''),
-        'progress_percent' => max(0.0, min(100.0, (float) ($owner['progress_percent'] ?? 0))),
-        'updated_at' => (string) ($owner['updated_at'] ?? ''),
-    ] : null;
+    $job = !$blockedByOtherJob && is_array($latest)
+        ? maintenance_center_present_job($latest)
+        : null;
+    $installationBlocker = $blockedByOtherJob
+        ? [
+            'job_id' => max(0, (int) ($owner['id'] ?? 0)),
+            'status' => (string) ($owner['status'] ?? ''),
+            'phase' => (string) ($owner['phase'] ?? ''),
+            'progress_percent' => max(0.0, min(
+                100.0,
+                (float) ($owner['progress_percent'] ?? 0),
+            )),
+            'updated_at' => (string) ($owner['updated_at'] ?? ''),
+        ] : null;
     return [
         'available' => !empty($dashboard['available']),
         'schema_ready' => !empty($dashboard['schema_ready']),

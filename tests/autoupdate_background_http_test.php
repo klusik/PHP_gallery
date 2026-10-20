@@ -28,7 +28,8 @@ function update_chain_http_assert(bool $condition, string $message): void
 }
 
 if (getenv('GITHUB_ACTIONS') !== 'true' || DIRECTORY_SEPARATOR === '\\') {
-    echo "SKIP hosted multi-worker updater HTTP fixture requires Linux PHP workers.\n";
+    echo
+        "SKIP hosted multi-worker updater HTTP fixture requires Linux PHP workers.\n";
     exit(0);
 }
 
@@ -40,6 +41,7 @@ if (getenv('GITHUB_ACTIONS') !== 'true' || DIRECTORY_SEPARATOR === '\\') {
  *   borrowing production limits or permitting an indefinitely stuck test.
  */
 const UPDATE_CHAIN_HTTP_DEADLINE_SECONDS = 20;
+
 /**
  * Avoid busy polling while observing independent server processes.
  * Type: int. Units: microseconds. Scope: this hosted fixture's passive polling.
@@ -57,8 +59,15 @@ file_put_contents($root . '/owned-fixture', 'isolated updater HTTP test');
 // writes and final cleanup to disposable test data.
 define('CACHE_LIFECYCLE_TEST_ROOT', $root);
 require_once __DIR__ . '/../app/services/updates.php';
-$socket = stream_socket_server('tcp://127.0.0.1:0', $socketError, $socketMessage);
-update_chain_http_assert(is_resource($socket), 'Could not reserve a disposable HTTP port.');
+$socket = stream_socket_server(
+    'tcp://127.0.0.1:0',
+    $socketError,
+    $socketMessage,
+);
+update_chain_http_assert(
+    is_resource($socket),
+    'Could not reserve a disposable HTTP port.',
+);
 $address = stream_socket_get_name($socket, false);
 fclose($socket);
 $base = 'http://' . $address;
@@ -72,10 +81,18 @@ $environment['PHP_CLI_SERVER_WORKERS'] = '2';
 $process = null;
 try {
     $jobId = '20261019000000-abcdef123456';
-    $job = ['id' => $jobId, 'operation' => 'stable_update',
-        'trigger' => 'background', 'status' => 'running', 'stage' => 'cleanup',
-        'attempts' => 0, 'parameters' => [], 'checkpoints' => [], 'result' => [],
-        'progress' => []];
+    $job = [
+        'id' => $jobId,
+        'operation' => 'stable_update',
+        'trigger' => 'background',
+        'status' => 'running',
+        'stage' => 'cleanup',
+        'attempts' => 0,
+        'parameters' => [],
+        'checkpoints' => [],
+        'result' => [],
+        'progress' => [],
+    ];
     \Gallery\Services\application_update_save_job($job);
     \Gallery\Services\application_update_set_active_job($jobId);
     $trash = \Gallery\Services\application_update_prune_trash_root($root);
@@ -87,17 +104,36 @@ try {
     for ($index = 0; $index < $payloadCount; $index++) {
         file_put_contents($trash . '/payload-' . $index, 'fixture');
     }
-    $process = proc_open([PHP_BINARY, '-S', $address,
-        __DIR__ . '/fixtures/autoupdate_background_router.php'],
-        [0 => ['pipe', 'r'], 1 => ['file', $root . '/server.log', 'a'],
-            2 => ['file', $root . '/server.log', 'a']], $pipes, $root, $environment);
-    update_chain_http_assert(is_resource($process), 'Could not start the owned HTTP server.');
+    $process = proc_open(
+        [
+            PHP_BINARY,
+            '-S',
+            $address,
+            __DIR__ . '/fixtures/autoupdate_background_router.php',
+        ],
+        [
+            0 => ['pipe', 'r'],
+            1 => ['file', $root . '/server.log', 'a'],
+            2 => ['file', $root . '/server.log', 'a'],
+        ],
+        $pipes,
+        $root,
+        $environment,
+    );
+    update_chain_http_assert(
+        is_resource($process),
+        'Could not start the owned HTTP server.',
+    );
     fclose($pipes[0]);
     $deadline = microtime(true) + UPDATE_CHAIN_HTTP_DEADLINE_SECONDS;
     $serverReady = false;
     do {
-        $ready = @stream_socket_client('tcp://' . $address, $error, $message,
-            UPDATE_CHAIN_HTTP_DEADLINE_SECONDS);
+        $ready = @stream_socket_client(
+            'tcp://' . $address,
+            $error,
+            $message,
+            UPDATE_CHAIN_HTTP_DEADLINE_SECONDS,
+        );
         if (is_resource($ready)) {
             fclose($ready);
             $serverReady = true;
@@ -105,45 +141,75 @@ try {
         }
         usleep(UPDATE_CHAIN_HTTP_POLL_US);
     } while (microtime(true) < $deadline);
-    update_chain_http_assert($serverReady,
-        'The owned HTTP server never became ready.');
-    $context = stream_context_create(['http' => ['ignore_errors' => true,
-        'timeout' => UPDATE_CHAIN_HTTP_DEADLINE_SECONDS]]);
+    update_chain_http_assert(
+        $serverReady,
+        'The owned HTTP server never became ready.',
+    );
+    $context = stream_context_create(['http' => [
+        'ignore_errors' => true,
+        'timeout' => UPDATE_CHAIN_HTTP_DEADLINE_SECONDS,
+    ]]);
     file_get_contents($base . '/blocked', false, $context);
-    update_chain_http_assert(!is_file($root . '/cache/updates/background-chain.json'),
-        'An HTTP 503 visitor response started an update chain.');
-    file_get_contents($base . '/index.php?page=site_maintenance_cron', false, $context);
-    update_chain_http_assert(str_contains($http_response_header[0] ?? '', '403')
-        && \Gallery\Services\application_update_load_job($jobId)['attempts'] === 0,
-        'An unauthenticated maintenance request advanced the updater.');
+    update_chain_http_assert(
+        !is_file($root . '/cache/updates/background-chain.json'),
+        'An HTTP 503 visitor response started an update chain.',
+    );
+    file_get_contents(
+        $base . '/index.php?page=site_maintenance_cron',
+        false,
+        $context,
+    );
+    update_chain_http_assert(
+        str_contains($http_response_header[0] ?? '', '403')
+            && \Gallery\Services\application_update_load_job($jobId)['attempts']
+                === 0,
+        'An unauthenticated maintenance request advanced the updater.',
+    );
     // No cookie, JavaScript, Admin page or follow-up visitor request participates.
     file_get_contents($base . '/visit', false, $context);
     do {
         $completed = \Gallery\Services\application_update_load_job($jobId);
-        if ($completed['status'] === 'completed' || $completed['status'] === 'failed') {
+        if (
+            $completed['status'] === 'completed'
+            || $completed['status'] === 'failed'
+        ) {
             break;
         }
         usleep(UPDATE_CHAIN_HTTP_POLL_US);
     } while (microtime(true) < $deadline);
     $arrivals = file($root . '/arrivals.log', FILE_IGNORE_NEW_LINES);
-    update_chain_http_assert($completed['status'] === 'completed'
-        && $completed['attempts'] > 1,
+    update_chain_http_assert(
+        $completed['status'] === 'completed'
+            && $completed['attempts'] > 1,
         'One visitor did not finish real independent updater slices: '
-            . json_encode($completed) . '\nOwned server: ' . file_get_contents($root . '/server.log'));
+            . json_encode($completed)
+            . '\nOwned server: '
+            . file_get_contents($root . '/server.log'),
+    );
     // One rejected visitor plus exactly one admitted visitor; worker counts
     // include the deliberate forbidden request as well as actual continuations.
-    update_chain_http_assert(count(array_filter($arrivals,
-        static fn(string $kind): bool => $kind === 'visit')) === 2
-        && count(array_filter($arrivals,
-            static fn(string $kind): bool => $kind === 'worker')) >= 3,
-        'Completion needed another visitor or had no real HTTP successors.');
-    echo "One anonymous visit, actual authenticated HTTP successors and real updater completion: PASS\n";
+    update_chain_http_assert(
+        count(array_filter(
+            $arrivals,
+            static fn(string $kind): bool => $kind === 'visit',
+        )) === 2
+            && count(array_filter(
+                $arrivals,
+                static fn(string $kind): bool => $kind === 'worker',
+            )) >= 3,
+        'Completion needed another visitor or had no real HTTP successors.',
+    );
+    echo
+        "One anonymous visit, actual authenticated HTTP successors and real updater completion: PASS\n";
 } finally {
     if (is_resource($process)) {
         require_once __DIR__ . '/../scripts/audit_process.php';
         $server = proc_get_status($process);
         \PhpGallery\Audit\terminate_process([
-            'process' => $process, 'pid' => $server['pid'], 'group' => false]);
+            'process' => $process,
+            'pid' => $server['pid'],
+            'group' => false,
+        ]);
         proc_close($process);
     }
     while (is_dir($root)) {

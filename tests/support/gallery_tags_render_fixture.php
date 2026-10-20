@@ -33,7 +33,10 @@ function gallery_tags_fixture_items(int $count): array
     ];
     $items = [];
     for ($index = 0; $index < $count; $index++) {
-        $items[] = ['name' => $names[$index % count($names)], 'href' => '#fixture-tag-' . $index];
+        $items[] = [
+            'name' => $names[$index % count($names)],
+            'href' => '#fixture-tag-' . $index,
+        ];
     }
     return $items;
 }
@@ -48,8 +51,14 @@ function gallery_tags_fixture_items(int $count): array
  * @param string $renderer Thumbnail renderer variant used by the card-layout fixture.
  * @return void Emits one test-only physical gallery card.
  */
-function gallery_tags_fixture_card(string $case, int $visibleLimit, int $rows, bool $displayAll = false, int $tagCount = 12, string $renderer = 'responsive'): void
-{
+function gallery_tags_fixture_card(
+    string $case,
+    int $visibleLimit,
+    int $rows,
+    bool $displayAll = false,
+    int $tagCount = 12,
+    string $renderer = 'responsive',
+): void {
     $tagModel = [
         'items' => gallery_tags_fixture_items($tagCount),
         'visible_limit' => $visibleLimit,
@@ -71,29 +80,61 @@ function gallery_tags_fixture_card(string $case, int $visibleLimit, int $rows, b
         'tag_list_view_model' => $tagModel,
     ]);
     $cardHtml = (string) ob_get_clean();
-    $cardHtml = str_replace('data-gallery-id="' . $galleryId . '"', 'data-gallery-id="' . $galleryId . '" data-fixture-case="' . \Gallery\Core\e($case) . '"' . (in_array($case, ['rows-one', 'rows-one-responsive', 'rows-five'], true) ? ' style="max-width:250px"' : ''), $cardHtml);
+    $cardHtml = str_replace(
+        'data-gallery-id="' . $galleryId . '"',
+        'data-gallery-id="'
+            . $galleryId
+            . '" data-fixture-case="'
+            . \Gallery\Core\e($case)
+            . '"'
+            . (
+                in_array(
+                    $case,
+                    ['rows-one', 'rows-one-responsive', 'rows-five'],
+                    true,
+                )
+                    ? ' style="max-width:250px"'
+                    : ''
+            ),
+        $cardHtml,
+    );
     echo $cardHtml;
 }
 
 /** Render the requested production stylesheet set and three setting variants. @return void Emits fixture document content for a browser test only. */
 function gallery_tags_fixture_document(): void
 {
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery tag fixture</title>';
+    echo
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery tag fixture</title>';
     foreach (\Gallery\Controllers\shared_layout_public_stylesheet_files() as $stylesheet) {
-        echo '<link rel="stylesheet" href="/public/' . \Gallery\Core\e($stylesheet) . '">';
+        echo
+            '<link rel="stylesheet" href="/public/'
+                . \Gallery\Core\e($stylesheet)
+                . '">';
     }
     echo '</head><body class="public-page"><main class="gallery-grid">';
     gallery_tags_fixture_card('rows-one', 4, 1, false, 12, 'progressive');
-    gallery_tags_fixture_card('rows-one-responsive', 4, 1, false, 12, 'responsive');
+    gallery_tags_fixture_card(
+        'rows-one-responsive',
+        4,
+        1,
+        false,
+        12,
+        'responsive',
+    );
     gallery_tags_fixture_card('rows-five', 8, 5);
     gallery_tags_fixture_card('exact-limit', 4, 5, false, 4);
     gallery_tags_fixture_card('display-all', 4, 1, true, 8);
     $heroItems = gallery_tags_fixture_items(12);
-    echo '<section class="hero" data-fixture-case="hero-rows-one" style="max-width:250px;min-width:0">';
+    echo
+        '<section class="hero" data-fixture-case="hero-rows-one" style="max-width:250px;min-width:0">';
     \Gallery\Views\view_render_public_hero_tags([
         'groups' => [
             ['items' => array_slice($heroItems, 0, 2)],
-            ['label' => 'Containing tags', 'items' => array_slice($heroItems, 2)],
+            [
+                'label' => 'Containing tags',
+                'items' => array_slice($heroItems, 2),
+            ],
         ],
         'tag_count' => 12,
         'visible_limit' => 4,
@@ -102,13 +143,38 @@ function gallery_tags_fixture_document(): void
         'scrollbar_rows' => 1,
     ]);
     echo '</section>';
-    foreach ([['case' => 'hero-group-boundary', 'limit' => 2, 'all' => false, 'count' => 12], ['case' => 'hero-exact-limit', 'limit' => 4, 'all' => false, 'count' => 4], ['case' => 'hero-display-all', 'limit' => 2, 'all' => true, 'count' => 8]] as $heroCase) {
+    foreach ([
+        [
+            'case' => 'hero-group-boundary',
+            'limit' => 2,
+            'all' => false,
+            'count' => 12,
+        ],
+        [
+            'case' => 'hero-exact-limit',
+            'limit' => 4,
+            'all' => false,
+            'count' => 4,
+        ],
+        [
+            'case' => 'hero-display-all',
+            'limit' => 2,
+            'all' => true,
+            'count' => 8,
+        ],
+    ] as $heroCase) {
         $items = gallery_tags_fixture_items($heroCase['count']);
-        echo '<section class="hero" data-fixture-case="' . $heroCase['case'] . '" style="max-width:250px;min-width:0">';
+        echo
+            '<section class="hero" data-fixture-case="'
+                . $heroCase['case']
+                . '" style="max-width:250px;min-width:0">';
         \Gallery\Views\view_render_public_hero_tags([
             'groups' => [
                 ['items' => array_slice($items, 0, 2)],
-                ['label' => 'Containing tags', 'items' => array_slice($items, 2)],
+                [
+                    'label' => 'Containing tags',
+                    'items' => array_slice($items, 2),
+                ],
             ],
             'tag_count' => $heroCase['count'],
             'visible_limit' => $heroCase['limit'],

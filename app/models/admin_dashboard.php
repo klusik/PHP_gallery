@@ -44,10 +44,16 @@ use function Gallery\Core\db;
 function admin_dashboard_model_overview_totals(bool $accessReady): array
 {
     $listing = $accessReady ? 'access_listing' : "'listed' AS access_listing";
-    $galleries = db()->query('SELECT visibility, ' . $listing . ' FROM galleries')->fetchAll();
+    $galleries = db()
+        ->query('SELECT visibility, ' . $listing . ' FROM galleries')
+        ->fetchAll();
     // Count only top-level images belonging to an existing gallery, as the gallery table does.
     // Storage retains the historical total for every indexed original, including orphan metadata.
-    $row = db()->query("SELECT COALESCE(SUM(CASE WHEN g.id IS NOT NULL AND i.relative_path NOT LIKE '%/%' THEN 1 ELSE 0 END), 0) AS total_images, COALESCE(SUM(i.file_size), 0) AS original_bytes FROM images i LEFT JOIN galleries g ON g.id = i.gallery_id")->fetch();
+    $row = db()
+        ->query(
+            "SELECT COALESCE(SUM(CASE WHEN g.id IS NOT NULL AND i.relative_path NOT LIKE '%/%' THEN 1 ELSE 0 END), 0) AS total_images, COALESCE(SUM(i.file_size), 0) AS original_bytes FROM images i LEFT JOIN galleries g ON g.id = i.gallery_id",
+        )
+        ->fetch();
     return [
         'galleries' => $galleries,
         'total_images' => max(0, (int) ($row['total_images'] ?? 0)),
@@ -55,11 +61,17 @@ function admin_dashboard_model_overview_totals(bool $accessReady): array
     ];
 }
 
-/** Return indexed source-file bytes from image metadata. */
+/**
+ * Return indexed source-file bytes from image metadata.
+ *
+ * @return int Non-negative total size of indexed original images, or zero on query failure.
+ */
 function admin_dashboard_model_original_storage_bytes(): int
 {
     try {
-        $stmt = db()->prepare('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images');
+        $stmt = db()->prepare(
+            'SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images',
+        );
         $stmt->execute();
         $row = $stmt->fetch();
         return max(0, (int) ($row['original_bytes'] ?? 0));
@@ -76,24 +88,58 @@ function admin_dashboard_model_original_storage_bytes(): int
 function admin_dashboard_model_gallery_rows(array $capabilities): array
 {
     $selects = [
-        'g.id', 'g.parent_id', 'g.folder_path', 'g.slug', 'g.title', 'g.sort_order', 'g.visibility',
-        'parent.title AS parent_title', 'COALESCE(image_counts.image_count, 0) AS image_count',
+        'g.id',
+        'g.parent_id',
+        'g.folder_path',
+        'g.slug',
+        'g.title',
+        'g.sort_order',
+        'g.visibility',
+        'parent.title AS parent_title',
+        'COALESCE(image_counts.image_count, 0) AS image_count',
     ];
-    $selects[] = !empty($capabilities['public_path']) ? 'g.url_path' : "'' AS url_path";
-    $selects[] = !empty($capabilities['content_localization']) ? 'g.content_language' : 'NULL AS content_language';
-    $selects[] = !empty($capabilities['access']) ? 'g.access_mode' : "'normal' AS access_mode";
-    $selects[] = !empty($capabilities['access']) ? 'g.access_listing' : "'listed' AS access_listing";
+    $selects[] = !empty($capabilities['public_path'])
+        ? 'g.url_path'
+        : "'' AS url_path";
+    $selects[] = !empty($capabilities['content_localization'])
+        ? 'g.content_language'
+        : 'NULL AS content_language';
+    $selects[] = !empty($capabilities['access'])
+        ? 'g.access_mode'
+        : "'normal' AS access_mode";
+    $selects[] = !empty($capabilities['access'])
+        ? 'g.access_listing'
+        : "'listed' AS access_listing";
     // Expose presence only: dashboard rows must never carry password hashes or access tokens.
-    $selects[] = !empty($capabilities['access']) ? "CASE WHEN COALESCE(g.access_password_hash, '') <> '' THEN 1 ELSE 0 END AS own_password_set" : '0 AS own_password_set';
-    $selects[] = !empty($capabilities['edit_revision']) ? 'g.edit_revision' : 'NULL AS edit_revision';
-    $selects[] = !empty($capabilities['gps_map']) ? 'g.gps_map_enabled' : '0 AS gps_map_enabled';
-    $selects[] = !empty($capabilities['background_source']) ? 'g.background_source' : 'NULL AS background_source';
-    $selects[] = !empty($capabilities['filename_display']) ? 'g.show_filenames' : '0 AS show_filenames';
-    $selects[] = !empty($capabilities['voting']) ? 'g.voting_enabled' : '0 AS voting_enabled';
-    $selects[] = !empty($capabilities['picture_game']) ? 'g.picture_game_enabled' : '0 AS picture_game_enabled';
-    $selects[] = !empty($capabilities['cover_asset']) ? 'g.cover_image_path' : 'NULL AS cover_image_path';
+    $selects[] = !empty($capabilities['access'])
+        ? "CASE WHEN COALESCE(g.access_password_hash, '') <> '' THEN 1 ELSE 0 END AS own_password_set"
+        : '0 AS own_password_set';
+    $selects[] = !empty($capabilities['edit_revision'])
+        ? 'g.edit_revision'
+        : 'NULL AS edit_revision';
+    $selects[] = !empty($capabilities['gps_map'])
+        ? 'g.gps_map_enabled'
+        : '0 AS gps_map_enabled';
+    $selects[] = !empty($capabilities['background_source'])
+        ? 'g.background_source'
+        : 'NULL AS background_source';
+    $selects[] = !empty($capabilities['filename_display'])
+        ? 'g.show_filenames'
+        : '0 AS show_filenames';
+    $selects[] = !empty($capabilities['voting'])
+        ? 'g.voting_enabled'
+        : '0 AS voting_enabled';
+    $selects[] = !empty($capabilities['picture_game'])
+        ? 'g.picture_game_enabled'
+        : '0 AS picture_game_enabled';
+    $selects[] = !empty($capabilities['cover_asset'])
+        ? 'g.cover_image_path'
+        : 'NULL AS cover_image_path';
 
-    $sql = 'SELECT ' . implode(', ', $selects) . "
+    $sql =
+        'SELECT '
+        . implode(', ', $selects)
+        . "
         FROM galleries g
         LEFT JOIN galleries parent ON parent.id = g.parent_id
         LEFT JOIN (
@@ -106,10 +152,16 @@ function admin_dashboard_model_gallery_rows(array $capabilities): array
     return db()->query($sql)->fetchAll();
 }
 
-/** Return aggregate gallery hierarchy values used for the parent-sync fingerprint. */
+/**
+ * Return aggregate gallery hierarchy values used for the parent-sync fingerprint.
+ *
+ * @return array{gallery_count?:int|string,newest_id?:int|string,newest_updated_at?:string,path_length_sum?:int|string} Aggregate fingerprint fields, or an empty array when unavailable.
+ */
 function admin_dashboard_model_parent_sync_fingerprint_row(): array
 {
-    $stmt = db()->prepare("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries");
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries",
+    );
     $stmt->execute();
     $row = $stmt->fetch();
     return is_array($row) ? $row : [];

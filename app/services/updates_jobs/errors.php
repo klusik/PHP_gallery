@@ -70,36 +70,66 @@ function application_update_manifest_mismatch_message(): string
  * The returned payload deliberately excludes the exception text, filesystem
  * paths, URLs, SQL, credentials, tokens, and stack traces.
  *
- * @param Throwable|string $error Internal failure.
- * @return array{message:string,reference:string,retryable:bool}
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $error A Throwable contributes its message; any other value is string-cast and used only to derive a private diagnostic reference and retryability classification. Sensitive internal details are excluded from the returned payload.
+ * @return array{message:string,reference:string,retryable:bool} Admin-safe message, opaque diagnostic reference, and whether retrying may succeed; internal exception details are excluded.
  */
-function application_update_safe_error($error): array
+function application_update_safe_error(mixed $error): array
 {
-    $internal = $error instanceof Throwable ? $error->getMessage() : (string) $error;
+    $internal = $error instanceof Throwable
+        ? $error->getMessage()
+        : (string) $error;
     $reference = application_update_error_reference($internal);
     $lower = strtolower($internal);
 
     $retryable = true;
-    if (str_contains($lower, 'failed core-manifest integrity validation')
-        || str_contains($lower, 'installable file that is missing from the core manifest')
-        || str_contains($lower, 'version markers do not agree')) {
+    if (
+        str_contains($lower, 'failed core-manifest integrity validation')
+        || str_contains(
+            $lower,
+            'installable file that is missing from the core manifest',
+        )
+        || str_contains($lower, 'version markers do not agree')
+    ) {
         $message = application_update_manifest_mismatch_message();
         $retryable = false;
-    } elseif (str_contains($lower, 'archive') || str_contains($lower, 'zip') || str_contains($lower, 'extract')) {
+    } elseif (
+        str_contains($lower, 'archive')
+        || str_contains($lower, 'zip')
+        || str_contains($lower, 'extract')
+    ) {
         $message = 'The downloaded update package could not be prepared or validated.';
-    } elseif (str_contains($lower, 'migration') || str_contains($lower, 'schema')) {
+    } elseif (
+        str_contains($lower, 'migration')
+        || str_contains($lower, 'schema')
+    ) {
         $message = 'The database migration stage could not be completed safely.';
-    } elseif (str_contains($lower, 'download') || str_contains($lower, 'http') || str_contains($lower, 'curl') || str_contains($lower, 'github')) {
+    } elseif (
+        str_contains($lower, 'download')
+        || str_contains($lower, 'http')
+        || str_contains($lower, 'curl')
+        || str_contains($lower, 'github')
+    ) {
         $message = 'The update download could not be completed.';
-    } elseif (str_contains($lower, 'backup') || str_contains($lower, 'rollback')) {
+    } elseif (
+        str_contains($lower, 'backup')
+        || str_contains($lower, 'rollback')
+    ) {
         $message = 'The updater could not prepare or use the rollback data safely.';
-    } elseif (str_contains($lower, 'activate') || str_contains($lower, 'replace') || str_contains($lower, 'rename')) {
+    } elseif (
+        str_contains($lower, 'activate')
+        || str_contains($lower, 'replace')
+        || str_contains($lower, 'rename')
+    ) {
         $message = 'The prepared update could not be activated safely.';
     } else {
         $message = 'The update job could not continue safely.';
     }
 
-    return ['message' => $message, 'reference' => $reference, 'retryable' => $retryable];
+    return [
+        'message' => $message,
+        'reference' => $reference,
+        'retryable' => $retryable,
+    ];
 }
 
 /**
@@ -108,19 +138,30 @@ function application_update_safe_error($error): array
  * Older persisted jobs predate the explicit retryable field. Their bounded
  * reference can still identify the three deterministic package-publisher
  * failures without retaining or exposing the original exception text.
+ *
+ * @param array{error?:array{reference?:string,retryable?:bool},...<string,mixed>} $job Durable job with optional stored safe error details.
+ * @return bool Whether retrying the same update source is considered useful.
  */
 function application_update_job_error_retryable(array $job): bool
 {
-    $error = isset($job['error']) && is_array($job['error']) ? $job['error'] : [];
+    $error = isset($job['error']) && is_array($job['error'])
+        ? $job['error']
+        : [];
     if (array_key_exists('retryable', $error)) {
         return $error['retryable'] !== false;
     }
 
     $reference = strtoupper((string) ($error['reference'] ?? ''));
     $nonRetryableReferences = [
-        application_update_error_reference('Downloaded update archive failed core-manifest integrity validation.'),
-        application_update_error_reference('Downloaded update archive contains an installable file that is missing from the core manifest.'),
-        application_update_error_reference('Downloaded update package version markers do not agree.'),
+        application_update_error_reference(
+            'Downloaded update archive failed core-manifest integrity validation.',
+        ),
+        application_update_error_reference(
+            'Downloaded update archive contains an installable file that is missing from the core manifest.',
+        ),
+        application_update_error_reference(
+            'Downloaded update package version markers do not agree.',
+        ),
     ];
     return !in_array($reference, $nonRetryableReferences, true);
 }

@@ -49,7 +49,7 @@ function duplicate_photo_ledger_model_pairs(int $adminUserId): array
         'SELECT image_id_low, image_id_high
          FROM duplicate_photo_ledger_pairs
          WHERE user_id = ?
-         ORDER BY image_id_low, image_id_high'
+         ORDER BY image_id_low, image_id_high',
     );
     $stmt->execute([$adminUserId]);
     return $stmt->fetchAll();
@@ -67,7 +67,7 @@ function duplicate_photo_ledger_model_gallery_ids(int $adminUserId): array
         'SELECT gallery_id
          FROM duplicate_photo_ledger_galleries
          WHERE user_id = ?
-         ORDER BY gallery_id'
+         ORDER BY gallery_id',
     );
     $stmt->execute([$adminUserId]);
     return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
@@ -79,12 +79,16 @@ function duplicate_photo_ledger_model_gallery_ids(int $adminUserId): array
  * @param int $adminUserId Administrator user identifier.
  * @param int $lowImageId Lower canonical image identifier.
  * @param int $highImageId Higher canonical image identifier.
+ * @return void Inserts the canonical ignored pair if it is not already present.
  */
-function duplicate_photo_ledger_model_add_pair(int $adminUserId, int $lowImageId, int $highImageId): void
-{
+function duplicate_photo_ledger_model_add_pair(
+    int $adminUserId,
+    int $lowImageId,
+    int $highImageId,
+): void {
     $stmt = db()->prepare(
         'INSERT IGNORE INTO duplicate_photo_ledger_pairs (user_id, image_id_low, image_id_high, created_at)
-         VALUES (?, ?, ?, NOW())'
+         VALUES (?, ?, ?, NOW())',
     );
     $stmt->execute([$adminUserId, $lowImageId, $highImageId]);
 }
@@ -94,12 +98,15 @@ function duplicate_photo_ledger_model_add_pair(int $adminUserId, int $lowImageId
  *
  * @param int $adminUserId Administrator user identifier.
  * @param int $galleryId Exact gallery identifier.
+ * @return void Inserts the ignored gallery rule if it is not already present.
  */
-function duplicate_photo_ledger_model_add_gallery(int $adminUserId, int $galleryId): void
-{
+function duplicate_photo_ledger_model_add_gallery(
+    int $adminUserId,
+    int $galleryId,
+): void {
     $stmt = db()->prepare(
         'INSERT IGNORE INTO duplicate_photo_ledger_galleries (user_id, gallery_id, created_at)
-         VALUES (?, ?, NOW())'
+         VALUES (?, ?, NOW())',
     );
     $stmt->execute([$adminUserId, $galleryId]);
 }
@@ -115,9 +122,13 @@ function duplicate_photo_ledger_model_clear(int $adminUserId): array
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $pairStmt = $pdo->prepare('DELETE FROM duplicate_photo_ledger_pairs WHERE user_id = ?');
+        $pairStmt = $pdo->prepare(
+            'DELETE FROM duplicate_photo_ledger_pairs WHERE user_id = ?',
+        );
         $pairStmt->execute([$adminUserId]);
-        $galleryStmt = $pdo->prepare('DELETE FROM duplicate_photo_ledger_galleries WHERE user_id = ?');
+        $galleryStmt = $pdo->prepare(
+            'DELETE FROM duplicate_photo_ledger_galleries WHERE user_id = ?',
+        );
         $galleryStmt->execute([$adminUserId]);
         $pdo->commit();
     } catch (Throwable $exception) {

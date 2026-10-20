@@ -80,8 +80,11 @@ function thumbnail_webp_quality(): int
  * @param int $maxSide Max side value.
  * @return array{width:int,height:int} Structured result data for the caller.
  */
-function thumbnail_expected_dimensions(int $sourceWidth, int $sourceHeight, int $maxSide): array
-{
+function thumbnail_expected_dimensions(
+    int $sourceWidth,
+    int $sourceHeight,
+    int $maxSide,
+): array {
     $sourceWidth = max(1, $sourceWidth);
     $sourceHeight = max(1, $sourceHeight);
     $maxSide = max(1, $maxSide);
@@ -102,8 +105,10 @@ function thumbnail_expected_dimensions(int $sourceWidth, int $sourceHeight, int 
  * @param string $mime Mime value.
  * @return int Integer result for the caller.
  */
-function thumbnail_jpeg_exif_orientation(string $sourcePath, string $mime = ''): int
-{
+function thumbnail_jpeg_exif_orientation(
+    string $sourcePath,
+    string $mime = '',
+): int {
     if ($mime !== '' && $mime !== 'image/jpeg') {
         return 1;
     }
@@ -123,7 +128,11 @@ function thumbnail_jpeg_exif_orientation(string $sourcePath, string $mime = ''):
     }
 
     // $orientation stores the normalized EXIF orientation value.
-    $orientation = (int) ($exif['IFD0']['Orientation'] ?? $exif['Orientation'] ?? 1);
+    $orientation = (int) (
+        $exif['IFD0']['Orientation']
+        ?? $exif['Orientation']
+        ?? 1
+    );
     return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
 }
 
@@ -147,14 +156,20 @@ function thumbnail_orientation_swaps_axes(int $orientation): bool
  * every public view.
  *
  * @param string $sourcePath Source filesystem path.
- * @param array $image Image row or image data.
- * @return array{width:int,height:int}|null Structured result data for the caller.
+ * @param array<string,mixed> $image Image metadata used when source EXIF cannot be read.
+ * @return array{width:int,height:int}|null Display-oriented source dimensions, or null when dimensions are unavailable.
  */
-function thumbnail_source_geometry_dimensions(string $sourcePath, array $image = []): ?array
-{
+function thumbnail_source_geometry_dimensions(
+    string $sourcePath,
+    array $image = [],
+): ?array {
     // $info stores dimensions decoded directly from the source file whenever possible.
     $info = @getimagesize($sourcePath);
-    if (is_array($info) && (int) ($info[0] ?? 0) > 0 && (int) ($info[1] ?? 0) > 0) {
+    if (
+        is_array($info)
+        && (int) ($info[0] ?? 0) > 0
+        && (int) ($info[1] ?? 0) > 0
+    ) {
         // $width stores the raw pixel width reported by the image decoder.
         $width = (int) $info[0];
         // $height stores the raw pixel height reported by the image decoder.
@@ -188,9 +203,17 @@ function thumbnail_source_geometry_dimensions(string $sourcePath, array $image =
  * @param int $maxSide Max side value.
  * @return array{valid:bool,reason:string,expected_width:int,expected_height:int,actual_width:int,actual_height:int} Structured result data for the caller.
  */
-function thumbnail_file_geometry_status(string $thumbnailPath, int $sourceWidth, int $sourceHeight, int $maxSide): array
-{
-    $expected = thumbnail_expected_dimensions($sourceWidth, $sourceHeight, $maxSide);
+function thumbnail_file_geometry_status(
+    string $thumbnailPath,
+    int $sourceWidth,
+    int $sourceHeight,
+    int $maxSide,
+): array {
+    $expected = thumbnail_expected_dimensions(
+        $sourceWidth,
+        $sourceHeight,
+        $maxSide,
+    );
     $actual = @getimagesize($thumbnailPath);
     $actualWidth = is_array($actual) ? (int) ($actual[0] ?? 0) : 0;
     $actualHeight = is_array($actual) ? (int) ($actual[1] ?? 0) : 0;
@@ -210,16 +233,23 @@ function thumbnail_file_geometry_status(string $thumbnailPath, int $sourceWidth,
 
     // $pixelTolerance allows one or two pixels of encoder rounding difference.
     $pixelTolerance = 2;
-    if (abs($actualWidth - (int) $expected['width']) <= $pixelTolerance && abs($actualHeight - (int) $expected['height']) <= $pixelTolerance) {
+    if (
+        abs($actualWidth - (int) $expected['width']) <= $pixelTolerance
+        && abs($actualHeight - (int) $expected['height']) <= $pixelTolerance
+    ) {
         $status['valid'] = true;
         $status['reason'] = 'geometry_matches_expected_dimensions';
         return $status;
     }
 
     // $expectedRatio and $actualRatio catch old square-canvas derivatives such as 1600x1600 portrait thumbnails.
-    $expectedRatio = (float) $expected['width'] / max(1, (int) $expected['height']);
+    $expectedRatio =
+        (float) $expected['width'] / max(1, (int) $expected['height']);
     $actualRatio = $actualWidth / max(1, $actualHeight);
-    if (abs($actualRatio - $expectedRatio) <= 0.015 && max($actualWidth, $actualHeight) <= max(1, $maxSide)) {
+    if (
+        abs($actualRatio - $expectedRatio) <= 0.015
+        && max($actualWidth, $actualHeight) <= max(1, $maxSide)
+    ) {
         $status['valid'] = true;
         $status['reason'] = 'geometry_matches_expected_ratio';
         return $status;
@@ -239,10 +269,13 @@ function thumbnail_file_geometry_status(string $thumbnailPath, int $sourceWidth,
  * new as the source.
  *
  * @param string $thumbnailPath Thumbnail path filesystem path.
- * @param string $sourcePath Source filesystem path.
+ * @param string $sourcePath Source filesystem path whose modification time is the freshness floor.
+ * @return void Advances the generated file mtime to at least the source mtime.
  */
-function thumbnail_touch_generated_file_for_source(string $thumbnailPath, string $sourcePath): void
-{
+function thumbnail_touch_generated_file_for_source(
+    string $thumbnailPath,
+    string $sourcePath,
+): void {
     if (!is_file($thumbnailPath)) {
         return;
     }
@@ -334,14 +367,20 @@ function create_image_thumbnails(array $image, array $gallery): int
  * @param array<string,mixed> $context Existing target counts and thumbnail policy details.
  * @return array<string,mixed> Compatible thumbnail result plus structured decode diagnostics.
  */
-function thumbnail_source_decode_failure_result(array $status, array $context = []): array
-{
+function thumbnail_source_decode_failure_result(
+    array $status,
+    array $context = [],
+): array {
     return array_replace([
         'created' => 0,
         'skipped' => 0,
         'webp_skipped' => 0,
         'failed' => 1,
-        'errors' => [$status['reason'] === 'processing_failed' ? 'source_decode_failed' : 'source_decode_' . $status['reason']],
+        'errors' => [
+            $status['reason'] === 'processing_failed'
+                ? 'source_decode_failed'
+                : 'source_decode_' . $status['reason'],
+        ],
         'message' => $status['message'],
         'decode_status' => $status,
         'created_files' => [],
@@ -364,14 +403,22 @@ function thumbnail_source_decode_failure_result(array $status, array $context = 
  * @param array{prefer_imagick_webp_exif?:bool} $options Whether the optional metadata-preserving writer may be attempted.
  * @return array{created:int,skipped:int,webp_skipped:int,failed:int,errors:list<string>,created_files:list<string>,target_formats:list<string>,thumbnail_policy:array<string,mixed>|null,invalid_geometry_deleted?:int,invalid_geometry_files?:list<string>,decode_status?:array<string,mixed>,message?:string} Derivative counts, bounded decode evidence and per-target diagnostics.
  */
-function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null, array $options = []): array
-{
+function create_image_thumbnails_result(
+    array $image,
+    array $gallery,
+    ?array $requestedSizes = null,
+    array $options = [],
+): array {
     thumbnail_assert_source_identity_owned($image);
-    thumbnail_metadata_preflight_write_schema('thumbnail_generation.create_image_thumbnails');
+    thumbnail_metadata_preflight_write_schema(
+        'thumbnail_generation.create_image_thumbnails',
+    );
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_image_variants')) {
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_metadata_delete_image_variants',
+        )) {
             thumbnail_metadata_delete_image_variants($image);
         }
         return [
@@ -382,30 +429,41 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             'errors' => [],
             'created_files' => [],
             'target_formats' => [],
-            'thumbnail_policy' => null
+            'thumbnail_policy' => null,
         ];
     }
     if (image_uses_dng_display_derivatives($image)) {
         gallery_thumbs_dir($gallery, true);
-        return create_dng_image_derivatives_result($image, $gallery, $sourcePath, $requestedSizes);
+        return create_dng_image_derivatives_result(
+            $image,
+            $gallery,
+            $sourcePath,
+            $requestedSizes,
+        );
     }
     // Variable $info stores this steps working value.
     $info = @getimagesize($sourcePath);
     if ($info === false || empty($info['mime'])) {
-        return thumbnail_source_decode_failure_result(image_decode_status('metadata_unavailable'));
+        return thumbnail_source_decode_failure_result(image_decode_status(
+            'metadata_unavailable',
+        ));
     }
     // $mime stores the source MIME value used by the scanner and generator format decision.
     $mime = (string) $info['mime'];
     // $formats stores the variants this server can actually keep current for this source.
     $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
     // $preferImagickWebpExif stores whether this caller accepts the heavier Imagick WebP writer.
-    $preferImagickWebpExif = array_key_exists('prefer_imagick_webp_exif', $options)
+    $preferImagickWebpExif = array_key_exists(
+        'prefer_imagick_webp_exif',
+        $options,
+    )
         ? (bool) $options['prefer_imagick_webp_exif']
         : true;
     // Variable $sourceMtime stores this steps working value.
     $sourceMtime = filemtime($sourcePath) ?: time();
     // $sourceGeometry stores displayed source dimensions used by validation and generation.
-    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image) ?: ['width' => (int) $info[0], 'height' => (int) $info[1]];
+    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image)
+    ?: ['width' => (int) $info[0], 'height' => (int) $info[1]];
     // $sourceWidth stores the orientation-aware source width used by all generated thumbnails.
     $sourceWidth = (int) $sourceGeometry['width'];
     // $sourceHeight stores the orientation-aware source height used by all generated thumbnails.
@@ -419,11 +477,25 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     // Delay removal until decode admission succeeds, keeping existing cache files on refusal.
     $invalidGeometryTargets = [];
     // Variable $webpSkipped stores this steps working value.
-    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
+    $webpSkipped = thumbnail_intentionally_skipped_webp_count(
+        $sourcePath,
+        $mime,
+    );
     // $sizes stores the generated thumbnail sizes requested by this operation. Null means the full standard set.
-    $sizes = $requestedSizes === null ? thumbnail_sizes() : array_values(array_unique(array_filter(array_map('intval', $requestedSizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    $sizes = $requestedSizes === null
+        ? thumbnail_sizes()
+        : array_values(array_unique(array_filter(
+            array_map('intval', $requestedSizes),
+            static fn(int $size): bool => in_array(
+                $size,
+                thumbnail_sizes(),
+                true,
+            ),
+        )));
     // $thumbnailPolicy stores the exact generation policy for diagnostics and warmup logs.
-    $thumbnailPolicy = function_exists('Gallery\\Services\\thumbnail_generation_policy_summary')
+    $thumbnailPolicy = function_exists(
+        'Gallery\\Services\\thumbnail_generation_policy_summary',
+    )
         ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes)
         : null;
     if (!$sizes) {
@@ -437,7 +509,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             'target_formats' => $formats,
             'thumbnail_policy' => $thumbnailPolicy,
             'invalid_geometry_deleted' => $invalidGeometryDeleted,
-            'invalid_geometry_files' => $invalidGeometryFiles
+            'invalid_geometry_files' => $invalidGeometryFiles,
         ];
     }
     if (!$formats) {
@@ -451,7 +523,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             'target_formats' => [],
             'thumbnail_policy' => $thumbnailPolicy,
             'invalid_geometry_deleted' => $invalidGeometryDeleted,
-            'invalid_geometry_files' => $invalidGeometryFiles
+            'invalid_geometry_files' => $invalidGeometryFiles,
         ];
     }
     // Variable $targets stores this steps working value.
@@ -460,17 +532,39 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
         foreach ($formats as $format) {
             // Variable $targetPath stores this steps working value.
             $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
-            if (is_file($targetPath) && filemtime($targetPath) >= $sourceMtime) {
+            if (
+                is_file($targetPath)
+                && filemtime($targetPath) >= $sourceMtime
+            ) {
                 // $geometryStatus stores whether a fresh cache file has the right aspect ratio.
-                $geometryStatus = thumbnail_file_geometry_status($targetPath, $sourceWidth, $sourceHeight, $size);
+                $geometryStatus = thumbnail_file_geometry_status(
+                    $targetPath,
+                    $sourceWidth,
+                    $sourceHeight,
+                    $size,
+                );
                 if (!empty($geometryStatus['valid'])) {
-                    if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
-                        thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
+                    if (function_exists(
+                        'Gallery\\Services\\thumbnail_metadata_record_file',
+                    )) {
+                        thumbnail_metadata_record_file(
+                            $image,
+                            $gallery,
+                            (int) $size,
+                            $format,
+                            $targetPath,
+                            $sourcePath,
+                            false,
+                        );
                     }
                     $skipped++;
                     continue;
                 }
-                $invalidGeometryTargets[] = ['path' => $targetPath, 'size' => (int) $size, 'format' => $format];
+                $invalidGeometryTargets[] = [
+                    'path' => $targetPath,
+                    'size' => (int) $size,
+                    'format' => $format,
+                ];
             }
             $targets[$size][$format] = $targetPath;
         }
@@ -486,7 +580,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             'target_formats' => $formats,
             'thumbnail_policy' => $thumbnailPolicy,
             'invalid_geometry_deleted' => $invalidGeometryDeleted,
-            'invalid_geometry_files' => $invalidGeometryFiles
+            'invalid_geometry_files' => $invalidGeometryFiles,
         ];
     }
     // $targetCount stores how many files this request still needs to create.
@@ -502,7 +596,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             'target_formats' => $formats,
             'thumbnail_policy' => $thumbnailPolicy,
             'invalid_geometry_deleted' => $invalidGeometryDeleted,
-            'invalid_geometry_files' => $invalidGeometryFiles
+            'invalid_geometry_files' => $invalidGeometryFiles,
         ];
     }
     // Reserve the largest sequential target and any EXIF orientation surface before GD decoding.
@@ -510,7 +604,8 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
         $sourcePath,
         $mime,
         (int) max(array_keys($targets)),
-        $mime === 'image/jpeg' && thumbnail_jpeg_exif_orientation($sourcePath, $mime) !== 1
+        $mime === 'image/jpeg'
+            && thumbnail_jpeg_exif_orientation($sourcePath, $mime) !== 1,
     );
     // Variable $source stores this steps working value.
     $source = $decodeResult['image'];
@@ -524,24 +619,37 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
         ]);
     }
     try {
-        $source = thumbnail_apply_gd_exif_orientation($sourcePath, $source, $mime);
+        $source = thumbnail_apply_gd_exif_orientation(
+            $sourcePath,
+            $source,
+            $mime,
+        );
     } catch (Throwable) {
         unset($source);
-        return thumbnail_source_decode_failure_result(image_decode_status('processing_failed'), [
-            'skipped' => $skipped,
-            'webp_skipped' => $webpSkipped,
-            'failed' => $targetCount,
-            'target_formats' => $formats,
-            'thumbnail_policy' => $thumbnailPolicy,
-        ]);
+        return thumbnail_source_decode_failure_result(
+            image_decode_status('processing_failed'),
+            [
+                'skipped' => $skipped,
+                'webp_skipped' => $webpSkipped,
+                'failed' => $targetCount,
+                'target_formats' => $formats,
+                'thumbnail_policy' => $thumbnailPolicy,
+            ],
+        );
     }
     gallery_thumbs_dir($gallery, true);
     foreach ($invalidGeometryTargets as $invalidTarget) {
         $invalidGeometryDeleted++;
         $invalidGeometryFiles[] = basename($invalidTarget['path']);
         thumbnail_delete_invalid_geometry_file($invalidTarget['path']);
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
-            thumbnail_metadata_delete_variant($image, $invalidTarget['size'], $invalidTarget['format']);
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_metadata_delete_variant',
+        )) {
+            thumbnail_metadata_delete_variant(
+                $image,
+                $invalidTarget['size'],
+                $invalidTarget['format'],
+            );
         }
     }
     // $workingWidth stores the real width after any EXIF orientation transform.
@@ -559,18 +667,52 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     foreach ($targets as $size => $formatTargets) {
         if (isset($formatTargets['jpg'])) {
             // $temporaryPath stores the new JPEG file until it can replace any stale derivative.
-            $temporaryPath = thumbnail_temporary_target_path($formatTargets['jpg'], 'jpg');
-            if (write_resized_jpeg($source, $workingWidth, $workingHeight, (int) $size, $temporaryPath) && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['jpg'])) {
-                thumbnail_touch_generated_file_for_source($formatTargets['jpg'], $sourcePath);
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
-                    thumbnail_metadata_record_file($image, $gallery, (int) $size, 'jpg', $formatTargets['jpg'], $sourcePath, true);
+            $temporaryPath = thumbnail_temporary_target_path(
+                $formatTargets['jpg'],
+                'jpg',
+            );
+            if (
+                write_resized_jpeg(
+                    $source,
+                    $workingWidth,
+                    $workingHeight,
+                    (int) $size,
+                    $temporaryPath,
+                )
+                && thumbnail_publish_temporary_target(
+                    $temporaryPath,
+                    $formatTargets['jpg'],
+                )
+            ) {
+                thumbnail_touch_generated_file_for_source(
+                    $formatTargets['jpg'],
+                    $sourcePath,
+                );
+                if (function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_record_file',
+                )) {
+                    thumbnail_metadata_record_file(
+                        $image,
+                        $gallery,
+                        (int) $size,
+                        'jpg',
+                        $formatTargets['jpg'],
+                        $sourcePath,
+                        true,
+                    );
                 }
                 $created++;
                 $createdFiles[] = basename($formatTargets['jpg']);
             } else {
                 thumbnail_remove_partial_file($temporaryPath);
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
-                    thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
+                if (function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_delete_variant',
+                )) {
+                    thumbnail_metadata_delete_variant(
+                        $image,
+                        (int) $size,
+                        'jpg',
+                    );
                 }
                 $failed++;
                 $errors[] = 'jpg_write_failed';
@@ -578,20 +720,57 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
         }
         if (isset($formatTargets['webp'])) {
             // $temporaryPath stores the new WebP file until it can replace any stale derivative.
-            $temporaryPath = thumbnail_temporary_target_path($formatTargets['webp'], 'webp');
+            $temporaryPath = thumbnail_temporary_target_path(
+                $formatTargets['webp'],
+                'webp',
+            );
             // $webpWritten stores an intermediate value used by the surrounding gallery workflow.
-            $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, $workingWidth, $workingHeight, (int) $size, $temporaryPath, $mime, $preferImagickWebpExif);
-            if ($webpWritten && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['webp'])) {
-                thumbnail_touch_generated_file_for_source($formatTargets['webp'], $sourcePath);
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
-                    thumbnail_metadata_record_file($image, $gallery, (int) $size, 'webp', $formatTargets['webp'], $sourcePath, true);
+            $webpWritten = write_resized_webp_preserving_exif_when_needed(
+                $sourcePath,
+                $source,
+                $workingWidth,
+                $workingHeight,
+                (int) $size,
+                $temporaryPath,
+                $mime,
+                $preferImagickWebpExif,
+            );
+            if (
+                $webpWritten
+                && thumbnail_publish_temporary_target(
+                    $temporaryPath,
+                    $formatTargets['webp'],
+                )
+            ) {
+                thumbnail_touch_generated_file_for_source(
+                    $formatTargets['webp'],
+                    $sourcePath,
+                );
+                if (function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_record_file',
+                )) {
+                    thumbnail_metadata_record_file(
+                        $image,
+                        $gallery,
+                        (int) $size,
+                        'webp',
+                        $formatTargets['webp'],
+                        $sourcePath,
+                        true,
+                    );
                 }
                 $created++;
                 $createdFiles[] = basename($formatTargets['webp']);
             } else {
                 thumbnail_remove_partial_file($temporaryPath);
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
-                    thumbnail_metadata_delete_variant($image, (int) $size, 'webp');
+                if (function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_delete_variant',
+                )) {
+                    thumbnail_metadata_delete_variant(
+                        $image,
+                        (int) $size,
+                        'webp',
+                    );
                 }
                 $webpSkipped++;
                 $failed++;
@@ -610,7 +789,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
         'target_formats' => $formats,
         'thumbnail_policy' => $thumbnailPolicy,
         'invalid_geometry_deleted' => $invalidGeometryDeleted,
-        'invalid_geometry_files' => $invalidGeometryFiles
+        'invalid_geometry_files' => $invalidGeometryFiles,
     ];
 }
 
@@ -619,16 +798,24 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
  *
  * Invalid geometry is handled by the variant resolver before streaming.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Persisted source image row.
+ * @param array<string,mixed> $gallery Owning gallery row used to resolve the source path.
  * @param int $size Size value.
  * @param string $path Filesystem path.
- * @return array<string mixed>.
+ * @return array{valid:bool,reason:string,expected_width?:int,expected_height?:int,actual_width?:int,actual_height?:int} Geometry decision or a safe bypass reason when source verification is unavailable.
  */
-function thumbnail_response_file_geometry_status(array $image, array $gallery, int $size, string $path): array
-{
-    if (!function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')
-        || !function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
+function thumbnail_response_file_geometry_status(
+    array $image,
+    array $gallery,
+    int $size,
+    string $path,
+): array {
+    if (
+        !function_exists(
+            'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+        )
+        || !function_exists('Gallery\\Services\\thumbnail_file_geometry_status')
+    ) {
         return ['valid' => true, 'reason' => 'geometry_validation_unavailable'];
     }
 
@@ -649,7 +836,12 @@ function thumbnail_response_file_geometry_status(array $image, array $gallery, i
         return ['valid' => true, 'reason' => 'source_geometry_unknown'];
     }
 
-    return thumbnail_file_geometry_status($path, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
+    return thumbnail_file_geometry_status(
+        $path,
+        (int) $sourceGeometry['width'],
+        (int) $sourceGeometry['height'],
+        $size,
+    );
 }
 
 /**
@@ -661,15 +853,27 @@ function thumbnail_response_file_geometry_status(array $image, array $gallery, i
  * @param bool $exactOnly Whether only the requested existing size/format is admitted for editor preload.
  * @return array{path:string,geometry_status:array<string,mixed>}|null Existing valid derivative response, or null when no safe derivative is available.
  */
-function thumbnail_readonly_existing_response_file(array $image, array $gallery, int $size, string $format, bool $exactOnly = false): ?array
-{
+function thumbnail_readonly_existing_response_file(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format,
+    bool $exactOnly = false,
+): ?array {
     if (!thumbnail_legacy_identity_owned($image)) {
         return null;
     }
 
     $sizes = thumbnail_sizes();
-    usort($sizes, static fn (int $left, int $right): int => abs($left - $size) <=> abs($right - $size));
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats')
+    usort(
+        $sizes,
+        static fn(int $left, int $right): int => (
+            abs($left - $size) <=> abs($right - $size)
+        ),
+    );
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
         ? thumbnail_policy_requested_formats()
         : ['jpg', 'webp'];
     $formats = array_values(array_unique(array_merge([$format], $formats)));
@@ -677,20 +881,29 @@ function thumbnail_readonly_existing_response_file(array $image, array $gallery,
     foreach ($exactOnly ? [] : $sizes as $candidateSize) {
         foreach ($formats as $candidateFormat) {
             if (in_array($candidateFormat, ['jpg', 'webp'], true)) {
-                $candidates[] = ['size' => (int) $candidateSize, 'format' => $candidateFormat];
+                $candidates[] = [
+                    'size' => (int) $candidateSize,
+                    'format' => $candidateFormat,
+                ];
             }
         }
     }
     $seen = [];
 
     foreach ($candidates as $candidate) {
-        $candidateKey = (int) $candidate['size'] . ':' . (string) $candidate['format'];
+        $candidateKey =
+            (int) $candidate['size'] . ':' . (string) $candidate['format'];
         if (isset($seen[$candidateKey])) {
             continue;
         }
         $seen[$candidateKey] = true;
         try {
-            $path = thumbnail_abs_path($image, $gallery, (int) $candidate['size'], (string) $candidate['format']);
+            $path = thumbnail_abs_path(
+                $image,
+                $gallery,
+                (int) $candidate['size'],
+                (string) $candidate['format'],
+            );
         } catch (RuntimeException) {
             continue;
         }
@@ -698,8 +911,17 @@ function thumbnail_readonly_existing_response_file(array $image, array $gallery,
             continue;
         }
         $geometryStatus = $exactOnly
-            ? thumbnail_editor_existing_file_geometry_status($path, (int) $candidate['size'], (string) $candidate['format'])
-            : thumbnail_response_file_geometry_status($image, $gallery, (int) $candidate['size'], $path);
+            ? thumbnail_editor_existing_file_geometry_status(
+                $path,
+                (int) $candidate['size'],
+                (string) $candidate['format'],
+            )
+            : thumbnail_response_file_geometry_status(
+                $image,
+                $gallery,
+                (int) $candidate['size'],
+                $path,
+            );
         if (empty($geometryStatus['valid'])) {
             continue;
         }
@@ -711,16 +933,25 @@ function thumbnail_readonly_existing_response_file(array $image, array $gallery,
 /**
  * Return true when a generated thumbnail file has valid geometry.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Persisted source image row.
+ * @param array<string,mixed> $gallery Owning gallery row used to resolve the source path.
  * @param int $size Size value.
  * @param string $path Filesystem path.
  * @return bool True when the condition matches.
  */
-function thumbnail_response_file_has_valid_geometry(array $image, array $gallery, int $size, string $path): bool
-{
+function thumbnail_response_file_has_valid_geometry(
+    array $image,
+    array $gallery,
+    int $size,
+    string $path,
+): bool {
     // $status stores the reusable geometry decision for callers that still need a boolean.
-    $status = thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
+    $status = thumbnail_response_file_geometry_status(
+        $image,
+        $gallery,
+        $size,
+        $path,
+    );
     return !empty($status['valid']);
 }
 
@@ -737,15 +968,25 @@ function thumbnail_response_file_has_valid_geometry(array $image, array $gallery
  * @param string $format Supported derivative format.
  * @return array{path:string,geometry_status:array<string,mixed>}|null Structured result data for the caller.
  */
-function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gallery, int $size, string $format): ?array
-{
+function thumbnail_ensure_image_thumbnail_variant_file(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format,
+): ?array {
     if (!thumbnail_legacy_identity_owned($image)) {
         return null;
     }
-    if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
+    if (
+        !in_array($size, thumbnail_sizes(), true)
+        || !in_array($format, ['jpg', 'webp'], true)
+    ) {
         return null;
     }
-    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+    if (
+        function_exists('Gallery\\Services\\thumbnail_policy_format_allowed')
+        && !thumbnail_policy_format_allowed($format)
+    ) {
         return null;
     }
 
@@ -756,7 +997,12 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
         return null;
     }
 
-    if (!is_file($path) && function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
+    if (
+        !is_file($path)
+        && function_exists(
+            'Gallery\\Services\\thumbnail_metadata_delete_variant',
+        )
+    ) {
         thumbnail_metadata_delete_variant($image, $size, $format);
     }
 
@@ -765,21 +1011,32 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
     }
 
     if (!is_file($path)) {
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_metadata_delete_variant',
+        )) {
             thumbnail_metadata_delete_variant($image, $size, $format);
         }
         return null;
     }
 
     // $geometryStatus stores whether the physical file matches the original image ratio.
-    $geometryStatus = thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
+    $geometryStatus = thumbnail_response_file_geometry_status(
+        $image,
+        $gallery,
+        $size,
+        $path,
+    );
     if (empty($geometryStatus['valid'])) {
-        if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_delete_invalid_geometry_file',
+        )) {
             thumbnail_delete_invalid_geometry_file($path);
         } elseif (is_file($path)) {
             @unlink($path);
         }
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_metadata_delete_variant',
+        )) {
             thumbnail_metadata_delete_variant($image, $size, $format);
         }
 
@@ -789,25 +1046,48 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
             return null;
         }
 
-        $geometryStatus = thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
+        $geometryStatus = thumbnail_response_file_geometry_status(
+            $image,
+            $gallery,
+            $size,
+            $path,
+        );
         if (empty($geometryStatus['valid'])) {
-            if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
+            if (function_exists(
+                'Gallery\\Services\\thumbnail_delete_invalid_geometry_file',
+            )) {
                 thumbnail_delete_invalid_geometry_file($path);
             } elseif (is_file($path)) {
                 @unlink($path);
             }
-            if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
+            if (function_exists(
+                'Gallery\\Services\\thumbnail_metadata_delete_variant',
+            )) {
                 thumbnail_metadata_delete_variant($image, $size, $format);
             }
             return null;
         }
     }
 
-    $metadataCurrent = function_exists('Gallery\\Services\\thumbnail_metadata_has_renderable_variant')
+    $metadataCurrent =
+        function_exists(
+            'Gallery\\Services\\thumbnail_metadata_has_renderable_variant',
+        )
         && thumbnail_metadata_has_renderable_variant($image, $size, $format);
-    if (!$metadataCurrent && function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
+    if (
+        !$metadataCurrent
+        && function_exists('Gallery\\Services\\thumbnail_metadata_record_file')
+    ) {
         try {
-            thumbnail_metadata_record_file($image, $gallery, $size, $format, $path, image_abs_path($image, $gallery), false);
+            thumbnail_metadata_record_file(
+                $image,
+                $gallery,
+                $size,
+                $format,
+                $path,
+                image_abs_path($image, $gallery),
+                false,
+            );
         } catch (Throwable) {
             // Metadata refresh must not break streaming of a valid derivative.
         }
@@ -817,15 +1097,18 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
 }
 
 /**
- * Handles image ids for galleries logic for the gallery application.
+ * Return direct image IDs for a deduplicated set of gallery IDs.
  *
- * @param mixed $galleryIds Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param list<int|string> $galleryIds Submitted gallery identifiers, normalized to positive integers.
+ * @return list<int> Direct image IDs belonging to the requested galleries.
  */
 function image_ids_for_galleries(array $galleryIds): array
 {
     // Variable $galleryIds stores this steps working value.
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$galleryIds) {
         return [];
     }
@@ -840,8 +1123,11 @@ function image_ids_for_galleries(array $galleryIds): array
  * @param bool $missingOnly Whether to limit the scope to images needing thumbnail repair.
  * @return list<int> Image IDs in the requested gallery scope.
  */
-function thumbnail_image_ids_for_gallery_scope(int $galleryId, bool $includeSubgalleries = false, bool $missingOnly = false): array
-{
+function thumbnail_image_ids_for_gallery_scope(
+    int $galleryId,
+    bool $includeSubgalleries = false,
+    bool $missingOnly = false,
+): array {
     if ($galleryId <= 0 || !find_gallery($galleryId, true)) {
         return [];
     }
@@ -851,7 +1137,9 @@ function thumbnail_image_ids_for_gallery_scope(int $galleryId, bool $includeSubg
         $galleryIds = gallery_subtree_ids($galleryId);
     }
 
-    return $missingOnly ? thumbnail_maintenance_image_ids($galleryIds, 0) : image_ids_for_galleries($galleryIds);
+    return $missingOnly
+        ? thumbnail_maintenance_image_ids($galleryIds, 0)
+        : image_ids_for_galleries($galleryIds);
 }
 
 /**
@@ -876,8 +1164,11 @@ function all_image_ids(): array
  * @param string $mime Mime value.
  * @return GdImage Result value for the caller.
  */
-function thumbnail_apply_gd_exif_orientation(string $sourcePath, GdImage $source, string $mime): GdImage
-{
+function thumbnail_apply_gd_exif_orientation(
+    string $sourcePath,
+    GdImage $source,
+    string $mime,
+): GdImage {
     if ($mime !== 'image/jpeg') {
         return $source;
     }
@@ -892,7 +1183,10 @@ function thumbnail_apply_gd_exif_orientation(string $sourcePath, GdImage $source
     $oriented = null;
     switch ($orientation) {
         case 2:
-            if (function_exists('imageflip') && imageflip($source, IMG_FLIP_HORIZONTAL)) {
+            if (
+                function_exists('imageflip')
+                && imageflip($source, IMG_FLIP_HORIZONTAL)
+            ) {
                 return $source;
             }
             break;
@@ -900,7 +1194,10 @@ function thumbnail_apply_gd_exif_orientation(string $sourcePath, GdImage $source
             $oriented = imagerotate($source, 180, 0);
             break;
         case 4:
-            if (function_exists('imageflip') && imageflip($source, IMG_FLIP_VERTICAL)) {
+            if (
+                function_exists('imageflip')
+                && imageflip($source, IMG_FLIP_VERTICAL)
+            ) {
                 return $source;
             }
             break;
@@ -939,8 +1236,10 @@ function thumbnail_apply_gd_exif_orientation(string $sourcePath, GdImage $source
  * @param string $format Format value.
  * @return string Text result for the caller.
  */
-function thumbnail_temporary_target_path(string $targetPath, string $format): string
-{
+function thumbnail_temporary_target_path(
+    string $targetPath,
+    string $format,
+): string {
     // $suffix keeps the image extension visible for encoders that inspect filenames.
     $suffix = $format === 'webp' ? '.tmp.webp' : '.tmp.jpg';
     return $targetPath . '.' . bin2hex(random_bytes(6)) . $suffix;
@@ -953,8 +1252,10 @@ function thumbnail_temporary_target_path(string $targetPath, string $format): st
  * @param string $targetPath Target filesystem path.
  * @return bool True when the condition matches.
  */
-function thumbnail_publish_temporary_target(string $temporaryPath, string $targetPath): bool
-{
+function thumbnail_publish_temporary_target(
+    string $temporaryPath,
+    string $targetPath,
+): bool {
     if (!is_file($temporaryPath)) {
         return false;
     }
@@ -987,9 +1288,18 @@ function thumbnail_publish_temporary_target(string $temporaryPath, string $targe
  * @param bool $mayRotate Whether a full-size intermediate surface may be needed.
  * @return GdImage|false Decoded source, or false for refused/failed decoding.
  */
-function image_create_from_path(string $path, string $mime, ?int $targetMaxSide = null, bool $mayRotate = true): GdImage|false
-{
-    return image_decode_gd_path_result($path, $mime, $targetMaxSide, $mayRotate)['image'];
+function image_create_from_path(
+    string $path,
+    string $mime,
+    ?int $targetMaxSide = null,
+    bool $mayRotate = true,
+): GdImage|false {
+    return image_decode_gd_path_result(
+        $path,
+        $mime,
+        $targetMaxSide,
+        $mayRotate,
+    )['image'];
 }
 
 /**
@@ -1002,8 +1312,13 @@ function image_create_from_path(string $path, string $mime, ?int $targetMaxSide 
  * @param string $targetPath Destination for the JPEG thumbnail.
  * @return bool Whether GD wrote the target successfully.
  */
-function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
-{
+function write_resized_jpeg(
+    GdImage $source,
+    int $width,
+    int $height,
+    int $maxSide,
+    string $targetPath,
+): bool {
     // Variable $scale stores this steps working value.
     $scale = min(1.0, $maxSide / max($width, $height));
     // Variable $targetWidth stores this steps working value.
@@ -1015,7 +1330,18 @@ function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSi
     // Variable $white stores this steps working value.
     $white = imagecolorallocate($target, 255, 255, 255);
     imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $white);
-    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+    imagecopyresampled(
+        $target,
+        $source,
+        0,
+        0,
+        0,
+        0,
+        $targetWidth,
+        $targetHeight,
+        $width,
+        $height,
+    );
     imageinterlace($target, true);
     // Variable $written stores this steps working value.
     $written = imagejpeg($target, $targetPath, thumbnail_jpeg_quality());
@@ -1061,15 +1387,23 @@ function write_resized_webp_preserving_exif_when_needed(
     int $maxSide,
     string $targetPath,
     string $mime,
-    bool $preferImagickExif = true
-): bool
-{
+    bool $preferImagickExif = true,
+): bool {
     if (!function_exists('imagewebp')) {
         return false;
     }
-    if ($preferImagickExif && image_source_has_exif($sourcePath, $mime) && thumbnail_imagick_webp_available()) {
+    if (
+        $preferImagickExif
+        && image_source_has_exif($sourcePath, $mime)
+        && thumbnail_imagick_webp_available()
+    ) {
         // $imagickWritten stores whether the preferred metadata-preserving writer succeeded.
-        $imagickWritten = write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath, true);
+        $imagickWritten = write_resized_webp_with_imagick_exif(
+            $sourcePath,
+            $maxSide,
+            $targetPath,
+            true,
+        );
         if ($imagickWritten) {
             return true;
         }
@@ -1080,7 +1414,13 @@ function write_resized_webp_preserving_exif_when_needed(
         thumbnail_remove_partial_file($targetPath);
     }
 
-    return write_resized_webp_with_gd($source, $width, $height, $maxSide, $targetPath);
+    return write_resized_webp_with_gd(
+        $source,
+        $width,
+        $height,
+        $maxSide,
+        $targetPath,
+    );
 }
 
 /**
@@ -1105,8 +1445,13 @@ function thumbnail_remove_partial_file(string $targetPath): void
  * @param string $targetPath Destination for the WebP thumbnail.
  * @return bool Whether GD wrote the target successfully.
  */
-function write_resized_webp_with_gd(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
-{
+function write_resized_webp_with_gd(
+    GdImage $source,
+    int $width,
+    int $height,
+    int $maxSide,
+    string $targetPath,
+): bool {
     // Variable $scale stores this steps working value.
     $scale = min(1.0, $maxSide / max($width, $height));
     // Variable $targetWidth stores this steps working value.
@@ -1119,8 +1464,26 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
     imagesavealpha($target, true);
     // Variable $transparent stores this steps working value.
     $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
-    imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $transparent);
-    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+    imagefilledrectangle(
+        $target,
+        0,
+        0,
+        $targetWidth,
+        $targetHeight,
+        $transparent,
+    );
+    imagecopyresampled(
+        $target,
+        $source,
+        0,
+        0,
+        0,
+        0,
+        $targetWidth,
+        $targetHeight,
+        $width,
+        $height,
+    );
     // Variable $written stores this steps working value.
     $written = imagewebp($target, $targetPath, thumbnail_webp_quality());
     unset($target);
@@ -1136,15 +1499,26 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
  * @param bool $retainGdSource Include the already-decoded GD source in admission estimates.
  * @return bool True for written output; false for unavailable Imagick, refused admission or ordinary processing failure.
  */
-function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, string $targetPath, bool $retainGdSource = false): bool
-{
+function write_resized_webp_with_imagick_exif(
+    string $sourcePath,
+    int $maxSide,
+    string $targetPath,
+    bool $retainGdSource = false,
+): bool {
     if (!thumbnail_imagick_webp_available()) {
         return false;
     }
 
     // Imagick must not bypass the shared budget while the first GD source remains alive.
     // A refusal returns to the existing GD writer without decoding the source again.
-    $admission = image_decode_path_admission($sourcePath, 'image/jpeg', $maxSide, true, 'imagick', $retainGdSource);
+    $admission = image_decode_path_admission(
+        $sourcePath,
+        'image/jpeg',
+        $maxSide,
+        true,
+        'imagick',
+        $retainGdSource,
+    );
     if (!$admission['allowed']) {
         return false;
     }
@@ -1191,11 +1565,23 @@ function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, 
  * @param string $format Requested jpg or webp encoding.
  * @return array{valid:bool,reason:string} Existing derivative safety decision; no repair or persistence.
  */
-function thumbnail_editor_existing_file_geometry_status(string $path, int $size, string $format): array
-{
+function thumbnail_editor_existing_file_geometry_status(
+    string $path,
+    int $size,
+    string $format,
+): array {
     $info = @getimagesize($path);
     $mime = $format === 'webp' ? 'image/webp' : 'image/jpeg';
-    $valid = is_array($info) && (int) ($info[0] ?? 0) > 0 && (int) ($info[1] ?? 0) > 0
-        && max((int) $info[0], (int) $info[1]) <= $size && (string) ($info['mime'] ?? '') === $mime;
-    return ['valid' => $valid, 'reason' => $valid ? 'editor_existing_bounded_derivative' : 'editor_derivative_unavailable'];
+    $valid =
+        is_array($info)
+        && (int) ($info[0] ?? 0) > 0
+        && (int) ($info[1] ?? 0) > 0
+        && max((int) $info[0], (int) $info[1]) <= $size
+        && (string) ($info['mime'] ?? '') === $mime;
+    return [
+        'valid' => $valid,
+        'reason' => $valid
+            ? 'editor_existing_bounded_derivative'
+            : 'editor_derivative_unavailable',
+    ];
 }

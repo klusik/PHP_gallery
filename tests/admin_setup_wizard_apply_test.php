@@ -86,9 +86,7 @@ namespace Gallery\Tests\AdminSetupWizardApply {
     /**
      * Marks authentication and CSRF boundary exits in controller tests.
      */
-    final class BoundaryTrap extends RuntimeException
-    {
-    }
+    final class BoundaryTrap extends RuntimeException {}
 }
 
 namespace Gallery\Core {
@@ -143,7 +141,10 @@ namespace Gallery\Core {
      */
     function cms_config(): array
     {
-        return ['base_url' => (string) $GLOBALS['wizard_config_url'], 'galleries_root' => 'fixture-galleries'];
+        return [
+            'base_url' => (string) $GLOBALS['wizard_config_url'],
+            'galleries_root' => 'fixture-galleries',
+        ];
     }
 
     /**
@@ -155,7 +156,9 @@ namespace Gallery\Core {
      */
     function url_for(string $page, array $params = []): string
     {
-        return 'https://old.test/index.php?' . http_build_query(['page' => $page] + $params);
+        return 'https://old.test/index.php?' . http_build_query([
+            'page' => $page,
+        ] + $params);
     }
 
     /**
@@ -200,7 +203,7 @@ namespace Gallery\Models {
         array $settingKeys,
         callable $operation,
         ?callable $compensate = null,
-        array $telemetrySettingKeys = []
+        array $telemetrySettingKeys = [],
     ): mixed {
         $GLOBALS['wizard_model_calls']++;
         $GLOBALS['wizard_locked_keys'] = $settingKeys;
@@ -242,7 +245,10 @@ namespace Gallery\Services {
         return [
             'general' => ['label' => 'General', 'label_key' => 'general'],
             'site' => ['label' => 'Site', 'label_key' => 'site'],
-            'appearance' => ['label' => 'Appearance', 'label_key' => 'appearance'],
+            'appearance' => [
+                'label' => 'Appearance',
+                'label_key' => 'appearance',
+            ],
             'content' => ['label' => 'Content', 'label_key' => 'content'],
             'media' => ['label' => 'Media', 'label_key' => 'media'],
             'uploads' => ['label' => 'Uploads', 'label_key' => 'uploads'],
@@ -260,7 +266,9 @@ namespace Gallery\Services {
     function admin_settings_section_normalize(mixed $section): string
     {
         $section = is_scalar($section) ? (string) $section : '';
-        return array_key_exists($section, admin_settings_sections()) ? $section : 'general';
+        return array_key_exists($section, admin_settings_sections())
+            ? $section
+            : 'general';
     }
 
     /**
@@ -271,10 +279,32 @@ namespace Gallery\Services {
     function admin_settings_registry(): array
     {
         return [
-            'alpha' => fixture_entry('alpha', 'general', 'setting.alpha', $GLOBALS['wizard_settings']['alpha']),
-            'beta' => fixture_entry('beta', 'general', 'setting.beta', $GLOBALS['wizard_settings']['beta']),
-            'base_url' => fixture_entry('base_url', 'site', 'base_url', $GLOBALS['wizard_config_url']),
-            'secret_key' => fixture_entry('secret_key', 'advanced', 'secret_key', 'Configured', false, 'secret'),
+            'alpha' => fixture_entry(
+                'alpha',
+                'general',
+                'setting.alpha',
+                $GLOBALS['wizard_settings']['alpha'],
+            ),
+            'beta' => fixture_entry(
+                'beta',
+                'general',
+                'setting.beta',
+                $GLOBALS['wizard_settings']['beta'],
+            ),
+            'base_url' => fixture_entry(
+                'base_url',
+                'site',
+                'base_url',
+                $GLOBALS['wizard_config_url'],
+            ),
+            'secret_key' => fixture_entry(
+                'secret_key',
+                'advanced',
+                'secret_key',
+                'Configured',
+                false,
+                'secret',
+            ),
         ];
     }
 
@@ -295,7 +325,7 @@ namespace Gallery\Services {
         string $key,
         mixed $current,
         bool $editable = true,
-        string $sensitivity = 'normal'
+        string $sensitivity = 'normal',
     ): array {
         return [
             'id' => $id,
@@ -379,7 +409,8 @@ namespace Gallery\Services {
      */
     function theme_layout_safe_normalize(string $id, mixed $value): string
     {
-        throw new InvalidArgumentException('unexpected theme layout adapter: ' . $id);
+        throw new InvalidArgumentException('unexpected theme layout adapter: '
+            . $id);
     }
 
     /**
@@ -391,7 +422,8 @@ namespace Gallery\Services {
      */
     function theme_layout_safe_save(string $id, mixed $value): void
     {
-        throw new InvalidArgumentException('unexpected theme layout save: ' . $id);
+        throw new InvalidArgumentException('unexpected theme layout save: '
+            . $id);
     }
 
     /**
@@ -402,7 +434,10 @@ namespace Gallery\Services {
      */
     function admin_upload_client_format_mode_validate(mixed $value): string
     {
-        if (!is_string($value) || !in_array(trim($value), ['server_supported', 'phone_jpeg'], true)) {
+        if (
+            !is_string($value)
+            || !in_array(trim($value), ['server_supported', 'phone_jpeg'], true)
+        ) {
             throw new InvalidArgumentException('invalid upload mode');
         }
         return trim($value);
@@ -417,10 +452,22 @@ namespace Gallery\Services {
         return trim($value);
     }
 
-    /** Strictly normalize one fixture browser-upload scalar. */
-    function browser_upload_safe_scalar_normalize(string $id, mixed $value): string
-    {
-        if ($id !== 'browser_upload_enabled' || !is_string($value) || !in_array(trim($value), ['0', '1'], true)) {
+    /**
+     * Strictly normalize one fixture browser-upload scalar.
+     *
+     * @param string $id Registered browser-upload setting identifier.
+     * @param string $value Candidate setting value; other types are rejected.
+     * @return string Normalized fixture value.
+     */
+    function browser_upload_safe_scalar_normalize(
+        string $id,
+        mixed $value,
+    ): string {
+        if (
+            $id !== 'browser_upload_enabled'
+            || !is_string($value)
+            || !in_array(trim($value), ['0', '1'], true)
+        ) {
             throw new InvalidArgumentException('invalid browser upload value');
         }
         return trim($value);
@@ -429,7 +476,11 @@ namespace Gallery\Services {
     /** Strictly normalize one fixture telemetry scalar. */
     function telemetry_admin_setting_normalize(string $id, mixed $value): string
     {
-        if ($id !== 'telemetry_enabled' || !is_string($value) || !in_array(trim($value), ['0', '1'], true)) {
+        if (
+            $id !== 'telemetry_enabled'
+            || !is_string($value)
+            || !in_array(trim($value), ['0', '1'], true)
+        ) {
             throw new InvalidArgumentException('invalid telemetry value');
         }
         return trim($value);
@@ -490,13 +541,17 @@ namespace Gallery\Services {
      * @param string|list<string> $value Candidate value; lists exercise rejection.
      * @return string Normalized value.
      */
-    function admin_settings_normalize_editable_value(array $entry, mixed $value): string
-    {
+    function admin_settings_normalize_editable_value(
+        array $entry,
+        mixed $value,
+    ): string {
         if ((string) ($entry['id'] ?? '') === 'base_url') {
             return site_url_normalize($value);
         }
         if (!is_string($value)) {
-            throw new InvalidArgumentException('fixture values must be strings');
+            throw new InvalidArgumentException(
+                'fixture values must be strings',
+            );
         }
         return trim($value);
     }
@@ -573,7 +628,10 @@ namespace Gallery\Services {
      */
     function schema_inspection_table(string $table): array
     {
-        return ['state' => (string) $GLOBALS['wizard_schema_state'], 'table' => $table];
+        return [
+            'state' => (string) $GLOBALS['wizard_schema_state'],
+            'table' => $table,
+        ];
     }
 
     /**
@@ -625,8 +683,10 @@ namespace Gallery\Services {
      * @param ?string $return Optional return token.
      * @return string Fixture settings URL.
      */
-    function admin_settings_url(?string $section = null, ?string $return = null): string
-    {
+    function admin_settings_url(
+        ?string $section = null,
+        ?string $return = null,
+    ): string {
         return 'https://old.test/index.php?page=admin_settings';
     }
 
@@ -640,8 +700,13 @@ namespace Gallery\Services {
      * @param array<string,mixed> $options Log options.
      * @return void
      */
-    function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-    {
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
         $GLOBALS['wizard_log'][] = [$level, $eventKey, $context];
     }
 
@@ -733,10 +798,14 @@ namespace Gallery\Tests\AdminSetupWizardApply {
         try {
             $operation();
         } catch (AdminSetupWizardException $exception) {
-            assert_true($exception->errorKey() === $errorKey, 'Unexpected wizard error key: ' . $exception->errorKey());
+            assert_true(
+                $exception->errorKey() === $errorKey,
+                'Unexpected wizard error key: ' . $exception->errorKey(),
+            );
             return;
         }
-        throw new \RuntimeException('Expected wizard failure was not raised: ' . $errorKey);
+        throw new \RuntimeException('Expected wizard failure was not raised: '
+            . $errorKey);
     }
 
     /**
@@ -751,7 +820,11 @@ namespace Gallery\Tests\AdminSetupWizardApply {
         $draft = admin_setup_wizard_begin_draft(7, $steps);
         $draft['step'] = \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP;
         $draft['changes'] = ['alpha' => 'new-a'];
-        $_POST = ['wizard_action' => 'apply', 'revision' => '1', 'approval' => '1'];
+        $_POST = [
+            'wizard_action' => 'apply',
+            'revision' => '1',
+            'approval' => '1',
+        ];
         admin_setup_wizard_process_post($draft, $steps);
         throw new \RuntimeException('Successful apply did not redirect.');
     }
@@ -769,10 +842,16 @@ namespace Gallery\Tests\AdminSetupWizardApply {
              *
              * @return array<string,mixed> Unreachable apply result.
              */
-            static fn (): array => admin_setup_wizard_apply(['alpha' => 'new-a'], originals()),
-            'admin.setup_wizard.error.unavailable'
+            static fn(): array => admin_setup_wizard_apply([
+                'alpha' => 'new-a',
+            ], originals()),
+            'admin.setup_wizard.error.unavailable',
         );
-        assert_true($GLOBALS['wizard_model_calls'] === 0 && $GLOBALS['wizard_save_calls'] === [], 'Unavailable schema reached a write boundary.');
+        assert_true(
+            $GLOBALS['wizard_model_calls'] === 0
+                && $GLOBALS['wizard_save_calls'] === [],
+            'Unavailable schema reached a write boundary.',
+        );
     }
 
     reset_fixture();
@@ -782,8 +861,10 @@ namespace Gallery\Tests\AdminSetupWizardApply {
          *
          * @return array<string,mixed> Unreachable apply result.
          */
-        static fn (): array => admin_setup_wizard_apply(['unknown' => 'value'], originals()),
-        'admin.setup_wizard.error.invalid_draft'
+        static fn(): array => admin_setup_wizard_apply([
+            'unknown' => 'value',
+        ], originals()),
+        'admin.setup_wizard.error.invalid_draft',
     );
     expect_wizard_error(
         /**
@@ -791,8 +872,10 @@ namespace Gallery\Tests\AdminSetupWizardApply {
          *
          * @return array<string,mixed> Unreachable apply result.
          */
-        static fn (): array => admin_setup_wizard_apply(['alpha' => 'new-a'], []),
-        'admin.setup_wizard.error.invalid_draft'
+        static fn(): array => admin_setup_wizard_apply([
+            'alpha' => 'new-a',
+        ], []),
+        'admin.setup_wizard.error.invalid_draft',
     );
     expect_wizard_error(
         /**
@@ -800,8 +883,10 @@ namespace Gallery\Tests\AdminSetupWizardApply {
          *
          * @return array<string,mixed> Unreachable apply result.
          */
-        static fn (): array => admin_setup_wizard_apply(['alpha' => ['nested']], originals()),
-        'admin.setup_wizard.error.invalid_value'
+        static fn(): array => admin_setup_wizard_apply(['alpha' => [
+            'nested',
+        ]], originals()),
+        'admin.setup_wizard.error.invalid_value',
     );
     expect_wizard_error(
         /**
@@ -809,10 +894,15 @@ namespace Gallery\Tests\AdminSetupWizardApply {
          *
          * @return array<string,mixed> Unreachable apply result.
          */
-        static fn (): array => admin_setup_wizard_apply(['secret_key' => 'secret'], ['secret_key' => 'Configured']),
-        'admin.setup_wizard.error.invalid_draft'
+        static fn(): array => admin_setup_wizard_apply([
+            'secret_key' => 'secret',
+        ], ['secret_key' => 'Configured']),
+        'admin.setup_wizard.error.invalid_draft',
     );
-    assert_true($GLOBALS['wizard_model_calls'] === 0, 'Invalid or secret payload reached the transaction boundary.');
+    assert_true(
+        $GLOBALS['wizard_model_calls'] === 0,
+        'Invalid or secret payload reached the transaction boundary.',
+    );
 
     reset_fixture();
     /**
@@ -830,45 +920,109 @@ namespace Gallery\Tests\AdminSetupWizardApply {
          *
          * @return array<string,mixed> Unreachable apply result.
          */
-        static fn (): array => admin_setup_wizard_apply(['alpha' => 'new-a', 'beta' => 'new-b'], originals()),
-        'admin.setup_wizard.error.conflict'
+        static fn(): array => admin_setup_wizard_apply([
+            'alpha' => 'new-a',
+            'beta' => 'new-b',
+        ], originals()),
+        'admin.setup_wizard.error.conflict',
     );
-    assert_true($GLOBALS['wizard_save_calls'] === [], 'A conflict wrote an earlier setting before checking every original.');
-    assert_true(!in_array('restore:base_url', $GLOBALS['wizard_events'], true), 'Conflict attempted URL compensation before any URL change.');
+    assert_true(
+        $GLOBALS['wizard_save_calls'] === [],
+        'A conflict wrote an earlier setting before checking every original.',
+    );
+    assert_true(
+        !in_array('restore:base_url', $GLOBALS['wizard_events'], true),
+        'Conflict attempted URL compensation before any URL change.',
+    );
 
     reset_fixture();
-    $applied = admin_setup_wizard_apply(['beta' => ' new-b ', 'alpha' => ' new-a '], originals());
-    assert_true($applied === ['alpha' => 'new-a', 'beta' => 'new-b'], 'Successful apply did not return normalized stable ordering.');
-    assert_true($GLOBALS['wizard_save_calls'] === ['alpha', 'beta'], 'Canonical setters were not called exactly once in stable order.');
-    assert_true($GLOBALS['wizard_locked_keys'] === ['setting.alpha', 'setting.beta'], 'Transaction did not receive the expected sorted lock keys.');
-    assert_true($GLOBALS['wizard_cache_resets'] >= 2, 'Successful apply did not refresh request-local settings state.');
+    $applied = admin_setup_wizard_apply([
+        'beta' => ' new-b ',
+        'alpha' => ' new-a ',
+    ], originals());
+    assert_true(
+        $applied === ['alpha' => 'new-a', 'beta' => 'new-b'],
+        'Successful apply did not return normalized stable ordering.',
+    );
+    assert_true(
+        $GLOBALS['wizard_save_calls'] === ['alpha', 'beta'],
+        'Canonical setters were not called exactly once in stable order.',
+    );
+    assert_true(
+        $GLOBALS['wizard_locked_keys'] === ['setting.alpha', 'setting.beta'],
+        'Transaction did not receive the expected sorted lock keys.',
+    );
+    assert_true(
+        $GLOBALS['wizard_cache_resets'] >= 2,
+        'Successful apply did not refresh request-local settings state.',
+    );
 
     reset_fixture();
     $GLOBALS['wizard_fail_save_id'] = 'beta';
     try {
-        admin_setup_wizard_apply(['alpha' => 'new-a', 'beta' => 'new-b'], originals());
-        throw new \RuntimeException('Second canonical save failure was accepted.');
+        admin_setup_wizard_apply([
+            'alpha' => 'new-a',
+            'beta' => 'new-b',
+        ], originals());
+        throw new \RuntimeException(
+            'Second canonical save failure was accepted.',
+        );
     } catch (\RuntimeException $exception) {
-        assert_true($exception->getMessage() === 'fixture save failure', 'Unexpected canonical save failure.');
+        assert_true(
+            $exception->getMessage() === 'fixture save failure',
+            'Unexpected canonical save failure.',
+        );
     }
-    assert_true($GLOBALS['wizard_settings'] === ['alpha' => 'old-a', 'beta' => 'old-b'], 'Transaction fixture did not roll back the first save.');
-    assert_true(in_array('rollback', $GLOBALS['wizard_events'], true), 'Save failure did not roll back.');
-    assert_true($GLOBALS['wizard_cache_resets'] >= 2, 'Failed apply did not refresh request-local settings state.');
+    assert_true(
+        $GLOBALS['wizard_settings'] === ['alpha' => 'old-a', 'beta' => 'old-b'],
+        'Transaction fixture did not roll back the first save.',
+    );
+    assert_true(
+        in_array('rollback', $GLOBALS['wizard_events'], true),
+        'Save failure did not roll back.',
+    );
+    assert_true(
+        $GLOBALS['wizard_cache_resets'] >= 2,
+        'Failed apply did not refresh request-local settings state.',
+    );
 
     reset_fixture();
     $GLOBALS['wizard_commit_failure'] = true;
     try {
-        admin_setup_wizard_apply(['alpha' => 'new-a', 'base_url' => 'https://new.test/gallery'], originals());
+        admin_setup_wizard_apply([
+            'alpha' => 'new-a',
+            'base_url' => 'https://new.test/gallery',
+        ], originals());
         throw new \RuntimeException('Commit failure was accepted.');
     } catch (\RuntimeException $exception) {
-        assert_true($exception->getMessage() === 'fixture commit failure', 'Unexpected commit failure result.');
+        assert_true(
+            $exception->getMessage() === 'fixture commit failure',
+            'Unexpected commit failure result.',
+        );
     }
-    assert_true($GLOBALS['wizard_config_url'] === '', 'Commit failure did not restore the exact legacy empty base_url.');
-    assert_true($GLOBALS['wizard_settings']['alpha'] === 'old-a', 'Commit failure did not roll back database settings.');
+    assert_true(
+        $GLOBALS['wizard_config_url'] === '',
+        'Commit failure did not restore the exact legacy empty base_url.',
+    );
+    assert_true(
+        $GLOBALS['wizard_settings']['alpha'] === 'old-a',
+        'Commit failure did not roll back database settings.',
+    );
     $saveAlpha = array_search('save:alpha', $GLOBALS['wizard_events'], true);
     $saveUrl = array_search('save:base_url', $GLOBALS['wizard_events'], true);
-    $restoreUrl = array_search('restore:base_url', $GLOBALS['wizard_events'], true);
-    assert_true(is_int($saveAlpha) && is_int($saveUrl) && is_int($restoreUrl) && $saveAlpha < $saveUrl && $saveUrl < $restoreUrl, 'base_url was not last or was not compensated after commit failure.');
+    $restoreUrl = array_search(
+        'restore:base_url',
+        $GLOBALS['wizard_events'],
+        true,
+    );
+    assert_true(
+        is_int($saveAlpha)
+            && is_int($saveUrl)
+            && is_int($restoreUrl)
+            && $saveAlpha < $saveUrl
+            && $saveUrl < $restoreUrl,
+        'base_url was not last or was not compensated after commit failure.',
+    );
 
     reset_fixture();
     /**
@@ -886,75 +1040,164 @@ namespace Gallery\Tests\AdminSetupWizardApply {
          *
          * @return array<string,mixed> Unreachable apply result.
          */
-        static fn (): array => admin_setup_wizard_apply(['base_url' => 'https://new.test'], originals()),
-        'admin.setup_wizard.error.conflict'
+        static fn(): array => admin_setup_wizard_apply([
+            'base_url' => 'https://new.test',
+        ], originals()),
+        'admin.setup_wizard.error.conflict',
     );
-    assert_true(!in_array('save:base_url', $GLOBALS['wizard_events'], true), 'Stale config was overwritten.');
+    assert_true(
+        !in_array('save:base_url', $GLOBALS['wizard_events'], true),
+        'Stale config was overwritten.',
+    );
 
     reset_fixture();
     $phaseThreeEntries = [
-        'admin_upload_client_format_mode' => ['id' => 'admin_upload_client_format_mode', 'wizard_adapter' => 'admin_upload_safe', 'key' => 'admin_upload_client_format_mode', 'wizard_editable' => true, 'unavailable' => false],
-        'browser_upload_enabled' => ['id' => 'browser_upload_enabled', 'wizard_adapter' => 'browser_upload_safe', 'key' => 'browser_upload_enabled', 'wizard_editable' => true, 'unavailable' => false],
-        'telemetry_enabled' => ['id' => 'telemetry_enabled', 'wizard_adapter' => 'telemetry_safe', 'key' => '', 'wizard_editable' => true, 'unavailable' => false],
+        'admin_upload_client_format_mode' => [
+            'id' => 'admin_upload_client_format_mode',
+            'wizard_adapter' => 'admin_upload_safe',
+            'key' => 'admin_upload_client_format_mode',
+            'wizard_editable' => true,
+            'unavailable' => false,
+        ],
+        'browser_upload_enabled' => [
+            'id' => 'browser_upload_enabled',
+            'wizard_adapter' => 'browser_upload_safe',
+            'key' => 'browser_upload_enabled',
+            'wizard_editable' => true,
+            'unavailable' => false,
+        ],
+        'telemetry_enabled' => [
+            'id' => 'telemetry_enabled',
+            'wizard_adapter' => 'telemetry_safe',
+            'key' => '',
+            'wizard_editable' => true,
+            'unavailable' => false,
+        ],
     ];
     assert_true(
         admin_setup_wizard_storage_keys(
-            ['telemetry_enabled' => '1', 'browser_upload_enabled' => '1', 'admin_upload_client_format_mode' => 'phone_jpeg'],
-            $phaseThreeEntries
+            [
+                'telemetry_enabled' => '1',
+                'browser_upload_enabled' => '1',
+                'admin_upload_client_format_mode' => 'phone_jpeg',
+            ],
+            $phaseThreeEntries,
         ) === ['browser_upload_enabled', 'admin_upload_client_format_mode'],
-        'Phase 3 app_settings lock keys crossed into telemetry storage or lost upload keys.'
+        'Phase 3 app_settings lock keys crossed into telemetry storage or lost upload keys.',
     );
     assert_true(
-        admin_setup_wizard_telemetry_storage_keys(['telemetry_enabled' => '1', 'browser_upload_enabled' => '1'], $phaseThreeEntries) === ['telemetry_enabled'],
-        'Phase 3 telemetry lock keys were not isolated.'
+        admin_setup_wizard_telemetry_storage_keys([
+            'telemetry_enabled' => '1',
+            'browser_upload_enabled' => '1',
+        ], $phaseThreeEntries) === ['telemetry_enabled'],
+        'Phase 3 telemetry lock keys were not isolated.',
     );
     assert_true(
         admin_setup_wizard_storage_keys(
             ['browser_upload_default_worker_count' => '8'],
-            ['browser_upload_default_worker_count' => ['id' => 'browser_upload_default_worker_count', 'wizard_adapter' => 'browser_upload_safe', 'key' => 'browser_upload_default_worker_count']]
-        ) === ['browser_upload_default_worker_count', 'browser_upload_max_worker_count', 'browser_upload_hard_worker_cap'],
-        'Browser default worker validation dependencies must be locked with the edited row.'
+            ['browser_upload_default_worker_count' => [
+                'id' => 'browser_upload_default_worker_count',
+                'wizard_adapter' => 'browser_upload_safe',
+                'key' => 'browser_upload_default_worker_count',
+            ]],
+        ) === [
+            'browser_upload_default_worker_count',
+            'browser_upload_max_worker_count',
+            'browser_upload_hard_worker_cap',
+        ],
+        'Browser default worker validation dependencies must be locked with the edited row.',
     );
     assert_true(
-        admin_setup_wizard_normalize_entry($phaseThreeEntries['admin_upload_client_format_mode'], 'phone_jpeg') === 'phone_jpeg'
-        && admin_setup_wizard_normalize_entry($phaseThreeEntries['browser_upload_enabled'], '1') === '1'
-        && admin_setup_wizard_normalize_entry($phaseThreeEntries['telemetry_enabled'], '1') === '1',
-        'Phase 3 owner adapters did not normalize through their dedicated boundaries.'
+        admin_setup_wizard_normalize_entry(
+            $phaseThreeEntries['admin_upload_client_format_mode'],
+            'phone_jpeg',
+        ) === 'phone_jpeg'
+            && admin_setup_wizard_normalize_entry(
+                $phaseThreeEntries['browser_upload_enabled'],
+                '1',
+            ) === '1'
+            && admin_setup_wizard_normalize_entry(
+                $phaseThreeEntries['telemetry_enabled'],
+                '1',
+            ) === '1',
+        'Phase 3 owner adapters did not normalize through their dedicated boundaries.',
     );
-    admin_setup_wizard_save_entry($phaseThreeEntries['admin_upload_client_format_mode'], 'phone_jpeg');
-    admin_setup_wizard_save_entry($phaseThreeEntries['browser_upload_enabled'], '1');
+    admin_setup_wizard_save_entry(
+        $phaseThreeEntries['admin_upload_client_format_mode'],
+        'phone_jpeg',
+    );
+    admin_setup_wizard_save_entry(
+        $phaseThreeEntries['browser_upload_enabled'],
+        '1',
+    );
     admin_setup_wizard_save_entry($phaseThreeEntries['telemetry_enabled'], '1');
     assert_true(
-        array_slice($GLOBALS['wizard_events'], -3) === ['save:admin_upload_client_format_mode', 'save:browser_upload_enabled', 'save:telemetry_enabled'],
-        'Phase 3 values did not route through canonical upload and telemetry owner adapters.'
+        array_slice($GLOBALS['wizard_events'], -3) === [
+            'save:admin_upload_client_format_mode',
+            'save:browser_upload_enabled',
+            'save:telemetry_enabled',
+        ],
+        'Phase 3 values did not route through canonical upload and telemetry owner adapters.',
     );
     $GLOBALS['wizard_schema_state'] = 'missing';
     $GLOBALS['wizard_telemetry_schema_state'] = 'available';
-    admin_setup_wizard_preflight(['telemetry_enabled' => '1'], $phaseThreeEntries);
+    admin_setup_wizard_preflight([
+        'telemetry_enabled' => '1',
+    ], $phaseThreeEntries);
     $GLOBALS['wizard_telemetry_schema_state'] = 'unknown';
     expect_wizard_error(
-        static fn (): array => (admin_setup_wizard_preflight(['telemetry_enabled' => '1'], $phaseThreeEntries) ?? []),
-        'admin.setup_wizard.error.unavailable'
+        static fn(): array => (
+            admin_setup_wizard_preflight([
+                'telemetry_enabled' => '1',
+            ], $phaseThreeEntries) ?? []
+        ),
+        'admin.setup_wizard.error.unavailable',
     );
 
     reset_fixture();
     $steps = admin_setup_wizard_steps();
     $draft = admin_setup_wizard_begin_draft(7, $steps);
-    $_POST = ['wizard_action' => 'next', 'revision' => [], 'wizard_step' => 'general'];
+    $_POST = [
+        'wizard_action' => 'next',
+        'revision' => [],
+        'wizard_step' => 'general',
+    ];
     [, $errors] = admin_setup_wizard_process_post($draft, $steps);
-    assert_true(($errors['_page'][0] ?? '') === 'admin.setup_wizard.error.stale' && $GLOBALS['wizard_model_calls'] === 0, 'Array revision bypassed stale protection.');
+    assert_true(
+        ($errors['_page'][0] ?? '') === 'admin.setup_wizard.error.stale'
+            && $GLOBALS['wizard_model_calls'] === 0,
+        'Array revision bypassed stale protection.',
+    );
 
     $_POST = ['wizard_action' => 'apply', 'revision' => '1', 'approval' => '1'];
     [, $errors] = admin_setup_wizard_process_post($draft, $steps);
-    assert_true(($errors['_page'][0] ?? '') === 'admin.setup_wizard.error.invalid_step' && $GLOBALS['wizard_model_calls'] === 0, 'Apply outside summary reached persistence.');
+    assert_true(
+        ($errors['_page'][0] ?? '') === 'admin.setup_wizard.error.invalid_step'
+            && $GLOBALS['wizard_model_calls'] === 0,
+        'Apply outside summary reached persistence.',
+    );
 
     $draft['step'] = \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP;
     $_POST = ['wizard_action' => 'apply', 'revision' => '1'];
     [, $errors] = admin_setup_wizard_process_post($draft, $steps);
-    assert_true(($errors['_page'][0] ?? '') === 'admin.setup_wizard.error.approval_required' && $GLOBALS['wizard_model_calls'] === 0, 'Missing approval reached persistence.');
-    $_POST = ['wizard_action' => 'apply', 'revision' => '1', 'approval' => ['1']];
+    assert_true(
+        ($errors['_page'][0] ?? '')
+            === 'admin.setup_wizard.error.approval_required'
+            && $GLOBALS['wizard_model_calls'] === 0,
+        'Missing approval reached persistence.',
+    );
+    $_POST = [
+        'wizard_action' => 'apply',
+        'revision' => '1',
+        'approval' => ['1'],
+    ];
     [, $errors] = admin_setup_wizard_process_post($draft, $steps);
-    assert_true(($errors['_page'][0] ?? '') === 'admin.setup_wizard.error.approval_required' && $GLOBALS['wizard_model_calls'] === 0, 'Array approval reached persistence.');
+    assert_true(
+        ($errors['_page'][0] ?? '')
+            === 'admin.setup_wizard.error.approval_required'
+            && $GLOBALS['wizard_model_calls'] === 0,
+        'Array approval reached persistence.',
+    );
 
     reset_fixture();
     $GLOBALS['wizard_auth_failure'] = true;
@@ -962,39 +1205,80 @@ namespace Gallery\Tests\AdminSetupWizardApply {
         cms_admin_setup_wizard();
         throw new \RuntimeException('Authentication failure was ignored.');
     } catch (BoundaryTrap $exception) {
-        assert_true($exception->getMessage() === 'auth', 'Unexpected authentication trap.');
+        assert_true(
+            $exception->getMessage() === 'auth',
+            'Unexpected authentication trap.',
+        );
     }
-    assert_true($GLOBALS['wizard_model_calls'] === 0, 'Authentication failure reached persistence.');
+    assert_true(
+        $GLOBALS['wizard_model_calls'] === 0,
+        'Authentication failure reached persistence.',
+    );
 
     reset_fixture();
     $GLOBALS['wizard_request_method'] = 'POST';
     $GLOBALS['wizard_csrf_failure'] = true;
-    $_POST = ['wizard_action' => 'next', 'revision' => '1', 'wizard_step' => 'general'];
+    $_POST = [
+        'wizard_action' => 'next',
+        'revision' => '1',
+        'wizard_step' => 'general',
+    ];
     try {
         cms_admin_setup_wizard();
         throw new \RuntimeException('CSRF failure was ignored.');
     } catch (BoundaryTrap $exception) {
-        assert_true($exception->getMessage() === 'csrf', 'Unexpected CSRF trap.');
+        assert_true(
+            $exception->getMessage() === 'csrf',
+            'Unexpected CSRF trap.',
+        );
     }
-    assert_true($GLOBALS['wizard_model_calls'] === 0, 'CSRF failure reached persistence.');
+    assert_true(
+        $GLOBALS['wizard_model_calls'] === 0,
+        'CSRF failure reached persistence.',
+    );
 
     reset_fixture();
     $_GET = ['step' => 'site'];
     cms_admin_setup_wizard();
-    assert_true(($_SESSION['admin_setup_wizard_draft']['step'] ?? '') === 'site', 'Whitelisted GET navigation was not persisted in the session draft.');
-    assert_true($GLOBALS['wizard_model_calls'] === 0 && $GLOBALS['wizard_save_calls'] === [], 'GET navigation persisted settings.');
+    assert_true(
+        ($_SESSION['admin_setup_wizard_draft']['step'] ?? '') === 'site',
+        'Whitelisted GET navigation was not persisted in the session draft.',
+    );
+    assert_true(
+        $GLOBALS['wizard_model_calls'] === 0
+            && $GLOBALS['wizard_save_calls'] === [],
+        'GET navigation persisted settings.',
+    );
 
     $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
     $environment = array_merge($_ENV, ['GALLERY_WIZARD_REDIRECT_CHILD' => '1']);
-    $process = proc_open([PHP_BINARY, __FILE__], $descriptor, $pipes, __DIR__, $environment);
-    assert_true(is_resource($process), 'Could not start redirect child process.');
+    $process = proc_open(
+        [PHP_BINARY, __FILE__],
+        $descriptor,
+        $pipes,
+        __DIR__,
+        $environment,
+    );
+    assert_true(
+        is_resource($process),
+        'Could not start redirect child process.',
+    );
     $stdout = stream_get_contents($pipes[1]);
     $stderr = stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
     $exitCode = proc_close($process);
-    assert_true($exitCode === 0, 'Redirect child failed: ' . trim((string) $stderr));
-    assert_true(str_contains((string) $stdout, 'REDIRECT:https://old.test/index.php?page=admin_settings'), 'Successful approved summary did not use the canonical Settings redirect.');
+    assert_true(
+        $exitCode === 0,
+        'Redirect child failed: ' . trim((string) $stderr),
+    );
+    assert_true(
+        str_contains(
+            (string) $stdout,
+            'REDIRECT:https://old.test/index.php?page=admin_settings',
+        ),
+        'Successful approved summary did not use the canonical Settings redirect.',
+    );
 
     echo "admin_setup_wizard_apply_test: PASS\n";
 }

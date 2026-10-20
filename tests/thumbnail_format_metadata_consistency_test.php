@@ -70,10 +70,19 @@ namespace Gallery\Core {
         return $GLOBALS['thumbnail_format_metadata_db'];
     }
 
-    /** Escape one HTML test value. */
+    /**
+     * Escape one HTML test value.
+     *
+     * @param string|null $value Nullable text to escape.
+     * @return string Escaped HTML text.
+     */
     function e(?string $value): string
     {
-        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars(
+            (string) $value,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 
     /** Build one deterministic test route. */
@@ -82,9 +91,18 @@ namespace Gallery\Core {
         return '/' . $route . '/' . (int) ($params['id'] ?? 0);
     }
 
-    /** Append the deterministic derivative revision to one test URL. */
-    function image_public_asset_url_with_version(string $url, array $image): string
-    {
+    /**
+     * Append the deterministic derivative revision to one test URL.
+     *
+     * @param string $url Base public asset URL.
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture image row supplying the derivative revision.
+     * @return string Versioned public asset URL.
+     */
+    function image_public_asset_url_with_version(
+        string $url,
+        array $image,
+    ): string {
         return $url . '?v=' . (int) ($image['derivative_version'] ?? 0);
     }
 
@@ -94,10 +112,30 @@ namespace Gallery\Core {
         return '/media/' . (int) $image['id'];
     }
 
-    /** Build one deterministic public thumbnail URL. */
-    function image_public_thumbnail_url(array $image, array $gallery, int $size, string $format): string
-    {
-        return '/thumb-' . $size . '.' . $format . '?v=' . (int) ($image['derivative_version'] ?? 0);
+    /**
+     * Build one deterministic public thumbnail URL.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture image row supplying the image id and revision.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param int $size Requested thumbnail width in pixels.
+     * @param string $format Generated image format extension.
+     * @return string Deterministic public thumbnail URL.
+     */
+    function image_public_thumbnail_url(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format,
+    ): string {
+        return (
+            '/thumb-'
+                . $size
+                . '.'
+                . $format
+                . '?v='
+                . (int) ($image['derivative_version'] ?? 0)
+        );
     }
 
     /** Build one deterministic public image base URL. */
@@ -113,7 +151,10 @@ namespace Gallery\Services {
      * @param array<string,mixed> $image Fixture source row.
      * @return bool True for this non-database format fixture.
      */
-    function thumbnail_legacy_identity_owned(array $image): bool { return true; }
+    function thumbnail_legacy_identity_owned(array $image): bool
+    {
+        return true;
+    }
 
     /**
      * Accept fixture ownership before testing format admission.
@@ -121,10 +162,20 @@ namespace Gallery\Services {
      * @return void
      */
     function thumbnail_assert_source_identity_owned(array $image): void {}
-    /** Read one in-memory compatibility setting. */
+
+    /**
+     * Read one in-memory compatibility setting.
+     *
+     * @param string $key Setting name to read.
+     * @param string|null $default Value returned when the setting is absent.
+     * @return string|null Stored setting value or the supplied default.
+     */
     function app_setting(string $key, ?string $default = null): ?string
     {
-        return array_key_exists($key, $GLOBALS['thumbnail_format_metadata_settings'])
+        return array_key_exists(
+            $key,
+            $GLOBALS['thumbnail_format_metadata_settings'],
+        )
             ? (string) $GLOBALS['thumbnail_format_metadata_settings'][$key]
             : $default;
     }
@@ -153,11 +204,23 @@ namespace Gallery\Services {
         return $column === 'derivative_version';
     }
 
-    /** Apply current-revision renderability to a fake metadata row. */
-    function thumbnail_metadata_row_is_renderable(array $row, array $image): bool
-    {
-        return ($row['status'] ?? '') === 'valid'
-            && (int) ($row['derivative_version'] ?? 0) === (int) ($image['derivative_version'] ?? 0);
+    /**
+     * Apply current-revision renderability to a fake metadata row.
+     *
+     * @param array{status:string,derivative_version:int} $row Metadata status and stored derivative revision.
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Source image row with its current derivative revision.
+     * @return bool True when the row is valid for the current image revision.
+     */
+    function thumbnail_metadata_row_is_renderable(
+        array $row,
+        array $image,
+    ): bool {
+        return (
+            ($row['status'] ?? '') === 'valid'
+                && (int) ($row['derivative_version'] ?? 0)
+                === (int) ($image['derivative_version'] ?? 0)
+        );
     }
 
     /** Keep URL generation on the deterministic query-route fixture path. */
@@ -172,29 +235,87 @@ namespace Gallery\Services {
         return false;
     }
 
-    /** Build one deterministic generated-thumbnail serving URL. */
-    function thumbnail_serving_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
-    {
-        return '/thumb-' . $size . '.' . $format . '?v=' . (int) ($image['derivative_version'] ?? 0);
+    /**
+     * Build one deterministic generated-thumbnail serving URL.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture image row supplying the revision.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param int $size Requested thumbnail width in pixels.
+     * @param string $format Generated image format extension.
+     * @return string Deterministic serving URL.
+     */
+    function thumbnail_serving_url(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format = 'jpg',
+    ): string {
+        return (
+            '/thumb-'
+                . $size
+                . '.'
+                . $format
+                . '?v='
+                . (int) ($image['derivative_version'] ?? 0)
+        );
     }
 
-    /** Record any unexpected direct-route filesystem discovery. */
-    function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
-    {
+    /**
+     * Record any unexpected direct-route filesystem discovery.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture image row.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param int $size Requested thumbnail width in pixels.
+     * @param string $format Generated image format extension.
+     * @return string Temporary or configured path for the requested variant.
+     */
+    function thumbnail_abs_path(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format = 'jpg',
+    ): string {
         $GLOBALS['thumbnail_format_metadata_filesystem_lookups']++;
         if (($GLOBALS['thumbnail_format_generation_root'] ?? '') !== '') {
-            return $GLOBALS['thumbnail_format_generation_root'] . DIRECTORY_SEPARATOR . $size . '.' . $format;
+            return (
+                $GLOBALS['thumbnail_format_generation_root']
+                    . DIRECTORY_SEPARATOR
+                    . $size
+                    . '.'
+                    . $format
+            );
         }
-        return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'thumbnail-format-metadata-' . $size . '.' . $format;
+        return (
+            sys_get_temp_dir()
+                . DIRECTORY_SEPARATOR
+                . 'thumbnail-format-metadata-'
+                . $size
+                . '.'
+                . $format
+        );
     }
 
-    /** Return the isolated source image path used by generation failure tests. */
+    /**
+     * Return the isolated source image path used by generation failure tests.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image Fixture image row.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @return string Configured source image path, or an empty string.
+     */
     function image_abs_path(array $image, array $gallery): string
     {
         return (string) ($GLOBALS['thumbnail_format_generation_source'] ?? '');
     }
 
-    /** Create and return the isolated thumbnail directory. */
+    /**
+     * Create and return the isolated thumbnail directory.
+     *
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param bool $create Whether to create the configured directory when missing.
+     * @return string Configured thumbnail directory, or an empty string.
+     */
     function gallery_thumbs_dir(array $gallery, bool $create = false): string
     {
         $root = (string) ($GLOBALS['thumbnail_format_generation_root'] ?? '');
@@ -204,60 +325,145 @@ namespace Gallery\Services {
         return $root;
     }
 
-    /** Keep the generation fixture on the ordinary raster path. */
+    /**
+     * Keep the generation fixture on the ordinary raster path.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture source image row.
+     * @return bool Always false for this ordinary raster fixture.
+     */
     function image_uses_dng_display_derivatives(array $image): bool
     {
         return false;
     }
 
-    /** Return active policy formats for the test JPEG source. */
-    function thumbnail_target_formats_for_source(string $sourcePath, string $mime): array
-    {
+    /**
+     * Return active policy formats for the test JPEG source.
+     *
+     * @param string $sourcePath Source image filesystem path.
+     * @param string $mime Detected source MIME type.
+     * @return list<string> Generated format extensions permitted by policy.
+     */
+    function thumbnail_target_formats_for_source(
+        string $sourcePath,
+        string $mime,
+    ): array {
         return thumbnail_policy_requested_formats();
     }
 
-    /** Report no intentionally skipped WebP variant in this capable runtime. */
-    function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $mime): int
-    {
+    /**
+     * Report no intentionally skipped WebP variant in this capable runtime.
+     *
+     * @param string $sourcePath Source image filesystem path.
+     * @param string $mime Detected source MIME type.
+     * @return int Number of intentionally skipped WebP variants.
+     */
+    function thumbnail_intentionally_skipped_webp_count(
+        string $sourcePath,
+        string $mime,
+    ): int {
         return 0;
     }
 
     /** Bypass database schema setup in the isolated generation fixture. */
-    function thumbnail_metadata_preflight_write_schema(string $operation): void
-    {
+    function thumbnail_metadata_preflight_write_schema(string $operation): void {}
+
+    /**
+     * Record metadata invalidation independently for each failed format.
+     *
+     * @param array{id:int}|int $image Image row or image identifier.
+     * @param int $size Requested thumbnail width in pixels.
+     * @param string $format Generated image format extension.
+     * @return void Records the invalidated size and format pair.
+     */
+    function thumbnail_metadata_delete_variant(
+        array|int $image,
+        int $size,
+        string $format,
+    ): void {
+        $GLOBALS['thumbnail_format_generation_metadata_deleted'][] =
+            $size . ':' . $format;
     }
 
-    /** Record metadata invalidation independently for each failed format. */
-    function thumbnail_metadata_delete_variant(array|int $image, int $size, string $format): void
-    {
-        $GLOBALS['thumbnail_format_generation_metadata_deleted'][] = $size . ':' . $format;
-    }
-
-    /** Record valid metadata only after a published derivative exists. */
-    function thumbnail_metadata_record_file(array $image, array $gallery, int $size, string $format, string $thumbnailPath, ?string $sourcePath = null, bool $deleteInvalid = false): array
-    {
+    /**
+     * Record valid metadata only after a published derivative exists.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture image row.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param int $size Requested thumbnail width in pixels.
+     * @param string $format Generated image format extension.
+     * @param string $thumbnailPath Published derivative filesystem path.
+     * @param string|null $sourcePath Optional source image filesystem path.
+     * @param bool $deleteInvalid Whether invalid existing metadata may be deleted.
+     * @return array{status:string,valid:bool,deleted:bool,metadata_written:bool} Result of the fake metadata write.
+     */
+    function thumbnail_metadata_record_file(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format,
+        string $thumbnailPath,
+        ?string $sourcePath = null,
+        bool $deleteInvalid = false,
+    ): array {
         $valid = is_file($thumbnailPath);
         if ($valid) {
-            $GLOBALS['thumbnail_format_generation_metadata_valid'][] = $size . ':' . $format;
+            $GLOBALS['thumbnail_format_generation_metadata_valid'][] =
+                $size . ':' . $format;
         }
-        return ['status' => $valid ? 'valid' : 'missing', 'valid' => $valid, 'deleted' => false, 'metadata_written' => $valid];
+        return [
+            'status' => $valid ? 'valid' : 'missing',
+            'valid' => $valid,
+            'deleted' => false,
+            'metadata_written' => $valid,
+        ];
     }
 
-    /** Omit signed warmup data from isolated renderer output. */
-    function thumbnail_warmup_candidate_attributes(array $image, array $gallery, array $sizes): string
-    {
+    /**
+     * Omit signed warmup data from isolated renderer output.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image
+     *   Fixture image row.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param array<int,int> $sizes Requested thumbnail widths keyed by width.
+     * @return string Empty attributes for this isolated fixture.
+     */
+    function thumbnail_warmup_candidate_attributes(
+        array $image,
+        array $gallery,
+        array $sizes,
+    ): string {
         return '';
     }
 
-    /** Ignore profiler counters in this isolated regression. */
-    function public_render_profile_count(string $name, int $increment = 1): void
-    {
-    }
+    /**
+     * Ignore profiler counters in this isolated regression.
+     *
+     * @param string $name Counter name.
+     * @param int $increment Amount added to the counter.
+     * @return void No profiling data is retained.
+     */
+    function public_render_profile_count(
+        string $name,
+        int $increment = 1,
+    ): void {}
 
-    /** Ignore profiler purpose records in this isolated regression. */
-    function public_render_profile_record_thumbnail_purpose(?string $purpose, int $size, string $format, string $source): void
-    {
-    }
+    /**
+     * Ignore profiler purpose records in this isolated regression.
+     *
+     * @param string|null $purpose Thumbnail rendering purpose, when known.
+     * @param int $size Requested thumbnail width in pixels.
+     * @param string $format Generated image format extension.
+     * @param string $source Source category for the thumbnail request.
+     * @return void No profiling data is retained.
+     */
+    function public_render_profile_record_thumbnail_purpose(
+        ?string $purpose,
+        int $size,
+        string $format,
+        string $source,
+    ): void {}
 
     /** Execute one profiled callback directly. */
     function public_render_profile_span(string $name, callable $callback): mixed
@@ -288,22 +494,86 @@ namespace {
     require_once __DIR__ . '/../app/services/thumbnail_html.php';
     require_once __DIR__ . '/../app/services/thumbnail_generation.php';
 
-    /** Throw when one thumbnail format consistency expectation fails. */
-    function thumbnail_format_metadata_assert(bool $condition, string $message): void
-    {
+    /**
+     * Throw when one thumbnail format consistency expectation fails.
+     *
+     * @param bool $condition Whether the expectation passed.
+     * @param string $message Failure message describing the violated expectation.
+     * @return void
+     */
+    function thumbnail_format_metadata_assert(
+        bool $condition,
+        string $message,
+    ): void {
         if (!$condition) {
             throw new RuntimeException($message);
         }
     }
 
-    /** Render one image through the batched manifest and selected real HTML renderer. */
-    function thumbnail_format_metadata_render(array $image, array $gallery, string $renderer): array
-    {
-        $rows = public_gallery_media_manifest_renderable_rows([(int) $image['id'] => $image], [300 => 300, 600 => 600]);
-        $bundle = public_gallery_media_manifest_metadata_bundle($image, $gallery, [300 => 300, 600 => 600], $rows[(int) $image['id']], '/gallery/photo');
+    /**
+     * Render one image through the batched manifest and selected real HTML renderer.
+     *
+     * @param array{id:int,gallery_id:int,filename:string,derivative_version:int,display_width:int,display_height:int} $image Fixture image row.
+     * @param array{id:int} $gallery Fixture gallery row.
+     * @param string $renderer Renderer selector, either responsive or progressive.
+     * @return array{
+     *   rows:array<int,array{
+     *     jpg:array<int,array{
+     *       image_id:int,size_px:int,format:string,width:int,height:int,
+     *       status:string,derivative_version:int
+     *     }>,
+     *     webp:array<int,array{
+     *       image_id:int,size_px:int,format:string,width:int,height:int,
+     *       status:string,derivative_version:int
+     *     }>
+     *   }>,
+     *   bundle:array{
+     *     image:array{
+     *       id:int,gallery_id:int,filename:string,derivative_version:int,
+     *       display_width:int,display_height:int
+     *     },
+     *     gallery:array{id:int},media_url:string,sizes:list<int>,
+     *     variants:array{jpg:array<int,string>,webp:array<int,string>},
+     *     warmup_sizes:array<int,int>
+     *   },
+     *   html:string
+     * } Renderable metadata rows, bundle data, and generated markup.
+     */
+    function thumbnail_format_metadata_render(
+        array $image,
+        array $gallery,
+        string $renderer,
+    ): array {
+        $rows = public_gallery_media_manifest_renderable_rows([
+            (int) $image['id'] => $image,
+        ], [300 => 300, 600 => 600]);
+        $bundle = public_gallery_media_manifest_metadata_bundle(
+            $image,
+            $gallery,
+            [300 => 300, 600 => 600],
+            $rows[(int) $image['id']],
+            '/gallery/photo',
+        );
         $html = $renderer === 'progressive'
-            ? thumbnail_progressive_picture_html($image, 300, [300, 600], '50vw', '50vw', 'Photo', '', $bundle)
-            : thumbnail_picture_html($image, 300, [300, 600], '50vw', 'Photo', '', $bundle);
+            ? thumbnail_progressive_picture_html(
+                $image,
+                300,
+                [300, 600],
+                '50vw',
+                '50vw',
+                'Photo',
+                '',
+                $bundle,
+            )
+            : thumbnail_picture_html(
+                $image,
+                300,
+                [300, 600],
+                '50vw',
+                'Photo',
+                '',
+                $bundle,
+            );
         return ['rows' => $rows, 'bundle' => $bundle, 'html' => $html];
     }
 
@@ -315,48 +585,147 @@ namespace {
     $GLOBALS['thumbnail_format_generation_source'] = '';
     $GLOBALS['thumbnail_format_generation_metadata_deleted'] = [];
     $GLOBALS['thumbnail_format_generation_metadata_valid'] = [];
-    $GLOBALS['thumbnail_format_metadata_db'] = new ThumbnailFormatMetadataDatabase();
+    $GLOBALS['thumbnail_format_metadata_db'] =
+        new ThumbnailFormatMetadataDatabase();
     $GLOBALS['thumbnail_format_metadata_db']->rows = [
-        ['image_id' => 41, 'size_px' => 300, 'format' => 'jpg', 'width' => 300, 'height' => 225, 'status' => 'valid', 'derivative_version' => 9],
-        ['image_id' => 41, 'size_px' => 300, 'format' => 'webp', 'width' => 300, 'height' => 225, 'status' => 'valid', 'derivative_version' => 9],
-        ['image_id' => 41, 'size_px' => 600, 'format' => 'jpg', 'width' => 600, 'height' => 450, 'status' => 'valid', 'derivative_version' => 9],
-        ['image_id' => 41, 'size_px' => 600, 'format' => 'webp', 'width' => 600, 'height' => 450, 'status' => 'valid', 'derivative_version' => 9],
+        [
+            'image_id' => 41,
+            'size_px' => 300,
+            'format' => 'jpg',
+            'width' => 300,
+            'height' => 225,
+            'status' => 'valid',
+            'derivative_version' => 9,
+        ],
+        [
+            'image_id' => 41,
+            'size_px' => 300,
+            'format' => 'webp',
+            'width' => 300,
+            'height' => 225,
+            'status' => 'valid',
+            'derivative_version' => 9,
+        ],
+        [
+            'image_id' => 41,
+            'size_px' => 600,
+            'format' => 'jpg',
+            'width' => 600,
+            'height' => 450,
+            'status' => 'valid',
+            'derivative_version' => 9,
+        ],
+        [
+            'image_id' => 41,
+            'size_px' => 600,
+            'format' => 'webp',
+            'width' => 600,
+            'height' => 450,
+            'status' => 'valid',
+            'derivative_version' => 9,
+        ],
     ];
-    $image = ['id' => 41, 'gallery_id' => 7, 'filename' => 'photo.jpg', 'derivative_version' => 9, 'display_width' => 1600, 'display_height' => 1200];
+    $image = [
+        'id' => 41,
+        'gallery_id' => 7,
+        'filename' => 'photo.jpg',
+        'derivative_version' => 9,
+        'display_width' => 1600,
+        'display_height' => 1200,
+    ];
     $gallery = ['id' => 7];
 
-    thumbnail_format_metadata_assert(thumbnail_policy_requested_formats() === ['webp'], 'No stored compatibility setting must default to WebP only.');
-    $settingsBeforeOldJpegRequest = $GLOBALS['thumbnail_format_metadata_settings'];
-    $oldJpeg = \Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file($image, $gallery, 300, 'jpg');
-    thumbnail_format_metadata_assert($oldJpeg === null, 'An old JPEG URL must be unavailable in modern mode.');
-    thumbnail_format_metadata_assert($GLOBALS['thumbnail_format_metadata_filesystem_lookups'] === 0, 'An old JPEG URL must be rejected before filesystem discovery or generation in modern mode.');
-    thumbnail_format_metadata_assert($GLOBALS['thumbnail_format_metadata_settings'] === $settingsBeforeOldJpegRequest, 'An old JPEG URL must not mutate compatibility settings.');
+    thumbnail_format_metadata_assert(
+        thumbnail_policy_requested_formats() === ['webp'],
+        'No stored compatibility setting must default to WebP only.',
+    );
+    $settingsBeforeOldJpegRequest =
+        $GLOBALS['thumbnail_format_metadata_settings'];
+    $oldJpeg = \Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file(
+        $image,
+        $gallery,
+        300,
+        'jpg',
+    );
+    thumbnail_format_metadata_assert(
+        $oldJpeg === null,
+        'An old JPEG URL must be unavailable in modern mode.',
+    );
+    thumbnail_format_metadata_assert(
+        $GLOBALS['thumbnail_format_metadata_filesystem_lookups'] === 0,
+        'An old JPEG URL must be rejected before filesystem discovery or generation in modern mode.',
+    );
+    thumbnail_format_metadata_assert(
+        $GLOBALS['thumbnail_format_metadata_settings']
+            === $settingsBeforeOldJpegRequest,
+        'An old JPEG URL must not mutate compatibility settings.',
+    );
     foreach (['responsive', 'progressive'] as $renderer) {
         $modern = thumbnail_format_metadata_render($image, $gallery, $renderer);
-        thumbnail_format_metadata_assert(str_contains($modern['html'], '.webp?v=9'), ucfirst($renderer) . ' modern markup must keep valid WebP candidates.');
-        thumbnail_format_metadata_assert(!str_contains($modern['html'], '.jpg?v=9'), ucfirst($renderer) . ' modern markup advertised a stale generated JPEG candidate.');
-        thumbnail_format_metadata_assert(($modern['bundle']['variants']['jpg'] ?? []) === [], ucfirst($renderer) . ' modern manifest bundle retained historical JPEG metadata.');
+        thumbnail_format_metadata_assert(
+            str_contains($modern['html'], '.webp?v=9'),
+            ucfirst($renderer)
+                . ' modern markup must keep valid WebP candidates.',
+        );
+        thumbnail_format_metadata_assert(
+            !str_contains($modern['html'], '.jpg?v=9'),
+            ucfirst($renderer)
+                . ' modern markup advertised a stale generated JPEG candidate.',
+        );
+        thumbnail_format_metadata_assert(
+            ($modern['bundle']['variants']['jpg'] ?? []) === [],
+            ucfirst($renderer)
+                . ' modern manifest bundle retained historical JPEG metadata.',
+        );
     }
 
     $historicalJpeg = tempnam(sys_get_temp_dir(), 'gallery-historical-jpeg-');
-    thumbnail_format_metadata_assert(is_string($historicalJpeg), 'Historical JPEG fixture could not be created.');
+    thumbnail_format_metadata_assert(
+        is_string($historicalJpeg),
+        'Historical JPEG fixture could not be created.',
+    );
     file_put_contents($historicalJpeg, 'historical generated jpeg');
-    $modernWithFile = thumbnail_format_metadata_render($image, $gallery, 'responsive');
-    thumbnail_format_metadata_assert(!str_contains($modernWithFile['html'], '.jpg?v=9'), 'A historical physical JPEG must not override modern format policy.');
+    $modernWithFile = thumbnail_format_metadata_render(
+        $image,
+        $gallery,
+        'responsive',
+    );
+    thumbnail_format_metadata_assert(
+        !str_contains($modernWithFile['html'], '.jpg?v=9'),
+        'A historical physical JPEG must not override modern format policy.',
+    );
     @unlink($historicalJpeg);
 
     set_thumbnail_compatibility_mode('legacy');
     foreach (['responsive', 'progressive'] as $renderer) {
         $legacy = thumbnail_format_metadata_render($image, $gallery, $renderer);
-        thumbnail_format_metadata_assert(str_contains($legacy['html'], '.jpg?v=9'), ucfirst($renderer) . ' legacy markup must retain JPEG compatibility candidates.');
-        thumbnail_format_metadata_assert(str_contains($legacy['html'], '.webp?v=9'), ucfirst($renderer) . ' legacy markup must retain WebP candidates.');
+        thumbnail_format_metadata_assert(
+            str_contains($legacy['html'], '.jpg?v=9'),
+            ucfirst($renderer)
+                . ' legacy markup must retain JPEG compatibility candidates.',
+        );
+        thumbnail_format_metadata_assert(
+            str_contains($legacy['html'], '.webp?v=9'),
+            ucfirst($renderer) . ' legacy markup must retain WebP candidates.',
+        );
     }
 
-    $generationRoot = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'thumbnail-format-generation-' . bin2hex(random_bytes(6));
+    $generationRoot =
+        sys_get_temp_dir()
+        . DIRECTORY_SEPARATOR
+        . 'thumbnail-format-generation-'
+        . bin2hex(random_bytes(6));
     mkdir($generationRoot, 0775, true);
     $generationSource = $generationRoot . DIRECTORY_SEPARATOR . 'source.jpg';
     $sourceImage = imagecreatetruecolor(32, 24);
-    imagefilledrectangle($sourceImage, 0, 0, 31, 23, imagecolorallocate($sourceImage, 30, 120, 180));
+    imagefilledrectangle(
+        $sourceImage,
+        0,
+        0,
+        31,
+        23,
+        imagecolorallocate($sourceImage, 30, 120, 180),
+    );
     imagejpeg($sourceImage, $generationSource, 90);
     imagedestroy($sourceImage);
     $GLOBALS['thumbnail_format_generation_root'] = $generationRoot;
@@ -365,37 +734,89 @@ namespace {
     mkdir($generationRoot . DIRECTORY_SEPARATOR . '300.jpg');
     $GLOBALS['thumbnail_format_generation_metadata_deleted'] = [];
     $GLOBALS['thumbnail_format_generation_metadata_valid'] = [];
-    $legacyFailure = \Gallery\Services\create_image_thumbnails_result($image, $gallery, [300], ['prefer_imagick_webp_exif' => false]);
-    $legacyWebpExists = is_file($generationRoot . DIRECTORY_SEPARATOR . '300.webp');
-    $legacyMetadataValid = $GLOBALS['thumbnail_format_generation_metadata_valid'];
-    $legacyMetadataDeleted = $GLOBALS['thumbnail_format_generation_metadata_deleted'];
+    $legacyFailure = \Gallery\Services\create_image_thumbnails_result(
+        $image,
+        $gallery,
+        [300],
+        ['prefer_imagick_webp_exif' => false],
+    );
+    $legacyWebpExists = is_file(
+        $generationRoot . DIRECTORY_SEPARATOR . '300.webp',
+    );
+    $legacyMetadataValid =
+        $GLOBALS['thumbnail_format_generation_metadata_valid'];
+    $legacyMetadataDeleted =
+        $GLOBALS['thumbnail_format_generation_metadata_deleted'];
     @unlink($generationRoot . DIRECTORY_SEPARATOR . '300.webp');
     @rmdir($generationRoot . DIRECTORY_SEPARATOR . '300.jpg');
-    thumbnail_format_metadata_assert(in_array('jpg_write_failed', $legacyFailure['errors'], true), 'Legacy JPEG publication failure must be reported.');
-    thumbnail_format_metadata_assert($legacyWebpExists, 'Legacy JPEG publication failure must not invalidate successful WebP publication.');
-    thumbnail_format_metadata_assert(in_array('300:webp', $legacyMetadataValid, true), 'Successful legacy WebP publication must become valid metadata.');
-    thumbnail_format_metadata_assert(!in_array('300:jpg', $legacyMetadataValid, true), 'Failed legacy JPEG publication must not become valid metadata.');
-    thumbnail_format_metadata_assert(in_array('300:jpg', $legacyMetadataDeleted, true), 'Failed legacy JPEG publication must invalidate JPEG metadata.');
+    thumbnail_format_metadata_assert(
+        in_array('jpg_write_failed', $legacyFailure['errors'], true),
+        'Legacy JPEG publication failure must be reported.',
+    );
+    thumbnail_format_metadata_assert(
+        $legacyWebpExists,
+        'Legacy JPEG publication failure must not invalidate successful WebP publication.',
+    );
+    thumbnail_format_metadata_assert(
+        in_array('300:webp', $legacyMetadataValid, true),
+        'Successful legacy WebP publication must become valid metadata.',
+    );
+    thumbnail_format_metadata_assert(
+        !in_array('300:jpg', $legacyMetadataValid, true),
+        'Failed legacy JPEG publication must not become valid metadata.',
+    );
+    thumbnail_format_metadata_assert(
+        in_array('300:jpg', $legacyMetadataDeleted, true),
+        'Failed legacy JPEG publication must invalidate JPEG metadata.',
+    );
 
     set_thumbnail_compatibility_mode('modern');
     mkdir($generationRoot . DIRECTORY_SEPARATOR . '300.webp');
     $GLOBALS['thumbnail_format_generation_metadata_deleted'] = [];
     $GLOBALS['thumbnail_format_generation_metadata_valid'] = [];
-    $modernSettingsBeforeFailure = $GLOBALS['thumbnail_format_metadata_settings'];
-    $modernFailure = \Gallery\Services\create_image_thumbnails_result($image, $gallery, [300], ['prefer_imagick_webp_exif' => false]);
-    $modernJpegExists = is_file($generationRoot . DIRECTORY_SEPARATOR . '300.jpg');
-    $modernMetadataValid = $GLOBALS['thumbnail_format_generation_metadata_valid'];
+    $modernSettingsBeforeFailure =
+        $GLOBALS['thumbnail_format_metadata_settings'];
+    $modernFailure = \Gallery\Services\create_image_thumbnails_result(
+        $image,
+        $gallery,
+        [300],
+        ['prefer_imagick_webp_exif' => false],
+    );
+    $modernJpegExists = is_file(
+        $generationRoot . DIRECTORY_SEPARATOR . '300.jpg',
+    );
+    $modernMetadataValid =
+        $GLOBALS['thumbnail_format_generation_metadata_valid'];
     @rmdir($generationRoot . DIRECTORY_SEPARATOR . '300.webp');
     @unlink($generationSource);
     @rmdir($generationRoot);
     $GLOBALS['thumbnail_format_generation_root'] = '';
     $GLOBALS['thumbnail_format_generation_source'] = '';
-    thumbnail_format_metadata_assert($modernFailure['target_formats'] === ['webp'], 'Modern WebP failure must keep a WebP-only target set.');
-    thumbnail_format_metadata_assert(in_array('webp_write_failed', $modernFailure['errors'], true), 'Modern WebP publication failure must be reported.');
-    thumbnail_format_metadata_assert(!$modernJpegExists, 'Modern WebP publication failure must not create a JPEG fallback.');
-    thumbnail_format_metadata_assert(!in_array('300:jpg', $modernMetadataValid, true), 'Modern WebP publication failure must not create valid JPEG metadata.');
-    thumbnail_format_metadata_assert($GLOBALS['thumbnail_format_metadata_settings'] === $modernSettingsBeforeFailure, 'Modern WebP publication failure must not change compatibility mode.');
+    thumbnail_format_metadata_assert(
+        $modernFailure['target_formats'] === ['webp'],
+        'Modern WebP failure must keep a WebP-only target set.',
+    );
+    thumbnail_format_metadata_assert(
+        in_array('webp_write_failed', $modernFailure['errors'], true),
+        'Modern WebP publication failure must be reported.',
+    );
+    thumbnail_format_metadata_assert(
+        !$modernJpegExists,
+        'Modern WebP publication failure must not create a JPEG fallback.',
+    );
+    thumbnail_format_metadata_assert(
+        !in_array('300:jpg', $modernMetadataValid, true),
+        'Modern WebP publication failure must not create valid JPEG metadata.',
+    );
+    thumbnail_format_metadata_assert(
+        $GLOBALS['thumbnail_format_metadata_settings']
+            === $modernSettingsBeforeFailure,
+        'Modern WebP publication failure must not change compatibility mode.',
+    );
 
-    thumbnail_format_metadata_assert(count($GLOBALS['thumbnail_format_metadata_queries']) === 5, 'Each manifest render must keep one batched metadata query.');
+    thumbnail_format_metadata_assert(
+        count($GLOBALS['thumbnail_format_metadata_queries']) === 5,
+        'Each manifest render must keep one batched metadata query.',
+    );
     echo "Thumbnail format metadata consistency tests passed.\n";
 }

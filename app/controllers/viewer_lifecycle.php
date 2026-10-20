@@ -91,7 +91,9 @@ function viewer_lifecycle_http_available(): bool
 function viewer_account_deletion_http_available(): bool
 {
     return viewer_http_auth_available()
-        && schema_inspection_is_available(viewer_account_deletion_schema_status());
+        && schema_inspection_is_available(
+            viewer_account_deletion_schema_status(),
+        );
 }
 
 /**
@@ -124,13 +126,16 @@ function viewer_reauthentication_destination_from_request(): string
         ? (string) ($_POST['destination'] ?? '')
         : (string) ($_GET['destination'] ?? '');
 
-    return viewer_reauthentication_destination_route($candidate) !== null ? $candidate : '';
+    return viewer_reauthentication_destination_route($candidate) !== null
+        ? $candidate
+        : '';
 }
 
 /**
  * Redirect a sensitive lifecycle request to bounded recent reauthentication when required.
  *
  * @param string $destination Allowlisted lifecycle action identifier.
+ * @return void Redirects to reauthentication when the recent-auth window has expired.
  */
 function viewer_require_recent_reauthentication(string $destination): void
 {
@@ -141,7 +146,9 @@ function viewer_require_recent_reauthentication(string $destination): void
     if (viewer_reauthentication_destination_route($destination) === null) {
         redirect_to(url_for('viewer_account'));
     }
-    redirect_to(url_for('viewer_account_reauth', ['destination' => $destination]));
+    redirect_to(url_for('viewer_account_reauth', [
+        'destination' => $destination,
+    ]));
 }
 
 /**
@@ -158,7 +165,6 @@ function viewer_clear_local_lifecycle_state(): void
     unset($_SESSION[viewer_csrf_namespace_key()]);
 }
 
-
 /**
  * Capture one existing lifecycle presentation helper as a trusted HTML fragment.
  *
@@ -173,6 +179,8 @@ function viewer_lifecycle_capture_html(callable $renderer): string
 
 /**
  * Render and process the bounded viewer recent-reauthentication form.
+ *
+ * @return void Processes the form and renders or redirects.
  */
 function cms_viewer_account_reauth(): void
 {
@@ -210,14 +218,20 @@ function cms_viewer_account_reauth(): void
         }
 
         try {
-            $result = viewer_reauthenticate_password((string) ($_POST['password'] ?? ''), request_client_ip());
+            $result = viewer_reauthenticate_password(
+                (string) ($_POST['password'] ?? ''),
+                request_client_ip(),
+            );
         } catch (Throwable) {
             $result = ['reauthenticated' => false, 'reason' => 'unavailable'];
         }
         if (!empty($result['reauthenticated'])) {
             redirect_to(url_for($destinationRoute));
         }
-        $error = t('viewer.reauth.failed', 'Password confirmation failed. Check your password and try again.');
+        $error = t(
+            'viewer.reauth.failed',
+            'Password confirmation failed. Check your password and try again.',
+        );
     }
 
     \Gallery\Views\view_render_viewer_reauthentication([
@@ -231,6 +245,8 @@ function cms_viewer_account_reauth(): void
 
 /**
  * Render and process viewer password changes through the Phase 0.7 lifecycle service.
+ *
+ * @return void Processes the password change and renders or redirects.
  */
 function cms_viewer_account_password(): void
 {
@@ -259,9 +275,15 @@ function cms_viewer_account_password(): void
         $password = (string) ($_POST['password'] ?? '');
         $confirmation = (string) ($_POST['password_confirmation'] ?? '');
         if ($password !== $confirmation) {
-            $error = t('viewer.password.confirmation_mismatch', 'The password confirmation does not match.');
+            $error = t(
+                'viewer.password.confirmation_mismatch',
+                'The password confirmation does not match.',
+            );
         } elseif (!viewer_password_input_is_acceptable($password)) {
-            $error = t('viewer.password.policy_error', 'Choose a password with at least 15 characters.');
+            $error = t(
+                'viewer.password.policy_error',
+                'Choose a password with at least 15 characters.',
+            );
         } else {
             try {
                 $result = viewer_change_password($password);
@@ -270,12 +292,19 @@ function cms_viewer_account_password(): void
             }
             if (!empty($result['changed'])) {
                 viewer_clear_local_lifecycle_state();
-                redirect_to(url_for('viewer_login', ['password_changed' => '1']));
+                redirect_to(url_for('viewer_login', [
+                    'password_changed' => '1',
+                ]));
             }
             if (($result['reason'] ?? '') === 'reauthentication_required') {
-                redirect_to(url_for('viewer_account_reauth', ['destination' => 'password']));
+                redirect_to(url_for('viewer_account_reauth', [
+                    'destination' => 'password',
+                ]));
             }
-            $error = t('viewer.password_change.failed', 'The password could not be changed. Reopen the page and try again.');
+            $error = t(
+                'viewer.password_change.failed',
+                'The password could not be changed. Reopen the page and try again.',
+            );
         }
     }
 
@@ -291,6 +320,8 @@ function cms_viewer_account_password(): void
 
 /**
  * Render and process the staged viewer email-change request.
+ *
+ * @return void Processes the email change request and renders or redirects.
  */
 function cms_viewer_account_email(): void
 {
@@ -320,41 +351,79 @@ function cms_viewer_account_email(): void
     if (request_method() === 'POST') {
         $newEmail = trim((string) ($_POST['email'] ?? ''));
         try {
-            $result = viewer_email_change_request_start($newEmail, request_client_ip());
+            $result = viewer_email_change_request_start(
+                $newEmail,
+                request_client_ip(),
+            );
         } catch (Throwable) {
             $result = ['requested' => false, 'reason' => 'unavailable'];
         }
 
-        if (!empty($result['requested']) && !empty($result['verification_token'])) {
+        if (
+            !empty($result['requested'])
+            && !empty($result['verification_token'])
+        ) {
             $normalizedEmail = viewer_email_normalize($newEmail);
             $verificationUrl = viewer_security_url('index.php', [
                 'page' => 'viewer_email_change_verify',
                 'token' => (string) $result['verification_token'],
             ]);
             if ($normalizedEmail !== null && $verificationUrl !== null) {
-                $subject = t('viewer.email.change_subject', '{site} viewer email change', ['site' => site_name()]);
-                $body = t('viewer.email.change_body', "A change of email address was requested for your viewer account.\n\nUse this link to confirm the new email address:\n{verification_url}\n\nIf you did not request this change, ignore this message.", [
-                    'verification_url' => $verificationUrl,
-                ]);
+                $subject = t(
+                    'viewer.email.change_subject',
+                    '{site} viewer email change',
+                    ['site' => site_name()],
+                );
+                $body = t(
+                    'viewer.email.change_body',
+                    "A change of email address was requested for your viewer account.\n\nUse this link to confirm the new email address:\n{verification_url}\n\nIf you did not request this change, ignore this message.",
+                    [
+                        'verification_url' => $verificationUrl,
+                    ],
+                );
                 try {
-                    $delivery = viewer_send_security_mail($normalizedEmail, $subject, $body, (string) ($result['expires_at'] ?? ''));
+                    $delivery = viewer_send_security_mail(
+                        $normalizedEmail,
+                        $subject,
+                        $body,
+                        (string) ($result['expires_at'] ?? ''),
+                    );
                 } catch (Throwable) {
                     $delivery = ['sent' => false];
                 }
                 if (!empty($delivery['sent'])) {
-                    viewer_security_event_record_best_effort('viewer.email_change_verification_sent', (int) $viewer['id'], 'success', ['action' => 'email_change']);
-                    $notice = t('viewer.email_change.sent', 'Verification email sent. Your current email remains unchanged until you confirm the new address.');
+                    viewer_security_event_record_best_effort(
+                        'viewer.email_change_verification_sent',
+                        (int) $viewer['id'],
+                        'success',
+                        ['action' => 'email_change'],
+                    );
+                    $notice = t(
+                        'viewer.email_change.sent',
+                        'Verification email sent. Your current email remains unchanged until you confirm the new address.',
+                    );
                 } else {
-                    $error = t('viewer.email_change.mail_failed', 'The verification email could not be sent. Your current email has not changed. Try again later.');
+                    $error = t(
+                        'viewer.email_change.mail_failed',
+                        'The verification email could not be sent. Your current email has not changed. Try again later.',
+                    );
                 }
             } else {
-                $error = t('viewer.email_change.failed', 'The email change could not be started. Check the address and try again later.');
+                $error = t(
+                    'viewer.email_change.failed',
+                    'The email change could not be started. Check the address and try again later.',
+                );
             }
         } else {
             if (($result['reason'] ?? '') === 'reauthentication_required') {
-                redirect_to(url_for('viewer_account_reauth', ['destination' => 'email']));
+                redirect_to(url_for('viewer_account_reauth', [
+                    'destination' => 'email',
+                ]));
             }
-            $error = t('viewer.email_change.failed', 'The email change could not be started. Check the address and try again later.');
+            $error = t(
+                'viewer.email_change.failed',
+                'The email change could not be started. Check the address and try again later.',
+            );
         }
     }
 
@@ -402,8 +471,11 @@ function cms_viewer_email_change_verify(): void
         ]);
         return;
     }
-    if ((int) $viewer['id'] !== (int) $inspected['account_id']
-        || (int) $viewer['security_version'] !== (int) $inspected['security_version']) {
+    if (
+        (int) $viewer['id'] !== (int) $inspected['account_id']
+        || (int) $viewer['security_version']
+            !== (int) $inspected['security_version']
+    ) {
         viewer_render_unavailable();
         return;
     }
@@ -430,6 +502,8 @@ function cms_viewer_email_change_verify(): void
 
 /**
  * Perform the final tokenless viewer email change from server-side confirmation authority.
+ *
+ * @return void Confirms the change and renders or redirects.
  */
 function cms_viewer_email_change_confirm(): void
 {
@@ -475,7 +549,9 @@ function cms_viewer_email_change_confirm(): void
         redirect_to(url_for('viewer_login', ['email_changed' => '1']));
     }
     if (($result['reason'] ?? '') === 'reauthentication_required') {
-        redirect_to(url_for('viewer_account_reauth', ['destination' => 'email_confirm']));
+        redirect_to(url_for('viewer_account_reauth', [
+            'destination' => 'email_confirm',
+        ]));
     }
 
     \Gallery\Views\view_render_viewer_email_confirm_failed([
@@ -485,6 +561,8 @@ function cms_viewer_email_change_confirm(): void
 
 /**
  * Render and process permanent viewer self-deletion through the Phase 0.7 lifecycle service.
+ *
+ * @return void Processes deletion and renders or redirects.
  */
 function cms_viewer_account_delete(): void
 {
@@ -511,7 +589,10 @@ function cms_viewer_account_delete(): void
     $error = '';
     if (request_method() === 'POST') {
         if ((string) ($_POST['confirm_delete'] ?? '') !== '1') {
-            $error = t('viewer.delete.confirm_required', 'Confirm that you understand this permanently deletes the viewer account.');
+            $error = t(
+                'viewer.delete.confirm_required',
+                'Confirm that you understand this permanently deletes the viewer account.',
+            );
         } else {
             try {
                 $result = viewer_account_delete();
@@ -526,9 +607,14 @@ function cms_viewer_account_delete(): void
                 return;
             }
             if (($result['reason'] ?? '') === 'reauthentication_required') {
-                redirect_to(url_for('viewer_account_reauth', ['destination' => 'delete']));
+                redirect_to(url_for('viewer_account_reauth', [
+                    'destination' => 'delete',
+                ]));
             }
-            $error = t('viewer.delete.failed', 'The viewer account could not be deleted. Reopen the page and try again.');
+            $error = t(
+                'viewer.delete.failed',
+                'The viewer account could not be deleted. Reopen the page and try again.',
+            );
         }
     }
 

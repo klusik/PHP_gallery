@@ -95,7 +95,8 @@ use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_has_map_payload;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
 use function Gallery\Services\gallery_sort_row_has_start_date;
-use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
+use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions
+;
 use function Gallery\Services\gallery_lightbox_excludes_restricted_nsfw;
 use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_image_position;
@@ -179,8 +180,11 @@ function cms_home(): void
 {
     public_render_profile_start('home');
     // $galleries stores public physical root galleries loaded through the model-backed lookup service.
-    $galleries = public_render_profile_db('home_gallery_query', static fn (): array => public_home_physical_galleries());
-    $galleries = array_merge($galleries, smart_galleries_for_placement(null, true));
+    $galleries = public_render_profile_db('home_gallery_query', static fn(): array => public_home_physical_galleries());
+    $galleries = array_merge($galleries, smart_galleries_for_placement(
+        null,
+        true,
+    ));
     // Variable $paginationSettings stores this steps working value.
     $paginationSettings = main_page_gallery_grid_settings();
     // $allHomeGalleries stores the full front-page gallery list before optional slicing.
@@ -188,29 +192,63 @@ function cms_home(): void
     // $homeGalleryCount stores the full front-page gallery count before optional slicing.
     $homeGalleryCount = count($allHomeGalleries);
     // $homePhysicalGalleryCount and $homeSmartGalleryCount expose pagination-safe context counts for Admin mutation verification.
-    $homePhysicalGalleries = array_values(array_filter($allHomeGalleries, static fn (array $gallery): bool => empty($gallery['__smart_gallery'])));
+    $homePhysicalGalleries = array_values(array_filter(
+        $allHomeGalleries,
+        static fn(array $gallery): bool => empty($gallery['__smart_gallery']),
+    ));
     $homePhysicalGalleryCount = count($homePhysicalGalleries);
-    $homeSmartGalleryCount = max(0, $homeGalleryCount - $homePhysicalGalleryCount);
+    $homeSmartGalleryCount = max(
+        0,
+        $homeGalleryCount - $homePhysicalGalleryCount,
+    );
     // $homePhysicalGalleryRevision verifies an updated root card even when pagination hides that card on the current page.
     $homePhysicalGalleryRevision = '';
     foreach ($homePhysicalGalleries as $homePhysicalGallery) {
-        $candidateRevision = trim((string) ($homePhysicalGallery['updated_at'] ?? ''));
+        $candidateRevision = trim(
+            (string) ($homePhysicalGallery['updated_at'] ?? ''),
+        );
         if ($candidateRevision > $homePhysicalGalleryRevision) {
             $homePhysicalGalleryRevision = $candidateRevision;
         }
     }
     // Variable $galleryPagination stores this steps working value.
-    $galleryPagination = pagination_model($homeGalleryCount, pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
+    $galleryPagination = pagination_model(
+        $homeGalleryCount,
+        pagination_current_page('gallery_page'),
+        (int) $paginationSettings['columns'],
+        (int) $paginationSettings['rows'],
+        'gallery_page',
+        null,
+        static fn(int $pageNumber): string => pagination_home_gallery_clean_url(
+            $pageNumber,
+        ),
+    );
     if (!empty($paginationSettings['enabled'])) {
         // $galleries stores the public home gallery list after optional pagination slicing.
         // Always slice from the immutable full result set so the rendered cards and
         // the pagination controls are based on the same source. This avoids a
         // controls-only front page after Theme pagination settings change.
-        $galleries = pagination_slice_items($allHomeGalleries, $galleryPagination);
+        $galleries = pagination_slice_items(
+            $allHomeGalleries,
+            $galleryPagination,
+        );
         if ($homeGalleryCount > 0 && $galleries === []) {
             // A stale or malformed front-page pagination request must not render a controls-only page.
-            $galleryPagination = pagination_model($homeGalleryCount, 1, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
-            $galleries = pagination_slice_items($allHomeGalleries, $galleryPagination);
+            $galleryPagination = pagination_model(
+                $homeGalleryCount,
+                1,
+                (int) $paginationSettings['columns'],
+                (int) $paginationSettings['rows'],
+                'gallery_page',
+                null,
+                static fn(int $pageNumber): string => pagination_home_gallery_clean_url(
+                    $pageNumber,
+                ),
+            );
+            $galleries = pagination_slice_items(
+                $allHomeGalleries,
+                $galleryPagination,
+            );
         }
     } else {
         // Keep the non-paginated branch explicit so later code never depends on
@@ -230,21 +268,52 @@ function cms_home(): void
     $backToTopHtml = '';
     if ($homeGalleryCount > 0) {
         ob_start();
-        view_render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
+        view_render_pagination_controls(
+            !empty($paginationSettings['enabled']) ? $galleryPagination : [],
+            t('gallery.pagination.gallery_pages', 'Gallery pages'),
+        );
         $paginationHtml = (string) ob_get_clean();
 
         public_render_profile_count('rendered_subgalleries', count($galleries));
-        $physicalGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => empty($gallery['__smart_gallery'])));
-        $smartGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => !empty($gallery['__smart_gallery'])));
-        $galleryCardContexts = public_render_profile_span('home_gallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($physicalGalleries, true, true));
-        $smartGalleryCardContexts = public_render_profile_span('home_smart_gallery_card_context_preload', static fn (): array => smart_gallery_card_summaries($smartGalleries, true));
+        $physicalGalleries = array_values(array_filter(
+            $galleries,
+            static fn(array $gallery): bool => empty($gallery['__smart_gallery']),
+        ));
+        $smartGalleries = array_values(array_filter(
+            $galleries,
+            static fn(array $gallery): bool => !empty($gallery['__smart_gallery']),
+        ));
+        $galleryCardContexts = public_render_profile_span('home_gallery_card_context_preload', static fn(): array => public_gallery_card_rendering_contexts(
+            $physicalGalleries,
+            true,
+            true,
+        ));
+        $smartGalleryCardContexts = public_render_profile_span('home_smart_gallery_card_context_preload', static fn(): array => smart_gallery_card_summaries(
+            $smartGalleries,
+            true,
+        ));
         ob_start();
-        public_render_profile_span('render_home_gallery_cards', static function () use ($galleries, $galleryCardContexts, $smartGalleryCardContexts): void {
+        public_render_profile_span('render_home_gallery_cards', static function () use (
+            $galleries,
+            $galleryCardContexts,
+            $smartGalleryCardContexts,
+        ): void {
             foreach ($galleries as $index => $gallery) {
                 if (!empty($gallery['__smart_gallery'])) {
-                    render_smart_gallery_card($gallery, $index, $smartGalleryCardContexts[(int) $gallery['id']] ?? []);
+                    render_smart_gallery_card(
+                        $gallery,
+                        $index,
+                        $smartGalleryCardContexts[(int) $gallery['id']] ?? [],
+                    );
                 } else {
-                    render_gallery_card($gallery, true, false, true, $index, $galleryCardContexts[(int) $gallery['id']] ?? []);
+                    render_gallery_card(
+                        $gallery,
+                        true,
+                        false,
+                        true,
+                        $index,
+                        $galleryCardContexts[(int) $gallery['id']] ?? [],
+                    );
                 }
             }
         });
@@ -259,7 +328,9 @@ function cms_home(): void
     $renderProfileHtml = '';
     if (!\Gallery\Services\public_visual_preview_is_active($_GET)) {
         ob_start();
-        view_render_public_render_profile_panel(public_render_profile_panel_model());
+        view_render_public_render_profile_panel(
+            public_render_profile_panel_model(),
+        );
         $renderProfileHtml = (string) ob_get_clean();
     }
 
@@ -302,6 +373,9 @@ function public_home_admin_creation_view_model(int $visibleGalleryCount): array
     $action = public_gallery_admin_creation_view_model();
     return [
         'creation_action' => $action,
-        'show_first_gallery' => $action !== null && $visibleGalleryCount === 0 && \Gallery\Services\gallery_catalog_is_empty(),
+        'show_first_gallery' =>
+            $action !== null
+                && $visibleGalleryCount === 0
+                && \Gallery\Services\gallery_catalog_is_empty(),
     ];
 }

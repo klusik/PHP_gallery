@@ -33,24 +33,39 @@ use RuntimeException;
 use function PhpGallery\Audit\run_process;
 use function PhpGallery\Release\write_text;
 
-/** Parse bounded, one-based physical PDF pages, not printed page labels. */
+/**
+ * Parse bounded, one-based physical PDF pages, not printed page labels.
+ *
+ * @param string $selection Comma-separated one-based page numbers and ranges.
+ * @return list<int> Unique selected physical page numbers in ascending order.
+ */
 function preview_pages(string $selection): array
 {
     $pages = [];
     foreach (explode(',', $selection) as $range) {
-        if (!preg_match('/^([1-9][0-9]{0,3})(?:-([1-9][0-9]{0,3}))?$/D', trim($range), $match)) {
-            throw new RuntimeException('Pages must use one-based numbers/ranges, for example 1-3,120-122.');
+        if (!preg_match(
+            '/^([1-9][0-9]{0,3})(?:-([1-9][0-9]{0,3}))?$/D',
+            trim($range),
+            $match,
+        )) {
+            throw new RuntimeException(
+                'Pages must use one-based numbers/ranges, for example 1-3,120-122.',
+            );
         }
         $first = (int) $match[1];
         $last = (int) ($match[2] ?? $match[1]);
-        if ($last < $first || $last - $first > 199) {
-            throw new RuntimeException('Each preview request is limited to 200 pages.');
+        if ($last < $first || ($last - $first) > 199) {
+            throw new RuntimeException(
+                'Each preview request is limited to 200 pages.',
+            );
         }
         foreach (range($first, $last) as $page) {
             $pages[$page] = $page;
         }
         if (count($pages) > 200) {
-            throw new RuntimeException('Each preview request is limited to 200 pages.');
+            throw new RuntimeException(
+                'Each preview request is limited to 200 pages.',
+            );
         }
     }
     sort($pages, SORT_NUMERIC);
@@ -60,44 +75,108 @@ function preview_pages(string $selection): array
 /**
  * Render immutable PDF bytes to fresh preview files using Poppler pdftoppm.
  * A unique attempt directory preserves earlier previews and any failure diagnostics.
+ *
+ * @param string $root Repository or isolated fixture root.
+ * @param array{scope_version:int,version:string,files:array<string,string>,fingerprint:string} $snapshot Frozen release content snapshot.
+ * @param list<int> $pages Sorted unique one-based physical PDF page numbers.
+ * @param int $dpi Raster output resolution in dots per inch, from 72 through 200.
+ * @param string $renderer Path or command name for pdftoppm.
+ * @return array{version:string,fingerprint:string,pdf_sha256:string,dpi:int,pages:list<int>,renderer:string,status:string,outputs:array<string,string>,directory:string} Preview metadata with hashes for rendered files.
  */
-function render_previews(string $root, array $snapshot, array $pages, int $dpi, string $renderer): array
-{
-    if ($dpi < 72 || $dpi > 200 || $renderer === '' || $pages === []
-        || preview_pages(implode(',', $pages)) !== $pages) {
-        throw new RuntimeException('Use a pdftoppm executable, sorted pages, and 72-200 DPI.');
+function render_previews(
+    string $root,
+    array $snapshot,
+    array $pages,
+    int $dpi,
+    string $renderer,
+): array {
+    if (
+        $dpi < 72
+        || $dpi > 200
+        || $renderer === ''
+        || $pages === []
+        || preview_pages(implode(',', $pages)) !== $pages
+    ) {
+        throw new RuntimeException(
+            'Use a pdftoppm executable, sorted pages, and 72-200 DPI.',
+        );
     }
-    $prefix = $snapshot['version'] . '/' . $snapshot['fingerprint'] . '/previews/'
-        . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(4));
+    $prefix =
+        $snapshot['version']
+        . '/'
+        . $snapshot['fingerprint']
+        . '/previews/'
+        . gmdate('Ymd-His')
+        . '-'
+        . bin2hex(random_bytes(4));
     $metadataPath = cache_path($root, $prefix . '/preview.json', true);
     $pdf = $root . '/docs/PHP_Gallery_Manual.pdf';
     $copy = cache_path($root, $prefix . '/manual.pdf');
-    if (!copy($pdf, $copy)
-        || content_hash($copy) !== $snapshot['files']['docs/PHP_Gallery_Manual.pdf']) {
-        throw new RuntimeException('Manual changed while preparing previews; rerun render.');
+    if (
+        !copy($pdf, $copy)
+        || content_hash($copy)
+            !== $snapshot['files']['docs/PHP_Gallery_Manual.pdf']
+    ) {
+        throw new RuntimeException(
+            'Manual changed while preparing previews; rerun render.',
+        );
     }
     $result = [
-        'version' => $snapshot['version'], 'fingerprint' => $snapshot['fingerprint'],
-        'pdf_sha256' => content_hash($copy), 'dpi' => $dpi, 'pages' => $pages,
-        'renderer' => $renderer, 'status' => 'pending', 'outputs' => [],
+        'version' => $snapshot['version'],
+        'fingerprint' => $snapshot['fingerprint'],
+        'pdf_sha256' => content_hash($copy),
+        'dpi' => $dpi,
+        'pages' => $pages,
+        'renderer' => $renderer,
+        'status' => 'pending',
+        'outputs' => [],
     ];
     write_text($metadataPath, encode($result));
     try {
         foreach ($pages as $page) {
             $name = sprintf('page-%04d', $page);
             $target = cache_path($root, $prefix . '/' . $name);
-            $command = [$renderer, '-f', (string) $page, '-l', (string) $page, '-r', (string) $dpi,
-                '-png', '-singlefile', $copy, $target];
+            $command = [
+                $renderer,
+                '-f',
+                (string) $page,
+                '-l',
+                (string) $page,
+                '-r',
+                (string) $dpi,
+                '-png',
+                '-singlefile',
+                $copy,
+                $target,
+            ];
             $process = run_process($command, $root, 30);
-            write_text($target . '.log', $process['stdout'] . "\n" . $process['stderr']);
-            $image = is_file($target . '.png') ? @getimagesize($target . '.png') : false;
-            if ($process['exit_code'] !== 0 || $process['timed_out'] || $image === false
-                || ($image[2] ?? null) !== IMAGETYPE_PNG) {
-                throw new RuntimeException('PDF page ' . $page . ' could not be rendered; see ' . $target . '.log');
+            write_text(
+                $target . '.log',
+                $process['stdout'] . "\n" . $process['stderr'],
+            );
+            $image = is_file($target . '.png')
+                ? @getimagesize($target . '.png')
+                : false;
+            if (
+                $process['exit_code'] !== 0
+                || $process['timed_out']
+                || $image === false
+                || ($image[2] ?? null) !== IMAGETYPE_PNG
+            ) {
+                throw new RuntimeException(
+                    'PDF page '
+                        . $page
+                        . ' could not be rendered; see '
+                        . $target
+                        . '.log',
+                );
             }
             $result['outputs'][$name . '.png'] = content_hash($target . '.png');
         }
-        assert_fingerprint(snapshot($root, $snapshot['version']), $snapshot['fingerprint']);
+        assert_fingerprint(
+            snapshot($root, $snapshot['version']),
+            $snapshot['fingerprint'],
+        );
         $result['status'] = 'rendered';
     } catch (\Throwable $exception) {
         $result['status'] = 'failed';

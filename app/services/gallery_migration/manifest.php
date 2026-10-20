@@ -70,10 +70,16 @@ function gallery_migration_flight_map_manifest(int $galleryId): ?array
     }
 
     return [
-        'map_source_type' => (string) ($row['map_source_type'] ?? GALLERY_MAP_SOURCE_FLIGHT_PATH),
+        'map_source_type' => (string) (
+            $row['map_source_type'] ?? GALLERY_MAP_SOURCE_FLIGHT_PATH
+        ),
         'route_text' => (string) ($row['route_text'] ?? ''),
-        'resolved_points_json' => (string) ($row['resolved_points_json'] ?? '[]'),
-        'unresolved_points_json' => (string) ($row['unresolved_points_json'] ?? '[]'),
+        'resolved_points_json' => (string) (
+            $row['resolved_points_json'] ?? '[]'
+        ),
+        'unresolved_points_json' => (string) (
+            $row['unresolved_points_json'] ?? '[]'
+        ),
         'point_count' => (int) ($row['point_count'] ?? 0),
         'resolved_at' => (string) ($row['resolved_at'] ?? ''),
     ];
@@ -86,11 +92,16 @@ function gallery_migration_flight_map_manifest(int $galleryId): ?array
  * @param bool $includeSubgalleries Include descendants value.
  * @return array<int,array<string,mixed>> Source galleries in parent-first order.
  */
-function gallery_migration_source_galleries(int $galleryId, bool $includeSubgalleries): array
-{
+function gallery_migration_source_galleries(
+    int $galleryId,
+    bool $includeSubgalleries,
+): array {
     $root = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     if (!$root) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.source_missing', 'Source gallery was not found.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.source_missing',
+            'Source gallery was not found.',
+        ));
     }
     if (!$includeSubgalleries) {
         return [$root];
@@ -104,7 +115,10 @@ function gallery_migration_source_galleries(int $galleryId, bool $includeSubgall
             continue;
         }
         $result[] = $gallery;
-        foreach (child_galleries((int) ($gallery['id'] ?? 0), false) as $child) {
+        foreach (child_galleries(
+            (int) ($gallery['id'] ?? 0),
+            false,
+        ) as $child) {
             if (is_array($child)) {
                 $queue[] = $child;
             }
@@ -117,19 +131,30 @@ function gallery_migration_source_galleries(int $galleryId, bool $includeSubgall
 /**
  * Build one gallery entry inside a tree migration manifest.
  *
- * @param array $gallery Gallery row.
- * @param array $root Root gallery row.
- * @return array<string,mixed> Manifest gallery entry.
+ * @param array<string,int|float|string|bool|null> $gallery Source gallery row used to assemble one tree entry.
+ * @param array<string,int|float|string|bool|null> $root Source root gallery row used to derive parent and relative-folder values.
+ * @return array{source_id:int,parent_source_id:int,source_folder:string,folder_name:string,relative_folder:string,gallery:array<string,int|float|string|bool|null>,gallery_assets:list<array<string,int|string>>,images:list<array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>>,flight_map:?array<string,int|float|string|bool|null>} Source gallery tree entry with safe metadata, owned assets, image entries, and optional flight-map data.
  */
-function gallery_migration_gallery_manifest_entry(array $gallery, array $root): array
-{
+function gallery_migration_gallery_manifest_entry(
+    array $gallery,
+    array $root,
+): array {
     $galleryId = (int) ($gallery['id'] ?? 0);
     $rootId = (int) ($root['id'] ?? 0);
-    $rootFolder = normalize_relative_path((string) ($root['folder_path'] ?? ''));
+    $rootFolder = normalize_relative_path(
+        (string) ($root['folder_path'] ?? ''),
+    );
     $folder = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
     $relativeFolder = '';
-    if ($galleryId !== $rootId && $rootFolder !== '' && str_starts_with($folder, $rootFolder . '/')) {
-        $relativeFolder = normalize_relative_path(substr($folder, strlen($rootFolder) + 1));
+    if (
+        $galleryId !== $rootId
+        && $rootFolder !== ''
+        && str_starts_with($folder, $rootFolder . '/')
+    ) {
+        $relativeFolder = normalize_relative_path(substr(
+            $folder,
+            strlen($rootFolder) + 1,
+        ));
     }
 
     $images = gallery_images($galleryId, false);
@@ -137,15 +162,22 @@ function gallery_migration_gallery_manifest_entry(array $gallery, array $root): 
     foreach ($images as $image) {
         $imageManifest = gallery_migration_image_metadata($image);
         $imageManifest['source_gallery_id'] = $galleryId;
-        $imageManifest['assets'] = gallery_migration_image_assets($image, $gallery);
+        $imageManifest['assets'] = gallery_migration_image_assets(
+            $image,
+            $gallery,
+        );
         $manifestImages[] = $imageManifest;
     }
 
     return [
         'source_id' => $galleryId,
-        'parent_source_id' => $galleryId === $rootId ? 0 : (int) ($gallery['parent_id'] ?? 0),
+        'parent_source_id' => $galleryId === $rootId
+            ? 0
+            : (int) ($gallery['parent_id'] ?? 0),
         'source_folder' => $folder,
-        'folder_name' => $folder !== '' ? basename($folder) : (string) ($gallery['slug'] ?? $gallery['title'] ?? 'gallery'),
+        'folder_name' => $folder !== ''
+            ? basename($folder)
+            : (string) ($gallery['slug'] ?? $gallery['title'] ?? 'gallery'),
         'relative_folder' => $relativeFolder,
         'gallery' => gallery_migration_gallery_metadata($gallery),
         'gallery_assets' => gallery_migration_gallery_assets($gallery),
@@ -157,12 +189,15 @@ function gallery_migration_gallery_manifest_entry(array $gallery, array $root): 
 /**
  * Return normalized gallery entries from a tree or legacy manifest.
  *
- * @param array $manifest Manifest value.
- * @return array<int,array<string,mixed>> Gallery entries.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Tree or legacy root-level migration manifest.
+ * @return list<array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>> Normalized source gallery entries from a tree manifest or legacy root-level fields.
  */
 function gallery_migration_manifest_galleries(array $manifest): array
 {
-    $entries = array_values(array_filter((array) ($manifest['galleries'] ?? []), 'is_array'));
+    $entries = array_values(array_filter(
+        (array) ($manifest['galleries'] ?? []),
+        'is_array',
+    ));
     if ($entries) {
         return $entries;
     }
@@ -175,7 +210,14 @@ function gallery_migration_manifest_galleries(array $manifest): array
         'source_id' => (int) ($manifest['source_gallery_id'] ?? 0),
         'parent_source_id' => 0,
         'source_folder' => (string) ($manifest['source_gallery_folder'] ?? ''),
-        'folder_name' => basename(normalize_relative_path((string) ($manifest['source_gallery_folder'] ?? ''))) ?: (string) (($manifest['gallery']['slug'] ?? $manifest['gallery']['title'] ?? 'gallery')),
+        'folder_name' => basename(normalize_relative_path(
+            (string) ($manifest['source_gallery_folder'] ?? ''),
+        ))
+            ?: (string) (
+                $manifest['gallery']['slug']
+                ?? $manifest['gallery']['title']
+                ?? 'gallery'
+            ),
         'relative_folder' => '',
         'gallery' => (array) $manifest['gallery'],
         'gallery_assets' => (array) ($manifest['gallery_assets'] ?? []),
@@ -187,12 +229,14 @@ function gallery_migration_manifest_galleries(array $manifest): array
 /**
  * Find one source gallery entry in a migration manifest.
  *
- * @param array $manifest Manifest value.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Tree or legacy root-level migration manifest.
  * @param int $sourceGalleryId Source gallery identifier.
- * @return ?array<string,mixed> Gallery entry or null.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>|null Matching source gallery entry, or null when its source ID is absent.
  */
-function gallery_migration_manifest_gallery(array $manifest, int $sourceGalleryId): ?array
-{
+function gallery_migration_manifest_gallery(
+    array $manifest,
+    int $sourceGalleryId,
+): ?array {
     foreach (gallery_migration_manifest_galleries($manifest) as $entry) {
         if ((int) ($entry['source_id'] ?? 0) === $sourceGalleryId) {
             return $entry;
@@ -206,14 +250,22 @@ function gallery_migration_manifest_gallery(array $manifest, int $sourceGalleryI
  *
  * @param int $galleryId Gallery identifier.
  * @param bool $includeSubgalleries Include descendant galleries value.
- * @return array Structured result data for the caller.
+ * @return array{protocol_version:int,app_version:string,source_instance_id:string,source_gallery_id:int,source_gallery_folder:string,include_subgalleries:bool,generated_at:string,galleries:list<array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>>,gallery:array<string,int|float|string|bool|null>,gallery_assets:list<array<string,int|string>>,images:list<array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>>,flight_map:?array<string,int|float|string|bool|null>,counts:array{galleries:int,images:int,assets:int},migration_id:string} Complete resumable transfer manifest with normalized gallery tree, compatibility mirrors, totals, and content-derived migration ID.
  */
-function gallery_migration_build_manifest(int $galleryId, bool $includeSubgalleries = true): array
-{
-    $sourceGalleries = gallery_migration_source_galleries($galleryId, $includeSubgalleries);
+function gallery_migration_build_manifest(
+    int $galleryId,
+    bool $includeSubgalleries = true,
+): array {
+    $sourceGalleries = gallery_migration_source_galleries(
+        $galleryId,
+        $includeSubgalleries,
+    );
     $root = $sourceGalleries[0] ?? null;
     if (!is_array($root)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.source_missing', 'Source gallery was not found.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.source_missing',
+            'Source gallery was not found.',
+        ));
     }
 
     $entries = [];
@@ -248,12 +300,19 @@ function gallery_migration_build_manifest(int $galleryId, bool $includeSubgaller
     // The resumable job id must change whenever any imported state changes.
     // Hash the complete deterministic tree payload, including image metadata,
     // gallery assets, original checksums, and existing thumbnail checksums.
-    $manifest['migration_id'] = substr(hash('sha256', json_encode([
-        'version' => $manifest['app_version'],
-        'source_gallery_id' => $galleryId,
-        'include_subgalleries' => $includeSubgalleries,
-        'galleries' => $entries,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: ''), 0, 32);
+    $manifest['migration_id'] = substr(
+        hash(
+            'sha256',
+            json_encode([
+                'version' => $manifest['app_version'],
+                'source_gallery_id' => $galleryId,
+                'include_subgalleries' => $includeSubgalleries,
+                'galleries' => $entries,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+        ),
+        0,
+        32,
+    );
 
     return $manifest;
 }
@@ -277,8 +336,14 @@ function gallery_migration_manifest_asset_refs(array $manifest): array
                 if (!is_array($asset)) {
                     continue;
                 }
-                $asset['source_gallery_id'] = (int) ($asset['source_gallery_id'] ?? $sourceGalleryId);
-                $asset['label'] = (string) ($image['relative_path'] ?? $asset['filename'] ?? '');
+                $asset['source_gallery_id'] = (int) (
+                    $asset['source_gallery_id'] ?? $sourceGalleryId
+                );
+                $asset['label'] = (string) (
+                    $image['relative_path']
+                    ?? $asset['filename']
+                    ?? ''
+                );
                 $assets[] = $asset;
             }
         }
@@ -286,8 +351,14 @@ function gallery_migration_manifest_asset_refs(array $manifest): array
             if (!is_array($asset)) {
                 continue;
             }
-            $asset['source_gallery_id'] = (int) ($asset['source_gallery_id'] ?? $sourceGalleryId);
-            $asset['label'] = (string) ($asset['relative_path'] ?? $asset['filename'] ?? '');
+            $asset['source_gallery_id'] = (int) (
+                $asset['source_gallery_id'] ?? $sourceGalleryId
+            );
+            $asset['label'] = (string) (
+                $asset['relative_path']
+                ?? $asset['filename']
+                ?? ''
+            );
             $assets[] = $asset;
         }
     }
@@ -316,17 +387,24 @@ function gallery_migration_manifest_asset_refs_with_keys(array $manifest): array
 /**
  * Find an image manifest by source id.
  *
- * @param array $manifest Manifest value.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Migration manifest containing gallery image entries.
  * @param int $sourceImageId Source image id identifier.
- * @return ?array Structured result data for the caller.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>|null Matching image metadata with source_gallery_id added, or null when the source image ID is absent.
  */
-function gallery_migration_manifest_image(array $manifest, int $sourceImageId): ?array
-{
+function gallery_migration_manifest_image(
+    array $manifest,
+    int $sourceImageId,
+): ?array {
     foreach (gallery_migration_manifest_galleries($manifest) as $galleryEntry) {
         foreach ((array) ($galleryEntry['images'] ?? []) as $image) {
-            if (is_array($image) && (int) ($image['source_id'] ?? 0) === $sourceImageId) {
+            if (
+                is_array($image)
+                && (int) ($image['source_id'] ?? 0) === $sourceImageId
+            ) {
                 if (!isset($image['source_gallery_id'])) {
-                    $image['source_gallery_id'] = (int) ($galleryEntry['source_id'] ?? 0);
+                    $image['source_gallery_id'] = (int) (
+                        $galleryEntry['source_id'] ?? 0
+                    );
                 }
                 return $image;
             }
@@ -339,12 +417,14 @@ function gallery_migration_manifest_image(array $manifest, int $sourceImageId): 
 /**
  * Find the manifest asset matching a submitted transfer reference.
  *
- * @param array $manifest Manifest value.
- * @param array $request Request data.
- * @return ?array Structured result data for the caller.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Migration manifest containing gallery and image asset descriptors.
+ * @param array{scope?:string,kind?:string,source_gallery_id?:int|string,source_image_id?:int|string,image_id?:int|string,size?:int|string,format?:string} $request Submitted transfer asset identity fields.
+ * @return array<string,int|float|string|bool|null>|null Matching transfer asset reference with source-gallery ID and display label, or null when no asset matches.
  */
-function gallery_migration_manifest_asset(array $manifest, array $request): ?array
-{
+function gallery_migration_manifest_asset(
+    array $manifest,
+    array $request,
+): ?array {
     foreach (gallery_migration_manifest_asset_refs($manifest) as $asset) {
         if (gallery_migration_asset_matches($asset, $request)) {
             return $asset;
@@ -357,21 +437,34 @@ function gallery_migration_manifest_asset(array $manifest, array $request): ?arr
 /**
  * Validate the minimum manifest shape before applying anything.
  *
- * @param array $manifest Manifest value.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Untrusted migration manifest to validate before applying target changes.
+ * @return void Returns after the required manifest fields, source IDs, and asset descriptors pass validation; otherwise throws.
  */
 function gallery_migration_validate_manifest(array $manifest): void
 {
-    if ((int) ($manifest['protocol_version'] ?? 0) !== GALLERY_MIGRATION_PROTOCOL_VERSION) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.protocol_unsupported', 'Unsupported migration protocol version.'));
+    if (
+        (int) ($manifest['protocol_version'] ?? 0)
+        !== GALLERY_MIGRATION_PROTOCOL_VERSION
+    ) {
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.protocol_unsupported',
+            'Unsupported migration protocol version.',
+        ));
     }
     if ((string) ($manifest['app_version'] ?? '') === '') {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.version_missing', 'Migration manifest does not include an app version.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.version_missing',
+            'Migration manifest does not include an app version.',
+        ));
     }
 
     $rootSourceId = (int) ($manifest['source_gallery_id'] ?? 0);
     $entries = gallery_migration_manifest_galleries($manifest);
     if ($rootSourceId <= 0 || !$entries) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_payload_missing', 'Migration manifest does not include gallery data.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.gallery_payload_missing',
+            'Migration manifest does not include gallery data.',
+        ));
     }
 
     $ids = [];
@@ -379,33 +472,64 @@ function gallery_migration_validate_manifest(array $manifest): void
     foreach ($entries as $entry) {
         $sourceId = (int) ($entry['source_id'] ?? 0);
         $parentSourceId = (int) ($entry['parent_source_id'] ?? 0);
-        if ($sourceId <= 0 || isset($ids[$sourceId]) || !isset($entry['gallery']) || !is_array($entry['gallery']) || !isset($entry['images']) || !is_array($entry['images'])) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_tree_invalid', 'Migration gallery tree is invalid or cannot be resumed safely.'));
+        if (
+            $sourceId <= 0
+            || isset($ids[$sourceId])
+            || !isset($entry['gallery'])
+            || !is_array($entry['gallery'])
+            || !isset($entry['images'])
+            || !is_array($entry['images'])
+        ) {
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.gallery_tree_invalid',
+                'Migration gallery tree is invalid or cannot be resumed safely.',
+            ));
         }
         if ($sourceId === $rootSourceId) {
             if ($parentSourceId !== 0) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_tree_invalid', 'Migration gallery tree is invalid or cannot be resumed safely.'));
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.gallery_tree_invalid',
+                    'Migration gallery tree is invalid or cannot be resumed safely.',
+                ));
             }
             $rootCount++;
         } elseif ($parentSourceId <= 0 || !isset($ids[$parentSourceId])) {
             // Manifests are intentionally parent-first. This also prevents
             // cycles and keeps target reconstruction deterministic.
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_tree_invalid', 'Migration gallery tree is invalid or cannot be resumed safely.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.gallery_tree_invalid',
+                'Migration gallery tree is invalid or cannot be resumed safely.',
+            ));
         }
         $ids[$sourceId] = true;
 
         foreach ((array) $entry['images'] as $image) {
             if (!is_array($image) || (int) ($image['source_id'] ?? 0) <= 0) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.images_payload_missing', 'Migration manifest does not include valid image data.'));
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.images_payload_missing',
+                    'Migration manifest does not include valid image data.',
+                ));
             }
             $imageGalleryId = (int) ($image['source_gallery_id'] ?? $sourceId);
             if ($imageGalleryId !== $sourceId) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_tree_invalid', 'Migration gallery tree is invalid or cannot be resumed safely.'));
+                throw new RuntimeException(gallery_migration_t(
+                    'gallery_migration.error.gallery_tree_invalid',
+                    'Migration gallery tree is invalid or cannot be resumed safely.',
+                ));
             }
         }
     }
 
-    if ($rootCount !== 1 || (empty($manifest['include_subgalleries']) && count($entries) !== 1)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_tree_invalid', 'Migration gallery tree is invalid or cannot be resumed safely.'));
+    if (
+        $rootCount !== 1
+        || (
+            empty($manifest['include_subgalleries'])
+            && count($entries) !== 1
+        )
+    ) {
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.gallery_tree_invalid',
+            'Migration gallery tree is invalid or cannot be resumed safely.',
+        ));
     }
 }

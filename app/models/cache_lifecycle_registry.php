@@ -27,7 +27,10 @@ use function Gallery\Core\db;
  */
 function cache_registry_model_database(): PDO
 {
-    if (defined('CACHE_LIFECYCLE_TEST_ROOT') && ($GLOBALS['cache_lifecycle_test_database'] ?? null) instanceof PDO) {
+    if (
+        defined('CACHE_LIFECYCLE_TEST_ROOT')
+        && ($GLOBALS['cache_lifecycle_test_database'] ?? null) instanceof PDO
+    ) {
         return $GLOBALS['cache_lifecycle_test_database'];
     }
     return db();
@@ -40,7 +43,9 @@ function cache_registry_model_database(): PDO
  */
 function cache_registry_model_find(string $key): ?array
 {
-    $query = cache_registry_model_database()->prepare('SELECT * FROM cache_lifecycle_regions WHERE region_key = ?');
+    $query = cache_registry_model_database()->prepare(
+        'SELECT * FROM cache_lifecycle_regions WHERE region_key = ?',
+    );
     $query->execute([$key]);
     $row = $query->fetch(PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;
@@ -56,16 +61,36 @@ function cache_registry_model_find(string $key): ?array
  * @param string $kind Internal discovery/files/history owner, or region for a filesystem path.
  * @return void Inserts once and subsequently updates discovery evidence while preserving checkpoints and findings.
  */
-function cache_registry_model_register(string $key, string $path, string $owner, string $generation, int $now, string $kind = 'region'): void
-{
+function cache_registry_model_register(
+    string $key,
+    string $path,
+    string $owner,
+    string $generation,
+    int $now,
+    string $kind = 'region',
+): void {
     $database = cache_registry_model_database();
     // The installation-wide kernel worker lock serializes this insert/update pair.
     $old = cache_registry_model_find($key);
     if ($old === null) {
-        $query = $database->prepare('INSERT INTO cache_lifecycle_regions (region_key, relative_path, owner, kind, next_due_at, seen_generation, checkpoint_json, finding_json, completed_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $query->execute([$key, $path, $owner, $kind, $now, $generation, '{}', '{}', '{}']);
+        $query = $database->prepare(
+            'INSERT INTO cache_lifecycle_regions (region_key, relative_path, owner, kind, next_due_at, seen_generation, checkpoint_json, finding_json, completed_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        );
+        $query->execute([
+            $key,
+            $path,
+            $owner,
+            $kind,
+            $now,
+            $generation,
+            '{}',
+            '{}',
+            '{}',
+        ]);
     } else {
-        $query = $database->prepare('UPDATE cache_lifecycle_regions SET next_due_at = CASE WHEN missing_since > 0 THEN ? ELSE next_due_at END, seen_generation = ?, missing_since = 0 WHERE region_key = ?');
+        $query = $database->prepare(
+            'UPDATE cache_lifecycle_regions SET next_due_at = CASE WHEN missing_since > 0 THEN ? ELSE next_due_at END, seen_generation = ?, missing_since = 0 WHERE region_key = ?',
+        );
         $query->execute([$now, $generation, $key]);
     }
 }
@@ -78,7 +103,9 @@ function cache_registry_model_register(string $key, string $path, string $owner,
  */
 function cache_registry_model_due(int $now, bool $force = false): ?array
 {
-    $query = cache_registry_model_database()->prepare("SELECT * FROM cache_lifecycle_regions WHERE (next_due_at <= ? OR ? = 1) AND retry_at <= ? AND missing_since = 0 AND kind <> 'history' ORDER BY next_due_at, last_completed_at, last_serviced_at, region_key LIMIT 1");
+    $query = cache_registry_model_database()->prepare(
+        "SELECT * FROM cache_lifecycle_regions WHERE (next_due_at <= ? OR ? = 1) AND retry_at <= ? AND missing_since = 0 AND kind <> 'history' ORDER BY next_due_at, last_completed_at, last_serviced_at, region_key LIMIT 1",
+    );
     // Preserve numeric literal comparisons on SQLite as well as MySQL/MariaDB;
     // execute(array) may bind the force placeholder as a string.
     $query->bindValue(1, $now, PDO::PARAM_INT);
@@ -96,21 +123,39 @@ function cache_registry_model_due(int $now, bool $force = false): ?array
  * @param string|null $history Updated installation-wide removal receipt JSON, or null when no removal delta exists.
  * @return void Atomically commits the checkpoint and optional retained removal receipts; failures roll back both.
  */
-function cache_registry_model_save(string $key, array $record, ?string $history = null): void
-{
+function cache_registry_model_save(
+    string $key,
+    array $record,
+    ?string $history = null,
+): void {
     $database = cache_registry_model_database();
     $database->beginTransaction();
     try {
-        $query = $database->prepare('UPDATE cache_lifecycle_regions SET checkpoint_json = ?, finding_json = ?, completed_json = ?, last_serviced_at = ?, last_completed_at = ?, next_due_at = ?, retry_at = ?, failures = ?, drained = ? WHERE region_key = ?');
-        $query->execute([$record['checkpoint_json'], $record['finding_json'], $record['completed_json'], $record['last_serviced_at'],
-            $record['last_completed_at'], $record['next_due_at'], $record['retry_at'], $record['failures'], $record['drained'], $key]);
+        $query = $database->prepare(
+            'UPDATE cache_lifecycle_regions SET checkpoint_json = ?, finding_json = ?, completed_json = ?, last_serviced_at = ?, last_completed_at = ?, next_due_at = ?, retry_at = ?, failures = ?, drained = ? WHERE region_key = ?',
+        );
+        $query->execute([
+            $record['checkpoint_json'],
+            $record['finding_json'],
+            $record['completed_json'],
+            $record['last_serviced_at'],
+            $record['last_completed_at'],
+            $record['next_due_at'],
+            $record['retry_at'],
+            $record['failures'],
+            $record['drained'],
+            $key,
+        ]);
         if ($history !== null) {
-            $receipt = $database->prepare("UPDATE cache_lifecycle_regions SET finding_json = ? WHERE kind = 'history'");
+            $receipt = $database->prepare(
+                "UPDATE cache_lifecycle_regions SET finding_json = ? WHERE kind = 'history'",
+            );
             $receipt->execute([$history]);
         }
         $database->commit();
     } catch (\Throwable $exception) {
-        if ($database->inTransaction()) $database->rollBack();
+        if ($database->inTransaction())
+            $database->rollBack();
         throw $exception;
     }
 }
@@ -122,7 +167,9 @@ function cache_registry_model_save(string $key, array $record, ?string $history 
  */
 function cache_registry_model_summaries(int $limit): array
 {
-    $query = cache_registry_model_database()->prepare('SELECT region_key, relative_path, owner, kind, last_serviced_at, last_completed_at, next_due_at, retry_at, failures, drained, missing_since, finding_json, completed_json FROM cache_lifecycle_regions ORDER BY region_key LIMIT ?');
+    $query = cache_registry_model_database()->prepare(
+        'SELECT region_key, relative_path, owner, kind, last_serviced_at, last_completed_at, next_due_at, retry_at, failures, drained, missing_since, finding_json, completed_json FROM cache_lifecycle_regions ORDER BY region_key LIMIT ?',
+    );
     $query->bindValue(1, $limit + 1, PDO::PARAM_INT);
     $query->execute();
     return $query->fetchAll(PDO::FETCH_ASSOC);
@@ -136,7 +183,9 @@ function cache_registry_model_summaries(int $limit): array
  */
 function cache_registry_model_mark_missing(string $generation, int $now): void
 {
-    $query = cache_registry_model_database()->prepare("UPDATE cache_lifecycle_regions SET missing_since = ? WHERE seen_generation <> ? AND missing_since = 0 AND kind = 'region' AND drained = 1");
+    $query = cache_registry_model_database()->prepare(
+        "UPDATE cache_lifecycle_regions SET missing_since = ? WHERE seen_generation <> ? AND missing_since = 0 AND kind = 'region' AND drained = 1",
+    );
     $query->execute([$now, $generation]);
 }
 
@@ -148,7 +197,9 @@ function cache_registry_model_mark_missing(string $generation, int $now): void
  */
 function cache_registry_model_prune(string $key, int $before): void
 {
-    $query = cache_registry_model_database()->prepare('DELETE FROM cache_lifecycle_regions WHERE region_key = ? AND drained = 1 AND missing_since > 0 AND missing_since <= ?');
+    $query = cache_registry_model_database()->prepare(
+        'DELETE FROM cache_lifecycle_regions WHERE region_key = ? AND drained = 1 AND missing_since > 0 AND missing_since <= ?',
+    );
     $query->execute([$key, $before]);
 }
 
@@ -159,6 +210,8 @@ function cache_registry_model_prune(string $key, int $before): void
  */
 function cache_registry_model_retire_legacy(string $history): void
 {
-    $query = cache_registry_model_database()->prepare("UPDATE cache_lifecycle_regions SET finding_json = ? WHERE kind = 'history'");
+    $query = cache_registry_model_database()->prepare(
+        "UPDATE cache_lifecycle_regions SET finding_json = ? WHERE kind = 'history'",
+    );
     $query->execute([$history]);
 }

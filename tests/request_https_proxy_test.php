@@ -61,83 +61,240 @@ namespace {
         }
     }
 
-    $GLOBALS['request_https_proxy_config'] = ['base_url' => '', 'security' => []];
+    $GLOBALS['request_https_proxy_config'] = [
+        'base_url' => '',
+        'security' => [],
+    ];
     $httpRequest = [
         'REMOTE_ADDR' => '198.51.100.25',
         'SERVER_PORT' => '80',
         'HTTP_HOST' => 'gallery.example.test',
         'SCRIPT_NAME' => '/galerie/index.php',
     ];
-    $_SERVER = $httpRequest + ['HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_SSL' => 'on'];
-    request_https_proxy_assert(!request_is_https(), 'An untrusted client must not forge HTTPS for Admin cookies or URLs.');
-    request_https_proxy_assert(!viewer_request_is_https(), 'Viewer transport must agree with the shared untrusted-peer policy.');
+    $_SERVER = $httpRequest
+    + ['HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_SSL' => 'on'];
     request_https_proxy_assert(
-        request_aware_base_url('http://gallery.example.test/galerie') === 'http://gallery.example.test/galerie'
+        !request_is_https(),
+        'An untrusted client must not forge HTTPS for Admin cookies or URLs.',
+    );
+    request_https_proxy_assert(
+        !viewer_request_is_https(),
+        'Viewer transport must agree with the shared untrusted-peer policy.',
+    );
+    request_https_proxy_assert(
+        request_aware_base_url('http://gallery.example.test/galerie')
+            === 'http://gallery.example.test/galerie'
             && public_base_url() === 'http://gallery.example.test/galerie',
-        'Spoofed forwarded headers must not upgrade configured or inferred public URLs.'
+        'Spoofed forwarded headers must not upgrade configured or inferred public URLs.',
     );
 
     $cases = [
         [[], $httpRequest, false, 'Direct HTTP'],
         [[], $httpRequest + ['HTTPS' => 'on'], true, 'Direct TLS'],
         [[], $httpRequest + ['HTTPS' => '0'], false, 'Disabled TLS indicator'],
-        [[], array_replace($httpRequest, ['SERVER_PORT' => '443']), true, 'Direct TLS port'],
-        [['trusted_proxies' => ['198.51.100.0/24']], $_SERVER, false, 'Proxy without enabled protocol header'],
-        [['trusted_proxy_protocol_headers' => ['x-forwarded-proto']], $_SERVER, false, 'Header without trusted proxy'],
-        [['trusted_proxies' => ['not-a-cidr'], 'trusted_proxy_protocol_headers' => ['x-forwarded-proto']], $_SERVER, false, 'Invalid proxy config'],
+        [
+            [],
+            array_replace($httpRequest, ['SERVER_PORT' => '443']),
+            true,
+            'Direct TLS port',
+        ],
+        [
+            ['trusted_proxies' => ['198.51.100.0/24']],
+            $_SERVER,
+            false,
+            'Proxy without enabled protocol header',
+        ],
+        [
+            ['trusted_proxy_protocol_headers' => ['x-forwarded-proto']],
+            $_SERVER,
+            false,
+            'Header without trusted proxy',
+        ],
+        [
+            [
+                'trusted_proxies' => ['not-a-cidr'],
+                'trusted_proxy_protocol_headers' => ['x-forwarded-proto'],
+            ],
+            $_SERVER,
+            false,
+            'Invalid proxy config',
+        ],
     ];
     $trusted = [
         'trusted_proxies' => ['203.0.113.0/24', '2001:db8::/64'],
-        'trusted_proxy_protocol_headers' => ['x-forwarded-proto', 'x-forwarded-ssl'],
+        'trusted_proxy_protocol_headers' => [
+            'x-forwarded-proto',
+            'x-forwarded-ssl',
+        ],
     ];
-    $proxyRequest = array_replace($httpRequest, ['REMOTE_ADDR' => '203.0.113.9']);
+    $proxyRequest = array_replace($httpRequest, [
+        'REMOTE_ADDR' => '203.0.113.9',
+    ]);
     foreach ([
         [[], false, 'No forwarded protocol'],
-        [['HTTP_X_FORWARDED_PROTO' => ' HTTPS '], true, 'Trusted forwarded HTTPS'],
+        [
+            ['HTTP_X_FORWARDED_PROTO' => ' HTTPS '],
+            true,
+            'Trusted forwarded HTTPS',
+        ],
         [['HTTP_X_FORWARDED_SSL' => 'ON'], true, 'Trusted forwarded SSL'],
-        [['HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_SSL' => 'on'], true, 'Consistent enabled headers'],
-        [['HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_SSL' => 'off'], false, 'Conflicting enabled headers'],
-        [['HTTP_X_FORWARDED_PROTO' => 'http', 'HTTP_X_FORWARDED_SSL' => 'on'], false, 'Opposite conflicting headers'],
-        [['HTTP_X_FORWARDED_PROTO' => 'https,http'], false, 'Multiple protocol values'],
+        [
+            [
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_SSL' => 'on',
+            ],
+            true,
+            'Consistent enabled headers',
+        ],
+        [
+            [
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_SSL' => 'off',
+            ],
+            false,
+            'Conflicting enabled headers',
+        ],
+        [
+            [
+                'HTTP_X_FORWARDED_PROTO' => 'http',
+                'HTTP_X_FORWARDED_SSL' => 'on',
+            ],
+            false,
+            'Opposite conflicting headers',
+        ],
+        [
+            ['HTTP_X_FORWARDED_PROTO' => 'https,http'],
+            false,
+            'Multiple protocol values',
+        ],
         [['HTTP_X_FORWARDED_SSL' => 'on,off'], false, 'Multiple SSL values'],
-        [['HTTP_X_FORWARDED_PROTO' => 'invalid', 'HTTP_X_FORWARDED_SSL' => 'on'], false, 'Malformed enabled header'],
+        [
+            [
+                'HTTP_X_FORWARDED_PROTO' => 'invalid',
+                'HTTP_X_FORWARDED_SSL' => 'on',
+            ],
+            false,
+            'Malformed enabled header',
+        ],
     ] as [$headers, $expected, $label]) {
         $cases[] = [$trusted, $proxyRequest + $headers, $expected, $label];
     }
-    $cases[] = [$trusted, array_replace($proxyRequest, ['REMOTE_ADDR' => '2001:db8::42', 'HTTP_X_FORWARDED_PROTO' => 'https']), true, 'Trusted IPv6 CIDR'];
-    $cases[] = [$trusted, array_replace($proxyRequest, ['REMOTE_ADDR' => '2001:db9::42', 'HTTP_X_FORWARDED_PROTO' => 'https']), false, 'Untrusted IPv6'];
-    $cases[] = [$trusted, array_replace($proxyRequest, ['REMOTE_ADDR' => 'invalid', 'HTTP_X_FORWARDED_PROTO' => 'https']), false, 'Invalid direct peer'];
-    $cases[] = [$trusted, ['HTTP_X_FORWARDED_PROTO' => 'https'], false, 'Missing direct peer'];
-    $protoOnly = array_replace($trusted, ['trusted_proxy_protocol_headers' => ['x-forwarded-proto']]);
-    $cases[] = [$protoOnly, $proxyRequest + ['HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_SSL' => 'off'], true, 'Disabled SSL header is ignored'];
-    $exactProxy = array_replace($protoOnly, ['trusted_proxies' => ['203.0.113.9']]);
-    $cases[] = [$exactProxy, $proxyRequest + ['HTTP_X_FORWARDED_PROTO' => 'https'], true, 'Trusted exact proxy IP'];
-    $cases[] = [$exactProxy, array_replace($proxyRequest, ['REMOTE_ADDR' => '203.0.113.10', 'HTTP_X_FORWARDED_PROTO' => 'https']), false, 'Exact trust does not include adjacent peer'];
-    $cases[] = [$trusted, $httpRequest + ['HTTPS' => 'on', 'HTTP_X_FORWARDED_PROTO' => 'invalid'], true, 'Direct TLS is independent of untrusted headers'];
+    $cases[] = [
+        $trusted,
+        array_replace($proxyRequest, [
+            'REMOTE_ADDR' => '2001:db8::42',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ]),
+        true,
+        'Trusted IPv6 CIDR',
+    ];
+    $cases[] = [
+        $trusted,
+        array_replace($proxyRequest, [
+            'REMOTE_ADDR' => '2001:db9::42',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ]),
+        false,
+        'Untrusted IPv6',
+    ];
+    $cases[] = [
+        $trusted,
+        array_replace($proxyRequest, [
+            'REMOTE_ADDR' => 'invalid',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ]),
+        false,
+        'Invalid direct peer',
+    ];
+    $cases[] = [
+        $trusted,
+        ['HTTP_X_FORWARDED_PROTO' => 'https'],
+        false,
+        'Missing direct peer',
+    ];
+    $protoOnly = array_replace($trusted, ['trusted_proxy_protocol_headers' => [
+        'x-forwarded-proto',
+    ]]);
+    $cases[] = [
+        $protoOnly,
+        $proxyRequest
+            + [
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_SSL' => 'off',
+            ],
+        true,
+        'Disabled SSL header is ignored',
+    ];
+    $exactProxy = array_replace($protoOnly, ['trusted_proxies' => [
+        '203.0.113.9',
+    ]]);
+    $cases[] = [
+        $exactProxy,
+        $proxyRequest + ['HTTP_X_FORWARDED_PROTO' => 'https'],
+        true,
+        'Trusted exact proxy IP',
+    ];
+    $cases[] = [
+        $exactProxy,
+        array_replace($proxyRequest, [
+            'REMOTE_ADDR' => '203.0.113.10',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ]),
+        false,
+        'Exact trust does not include adjacent peer',
+    ];
+    $cases[] = [
+        $trusted,
+        $httpRequest + ['HTTPS' => 'on', 'HTTP_X_FORWARDED_PROTO' => 'invalid'],
+        true,
+        'Direct TLS is independent of untrusted headers',
+    ];
 
     foreach ($cases as [$security, $server, $expected, $label]) {
         $GLOBALS['request_https_proxy_config']['security'] = $security;
         $_SERVER = $server;
-        request_https_proxy_assert(request_is_https() === $expected, $label . ': shared HTTPS resolution failed.');
-        request_https_proxy_assert(viewer_request_is_https() === $expected, $label . ': Viewer HTTPS resolution diverged.');
+        request_https_proxy_assert(
+            request_is_https() === $expected,
+            $label . ': shared HTTPS resolution failed.',
+        );
+        request_https_proxy_assert(
+            viewer_request_is_https() === $expected,
+            $label . ': Viewer HTTPS resolution diverged.',
+        );
     }
 
-    $sessionDirectory = sys_get_temp_dir() . '/gallery-https-' . bin2hex(random_bytes(8));
-    request_https_proxy_assert(mkdir($sessionDirectory, 0700), 'Isolated session directory must be created.');
+    $sessionDirectory =
+        sys_get_temp_dir() . '/gallery-https-' . bin2hex(random_bytes(8));
+    request_https_proxy_assert(
+        mkdir($sessionDirectory, 0700),
+        'Isolated session directory must be created.',
+    );
     $previousSavePath = session_save_path();
     session_save_path($sessionDirectory);
     try {
         foreach ([
             [[], $httpRequest + ['HTTP_X_FORWARDED_PROTO' => 'https'], false],
             [[], $httpRequest + ['HTTPS' => 'on'], true],
-            [$trusted, $proxyRequest + ['HTTP_X_FORWARDED_PROTO' => 'https'], true],
+            [
+                $trusted,
+                $proxyRequest + ['HTTP_X_FORWARDED_PROTO' => 'https'],
+                true,
+            ],
         ] as [$security, $server, $expected]) {
             $GLOBALS['request_https_proxy_config']['security'] = $security;
             $_SERVER = $server;
-            cms_start_session(['admin_session_name' => 'gallery_https_proxy_test']);
+            cms_start_session([
+                'admin_session_name' => 'gallery_https_proxy_test',
+            ]);
             $cookie = session_get_cookie_params();
-            request_https_proxy_assert($cookie['secure'] === $expected, 'Admin session Secure policy must use the shared transport decision.');
-            request_https_proxy_assert($cookie['httponly'] && $cookie['samesite'] === 'Lax', 'Other Admin cookie protections must remain intact.');
+            request_https_proxy_assert(
+                $cookie['secure'] === $expected,
+                'Admin session Secure policy must use the shared transport decision.',
+            );
+            request_https_proxy_assert(
+                $cookie['httponly'] && $cookie['samesite'] === 'Lax',
+                'Other Admin cookie protections must remain intact.',
+            );
             session_destroy();
             session_id('');
         }
@@ -155,19 +312,24 @@ namespace {
     $_SERVER = $proxyRequest + ['HTTP_X_FORWARDED_PROTO' => 'https'];
     $GLOBALS['request_https_proxy_config']['security'] = $trusted;
     request_https_proxy_assert(
-        request_aware_base_url('http://gallery.example.test/galerie') === 'https://gallery.example.test/galerie'
+        request_aware_base_url('http://gallery.example.test/galerie')
+            === 'https://gallery.example.test/galerie'
             && public_base_url() === 'https://gallery.example.test/galerie',
-        'Configured TLS termination must continue upgrading same-installation and inferred public URLs.'
+        'Configured TLS termination must continue upgrading same-installation and inferred public URLs.',
     );
     request_https_proxy_assert(
-        request_aware_base_url('http://other.example.test/galerie') === 'http://other.example.test/galerie',
-        'Request transport must not rewrite an unrelated configured host.'
+        request_aware_base_url('http://other.example.test/galerie')
+            === 'http://other.example.test/galerie',
+        'Request transport must not rewrite an unrelated configured host.',
     );
 
     foreach ([[], $trusted] as $proxyPolicy) {
         $GLOBALS['request_https_proxy_config']['security'] = $proxyPolicy;
-        request_https_proxy_assert(\Gallery\Core\public_visual_preview_home_url() === '/galerie/index.php?page=home&preview=visual',
-            'Protected Home remains on the browser origin and actual mount with either trusted or untrusted TLS forwarding.');
+        request_https_proxy_assert(
+            \Gallery\Core\public_visual_preview_home_url()
+                === '/galerie/index.php?page=home&preview=visual',
+            'Protected Home remains on the browser origin and actual mount with either trusted or untrusted TLS forwarding.',
+        );
     }
 
     echo "Shared HTTPS proxy and Admin cookie policy passed.\n";

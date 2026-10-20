@@ -56,16 +56,23 @@ use function Gallery\Core\unique_slug;
  * Return a result payload when a manifest asset already exists on the target.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array $manifest Manifest value.
- * @param array $asset Asset value.
- * @param array $job Job value.
- * @return array<string mixed>|null Existing-asset result, or null when the asset is still missing.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Validated manifest used to resolve source image metadata.
+ * @param array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string} $asset Manifest asset descriptor to reconcile against target files.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $job Durable job containing the source-to-target image map.
+ * @return array{scope:string,kind:string,relative_path?:string,source_image_id?:int,image_id?:int,size?:int,format?:string,already_present:true}|null Recovered receipt descriptor for an already-present matching asset, or null when the file is absent or invalid.
  */
-function gallery_migration_recover_existing_asset(int $targetGalleryId, array $manifest, array $asset, array $job): ?array
-{
+function gallery_migration_recover_existing_asset(
+    int $targetGalleryId,
+    array $manifest,
+    array $asset,
+    array $job,
+): ?array {
     $scope = (string) ($asset['scope'] ?? '');
     if ($scope === 'gallery') {
-        return gallery_migration_recover_existing_gallery_asset($targetGalleryId, $asset);
+        return gallery_migration_recover_existing_gallery_asset(
+            $targetGalleryId,
+            $asset,
+        );
     }
 
     if ($scope !== 'image') {
@@ -73,17 +80,29 @@ function gallery_migration_recover_existing_asset(int $targetGalleryId, array $m
     }
 
     $sourceImageId = (int) ($asset['source_image_id'] ?? 0);
-    $imageManifest = gallery_migration_manifest_image($manifest, $sourceImageId);
+    $imageManifest = gallery_migration_manifest_image(
+        $manifest,
+        $sourceImageId,
+    );
     if ($imageManifest === null) {
         return null;
     }
 
     if ((string) ($asset['kind'] ?? '') === 'original') {
-        return gallery_migration_recover_existing_original($targetGalleryId, $imageManifest, $asset);
+        return gallery_migration_recover_existing_original(
+            $targetGalleryId,
+            $imageManifest,
+            $asset,
+        );
     }
 
     if ((string) ($asset['kind'] ?? '') === 'thumbnail') {
-        return gallery_migration_recover_existing_thumbnail($targetGalleryId, $imageManifest, $asset, $job);
+        return gallery_migration_recover_existing_thumbnail(
+            $targetGalleryId,
+            $imageManifest,
+            $asset,
+            $job,
+        );
     }
 
     return null;
@@ -96,8 +115,10 @@ function gallery_migration_recover_existing_asset(int $targetGalleryId, array $m
  * @param string $expectedChecksum Expected checksum value.
  * @return bool True when the condition matches.
  */
-function gallery_migration_existing_file_matches(string $path, string $expectedChecksum): bool
-{
+function gallery_migration_existing_file_matches(
+    string $path,
+    string $expectedChecksum,
+): bool {
     if (!is_file($path)) {
         return false;
     }
@@ -105,38 +126,77 @@ function gallery_migration_existing_file_matches(string $path, string $expectedC
         return true;
     }
 
-    return strtolower((string) (hash_file('sha256', $path) ?: '')) === strtolower($expectedChecksum);
+    return (
+        strtolower((string) (hash_file('sha256', $path) ?: '')) === strtolower(
+            $expectedChecksum,
+        )
+    );
 }
 
 /**
  * Recover the received state for one gallery-level asset.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array $asset Asset value.
- * @return array<string mixed>|null Existing-asset result, or null when missing.
+ * @param array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string} $asset Gallery-level manifest asset descriptor.
+ * @return array{scope:'gallery',kind:string,relative_path:string,already_present:true}|null Gallery-asset receipt descriptor, or null when the existing file does not match.
  */
-function gallery_migration_recover_existing_gallery_asset(int $targetGalleryId, array $asset): ?array
-{
-    $gallery = find_gallery($targetGalleryId, true) ?: find_gallery($targetGalleryId);
+function gallery_migration_recover_existing_gallery_asset(
+    int $targetGalleryId,
+    array $asset,
+): ?array {
+    $gallery = find_gallery($targetGalleryId, true) ?: find_gallery(
+        $targetGalleryId,
+    );
     if (!$gallery) {
         return null;
     }
 
-    $relativePath = normalize_relative_path((string) ($asset['relative_path'] ?? ''));
+    $relativePath = normalize_relative_path(
+        (string) ($asset['relative_path'] ?? ''),
+    );
     if ($relativePath === '') {
         return null;
     }
 
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
-    $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-    if (!path_inside($galleryRoot, dirname($targetPath)) || !gallery_migration_existing_file_matches($targetPath, (string) ($asset['checksum_sha256'] ?? ''))) {
+    $targetPath =
+        $galleryRoot
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    if (
+        !path_inside($galleryRoot, dirname($targetPath))
+        || !gallery_migration_existing_file_matches(
+            $targetPath,
+            (string) ($asset['checksum_sha256'] ?? ''),
+        )
+    ) {
         return null;
     }
 
     $column = (string) ($asset['kind'] ?? '');
-    if (in_array($column, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true)
-        && mutation_schema_optional_column_available('mutation.gallery_migration_gallery_asset', 'galleries', $column, 'gallery_migration.recover_gallery_asset')) {
-        gallery_model_update_fields($targetGalleryId, [$column => $relativePath], now_sql());
+    if (
+        in_array(
+            $column,
+            [
+                'cover_image_path',
+                'banner_image_path',
+                'logo_image_path',
+                'separator_image_path',
+            ],
+            true,
+        )
+        && mutation_schema_optional_column_available(
+            'mutation.gallery_migration_gallery_asset',
+            'galleries',
+            $column,
+            'gallery_migration.recover_gallery_asset',
+        )
+    ) {
+        gallery_model_update_fields(
+            $targetGalleryId,
+            [$column => $relativePath],
+            now_sql(),
+        );
         $updated = find_gallery($targetGalleryId, true) ?: $gallery;
         write_gallery_sidecar($updated);
     }
@@ -153,25 +213,43 @@ function gallery_migration_recover_existing_gallery_asset(int $targetGalleryId, 
  * Recover the received state for one original image.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array $imageManifest Image manifest value.
- * @param array $asset Asset value.
- * @return array<string mixed>|null Existing-asset result, or null when missing.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $imageManifest Source image metadata associated with the asset.
+ * @param array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string} $asset Original-image manifest asset descriptor.
+ * @return array{scope:'image',kind:'original',source_image_id:int,image_id:int,already_present:true}|null Original-image receipt descriptor, or null when the existing file is not valid.
  */
-function gallery_migration_recover_existing_original(int $targetGalleryId, array $imageManifest, array $asset): ?array
-{
-    $gallery = find_gallery($targetGalleryId, true) ?: find_gallery($targetGalleryId);
+function gallery_migration_recover_existing_original(
+    int $targetGalleryId,
+    array $imageManifest,
+    array $asset,
+): ?array {
+    $gallery = find_gallery($targetGalleryId, true) ?: find_gallery(
+        $targetGalleryId,
+    );
     if (!$gallery) {
         return null;
     }
 
-    $relativePath = normalize_relative_path((string) ($imageManifest['relative_path'] ?? $asset['relative_path'] ?? $asset['filename'] ?? ''));
+    $relativePath = normalize_relative_path(
+        (string) (
+            $imageManifest['relative_path']
+            ?? $asset['relative_path']
+            ?? $asset['filename']
+            ?? ''
+        ),
+    );
     if ($relativePath === '' || str_contains($relativePath, '/')) {
         return null;
     }
 
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . $relativePath;
-    if (!path_inside($galleryRoot, dirname($targetPath)) || !gallery_migration_existing_file_matches($targetPath, (string) ($asset['checksum_sha256'] ?? ''))) {
+    if (
+        !path_inside($galleryRoot, dirname($targetPath))
+        || !gallery_migration_existing_file_matches(
+            $targetPath,
+            (string) ($asset['checksum_sha256'] ?? ''),
+        )
+    ) {
         return null;
     }
 
@@ -180,7 +258,12 @@ function gallery_migration_recover_existing_original(int $targetGalleryId, array
         return null;
     }
 
-    $imageId = gallery_migration_upsert_image_metadata($targetGalleryId, $imageManifest, $targetPath, $info);
+    $imageId = gallery_migration_upsert_image_metadata(
+        $targetGalleryId,
+        $imageManifest,
+        $targetPath,
+        $info,
+    );
     return [
         'scope' => 'image',
         'kind' => 'original',
@@ -194,24 +277,35 @@ function gallery_migration_recover_existing_original(int $targetGalleryId, array
  * Recover the received state for one thumbnail.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array $imageManifest Image manifest value.
- * @param array $asset Asset value.
- * @param array $job Job value.
- * @return array<string mixed>|null Existing-asset result, or null when missing.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $imageManifest Source image metadata associated with the thumbnail.
+ * @param array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string} $asset Thumbnail manifest asset descriptor.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $job Durable job containing the source-to-target image map.
+ * @return array{scope:'image',kind:'thumbnail',source_image_id:int,image_id:int,size:int,format:string,already_present:true}|null Thumbnail receipt descriptor, or null when the existing file is not valid.
  */
-function gallery_migration_recover_existing_thumbnail(int $targetGalleryId, array $imageManifest, array $asset, array $job): ?array
-{
+function gallery_migration_recover_existing_thumbnail(
+    int $targetGalleryId,
+    array $imageManifest,
+    array $asset,
+    array $job,
+): ?array {
     $sourceImageId = (int) ($asset['source_image_id'] ?? 0);
-    $imageId = (int) (($job['image_map'][(string) $sourceImageId] ?? 0));
+    $imageId = (int) ($job['image_map'][(string) $sourceImageId] ?? 0);
     if ($imageId <= 0) {
-        $targetImage = upload_automation_find_image_by_path_uncached($targetGalleryId, normalize_relative_path((string) ($imageManifest['relative_path'] ?? '')));
+        $targetImage = upload_automation_find_image_by_path_uncached(
+            $targetGalleryId,
+            normalize_relative_path(
+                (string) ($imageManifest['relative_path'] ?? ''),
+            ),
+        );
         $imageId = $targetImage ? (int) $targetImage['id'] : 0;
     }
     if ($imageId <= 0) {
         return null;
     }
 
-    $gallery = find_gallery($targetGalleryId, true) ?: find_gallery($targetGalleryId);
+    $gallery = find_gallery($targetGalleryId, true) ?: find_gallery(
+        $targetGalleryId,
+    );
     $image = find_image($imageId);
     if (!$gallery || !$image) {
         return null;
@@ -219,12 +313,18 @@ function gallery_migration_recover_existing_thumbnail(int $targetGalleryId, arra
 
     $size = (int) ($asset['size'] ?? 0);
     $format = (string) ($asset['format'] ?? '');
-    if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
+    if (
+        !in_array($size, thumbnail_sizes(), true)
+        || !in_array($format, ['jpg', 'webp'], true)
+    ) {
         return null;
     }
 
     $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
-    if (!gallery_migration_existing_file_matches($targetPath, (string) ($asset['checksum_sha256'] ?? ''))) {
+    if (!gallery_migration_existing_file_matches(
+        $targetPath,
+        (string) ($asset['checksum_sha256'] ?? ''),
+    )) {
         return null;
     }
 

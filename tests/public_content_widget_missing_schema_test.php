@@ -49,14 +49,22 @@ namespace {
          * @param scalar|array<array-key,mixed>|object|resource|null ...$fetchModeArgs Optional inherited PDO fetch arguments, accepted and ignored by this disconnected fixture.
          * @return \PDOStatement|false Never returns because the optional table is absent.
          */
-        public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): \PDOStatement|false
-        {
-            if (!str_contains($query, 'FROM public_content_widgets') || $fetchMode !== null) {
-                throw new \RuntimeException('Unexpected public widget missing-schema query.');
+        public function query(
+            string $query,
+            ?int $fetchMode = null,
+            mixed ...$fetchModeArgs,
+        ): \PDOStatement|false {
+            if (
+                !str_contains($query, 'FROM public_content_widgets')
+                || $fetchMode !== null
+            ) {
+                throw new \RuntimeException(
+                    'Unexpected public widget missing-schema query.',
+                );
             }
             $this->queryCount++;
             throw new \PDOException(
-                'SQLSTATE[42S02]: Base table or view not found: 1146 Table public_content_widgets does not exist; MISSING_WIDGET_SCHEMA_PRIVATE_DIAGNOSTIC'
+                'SQLSTATE[42S02]: Base table or view not found: 1146 Table public_content_widgets does not exist; MISSING_WIDGET_SCHEMA_PRIVATE_DIAGNOSTIC',
             );
         }
     }
@@ -75,24 +83,56 @@ namespace {
     $connection = new PublicWidgetMissingSchemaPdo();
     $GLOBALS['public_widget_missing_schema_connection'] = $connection;
     $regions = [
-        'content_top', 'content_bottom', 'left_rail', 'right_rail',
-        'home_before_grid', 'home_after_grid', 'footer', 'floating',
+        'content_top',
+        'content_bottom',
+        'left_rail',
+        'right_rail',
+        'home_before_grid',
+        'home_after_grid',
+        'footer',
+        'floating',
     ];
 
     foreach (['home', 'gallery'] as $pageType) {
         $rows = public_widget_public_rows($pageType);
         $plan = public_widget_public_plan($pageType);
-        $check($rows === [], ucfirst($pageType) . ' public rows must be empty when widget storage is missing.');
-        $check(array_keys($plan) === $regions, ucfirst($pageType) . ' plan must retain its complete safe region shape.');
+        $check(
+            $rows === [],
+            ucfirst($pageType)
+                . ' public rows must be empty when widget storage is missing.',
+        );
+        $check(
+            array_keys($plan) === $regions,
+            ucfirst($pageType)
+                . ' plan must retain its complete safe region shape.',
+        );
         foreach ($plan as $region => $items) {
-            $check($items === [], ucfirst($pageType) . ' region ' . $region . ' must contain no widget rows.');
+            $check(
+                $items === [],
+                ucfirst($pageType)
+                    . ' region '
+                    . $region
+                    . ' must contain no widget rows.',
+            );
         }
-        $encoded = json_encode(['rows' => $rows, 'plan' => $plan], JSON_UNESCAPED_SLASHES);
-        $check(is_string($encoded)
-            && !str_contains($encoded, 'MISSING_WIDGET_SCHEMA_PRIVATE_DIAGNOSTIC'),
-            ucfirst($pageType) . ' public output must not expose database diagnostics.');
+        $encoded = json_encode([
+            'rows' => $rows,
+            'plan' => $plan,
+        ], JSON_UNESCAPED_SLASHES);
+        $check(
+            is_string($encoded)
+                && !str_contains(
+                    $encoded,
+                    'MISSING_WIDGET_SCHEMA_PRIVATE_DIAGNOSTIC',
+                ),
+            ucfirst($pageType)
+                . ' public output must not expose database diagnostics.',
+        );
     }
 
-    $check($connection->queryCount === 4, 'Both public readers and plans must exercise the missing-table failure path.');
+    $check(
+        $connection->queryCount === 4,
+        'Both public readers and plans must exercise the missing-table failure path.',
+    );
     echo "public_content_widget_missing_schema_test: PASS\n";
 }

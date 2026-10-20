@@ -60,7 +60,7 @@ assert.match(panelSource, /cover_state_refreshed_after_failure/,
     'Reconciliation preserves the failed write notice while reporting refreshed state.');
 assert.match(source, /settingsRevision\.value = editRevision/,
     'A server-confirmed cover write advances only the hidden editor revision.');
-assert.match(controllerSource, /gallery_editor_set_cover_images\(\$galleryId, \$ownedIds, \$gallery, \$expectedRevision\)/,
+assert.match(controllerSource, /gallery_editor_set_cover_images\(\s*\$galleryId,\s*\$ownedIds,\s*\$gallery,\s*\$expectedRevision,?\s*\)/,
     'Bulk cover selection must preserve all selected images rather than only the first.');
 assert.match(controllerSource, /gallery\.cover_update_failed/,
     'Server title-picture failures must reach the Admin log.');

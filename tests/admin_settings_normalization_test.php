@@ -35,7 +35,9 @@ $GLOBALS['admin_settings_test_store'] = [];
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
-    return array_key_exists($key, $GLOBALS['admin_settings_test_store']) ? (string) $GLOBALS['admin_settings_test_store'][$key] : $default;
+    return array_key_exists($key, $GLOBALS['admin_settings_test_store'])
+        ? (string) $GLOBALS['admin_settings_test_store'][$key]
+        : $default;
 }
 
 /**
@@ -67,16 +69,37 @@ use function Gallery\Services\public_thumbnail_rendering_mode_save;
 
 /**
  * Assert strict equality and report a descriptive settings-test failure.
+ *
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Expected normalized value.
+ * @param TActual $actual Actual normalized value.
+ * @param string $label Assertion label for failure diagnostics.
+ * @return void Throws when the values differ strictly.
  */
-function assert_admin_settings_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_admin_settings_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
-assert_admin_settings_same('progressive', public_thumbnail_rendering_mode_save('progressive'), 'valid thumbnail mode persists');
-assert_admin_settings_same('progressive', public_thumbnail_rendering_mode_save('invalid'), 'invalid thumbnail mode uses progressive fallback');
+assert_admin_settings_same(
+    'progressive',
+    public_thumbnail_rendering_mode_save('progressive'),
+    'valid thumbnail mode persists',
+);
+assert_admin_settings_same(
+    'progressive',
+    public_thumbnail_rendering_mode_save('invalid'),
+    'invalid thumbnail mode uses progressive fallback',
+);
 
 $browser = browser_upload_normalize_settings([
     'enabled' => '1',
@@ -87,34 +110,91 @@ $browser = browser_upload_normalize_settings([
     'max_zip_batch_bytes' => PHP_INT_MAX,
     'zip_size_threshold_ratio' => 50,
 ]);
-assert_admin_settings_same(32, $browser['hard_worker_cap'], 'browser hard worker cap is clamped');
-assert_admin_settings_same(32, $browser['max_worker_count'], 'browser max worker count is clamped');
-assert_admin_settings_same(32, $browser['default_worker_count'], 'browser default worker count is clamped to max');
-assert_admin_settings_same(64, $browser['max_items_per_batch'], 'browser batch item count is clamped');
-assert_admin_settings_same(128 * 1024 * 1024, $browser['max_zip_batch_bytes'], 'browser ZIP cap is clamped');
-assert_admin_settings_same(0.95, $browser['zip_size_threshold_ratio'], 'browser ZIP ratio is clamped');
+assert_admin_settings_same(
+    32,
+    $browser['hard_worker_cap'],
+    'browser hard worker cap is clamped',
+);
+assert_admin_settings_same(
+    32,
+    $browser['max_worker_count'],
+    'browser max worker count is clamped',
+);
+assert_admin_settings_same(
+    32,
+    $browser['default_worker_count'],
+    'browser default worker count is clamped to max',
+);
+assert_admin_settings_same(
+    64,
+    $browser['max_items_per_batch'],
+    'browser batch item count is clamped',
+);
+assert_admin_settings_same(
+    128 * 1024 * 1024,
+    $browser['max_zip_batch_bytes'],
+    'browser ZIP cap is clamped',
+);
+assert_admin_settings_same(
+    0.95,
+    $browser['zip_size_threshold_ratio'],
+    'browser ZIP ratio is clamped',
+);
 
 $siteEntry = ['id' => 'site_name', 'central_editable' => true];
-assert_admin_settings_same('Gallery CMS', admin_settings_normalize_editable_value($siteEntry, '   '), 'empty site name uses existing fallback');
-assert_admin_settings_same(str_repeat('x', 120), admin_settings_normalize_editable_value($siteEntry, str_repeat('x', 200)), 'site name preserves existing 120-character clamp');
+assert_admin_settings_same(
+    'Gallery CMS',
+    admin_settings_normalize_editable_value($siteEntry, '   '),
+    'empty site name uses existing fallback',
+);
+assert_admin_settings_same(
+    str_repeat('x', 120),
+    admin_settings_normalize_editable_value($siteEntry, str_repeat('x', 200)),
+    'site name preserves existing 120-character clamp',
+);
 
 $_SESSION = ['cms_translation_context' => 'admin'];
 $adminLanguageEntry = ['id' => 'admin_language', 'central_editable' => true];
-assert_admin_settings_same('cs', admin_settings_normalize_editable_value($adminLanguageEntry, 'CS'), 'Admin language uses the existing language normalizer');
+assert_admin_settings_same(
+    'cs',
+    admin_settings_normalize_editable_value($adminLanguageEntry, 'CS'),
+    'Admin language uses the existing language normalizer',
+);
 $beforeAdminLanguage = $GLOBALS['admin_settings_test_store'];
 admin_settings_save_editable_value('admin_language', 'de');
-assert_admin_settings_same('de', \Gallery\Services\translation_active_language(), 'Admin language updates the existing browser preference');
-assert_admin_settings_same($beforeAdminLanguage, $GLOBALS['admin_settings_test_store'], 'Admin language creates no public language or shadow database setting');
+assert_admin_settings_same(
+    'de',
+    \Gallery\Services\translation_active_language(),
+    'Admin language updates the existing browser preference',
+);
+assert_admin_settings_same(
+    $beforeAdminLanguage,
+    $GLOBALS['admin_settings_test_store'],
+    'Admin language creates no public language or shadow database setting',
+);
 
 $design = \Gallery\Services\translation_public_language_selector_design();
-$basicDesign = admin_settings_normalize_editable_value(['id' => 'public_language_selector_design', 'central_editable' => true], ['basic_only' => '1', 'preset' => 'outline']);
-assert_admin_settings_same(false, $basicDesign['show_flags'], 'unchecked flags can be disabled from the basic editor');
-assert_admin_settings_same($design['presets'], $basicDesign['presets'], 'basic design saves preserve detailed preset styles');
+$basicDesign = admin_settings_normalize_editable_value([
+    'id' => 'public_language_selector_design',
+    'central_editable' => true,
+], ['basic_only' => '1', 'preset' => 'outline']);
+assert_admin_settings_same(
+    false,
+    $basicDesign['show_flags'],
+    'unchecked flags can be disabled from the basic editor',
+);
+assert_admin_settings_same(
+    $design['presets'],
+    $basicDesign['presets'],
+    'basic design saves preserve detailed preset styles',
+);
 
 $unknownEntry = ['id' => 'arbitrary_database_key', 'central_editable' => true];
 try {
     admin_settings_normalize_editable_value($unknownEntry, 'value');
-    throw new RuntimeException('Unknown central setting normalization was accepted.');
+    throw new RuntimeException(
+        'Unknown central setting normalization was accepted.',
+    );
 } catch (InvalidArgumentException) {
 }
 
@@ -124,9 +204,15 @@ try {
 } catch (InvalidArgumentException) {
 }
 
-$controllerSource = file_get_contents(__DIR__ . '/../app/controllers/admin_settings.php');
-if (!is_string($controllerSource) || !str_contains($controllerSource, "!empty(\$entry['central_editable'])")) {
-    throw new RuntimeException('Central controller does not restrict writes to registry-whitelisted editable settings.');
+$controllerSource = file_get_contents(__DIR__
+    . '/../app/controllers/admin_settings.php');
+if (
+    !is_string($controllerSource)
+    || !str_contains($controllerSource, "!empty(\$entry['central_editable'])")
+) {
+    throw new RuntimeException(
+        'Central controller does not restrict writes to registry-whitelisted editable settings.',
+    );
 }
 
 echo "Admin Settings normalization tests passed.\n";

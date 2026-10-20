@@ -17,10 +17,10 @@
  * the real controller functions responsible for normalizing the input,
  * persisting through create_empty_gallery(), enforcing the admin and CSRF
  * gates, and building the JSON refresh metadata consumed by the side panel.
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
@@ -28,13 +28,15 @@ namespace Gallery\Core {
     /** Track that the production controller still enforces the admin gate. */
     function require_admin(): void
     {
-        $GLOBALS['side_panel_test_require_admin_calls'] = ($GLOBALS['side_panel_test_require_admin_calls'] ?? 0) + 1;
+        $GLOBALS['side_panel_test_require_admin_calls'] =
+            ($GLOBALS['side_panel_test_require_admin_calls'] ?? 0) + 1;
     }
 
     /** Track that the production controller still enforces CSRF validation. */
     function verify_csrf(): void
     {
-        $GLOBALS['side_panel_test_verify_csrf_calls'] = ($GLOBALS['side_panel_test_verify_csrf_calls'] ?? 0) + 1;
+        $GLOBALS['side_panel_test_verify_csrf_calls'] =
+            ($GLOBALS['side_panel_test_verify_csrf_calls'] ?? 0) + 1;
     }
 
     /** Return POST so the real create controller takes its mutation branch. */
@@ -55,62 +57,113 @@ namespace Gallery\Core {
         return ['id' => 1, 'role' => 'admin'];
     }
 
-    /** Build deterministic public URLs for assertions. */
+    /**
+     * Build a deterministic public gallery URL for assertions.
+     *
+     * @param array<string,mixed> $gallery Gallery row containing an optional slug.
+     * @return string Encoded public gallery URL.
+     */
     function gallery_public_url(array $gallery): string
     {
         return '/gallery/' . rawurlencode((string) ($gallery['slug'] ?? ''));
     }
 
-    /** Build only the route URLs needed by the success payload. */
+    /**
+     * Build only the route URLs needed by the success payload.
+     *
+     * @param string $route Route identifier.
+     * @param array<string,int|string|bool|null> $params Route parameter values.
+     * @return string Fixture route URL.
+     */
     function url_for(string $route, array $params = []): string
     {
         if ($route === 'home') {
             return '/';
         }
         if ($route === 'admin_edit_gallery') {
-            return '/admin/gallery/edit?id=' . (int) ($params['id'] ?? 0) . '&created=' . (int) ($params['created'] ?? 0);
+            return (
+                '/admin/gallery/edit?id='
+                    . (int) ($params['id'] ?? 0)
+                    . '&created='
+                    . (int) ($params['created'] ?? 0)
+            );
         }
         return '/' . rawurlencode($route);
     }
 
-    /** Direct-page fallbacks are not expected on the JSON branch. */
+    /**
+     * Reject direct-page fallback redirects on the JSON branch.
+     *
+     * @param string $url Unexpected redirect destination.
+     * @return never Always throws because this fixture exercises the JSON branch.
+     */
     function redirect_to(string $url): never
     {
         throw new \RuntimeException('Unexpected redirect to ' . $url);
     }
 
-    /** Direct-page rendering helpers must remain unused in this focused test. */
+    /**
+     * Reject direct-page flash messages in this focused JSON test.
+     *
+     * @param string $key Message translation key.
+     * @param string $message Rendered message text.
+     * @return void Always throws because direct-page rendering is unused.
+     */
     function flash_message(string $key, string $message): void
     {
-        throw new \RuntimeException('Unexpected flash message: ' . $key . ' ' . $message);
+        throw new \RuntimeException(
+            'Unexpected flash message: ' . $key . ' ' . $message,
+        );
     }
 
-    /** Return an empty CSRF field for rendering paths that must stay unused. */
+    /**
+     * Return an empty CSRF field for rendering paths that must stay unused.
+     *
+     * @return string Empty fixture field markup.
+     */
     function csrf_field(): string
     {
         return '';
     }
 
-    /** Return a deterministic fixture CSRF token. */
+    /**
+     * Return a deterministic fixture CSRF token.
+     *
+     * @return string Stable test token.
+     */
     function csrf_token(): string
     {
         return 'test-csrf-token';
     }
 
-    /** Escape fixture output through the production-compatible HTML flags. */
+    /**
+     * Escape fixture output through the production-compatible HTML flags.
+     *
+     * @param string $value Raw fixture text.
+     * @return string Escaped HTML text.
+     */
     function e(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    /** Fail if the JSON branch attempts direct-page header rendering. */
-    function render_header(string $title): void
+    /**
+     * Fail if the JSON branch attempts direct-page header rendering.
+     *
+     * @param string $title Unexpected page title.
+     * @return never Always throws because header rendering is unused.
+     */
+    function render_header(string $title): never
     {
         throw new \RuntimeException('Unexpected direct-page header: ' . $title);
     }
 
-    /** Fail if the JSON branch attempts direct-page footer rendering. */
-    function render_footer(): void
+    /**
+     * Fail if the JSON branch attempts direct-page footer rendering.
+     *
+     * @return never Always throws because footer rendering is unused.
+     */
+    function render_footer(): never
     {
         throw new \RuntimeException('Unexpected direct-page footer.');
     }
@@ -118,7 +171,9 @@ namespace Gallery\Core {
 
 namespace Gallery\Services {
     const ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE = 10;
+
     const ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE = 100;
+
     /**
      * The single public root result in this fixture.
      *
@@ -129,6 +184,7 @@ namespace Gallery\Services {
     {
         return 1;
     }
+
     /**
      * Simulate creation once and retain the resulting catalog row for replay validation.
      * @param array<string,mixed> $input Normalized controller creation fields captured for assertions.
@@ -136,7 +192,8 @@ namespace Gallery\Services {
      */
     function create_empty_gallery(array $input): array
     {
-        $GLOBALS['side_panel_test_create_calls'] = ($GLOBALS['side_panel_test_create_calls'] ?? 0) + 1;
+        $GLOBALS['side_panel_test_create_calls'] =
+            ($GLOBALS['side_panel_test_create_calls'] ?? 0) + 1;
         $GLOBALS['side_panel_test_create_input'] = $input;
 
         return $GLOBALS['operation_fixture_galleries'][77] = [
@@ -173,48 +230,113 @@ namespace Gallery\Services {
      * @param bool $includeNonPublic Fresh administrative lookup.
      * @return array<string,mixed>|null Retained fixture result for replay validation.
      */
-    function find_gallery(int $galleryId, bool $includeNonPublic = false): ?array
-    {
+    function find_gallery(
+        int $galleryId,
+        bool $includeNonPublic = false,
+    ): ?array {
         return $GLOBALS['operation_fixture_galleries'][$galleryId] ?? null;
     }
 
-    /** Keep translation calls deterministic while preserving their call sites. */
-    function t(string $key, string|array|null $fallback = null, array $variables = []): string
-    {
+    /**
+     * Keep translation calls deterministic while preserving their call sites.
+     *
+     * @param string $key Translation key.
+     * @param string|array<string,string|int|float>|null $fallback Optional fallback text or translation values.
+     * @param array<string,string|int|float> $variables Interpolation values.
+     * @return string Selected fallback text or the key.
+     */
+    function t(
+        string $key,
+        string|array|null $fallback = null,
+        array $variables = [],
+    ): string {
         if (is_string($fallback) && $fallback !== '') {
             return $fallback;
         }
         return $key;
     }
 
-    /** Record logging without coupling the test to the configured log backend. */
-    function admin_log_event(string $level, string $event, string $message, array $context = [], array $options = []): void
-    {
-        $GLOBALS['side_panel_test_log_events'][] = [$level, $event, $message, $context, $options];
+    /**
+     * Record logging without coupling the test to the configured log backend.
+     *
+     * @param string $level Event severity.
+     * @param string $event Event identifier.
+     * @param string $message Safe event message.
+     * @param array<string,mixed> $context Event context fields.
+     * @param array<string,mixed> $options Logger option fields.
+     * @return void Appends the event tuple to the in-memory fixture log.
+     */
+    function admin_log_event(
+        string $level,
+        string $event,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
+        $GLOBALS['side_panel_test_log_events'][] = [
+            $level,
+            $event,
+            $message,
+            $context,
+            $options,
+        ];
     }
 }
 
 namespace Gallery\Views {
-    /** Fail if the JSON branch renders gallery date fields. */
-    function view_render_admin_gallery_date_range_fields(...$args): void
+    /**
+     * Fail if the JSON branch renders gallery date fields.
+     *
+     * @param mixed ...$args Unexpected renderer arguments, which are ignored because every invocation throws.
+     * @source-contract-opaque-param $args These fixture stubs reject every call; their arguments are intentionally ignored.
+     * @return never Always throws because date fields must stay unused.
+     */
+    function view_render_admin_gallery_date_range_fields(mixed ...$args): never
     {
         throw new \RuntimeException('Unexpected date-range rendering.');
     }
 
-    /** Fail if the JSON branch renders new-gallery fields. */
-    function view_render_admin_new_gallery_fields(...$args): void
+    /**
+     * Fail if the JSON branch renders new-gallery fields.
+     *
+     * @param mixed ...$args Unexpected renderer arguments, which are ignored because every invocation throws.
+     * @source-contract-opaque-param $args These fixture stubs reject every call; their arguments are intentionally ignored.
+     * @return never Always throws because new-gallery fields must stay unused.
+     */
+    function view_render_admin_new_gallery_fields(mixed ...$args): never
     {
         throw new \RuntimeException('Unexpected new-gallery field rendering.');
     }
 
-    /** Fail if the JSON branch renders the side-panel form. */
-    function view_render_admin_new_gallery_side_panel(...$args): void
+    /**
+     * Fail if the JSON branch renders the side-panel form.
+     *
+     * @param int $prefillParentId Parent gallery identifier to prefill.
+     * @param array{title?:string}|null $prefillParentGallery Prepared parent summary, when available.
+     * @param string $error Prepared creation error message.
+     * @param array<string,mixed> $formModel Prepared form state.
+     * @return never Always throws because side-panel rendering must stay unused.
+     */
+    function view_render_admin_new_gallery_side_panel(
+        int $prefillParentId,
+        ?array $prefillParentGallery,
+        string $error,
+        array $formModel = [],
+    ): never
     {
-        throw new \RuntimeException('Unexpected side-panel rendering after JSON mutation.');
+        throw new \RuntimeException(
+            'Unexpected side-panel rendering after JSON mutation.',
+        );
     }
 
-    /** Fail if the JSON branch renders description guidance. */
-    function view_render_gallery_description_formatting_hint(...$args): void
+    /**
+     * Fail if the JSON branch renders description guidance.
+     *
+     * @param mixed ...$args Unexpected renderer arguments, which are ignored because every invocation throws.
+     * @source-contract-opaque-param $args These fixture stubs reject every call; their arguments are intentionally ignored.
+     * @return never Always throws because description guidance must stay unused.
+     */
+    function view_render_gallery_description_formatting_hint(mixed ...$args): never
     {
         throw new \RuntimeException('Unexpected description hint rendering.');
     }
@@ -244,15 +366,21 @@ namespace Gallery\Controllers {
         }
     }
 
-    $GLOBALS['operation_fixture_db'] = new \Gallery\Core\AdminOperationFixtureDatabase();
+    $GLOBALS['operation_fixture_db'] =
+        new \Gallery\Core\AdminOperationFixtureDatabase();
     $GLOBALS['operation_fixture_galleries'] = [];
     /**
      * Verified fixture schema; no production database is inspected.
      *
      * @return bool Verified fixture schema; no production database is inspected.
      */
-    function side_panel_operation_schema_probe(): bool { return true; }
-    \Gallery\Services\schema_inspection_set_query_executor_for_tests(__NAMESPACE__ . '\\side_panel_operation_schema_probe');
+    function side_panel_operation_schema_probe(): bool
+    {
+        return true;
+    }
+
+    \Gallery\Services\schema_inspection_set_query_executor_for_tests(__NAMESPACE__
+        . '\\side_panel_operation_schema_probe');
     $_GET = [];
     $_POST = [
         'operation_key' => \Gallery\Services\admin_operation_new_key(),
@@ -271,30 +399,108 @@ namespace Gallery\Controllers {
     $rawResponse = (string) ob_get_clean();
     $payload = json_decode($rawResponse, true, 512, JSON_THROW_ON_ERROR);
 
-    side_panel_test_expect(($GLOBALS['side_panel_test_require_admin_calls'] ?? 0) === 1, 'Admin authorization gate was not executed exactly once.');
-    side_panel_test_expect(($GLOBALS['side_panel_test_verify_csrf_calls'] ?? 0) === 1, 'CSRF validation was not executed exactly once.');
-    side_panel_test_expect(($GLOBALS['side_panel_test_create_calls'] ?? 0) === 1, 'Shared create_empty_gallery() mutation was not executed exactly once.');
-    side_panel_test_expect(($GLOBALS['side_panel_test_create_input']['title'] ?? '') === 'New Panel Gallery', 'Create input was not normalized and passed to persistence.');
-    side_panel_test_expect(($payload['ok'] ?? false) === true, 'AJAX create response did not report success.');
-    side_panel_test_expect((int) ($payload['gallery_id'] ?? 0) === 77, 'AJAX create response did not identify the newly persisted gallery.');
-    side_panel_test_expect(($payload['gallery_url'] ?? '') === '/gallery/new-panel-gallery', 'AJAX create response did not include the new public gallery URL.');
-    side_panel_test_expect(($payload['refresh_url'] ?? null) === '/', 'Root create response did not provide the canonical background refresh URL.');
-    side_panel_test_expect(($payload['refresh_gallery_id'] ?? null) === 0, 'Root create response returned an unexpected refresh gallery id.');
-    side_panel_test_expect(array_keys(array_intersect_key($payload, array_flip(['ok', 'message', 'mutation', 'panel', 'contexts', 'fallback']))) === ['ok', 'message', 'mutation', 'panel', 'contexts', 'fallback'], 'Create response must expose the canonical mutation envelope.');
-    side_panel_test_expect(($payload['mutation']['type'] ?? '') === 'gallery.create', 'Create response must identify the typed gallery mutation.');
-    side_panel_test_expect(($payload['mutation']['entity_ids'] ?? []) === [77], 'Create response must preserve the stable created gallery id.');
-    side_panel_test_expect(($payload['panel']['keep_open'] ?? false) === true, 'Enhanced create must keep the side panel open.');
-    side_panel_test_expect(($payload['contexts'][0]['postcondition']['type'] ?? '') === 'gallery_membership', 'Create response must use pagination-safe gallery membership verification.');
-    side_panel_test_expect(($payload['contexts'][0]['postcondition']['present'] ?? false) === true, 'Create response must expect the new public card to be present.');
-    side_panel_test_expect((int) ($payload['contexts'][0]['postcondition']['count'] ?? -1) === 1, 'Create response must carry the authoritative full root gallery count.');
-    side_panel_test_expect(($payload['fallback']['redirect_url'] ?? '') !== '', 'Classic redirect must remain fallback metadata.');
+    side_panel_test_expect(
+        ($GLOBALS['side_panel_test_require_admin_calls'] ?? 0) === 1,
+        'Admin authorization gate was not executed exactly once.',
+    );
+    side_panel_test_expect(
+        ($GLOBALS['side_panel_test_verify_csrf_calls'] ?? 0) === 1,
+        'CSRF validation was not executed exactly once.',
+    );
+    side_panel_test_expect(
+        ($GLOBALS['side_panel_test_create_calls'] ?? 0) === 1,
+        'Shared create_empty_gallery() mutation was not executed exactly once.',
+    );
+    side_panel_test_expect(
+        ($GLOBALS['side_panel_test_create_input']['title'] ?? '')
+            === 'New Panel Gallery',
+        'Create input was not normalized and passed to persistence.',
+    );
+    side_panel_test_expect(
+        ($payload['ok'] ?? false) === true,
+        'AJAX create response did not report success.',
+    );
+    side_panel_test_expect(
+        (int) ($payload['gallery_id'] ?? 0) === 77,
+        'AJAX create response did not identify the newly persisted gallery.',
+    );
+    side_panel_test_expect(
+        ($payload['gallery_url'] ?? '') === '/gallery/new-panel-gallery',
+        'AJAX create response did not include the new public gallery URL.',
+    );
+    side_panel_test_expect(
+        ($payload['refresh_url'] ?? null) === '/',
+        'Root create response did not provide the canonical background refresh URL.',
+    );
+    side_panel_test_expect(
+        ($payload['refresh_gallery_id'] ?? null) === 0,
+        'Root create response returned an unexpected refresh gallery id.',
+    );
+    side_panel_test_expect(
+        array_keys(array_intersect_key($payload, array_flip([
+            'ok',
+            'message',
+            'mutation',
+            'panel',
+            'contexts',
+            'fallback',
+        ]))) === ['ok', 'message', 'mutation', 'panel', 'contexts', 'fallback'],
+        'Create response must expose the canonical mutation envelope.',
+    );
+    side_panel_test_expect(
+        ($payload['mutation']['type'] ?? '') === 'gallery.create',
+        'Create response must identify the typed gallery mutation.',
+    );
+    side_panel_test_expect(
+        ($payload['mutation']['entity_ids'] ?? []) === [77],
+        'Create response must preserve the stable created gallery id.',
+    );
+    side_panel_test_expect(
+        ($payload['panel']['keep_open'] ?? false) === true,
+        'Enhanced create must keep the side panel open.',
+    );
+    side_panel_test_expect(
+        ($payload['contexts'][0]['postcondition']['type'] ?? '')
+            === 'gallery_membership',
+        'Create response must use pagination-safe gallery membership verification.',
+    );
+    side_panel_test_expect(
+        ($payload['contexts'][0]['postcondition']['present'] ?? false) === true,
+        'Create response must expect the new public card to be present.',
+    );
+    side_panel_test_expect(
+        (int) ($payload['contexts'][0]['postcondition']['count'] ?? -1) === 1,
+        'Create response must carry the authoritative full root gallery count.',
+    );
+    side_panel_test_expect(
+        ($payload['fallback']['redirect_url'] ?? '') !== '',
+        'Classic redirect must remain fallback metadata.',
+    );
 
     ob_start();
     cms_admin_new_gallery();
-    $replayed = json_decode((string) ob_get_clean(), true, 512, JSON_THROW_ON_ERROR);
-    side_panel_test_expect($replayed === $payload, 'Same-key retry did not return the original canonical response.');
-    side_panel_test_expect($GLOBALS['side_panel_test_create_calls'] === 1, 'Same-key retry executed gallery creation again.');
-    side_panel_test_expect($GLOBALS['side_panel_test_require_admin_calls'] === 2 && $GLOBALS['side_panel_test_verify_csrf_calls'] === 2, 'Replay skipped current authorization or CSRF checks.');
-    side_panel_test_expect($GLOBALS['operation_fixture_db']->locks === [], 'Create or replay leaked ledger ownership.');
+    $replayed = json_decode(
+        (string) ob_get_clean(),
+        true,
+        512,
+        JSON_THROW_ON_ERROR,
+    );
+    side_panel_test_expect(
+        $replayed === $payload,
+        'Same-key retry did not return the original canonical response.',
+    );
+    side_panel_test_expect(
+        $GLOBALS['side_panel_test_create_calls'] === 1,
+        'Same-key retry executed gallery creation again.',
+    );
+    side_panel_test_expect(
+        $GLOBALS['side_panel_test_require_admin_calls'] === 2
+            && $GLOBALS['side_panel_test_verify_csrf_calls'] === 2,
+        'Replay skipped current authorization or CSRF checks.',
+    );
+    side_panel_test_expect(
+        $GLOBALS['operation_fixture_db']->locks === [],
+        'Create or replay leaked ledger ownership.',
+    );
     fwrite(STDOUT, "PASS admin_side_panel_gallery_mutation_test\n");
 }

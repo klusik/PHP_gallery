@@ -42,8 +42,10 @@ const CACHE_CLEANUP_LOG_REQUEST_ID_LENGTH = 26;
  * @param array<string,int|float|bool|string>|null $event Optional sanitized event to append.
  * @return list<array<string,int|float|bool|string>> Start and bounded recent events for this invocation.
  */
-function cache_cleanup_diagnostic_buffer(string $runId, ?array $event = null): array
-{
+function cache_cleanup_diagnostic_buffer(
+    string $runId,
+    ?array $event = null,
+): array {
     static $events = [];
     if ($event !== null) {
         $events[] = $event;
@@ -51,7 +53,10 @@ function cache_cleanup_diagnostic_buffer(string $runId, ?array $event = null): a
             array_splice($events, 1, 1);
         }
     }
-    return array_values(array_filter($events, static fn (array $item): bool => $item['run_id'] === $runId));
+    return array_values(array_filter(
+        $events,
+        static fn(array $item): bool => $item['run_id'] === $runId,
+    ));
 }
 
 /**
@@ -61,7 +66,9 @@ function cache_cleanup_diagnostic_buffer(string $runId, ?array $event = null): a
  */
 function cache_cleanup_diagnostic_id(string $candidate = ''): string
 {
-    return preg_match('/^[a-f0-9]{32}$/D', $candidate) === 1 ? $candidate : bin2hex(random_bytes(16));
+    return preg_match('/^[a-f0-9]{32}$/D', $candidate) === 1
+        ? $candidate
+        : bin2hex(random_bytes(16));
 }
 
 /**
@@ -102,11 +109,15 @@ function cache_cleanup_exception_diagnostic(Throwable $exception): array
     ];
     $root = str_replace('\\', '/', dirname(__DIR__, 2)) . '/';
     $file = str_replace('\\', '/', $exception->getFile());
-    $site = str_starts_with($file, $root) ? substr($file, strlen($root)) : 'external';
-    return ['exception_class' => $exception::class,
+    $site = str_starts_with($file, $root)
+        ? substr($file, strlen($root))
+        : 'external';
+    return [
+        'exception_class' => $exception::class,
         'failure_code' => $known[$exception->getMessage()] ?? 'owner_exception',
         'exception_site' => str_starts_with($site, 'app/') ? $site : 'external',
-        'exception_line' => $exception->getLine()];
+        'exception_line' => $exception->getLine(),
+    ];
 }
 
 /**
@@ -117,27 +128,78 @@ function cache_cleanup_exception_diagnostic(Throwable $exception): array
  * @param Throwable|null $exception Optional failure whose raw message is never logged.
  * @return array<string,int|float|bool|string> Exact sanitized event exposed to the authenticated diagnostic UI.
  */
-function cache_cleanup_diagnostic_event(string $runId, string $stage, array $context = [], ?Throwable $exception = null): array
-{
-    $record = ['run_id' => cache_cleanup_diagnostic_id($runId),
-        'stage' => preg_replace('/[^a-z0-9_]/', '_', substr($stage, 0, 48)) ?? 'unknown',
-        'recorded_at_unix_ms' => (int) round(microtime(true) * 1000)];
-    $allowed = ['source', 'forced', 'ok', 'done', 'skipped', 'blocked', 'reason', 'visited',
-        'removed', 'bytes_removed', 'total_bytes_removed', 'elapsed_ms', 'next_due',
-        'cursor_depth', 'entry_cap', 'time_cap_ms', 'lock', 'failure_code',
-        'failure_operation', 'object_token', 'exception_class', 'exception_site',
-        'exception_line', 'error_type', 'http_status', 'request_method', 'elapsed_total_ms', 'central_job_id', 'central_phase',
-        'updater_job_id', 'updater_status', 'updater_stage', 'updater_updated_at', 'updater_pointer_state',
-        'operation','phase','files','bytes','candidates','candidate_bytes','errors'];
+function cache_cleanup_diagnostic_event(
+    string $runId,
+    string $stage,
+    array $context = [],
+    ?Throwable $exception = null,
+): array {
+    $record = [
+        'run_id' => cache_cleanup_diagnostic_id($runId),
+        'stage' =>
+            preg_replace('/[^a-z0-9_]/', '_', substr($stage, 0, 48))
+                ?? 'unknown',
+        'recorded_at_unix_ms' => (int) round(microtime(true) * 1000),
+    ];
+    $allowed = [
+        'source',
+        'forced',
+        'ok',
+        'done',
+        'skipped',
+        'blocked',
+        'reason',
+        'visited',
+        'removed',
+        'bytes_removed',
+        'total_bytes_removed',
+        'elapsed_ms',
+        'next_due',
+        'cursor_depth',
+        'entry_cap',
+        'time_cap_ms',
+        'lock',
+        'failure_code',
+        'failure_operation',
+        'object_token',
+        'exception_class',
+        'exception_site',
+        'exception_line',
+        'error_type',
+        'http_status',
+        'request_method',
+        'elapsed_total_ms',
+        'central_job_id',
+        'central_phase',
+        'updater_job_id',
+        'updater_status',
+        'updater_stage',
+        'updater_updated_at',
+        'updater_pointer_state',
+        'operation',
+        'phase',
+        'files',
+        'bytes',
+        'candidates',
+        'candidate_bytes',
+        'errors',
+    ];
     foreach ($allowed as $key) {
         if (isset($context[$key]) && is_scalar($context[$key])) {
-            $record[$key] = is_string($context[$key]) ? substr($context[$key], 0, 160) : $context[$key];
+            $record[$key] = is_string($context[$key])
+                ? substr($context[$key], 0, 160)
+                : $context[$key];
         }
     }
     if ($exception !== null) {
-        $record = array_replace($record, cache_cleanup_exception_diagnostic($exception));
+        $record = array_replace(
+            $record,
+            cache_cleanup_exception_diagnostic($exception),
+        );
     }
-    $level = str_ends_with($stage, 'failed') || in_array($stage, ['fatal', 'blocked'], true) ? 'error'
+    $level = str_ends_with($stage, 'failed')
+    || in_array($stage, ['fatal', 'blocked'], true)
+        ? 'error'
         : ($stage === 'skipped' ? 'warning' : 'info');
     $record['admin_log_attempted'] = false;
     $record['admin_log_written'] = false;
@@ -148,14 +210,45 @@ function cache_cleanup_diagnostic_event(string $runId, string $stage, array $con
             // Only the returned receipt can confirm persistence after insertion.
             // Stored rows must never contain provisional failure defaults.
             $storedContext = array_diff_key($record, array_fill_keys(
-                ['admin_log_attempted', 'admin_log_written', 'log_failure_code'], true));
-            $receipt = admin_log_event_result($level, 'cache.cleanup.' . $record['stage'],
-                (str_starts_with($record['stage'], 'lifecycle') ? 'Cache lifecycle: ' : 'Updater cache cleanup: ') . $record['stage'] . '.', $storedContext,
-                ['category' => 'system', 'severity' => $level, 'subject_type' => 'cache_cleanup',
-                    'request_id' => substr($record['run_id'], 0, CACHE_CLEANUP_LOG_REQUEST_ID_LENGTH), 'route_name' => 'admin_site_maintenance_settings']);
+                [
+                    'admin_log_attempted',
+                    'admin_log_written',
+                    'log_failure_code',
+                ],
+                true,
+            ));
+            $receipt = admin_log_event_result(
+                $level,
+                'cache.cleanup.' . $record['stage'],
+                (
+                    str_starts_with($record['stage'], 'lifecycle')
+                        ? 'Cache lifecycle: '
+                        : 'Updater cache cleanup: '
+                )
+                    . $record['stage']
+                    . '.',
+                $storedContext,
+                [
+                    'category' => 'system',
+                    'severity' => $level,
+                    'subject_type' => 'cache_cleanup',
+                    'request_id' => substr(
+                        $record['run_id'],
+                        0,
+                        CACHE_CLEANUP_LOG_REQUEST_ID_LENGTH,
+                    ),
+                    'route_name' => 'admin_site_maintenance_settings',
+                ],
+            );
             $record['admin_log_written'] = $receipt['ok'];
             unset($record['log_failure_code']);
-            foreach (['failure_code', 'exception_class', 'sqlstate', 'driver_code', 'field'] as $field) {
+            foreach ([
+                'failure_code',
+                'exception_class',
+                'sqlstate',
+                'driver_code',
+                'field',
+            ] as $field) {
                 if (isset($receipt[$field])) {
                     $record['log_' . $field] = $receipt[$field];
                 }
@@ -167,7 +260,10 @@ function cache_cleanup_diagnostic_event(string $runId, string $stage, array $con
     }
     // Always retain a second diagnostic channel: the legacy Admin logger may
     // intentionally suppress storage errors. Neither channel authorizes deletion.
-    error_log('PHP Gallery cache cleanup ' . json_encode($record, JSON_UNESCAPED_SLASHES));
+    error_log(
+        'PHP Gallery cache cleanup '
+            . json_encode($record, JSON_UNESCAPED_SLASHES),
+    );
     cache_cleanup_diagnostic_buffer($record['run_id'], $record);
     return $record;
 }

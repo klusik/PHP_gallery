@@ -28,7 +28,9 @@ function worker_count(?string $override = null): int
         return 4;
     }
     if (preg_match('/^[1-8]$/D', $value) !== 1) {
-        throw new \InvalidArgumentException('PHP_GALLERY_AUDIT_WORKERS must be an integer from 1 through 8.');
+        throw new \InvalidArgumentException(
+            'PHP_GALLERY_AUDIT_WORKERS must be an integer from 1 through 8.',
+        );
     }
     return (int) $value;
 }
@@ -58,7 +60,10 @@ function process_status(array $process, bool $required = false): string
     if (!empty($process['timed_out'])) {
         return STATUS_FAIL;
     }
-    $output = (string) ($process['stdout'] ?? '') . "\n" . (string) ($process['stderr'] ?? '');
+    $output =
+        (string) ($process['stdout'] ?? '')
+        . "\n"
+        . (string) ($process['stderr'] ?? '');
     if (preg_match('/^\s*BLOCKED\b/im', $output) === 1) {
         return STATUS_BLOCKED;
     }
@@ -86,7 +91,11 @@ function start_process(array $job, string $cwd): array
     $stderr = tmpfile();
     $command = $job['command'];
     $group = false;
-    if (DIRECTORY_SEPARATOR !== '\\' && function_exists('posix_kill') && is_executable('/usr/bin/setsid')) {
+    if (
+        DIRECTORY_SEPARATOR !== '\\'
+        && function_exists('posix_kill')
+        && is_executable('/usr/bin/setsid')
+    ) {
         // A private group lets timeout cleanup include grandchildren on Linux.
         $command = array_merge(['/usr/bin/setsid'], $command);
         $group = true;
@@ -95,12 +104,21 @@ function start_process(array $job, string $cwd): array
     $process = false;
     $executable = (string) ($job['command'][0] ?? '');
     // Absolute/relative paths can be checked without rejecting runnable Windows aliases on PATH.
-    $missingPath = (str_contains($executable, '/') || str_contains($executable, '\\')) && !is_file($executable);
+    $missingPath =
+        (str_contains($executable, '/') || str_contains($executable, '\\'))
+        && !is_file($executable);
     if (DIRECTORY_SEPARATOR !== '\\' && find_executable($executable) === null) {
         $missingPath = true;
     }
     if (!$missingPath && $stdout !== false && $stderr !== false) {
-        $process = @proc_open($command, [0 => ['pipe', 'r'], 1 => $stdout, 2 => $stderr], $pipes, $cwd, null, ['bypass_shell' => true]);
+        $process = @proc_open(
+            $command,
+            [0 => ['pipe', 'r'], 1 => $stdout, 2 => $stderr],
+            $pipes,
+            $cwd,
+            null,
+            ['bypass_shell' => true],
+        );
     }
     if (!is_resource($process)) {
         foreach ([$stdout, $stderr] as $stream) {
@@ -108,16 +126,32 @@ function start_process(array $job, string $cwd): array
                 fclose($stream);
             }
         }
-        return ['result' => ['exit_code' => 127, 'stdout' => '', 'stderr' => 'Unable to allocate capture streams or start process: ' . implode(' ', $job['command']),
-            'timed_out' => false, 'blocked' => true, 'duration' => hrtime(true) / 1e9 - $started]];
+        return ['result' => [
+            'exit_code' => 127,
+            'stdout' => '',
+            'stderr' =>
+                'Unable to allocate capture streams or start process: '
+                    . implode(' ', $job['command']),
+            'timed_out' => false,
+            'blocked' => true,
+            'duration' => (hrtime(true) / 1e9) - $started,
+        ]];
     }
     // Allocation and executable discovery never consume a successfully spawned child's deadline.
     $started = hrtime(true) / 1e9;
     fclose($pipes[0]);
     $status = proc_get_status($process);
-    return ['process' => $process, 'stdout' => $stdout, 'stderr' => $stderr, 'started' => $started,
-        'timeout' => max(1, (int) ($job['timeout'] ?? 30)), 'serial' => !empty($job['serial']),
-        'pid' => (int) $status['pid'], 'group' => $group, 'status' => $status];
+    return [
+        'process' => $process,
+        'stdout' => $stdout,
+        'stderr' => $stderr,
+        'started' => $started,
+        'timeout' => max(1, (int) ($job['timeout'] ?? 30)),
+        'serial' => !empty($job['serial']),
+        'pid' => (int) $status['pid'],
+        'group' => $group,
+        'status' => $status,
+    ];
 }
 
 /**
@@ -128,7 +162,9 @@ function start_process(array $job, string $cwd): array
  */
 function descendant_process_ids(int $parentPid): array
 {
-    $ps = is_executable('/bin/ps') ? '/bin/ps' : (is_executable('/usr/bin/ps') ? '/usr/bin/ps' : null);
+    $ps = is_executable('/bin/ps')
+        ? '/bin/ps'
+        : (is_executable('/usr/bin/ps') ? '/usr/bin/ps' : null);
     if ($ps === null) {
         return [];
     }
@@ -137,19 +173,27 @@ function descendant_process_ids(int $parentPid): array
         return [];
     }
     $pipes = [];
-    $process = @proc_open([$ps, '-axo', 'pid=,ppid='], [0 => ['file', '/dev/null', 'r'], 1 => $stream, 2 => ['file', '/dev/null', 'w']], $pipes);
+    $process = @proc_open(
+        [$ps, '-axo', 'pid=,ppid='],
+        [
+            0 => ['file', '/dev/null', 'r'],
+            1 => $stream,
+            2 => ['file', '/dev/null', 'w'],
+        ],
+        $pipes,
+    );
     if (!is_resource($process)) {
         fclose($stream);
         return [];
     }
-    $deadline = hrtime(true) / 1e9 + 1;
+    $deadline = (hrtime(true) / 1e9) + 1;
     do {
         $status = proc_get_status($process);
         if (!$status['running']) {
             break;
         }
         usleep(10000);
-    } while (hrtime(true) / 1e9 < $deadline);
+    } while ((hrtime(true) / 1e9) < $deadline);
     if ($status['running']) {
         proc_terminate($process, 9);
     }
@@ -192,11 +236,20 @@ function signal_process_ids(array $pids, int $signal): void
         }
         return;
     }
-    $kill = is_executable('/bin/kill') ? '/bin/kill' : (is_executable('/usr/bin/kill') ? '/usr/bin/kill' : null);
+    $kill = is_executable('/bin/kill')
+        ? '/bin/kill'
+        : (is_executable('/usr/bin/kill') ? '/usr/bin/kill' : null);
     if ($kill !== null) {
         $pipes = [];
-        $process = @proc_open(array_merge([$kill, '-' . $signal], array_map('strval', $pids)),
-            [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+        $process = @proc_open(
+            array_merge([$kill, '-' . $signal], array_map('strval', $pids)),
+            [
+                0 => ['file', '/dev/null', 'r'],
+                1 => ['file', '/dev/null', 'w'],
+                2 => ['file', '/dev/null', 'w'],
+            ],
+            $pipes,
+        );
         if (is_resource($process)) {
             proc_close($process);
         }
@@ -213,16 +266,32 @@ function terminate_process(array $active): void
 {
     $descendants = [];
     if (DIRECTORY_SEPARATOR === '\\') {
-        $taskkill = rtrim((string) getenv('SystemRoot'), '\\/') . '/System32/taskkill.exe';
+        $taskkill =
+            rtrim((string) getenv('SystemRoot'), '\\/')
+            . '/System32/taskkill.exe';
         if (is_file($taskkill)) {
             $pipes = [];
-            $killer = @proc_open([$taskkill, '/PID', (string) $active['pid'], '/T', '/F'],
-                [0 => ['file', 'NUL', 'r'], 1 => ['file', 'NUL', 'w'], 2 => ['file', 'NUL', 'w']], $pipes, null, null, ['bypass_shell' => true]);
+            $killer = @proc_open(
+                [$taskkill, '/PID', (string) $active['pid'], '/T', '/F'],
+                [
+                    0 => ['file', 'NUL', 'r'],
+                    1 => ['file', 'NUL', 'w'],
+                    2 => ['file', 'NUL', 'w'],
+                ],
+                $pipes,
+                null,
+                null,
+                ['bypass_shell' => true],
+            );
             if (is_resource($killer)) {
                 proc_close($killer);
             }
         }
-    } elseif ($active['group'] && function_exists('posix_getpgid') && posix_getpgid($active['pid']) === $active['pid']) {
+    } elseif (
+        $active['group']
+        && function_exists('posix_getpgid')
+        && posix_getpgid($active['pid']) === $active['pid']
+    ) {
         posix_kill(-$active['pid'], 15);
     } else {
         // macOS generally lacks setsid; a bounded ps snapshot supplies the owned subtree.
@@ -258,9 +327,19 @@ function finish_process(array $active, array $status, bool $timedOut): array
     $stderr = stream_get_contents($active['stderr']) ?: '';
     fclose($active['stdout']);
     fclose($active['stderr']);
-    return ['exit_code' => $timedOut ? 124 : ((int) $status['exitcode'] >= 0 ? (int) $status['exitcode'] : $closed),
-        'stdout' => $stdout, 'stderr' => $stderr, 'timed_out' => $timedOut,
-        'duration' => hrtime(true) / 1e9 - $active['started']];
+    return [
+        'exit_code' => $timedOut
+            ? 124
+            : (
+                (int) $status['exitcode'] >= 0
+                    ? (int) $status['exitcode']
+                    : $closed
+            ),
+        'stdout' => $stdout,
+        'stderr' => $stderr,
+        'timed_out' => $timedOut,
+        'duration' => (hrtime(true) / 1e9) - $active['started'],
+    ];
 }
 
 /**
@@ -274,7 +353,9 @@ function finish_process(array $active, array $status, bool $timedOut): array
 function run_process_pool(array $jobs, string $cwd, int $workers): array
 {
     if ($workers < 1 || $workers > 8) {
-        throw new \InvalidArgumentException('Process pool worker limit must be from 1 through 8.');
+        throw new \InvalidArgumentException(
+            'Process pool worker limit must be from 1 through 8.',
+        );
     }
     $jobs = array_values($jobs);
     $next = 0;
@@ -283,7 +364,13 @@ function run_process_pool(array $jobs, string $cwd, int $workers): array
     try {
         while ($next < count($jobs) || $active !== []) {
             while ($next < count($jobs) && count($active) < $workers) {
-                if ($active !== [] && (!empty($jobs[$next]['serial']) || !empty(reset($active)['serial']))) {
+                if (
+                    $active !== []
+                    && (
+                        !empty($jobs[$next]['serial'])
+                        || !empty(reset($active)['serial'])
+                    )
+                ) {
                     break;
                 }
                 $child = start_process($jobs[$next], $cwd);
@@ -299,13 +386,22 @@ function run_process_pool(array $jobs, string $cwd, int $workers): array
             }
             foreach ($active as $index => $child) {
                 // Preserve an already-observed exit code on PHP 8.1/8.2, where a second poll can lose it.
-                $status = $child['status']['running'] ? proc_get_status($child['process']) : $child['status'];
-                $timedOut = $status['running'] && hrtime(true) / 1e9 - $child['started'] >= $child['timeout'];
+                $status = $child['status']['running']
+                    ? proc_get_status($child['process'])
+                    : $child['status'];
+                $timedOut =
+                    $status['running']
+                    && ((hrtime(true) / 1e9) - $child['started'])
+                        >= $child['timeout'];
                 if ($timedOut) {
                     terminate_process($child);
                 }
                 if (!$status['running'] || $timedOut) {
-                    $results[$index] = finish_process($child, $status, $timedOut);
+                    $results[$index] = finish_process(
+                        $child,
+                        $status,
+                        $timedOut,
+                    );
                     unset($active[$index]);
                 }
             }

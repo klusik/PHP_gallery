@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-
 require_once __DIR__ . '/admin_galleries_edit_actions.php';
 require_once __DIR__ . '/admin_galleries_edit_metadata.php';
 require_once __DIR__ . '/admin_galleries_edit_page.php';

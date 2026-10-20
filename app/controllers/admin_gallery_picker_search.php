@@ -32,8 +32,13 @@ use const Gallery\Core\GALLERY_PICKER_TITLE_MAX_CHARACTERS;
  */
 function admin_gallery_picker_request_id(mixed $value): int
 {
-    if (!is_string($value) || preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/', $value) !== 1
-        || filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) === false) {
+    if (
+        !is_string($value)
+        || preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/', $value) !== 1
+        || filter_var($value, FILTER_VALIDATE_INT, ['options' => [
+            'min_range' => 0,
+        ]]) === false
+    ) {
         throw new \InvalidArgumentException('Invalid destination request.');
     }
     return (int) $value;
@@ -51,12 +56,21 @@ function cms_admin_gallery_picker_search(): void
     header('X-Content-Type-Options: nosniff');
     header('X-Robots-Tag: noindex, nofollow');
     $html = ($_GET['format'] ?? '') === 'html';
-    header('Content-Type: ' . ($html ? 'text/html' : 'application/json') . '; charset=utf-8');
+    header(
+        'Content-Type: '
+            . ($html ? 'text/html' : 'application/json')
+            . '; charset=utf-8',
+    );
     $page = gallery_picker_empty_page();
     $status = 200;
     $query = '';
-    $parameters = ['page' => 'admin_gallery_picker_search', 'format' => 'html',
-        'excluded_id' => 0, 'exclude_descendants' => 0, 'allow_root' => 0];
+    $parameters = [
+        'page' => 'admin_gallery_picker_search',
+        'format' => 'html',
+        'excluded_id' => 0,
+        'exclude_descendants' => 0,
+        'allow_root' => 0,
+    ];
     try {
         $user = current_user();
         if (!is_array($user) || ($user['role'] ?? '') !== 'admin') {
@@ -66,19 +80,44 @@ function cms_admin_gallery_picker_search(): void
             header('Allow: GET');
         } else {
             $rawQuery = $_GET['q'] ?? '';
-            if (!is_string($rawQuery) || !in_array($_GET['format'] ?? 'json', ['json', 'html'], true)) {
-                throw new \InvalidArgumentException('Invalid destination request.');
+            if (
+                !is_string($rawQuery)
+                || !in_array($_GET['format'] ?? 'json', ['json', 'html'], true)
+            ) {
+                throw new \InvalidArgumentException(
+                    'Invalid destination request.',
+                );
             }
-            $afterId = admin_gallery_picker_request_id($_GET['after_id'] ?? '0');
-            $selectedId = admin_gallery_picker_request_id($_GET['selected_id'] ?? '0');
-            $parameters['excluded_id'] = admin_gallery_picker_request_id($_GET['excluded_id'] ?? '0');
-            $parameters['exclude_descendants'] = admin_gallery_picker_request_id($_GET['exclude_descendants'] ?? '0');
-            $parameters['allow_root'] = admin_gallery_picker_request_id($_GET['allow_root'] ?? '0');
-            if ($parameters['exclude_descendants'] > 1 || $parameters['allow_root'] > 1) {
-                throw new \InvalidArgumentException('Invalid destination request.');
+            $afterId = admin_gallery_picker_request_id(
+                $_GET['after_id'] ?? '0',
+            );
+            $selectedId = admin_gallery_picker_request_id(
+                $_GET['selected_id'] ?? '0',
+            );
+            $parameters['excluded_id'] = admin_gallery_picker_request_id(
+                $_GET['excluded_id'] ?? '0',
+            );
+            $parameters['exclude_descendants'] = admin_gallery_picker_request_id(
+                $_GET['exclude_descendants'] ?? '0',
+            );
+            $parameters['allow_root'] = admin_gallery_picker_request_id(
+                $_GET['allow_root'] ?? '0',
+            );
+            if (
+                $parameters['exclude_descendants'] > 1
+                || $parameters['allow_root'] > 1
+            ) {
+                throw new \InvalidArgumentException(
+                    'Invalid destination request.',
+                );
             }
-            $page = gallery_picker_search_page($rawQuery, $afterId, $selectedId,
-                $parameters['excluded_id'], $parameters['exclude_descendants'] === 1);
+            $page = gallery_picker_search_page(
+                $rawQuery,
+                $afterId,
+                $selectedId,
+                $parameters['excluded_id'],
+                $parameters['exclude_descendants'] === 1,
+            );
             $query = $rawQuery;
         }
     } catch (\InvalidArgumentException) {
@@ -90,25 +129,44 @@ function cms_admin_gallery_picker_search(): void
     if ($html) {
         http_response_code($status);
         echo view_render_gallery_picker_directory([
-            'ok' => $page['ok'], 'rows' => $page['rows'], 'query' => $query,
+            'ok' => $page['ok'],
+            'rows' => $page['rows'],
+            'query' => $query,
             'query_max_characters' => GALLERY_PICKER_TITLE_MAX_CHARACTERS,
             'allow_root' => $status === 200 && $parameters['allow_root'] === 1,
             'action_url' => url_for('admin_gallery_picker_search'),
             'parameters' => $parameters,
-            'next_url' => $page['more'] ? url_for('admin_gallery_picker_search',
-                $parameters + ['q' => $query, 'after_id' => $page['next_after_id']]) : '',
+            'next_url' => $page['more']
+                ? url_for(
+                    'admin_gallery_picker_search',
+                    $parameters
+                        + ['q' => $query, 'after_id' => $page['next_after_id']],
+                )
+                : '',
             'labels' => [
                 'title' => t('gallery_picker.directory', 'Gallery directory'),
-                'help' => t('gallery_picker.directory_help', 'Search or browse, then enter the chosen gallery ID in the form in your original tab. The full path distinguishes galleries with the same name.'),
-                'query' => t('gallery_picker.placeholder', 'Search gallery by name or path'),
+                'help' => t(
+                    'gallery_picker.directory_help',
+                    'Search or browse, then enter the chosen gallery ID in the form in your original tab. The full path distinguishes galleries with the same name.',
+                ),
+                'query' => t(
+                    'gallery_picker.placeholder',
+                    'Search gallery by name or path',
+                ),
                 'search' => t('gallery_picker.search', 'Search'),
                 'id' => t('gallery_picker.id', 'Gallery ID'),
                 'gallery' => t('gallery_picker.gallery', 'Gallery'),
                 'path' => t('gallery_picker.path', 'Path'),
                 'root' => t('admin.gallery_editor.no_parent', 'No parent'),
                 'more' => t('gallery_picker.more', 'Next results'),
-                'empty' => t('gallery_picker.no_results', 'No matching galleries found.'),
-                'error' => t('gallery_picker.directory_error', 'The directory is unavailable. Check your administrator login and try again.'),
+                'empty' => t(
+                    'gallery_picker.no_results',
+                    'No matching galleries found.',
+                ),
+                'error' => t(
+                    'gallery_picker.directory_error',
+                    'The directory is unavailable. Check your administrator login and try again.',
+                ),
             ],
         ]);
         return;

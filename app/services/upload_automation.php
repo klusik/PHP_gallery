@@ -78,7 +78,7 @@ function upload_automation_schema_ready(): bool
 /**
  * Return the visible prefix used for newly generated upload API keys.
  *
- * @return string Text result for the caller.
+ * @return string Trimmed API key from the dedicated header, Bearer authorization value, or scalar form value; array form values produce an empty string.
  */
 function upload_automation_token_prefix(): string
 {
@@ -133,19 +133,31 @@ function upload_automation_normalize_label(string $label): string
  * @param string $label Label value.
  * @return array{token:string,id:int,label:string} Structured result data for the caller.
  */
-function create_gallery_upload_automation_token(int $galleryId, ?int $createdByUserId, string $label = ''): array
-{
+function create_gallery_upload_automation_token(
+    int $galleryId,
+    ?int $createdByUserId,
+    string $label = '',
+): array {
     mutation_schema_assert_available(
         upload_automation_schema_status(),
         'upload_automation.create_token',
-        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
-        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified. No API key was created.')
+        t(
+            'upload_automation.error.migration_required',
+            'Upload automation database table is missing. Run pending migrations first.',
+        ),
+        t(
+            'upload_automation.error.schema_unknown',
+            'Upload automation is temporarily unavailable because its database schema could not be verified. No API key was created.',
+        ),
     );
 
     // $gallery stores the gallery that owns the new API key.
     $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
 
     // $token stores the raw value that is shown to the admin only once.
@@ -157,7 +169,7 @@ function create_gallery_upload_automation_token(int $galleryId, ?int $createdByU
         upload_automation_token_hash($token),
         $normalizedLabel,
         $createdByUserId,
-        now_sql()
+        now_sql(),
     );
 
     return [
@@ -171,7 +183,7 @@ function create_gallery_upload_automation_token(int $galleryId, ?int $createdByU
  * Return active upload automation API keys for one gallery.
  *
  * @param int $galleryId Gallery identifier.
- * @return array<int array<string, mixed>>.
+ * @return list<array{id:int,gallery_id:int,label:string,active:int,created_at:string,last_used_at:?string,revoked_at:?string}> Active key metadata for one gallery; raw secrets are excluded.
  */
 function gallery_upload_automation_tokens(int $galleryId): array
 {
@@ -182,7 +194,10 @@ function gallery_upload_automation_tokens(int $galleryId): array
     mutation_schema_assert_known(
         $schemaStatus,
         'upload_automation.list_tokens',
-        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified.')
+        t(
+            'upload_automation.error.schema_unknown',
+            'Upload automation is temporarily unavailable because its database schema could not be verified.',
+        ),
     );
 
     return upload_automation_model_active_tokens_for_gallery($galleryId);
@@ -191,7 +206,7 @@ function gallery_upload_automation_tokens(int $galleryId): array
 /**
  * Return active upload automation API keys across all galleries.
  *
- * @return array<int array<string, mixed>>.
+ * @return list<array{id:int,gallery_id:int,label:string,active:int,created_at:string,last_used_at:?string,revoked_at:?string,gallery_title:string,gallery_slug:string,created_by_username:?string,created_by_display_name:?string}> Active key metadata across galleries; raw secrets are excluded.
  */
 function upload_automation_tokens_for_manager(): array
 {
@@ -202,7 +217,10 @@ function upload_automation_tokens_for_manager(): array
     mutation_schema_assert_known(
         $schemaStatus,
         'upload_automation.list_tokens',
-        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified.')
+        t(
+            'upload_automation.error.schema_unknown',
+            'Upload automation is temporarily unavailable because its database schema could not be verified.',
+        ),
     );
 
     return upload_automation_model_active_tokens_for_manager();
@@ -215,16 +233,28 @@ function upload_automation_tokens_for_manager(): array
  * @param int $tokenId Token id identifier.
  * @return bool True when the condition matches.
  */
-function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): bool
-{
+function revoke_gallery_upload_automation_token(
+    int $galleryId,
+    int $tokenId,
+): bool {
     mutation_schema_assert_available(
         upload_automation_revocation_schema_status(),
         'upload_automation.revoke_token',
-        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
-        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because the API-key revocation schema could not be verified. No API key was changed.')
+        t(
+            'upload_automation.error.migration_required',
+            'Upload automation database table is missing. Run pending migrations first.',
+        ),
+        t(
+            'upload_automation.error.schema_unknown',
+            'Upload automation is temporarily unavailable because the API-key revocation schema could not be verified. No API key was changed.',
+        ),
     );
 
-    return upload_automation_model_revoke_token($galleryId, $tokenId, now_sql());
+    return upload_automation_model_revoke_token(
+        $galleryId,
+        $tokenId,
+        now_sql(),
+    );
 }
 
 /**
@@ -243,30 +273,44 @@ function find_upload_automation_token(string $token): ?array
     mutation_schema_assert_available(
         upload_automation_schema_status(),
         'upload_automation.authenticate',
-        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
-        t('upload_automation.error.schema_unknown', 'Upload automation authentication is temporarily unavailable because its database schema could not be verified.')
+        t(
+            'upload_automation.error.migration_required',
+            'Upload automation database table is missing. Run pending migrations first.',
+        ),
+        t(
+            'upload_automation.error.schema_unknown',
+            'Upload automation authentication is temporarily unavailable because its database schema could not be verified.',
+        ),
     );
 
-    return upload_automation_model_find_active_token_by_hash(upload_automation_token_hash($normalizedToken));
+    return upload_automation_model_find_active_token_by_hash(upload_automation_token_hash(
+        $normalizedToken,
+    ));
 }
 
 /**
  * Record the most recent successful use of one upload automation API key.
  *
  * @param int $tokenId Token id identifier.
+ * @return void
  */
 function mark_upload_automation_token_used(int $tokenId): void
 {
     mutation_schema_assert_available(
         upload_automation_schema_status(),
         'upload_automation.mark_used',
-        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
-        t('upload_automation.error.schema_unknown', 'Upload automation usage metadata could not be updated because its database schema could not be verified.')
+        t(
+            'upload_automation.error.migration_required',
+            'Upload automation database table is missing. Run pending migrations first.',
+        ),
+        t(
+            'upload_automation.error.schema_unknown',
+            'Upload automation usage metadata could not be updated because its database schema could not be verified.',
+        ),
     );
 
     upload_automation_model_mark_token_used($tokenId, now_sql());
 }
-
 
 /**
  * Normalize one client inventory row submitted by the companion app.
@@ -289,7 +333,11 @@ function upload_automation_normalize_inventory_row(array $row): ?array
     }
 
     // $filename stores only a basename. Remote inventory never trusts client paths.
-    $filename = basename(str_replace('\\', '/', trim((string) ($row['filename'] ?? ''))));
+    $filename = basename(str_replace(
+        '\\',
+        '/',
+        trim((string) ($row['filename'] ?? '')),
+    ));
     if ($filename === '') {
         $filename = $sha256;
     }
@@ -366,10 +414,15 @@ function upload_automation_gallery_inventory_fingerprint(int $galleryId): string
  * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
  * @return array<string,array<string,mixed>> Remote rows keyed by checksum.
  */
-function upload_automation_inventory_db_matches(int $galleryId, array $candidates): array
-{
+function upload_automation_inventory_db_matches(
+    int $galleryId,
+    array $candidates,
+): array {
     // $hashes stores the submitted content hashes that are cheap to compare with indexed image rows.
-    $hashes = array_values(array_unique(array_map(static fn (array $row): string => (string) $row['sha256'], $candidates)));
+    $hashes = array_values(array_unique(array_map(
+        static fn(array $row): string => (string) $row['sha256'],
+        $candidates,
+    )));
     if (!$hashes) {
         return [];
     }
@@ -377,7 +430,10 @@ function upload_automation_inventory_db_matches(int $galleryId, array $candidate
     // $matches stores rows keyed by remote checksum_sha256.
     $matches = [];
     foreach (array_chunk($hashes, 250) as $hashChunk) {
-        foreach (image_model_direct_rows_by_checksums($galleryId, $hashChunk) as $row) {
+        foreach (image_model_direct_rows_by_checksums(
+            $galleryId,
+            $hashChunk,
+        ) as $row) {
             $hash = strtolower((string) ($row['checksum_sha256'] ?? ''));
             if ($hash === '') {
                 continue;
@@ -409,8 +465,11 @@ function upload_automation_inventory_db_matches(int $galleryId, array $candidate
  * @param array<string,array<string,mixed>> $knownMatches Existing checksum matches from the database.
  * @return array<string,array<string,mixed>> Additional remote rows keyed by checksum.
  */
-function upload_automation_inventory_disk_matches(array $gallery, array $candidates, array $knownMatches): array
-{
+function upload_automation_inventory_disk_matches(
+    array $gallery,
+    array $candidates,
+    array $knownMatches,
+): array {
     // $missingBySize stores only hashes that still need a disk-level check.
     $missingBySize = [];
     foreach ($candidates as $candidate) {
@@ -437,14 +496,19 @@ function upload_automation_inventory_disk_matches(array $gallery, array $candida
     // $matches stores newly found disk matches keyed by content hash.
     $matches = [];
     foreach (new DirectoryIterator($root) as $file) {
-        if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
+        if (
+            !$file->isFile()
+            || !is_supported_image_path($file->getFilename())
+        ) {
             continue;
         }
         $size = $file->getSize();
         if (!isset($missingBySize[$size])) {
             continue;
         }
-        $hash = strtolower((string) (hash_file('sha256', $file->getPathname()) ?: ''));
+        $hash = strtolower(
+            (string) (hash_file('sha256', $file->getPathname()) ?: ''),
+        );
         if ($hash === '' || !isset($missingBySize[$size][$hash])) {
             continue;
         }
@@ -470,15 +534,26 @@ function upload_automation_inventory_disk_matches(array $gallery, array $candida
  * @param bool $deepCheck Whether to perform the bounded filesystem fallback used only after ambiguous upload failures.
  * @return array<string,mixed> JSON-safe inventory response.
  */
-function upload_automation_gallery_inventory_response(int $galleryId, array $gallery, array $candidates, bool $deepCheck = false): array
-{
+function upload_automation_gallery_inventory_response(
+    int $galleryId,
+    array $gallery,
+    array $candidates,
+    bool $deepCheck = false,
+): array {
     // $dbMatches stores the normal indexed-image matches. Routine inventory remains database-only.
-    $dbMatches = upload_automation_inventory_db_matches($galleryId, $candidates);
+    $dbMatches = upload_automation_inventory_db_matches(
+        $galleryId,
+        $candidates,
+    );
     // $deepCandidates bounds the expensive disk fallback to a tiny recovery request.
     $deepCandidates = $deepCheck ? array_slice($candidates, 0, 8) : [];
     // $diskMatches stores fallback direct-file matches only for interrupted upload recovery.
     $diskMatches = $deepCandidates
-        ? upload_automation_inventory_disk_matches($gallery, $deepCandidates, $dbMatches)
+        ? upload_automation_inventory_disk_matches(
+            $gallery,
+            $deepCandidates,
+            $dbMatches,
+        )
         : [];
     // $matches stores the combined remote truth keyed by content hash.
     $matches = array_replace($diskMatches, $dbMatches);
@@ -499,7 +574,9 @@ function upload_automation_gallery_inventory_response(int $galleryId, array $gal
             'remote_filename' => (string) ($remote['filename'] ?? ''),
             'remote_relative_path' => (string) ($remote['relative_path'] ?? ''),
             'remote_image_id' => (int) ($remote['image_id'] ?? 0),
-            'matched_by' => (string) ($remote['matched_by'] ?? 'checksum_sha256'),
+            'matched_by' => (string) (
+                $remote['matched_by'] ?? 'checksum_sha256'
+            ),
         ];
     }
 
@@ -512,7 +589,8 @@ function upload_automation_gallery_inventory_response(int $galleryId, array $gal
         'matched' => count($existing),
         'existing' => $existing,
         'deep_check_applied' => $deepCheck && $deepCandidates !== [],
-        'fingerprint' => upload_automation_gallery_inventory_fingerprint($galleryId),
+        'fingerprint' =>
+            upload_automation_gallery_inventory_fingerprint($galleryId),
         'server_time' => now_sql(),
     ];
 }
@@ -520,17 +598,26 @@ function upload_automation_gallery_inventory_response(int $galleryId, array $gal
 /**
  * Extract an upload automation API key from common HTTP locations.
  *
+ * @param string $headerToken Optional key from the dedicated HTTP header.
+ * @param string $authorization Optional Authorization header, including Bearer scheme.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $postToken Optional form token. Arrays are rejected as empty; other values are string-cast and trimmed if no header or Bearer token was found.
  * @return string Text result for the caller.
  */
-function upload_automation_request_token(string $headerToken = '', string $authorization = '', mixed $postToken = ''): string
-{
+function upload_automation_request_token(
+    string $headerToken = '',
+    string $authorization = '',
+    mixed $postToken = '',
+): string {
     $headerToken = trim($headerToken);
     if ($headerToken !== '') {
         return $headerToken;
     }
 
     $authorization = trim($authorization);
-    if ($authorization !== '' && preg_match('/^Bearer\s+(.+)$/i', $authorization, $match) === 1) {
+    if (
+        $authorization !== ''
+        && preg_match('/^Bearer\s+(.+)$/i', $authorization, $match) === 1
+    ) {
         return trim((string) $match[1]);
     }
 
@@ -577,7 +664,10 @@ function upload_automation_normalize_client_id(string $clientId): string
 {
     // $clientId stores a compact ASCII-only correlation value supplied by the client.
     $clientId = trim($clientId);
-    if ($clientId === '' || preg_match('/^[A-Za-z0-9_-]{1,80}$/', $clientId) !== 1) {
+    if (
+        $clientId === ''
+        || preg_match('/^[A-Za-z0-9_-]{1,80}$/', $clientId) !== 1
+    ) {
         return '';
     }
 
@@ -587,7 +677,8 @@ function upload_automation_normalize_client_id(string $clientId): string
 /**
  * Return request-local image IDs submitted beside images[].
  *
- * @return array<int string>.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $rawIds One submitted identifier or an array of identifiers aligned with upload order. Non-array input is wrapped as the sole candidate; each candidate is string-cast and normalized, and array keys become integer upload indexes.
+ * @return array<int,string> Normalized client correlation IDs keyed by upload index; scalar input is treated as index zero.
  */
 function upload_automation_image_client_ids(mixed $rawIds): array
 {
@@ -599,7 +690,9 @@ function upload_automation_image_client_ids(mixed $rawIds): array
     // $ids stores normalized correlation values by original upload index.
     $ids = [];
     foreach ($rawIds as $index => $rawId) {
-        $ids[(int) $index] = upload_automation_normalize_client_id((string) $rawId);
+        $ids[(int) $index] = upload_automation_normalize_client_id(
+            (string) $rawId,
+        );
     }
 
     return $ids;
@@ -608,6 +701,8 @@ function upload_automation_image_client_ids(mixed $rawIds): array
 /**
  * Parse optional Flight Simulator camera metadata from the upload request.
  *
+ * @param array<string,mixed> $input Submitted upload fields containing
+ *     simulator source and camera coordinates.
  * @return array{lat:float,lng:float,altitude:float|null,source:string}|null Structured result data for the caller.
  */
 function upload_automation_sim_camera_metadata(array $input): ?array
@@ -622,13 +717,24 @@ function upload_automation_sim_camera_metadata(array $input): ?array
         return null;
     }
 
-    $latitude = upload_automation_float_field($input['sim_camera_latitude'] ?? null);
-    $longitude = upload_automation_float_field($input['sim_camera_longitude'] ?? null);
-    $altitude = upload_automation_float_field($input['sim_camera_altitude'] ?? null);
+    $latitude = upload_automation_float_field(
+        $input['sim_camera_latitude'] ?? null,
+    );
+    $longitude = upload_automation_float_field(
+        $input['sim_camera_longitude'] ?? null,
+    );
+    $altitude = upload_automation_float_field(
+        $input['sim_camera_altitude'] ?? null,
+    );
     if ($latitude === null || $longitude === null) {
         return null;
     }
-    if ($latitude < -90.0 || $latitude > 90.0 || $longitude < -180.0 || $longitude > 180.0) {
+    if (
+        $latitude < -90.0
+        || $latitude > 90.0
+        || $longitude < -180.0
+        || $longitude > 180.0
+    ) {
         return null;
     }
 
@@ -675,10 +781,22 @@ function upload_automation_float_field(mixed $raw): ?float
  * @param array<string,mixed> $stored Stored upload result containing image ids.
  * @return array{hashed:int,persisted:int,skipped:int,failed:int,errors:array<int,string>} Checksum indexing result.
  */
-function upload_automation_refresh_stored_checksums(int $galleryId, array $gallery, array $stored): array
-{
-    $result = ['hashed' => 0, 'persisted' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($stored['image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+function upload_automation_refresh_stored_checksums(
+    int $galleryId,
+    array $gallery,
+    array $stored,
+): array {
+    $result = [
+        'hashed' => 0,
+        'persisted' => 0,
+        'skipped' => 0,
+        'failed' => 0,
+        'errors' => [],
+    ];
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', (array) ($stored['image_ids'] ?? [])),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($galleryId <= 0 || $imageIds === []) {
         return $result;
     }
@@ -691,11 +809,16 @@ function upload_automation_refresh_stored_checksums(int $galleryId, array $galle
         return $result;
     }
 
-    $relativePaths = image_model_relative_paths_for_gallery_ids($galleryId, $imageIds);
+    $relativePaths = image_model_relative_paths_for_gallery_ids(
+        $galleryId,
+        $imageIds,
+    );
     $checksums = [];
     foreach ($imageIds as $imageId) {
         try {
-            $relative = normalize_relative_path((string) ($relativePaths[$imageId] ?? ''));
+            $relative = normalize_relative_path(
+                (string) ($relativePaths[$imageId] ?? ''),
+            );
         } catch (Throwable) {
             $relative = '';
         }
@@ -705,9 +828,19 @@ function upload_automation_refresh_stored_checksums(int $galleryId, array $galle
             continue;
         }
 
-        $candidate = $realRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $candidate =
+            $realRoot
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $realPath = realpath($candidate);
-        if (!is_string($realPath) || !is_file($realPath) || ($realPath !== $realRoot && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR))) {
+        if (
+            !is_string($realPath)
+            || !is_file($realPath)
+            || (
+                $realPath !== $realRoot
+                && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR)
+            )
+        ) {
             $result['failed']++;
             $result['errors'][] = 'Stored image file is unavailable while indexing its checksum.';
             continue;
@@ -728,7 +861,11 @@ function upload_automation_refresh_stored_checksums(int $galleryId, array $galle
         return $result;
     }
 
-    $counts = image_model_set_checksums_for_gallery_ids($galleryId, $checksums, now_sql());
+    $counts = image_model_set_checksums_for_gallery_ids(
+        $galleryId,
+        $checksums,
+        now_sql(),
+    );
     $result['persisted'] = (int) ($counts['updated'] ?? 0);
     $result['skipped'] = (int) ($counts['skipped'] ?? 0);
     return $result;
@@ -738,12 +875,16 @@ function upload_automation_refresh_stored_checksums(int $galleryId, array $galle
  * Attach parsed Flight Simulator camera metadata to stored image rows.
  *
  * @param int $galleryId Target gallery authorized by the API key.
- * @param array $stored Stored value.
+ * @param array{image_ids?:list<int>} $stored Stored upload result with image
+ *     identities.
  * @param array{lat:float,lng:float,altitude:float|null,source:string}|null $metadata Parsed metadata.
  * @return array{attached:int,skipped:int,error:string} Structured result data for the caller.
  */
-function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stored, ?array $metadata): array
-{
+function upload_automation_apply_sim_camera_metadata(
+    int $galleryId,
+    array $stored,
+    ?array $metadata,
+): array {
     $result = ['attached' => 0, 'skipped' => 0, 'error' => ''];
     if ($metadata === null) {
         return $result;
@@ -754,7 +895,10 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
         return $result;
     }
 
-    $imageIds = array_values(array_filter(array_map('intval', (array) ($stored['image_ids'] ?? []))));
+    $imageIds = array_values(array_filter(array_map(
+        'intval',
+        (array) ($stored['image_ids'] ?? []),
+    )));
     if (!$imageIds) {
         $result['error'] = 'No stored image rows were available for camera metadata.';
         return $result;
@@ -767,7 +911,7 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
             (float) $metadata['lat'],
             (float) $metadata['lng'],
             isset($metadata['altitude']) ? (float) $metadata['altitude'] : null,
-            now_sql()
+            now_sql(),
         );
         $result['attached'] = $counts['updated'];
         $result['skipped'] = $counts['skipped'];
@@ -788,11 +932,23 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
  * getimagesize(). Unknown, missing, or mismatched metadata causes the single
  * submitted thumbnail to be rejected before it can be written into a gallery.
  *
- * @return array<int array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}>.
+ * @param ?array<string,mixed> $files PHP multi-file upload descriptor.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $clientIds Client correlation IDs indexed by thumbnail entry; non-array input is treated as a one-entry list, then candidates are string-cast and validated.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $sizes Requested thumbnail pixel sizes indexed by entry; non-array input is treated as a one-entry list and values are normalized against supported sizes.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $formats Requested thumbnail formats indexed by entry; non-array input is treated as a one-entry list and values are normalized against supported formats.
+ * @return list<array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}> Validated temporary thumbnail entries.
  */
-function upload_automation_client_thumbnail_entries(?array $files, mixed $clientIds, mixed $sizes, mixed $formats): array
-{
-    if (!is_array($files) || empty($files['name']) || !is_array($files['name'])) {
+function upload_automation_client_thumbnail_entries(
+    ?array $files,
+    mixed $clientIds,
+    mixed $sizes,
+    mixed $formats,
+): array {
+    if (
+        !is_array($files)
+        || empty($files['name'])
+        || !is_array($files['name'])
+    ) {
         return [];
     }
 
@@ -824,25 +980,39 @@ function upload_automation_client_thumbnail_entries(?array $files, mixed $client
         // $tmpName stores the uploaded temporary file that PHP created for this request.
         $tmpName = (string) ($files['tmp_name'][$index] ?? '');
         if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_unavailable', 'Uploaded client thumbnail is not available.'));
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_unavailable',
+                'Uploaded client thumbnail is not available.',
+            ));
         }
 
         // $clientId stores the request-local image correlation value.
-        $clientId = upload_automation_normalize_client_id((string) ($clientIds[$index] ?? ''));
+        $clientId = upload_automation_normalize_client_id(
+            (string) ($clientIds[$index] ?? ''),
+        );
         if ($clientId === '') {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_client_id_missing', 'Uploaded client thumbnail is missing its image correlation ID.'));
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_client_id_missing',
+                'Uploaded client thumbnail is missing its image correlation ID.',
+            ));
         }
 
         // $size stores the target long-side thumbnail size.
         $size = (int) ($sizes[$index] ?? 0);
         if (!in_array($size, thumbnail_sizes(), true)) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_size_invalid', 'Uploaded client thumbnail uses an unsupported size.'));
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_size_invalid',
+                'Uploaded client thumbnail uses an unsupported size.',
+            ));
         }
 
         // $format stores the target thumbnail format.
         $format = strtolower((string) ($formats[$index] ?? ''));
         if (!in_array($format, ['jpg', 'webp'], true)) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_format_invalid', 'Uploaded client thumbnail uses an unsupported format.'));
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_format_invalid',
+                'Uploaded client thumbnail uses an unsupported format.',
+            ));
         }
         // Do not reject the whole automation request when a compatibility-capable
         // client submits a valid thumbnail format that the active server policy
@@ -858,20 +1028,35 @@ function upload_automation_client_thumbnail_entries(?array $files, mixed $client
         // $info stores image metadata used to reject wrong or damaged thumbnail files.
         $info = @getimagesize($tmpName);
         if ($info === false || empty($info['mime'])) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_invalid', 'Uploaded client thumbnail is not a valid image.'));
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_invalid',
+                'Uploaded client thumbnail is not a valid image.',
+            ));
         }
         // $mime stores the detected image MIME type for format validation.
         $mime = (string) $info['mime'];
-        if ($format === 'jpg' && !in_array($mime, ['image/jpeg', 'image/pjpeg'], true)) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_format_mismatch', 'Uploaded client thumbnail MIME type does not match its target format.'));
+        if (
+            $format === 'jpg'
+            && !in_array($mime, ['image/jpeg', 'image/pjpeg'], true)
+        ) {
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_format_mismatch',
+                'Uploaded client thumbnail MIME type does not match its target format.',
+            ));
         }
         if ($format === 'webp' && $mime !== 'image/webp') {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_format_mismatch', 'Uploaded client thumbnail MIME type does not match its target format.'));
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_format_mismatch',
+                'Uploaded client thumbnail MIME type does not match its target format.',
+            ));
         }
         // $longSide stores the decoded thumbnail long side for size validation.
         $longSide = max((int) ($info[0] ?? 0), (int) ($info[1] ?? 0));
-        if ($longSide > $size + 4) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_dimensions_invalid', 'Uploaded client thumbnail is larger than its declared target size.'));
+        if ($longSide > ($size + 4)) {
+            throw new RuntimeException(t(
+                'upload_automation.error.thumbnail_dimensions_invalid',
+                'Uploaded client thumbnail is larger than its declared target size.',
+            ));
         }
 
         $entries[] = [
@@ -890,12 +1075,17 @@ function upload_automation_client_thumbnail_entries(?array $files, mixed $client
  * Build a map from client upload IDs to stored gallery image records.
  *
  * @param int $galleryId Gallery that received the originals.
- * @param array $clientIds Client ids value.
- * @param array $stored Stored value.
- * @return array<string array<string, mixed>>.
+ * @param list<string> $clientIds Normalized IDs aligned with original uploads.
+ * @param array{filenames?:list<string>} $stored Upload result filenames
+ *     aligned with the same original order.
+ * @return array<string,array<string,mixed>> Stored image rows keyed by
+ *     normalized client ID.
  */
-function upload_automation_client_image_map(int $galleryId, array $clientIds, array $stored): array
-{
+function upload_automation_client_image_map(
+    int $galleryId,
+    array $clientIds,
+    array $stored,
+): array {
     // $filenames stores final filenames after PHP Gallery normalized and de-duplicated them.
     $filenames = array_values((array) ($stored['filenames'] ?? []));
     // $map stores stored image rows by request-local client ID.
@@ -903,7 +1093,9 @@ function upload_automation_client_image_map(int $galleryId, array $clientIds, ar
 
     foreach ($filenames as $index => $filename) {
         // $clientId stores the ID originally submitted beside this image index.
-        $clientId = upload_automation_normalize_client_id((string) ($clientIds[$index] ?? ''));
+        $clientId = upload_automation_normalize_client_id(
+            (string) ($clientIds[$index] ?? ''),
+        );
         if ($clientId === '') {
             continue;
         }
@@ -913,7 +1105,10 @@ function upload_automation_client_image_map(int $galleryId, array $clientIds, ar
         // helper may cache a negative lookup before inserting the new row. This
         // upload request needs a fresh database read so client thumbnails can be
         // attached immediately after the original was scanned.
-        $image = upload_automation_find_image_by_path_uncached($galleryId, normalize_relative_path((string) $filename));
+        $image = upload_automation_find_image_by_path_uncached(
+            $galleryId,
+            normalize_relative_path((string) $filename),
+        );
         if (is_array($image)) {
             $map[$clientId] = $image;
         }
@@ -934,11 +1129,16 @@ function upload_automation_client_image_map(int $galleryId, array $clientIds, ar
  * @param string $relativePath Normalized image path inside the gallery folder.
  * @return array<string mixed>|null Fresh image row, or null when not found.
  */
-function upload_automation_find_image_by_path_uncached(int $galleryId, string $relativePath): ?array
-{
+function upload_automation_find_image_by_path_uncached(
+    int $galleryId,
+    string $relativePath,
+): ?array {
     // $normalizedPath stores the canonical path used by the image hash index.
     $normalizedPath = normalize_relative_path($relativePath);
-    return image_model_find_by_path_hash($galleryId, hash('sha256', $normalizedPath));
+    return image_model_find_by_path_hash($galleryId, hash(
+        'sha256',
+        $normalizedPath,
+    ));
 }
 
 /**
@@ -953,14 +1153,20 @@ function upload_automation_find_image_by_path_uncached(int $galleryId, string $r
  * the Windows app can still generate thumbnails in parallel and upload request
  * bodies concurrently.
  *
+ * @template TResult
  * @param int $galleryId Gallery being modified by the automation endpoint.
- * @param callable $callback Work to run while the gallery lock is held.
- * @return mixed Value returned by the callback.
+ * @param callable():TResult $callback Zero-argument work callback run while the gallery lock is held; its return value is passed through unchanged, and thrown exceptions propagate after the lock is released.
+ * @return TResult Value returned by the callback while the gallery lock is held.
  */
-function upload_automation_with_gallery_lock(int $galleryId, callable $callback): mixed
-{
+function upload_automation_with_gallery_lock(
+    int $galleryId,
+    callable $callback,
+): mixed {
     if (!upload_automation_model_acquire_gallery_lock($galleryId, 10)) {
-        throw new RuntimeException(t('upload_automation.error.gallery_busy', 'The target gallery is busy processing another upload. Please retry shortly.'));
+        throw new RuntimeException(t(
+            'upload_automation.error.gallery_busy',
+            'The target gallery is busy processing another upload. Please retry shortly.',
+        ));
     }
 
     try {
@@ -978,27 +1184,43 @@ function upload_automation_with_gallery_lock(int $galleryId, callable $callback)
  * decide the target gallery independently from the API key.
  *
  * @param int $galleryId Target gallery authorized by the API key.
- * @param array $gallery Gallery row or gallery data.
- * @param array $thumbnailEntries Thumbnail entries value.
- * @param array $imageClientIds Image client ids value.
- * @param array $stored Stored value.
+ * @param array<string,mixed> $gallery Target gallery row with folder path.
+ * @param list<array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}> $thumbnailEntries Validated client thumbnail uploads.
+ * @param list<string> $imageClientIds Normalized IDs aligned with original uploads.
+ * @param array{filenames?:list<string>} $stored Original upload result.
  * @return array{installed:int,skipped:int,failed:int,errors:array<int,string>} Structured result data for the caller.
  */
-function upload_automation_install_client_thumbnails(int $galleryId, array $gallery, array $thumbnailEntries, array $imageClientIds, array $stored): array
-{
+function upload_automation_install_client_thumbnails(
+    int $galleryId,
+    array $gallery,
+    array $thumbnailEntries,
+    array $imageClientIds,
+    array $stored,
+): array {
     if (!$thumbnailEntries) {
-        return ['installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+        return [
+            'installed' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'errors' => [],
+        ];
     }
 
     // $imageMap stores accepted original images by their request-local client ID.
-    $imageMap = upload_automation_client_image_map($galleryId, $imageClientIds, $stored);
+    $imageMap = upload_automation_client_image_map(
+        $galleryId,
+        $imageClientIds,
+        $stored,
+    );
     // $result stores counters returned to the client and admin logs.
     $result = ['installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
 
     gallery_thumbs_dir($gallery, true);
     foreach ($thumbnailEntries as $entry) {
         // $clientId stores the original image correlation value for this thumbnail.
-        $clientId = upload_automation_normalize_client_id((string) ($entry['client_id'] ?? ''));
+        $clientId = upload_automation_normalize_client_id(
+            (string) ($entry['client_id'] ?? ''),
+        );
         // $image stores the final image row belonging to this thumbnail.
         $image = $imageMap[$clientId] ?? null;
         if (!is_array($image)) {
@@ -1007,7 +1229,12 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
             continue;
         }
         $format = strtolower((string) ($entry['format'] ?? ''));
-        if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+        if (
+            function_exists(
+                'Gallery\\Services\\thumbnail_policy_format_allowed',
+            )
+            && !thumbnail_policy_format_allowed($format)
+        ) {
             // Compatibility clients may submit both JPG and WebP because the
             // active server policy is not known before upload. Treat an otherwise
             // valid but currently unnecessary variant as an expected skip rather
@@ -1019,20 +1246,45 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
 
         try {
             // $targetPath stores the final gallery thumbnail cache path.
-            $targetPath = thumbnail_abs_path($image, $gallery, (int) $entry['size_px'], $format);
+            $targetPath = thumbnail_abs_path(
+                $image,
+                $gallery,
+                (int) $entry['size_px'],
+                $format,
+            );
             // $targetDir stores the parent folder for the generated thumbnail file.
             $targetDir = dirname($targetPath);
             if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
-                throw new RuntimeException(t('upload_automation.error.thumbnail_target_dir_failed', 'Could not create the gallery thumbnail folder.'));
+                throw new RuntimeException(t(
+                    'upload_automation.error.thumbnail_target_dir_failed',
+                    'Could not create the gallery thumbnail folder.',
+                ));
             }
             if (!move_uploaded_file((string) $entry['tmp_name'], $targetPath)) {
-                throw new RuntimeException(t('upload_automation.error.thumbnail_store_failed', 'Could not store a client-generated thumbnail.'));
+                throw new RuntimeException(t(
+                    'upload_automation.error.thumbnail_store_failed',
+                    'Could not store a client-generated thumbnail.',
+                ));
             }
             @touch($targetPath, time());
-            if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
+            if (function_exists(
+                'Gallery\\Services\\thumbnail_metadata_record_file',
+            )) {
                 // $metadataResult stores validation and DB registration for the uploaded client thumbnail.
-                $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], $format, $targetPath, image_abs_path($image, $gallery), true);
-                if (empty($metadataResult['valid']) && (string) ($metadataResult['status'] ?? '') !== 'metadata_unavailable') {
+                $metadataResult = thumbnail_metadata_record_file(
+                    $image,
+                    $gallery,
+                    (int) $entry['size_px'],
+                    $format,
+                    $targetPath,
+                    image_abs_path($image, $gallery),
+                    true,
+                );
+                if (
+                    empty($metadataResult['valid'])
+                    && (string) ($metadataResult['status'] ?? '')
+                        !== 'metadata_unavailable'
+                ) {
                     $result['failed']++;
                     $result['errors'][] = 'Client-generated thumbnail geometry did not match the original image.';
                     continue;
@@ -1045,8 +1297,16 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
         }
     }
 
-    $result['errors'] = array_values(array_unique(array_filter(array_map('strval', $result['errors']))));
-    if ($result['installed'] > 0 && function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
+    $result['errors'] = array_values(array_unique(array_filter(array_map(
+        'strval',
+        $result['errors'],
+    ))));
+    if (
+        $result['installed'] > 0
+        && function_exists(
+            'Gallery\\Services\\thumbnail_maintenance_summary_cache_clear',
+        )
+    ) {
         thumbnail_maintenance_summary_cache_clear();
     }
 
@@ -1056,9 +1316,9 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
 /**
  * Convert common submitted truthy values into a boolean flag.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Boolean, integer, or string flag candidate. Null and the empty string return the supplied default; booleans pass through, and every other value is string-cast and compared case-insensitively with '1', 'true', 'yes', or 'on'. Non-matching values return false.
  * @param bool $default Default value when no explicit value is available.
- * @return bool True when the condition matches.
+ * @return bool Boolean value for booleans; otherwise true for '1', 'true', 'yes', or 'on' (case-insensitive), false for other strings, or the supplied default for null/empty input.
  */
 function upload_automation_bool(mixed $value, bool $default = false): bool
 {
@@ -1068,5 +1328,9 @@ function upload_automation_bool(mixed $value, bool $default = false): bool
     if (is_bool($value)) {
         return $value;
     }
-    return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
+    return in_array(
+        strtolower((string) $value),
+        ['1', 'true', 'yes', 'on'],
+        true,
+    );
 }

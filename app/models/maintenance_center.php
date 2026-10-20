@@ -42,70 +42,125 @@ use PDOException;
 use RuntimeException;
 use function Gallery\Core\db;
 
-/** Acquire a short-lived database-scoped single-flight lock for one job step. */
+/**
+ * Acquire a short-lived database-scoped single-flight lock for one job step.
+ *
+ * @param int $jobId Maintenance job identifier used to scope the lock.
+ * @return bool True when this connection acquires the lock.
+ */
 function maintenance_center_model_acquire_step_lock(int $jobId): bool
 {
-    $stmt = db()->prepare("SELECT GET_LOCK(CONCAT('pg_maintenance_center_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?), 0)");
+    $stmt = db()->prepare(
+        "SELECT GET_LOCK(CONCAT('pg_maintenance_center_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?), 0)",
+    );
     $stmt->execute([$jobId]);
     $value = $stmt->fetchColumn();
     if ($value === null || $value === false) {
-        throw new RuntimeException('Maintenance Center step lock is unavailable.');
+        throw new RuntimeException(
+            'Maintenance Center step lock is unavailable.',
+        );
     }
     return (int) $value === 1;
 }
 
-/** Release the current connection's short-lived single-flight job lock. */
+/**
+ * Release the current connection's short-lived single-flight job lock.
+ *
+ * @param int $jobId Maintenance job identifier whose lock is released.
+ * @return void Releases the connection-owned lock when held.
+ */
 function maintenance_center_model_release_step_lock(int $jobId): void
 {
-    $stmt = db()->prepare("SELECT RELEASE_LOCK(CONCAT('pg_maintenance_center_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?))");
+    $stmt = db()->prepare(
+        "SELECT RELEASE_LOCK(CONCAT('pg_maintenance_center_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?))",
+    );
     $stmt->execute([$jobId]);
 }
 
-/** Acquire a short-lived actor-scoped lock while replacing/creating an analysis job. */
+/**
+ * Acquire a short-lived actor-scoped lock while replacing/creating an analysis job.
+ *
+ * @param int $actorId Administrator identifier owning the analysis request.
+ * @return bool True when this connection acquires the lock.
+ */
 function maintenance_center_model_acquire_analysis_start_lock(int $actorId): bool
 {
-    $stmt = db()->prepare("SELECT GET_LOCK(CONCAT('pg_mc_analysis_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?), 0)");
+    $stmt = db()->prepare(
+        "SELECT GET_LOCK(CONCAT('pg_mc_analysis_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?), 0)",
+    );
     $stmt->execute([$actorId]);
     $value = $stmt->fetchColumn();
     if ($value === null || $value === false) {
-        throw new RuntimeException('Maintenance Center analysis-start lock is unavailable.');
+        throw new RuntimeException(
+            'Maintenance Center analysis-start lock is unavailable.',
+        );
     }
     return (int) $value === 1;
 }
 
-/** Release the current connection's short-lived actor-scoped analysis-start lock. */
+/**
+ * Release the current connection's short-lived actor-scoped analysis-start lock.
+ *
+ * @param int $actorId Administrator identifier whose lock is released.
+ * @return void Releases the connection-owned lock when held.
+ */
 function maintenance_center_model_release_analysis_start_lock(int $actorId): void
 {
-    $stmt = db()->prepare("SELECT RELEASE_LOCK(CONCAT('pg_mc_analysis_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?))");
+    $stmt = db()->prepare(
+        "SELECT RELEASE_LOCK(CONCAT('pg_mc_analysis_', LEFT(SHA2(DATABASE(), 256), 24), '_', ?))",
+    );
     $stmt->execute([$actorId]);
 }
 
-/** Return true when the Maintenance Center persistence migration is available. */
+/**
+ * Return true when the Maintenance Center persistence migration is available.
+ *
+ * @return bool True when the expected maintenance_jobs columns are present.
+ */
 function maintenance_center_model_schema_ready(): bool
 {
     try {
-        $stmt = db()->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'maintenance_jobs'");
+        $stmt = db()->query(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'maintenance_jobs'",
+        );
         return (int) $stmt->fetchColumn() >= 18;
     } catch (\Throwable) {
         return false;
     }
 }
 
-/** Return the current applied-migration revision without mutating schema state. */
+/**
+ * Return the current applied-migration revision without mutating schema state.
+ *
+ * @return string Migration count and latest version, or unknown when unavailable.
+ */
 function maintenance_center_model_schema_revision(): string
 {
     try {
-        $row = db()->query('SELECT COUNT(*) AS migration_count, MAX(version) AS max_version FROM schema_migrations')->fetch(PDO::FETCH_ASSOC);
+        $row = db()
+            ->query(
+                'SELECT COUNT(*) AS migration_count, MAX(version) AS max_version FROM schema_migrations',
+            )
+            ->fetch(PDO::FETCH_ASSOC);
         if (!is_array($row)) {
             return 'unknown';
         }
-        return (string) ($row['migration_count'] ?? 0) . ':' . (string) ($row['max_version'] ?? '');
+        return (
+            (string) ($row['migration_count'] ?? 0)
+                . ':'
+                . (string) ($row['max_version'] ?? '')
+        );
     } catch (\Throwable) {
         return 'unknown';
     }
 }
 
-/** Create one persisted analysis job and return its id. */
+/**
+ * Create one persisted analysis job and return its id.
+ *
+ * @param array{actor_id:int,status:string,mode?:string,phase:string,plan_json?:?string,state_json:string,plan_hash?:?string,app_version:string,schema_revision:string,registry_revision:string,progress_done?:int,progress_total?:int,progress_percent?:float,cancel_requested?:bool,lock_key?:?string,error_category?:?string,error_message?:?string,created_at:string,started_at?:?string,updated_at:string,finished_at?:?string} $row Persisted job fields, with optional plan and lifecycle state.
+ * @return int Newly created job identifier.
+ */
 function maintenance_center_model_create_job(array $row): int
 {
     $stmt = db()->prepare(
@@ -113,7 +168,7 @@ function maintenance_center_model_create_job(array $row): int
             (actor_id, status, mode, phase, plan_json, state_json, plan_hash, app_version, schema_revision,
              registry_revision, progress_done, progress_total, progress_percent, cancel_requested, lock_key,
              error_category, error_message, created_at, started_at, updated_at, finished_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     $stmt->execute([
         (int) $row['actor_id'],
@@ -141,28 +196,49 @@ function maintenance_center_model_create_job(array $row): int
     return (int) db()->lastInsertId();
 }
 
-/** Load one job by id. */
+/**
+ * Load one job by ID.
+ *
+ * @param int $jobId Maintenance job identifier.
+ * @return array<string,mixed>|null Persisted job row, or null when absent.
+ */
 function maintenance_center_model_job(int $jobId): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM maintenance_jobs WHERE id = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT * FROM maintenance_jobs WHERE id = ? LIMIT 1',
+    );
     $stmt->execute([$jobId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;
 }
 
-/** Load the newest job belonging to one administrator. */
+/**
+ * Load the newest job belonging to one administrator.
+ *
+ * @param int $actorId Administrator identifier owning the job.
+ * @return array<string,mixed>|null Newest persisted job row, or null when absent.
+ */
 function maintenance_center_model_latest_actor_job(int $actorId): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM maintenance_jobs WHERE actor_id = ? ORDER BY id DESC LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT * FROM maintenance_jobs WHERE actor_id = ? ORDER BY id DESC LIMIT 1',
+    );
     $stmt->execute([$actorId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;
 }
 
-/** Load the newest unfinished actor job. */
+/**
+ * Load the newest unfinished actor job.
+ *
+ * @param int $actorId Administrator identifier owning the job.
+ * @return array<string,mixed>|null Newest unfinished job row, or null when absent.
+ */
 function maintenance_center_model_latest_unfinished_actor_job(int $actorId): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM maintenance_jobs WHERE actor_id = ? AND status IN ('analyzing','ready','running','paused') ORDER BY id DESC LIMIT 1");
+    $stmt = db()->prepare(
+        "SELECT * FROM maintenance_jobs WHERE actor_id = ? AND status IN ('analyzing','ready','running','paused') ORDER BY id DESC LIMIT 1",
+    );
     $stmt->execute([$actorId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;
@@ -176,20 +252,33 @@ function maintenance_center_model_latest_unfinished_actor_job(int $actorId): ?ar
 function maintenance_center_model_mutation_owner(bool $requireKnown = false): ?array
 {
     try {
-        $stmt = db()->query("SELECT id, actor_id, status, phase, updated_at FROM maintenance_jobs WHERE lock_key = 'central' LIMIT 1");
+        $stmt = db()->query(
+            "SELECT id, actor_id, status, phase, updated_at FROM maintenance_jobs WHERE lock_key = 'central' LIMIT 1",
+        );
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return is_array($row) ? $row : null;
     } catch (\Throwable $exception) {
-        if ($requireKnown) throw new RuntimeException('Maintenance ownership could not be established.', 0, $exception);
+        if ($requireKnown)
+            throw new RuntimeException(
+                'Maintenance ownership could not be established.',
+                0,
+                $exception,
+            );
         return null;
     }
 }
 
-/** Load the most recently completed central maintenance job. */
+/**
+ * Load the most recently completed central maintenance job.
+ *
+ * @return array<string,mixed>|null Latest completed job row, or null when none is available.
+ */
 function maintenance_center_model_latest_completed_job(): ?array
 {
     try {
-        $stmt = db()->query("SELECT * FROM maintenance_jobs WHERE status = 'completed' ORDER BY finished_at DESC, id DESC LIMIT 1");
+        $stmt = db()->query(
+            "SELECT * FROM maintenance_jobs WHERE status = 'completed' ORDER BY finished_at DESC, id DESC LIMIT 1",
+        );
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return is_array($row) ? $row : null;
     } catch (\Throwable) {
@@ -197,19 +286,47 @@ function maintenance_center_model_latest_completed_job(): ?array
     }
 }
 
-/** Persist a bounded set of mutable job fields. */
-function maintenance_center_model_update_job(int $jobId, int $actorId, array $fields): bool
-{
+/**
+ * Persist a bounded set of mutable job fields.
+ *
+ * @param int $jobId Maintenance job identifier.
+ * @param int $actorId Administrator identifier that owns the job.
+ * @param array<string,mixed> $fields Allowlisted mutable columns and their new values.
+ * @return bool True when the requested state is persisted for the actor-owned job.
+ */
+function maintenance_center_model_update_job(
+    int $jobId,
+    int $actorId,
+    array $fields,
+): bool {
     $allowed = [
-        'status', 'mode', 'phase', 'plan_json', 'state_json', 'plan_hash', 'progress_done', 'progress_total',
-        'progress_percent', 'cancel_requested', 'lock_key', 'error_category', 'error_message', 'started_at',
-        'updated_at', 'finished_at', 'app_version', 'schema_revision', 'registry_revision',
+        'status',
+        'mode',
+        'phase',
+        'plan_json',
+        'state_json',
+        'plan_hash',
+        'progress_done',
+        'progress_total',
+        'progress_percent',
+        'cancel_requested',
+        'lock_key',
+        'error_category',
+        'error_message',
+        'started_at',
+        'updated_at',
+        'finished_at',
+        'app_version',
+        'schema_revision',
+        'registry_revision',
     ];
     $assignments = [];
     $values = [];
     foreach ($fields as $name => $value) {
         if (!in_array((string) $name, $allowed, true)) {
-            throw new RuntimeException('Unsupported Maintenance Center persistence field.');
+            throw new RuntimeException(
+                'Unsupported Maintenance Center persistence field.',
+            );
         }
         $assignments[] = '`' . $name . '` = ?';
         $values[] = $value;
@@ -219,7 +336,11 @@ function maintenance_center_model_update_job(int $jobId, int $actorId, array $fi
     }
     $values[] = $jobId;
     $values[] = $actorId;
-    $stmt = db()->prepare('UPDATE maintenance_jobs SET ' . implode(', ', $assignments) . ' WHERE id = ? AND actor_id = ?');
+    $stmt = db()->prepare(
+        'UPDATE maintenance_jobs SET '
+            . implode(', ', $assignments)
+            . ' WHERE id = ? AND actor_id = ?',
+    );
     $stmt->execute($values);
     if ($stmt->rowCount() > 0) {
         return true;
@@ -228,24 +349,40 @@ function maintenance_center_model_update_job(int $jobId, int $actorId, array $fi
     return is_array($row) && (int) ($row['actor_id'] ?? 0) === $actorId;
 }
 
-/** Atomically claim the single installation-wide central mutation slot. */
-function maintenance_center_model_claim_mutation_lock(int $jobId, int $actorId, string $now): bool
-{
+/**
+ * Atomically claim the single installation-wide central mutation slot.
+ *
+ * @param int $jobId Maintenance job identifier to claim.
+ * @param int $actorId Administrator identifier that owns the job.
+ * @param string $now Shared SQL timestamp for the claim.
+ * @return bool True when this job owns, or already validly holds, the central slot.
+ */
+function maintenance_center_model_claim_mutation_lock(
+    int $jobId,
+    int $actorId,
+    string $now,
+): bool {
     try {
         $stmt = db()->prepare(
             "UPDATE maintenance_jobs
                 SET lock_key = 'central', status = 'running', phase = 'execute', started_at = COALESCE(started_at, ?), updated_at = ?
-              WHERE id = ? AND actor_id = ? AND status IN ('ready','paused') AND (lock_key IS NULL OR lock_key = 'central')"
+              WHERE id = ? AND actor_id = ? AND status IN ('ready','paused') AND (lock_key IS NULL OR lock_key = 'central')",
         );
         $stmt->execute([$now, $now, $jobId, $actorId]);
         if ($stmt->rowCount() > 0) {
             return true;
         }
         $row = maintenance_center_model_job($jobId);
-        return is_array($row)
-            && (int) ($row['actor_id'] ?? 0) === $actorId
-            && (string) ($row['lock_key'] ?? '') === 'central'
-            && in_array((string) ($row['status'] ?? ''), ['running', 'paused'], true);
+        return (
+            is_array($row)
+                && (int) ($row['actor_id'] ?? 0) === $actorId
+                && (string) ($row['lock_key'] ?? '') === 'central'
+                && in_array(
+                    (string) ($row['status'] ?? ''),
+                    ['running', 'paused'],
+                    true,
+                )
+        );
     } catch (PDOException $exception) {
         // Duplicate unique lock_key means another central job already owns the mutation slot.
         if ((string) $exception->getCode() === '23000') {
@@ -255,32 +392,88 @@ function maintenance_center_model_claim_mutation_lock(int $jobId, int $actorId, 
     }
 }
 
-/** Release the central claim while moving the job to a terminal state. */
-function maintenance_center_model_finish_job(int $jobId, int $actorId, string $status, string $phase, string $stateJson, float $percent, string $now, ?string $errorCategory = null, ?string $errorMessage = null): bool
-{
+/**
+ * Release the central claim while moving the job to a terminal state.
+ *
+ * @param int $jobId Maintenance job identifier to finish.
+ * @param int $actorId Administrator identifier that owns the job.
+ * @param string $status Terminal job status.
+ * @param string $phase Final lifecycle phase.
+ * @param string $stateJson Serialized final job state.
+ * @param float $percent Final completion percentage.
+ * @param string $now Shared SQL timestamp for completion fields.
+ * @param ?string $errorCategory Optional stable failure category.
+ * @param ?string $errorMessage Optional safe failure summary.
+ * @return bool True when the actor-owned job row was updated.
+ */
+function maintenance_center_model_finish_job(
+    int $jobId,
+    int $actorId,
+    string $status,
+    string $phase,
+    string $stateJson,
+    float $percent,
+    string $now,
+    ?string $errorCategory = null,
+    ?string $errorMessage = null,
+): bool {
     $stmt = db()->prepare(
         'UPDATE maintenance_jobs
             SET status = ?, phase = ?, state_json = ?, progress_percent = ?, lock_key = NULL,
                 cancel_requested = 0, error_category = ?, error_message = ?, updated_at = ?, finished_at = ?
-          WHERE id = ? AND actor_id = ?'
+          WHERE id = ? AND actor_id = ?',
     );
-    $stmt->execute([$status, $phase, $stateJson, max(0.0, min(100.0, $percent)), $errorCategory, $errorMessage, $now, $now, $jobId, $actorId]);
+    $stmt->execute([
+        $status,
+        $phase,
+        $stateJson,
+        max(0.0, min(100.0, $percent)),
+        $errorCategory,
+        $errorMessage,
+        $now,
+        $now,
+        $jobId,
+        $actorId,
+    ]);
     return $stmt->rowCount() > 0;
 }
 
-/** Set cooperative cancellation without interrupting an in-flight atomic operation. */
-function maintenance_center_model_request_cancel(int $jobId, int $actorId, string $now): bool
-{
-    $stmt = db()->prepare("UPDATE maintenance_jobs SET cancel_requested = 1, updated_at = ? WHERE id = ? AND actor_id = ? AND status IN ('analyzing','ready','running','paused')");
+/**
+ * Set cooperative cancellation without interrupting an in-flight atomic operation.
+ *
+ * @param int $jobId Maintenance job identifier to cancel.
+ * @param int $actorId Administrator identifier that owns the job.
+ * @param string $now Shared SQL timestamp for the cancellation request.
+ * @return bool True when a cancellable actor-owned job was updated.
+ */
+function maintenance_center_model_request_cancel(
+    int $jobId,
+    int $actorId,
+    string $now,
+): bool {
+    $stmt = db()->prepare(
+        "UPDATE maintenance_jobs SET cancel_requested = 1, updated_at = ? WHERE id = ? AND actor_id = ? AND status IN ('analyzing','ready','running','paused')",
+    );
     $stmt->execute([$now, $jobId, $actorId]);
     return $stmt->rowCount() > 0;
 }
 
-/** Remove a bounded batch of old terminal jobs. */
-function maintenance_center_model_cleanup_history(string $finishedBefore, int $limit = 100): int
-{
+/**
+ * Remove a bounded batch of old terminal jobs.
+ *
+ * @param string $finishedBefore Cutoff SQL timestamp for finished jobs.
+ * @param int $limit Maximum rows to delete, bounded by the model.
+ * @return int Number of old terminal rows deleted.
+ */
+function maintenance_center_model_cleanup_history(
+    string $finishedBefore,
+    int $limit = 100,
+): int {
     $limit = max(1, min(500, $limit));
-    $stmt = db()->prepare("DELETE FROM maintenance_jobs WHERE lock_key IS NULL AND status IN ('completed','failed','cancelled') AND finished_at IS NOT NULL AND finished_at < ? ORDER BY finished_at ASC LIMIT " . $limit);
+    $stmt = db()->prepare(
+        "DELETE FROM maintenance_jobs WHERE lock_key IS NULL AND status IN ('completed','failed','cancelled') AND finished_at IS NOT NULL AND finished_at < ? ORDER BY finished_at ASC LIMIT "
+            . $limit,
+    );
     $stmt->execute([$finishedBefore]);
     return $stmt->rowCount();
 }

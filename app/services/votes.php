@@ -89,13 +89,16 @@ function current_vote_for_image(int $imageId): int
 /**
  * Return votes for many images for the current viewer in one query, keyed by image ID.
  *
- * @param array $imageIds Image ids value.
- * @return array Structured result data for the caller.
+ * @param list<int> $imageIds Candidate canonical image identifiers; invalid and duplicate IDs are removed.
+ * @return array<int,int> Current actor votes keyed by canonical image identifier; empty when there are no valid IDs or no votes.
  */
 function current_votes_for_images(array $imageIds): array
 {
     // $imageIds stores an intermediate value used by the surrounding gallery workflow.
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$imageIds) {
         return [];
     }

@@ -49,15 +49,22 @@ use function Gallery\Views\view_render_admin_upload_automation_manager_action;
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
+ * @return void Render the Organizer panel when its feature is enabled.
  */
-function admin_edit_gallery_render_organizer_tab(array $gallery, string $activeEditTab): void
-{
+function admin_edit_gallery_render_organizer_tab(
+    array $gallery,
+    string $activeEditTab,
+): void {
     if (!feature_capability_effective_enabled('metadata_organizer')) {
         return;
     }
     ob_start();
     render_admin_gallery_metadata_organizer_panel($gallery);
-    render_admin_tab_panel('admin-edit-organizer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-organizer');
+    render_admin_tab_panel(
+        'admin-edit-organizer',
+        (string) ob_get_clean(),
+        $activeEditTab === 'admin-edit-organizer',
+    );
 }
 
 /**
@@ -69,21 +76,37 @@ function admin_edit_gallery_render_organizer_tab(array $gallery, string $activeE
  * @param bool $deferred Whether the drawer defers its image-dependent renaming plan until requested.
  * @return void Render the plan or its demand-load placeholder.
  */
-function admin_edit_gallery_render_renamer_tab(array $gallery, string $activeEditTab, array $capabilities, bool $deferred = false): void
-{
+function admin_edit_gallery_render_renamer_tab(
+    array $gallery,
+    string $activeEditTab,
+    array $capabilities,
+    bool $deferred = false,
+): void {
     if (!$capabilities['media_renamer_feature_enabled']) {
         return;
     }
     ob_start();
     if ($deferred) {
         \Gallery\Views\view_render_admin_gallery_tool_placeholder([
-            'endpoint' => url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'tab' => 'admin-edit-renamer']),
-            'label' => t('admin.gallery_editor.images_preparing', 'Preparing photos…'),
+            'endpoint' => url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
+                'tab' => 'admin-edit-renamer',
+            ]),
+            'label' => t(
+                'admin.gallery_editor.images_preparing',
+                'Preparing photos…',
+            ),
         ]);
-    } elseif (function_exists('Gallery\\Controllers\\render_admin_media_renamer_gallery_panel')) {
+    } elseif (function_exists(
+        'Gallery\\Controllers\\render_admin_media_renamer_gallery_panel',
+    )) {
         render_admin_media_renamer_gallery_panel($gallery);
     }
-    render_admin_tab_panel('admin-edit-renamer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-renamer');
+    render_admin_tab_panel(
+        'admin-edit-renamer',
+        (string) ob_get_clean(),
+        $activeEditTab === 'admin-edit-renamer',
+    );
 }
 
 /**
@@ -94,11 +117,17 @@ function admin_edit_gallery_render_renamer_tab(array $gallery, string $activeEdi
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
  * @return void Render the API tab.
  */
-function admin_edit_gallery_render_api_tab(array $gallery, string $activeEditTab, array $capabilities): void
-{
+function admin_edit_gallery_render_api_tab(
+    array $gallery,
+    string $activeEditTab,
+    array $capabilities,
+): void {
     ob_start();
     if ($capabilities['upload_api_feature_enabled']) {
-        render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
+        render_admin_gallery_upload_automation_panel(
+            $gallery,
+            'admin-edit-api',
+        );
     }
     ob_start();
     render_admin_gallery_ai_reprocess_panel($gallery);
@@ -108,12 +137,22 @@ function admin_edit_gallery_render_api_tab(array $gallery, string $activeEditTab
     if ($capabilities['upload_api_feature_enabled']) {
         view_render_admin_upload_automation_manager_action([
             'href' => url_for('admin_api_manager'),
-            'label' => t('admin.upload_automation.open_manager', 'Open API manager'),
+            'label' => t(
+                'admin.upload_automation.open_manager',
+                'Open API manager',
+            ),
         ]);
     }
     $advancedTools = (string) ob_get_clean();
     if (trim($advancedTools) !== '') {
-        view_render_admin_gallery_advanced_tools(t('admin.gallery_editor.advanced_api_tools', 'Advanced API tools'), $advancedTools);
+        view_render_admin_gallery_advanced_tools(
+            t('admin.gallery_editor.advanced_api_tools', 'Advanced API tools'),
+            $advancedTools,
+        );
     }
-    render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
+    render_admin_tab_panel(
+        'admin-edit-api',
+        (string) ob_get_clean(),
+        $activeEditTab === 'admin-edit-api',
+    );
 }

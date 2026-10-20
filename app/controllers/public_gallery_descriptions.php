@@ -44,7 +44,7 @@ use function Gallery\Services\link_favicon_normalize_url;
  * Prepare normalized link presentation metadata for one description.
  *
  * @param string $markdown Gallery description using the supported Markdown/BBCode subset.
- * @return array<string, array{icon_id:?string,cached_url:?string}>
+ * @return array<string,array{icon_id:?string,cached_url:?string}> Link URLs keyed to normalized favicon metadata; each entry contains a known icon ID or cached public URL.
  */
 function public_gallery_description_link_models(string $markdown): array
 {
@@ -53,17 +53,29 @@ function public_gallery_description_link_models(string $markdown): array
     }
 
     $candidates = [];
-    if (preg_match_all('/\[(?:link|url)=([^\]\n]{1,2048})\]/iu', $markdown, $matches)) {
+    if (preg_match_all(
+        '/\[(?:link|url)=([^\]\n]{1,2048})\]/iu',
+        $markdown,
+        $matches,
+    )) {
         foreach ((array) ($matches[1] ?? []) as $value) {
             $candidates[] = (string) $value;
         }
     }
-    if (preg_match_all('/\[(?:link|url)\]([^\[\]\n]{1,2048})\[\/(?:link|url)\]/iu', $markdown, $matches)) {
+    if (preg_match_all(
+        '/\[(?:link|url)\]([^\[\]\n]{1,2048})\[\/(?:link|url)\]/iu',
+        $markdown,
+        $matches,
+    )) {
         foreach ((array) ($matches[1] ?? []) as $value) {
             $candidates[] = trim((string) $value);
         }
     }
-    if (preg_match_all('/\[[^\]\n]{1,160}\]\((https?:\/\/[^\s<>")]+)\)/iu', $markdown, $matches)) {
+    if (preg_match_all(
+        '/\[[^\]\n]{1,160}\]\((https?:\/\/[^\s<>")]+)\)/iu',
+        $markdown,
+        $matches,
+    )) {
         foreach ((array) ($matches[1] ?? []) as $value) {
             $candidates[] = (string) $value;
         }
@@ -78,7 +90,9 @@ function public_gallery_description_link_models(string $markdown): array
         $iconId = link_favicon_known_icon_id($normalized);
         $models[$normalized] = [
             'icon_id' => $iconId,
-            'cached_url' => $iconId === null ? link_favicon_cached_public_url($normalized) : null,
+            'cached_url' => $iconId === null
+                ? link_favicon_cached_public_url($normalized)
+                : null,
         ];
     }
     return $models;

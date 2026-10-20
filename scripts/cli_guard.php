@@ -22,7 +22,7 @@ function gallery_require_cli_sapi(): void
 {
     if (PHP_SAPI !== 'cli') {
         http_response_code(404);
-        exit;
+        exit();
     }
 }
 
@@ -36,11 +36,19 @@ function gallery_guard_cli_entrypoint(string $entryFile): void
 {
     $scriptFile = realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
     $entryPath = realpath($entryFile);
-    if ($scriptFile !== false && $entryPath !== false && $scriptFile === $entryPath) {
+    if (
+        $scriptFile !== false
+        && $entryPath !== false
+        && $scriptFile === $entryPath
+    ) {
         gallery_require_cli_sapi();
     }
 }
 
-if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === realpath(__FILE__)) {
+if (
+    realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === realpath(
+        __FILE__,
+    )
+) {
     gallery_require_cli_sapi();
 }

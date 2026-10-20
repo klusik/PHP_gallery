@@ -52,8 +52,11 @@ use function Gallery\Models\public_search_model_compound_gallery_rows;
 use function Gallery\Models\public_search_model_compound_image_rows;
 
 const PUBLIC_SEARCH_PHASE_PRIMARY = 'primary';
+
 const PUBLIC_SEARCH_PHASE_MEDIA = 'media';
+
 const PUBLIC_SEARCH_PHASE_DESCRIPTIVE = 'descriptive';
+
 const PUBLIC_SEARCH_PHASE_DEEP = 'deep';
 
 /** @var array<string, int> */
@@ -87,7 +90,16 @@ const PUBLIC_SEARCH_RELEVANCE_SCORES = [
  */
 function public_search_phase_supported(string $phase): bool
 {
-    return in_array($phase, [PUBLIC_SEARCH_PHASE_PRIMARY, PUBLIC_SEARCH_PHASE_MEDIA, PUBLIC_SEARCH_PHASE_DESCRIPTIVE, PUBLIC_SEARCH_PHASE_DEEP], true);
+    return in_array(
+        $phase,
+        [
+            PUBLIC_SEARCH_PHASE_PRIMARY,
+            PUBLIC_SEARCH_PHASE_MEDIA,
+            PUBLIC_SEARCH_PHASE_DESCRIPTIVE,
+            PUBLIC_SEARCH_PHASE_DEEP,
+        ],
+        true,
+    );
 }
 
 /**
@@ -103,7 +115,16 @@ function public_search_phase_supported(string $phase): bool
 function public_search_phase_result_limit(string $phase, int $requested): int
 {
     $requested = max(1, min(30, $requested));
-    if (in_array($phase, [PUBLIC_SEARCH_PHASE_PRIMARY, PUBLIC_SEARCH_PHASE_MEDIA, PUBLIC_SEARCH_PHASE_DESCRIPTIVE, PUBLIC_SEARCH_PHASE_DEEP], true)) {
+    if (in_array(
+        $phase,
+        [
+            PUBLIC_SEARCH_PHASE_PRIMARY,
+            PUBLIC_SEARCH_PHASE_MEDIA,
+            PUBLIC_SEARCH_PHASE_DESCRIPTIVE,
+            PUBLIC_SEARCH_PHASE_DEEP,
+        ],
+        true,
+    )) {
         return min(8, $requested);
     }
     return $requested;
@@ -142,8 +163,12 @@ function public_search_result_key(string $type, int $id): string
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Public phase results.
  */
-function public_search_phase_results(string $phase, string $query, int $limit = 12, ?array $contextGallery = null): array
-{
+function public_search_phase_results(
+    string $phase,
+    string $query,
+    int $limit = 12,
+    ?array $contextGallery = null,
+): array {
     if (!public_search_phase_supported($phase)) {
         throw new \InvalidArgumentException('Unsupported public search phase.');
     }
@@ -165,7 +190,12 @@ function public_search_phase_results(string $phase, string $query, int $limit = 
             return [];
         }
     } else {
-        return public_search_compound_phase_results($phase, $groups, $limit, $contextGallery);
+        return public_search_compound_phase_results(
+            $phase,
+            $groups,
+            $limit,
+            $contextGallery,
+        );
     }
 
     if ($phase === PUBLIC_SEARCH_PHASE_PRIMARY) {
@@ -175,7 +205,11 @@ function public_search_phase_results(string $phase, string $query, int $limit = 
         return public_search_media_results($query, $limit, $contextGallery);
     }
     if ($phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE) {
-        return public_search_descriptive_results($query, $limit, $contextGallery);
+        return public_search_descriptive_results(
+            $query,
+            $limit,
+            $contextGallery,
+        );
     }
     if ($phase === PUBLIC_SEARCH_PHASE_DEEP) {
         return public_search_deep_results($query, $limit, $contextGallery);
@@ -196,9 +230,16 @@ function public_search_phase_results(string $phase, string $query, int $limit = 
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Primary public result models.
  */
-function public_search_primary_results(string $query, int $limit, ?array $contextGallery = null): array
-{
-    $candidates = public_search_primary_gallery_candidates($query, $limit, $contextGallery);
+function public_search_primary_results(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
+    $candidates = public_search_primary_gallery_candidates(
+        $query,
+        $limit,
+        $contextGallery,
+    );
     if ($candidates === []) {
         return [];
     }
@@ -214,8 +255,11 @@ function public_search_primary_results(string $query, int $limit, ?array $contex
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Candidate models ordered by relevance.
  */
-function public_search_primary_gallery_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_primary_gallery_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
         return [];
@@ -229,24 +273,30 @@ function public_search_primary_gallery_candidates(string $query, int $limit, ?ar
         $query,
         [
             'exact' => public_search_relevance_score('gallery_title_exact'),
-            'normalized_exact' => public_search_relevance_score('gallery_title_normalized_exact'),
+            'normalized_exact' => public_search_relevance_score(
+                'gallery_title_normalized_exact',
+            ),
             'prefix' => public_search_relevance_score('gallery_title_prefix'),
-            'substring' => public_search_relevance_score('gallery_title_substring'),
+            'substring' => public_search_relevance_score(
+                'gallery_title_substring',
+            ),
         ],
         $listedOnly,
         $contextGallery,
-        $candidateLimit
+        $candidateLimit,
     );
     $tagRows = public_search_model_primary_gallery_tag_rows(
         $query,
         [
             'exact' => public_search_relevance_score('gallery_tag_exact'),
             'prefix' => public_search_relevance_score('gallery_tag_prefix'),
-            'substring' => public_search_relevance_score('gallery_tag_substring'),
+            'substring' => public_search_relevance_score(
+                'gallery_tag_substring',
+            ),
         ],
         $listedOnly,
         $contextGallery,
-        $candidateLimit
+        $candidateLimit,
     );
 
     $candidates = [];
@@ -261,7 +311,10 @@ function public_search_primary_gallery_candidates(string $query, int $limit, ?ar
             'entity_id' => $id,
             'result_key' => public_search_result_key('gallery', $id),
             'score' => $score,
-            'match_source' => public_search_primary_gallery_match_source($score, 0),
+            'match_source' => public_search_primary_gallery_match_source(
+                $score,
+                0,
+            ),
             'title_sort' => (string) ($row['title'] ?? ''),
         ];
     }
@@ -276,7 +329,10 @@ function public_search_primary_gallery_candidates(string $query, int $limit, ?ar
             'entity_id' => $id,
             'result_key' => public_search_result_key('gallery', $id),
             'score' => $score,
-            'match_source' => public_search_primary_gallery_match_source(0, $score),
+            'match_source' => public_search_primary_gallery_match_source(
+                0,
+                $score,
+            ),
             'title_sort' => (string) ($row['title'] ?? ''),
         ];
         $existing = $candidates[$id] ?? null;
@@ -287,15 +343,21 @@ function public_search_primary_gallery_candidates(string $query, int $limit, ?ar
 
     $candidates = array_values($candidates);
     usort($candidates, static function (array $left, array $right): int {
-        $scoreCompare = ((int) ($right['score'] ?? 0)) <=> ((int) ($left['score'] ?? 0));
+        $scoreCompare =
+            (int) ($right['score'] ?? 0) <=> (int) ($left['score'] ?? 0);
         if ($scoreCompare !== 0) {
             return $scoreCompare;
         }
-        $titleCompare = strcasecmp((string) ($left['title_sort'] ?? ''), (string) ($right['title_sort'] ?? ''));
+        $titleCompare = strcasecmp(
+            (string) ($left['title_sort'] ?? ''),
+            (string) ($right['title_sort'] ?? ''),
+        );
         if ($titleCompare !== 0) {
             return $titleCompare;
         }
-        return ((int) ($left['entity_id'] ?? 0)) <=> ((int) ($right['entity_id'] ?? 0));
+        return (
+            (int) ($left['entity_id'] ?? 0) <=> (int) ($right['entity_id'] ?? 0)
+        );
     });
 
     return array_slice($candidates, 0, $limit);
@@ -308,8 +370,10 @@ function public_search_primary_gallery_candidates(string $query, int $limit, ?ar
  * @param int $tagScore Gallery-tag score.
  * @return string Stable match-source identifier.
  */
-function public_search_primary_gallery_match_source(int $titleScore, int $tagScore): string
-{
+function public_search_primary_gallery_match_source(
+    int $titleScore,
+    int $tagScore,
+): string {
     if ($titleScore >= $tagScore && $titleScore > 0) {
         return match ($titleScore) {
             1200 => 'gallery_title_exact',
@@ -353,15 +417,25 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
     $authorizedGalleryIds = [];
     foreach ($galleryRows as $gallery) {
         $id = (int) ($gallery['id'] ?? 0);
-        if ($id <= 0 || !public_search_gallery_visible_to_current_visitor($gallery)) {
+        if (
+            $id <= 0
+            || !public_search_gallery_visible_to_current_visitor($gallery)
+        ) {
             continue;
         }
         $authorizedGalleryRows[] = $gallery;
         $authorizedGalleryIds[] = $id;
     }
     $galleryRows = $authorizedGalleryRows;
-    if (content_localization_enabled() && content_localization_schema_ready('gallery')) {
-        $galleryRows = content_localize_entities('gallery', $galleryRows, translation_active_language());
+    if (
+        content_localization_enabled()
+        && content_localization_schema_ready('gallery')
+    ) {
+        $galleryRows = content_localize_entities(
+            'gallery',
+            $galleryRows,
+            translation_active_language(),
+        );
     }
 
     $galleriesById = [];
@@ -373,10 +447,14 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
     }
 
     $tagNamesByGalleryId = [];
-    foreach (public_search_model_gallery_tag_name_rows($authorizedGalleryIds) as $row) {
+    foreach (public_search_model_gallery_tag_name_rows(
+        $authorizedGalleryIds,
+    ) as $row) {
         $galleryId = (int) ($row['gallery_id'] ?? 0);
         if ($galleryId > 0) {
-            $tagNamesByGalleryId[$galleryId] = trim((string) ($row['gallery_tag_names'] ?? ''));
+            $tagNamesByGalleryId[$galleryId] = trim(
+                (string) ($row['gallery_tag_names'] ?? ''),
+            );
         }
     }
 
@@ -391,15 +469,27 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
         $details = [];
         $tagNames = $tagNamesByGalleryId[$id] ?? '';
         if ($tagNames !== '') {
-            $details[] = t('search.tags_prefix', 'Tags: {tags}', ['tags' => public_search_compact_text($tagNames, 120)]);
+            $details[] = t(
+                'search.tags_prefix',
+                'Tags: {tags}',
+                ['tags' => public_search_compact_text($tagNames, 120)],
+            );
         }
-        $description = public_search_compact_text((string) ($gallery['description'] ?? ''), 180);
+        $description = public_search_compact_text(
+            (string) ($gallery['description'] ?? ''),
+            180,
+        );
         if ($description !== '') {
             $details[] = $description;
         }
 
         $results[] = [
-            'key' => (string) ($candidate['result_key'] ?? public_search_result_key('gallery', $id)),
+            'key' => (string) (
+                $candidate['result_key'] ?? public_search_result_key(
+                    'gallery',
+                    $id,
+                )
+            ),
             'type' => 'gallery',
             'label' => t('search.type_gallery', 'Gallery'),
             'title' => (string) ($gallery['title'] ?? ''),
@@ -425,14 +515,24 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Lightweight public photo results.
  */
-function public_search_media_results(string $query, int $limit, ?array $contextGallery = null): array
-{
-    $candidates = public_search_media_image_candidates($query, $limit, $contextGallery);
+function public_search_media_results(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
+    $candidates = public_search_media_image_candidates(
+        $query,
+        $limit,
+        $contextGallery,
+    );
     if ($candidates === []) {
         return [];
     }
 
-    return public_search_hydrate_media_image_candidates($candidates, $contextGallery);
+    return public_search_hydrate_media_image_candidates(
+        $candidates,
+        $contextGallery,
+    );
 }
 
 /**
@@ -447,8 +547,11 @@ function public_search_media_results(string $query, int $limit, ?array $contextG
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Ordered media candidate models.
  */
-function public_search_media_image_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_media_image_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
         return [];
@@ -458,34 +561,52 @@ function public_search_media_image_candidates(string $query, int $limit, ?array 
     $candidateLimit = min(90, max($limit * 3, $limit + 8));
     $candidates = [];
 
-    foreach (public_search_media_image_name_candidates($query, $candidateLimit, $contextGallery) as $candidate) {
+    foreach (public_search_media_image_name_candidates(
+        $query,
+        $candidateLimit,
+        $contextGallery,
+    ) as $candidate) {
         $id = (int) ($candidate['entity_id'] ?? 0);
         if ($id > 0) {
             $candidates[$id] = $candidate;
         }
     }
-    foreach (public_search_media_image_tag_candidates($query, $candidateLimit, $contextGallery) as $candidate) {
+    foreach (public_search_media_image_tag_candidates(
+        $query,
+        $candidateLimit,
+        $contextGallery,
+    ) as $candidate) {
         $id = (int) ($candidate['entity_id'] ?? 0);
         if ($id <= 0) {
             continue;
         }
         $existing = $candidates[$id] ?? null;
-        if (!is_array($existing) || (int) ($candidate['score'] ?? 0) > (int) ($existing['score'] ?? 0)) {
+        if (
+            !is_array($existing)
+            || (int) ($candidate['score'] ?? 0)
+                > (int) ($existing['score'] ?? 0)
+        ) {
             $candidates[$id] = $candidate;
         }
     }
 
     $candidates = array_values($candidates);
     usort($candidates, static function (array $left, array $right): int {
-        $scoreCompare = ((int) ($right['score'] ?? 0)) <=> ((int) ($left['score'] ?? 0));
+        $scoreCompare =
+            (int) ($right['score'] ?? 0) <=> (int) ($left['score'] ?? 0);
         if ($scoreCompare !== 0) {
             return $scoreCompare;
         }
-        $titleCompare = strcasecmp((string) ($left['title_sort'] ?? ''), (string) ($right['title_sort'] ?? ''));
+        $titleCompare = strcasecmp(
+            (string) ($left['title_sort'] ?? ''),
+            (string) ($right['title_sort'] ?? ''),
+        );
         if ($titleCompare !== 0) {
             return $titleCompare;
         }
-        return ((int) ($left['entity_id'] ?? 0)) <=> ((int) ($right['entity_id'] ?? 0));
+        return (
+            (int) ($left['entity_id'] ?? 0) <=> (int) ($right['entity_id'] ?? 0)
+        );
     });
 
     return array_slice($candidates, 0, $limit);
@@ -499,8 +620,11 @@ function public_search_media_image_candidates(string $query, int $limit, ?array 
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Name/title candidate models.
  */
-function public_search_media_image_name_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_media_image_name_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $listedOnly = public_search_listing_requires_listed();
 
     $rows = public_search_model_media_image_name_rows(
@@ -508,11 +632,13 @@ function public_search_media_image_name_candidates(string $query, int $limit, ?a
         [
             'exact' => public_search_relevance_score('image_name_exact'),
             'prefix' => public_search_relevance_score('image_name_prefix'),
-            'substring' => public_search_relevance_score('image_name_substring'),
+            'substring' => public_search_relevance_score(
+                'image_name_substring',
+            ),
         ],
         $listedOnly,
         $contextGallery,
-        $limit
+        $limit,
     );
 
     $candidates = [];
@@ -531,7 +657,8 @@ function public_search_media_image_name_candidates(string $query, int $limit, ?a
             'entity_id' => $id,
             'result_key' => public_search_result_key('photo', $id),
             'score' => $score,
-            'match_source' => public_search_media_image_name_match_source($score),
+            'match_source' =>
+                public_search_media_image_name_match_source($score),
             'title_sort' => $titleSort,
         ];
     }
@@ -547,8 +674,11 @@ function public_search_media_image_name_candidates(string $query, int $limit, ?a
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Image-tag candidate models.
  */
-function public_search_media_image_tag_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_media_image_tag_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $listedOnly = public_search_listing_requires_listed();
 
     $rows = public_search_model_media_image_tag_rows(
@@ -560,7 +690,7 @@ function public_search_media_image_tag_candidates(string $query, int $limit, ?ar
         ],
         $listedOnly,
         $contextGallery,
-        $limit
+        $limit,
     );
 
     $candidates = [];
@@ -579,7 +709,8 @@ function public_search_media_image_tag_candidates(string $query, int $limit, ?ar
             'entity_id' => $id,
             'result_key' => public_search_result_key('photo', $id),
             'score' => $score,
-            'match_source' => public_search_media_image_tag_match_source($score),
+            'match_source' =>
+                public_search_media_image_tag_match_source($score),
             'title_sort' => $titleSort,
         ];
     }
@@ -633,8 +764,10 @@ function public_search_media_image_tag_match_source(int $score): string
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Hydrated media result models.
  */
-function public_search_hydrate_media_image_candidates(array $candidates, ?array $contextGallery = null): array
-{
+function public_search_hydrate_media_image_candidates(
+    array $candidates,
+    ?array $contextGallery = null,
+): array {
     $candidateById = [];
     $ids = [];
     foreach ($candidates as $candidate) {
@@ -652,7 +785,7 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
     $imageRows = public_search_model_media_image_rows_by_ids(
         $ids,
         public_search_listing_requires_listed(),
-        $contextGallery
+        $contextGallery,
     );
 
     $rawImagesById = [];
@@ -670,7 +803,9 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
         return [];
     }
 
-    $rawGalleryRows = public_search_model_gallery_rows_by_ids(array_values($galleryIds));
+    $rawGalleryRows = public_search_model_gallery_rows_by_ids(array_values(
+        $galleryIds,
+    ));
     $rawGalleriesById = [];
     foreach ($rawGalleryRows as $gallery) {
         $galleryId = (int) ($gallery['id'] ?? 0);
@@ -689,7 +824,10 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
         }
         $galleryId = (int) ($row['gallery_id'] ?? 0);
         $gallery = $rawGalleriesById[$galleryId] ?? null;
-        if (!is_array($gallery) || !public_search_image_visible_to_current_visitor($row, $gallery)) {
+        if (
+            !is_array($gallery)
+            || !public_search_image_visible_to_current_visitor($row, $gallery)
+        ) {
             continue;
         }
         $authorizedImageRows[] = $row;
@@ -701,8 +839,15 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
     }
 
     $contentLanguage = translation_active_language();
-    if (content_localization_enabled() && content_localization_schema_ready('image')) {
-        $authorizedImageRows = content_localize_entities('image', $authorizedImageRows, $contentLanguage);
+    if (
+        content_localization_enabled()
+        && content_localization_schema_ready('image')
+    ) {
+        $authorizedImageRows = content_localize_entities(
+            'image',
+            $authorizedImageRows,
+            $contentLanguage,
+        );
     }
     $imagesById = [];
     foreach ($authorizedImageRows as $row) {
@@ -719,8 +864,15 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
             $galleryRows[] = $gallery;
         }
     }
-    if (content_localization_enabled() && content_localization_schema_ready('gallery')) {
-        $galleryRows = content_localize_entities('gallery', $galleryRows, $contentLanguage);
+    if (
+        content_localization_enabled()
+        && content_localization_schema_ready('gallery')
+    ) {
+        $galleryRows = content_localize_entities(
+            'gallery',
+            $galleryRows,
+            $contentLanguage,
+        );
     }
     $galleriesById = [];
     foreach ($galleryRows as $gallery) {
@@ -731,10 +883,14 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
     }
 
     $tagNamesByImageId = [];
-    foreach (public_search_model_image_tag_name_rows($authorizedImageIds) as $row) {
+    foreach (public_search_model_image_tag_name_rows(
+        $authorizedImageIds,
+    ) as $row) {
         $imageId = (int) ($row['image_id'] ?? 0);
         if ($imageId > 0) {
-            $tagNamesByImageId[$imageId] = trim((string) ($row['image_tag_names'] ?? ''));
+            $tagNamesByImageId[$imageId] = trim(
+                (string) ($row['image_tag_names'] ?? ''),
+            );
         }
     }
 
@@ -753,20 +909,36 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
 
         $title = trim((string) ($row['title'] ?? ''));
         if ($title === '') {
-            $title = (string) ($row['filename'] ?? t('search.untitled_photo', 'Untitled photo'));
+            $title = (string) (
+                $row['filename'] ?? t('search.untitled_photo', 'Untitled photo')
+            );
         }
-        $details = [t('search.in_gallery', 'In {gallery}', ['gallery' => (string) ($gallery['title'] ?? '')])];
+        $details = [t('search.in_gallery', 'In {gallery}', [
+            'gallery' => (string) ($gallery['title'] ?? ''),
+        ])];
         $tagNames = $tagNamesByImageId[$id] ?? '';
         if ($tagNames !== '') {
-            $details[] = t('search.tags_prefix', 'Tags: {tags}', ['tags' => public_search_compact_text($tagNames, 120)]);
+            $details[] = t(
+                'search.tags_prefix',
+                'Tags: {tags}',
+                ['tags' => public_search_compact_text($tagNames, 120)],
+            );
         }
-        $description = public_search_compact_text((string) ($row['description'] ?? ''), 160);
+        $description = public_search_compact_text(
+            (string) ($row['description'] ?? ''),
+            160,
+        );
         if ($description !== '') {
             $details[] = $description;
         }
 
         $results[] = [
-            'key' => (string) ($candidate['result_key'] ?? public_search_result_key('photo', $id)),
+            'key' => (string) (
+                $candidate['result_key'] ?? public_search_result_key(
+                    'photo',
+                    $id,
+                )
+            ),
             'type' => 'photo',
             'label' => t('search.type_photo', 'Photo'),
             'title' => $title,
@@ -804,7 +976,13 @@ function public_search_compound_gallery_candidates(array $rows): array
             520 => 'gallery_description',
             default => 'tag_description',
         };
-        $candidates[] = public_search_candidate_model('gallery', $id, $score, $source, (string) ($row['title'] ?? ''));
+        $candidates[] = public_search_candidate_model(
+            'gallery',
+            $id,
+            $score,
+            $source,
+            (string) ($row['title'] ?? ''),
+        );
     }
     return $candidates;
 }
@@ -836,7 +1014,13 @@ function public_search_compound_photo_candidates(array $rows): array
         if ($title === '') {
             $title = (string) ($row['filename'] ?? '');
         }
-        $candidates[] = public_search_candidate_model('photo', $id, $score, $source, $title);
+        $candidates[] = public_search_candidate_model(
+            'photo',
+            $id,
+            $score,
+            $source,
+            $title,
+        );
     }
     return $candidates;
 }
@@ -858,7 +1042,7 @@ function public_search_compound_phase_results(
     string $phase,
     array $groups,
     int $limit,
-    ?array $contextGallery = null
+    ?array $contextGallery = null,
 ): array {
     if (!public_search_phase_supported($phase) || $groups === []) {
         return [];
@@ -869,39 +1053,94 @@ function public_search_compound_phase_results(
     $listedOnly = public_search_listing_requires_listed();
     $language = translation_active_language();
 
-    if ($phase === PUBLIC_SEARCH_PHASE_PRIMARY || $phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE) {
-        $translated = $phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE
+    if (
+        $phase === PUBLIC_SEARCH_PHASE_PRIMARY
+        || $phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE
+    ) {
+        $translated =
+            $phase === PUBLIC_SEARCH_PHASE_DESCRIPTIVE
             && content_localization_enabled()
             && content_localization_schema_ready('gallery');
         $rows = public_search_model_compound_gallery_rows(
-            $groups, $phase, $listedOnly, $contextGallery, $translated, $language, $candidateLimit
+            $groups,
+            $phase,
+            $listedOnly,
+            $contextGallery,
+            $translated,
+            $language,
+            $candidateLimit,
         );
-        $candidates = array_slice(public_search_compound_gallery_candidates($rows), 0, $limit);
+        $candidates = array_slice(
+            public_search_compound_gallery_candidates($rows),
+            0,
+            $limit,
+        );
         return public_search_hydrate_primary_gallery_candidates($candidates);
     }
 
     if ($phase === PUBLIC_SEARCH_PHASE_MEDIA) {
         $rows = public_search_model_compound_image_rows(
-            $groups, $phase, $listedOnly, $contextGallery, false, $language, false, $candidateLimit
+            $groups,
+            $phase,
+            $listedOnly,
+            $contextGallery,
+            false,
+            $language,
+            false,
+            $candidateLimit,
         );
-        $candidates = array_slice(public_search_compound_photo_candidates($rows), 0, $limit);
-        return public_search_hydrate_media_image_candidates($candidates, $contextGallery);
+        $candidates = array_slice(
+            public_search_compound_photo_candidates($rows),
+            0,
+            $limit,
+        );
+        return public_search_hydrate_media_image_candidates(
+            $candidates,
+            $contextGallery,
+        );
     }
 
-    $galleryTranslated = content_localization_enabled() && content_localization_schema_ready('gallery');
-    $imageTranslated = content_localization_enabled() && content_localization_schema_ready('image');
+    $galleryTranslated =
+        content_localization_enabled()
+        && content_localization_schema_ready('gallery');
+    $imageTranslated =
+        content_localization_enabled()
+        && content_localization_schema_ready('image');
     $aiReady = public_search_ai_metadata_ready();
     $galleryRows = public_search_model_compound_gallery_rows(
-        $groups, $phase, $listedOnly, $contextGallery, $galleryTranslated, $language, $candidateLimit
+        $groups,
+        $phase,
+        $listedOnly,
+        $contextGallery,
+        $galleryTranslated,
+        $language,
+        $candidateLimit,
     );
     $imageRows = public_search_model_compound_image_rows(
-        $groups, $phase, $listedOnly, $contextGallery, $imageTranslated, $language, $aiReady, $candidateLimit
+        $groups,
+        $phase,
+        $listedOnly,
+        $contextGallery,
+        $imageTranslated,
+        $language,
+        $aiReady,
+        $candidateLimit,
     );
 
     $candidates = [];
-    public_search_merge_candidate_rows($candidates, public_search_compound_gallery_candidates($galleryRows));
-    public_search_merge_candidate_rows($candidates, public_search_compound_photo_candidates($imageRows));
-    $ordered = array_slice(public_search_sort_candidate_rows(array_values($candidates)), 0, $limit);
+    public_search_merge_candidate_rows(
+        $candidates,
+        public_search_compound_gallery_candidates($galleryRows),
+    );
+    public_search_merge_candidate_rows(
+        $candidates,
+        public_search_compound_photo_candidates($imageRows),
+    );
+    $ordered = array_slice(
+        public_search_sort_candidate_rows(array_values($candidates)),
+        0,
+        $limit,
+    );
     return public_search_hydrate_deep_candidates($ordered, $contextGallery);
 }
 
@@ -917,19 +1156,35 @@ function public_search_compound_phase_results(
  * @param ?array $contextGallery Optional gallery-branch restriction.
  * @return array<int,array<string,mixed>> Bounded, merged search results.
  */
-function public_search_compound_results(array $groups, int $limit, ?array $contextGallery = null): array
-{
+function public_search_compound_results(
+    array $groups,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $limit = max(1, min(30, $limit));
     $byKey = [];
 
-    foreach ([PUBLIC_SEARCH_PHASE_PRIMARY, PUBLIC_SEARCH_PHASE_MEDIA, PUBLIC_SEARCH_PHASE_DESCRIPTIVE, PUBLIC_SEARCH_PHASE_DEEP] as $phase) {
-        foreach (public_search_compound_phase_results($phase, $groups, $limit, $contextGallery) as $row) {
+    foreach ([
+        PUBLIC_SEARCH_PHASE_PRIMARY,
+        PUBLIC_SEARCH_PHASE_MEDIA,
+        PUBLIC_SEARCH_PHASE_DESCRIPTIVE,
+        PUBLIC_SEARCH_PHASE_DEEP,
+    ] as $phase) {
+        foreach (public_search_compound_phase_results(
+            $phase,
+            $groups,
+            $limit,
+            $contextGallery,
+        ) as $row) {
             $key = (string) ($row['key'] ?? '');
             if ($key === '') {
                 continue;
             }
             $existing = $byKey[$key] ?? null;
-            if (!is_array($existing) || (int) ($row['rank'] ?? 0) > (int) ($existing['rank'] ?? 0)) {
+            if (
+                !is_array($existing)
+                || (int) ($row['rank'] ?? 0) > (int) ($existing['rank'] ?? 0)
+            ) {
                 $byKey[$key] = $row;
             }
         }
@@ -937,17 +1192,26 @@ function public_search_compound_results(array $groups, int $limit, ?array $conte
 
     $results = array_values($byKey);
     usort($results, static function (array $left, array $right): int {
-        $rank = ((int) ($right['rank'] ?? 0)) <=> ((int) ($left['rank'] ?? 0));
+        $rank = (int) ($right['rank'] ?? 0) <=> (int) ($left['rank'] ?? 0);
         if ($rank !== 0) {
             return $rank;
         }
-        $kind = (($left['type'] ?? '') === 'gallery' ? 0 : 1)
+        $kind =
+            (($left['type'] ?? '') === 'gallery' ? 0 : 1)
             <=> (($right['type'] ?? '') === 'gallery' ? 0 : 1);
         if ($kind !== 0) {
             return $kind;
         }
-        $title = strcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
-        return $title !== 0 ? $title : strcmp((string) ($left['key'] ?? ''), (string) ($right['key'] ?? ''));
+        $title = strcasecmp(
+            (string) ($left['title'] ?? ''),
+            (string) ($right['title'] ?? ''),
+        );
+        return $title !== 0
+            ? $title
+            : strcmp(
+                (string) ($left['key'] ?? ''),
+                (string) ($right['key'] ?? ''),
+            );
     });
     return array_slice($results, 0, $limit);
 }

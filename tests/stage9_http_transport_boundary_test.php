@@ -31,14 +31,33 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 $root = dirname(__DIR__);
 
-/** Return the next significant token index after one token. */
+/**
+ * Return the next significant token index after one token.
+ *
+ * @param list<string|array{0:int,1:string,2:int}> $tokens PHP token stream.
+ * @param int $index Current token index.
+ * @return ?int Index of the next non-trivia token, or null at end of stream.
+ */
 function stage9_transport_next_token_index(array $tokens, int $index): ?int
 {
-    for ($cursor = $index + 1, $count = count($tokens); $cursor < $count; $cursor++) {
+    for (
+        $cursor = $index + 1, $count = count($tokens);
+        $cursor < $count;
+        $cursor++
+    ) {
         $token = $tokens[$cursor];
-        if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+        if (
+            is_array($token)
+            && in_array(
+                $token[0],
+                [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT],
+                true,
+            )
+        ) {
             continue;
         }
         return $cursor;
@@ -46,7 +65,13 @@ function stage9_transport_next_token_index(array $tokens, int $index): ?int
     return null;
 }
 
-/** Return whether one T_STRING token is a direct function call. */
+/**
+ * Return whether one T_STRING token is a direct function call.
+ *
+ * @param list<string|array{0:int,1:string,2:int}> $tokens PHP token stream.
+ * @param int $index Index of the candidate T_STRING token.
+ * @return bool Whether the token is followed by a call parenthesis and is not a declaration/construction.
+ */
 function stage9_transport_is_function_call(array $tokens, int $index): bool
 {
     $next = stage9_transport_next_token_index($tokens, $index);
@@ -55,21 +80,43 @@ function stage9_transport_is_function_call(array $tokens, int $index): bool
     }
     for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
         $token = $tokens[$cursor];
-        if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+        if (
+            is_array($token)
+            && in_array(
+                $token[0],
+                [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT],
+                true,
+            )
+        ) {
             continue;
         }
-        return !(is_array($token) && in_array($token[0], [T_FUNCTION, T_NEW], true));
+        return !(
+            is_array($token)
+            && in_array($token[0], [T_FUNCTION, T_NEW], true)
+        );
     }
     return true;
 }
 
 $violations = [];
-$responseFunctions = ['header', 'http_response_code', 'setcookie', 'setrawcookie'];
+$responseFunctions = [
+    'header',
+    'http_response_code',
+    'setcookie',
+    'setrawcookie',
+];
 $serviceIterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($root . '/app/services', FilesystemIterator::SKIP_DOTS)
+    new RecursiveDirectoryIterator(
+        $root . '/app/services',
+        FilesystemIterator::SKIP_DOTS,
+    ),
 );
 foreach ($serviceIterator as $fileInfo) {
-    if (!$fileInfo instanceof SplFileInfo || !$fileInfo->isFile() || strtolower($fileInfo->getExtension()) !== 'php') {
+    if (
+        !$fileInfo instanceof SplFileInfo
+        || !$fileInfo->isFile()
+        || strtolower($fileInfo->getExtension()) !== 'php'
+    ) {
         continue;
     }
     $path = $fileInfo->getPathname();
@@ -85,8 +132,17 @@ foreach ($serviceIterator as $fileInfo) {
             continue;
         }
         $name = strtolower($token[1]);
-        if (in_array($name, $responseFunctions, true) && stage9_transport_is_function_call($tokens, $index)) {
-            $violations[] = $relativePath . ':' . $token[2] . ' direct HTTP response call ' . $token[1] . '()';
+        if (
+            in_array($name, $responseFunctions, true)
+            && stage9_transport_is_function_call($tokens, $index)
+        ) {
+            $violations[] =
+                $relativePath
+                . ':'
+                . $token[2]
+                . ' direct HTTP response call '
+                . $token[1]
+                . '()';
         }
     }
 }
@@ -99,7 +155,14 @@ $transportCleanServices = [
     'app/services/admin_test_runs/context.php',
     'app/services/admin_test_runs/lifecycle.php',
 ];
-$requestVariables = ['$_GET', '$_POST', '$_SERVER', '$_COOKIE', '$_REQUEST', '$_FILES'];
+$requestVariables = [
+    '$_GET',
+    '$_POST',
+    '$_SERVER',
+    '$_COOKIE',
+    '$_REQUEST',
+    '$_FILES',
+];
 foreach ($transportCleanServices as $relativePath) {
     $path = $root . '/' . $relativePath;
     if (!is_file($path)) {
@@ -112,35 +175,69 @@ foreach ($transportCleanServices as $relativePath) {
         continue;
     }
     foreach (token_get_all($source) as $token) {
-        if (is_array($token) && $token[0] === T_VARIABLE && in_array($token[1], $requestVariables, true)) {
-            $violations[] = $relativePath . ':' . $token[2] . ' direct request variable ' . $token[1];
+        if (
+            is_array($token)
+            && $token[0] === T_VARIABLE
+            && in_array($token[1], $requestVariables, true)
+        ) {
+            $violations[] =
+                $relativePath
+                . ':'
+                . $token[2]
+                . ' direct request variable '
+                . $token[1];
         }
     }
 }
 
-$coreRequestSource = (string) file_get_contents($root . '/app/helpers_request.php');
-$requestBootstrapSource = (string) file_get_contents($root . '/app/bootstrap/request.php');
-$dispatchSource = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
-$maintenanceSource = (string) file_get_contents($root . '/app/bootstrap/maintenance.php');
-if (!str_contains($coreRequestSource, 'function apply_cookie_intents(')
-    || !str_contains($coreRequestSource, 'function apply_response_header_intents(')) {
+$coreRequestSource = (string) file_get_contents($root
+    . '/app/helpers_request.php');
+$requestBootstrapSource = (string) file_get_contents($root
+    . '/app/bootstrap/request.php');
+$dispatchSource = (string) file_get_contents($root
+    . '/app/bootstrap/dispatch.php');
+$maintenanceSource = (string) file_get_contents($root
+    . '/app/bootstrap/maintenance.php');
+if (
+    !php_source_contains($coreRequestSource, 'function apply_cookie_intents(')
+    || !php_source_contains(
+        $coreRequestSource,
+        'function apply_response_header_intents(',
+    )
+) {
     $violations[] = 'Core cookie/header intent adapters are unavailable';
 }
-if (!str_contains($requestBootstrapSource, 'cms_apply_seo_request_guard_decision(')
-    || !str_contains($requestBootstrapSource, 'translation_bootstrap_request(')
-    || !str_contains($requestBootstrapSource, 'apply_cookie_intents(')) {
+if (
+    !php_source_contains(
+        $requestBootstrapSource,
+        'cms_apply_seo_request_guard_decision(',
+    )
+    || !php_source_contains($requestBootstrapSource, 'translation_bootstrap_request(')
+    || !php_source_contains($requestBootstrapSource, 'apply_cookie_intents(')
+) {
     $violations[] = 'Request bootstrap does not own SEO/language transport application';
 }
-if (!str_contains($dispatchSource, 'feature_flag_disabled_route_decision(')
-    || !str_contains($dispatchSource, 'cms_apply_feature_disabled_route_response(')) {
+if (
+    !php_source_contains($dispatchSource, 'feature_flag_disabled_route_decision(')
+    || !php_source_contains(
+        $dispatchSource,
+        'cms_apply_feature_disabled_route_response(',
+    )
+) {
     $violations[] = 'Dispatch does not own feature-disabled HTTP response application';
 }
-if (!str_contains($maintenanceSource, 'application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel')) {
+if (!php_source_contains(
+    $maintenanceSource,
+    'application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel',
+)) {
     $violations[] = 'Maintenance bootstrap does not pass request method explicitly to updater policy';
 }
 
 if ($violations !== []) {
-    throw new RuntimeException("Stage 9 HTTP transport boundary violations:\n  - " . implode("\n  - ", $violations));
+    throw new RuntimeException(
+        "Stage 9 HTTP transport boundary violations:\n  - "
+            . implode("\n  - ", $violations),
+    );
 }
 
 fwrite(STDOUT, "Stage 9 HTTP transport boundary checks passed.\n");

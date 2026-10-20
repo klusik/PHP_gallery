@@ -32,9 +32,17 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** Build the internal image WHERE clause for one semantic lightbox scope. */
-function lightbox_metadata_model_where(bool $publicOnly, bool $excludeRestrictedNsfw): string
-{
+/**
+ * Build the internal image WHERE clause for one semantic lightbox scope.
+ *
+ * @param bool $publicOnly Whether the query restricts results to public images.
+ * @param bool $excludeRestrictedNsfw Whether restricted NSFW images are excluded.
+ * @return string SQL predicate for direct gallery images; the gallery ID is bound separately.
+ */
+function lightbox_metadata_model_where(
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw,
+): string {
     $where = "i.gallery_id = ? AND i.relative_path NOT LIKE '%/%'";
     if ($publicOnly) {
         $where .= " AND i.visibility = 'public'";
@@ -45,13 +53,32 @@ function lightbox_metadata_model_where(bool $publicOnly, bool $excludeRestricted
     return $where;
 }
 
-/** @return array{count:int,revision:string} */
-function lightbox_metadata_model_state_summary(int $galleryId, bool $publicOnly, bool $excludeRestrictedNsfw): array
-{
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(i.updated_at), '') AS image_revision FROM images i WHERE " . lightbox_metadata_model_where($publicOnly, $excludeRestrictedNsfw));
+/**
+ * Read image count and latest update time for one lightbox scope.
+ *
+ * @param int $galleryId Gallery whose lightbox state is summarized.
+ * @param bool $publicOnly Whether the query restricts results to public images.
+ * @param bool $excludeRestrictedNsfw Whether restricted NSFW images are excluded.
+ * @return array{count:int,revision:string} Stable count and update revision for cache validation.
+ */
+function lightbox_metadata_model_state_summary(
+    int $galleryId,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw,
+): array {
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS image_count, COALESCE(MAX(i.updated_at), '') AS image_revision FROM images i WHERE "
+            . lightbox_metadata_model_where(
+                $publicOnly,
+                $excludeRestrictedNsfw,
+            ),
+    );
     $stmt->execute([$galleryId]);
     $row = $stmt->fetch() ?: [];
-    return ['count' => max(0, (int) ($row['image_count'] ?? 0)), 'revision' => trim((string) ($row['image_revision'] ?? ''))];
+    return [
+        'count' => max(0, (int) ($row['image_count'] ?? 0)),
+        'revision' => trim((string) ($row['image_revision'] ?? '')),
+    ];
 }
 
 /**
@@ -62,24 +89,50 @@ function lightbox_metadata_model_state_summary(int $galleryId, bool $publicOnly,
  * @param bool $excludeRestrictedNsfw Whether to exclude restricted NSFW rows.
  * @return int Number of matching images.
  */
-function lightbox_metadata_model_total_count(int $galleryId, bool $publicOnly, bool $excludeRestrictedNsfw): int
-{
-    $stmt = db()->prepare('SELECT COUNT(*) FROM images i WHERE ' . lightbox_metadata_model_where($publicOnly, $excludeRestrictedNsfw));
+function lightbox_metadata_model_total_count(
+    int $galleryId,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw,
+): int {
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM images i WHERE '
+            . lightbox_metadata_model_where(
+                $publicOnly,
+                $excludeRestrictedNsfw,
+            ),
+    );
     $stmt->execute([$galleryId]);
     return max(0, (int) $stmt->fetchColumn());
 }
 
-/** @return array<int,array<string,mixed>> */
-function lightbox_metadata_model_fetch_images(int $galleryId, bool $publicOnly, int $offset, ?int $limit, bool $excludeRestrictedNsfw): array
-{
-    $sql = "SELECT i.*, (
+/**
+ * Fetch an ordered window of images for one gallery lightbox.
+ *
+ * @param int $galleryId Gallery whose direct images are loaded.
+ * @param bool $publicOnly Whether the query restricts results to public images.
+ * @param int $offset Zero-based image offset for a bounded window.
+ * @param ?int $limit Optional maximum image count; null returns all matching rows.
+ * @param bool $excludeRestrictedNsfw Whether restricted NSFW images are excluded.
+ * @return list<array<string,mixed>> Ordered image rows including aggregate vote scores.
+ */
+function lightbox_metadata_model_fetch_images(
+    int $galleryId,
+    bool $publicOnly,
+    int $offset,
+    ?int $limit,
+    bool $excludeRestrictedNsfw,
+): array {
+    $sql =
+        'SELECT i.*, (
             SELECT COALESCE(SUM(v.vote), 0)
             FROM image_votes v
             WHERE v.image_id = i.id
         ) AS score
         FROM images i
-        WHERE " . lightbox_metadata_model_where($publicOnly, $excludeRestrictedNsfw) . "
-        ORDER BY i.sort_order, i.filename, i.id";
+        WHERE '
+        . lightbox_metadata_model_where($publicOnly, $excludeRestrictedNsfw)
+        . '
+        ORDER BY i.sort_order, i.filename, i.id';
     if ($limit !== null) {
         $sql .= ' LIMIT ? OFFSET ?';
     }
@@ -97,14 +150,21 @@ function lightbox_metadata_model_fetch_images(int $galleryId, bool $publicOnly, 
  * Return zero-based position for one image inside one lightbox scope.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $image Image row used as the ordering anchor.
+ * @param array{sort_order?:int|string,filename?:string,id?:int|string} $image Image fields used as the ordering anchor.
  * @param bool $publicOnly Whether to require public images.
  * @param bool $excludeRestrictedNsfw Whether to exclude restricted NSFW rows.
- * @return int Zero-based position.
+ * @return int Zero-based position of the image in the ordered lightbox scope.
  */
-function lightbox_metadata_model_image_position(int $galleryId, array $image, bool $publicOnly, bool $excludeRestrictedNsfw): int
-{
-    $sql = 'SELECT COUNT(*) FROM images i WHERE ' . lightbox_metadata_model_where($publicOnly, $excludeRestrictedNsfw) . '
+function lightbox_metadata_model_image_position(
+    int $galleryId,
+    array $image,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw,
+): int {
+    $sql =
+        'SELECT COUNT(*) FROM images i WHERE '
+        . lightbox_metadata_model_where($publicOnly, $excludeRestrictedNsfw)
+        . '
           AND (
               i.sort_order < ?
               OR (i.sort_order = ? AND i.filename < ?)

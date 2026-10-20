@@ -42,23 +42,26 @@ use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\url_for;
 
 const THEME_FAVORITE_GALLERIES_SETTING = 'theme_favorite_gallery_ids';
+
 const THEME_FAVORITE_GALLERIES_MAX = 3;
+
 const THEME_FAVORITE_GALLERIES_HOME_TOKEN = 'home';
 
 /**
  * Normalize submitted or stored favorite shortcut entries.
- *
  * The Theme form submits ordered shortcut values. Older or manually edited
  * installations may contain JSON, CSV, or a scalar value, so this helper accepts
  * all three formats and returns a stable, duplicate-free list. Numeric entries
  * are gallery IDs, while the home token represents the main gallery page.
  *
- * @param mixed $value Raw stored setting or submitted form value.
+ * @param string|int|float|array<array-key,mixed>|bool|null $value Stored JSON/CSV/scalar setting or submitted value list; unsupported types yield an empty list, while array entries are string-coerced for token/ID checks.
  * @param bool $limit Whether the result should be limited to the supported maximum.
- * @return array<int int|string> Ordered shortcut entries.
+ * @return list<int|'home'> Ordered list of unique positive gallery IDs and at most one literal 'home' shortcut, limited to the supported maximum when requested.
  */
-function theme_favorite_gallery_ids_normalize(mixed $value, bool $limit = true): array
-{
+function theme_favorite_gallery_ids_normalize(
+    mixed $value,
+    bool $limit = true,
+): array {
     // $rawValues stores candidate values before numeric validation.
     $rawValues = [];
     if (is_string($value)) {
@@ -111,7 +114,10 @@ function theme_favorite_gallery_ids_normalize(mixed $value, bool $limit = true):
  */
 function theme_favorite_gallery_ids(): array
 {
-    return theme_favorite_gallery_ids_normalize(app_setting(THEME_FAVORITE_GALLERIES_SETTING, '[]'));
+    return theme_favorite_gallery_ids_normalize(app_setting(
+        THEME_FAVORITE_GALLERIES_SETTING,
+        '[]',
+    ));
 }
 
 /**
@@ -138,7 +144,10 @@ function theme_favorite_gallery_ids_encode(array $ids): string
 function theme_favorite_gallery_rows_by_ids(array $ids): array
 {
     // $ids stores validated lookup IDs after dropping non-gallery shortcut tokens.
-    $ids = array_values(array_filter(theme_favorite_gallery_ids_normalize($ids), 'is_int'));
+    $ids = array_values(array_filter(
+        theme_favorite_gallery_ids_normalize($ids),
+        'is_int',
+    ));
     if ($ids === []) {
         return [];
     }
@@ -152,23 +161,25 @@ function theme_favorite_gallery_rows_by_ids(array $ids): array
             $ids,
             db_column_exists('galleries', 'url_path'),
             gallery_access_schema_ready(),
-            content_localization_enabled() && content_localization_schema_ready('gallery')
+            content_localization_enabled()
+                && content_localization_schema_ready('gallery'),
         );
     } catch (PDOException) {
         return [];
     }
 }
 
-
 /**
  * Return submitted favorite IDs that exist in a resolved gallery row set.
  *
- * @param array $ids Ids value.
- * @param array $rows Rows to process.
- * @return array<int int|string> Submitted shortcuts that still resolve safely.
+ * @param list<int|'home'> $ids Normalized submitted gallery IDs and optional home shortcut.
+ * @param array<array-key,array<string,int|float|string|bool|null>> $rows Resolved gallery rows keyed by ID or row index.
+ * @return list<int|'home'> Submitted shortcuts that still resolve to a gallery or the main page.
  */
-function theme_favorite_gallery_existing_ids_from_rows(array $ids, array $rows): array
-{
+function theme_favorite_gallery_existing_ids_from_rows(
+    array $ids,
+    array $rows,
+): array {
     // $normalizedIds stores submitted IDs after duplicate removal and max-count clamping.
     $normalizedIds = theme_favorite_gallery_ids_normalize($ids, false);
     if ($normalizedIds === []) {
@@ -191,23 +202,27 @@ function theme_favorite_gallery_existing_ids_from_rows(array $ids, array $rows):
     // $savedIds stores only configured shortcuts that still exist or point to the main page.
     $savedIds = [];
     foreach ($normalizedIds as $galleryId) {
-        if ($galleryId === THEME_FAVORITE_GALLERIES_HOME_TOKEN || isset($existingIds[(int) $galleryId])) {
+        if (
+            $galleryId === THEME_FAVORITE_GALLERIES_HOME_TOKEN
+            || isset($existingIds[(int) $galleryId])
+        ) {
             $savedIds[] = $galleryId;
         }
     }
     return $savedIds;
 }
 
-
 /**
  * Build ordered shortcut values from the Theme form slot fields.
  *
- * @param mixed $types Submitted slot types: empty, home, or gallery.
- * @param mixed $galleryIds Submitted gallery picker IDs aligned by slot index.
- * @return array<int int|string> Ordered shortcut entries ready for validation and saving.
+ * @param array<array-key,mixed>|scalar|null $types Submitted slot-type list; values are string-coerced and only empty, 'home', or 'gallery' affect a slot. Non-array input is treated as no slots.
+ * @param array<array-key,mixed>|scalar|null $galleryIds Submitted picker-value list aligned by slot index; gallery slots use positive integer-like values. Non-array input is treated as no IDs.
+ * @return list<int|'home'> Ordered list of unique positive gallery IDs and at most one literal 'home' shortcut after normalization and maximum-count clamping.
  */
-function theme_favorite_gallery_entries_from_form(mixed $types, mixed $galleryIds): array
-{
+function theme_favorite_gallery_entries_from_form(
+    mixed $types,
+    mixed $galleryIds,
+): array {
     // $typeValues stores normalized slot type values from the form.
     $typeValues = is_array($types) ? array_values($types) : [];
     // $galleryValues stores gallery picker values aligned with the type slots.
@@ -236,20 +251,25 @@ function theme_favorite_gallery_entries_from_form(mixed $types, mixed $galleryId
 /**
  * Save favorite shortcut slots submitted by the Theme form.
  *
- * @param mixed $types Submitted slot types.
- * @param mixed $galleryIds Submitted gallery IDs aligned by slot index.
- * @return array<string array<int, int|string>> Saved shortcuts and removed submitted entries.
+ * @param array<array-key,string|null> $types Submitted slot type values: empty, home, or gallery.
+ * @param array<array-key,int|string|null> $galleryIds Submitted gallery picker values aligned to slot indexes.
+ * @return array{saved_ids:list<int|'home'>,removed_ids:list<int|'home'>} Validated saved shortcuts and submitted values dropped because their galleries no longer exist.
  */
-function save_theme_favorite_gallery_slots(mixed $types, mixed $galleryIds): array
-{
-    return save_theme_favorite_gallery_ids(theme_favorite_gallery_entries_from_form($types, $galleryIds));
+function save_theme_favorite_gallery_slots(
+    mixed $types,
+    mixed $galleryIds,
+): array {
+    return save_theme_favorite_gallery_ids(theme_favorite_gallery_entries_from_form(
+        $types,
+        $galleryIds,
+    ));
 }
 
 /**
  * Save submitted favorite galleries after removing duplicates and missing rows.
  *
- * @param mixed $input Submitted form value, usually favorite_gallery_ids[].
- * @return array<string array<int, int>> Saved IDs and removed submitted IDs.
+ * @param string|int|float|array<array-key,mixed>|bool|null $input Submitted favorite shortcut list, JSON/CSV string, numeric scalar ID, or home token; unsupported types normalize to an empty list.
+ * @return array{saved_ids:list<int|'home'>,removed_ids:list<int|'home'>} Result with saved_ids containing persisted home/valid gallery shortcuts and removed_ids containing submitted gallery IDs whose rows no longer exist.
  */
 function save_theme_favorite_gallery_ids(mixed $input): array
 {
@@ -258,10 +278,20 @@ function save_theme_favorite_gallery_ids(mixed $input): array
     // $existingRows stores rows that still exist in the galleries table.
     $existingRows = theme_favorite_gallery_rows_by_ids($submittedIds);
     // $savedIds stores submitted IDs that resolved to live galleries.
-    $savedIds = array_slice(theme_favorite_gallery_existing_ids_from_rows($submittedIds, $existingRows), 0, THEME_FAVORITE_GALLERIES_MAX);
+    $savedIds = array_slice(
+        theme_favorite_gallery_existing_ids_from_rows(
+            $submittedIds,
+            $existingRows,
+        ),
+        0,
+        THEME_FAVORITE_GALLERIES_MAX,
+    );
     // $removedIds stores values dropped because their gallery row was missing.
     $removedIds = array_values(array_diff($submittedIds, $savedIds));
-    set_app_setting(THEME_FAVORITE_GALLERIES_SETTING, theme_favorite_gallery_ids_encode($savedIds));
+    set_app_setting(
+        THEME_FAVORITE_GALLERIES_SETTING,
+        theme_favorite_gallery_ids_encode($savedIds),
+    );
     return [
         'saved_ids' => $savedIds,
         'removed_ids' => $removedIds,
@@ -271,13 +301,16 @@ function save_theme_favorite_gallery_ids(mixed $input): array
 /**
  * Convert resolved rows into public header navigation items.
  *
- * @param array $ids Ids value.
- * @param array $rows Rows to process.
+ * @param list<int|'home'> $ids Normalized saved gallery IDs and optional home shortcut.
+ * @param array<array-key,array<string,int|float|string|bool|null>> $rows Resolved gallery rows keyed by ID or row index.
  * @param bool $publicOnly Whether private and unlisted rows must be filtered out.
- * @return array<int array<string, mixed>> Navigation items with id, title, url, and gallery row.
+ * @return list<array{id:int|'home',title:string,url:string,gallery:array<string,int|float|string|bool|null>|null}> Ordered home or gallery navigation items with their resolved gallery row.
  */
-function theme_favorite_gallery_navigation_items_from_rows(array $ids, array $rows, bool $publicOnly): array
-{
+function theme_favorite_gallery_navigation_items_from_rows(
+    array $ids,
+    array $rows,
+    bool $publicOnly,
+): array {
     // $normalizedIds stores the preferred order without duplicate IDs.
     $normalizedIds = theme_favorite_gallery_ids_normalize($ids);
     if ($normalizedIds === []) {
@@ -314,13 +347,19 @@ function theme_favorite_gallery_navigation_items_from_rows(array $ids, array $ro
         }
         // $gallery stores the resolved gallery row for one favorite button.
         $gallery = $rowMap[(int) $galleryId];
-        if ($publicOnly && function_exists('Gallery\\Services\\gallery_is_public_listed') && !gallery_is_public_listed($gallery)) {
+        if (
+            $publicOnly
+            && function_exists('Gallery\\Services\\gallery_is_public_listed')
+            && !gallery_is_public_listed($gallery)
+        ) {
             continue;
         }
         // $title stores a stable label even if an old row has an empty title.
         $title = trim((string) ($gallery['title'] ?? ''));
         if ($title === '') {
-            $title = t('nav.favorite_gallery_fallback', 'Gallery {id}', ['id' => (int) $galleryId]);
+            $title = t('nav.favorite_gallery_fallback', 'Gallery {id}', [
+                'id' => (int) $galleryId,
+            ]);
         }
         $items[] = [
             'id' => (int) $galleryId,
@@ -348,7 +387,15 @@ function theme_favorite_gallery_navigation_items(bool $publicOnly): array
     $rows = theme_favorite_gallery_rows_by_ids($ids);
     // Apply presentation overlays after the existing listing policy, without
     // changing the raw rows used by favorite selection and settings editors.
-    $rows = array_filter($rows, static fn (array $gallery): bool => !$publicOnly || gallery_is_public_listed($gallery));
+    $rows = array_filter(
+        $rows,
+        static fn(array $gallery): bool => !$publicOnly
+        || gallery_is_public_listed($gallery),
+    );
     $rows = content_localize_entities('gallery', array_values($rows));
-    return theme_favorite_gallery_navigation_items_from_rows($ids, $rows, $publicOnly);
+    return theme_favorite_gallery_navigation_items_from_rows(
+        $ids,
+        $rows,
+        $publicOnly,
+    );
 }

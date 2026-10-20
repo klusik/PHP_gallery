@@ -51,7 +51,12 @@ const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
  */
 function public_home_search_enabled(): bool
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('public_search')
+    ) {
         return false;
     }
     return app_setting(PUBLIC_HOME_SEARCH_SETTING, '1') === '1';
@@ -93,8 +98,11 @@ function public_search_normalize_query(string $query): string
  * @param string $token Pending unquoted term, consumed by reference.
  * @return void
  */
-function public_search_flush_query_token(array &$groups, array &$current, string &$token): void
-{
+function public_search_flush_query_token(
+    array &$groups,
+    array &$current,
+    string &$token,
+): void {
     if ($token === '') {
         return;
     }
@@ -135,9 +143,17 @@ function public_search_parse_groups(string $query): array
         return [];
     }
     $quotes = [
-        '"' => '"', "'" => "'", '„' => '“', '“' => '”', '”' => '“',
-        '«' => '»', '‹' => '›', '‚' => '‘', '‘' => '’',
-        '「' => '」', '『' => '』',
+        '"' => '"',
+        "'" => "'",
+        '„' => '“',
+        '“' => '”',
+        '”' => '“',
+        '«' => '»',
+        '‹' => '›',
+        '‚' => '‘',
+        '‘' => '’',
+        '「' => '」',
+        '『' => '』',
     ];
     $groups = [];
     $current = [];
@@ -156,7 +172,11 @@ function public_search_parse_groups(string $query): array
                 }
             }
             if ($closingIndex >= 0) {
-                $phrase = trim(implode('', array_slice($chars, $i + 1, $closingIndex - $i - 1)));
+                $phrase = trim(implode('', array_slice(
+                    $chars,
+                    $i + 1,
+                    $closingIndex - $i - 1,
+                )));
                 if ($phrase !== '') {
                     $current[] = $phrase;
                 }
@@ -200,8 +220,11 @@ function public_search_parse_groups(string $query): array
  * @param ?array $contextGallery Context gallery value.
  * @return array<int,array<string,mixed>> Bounded public gallery and photo result models.
  */
-function public_search_results(string $query, int $limit = 12, ?array $contextGallery = null): array
-{
+function public_search_results(
+    string $query,
+    int $limit = 12,
+    ?array $contextGallery = null,
+): array {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
         return [];
@@ -223,8 +246,16 @@ function public_search_results(string $query, int $limit = 12, ?array $contextGa
     $limit = max(1, min(30, $limit));
     $galleryLimit = max(4, (int) ceil($limit * 0.6));
     $imageLimit = max(4, $limit - $galleryLimit + 4);
-    $galleryResults = public_search_gallery_results($query, $galleryLimit, $contextGallery);
-    $imageResults = public_search_image_results($query, $imageLimit, $contextGallery);
+    $galleryResults = public_search_gallery_results(
+        $query,
+        $galleryLimit,
+        $contextGallery,
+    );
+    $imageResults = public_search_image_results(
+        $query,
+        $imageLimit,
+        $contextGallery,
+    );
 
     $merged = [];
     foreach ($galleryResults as $result) {
@@ -235,11 +266,15 @@ function public_search_results(string $query, int $limit = 12, ?array $contextGa
     }
 
     usort($merged, static function (array $left, array $right): int {
-        $scoreCompare = ((int) ($right['score'] ?? 0)) <=> ((int) ($left['score'] ?? 0));
+        $scoreCompare =
+            (int) ($right['score'] ?? 0) <=> (int) ($left['score'] ?? 0);
         if ($scoreCompare !== 0) {
             return $scoreCompare;
         }
-        return strcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
+        return strcasecmp(
+            (string) ($left['title'] ?? ''),
+            (string) ($right['title'] ?? ''),
+        );
     });
 
     return array_slice(array_map(static function (array $result): array {
@@ -263,7 +298,6 @@ function public_search_query_length(string $query): int
     return strlen($query);
 }
 
-
 /**
  * Return whether public-search persistence must restrict galleries to listed access.
  *
@@ -286,12 +320,15 @@ function public_search_listing_requires_listed(): bool
  * the gallery must be publicly listed and the current visitor must satisfy the
  * same inherited password, share-link, and NSFW policy as the gallery page.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Canonical gallery row checked against public listing and visitor access policy.
  * @return bool True when the gallery may appear in public search results.
  */
 function public_search_gallery_visible_to_current_visitor(array $gallery): bool
 {
-    return gallery_is_public_listed($gallery) && visitor_can_access_gallery($gallery);
+    return (
+        gallery_is_public_listed($gallery)
+            && visitor_can_access_gallery($gallery)
+    );
 }
 
 /**
@@ -301,13 +338,18 @@ function public_search_gallery_visible_to_current_visitor(array $gallery): bool
  * gallery authorization, and image/gallery NSFW policy are delegated to the
  * canonical public-image authorization helper.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Owning gallery row or gallery data.
+ * @param array<string,mixed> $image Search image row checked against public visibility policy.
+ * @param array<string,mixed> $gallery Canonical owning gallery row used for inherited access checks.
  * @return bool True when the image may appear in public search results.
  */
-function public_search_image_visible_to_current_visitor(array $image, array $gallery): bool
-{
-    return gallery_is_public_listed($gallery) && public_image_visible_to_current_visitor($image, $gallery);
+function public_search_image_visible_to_current_visitor(
+    array $image,
+    array $gallery,
+): bool {
+    return (
+        gallery_is_public_listed($gallery)
+            && public_image_visible_to_current_visitor($image, $gallery)
+    );
 }
 
 /**
@@ -320,10 +362,17 @@ function public_search_image_visible_to_current_visitor(array $image, array $gal
  */
 function public_search_ai_metadata_ready(): bool
 {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
+    if (
+        function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('ai_image_metadata')
+    ) {
         return false;
     }
-    return function_exists(__NAMESPACE__ . '\\ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
+    return (
+        function_exists(__NAMESPACE__ . '\\ai_image_analysis_schema_ready')
+            && ai_image_analysis_schema_ready()
+    );
 }
 
 /**
@@ -331,15 +380,20 @@ function public_search_ai_metadata_ready(): bool
  *
  * @param string $query Query value.
  * @param int $limit Maximum number of items.
- * @param ?array $contextGallery Context gallery value.
- * @return array Structured result data for the caller.
+ * @param ?array<string,mixed> $contextGallery Optional gallery scope for the search.
+ * @return list<array{key:string,type:string,label:string,title:string,subtitle:string,url:string,score:int}> Ranked gallery result cards visible to this visitor.
  */
-function public_search_gallery_results(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_gallery_results(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $listedOnly = public_search_listing_requires_listed();
     $aiSearchReady = public_search_ai_metadata_ready();
     $contentLanguage = translation_active_language();
-    $localizedGallerySearchReady = content_localization_enabled() && content_localization_schema_ready('gallery');
+    $localizedGallerySearchReady =
+        content_localization_enabled()
+        && content_localization_schema_ready('gallery');
 
     $galleryRows = public_search_model_compatibility_gallery_rows(
         $query,
@@ -348,7 +402,7 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
         $aiSearchReady,
         $localizedGallerySearchReady,
         $contentLanguage,
-        $limit
+        $limit,
     );
     $authorizedGalleryRows = [];
     foreach ($galleryRows as $gallery) {
@@ -358,7 +412,11 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
     }
     $galleryRows = $authorizedGalleryRows;
     if ($localizedGallerySearchReady) {
-        $galleryRows = content_localize_entities('gallery', $galleryRows, $contentLanguage);
+        $galleryRows = content_localize_entities(
+            'gallery',
+            $galleryRows,
+            $contentLanguage,
+        );
     }
 
     $results = [];
@@ -367,16 +425,32 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
         $containedTags = trim((string) ($gallery['image_tag_names'] ?? ''));
         $details = [];
         if ($tagNames !== '') {
-            $details[] = t('search.tags_prefix', 'Tags: {tags}', ['tags' => public_search_compact_text($tagNames, 120)]);
+            $details[] = t(
+                'search.tags_prefix',
+                'Tags: {tags}',
+                ['tags' => public_search_compact_text($tagNames, 120)],
+            );
         }
         if ($containedTags !== '' && $containedTags !== $tagNames) {
-            $details[] = t('search.photo_tags_prefix', 'Photo tags: {tags}', ['tags' => public_search_compact_text($containedTags, 120)]);
+            $details[] = t(
+                'search.photo_tags_prefix',
+                'Photo tags: {tags}',
+                ['tags' => public_search_compact_text($containedTags, 120)],
+            );
         }
-        $description = public_search_compact_text((string) ($gallery['description'] ?? ''), 180);
+        $description = public_search_compact_text(
+            (string) ($gallery['description'] ?? ''),
+            180,
+        );
         if ($description !== '') {
             $details[] = $description;
         }
-        $score = (int) ($gallery['exact_title_score'] ?? 0) + (int) ($gallery['title_score'] ?? 0) + (int) ($gallery['gallery_tag_score'] ?? 0) + (int) ($gallery['image_name_score'] ?? 0) + (int) ($gallery['ai_score'] ?? 0);
+        $score =
+            (int) ($gallery['exact_title_score'] ?? 0)
+            + (int) ($gallery['title_score'] ?? 0)
+            + (int) ($gallery['gallery_tag_score'] ?? 0)
+            + (int) ($gallery['image_name_score'] ?? 0)
+            + (int) ($gallery['ai_score'] ?? 0);
         $results[] = [
             'key' => 'gallery:' . (int) ($gallery['id'] ?? 0),
             'type' => 'gallery',
@@ -396,15 +470,19 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
  *
  * @param string $query Query value.
  * @param int $limit Maximum number of items.
- * @param ?array $contextGallery Context gallery value.
- * @return array Structured result data for the caller.
+ * @param ?array<string,mixed> $contextGallery Optional gallery scope for the search.
+ * @return list<array{key:string,type:string,label:string,title:string,subtitle:string,url:string,score:int}> Ranked image result cards with authorized gallery context.
  */
-function public_search_image_results(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_image_results(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $listedOnly = public_search_listing_requires_listed();
     $aiSearchReady = public_search_ai_metadata_ready();
     $contentLanguage = translation_active_language();
-    $localizedSearchReady = content_localization_enabled()
+    $localizedSearchReady =
+        content_localization_enabled()
         && content_localization_schema_ready('image');
 
     $rows = public_search_model_compatibility_image_rows(
@@ -414,7 +492,7 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
         $aiSearchReady,
         $localizedSearchReady,
         $contentLanguage,
-        $limit
+        $limit,
     );
 
     // Re-fetch canonical gallery rows before exposing image metadata. The legacy
@@ -431,21 +509,35 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
             $galleries[$galleryId] = find_gallery($galleryId);
         }
         $gallery = $galleries[$galleryId] ?? null;
-        if (!is_array($gallery) || !public_search_image_visible_to_current_visitor($row, $gallery)) {
+        if (
+            !is_array($gallery)
+            || !public_search_image_visible_to_current_visitor($row, $gallery)
+        ) {
             continue;
         }
         $authorizedRows[] = $row;
     }
-    $rows = content_localize_entities('image', $authorizedRows, $contentLanguage);
+    $rows = content_localize_entities(
+        'image',
+        $authorizedRows,
+        $contentLanguage,
+    );
 
     $authorizedGalleries = [];
     foreach ($galleries as $galleryId => $gallery) {
-        if (!is_array($gallery) || !public_search_gallery_visible_to_current_visitor($gallery)) {
+        if (
+            !is_array($gallery)
+            || !public_search_gallery_visible_to_current_visitor($gallery)
+        ) {
             continue;
         }
         $authorizedGalleries[(int) $galleryId] = $gallery;
     }
-    $localizedGalleries = content_localize_entities('gallery', array_values($authorizedGalleries), $contentLanguage);
+    $localizedGalleries = content_localize_entities(
+        'gallery',
+        array_values($authorizedGalleries),
+        $contentLanguage,
+    );
     $galleries = [];
     foreach ($localizedGalleries as $localizedGallery) {
         $galleries[(int) ($localizedGallery['id'] ?? 0)] = $localizedGallery;
@@ -453,22 +545,39 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
     $results = [];
     foreach ($rows as $row) {
         $galleryId = (int) ($row['matched_gallery_id'] ?? 0);
-        $gallery = $galleries[$galleryId] ?? public_search_gallery_from_image_row($row);
+        $gallery = $galleries[$galleryId] ?? public_search_gallery_from_image_row(
+            $row,
+        );
         $title = trim((string) ($row['title'] ?? ''));
         if ($title === '') {
-            $title = (string) ($row['filename'] ?? t('search.untitled_photo', 'Untitled photo'));
+            $title = (string) (
+                $row['filename'] ?? t('search.untitled_photo', 'Untitled photo')
+            );
         }
         $details = [];
-        $details[] = t('search.in_gallery', 'In {gallery}', ['gallery' => (string) ($gallery['title'] ?? '')]);
+        $details[] = t('search.in_gallery', 'In {gallery}', [
+            'gallery' => (string) ($gallery['title'] ?? ''),
+        ]);
         $tagNames = trim((string) ($row['image_tag_names'] ?? ''));
         if ($tagNames !== '') {
-            $details[] = t('search.tags_prefix', 'Tags: {tags}', ['tags' => public_search_compact_text($tagNames, 120)]);
+            $details[] = t(
+                'search.tags_prefix',
+                'Tags: {tags}',
+                ['tags' => public_search_compact_text($tagNames, 120)],
+            );
         }
-        $description = public_search_compact_text((string) ($row['description'] ?? ''), 160);
+        $description = public_search_compact_text(
+            (string) ($row['description'] ?? ''),
+            160,
+        );
         if ($description !== '') {
             $details[] = $description;
         }
-        $score = (int) ($row['exact_name_score'] ?? 0) + (int) ($row['name_score'] ?? 0) + (int) ($row['tag_score'] ?? 0) + (int) ($row['ai_score'] ?? 0);
+        $score =
+            (int) ($row['exact_name_score'] ?? 0)
+            + (int) ($row['name_score'] ?? 0)
+            + (int) ($row['tag_score'] ?? 0)
+            + (int) ($row['ai_score'] ?? 0);
         $results[] = [
             'key' => 'photo:' . (int) ($row['id'] ?? 0),
             'type' => 'photo',

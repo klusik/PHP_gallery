@@ -23,7 +23,11 @@ use function Gallery\Core\current_user;
 use function Gallery\Services\gallery_title_completion_candidates;
 use function Gallery\Services\gallery_title_completion_empty_result;
 
-/** Send a bounded optional suggestion response without HTML/login redirects. */
+/**
+ * Send a bounded optional suggestion response without HTML/login redirects.
+ *
+ * @return void Emits the JSON response and HTTP status.
+ */
 function cms_admin_gallery_title_completion(): void
 {
     clear_response_cache_headers();
@@ -44,12 +48,22 @@ function cms_admin_gallery_title_completion(): void
         } else {
             $query = $_GET['q'] ?? '';
             $parent = $_GET['parent_id'] ?? '0';
-            if (!is_string($query) || !is_string($parent)
+            if (
+                !is_string($query)
+                || !is_string($parent)
                 || preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/', $parent) !== 1
-                || filter_var($parent, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) === false) {
-                throw new \InvalidArgumentException('Invalid title completion request.');
+                || filter_var($parent, FILTER_VALIDATE_INT, ['options' => [
+                    'min_range' => 0,
+                ]]) === false
+            ) {
+                throw new \InvalidArgumentException(
+                    'Invalid title completion request.',
+                );
             }
-            $result = gallery_title_completion_candidates($query, (int) $parent);
+            $result = gallery_title_completion_candidates(
+                $query,
+                (int) $parent,
+            );
             $status = $result['ok'] ? 200 : 503;
         }
     } catch (\InvalidArgumentException) {
@@ -59,10 +73,16 @@ function cms_admin_gallery_title_completion(): void
         $result = gallery_title_completion_empty_result(false, true);
     }
 
-    $body = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $body = json_encode(
+        $result,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($body) || strlen($body) > 16384) {
         $status = 503;
-        $body = (string) json_encode(gallery_title_completion_empty_result(false, true));
+        $body = (string) json_encode(gallery_title_completion_empty_result(
+            false,
+            true,
+        ));
     }
     http_response_code($status);
     echo $body;

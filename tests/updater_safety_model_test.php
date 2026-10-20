@@ -30,10 +30,20 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../app/services/updates.php';
 
-$updatesController = (string) file_get_contents(__DIR__ . '/../app/controllers/updates.php');
-$updatesView = (string) file_get_contents(__DIR__ . '/../app/views/admin_updates.php');
-if (!str_contains($updatesController, "\$action === 'cleanup_malformed_root_files'") || !str_contains($updatesView, 'value="cleanup_malformed_root_files"')) {
-    throw new RuntimeException('Advanced updater tools no longer expose malformed root-file cleanup.');
+$updatesController = (string) file_get_contents(__DIR__
+    . '/../app/controllers/updates.php');
+$updatesView = (string) file_get_contents(__DIR__
+    . '/../app/views/admin_updates.php');
+if (
+    !str_contains(
+        $updatesController,
+        "\$action === 'cleanup_malformed_root_files'",
+    )
+    || !str_contains($updatesView, 'value="cleanup_malformed_root_files"')
+) {
+    throw new RuntimeException(
+        'Advanced updater tools no longer expose malformed root-file cleanup.',
+    );
 }
 
 use function Gallery\Services\application_update_assert_source_root;
@@ -52,23 +62,39 @@ foreach ([
     'app/migration_repairs.php',
 ] as $validPath) {
     if (in_array($validPath, $misplaced, true)) {
-        throw new RuntimeException('Updater classified a valid application path as misplaced: ' . $validPath);
+        throw new RuntimeException('Updater classified a valid application path as misplaced: '
+            . $validPath);
     }
 }
 
 foreach (['app/app', 'app/public', 'app/index.php'] as $knownWrongPath) {
     if (!in_array($knownWrongPath, $misplaced, true)) {
-        throw new RuntimeException('Updater no longer recognizes a known nested project artifact: ' . $knownWrongPath);
+        throw new RuntimeException(
+            'Updater no longer recognizes a known nested project artifact: '
+                . $knownWrongPath,
+        );
     }
 }
 
-$tempRoot = sys_get_temp_dir() . '/php-gallery-incomplete-update-' . bin2hex(random_bytes(6));
+$tempRoot =
+    sys_get_temp_dir()
+    . '/php-gallery-incomplete-update-'
+    . bin2hex(random_bytes(6));
 mkdir($tempRoot, 0775, true);
-$runtimePaths = ['app/bootstrap_full.php', 'app/runtime/autoload.php', 'app/runtime/bridge.php',
-    'app/runtime/modules.php', 'app/runtime/Kernel.php', 'app/runtime/ModuleLoader.php',
-    'app/runtime/Request.php', 'app/runtime/Router.php', 'app/runtime/RouteDefinition.php',
-    'app/runtime/RouteRegistry.php', 'app/services/updates_request.php',
-    'app/services/updates_job_lookup.php'];
+$runtimePaths = [
+    'app/bootstrap_full.php',
+    'app/runtime/autoload.php',
+    'app/runtime/bridge.php',
+    'app/runtime/modules.php',
+    'app/runtime/Kernel.php',
+    'app/runtime/ModuleLoader.php',
+    'app/runtime/Request.php',
+    'app/runtime/Router.php',
+    'app/runtime/RouteDefinition.php',
+    'app/runtime/RouteRegistry.php',
+    'app/services/updates_request.php',
+    'app/services/updates_job_lookup.php',
+];
 try {
     foreach (array_merge($runtimePaths, [
         'index.php',
@@ -138,16 +164,22 @@ try {
         'algorithm' => 'sha256',
         'hash_mode' => 'normalized-text-sha256',
         'files' => ['index.php' => 'sha256:fixture'],
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        . "\n");
 
     $failedAsExpected = false;
     try {
         application_update_assert_source_root($tempRoot);
     } catch (RuntimeException $exception) {
-        $failedAsExpected = str_contains($exception->getMessage(), 'app/views.php');
+        $failedAsExpected = str_contains(
+            $exception->getMessage(),
+            'app/views.php',
+        );
     }
     if (!$failedAsExpected) {
-        throw new RuntimeException('Incomplete update snapshot was not rejected for missing app/views.php.');
+        throw new RuntimeException(
+            'Incomplete update snapshot was not rejected for missing app/views.php.',
+        );
     }
     file_put_contents($tempRoot . '/app/views.php', "<?php\n");
     application_update_assert_source_root($tempRoot);
@@ -161,32 +193,49 @@ try {
         }
         file_put_contents($tempRoot . '/' . $path, "<?php\n");
         if (!$refused) {
-            throw new RuntimeException('Updater accepted a snapshot missing required runtime file: ' . $path);
+            throw new RuntimeException('Updater accepted a snapshot missing required runtime file: '
+                . $path);
         }
     }
 } finally {
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($tempRoot, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $tempRoot,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
-        $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        $item->isDir()
+            ? rmdir($item->getPathname())
+            : unlink($item->getPathname());
     }
     rmdir($tempRoot);
 }
 
 if (class_exists(ZipArchive::class) && DIRECTORY_SEPARATOR !== '\\') {
-    $cleanupRoot = sys_get_temp_dir() . '/php-gallery-malformed-root-cleanup-' . bin2hex(random_bytes(6));
+    $cleanupRoot =
+        sys_get_temp_dir()
+        . '/php-gallery-malformed-root-cleanup-'
+        . bin2hex(random_bytes(6));
     mkdir($cleanupRoot . '/app/services', 0775, true);
     mkdir($cleanupRoot . '/public/assets', 0775, true);
     mkdir($cleanupRoot . '/cache', 0775, true);
-    foreach (['index.php', 'app/bootstrap.php', 'app/services/updates.php', 'public/assets/styles.css'] as $requiredPath) {
+    foreach ([
+        'index.php',
+        'app/bootstrap.php',
+        'app/services/updates.php',
+        'public/assets/styles.css',
+    ] as $requiredPath) {
         file_put_contents($cleanupRoot . '/' . $requiredPath, "<?php\n");
     }
     $malformedName = 'app\\controllers\\admin_auth.php';
     file_put_contents($cleanupRoot . '/' . $malformedName, "<?php\n");
     file_put_contents($cleanupRoot . '/bootstrap.php', "<?php\n");
-    file_put_contents($cleanupRoot . '/google-site-verification.html', "verification\n");
+    file_put_contents(
+        $cleanupRoot . '/google-site-verification.html',
+        "verification\n",
+    );
     file_put_contents($cleanupRoot . '/custom-tracker.php', "<?php\n");
     mkdir($cleanupRoot . '/nested', 0775, true);
     file_put_contents($cleanupRoot . '/nested/keep\\file.php', "<?php\n");
@@ -194,11 +243,19 @@ if (class_exists(ZipArchive::class) && DIRECTORY_SEPARATOR !== '\\') {
 
     $backupPath = $cleanupRoot . '/cache/malformed-cleanup.zip';
     $backup = new ZipArchive();
-    if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        throw new RuntimeException('Could not create malformed-root cleanup test archive.');
+    if (
+        $backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+        !== true
+    ) {
+        throw new RuntimeException(
+            'Could not create malformed-root cleanup test archive.',
+        );
     }
     try {
-        $removed = application_update_remove_malformed_root_files($cleanupRoot, $backup);
+        $removed = application_update_remove_malformed_root_files(
+            $cleanupRoot,
+            $backup,
+        );
     } finally {
         $backup->close();
     }
@@ -206,19 +263,37 @@ if (class_exists(ZipArchive::class) && DIRECTORY_SEPARATOR !== '\\') {
     sort($removed);
     $expectedRemoved = [$malformedName, 'bootstrap.php'];
     sort($expectedRemoved);
-    if ($removed !== $expectedRemoved || file_exists($cleanupRoot . '/' . $malformedName) || file_exists($cleanupRoot . '/bootstrap.php')) {
-        throw new RuntimeException('Updater did not remove the malformed root file safely.');
+    if (
+        $removed !== $expectedRemoved
+        || file_exists($cleanupRoot . '/' . $malformedName)
+        || file_exists($cleanupRoot . '/bootstrap.php')
+    ) {
+        throw new RuntimeException(
+            'Updater did not remove the malformed root file safely.',
+        );
     }
-    if (!is_file($cleanupRoot . '/nested/keep\\file.php') || !is_dir($cleanupRoot . '/keep\\directory') || !is_file($cleanupRoot . '/google-site-verification.html') || !is_file($cleanupRoot . '/custom-tracker.php')) {
-        throw new RuntimeException('Malformed-root cleanup escaped its direct regular-file scope.');
+    if (
+        !is_file($cleanupRoot . '/nested/keep\\file.php')
+        || !is_dir($cleanupRoot . '/keep\\directory')
+        || !is_file($cleanupRoot . '/google-site-verification.html')
+        || !is_file($cleanupRoot . '/custom-tracker.php')
+    ) {
+        throw new RuntimeException(
+            'Malformed-root cleanup escaped its direct regular-file scope.',
+        );
     }
 
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($cleanupRoot, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $cleanupRoot,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
-        $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        $item->isDir()
+            ? rmdir($item->getPathname())
+            : unlink($item->getPathname());
     }
     rmdir($cleanupRoot);
 }

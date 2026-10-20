@@ -48,8 +48,11 @@ namespace Gallery\Services {
      */
     function db_column_exists(string $table, string $column): bool
     {
-        return $table === 'galleries' && $column === 'count_badge_visibility'
-            && ($GLOBALS['gallery_count_modes_test_schema'] ?? true);
+        return (
+            $table === 'galleries'
+                && $column === 'count_badge_visibility'
+                && ($GLOBALS['gallery_count_modes_test_schema'] ?? true)
+        );
     }
 
     /**
@@ -63,7 +66,11 @@ namespace Gallery\Services {
     function t(string $key, string $fallback = '', array $params = []): string
     {
         foreach ($params as $name => $value) {
-            $fallback = str_replace('{' . $name . '}', (string) $value, $fallback);
+            $fallback = str_replace(
+                '{' . $name . '}',
+                (string) $value,
+                $fallback,
+            );
         }
         return $fallback;
     }
@@ -99,93 +106,203 @@ namespace {
     ];
     $GLOBALS['gallery_count_modes_test_schema'] = true;
     $inherit = ['count_badge_visibility' => null];
-    $check(\Gallery\Services\theme_gallery_count_badge_mode() === 'both',
-        'First upgrade must default to Both independently of the old disabled checkbox.');
-    $check(\Gallery\Services\theme_gallery_count_badge_icons_enabled(),
-        'First upgrade must default icons to ON.');
-    $check(\Gallery\Services\gallery_count_badge_storage_value(['malformed']) === null
-        && \Gallery\Services\gallery_count_badge_storage_value('unknown') === null,
-        'Malformed gallery enum values should fail closed to inheritance.');
-    $check(\Gallery\Services\gallery_count_badge_storage_value('show') === 'show'
-        && \Gallery\Services\gallery_effective_count_badge_mode(['count_badge_visibility' => 'show']) === 'both',
-        'Legacy explicit Show must map to a visible Both counter.');
-    $check(\Gallery\Services\gallery_effective_count_badge_mode(['count_badge_visibility' => 'hide']) === 'hidden',
-        'Legacy explicit Hide must remain hidden.');
-    $check(\Gallery\Services\gallery_effective_count_badge_mode(['count_badge_visibility' => 'public']) === 'public'
-        && \Gallery\Services\gallery_effective_count_badge_mode(['count_badge_visibility' => 'all']) === 'all',
-        'Explicit per-gallery Public/All overrides must not follow Theme mode.');
+    $check(
+        \Gallery\Services\theme_gallery_count_badge_mode() === 'both',
+        'First upgrade must default to Both independently of the old disabled checkbox.',
+    );
+    $check(
+        \Gallery\Services\theme_gallery_count_badge_icons_enabled(),
+        'First upgrade must default icons to ON.',
+    );
+    $check(
+        \Gallery\Services\gallery_count_badge_storage_value(['malformed'])
+            === null
+            && \Gallery\Services\gallery_count_badge_storage_value('unknown')
+                === null,
+        'Malformed gallery enum values should fail closed to inheritance.',
+    );
+    $check(
+        \Gallery\Services\gallery_count_badge_storage_value('show') === 'show'
+            && \Gallery\Services\gallery_effective_count_badge_mode([
+                'count_badge_visibility' => 'show',
+            ]) === 'both',
+        'Legacy explicit Show must map to a visible Both counter.',
+    );
+    $check(\Gallery\Services\gallery_effective_count_badge_mode([
+        'count_badge_visibility' => 'hide',
+    ]) === 'hidden', 'Legacy explicit Hide must remain hidden.');
+    $check(\Gallery\Services\gallery_effective_count_badge_mode([
+        'count_badge_visibility' => 'public',
+    ]) === 'public'
+        && \Gallery\Services\gallery_effective_count_badge_mode([
+            'count_badge_visibility' => 'all',
+        ])
+            === 'all', 'Explicit per-gallery Public/All overrides must not follow Theme mode.');
 
     $modes = ['public', 'all', 'both', 'hidden'];
     foreach ($modes as $mode) {
         foreach ([true, false] as $icons) {
-            $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_mode'] = $mode;
-            $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_icons_enabled'] = $icons ? '1' : '0';
-            $badge = \Gallery\Services\gallery_count_badge_presentation($inherit, true, 12, 18);
-            $check($badge['visible'] === ($mode !== 'hidden'), 'Wrong admin badge visibility in ' . $mode);
+            $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_mode'] =
+                $mode;
+            $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_icons_enabled'] =
+                $icons ? '1' : '0';
+            $badge = \Gallery\Services\gallery_count_badge_presentation(
+                $inherit,
+                true,
+                12,
+                18,
+            );
+            $check(
+                $badge['visible'] === ($mode !== 'hidden'),
+                'Wrong admin badge visibility in ' . $mode,
+            );
             $check($badge['mode'] === $mode, 'Wrong admin mode in ' . $mode);
-            $check($badge['icons'] === $icons, 'Icon setting unexpectedly depends on count mode.');
+            $check(
+                $badge['icons'] === $icons,
+                'Icon setting unexpectedly depends on count mode.',
+            );
 
             if ($badge['visible']) {
                 ob_start();
                 \Gallery\Views\view_gallery_count_admin_values($badge);
                 $html = (string) ob_get_clean();
-                $check(str_contains($html, 'gallery-count-number'), 'Admin count is missing a number.');
-                $check(($mode === 'both') === str_contains($html, 'gallery-count-separator'),
-                    'The separator must appear only for different Public/All counts.');
-                $check(($mode !== 'all') === str_contains($html, '>12</span>'),
-                    'Public count incorrectly rendered or omitted.');
-                $check(($mode !== 'public') === str_contains($html, '>18</span>'),
-                    'All count incorrectly rendered or omitted.');
-                $check(($icons && $mode !== 'all') === str_contains($html, 'gallery-count-eye-icon'),
-                    'Eye icon not matched to enabled Public segment.');
-                $check(($icons && $mode !== 'public') === str_contains($html, 'subgallery-stack-icon'),
-                    'Stacked-photo icon not matched to enabled All segment.');
-                $check(str_contains(\Gallery\Views\view_gallery_count_admin_label($badge), 'subgalleries'),
-                    'Accessible description must mention descendants.');
+                $check(
+                    str_contains($html, 'gallery-count-number'),
+                    'Admin count is missing a number.',
+                );
+                $check(
+                    ($mode === 'both') === str_contains(
+                        $html,
+                        'gallery-count-separator',
+                    ),
+                    'The separator must appear only for different Public/All counts.',
+                );
+                $check(
+                    ($mode !== 'all') === str_contains($html, '>12</span>'),
+                    'Public count incorrectly rendered or omitted.',
+                );
+                $check(
+                    ($mode !== 'public') === str_contains($html, '>18</span>'),
+                    'All count incorrectly rendered or omitted.',
+                );
+                $check(
+                    ($icons && $mode !== 'all') === str_contains(
+                        $html,
+                        'gallery-count-eye-icon',
+                    ),
+                    'Eye icon not matched to enabled Public segment.',
+                );
+                $check(
+                    ($icons && $mode !== 'public') === str_contains(
+                        $html,
+                        'subgallery-stack-icon',
+                    ),
+                    'Stacked-photo icon not matched to enabled All segment.',
+                );
+                $check(
+                    str_contains(
+                        \Gallery\Views\view_gallery_count_admin_label($badge),
+                        'subgalleries',
+                    ),
+                    'Accessible description must mention descendants.',
+                );
             }
-            $guest = \Gallery\Services\gallery_count_badge_presentation($inherit, false, 12, 18);
-            $check($guest['mode'] === ($mode === 'hidden' ? 'hidden' : 'public')
-                && $guest['all_count'] === null && $guest['icons'] === false,
-                'Guest must never receive All or the dual counter for mode ' . $mode);
-            $check($guest['visible'] === ($mode !== 'hidden'),
-                'Guests should retain one public badge except when Hidden.');
-            $check(!\Gallery\Services\gallery_count_badge_needs_total($inherit, false),
-                'Guest should never cause an all-visibility branch query.');
+            $guest = \Gallery\Services\gallery_count_badge_presentation(
+                $inherit,
+                false,
+                12,
+                18,
+            );
+            $check(
+                $guest['mode'] === ($mode === 'hidden' ? 'hidden' : 'public')
+                    && $guest['all_count'] === null
+                    && $guest['icons'] === false,
+                'Guest must never receive All or the dual counter for mode '
+                    . $mode,
+            );
+            $check(
+                $guest['visible'] === ($mode !== 'hidden'),
+                'Guests should retain one public badge except when Hidden.',
+            );
+            $check(
+                !\Gallery\Services\gallery_count_badge_needs_total(
+                    $inherit,
+                    false,
+                ),
+                'Guest should never cause an all-visibility branch query.',
+            );
         }
     }
 
     $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_mode'] = 'both';
     $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_icons_enabled'] = '1';
     foreach ([0, 18] as $equal) {
-        $badge = \Gallery\Services\gallery_count_badge_presentation($inherit, true, $equal, $equal);
-        $check($badge['mode'] === 'all', 'Both equal counts must collapse to All.');
+        $badge = \Gallery\Services\gallery_count_badge_presentation(
+            $inherit,
+            true,
+            $equal,
+            $equal,
+        );
+        $check(
+            $badge['mode'] === 'all',
+            'Both equal counts must collapse to All.',
+        );
         ob_start();
         \Gallery\Views\view_gallery_count_admin_values($badge);
         $html = (string) ob_get_clean();
-        $check(!str_contains($html, 'gallery-count-separator') && !str_contains($html, 'gallery-count-eye-icon')
-            && str_contains($html, 'gallery-count-number'), 'Collapsed count must be a single All segment.');
+        $check(
+            !str_contains($html, 'gallery-count-separator')
+                && !str_contains($html, 'gallery-count-eye-icon')
+                && str_contains($html, 'gallery-count-number'),
+            'Collapsed count must be a single All segment.',
+        );
     }
-    $diff = \Gallery\Services\gallery_count_badge_presentation($inherit, true, 0, 18);
-    $check($diff['mode'] === 'both' && $diff['public_count'] === 0 && $diff['all_count'] === 18,
-        '0 / N must not be collapsed.');
-    $check(\Gallery\Services\gallery_count_badge_needs_total($inherit, true),
-        'Administrator Both mode must request the full branch count.');
+    $diff = \Gallery\Services\gallery_count_badge_presentation(
+        $inherit,
+        true,
+        0,
+        18,
+    );
+    $check(
+        $diff['mode'] === 'both'
+            && $diff['public_count'] === 0
+            && $diff['all_count'] === 18,
+        '0 / N must not be collapsed.',
+    );
+    $check(
+        \Gallery\Services\gallery_count_badge_needs_total($inherit, true),
+        'Administrator Both mode must request the full branch count.',
+    );
 
     $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_mode'] = 'hidden';
-    $check(\Gallery\Services\theme_gallery_count_badge_icons_enabled(),
-        'Hidden mode must not clear the independent icon setting.');
+    $check(
+        \Gallery\Services\theme_gallery_count_badge_icons_enabled(),
+        'Hidden mode must not clear the independent icon setting.',
+    );
     $GLOBALS['gallery_count_modes_test_settings']['theme_gallery_count_badge_mode'] = 'public';
-    $check(\Gallery\Services\theme_gallery_count_badge_icons_enabled(),
-        'Unhiding the count must preserve the icon setting.');
+    $check(
+        \Gallery\Services\theme_gallery_count_badge_icons_enabled(),
+        'Unhiding the count must preserve the icon setting.',
+    );
 
     // The identity check is deliberately performed in the server-side controllers,
     // not in a rendered HTML/JS attribute or the count formatting service itself.
-    $cards = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_cards.php');
-    $page = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
-    $check(str_contains($cards, 'current_user() !== null') && str_contains($cards, 'admin_anonymous_preview_active()'),
-        'Card totals must remain bound to the historical authenticated Admin session.');
-    $check(str_contains($page, 'gallery_count_badge_needs_total($gallery, $isCountAdmin)'),
-        'Hero totals must remain gated on Admin mode and session.');
+    $cards = (string) file_get_contents(__DIR__
+        . '/../app/controllers/public_gallery_cards.php');
+    $page = (string) file_get_contents(__DIR__
+        . '/../app/controllers/public_gallery_page.php');
+    $check(
+        str_contains($cards, 'current_user() !== null')
+            && str_contains($cards, 'admin_anonymous_preview_active()'),
+        'Card totals must remain bound to the historical authenticated Admin session.',
+    );
+    $check(
+        str_contains(
+            $page,
+            'gallery_count_badge_needs_total($gallery, $isCountAdmin)',
+        ),
+        'Hero totals must remain gated on Admin mode and session.',
+    );
 
     echo "gallery_count_badge_modes_test: PASS\n";
 }

@@ -43,10 +43,20 @@ function demand(bool $condition, string $code): void
     }
 }
 
-/** Encode a private evidence document deterministically with a final newline. */
+/**
+ * Encode a private evidence document deterministically with a final newline.
+ *
+ * @param array<string,mixed> $value Evidence document data.
+ * @return string Pretty-printed JSON with a trailing newline.
+ */
 function json_text(array $value): string
 {
-    return json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+    return (
+        json_encode(
+            $value,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        ) . "\n"
+    );
 }
 
 /** Bind evidence to the complete ordered JSON document; any edit invalidates it. */
@@ -60,13 +70,23 @@ function same_path(string $left, string $right): bool
 {
     $left = rtrim(str_replace('\\', '/', $left), '/');
     $right = rtrim(str_replace('\\', '/', $right), '/');
-    return PHP_OS_FAMILY === 'Windows' ? strcasecmp($left, $right) === 0 : $left === $right;
+    return PHP_OS_FAMILY === 'Windows'
+        ? strcasecmp($left, $right) === 0
+        : $left === $right;
 }
 
-/** Reject aliases at every existing segment, including Windows junctions and linked ancestors. */
+/**
+ * Reject aliases at every existing segment, including Windows junctions and linked ancestors.
+ *
+ * @param string $path Candidate filesystem path.
+ * @return string Canonical absolute path after existing path segments pass alias checks.
+ */
 function plain_path(string $path): string
 {
-    demand(!str_contains($path, "\0") && !str_contains($path, '://'), 'unsafe_path');
+    demand(
+        !str_contains($path, "\0") && !str_contains($path, '://'),
+        'unsafe_path',
+    );
     $withoutDrive = preg_replace('/^[A-Za-z]:/', '', $path);
     demand(!str_contains((string) $withoutDrive, ':'), 'unsafe_path');
     $resolved = realpath($path);
@@ -79,19 +99,35 @@ function plain_path(string $path): string
             break;
         }
         $parentReal = realpath($parent);
-        demand($parentReal !== false && same_path(rtrim($parentReal, '/\\') . '/' . basename($cursor), (string) realpath($cursor)), 'aliased_path');
+        demand(
+            $parentReal !== false
+                && same_path(
+                    rtrim($parentReal, '/\\') . '/' . basename($cursor),
+                    (string) realpath($cursor),
+                ),
+            'aliased_path',
+        );
         $cursor = $parent;
     }
     return $resolved;
 }
 
-/** Disjoint roots prevent selecting the executing installation, a child, or its parent. */
+/**
+ * Disjoint roots prevent selecting the executing installation, a child, or its parent.
+ *
+ * @param string $path Candidate external directory.
+ * @return string Canonical external directory disjoint from the executing installation.
+ */
 function external_directory(string $path): string
 {
     $resolved = plain_path($path);
     demand(is_dir($resolved), 'directory_required');
     $project = dirname(__DIR__, 2);
-    demand(!contains_path($project, $resolved) && !contains_path($resolved, $project), 'installation_overlap');
+    demand(
+        !contains_path($project, $resolved)
+            && !contains_path($resolved, $project),
+        'installation_overlap',
+    );
     return $resolved;
 }
 
@@ -105,25 +141,63 @@ function contains_path(string $root, string $path): bool
     return \Gallery\Core\path_inside($root, $path);
 }
 
-/** Reject traversal, Windows streams, ambiguous names and credential filenames. */
+/**
+ * Reject traversal, Windows streams, ambiguous names and credential filenames.
+ *
+ * @param string $path Candidate repository-relative path.
+ * @return string Validated forward-slash relative path.
+ */
 function relative_path(string $path): string
 {
-    demand($path !== '' && strlen($path) <= 1024 && !preg_match('/[\x00-\x1f\x7f:\\\\]/', $path), 'unsafe_relative_path');
-    demand(!str_starts_with($path, '/') && !str_ends_with($path, '/') && !str_contains($path, '//'), 'unsafe_relative_path');
-    demand(\Gallery\Core\normalize_relative_path($path) === $path, 'unsafe_relative_path');
+    demand(
+        $path !== ''
+            && strlen($path) <= 1024
+            && !preg_match('/[\x00-\x1f\x7f:\\\\]/', $path),
+        'unsafe_relative_path',
+    );
+    demand(
+        !str_starts_with($path, '/')
+            && !str_ends_with($path, '/')
+            && !str_contains($path, '//'),
+        'unsafe_relative_path',
+    );
+    demand(
+        \Gallery\Core\normalize_relative_path($path) === $path,
+        'unsafe_relative_path',
+    );
     foreach (explode('/', $path) as $part) {
-        demand(!preg_match('/[. ]$/', $part) && !in_array(strtolower($part), ['config.php', '.env', '.git'], true), 'forbidden_file');
-        demand(preg_match('/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i', $part) !== 1, 'reserved_filename');
+        demand(
+            !preg_match('/[. ]$/', $part)
+                && !in_array(
+                    strtolower($part),
+                    ['config.php', '.env', '.git'],
+                    true,
+                ),
+            'forbidden_file',
+        );
+        demand(
+            preg_match('/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i', $part)
+                !== 1,
+            'reserved_filename',
+        );
     }
     return $path;
 }
 
-/** Require a readable regular file with no symbolic or hard-link alias. */
+/**
+ * Require a readable regular file with no symbolic or hard-link alias.
+ *
+ * @param string $path Candidate file path.
+ * @return string Canonical readable regular-file path.
+ */
 function regular_file(string $path): string
 {
     $resolved = plain_path($path);
     $stat = stat($resolved);
-    demand(is_file($resolved) && is_readable($resolved) && is_array($stat), 'file_unavailable');
+    demand(
+        is_file($resolved) && is_readable($resolved) && is_array($stat),
+        'file_unavailable',
+    );
     demand(($stat['nlink'] ?? 1) <= 1, 'hardlinked_file');
     return $resolved;
 }
@@ -136,32 +210,60 @@ function contained_file(string $root, string $relative): string
     return $path;
 }
 
-/** Read bounded JSON input without accepting PHP or stream-wrapper paths. */
+/**
+ * Read bounded JSON input without accepting PHP or stream-wrapper paths.
+ *
+ * @param string $path JSON file path.
+ * @return array<string,mixed> Decoded JSON object data.
+ */
 function read_json(string $path): array
 {
-    demand(strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'json', 'json_file_required');
+    demand(
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'json',
+        'json_file_required',
+    );
     $file = regular_file($path);
     demand(filesize($file) <= 33554432, 'json_too_large');
-    $value = json_decode((string) file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
+    $value = json_decode(
+        (string) file_get_contents($file),
+        true,
+        32,
+        JSON_THROW_ON_ERROR,
+    );
     demand(is_array($value), 'json_object_required');
     return $value;
 }
 
-/** Exclusive creation never replaces evidence; no stdout dump of an input document. */
+/**
+ * Exclusive creation never replaces evidence; no stdout dump of an input document.
+ *
+ * @param string $path New evidence-file path.
+ * @param array<string,mixed> $value Evidence document to serialize.
+ * @return void Create and persist the encoded document or throw a fixed-code error.
+ */
 function write_json(string $path, array $value): void
 {
-    demand(strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'json', 'json_file_required');
+    demand(
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'json',
+        'json_file_required',
+    );
     $directory = external_directory(dirname($path));
     demand(basename($path) === relative_path(basename($path)), 'unsafe_output');
     $destination = $directory . '/' . basename($path);
-    demand(!file_exists($destination) && !is_link($destination), 'output_exists');
+    demand(
+        !file_exists($destination) && !is_link($destination),
+        'output_exists',
+    );
     $text = json_text($value);
     $oldMask = umask(0077);
     try {
         $handle = fopen($destination, 'xb');
         demand($handle !== false, 'output_unavailable');
         try {
-            demand(fwrite($handle, $text) === strlen($text) && fflush($handle), 'output_incomplete');
+            demand(
+                fwrite($handle, $text) === strlen($text) && fflush($handle),
+                'output_incomplete',
+            );
         } finally {
             fclose($handle);
         }
@@ -170,12 +272,25 @@ function write_json(string $path, array $value): void
     }
 }
 
-/** Parse a real UTC calendar timestamp in the documented exact format. */
+/**
+ * Parse a real UTC calendar timestamp in the documented exact format.
+ *
+ * @param string $value Candidate UTC timestamp in YYYY-MM-DDTHH:MM:SSZ form.
+ * @return int Unix timestamp for the validated UTC calendar value.
+ */
 function timestamp(mixed $value): int
 {
-    demand(is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/D', $value) === 1, 'invalid_timestamp');
+    demand(
+        is_string($value)
+            && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/D', $value)
+                === 1,
+        'invalid_timestamp',
+    );
     $parsed = strtotime($value);
-    demand($parsed !== false && gmdate('Y-m-d\TH:i:s\Z', $parsed) === $value, 'invalid_timestamp');
+    demand(
+        $parsed !== false && gmdate('Y-m-d\TH:i:s\Z', $parsed) === $value,
+        'invalid_timestamp',
+    );
     return $parsed;
 }
 

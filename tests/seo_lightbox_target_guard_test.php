@@ -23,10 +23,14 @@ declare(strict_types=1);
 
 /** Execute the real request guard in isolated public/Admin requests, without a database. */
 namespace Gallery\Core {
-    /** Return the fixture's authentication principal. */
+    /**
+     * Return the fixture's authentication principal.
+     *
+     * @return ?array{id:int} Fixture Admin identity or null for a public visitor.
+     */
     function current_user(): ?array
     {
-        return ($GLOBALS['guardAdmin'] ?? false) ? ['id' => 1] : null;
+        return $GLOBALS['guardAdmin'] ?? false ? ['id' => 1] : null;
     }
 
     /** Keep the request at the public GET enforcement boundary. */
@@ -49,9 +53,18 @@ namespace {
         require dirname(__DIR__) . '/app/services/seo_request_guard.php';
         $GLOBALS['guardAdmin'] = ($argv[2] ?? '') === 'admin';
         $route = $argv[3];
-        $_GET = ['page' => $route, 'id' => '1', 'limit' => '60', 'offset' => '0'];
+        $_GET = [
+            'page' => $route,
+            'id' => '1',
+            'limit' => '60',
+            'offset' => '0',
+        ];
         if ($route === 'gallery') {
-            $_GET = ['page' => $route, 'public_path' => 'album', 'lang' => 'en'];
+            $_GET = [
+                'page' => $route,
+                'public_path' => 'album',
+                'lang' => 'en',
+            ];
         } elseif ($route === 'smart_gallery') {
             $_GET = ['page' => $route, 'slug' => 'album', 'lang' => 'en'];
         }
@@ -63,7 +76,11 @@ namespace {
         ob_start();
         register_shutdown_function(static function () use (&$reached): void {
             $body = ob_get_clean();
-            echo json_encode(['status' => http_response_code(), 'reached' => $reached, 'body' => $body], JSON_THROW_ON_ERROR);
+            echo json_encode([
+                'status' => http_response_code(),
+                'reached' => $reached,
+                'body' => $body,
+            ], JSON_THROW_ON_ERROR);
         });
         $decision = \Gallery\Services\seo_request_guard_enforcement_decision(
             $route,
@@ -72,15 +89,15 @@ namespace {
             $GLOBALS['guardAdmin'],
             '/index.php?page=' . rawurlencode($route),
             '127.0.0.1',
-            'fixture'
+            'fixture',
         );
         if (($decision['action'] ?? 'allow') === 'reject') {
             http_response_code((int) ($decision['status'] ?? 404));
             echo (string) ($decision['body'] ?? '');
-            exit;
+            exit();
         }
         $reached = true;
-        exit;
+        exit();
     }
 
     $cases = [
@@ -114,10 +131,15 @@ namespace {
         ['public', 'smart_gallery_lightbox_data', 'presentation', 404],
     ];
     foreach ($cases as [$principal, $route, $parameter, $expectedStatus]) {
-        $process = proc_open([PHP_BINARY, __FILE__, '--probe', $principal, $route, $parameter],
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $process = proc_open(
+            [PHP_BINARY, __FILE__, '--probe', $principal, $route, $parameter],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
         if (!is_resource($process)) {
-            throw new RuntimeException('Could not launch request-guard fixture.');
+            throw new RuntimeException(
+                'Could not launch request-guard fixture.',
+            );
         }
         $output = stream_get_contents($pipes[1]);
         $error = stream_get_contents($pipes[2]);
@@ -125,14 +147,25 @@ namespace {
         fclose($pipes[2]);
         $exit = proc_close($process);
         if ($exit !== 0) {
-            throw new RuntimeException('Request-guard fixture failed: ' . $error);
+            throw new RuntimeException('Request-guard fixture failed: '
+                . $error);
         }
         $result = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
-        if ($result['status'] !== $expectedStatus || $result['reached'] !== ($expectedStatus === 200)
-            || ($expectedStatus === 404 && $result['body'] !== "Not found.\n")) {
-            throw new RuntimeException("Unexpected guard result for $principal/$route/$parameter: $output");
+        if (
+            $result['status'] !== $expectedStatus
+            || $result['reached'] !== ($expectedStatus === 200)
+            || (
+                $expectedStatus === 404
+                && $result['body'] !== "Not found.\n"
+            )
+        ) {
+            throw new RuntimeException(
+                "Unexpected guard result for $principal/$route/$parameter: $output",
+            );
         }
     }
-    echo 'Lightbox target request guard: ' . count($cases)
-        . " public/Admin scenarios passed.\n";
+    echo
+        'Lightbox target request guard: '
+            . count($cases)
+            . " public/Admin scenarios passed.\n";
 }

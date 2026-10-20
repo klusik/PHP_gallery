@@ -40,20 +40,29 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use Throwable;
 
 /**
  * Return OPcache diagnostic capability without causing a restrict_api warning when it is knowably forbidden.
  *
- * @return array<string,mixed>
+ * @return array{extension_loaded:bool,enabled:?bool,status_access:string,restrict_api_configured:bool,status:?array<string,mixed>,note?:string} OPcache capability and access status, with runtime status details only when readable.
  */
 function admin_test_run_opcache_capability(): array
 {
-    $extensionLoaded = extension_loaded('Zend OPcache') || function_exists('opcache_get_status');
-    $enabled = filter_var((string) ini_get('opcache.enable'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+    $extensionLoaded =
+        extension_loaded('Zend OPcache')
+        || function_exists('opcache_get_status');
+    $enabled = filter_var(
+        (string) ini_get('opcache.enable'),
+        FILTER_VALIDATE_BOOL,
+        FILTER_NULL_ON_FAILURE,
+    );
     $restrictApi = trim((string) ini_get('opcache.restrict_api'));
-    $script = str_replace('\\', '/', (string) (request_data('server')['SCRIPT_FILENAME'] ?? __FILE__));
+    $script = str_replace(
+        '\\',
+        '/',
+        (string) (request_data('server')['SCRIPT_FILENAME'] ?? __FILE__),
+    );
     $normalizedRestriction = str_replace('\\', '/', $restrictApi);
     $restricted = false;
     if ($restrictApi !== '') {
@@ -62,7 +71,9 @@ function admin_test_run_opcache_capability(): array
     $result = [
         'extension_loaded' => $extensionLoaded,
         'enabled' => $enabled,
-        'status_access' => !$extensionLoaded ? 'unavailable' : ($restricted ? 'restricted' : 'unavailable'),
+        'status_access' => !$extensionLoaded
+            ? 'unavailable'
+            : ($restricted ? 'restricted' : 'unavailable'),
         'restrict_api_configured' => $restrictApi !== '',
         'status' => null,
     ];
@@ -77,7 +88,13 @@ function admin_test_run_opcache_capability(): array
     $status = @opcache_get_status(false);
     if (!is_array($status)) {
         $lastError = error_get_last();
-        if (is_array($lastError) && str_contains(strtolower((string) ($lastError['message'] ?? '')), 'restrict_api')) {
+        if (
+            is_array($lastError)
+            && str_contains(
+                strtolower((string) ($lastError['message'] ?? '')),
+                'restrict_api',
+            )
+        ) {
             $result['status_access'] = 'restricted';
             $result['note'] = 'Host runtime rejected OPcache status access through restrict_api.';
         } else {
@@ -101,13 +118,22 @@ function admin_test_run_opcache_capability(): array
 /**
  * Return a very light cache preflight with no recursive traversal.
  *
- * @return array<string,mixed>
+ * @param ?string $root Cache directory root; null uses the application's cache directory.
+ * @return array{mode:string,root_exists:bool,root_mtime:?int,families:array<string,array{exists:bool,mtime:?int}>,elapsed_ms:float,recursive_entries_visited:int} Non-recursive cache-root and known-family presence/mtime snapshot.
  */
 function admin_test_run_cache_preflight(?string $root = null): array
 {
     $started = microtime(true);
     $root = $root ?? dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache';
-    $known = ['updates', 'admin-test-runs', 'github-api', 'thumbnail-warmup', 'site-maintenance', 'zips', 'gallery-migrations'];
+    $known = [
+        'updates',
+        'admin-test-runs',
+        'github-api',
+        'thumbnail-warmup',
+        'site-maintenance',
+        'zips',
+        'gallery-migrations',
+    ];
     $families = [];
     foreach ($known as $name) {
         $path = $root . DIRECTORY_SEPARATOR . $name;
@@ -181,7 +207,7 @@ function admin_test_run_cache_family_policy(string $family): array
 /**
  * Initialize one cache-family accumulator.
  *
- * @return array<string,mixed>
+ * @return array{mode:string,root:string,exists:bool,traversal_count:int,entry_cap:int,time_budget_ms:float,entries_visited:int,truncated:bool,truncation_reason:string,families:array<string,array<string,mixed>>,scan_elapsed_ms:float} Single-pass cache inventory with bounded traversal metadata and per-family totals/artifact dates.
  */
 function admin_test_run_cache_family_accumulator(string $family): array
 {
@@ -202,9 +228,19 @@ function admin_test_run_cache_family_accumulator(string $family): array
  * Add one file/directory observation to a cache-family accumulator.
  *
  * @param array<string,mixed> $family Family accumulator.
+ * @param bool $isDirectory Whether the observed entry is a directory.
+ * @param int $bytes Observed file size in bytes; ignored for directories.
+ * @param int $mtime Observed modification time as Unix seconds.
+ * @param string $relativePath Entry path relative to cache root.
+ * @return void Updates file/directory totals and oldest/newest file metadata.
  */
-function admin_test_run_cache_family_add(array &$family, bool $isDirectory, int $bytes, int $mtime, string $relativePath): void
-{
+function admin_test_run_cache_family_add(
+    array &$family,
+    bool $isDirectory,
+    int $bytes,
+    int $mtime,
+    string $relativePath,
+): void {
     if ($isDirectory) {
         $family['directories']++;
         return;
@@ -214,11 +250,25 @@ function admin_test_run_cache_family_add(array &$family, bool $isDirectory, int 
     if ($mtime <= 0) {
         return;
     }
-    $artifact = ['relative_path' => substr(str_replace('\\', '/', $relativePath), 0, 1000), 'mtime' => $mtime, 'at' => gmdate('c', $mtime)];
-    if (!is_array($family['oldest_artifact']) || $mtime < (int) ($family['oldest_artifact']['mtime'] ?? PHP_INT_MAX)) {
+    $artifact = [
+        'relative_path' => substr(
+            str_replace('\\', '/', $relativePath),
+            0,
+            1000,
+        ),
+        'mtime' => $mtime,
+        'at' => gmdate('c', $mtime),
+    ];
+    if (
+        !is_array($family['oldest_artifact'])
+        || $mtime < (int) ($family['oldest_artifact']['mtime'] ?? PHP_INT_MAX)
+    ) {
         $family['oldest_artifact'] = $artifact;
     }
-    if (!is_array($family['newest_artifact']) || $mtime > (int) ($family['newest_artifact']['mtime'] ?? 0)) {
+    if (
+        !is_array($family['newest_artifact'])
+        || $mtime > (int) ($family['newest_artifact']['mtime'] ?? 0)
+    ) {
         $family['newest_artifact'] = $artifact;
     }
 }
@@ -226,19 +276,48 @@ function admin_test_run_cache_family_add(array &$family, bool $isDirectory, int 
 /**
  * Traverse cache exactly once and derive root plus subtree totals from that one walk.
  *
- * @return array<string,mixed>
+ * @param ?string $root Cache directory root; null uses the application's cache directory.
+ * @param ?int $entryCap Maximum filesystem entries visited, or null for the configured default.
+ * @param ?float $timeBudgetMs Maximum traversal duration in milliseconds, or null for the configured default.
+ * @return array<string,mixed> Root and subtree cache measurements, traversal status, and bounded-walk diagnostics.
  */
-function admin_test_run_cache_inventory_single_pass(?string $root = null, ?int $entryCap = null, ?float $timeBudgetMs = null): array
-{
+function admin_test_run_cache_inventory_single_pass(
+    ?string $root = null,
+    ?int $entryCap = null,
+    ?float $timeBudgetMs = null,
+): array {
     $root = $root ?? dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache';
-    $entryCap = $entryCap ?? (defined(__NAMESPACE__ . '\\ADMIN_TEST_RUN_CACHE_SCAN_ENTRY_CAP') ? ADMIN_TEST_RUN_CACHE_SCAN_ENTRY_CAP : 25000);
-    $timeBudgetMs = $timeBudgetMs ?? (defined(__NAMESPACE__ . '\\ADMIN_TEST_RUN_CACHE_SCAN_TIME_BUDGET_MS') ? ADMIN_TEST_RUN_CACHE_SCAN_TIME_BUDGET_MS : 250.0);
+    $entryCap =
+        $entryCap
+        ?? (
+            defined(__NAMESPACE__ . '\\ADMIN_TEST_RUN_CACHE_SCAN_ENTRY_CAP')
+                ? ADMIN_TEST_RUN_CACHE_SCAN_ENTRY_CAP
+                : 25000
+        );
+    $timeBudgetMs =
+        $timeBudgetMs
+        ?? (
+            defined(__NAMESPACE__
+                . '\\ADMIN_TEST_RUN_CACHE_SCAN_TIME_BUDGET_MS')
+                ? ADMIN_TEST_RUN_CACHE_SCAN_TIME_BUDGET_MS
+                : 250.0
+        );
     $entryCap = max(100, $entryCap);
     $timeBudgetMs = max(10.0, $timeBudgetMs);
     $started = microtime(true);
     $deadline = $started + ($timeBudgetMs / 1000.0);
-    $known = ['updates', 'admin-test-runs', 'github-api', 'thumbnail-warmup', 'site-maintenance', 'zips', 'gallery-migrations'];
-    $families = ['application_cache' => admin_test_run_cache_family_accumulator('other')];
+    $known = [
+        'updates',
+        'admin-test-runs',
+        'github-api',
+        'thumbnail-warmup',
+        'site-maintenance',
+        'zips',
+        'gallery-migrations',
+    ];
+    $families = [
+        'application_cache' => admin_test_run_cache_family_accumulator('other'),
+    ];
     $families['application_cache']['semantic_name'] = 'cache/';
     $families['application_cache']['retention_policy'] = 'Aggregate application cache total derived from this same single traversal; it is not scanned separately.';
     $families['application_cache']['probable_reclaimable_or_stale'] = 'Use per-family semantics; aggregate cache bytes are not assumed reclaimable.';
@@ -287,20 +366,39 @@ function admin_test_run_cache_inventory_single_pass(?string $root = null, ?int $
                 $result['truncation_reason'] = 'entry_cap';
                 break 2;
             }
-            if (((int) $result['entries_visited'] & 63) === 0 && microtime(true) >= $deadline) {
+            if (
+                ((int) $result['entries_visited'] & 63) === 0
+                && microtime(true) >= $deadline
+            ) {
                 $result['truncated'] = true;
                 $result['truncation_reason'] = 'time_budget';
                 break 2;
             }
-            $relative = $relativeDirectory === '' ? $name : $relativeDirectory . '/' . $name;
+            $relative = $relativeDirectory === ''
+                ? $name
+                : $relativeDirectory . '/' . $name;
             $path = $directory . DIRECTORY_SEPARATOR . $name;
             $isDirectory = is_dir($path) && !is_link($path);
             $topLevel = explode('/', $relative, 2)[0];
-            $familyKey = in_array($topLevel, $known, true) ? $topLevel : 'other';
+            $familyKey = in_array($topLevel, $known, true)
+                ? $topLevel
+                : 'other';
             $bytes = $isDirectory ? 0 : max(0, (int) (@filesize($path) ?: 0));
             $mtime = max(0, (int) (@filemtime($path) ?: 0));
-            admin_test_run_cache_family_add($result['families']['application_cache'], $isDirectory, $bytes, $mtime, $relative);
-            admin_test_run_cache_family_add($result['families'][$familyKey], $isDirectory, $bytes, $mtime, $relative);
+            admin_test_run_cache_family_add(
+                $result['families']['application_cache'],
+                $isDirectory,
+                $bytes,
+                $mtime,
+                $relative,
+            );
+            admin_test_run_cache_family_add(
+                $result['families'][$familyKey],
+                $isDirectory,
+                $bytes,
+                $mtime,
+                $relative,
+            );
             if ($isDirectory) {
                 $stack[] = [$path, $relative];
             }
@@ -314,17 +412,24 @@ function admin_test_run_cache_inventory_single_pass(?string $root = null, ?int $
  * Analyze Cache-Control values from PHP header lines or browser provider-header maps.
  *
  * @param array<mixed> $headers Header lines or name/value map.
- * @return array{conflict:bool,values:array<int,string>,directives:array<string,array<int,string>>,reasons:array<int,string>}
+ * @return array{conflict:bool,values:list<string>,directives:array<string,list<string>>,reasons:list<string>} Parsed Cache-Control values, directive values, and conflict reasons.
  */
 function admin_test_run_cache_control_analysis(array $headers): array
 {
     $values = [];
     foreach ($headers as $name => $header) {
-        if (is_string($name) && strtolower(trim($name)) === 'cache-control' && is_scalar($header)) {
+        if (
+            is_string($name)
+            && strtolower(trim($name)) === 'cache-control'
+            && is_scalar($header)
+        ) {
             $values[] = trim((string) $header);
             continue;
         }
-        if (!is_string($header) || stripos(ltrim($header), 'cache-control:') !== 0) {
+        if (
+            !is_string($header)
+            || stripos(ltrim($header), 'cache-control:') !== 0
+        ) {
             continue;
         }
         $values[] = trim(substr(ltrim($header), strlen('cache-control:')));
@@ -337,7 +442,11 @@ function admin_test_run_cache_control_analysis(array $headers): array
             if ($directive === '') {
                 continue;
             }
-            [$directiveName, $directiveValue] = array_pad(explode('=', $directive, 2), 2, '');
+            [$directiveName, $directiveValue] = array_pad(
+                explode('=', $directive, 2),
+                2,
+                '',
+            );
             $directiveName = trim($directiveName);
             $directiveValue = trim($directiveValue, " \t\n\r\0\x0B\"");
             if ($directiveName === '') {
@@ -351,7 +460,13 @@ function admin_test_run_cache_control_analysis(array $headers): array
     if (isset($directives['public'], $directives['private'])) {
         $reasons[] = 'public_and_private';
     }
-    if (isset($directives['no-store']) && (isset($directives['public']) || isset($directives['immutable']))) {
+    if (
+        isset($directives['no-store'])
+        && (
+            isset($directives['public'])
+            || isset($directives['immutable'])
+        )
+    ) {
         $reasons[] = 'no_store_with_cacheable_directive';
     }
     foreach ($directives as $directiveName => $directiveValues) {

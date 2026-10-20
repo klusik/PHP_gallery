@@ -61,17 +61,25 @@ const TELEMETRY_MODEL_DEFAULT_DELETE_BATCH = 2000;
  * @param string $deviceColumn Model-owned validated device column identifier.
  * @return string Result of the documented operation.
  */
-function telemetry_model_traffic_segment_condition(string $trafficSegment, string $deviceColumn = 'device_type'): string
-{
+function telemetry_model_traffic_segment_condition(
+    string $trafficSegment,
+    string $deviceColumn = 'device_type',
+): string {
     if (!in_array($deviceColumn, ['device_type', 'm.device_type'], true)) {
-        throw new InvalidArgumentException('Unsupported telemetry traffic-segment column.');
+        throw new InvalidArgumentException(
+            'Unsupported telemetry traffic-segment column.',
+        );
     }
     return match ($trafficSegment) {
         'all' => '',
-        'non_bot' => ' AND ' . $deviceColumn . " IN ('desktop', 'tablet', 'phone')",
+        'non_bot' => ' AND '
+            . $deviceColumn
+            . " IN ('desktop', 'tablet', 'phone')",
         'bot' => ' AND ' . $deviceColumn . " = 'bot'",
         'unknown' => ' AND ' . $deviceColumn . " = 'unknown'",
-        default => throw new InvalidArgumentException('Unsupported telemetry traffic segment.'),
+        default => throw new InvalidArgumentException(
+            'Unsupported telemetry traffic segment.',
+        ),
     };
 }
 
@@ -82,14 +90,16 @@ function telemetry_model_traffic_segment_condition(string $trafficSegment, strin
  * counters, never SQL text, bound values, result rows, or database error messages. Production
  * exports can therefore identify expensive report query families without creating recursive
  * telemetry writes or increasing persistent telemetry cardinality.
- *
  * @param \PDOStatement $statement Prepared statement to execute.
  * @param array<array-key,mixed> $params Bound statement parameters.
  * @param string $profileKey Bounded source-owned report operation identifier.
  * @return void No return value; effects are recorded in the owned state.
  */
-function telemetry_model_profiled_report_execute(\PDOStatement $statement, array $params, string $profileKey): void
-{
+function telemetry_model_profiled_report_execute(
+    \PDOStatement $statement,
+    array $params,
+    string $profileKey,
+): void {
     static $allowedKeys = [
         'metric_sum',
         'metric_events',
@@ -120,7 +130,9 @@ function telemetry_model_profiled_report_execute(\PDOStatement $statement, array
         'cache_phases',
     ];
     if (!in_array($profileKey, $allowedKeys, true)) {
-        throw new InvalidArgumentException('Unsupported telemetry report query profile key.');
+        throw new InvalidArgumentException(
+            'Unsupported telemetry report query profile key.',
+        );
     }
 
     $startedNs = hrtime(true);
@@ -130,10 +142,15 @@ function telemetry_model_profiled_report_execute(\PDOStatement $statement, array
         $ok = true;
     } finally {
         $elapsedMs = max(0.0, (hrtime(true) - $startedNs) / 1_000_000);
-        if (!isset($GLOBALS['cms_telemetry_report_query_profile']) || !is_array($GLOBALS['cms_telemetry_report_query_profile'])) {
+        if (
+            !isset($GLOBALS['cms_telemetry_report_query_profile'])
+            || !is_array($GLOBALS['cms_telemetry_report_query_profile'])
+        ) {
             $GLOBALS['cms_telemetry_report_query_profile'] = [];
         }
-        if (!isset($GLOBALS['cms_telemetry_report_query_profile'][$profileKey])) {
+        if (
+            !isset($GLOBALS['cms_telemetry_report_query_profile'][$profileKey])
+        ) {
             $GLOBALS['cms_telemetry_report_query_profile'][$profileKey] = [
                 'operation' => $profileKey,
                 'calls' => 0,
@@ -160,7 +177,7 @@ function telemetry_model_reset_report_query_profile(): void
 /**
  * Return request-local telemetry report SQL timing evidence.
  *
- * @return array<int,array{operation:string,calls:int,failed_calls:int,total_ms:float,avg_ms:float,max_ms:float}>
+ * @return array<int,array{operation:string,calls:int,failed_calls:int,total_ms:float,avg_ms:float,max_ms:float}> Rows containing operation name and call/failure counts with total, average, and maximum elapsed milliseconds.
  */
 function telemetry_model_report_query_profile(): array
 {
@@ -186,34 +203,41 @@ function telemetry_model_report_query_profile(): array
         ];
     }
     usort($rows, static function (array $left, array $right): int {
-        $totalCompare = ((float) ($right['total_ms'] ?? 0.0)) <=> ((float) ($left['total_ms'] ?? 0.0));
+        $totalCompare =
+            (float) ($right['total_ms'] ?? 0.0)
+            <=> (float) ($left['total_ms'] ?? 0.0);
         if ($totalCompare !== 0) {
             return $totalCompare;
         }
-        return strcmp((string) ($left['operation'] ?? ''), (string) ($right['operation'] ?? ''));
+        return strcmp(
+            (string) ($left['operation'] ?? ''),
+            (string) ($right['operation'] ?? ''),
+        );
     });
     return $rows;
 }
 
 /**
  * Persist one normalized short-retention telemetry event.
- *
  * @param array<int,mixed> $params Ordered telemetry_events insert parameters.
+
+ * @return void No value; persists the supplied telemetry event, setting, or query aggregate.
  */
 function telemetry_model_insert_event(array $params): void
 {
-    $stmt = db()->prepare('INSERT INTO telemetry_events (
+    $stmt = db()->prepare(
+        'INSERT INTO telemetry_events (
         occurred_at, received_at, event_name, source, session_hash, request_id, route_name, page_kind,
         gallery_id, image_id, referrer_category, browser_family, browser_major_bucket, os_family, device_type,
         viewport_class, locale_bucket, country_code, duration_ms_capped, value_count, value_bytes, value_ms,
         value_bucket, cache_result, media_variant, http_status, error_kind, sampled_rate, context_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
     $stmt->execute($params);
 }
 
 /**
  * Create or update one normalized anonymous telemetry session row.
- *
  * @param array<int,mixed> $params Ordered telemetry_sessions upsert parameters.
  */
 function telemetry_model_upsert_session(array $params): void
@@ -240,7 +264,6 @@ function telemetry_model_upsert_session(array $params): void
 
 /**
  * Add one normalized sample to an hourly telemetry aggregate row.
- *
  * @param array<int,mixed> $params Ordered telemetry_hourly_metrics upsert parameters.
  */
 function telemetry_model_upsert_hourly_metric(array $params): void
@@ -262,13 +285,14 @@ function telemetry_model_upsert_hourly_metric(array $params): void
 
 /**
  * Read one telemetry setting value.
- *
  * @param string $key Setting key.
  * @return string|false Raw database value or false when missing.
  */
 function telemetry_model_setting(string $key): string|false
 {
-    $stmt = db()->prepare('SELECT setting_value FROM telemetry_settings WHERE setting_key = ?');
+    $stmt = db()->prepare(
+        'SELECT setting_value FROM telemetry_settings WHERE setting_key = ?',
+    );
     $stmt->execute([$key]);
     $value = $stmt->fetchColumn();
     return $value === false ? false : (string) $value;
@@ -276,14 +300,20 @@ function telemetry_model_setting(string $key): string|false
 
 /**
  * Persist one telemetry setting value.
- *
  * @param string $key Setting key.
  * @param string $value Setting value.
  * @param string $now SQL timestamp.
+
+ * @return void No value; persists the supplied telemetry event, setting, or query aggregate.
  */
-function telemetry_model_set_setting(string $key, string $value, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO telemetry_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
+function telemetry_model_set_setting(
+    string $key,
+    string $value,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO telemetry_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)',
+    );
     $stmt->execute([$key, $value, $now]);
 }
 
@@ -294,84 +324,155 @@ function telemetry_model_set_setting(string $key, string $value, string $now): v
  */
 function telemetry_model_all_settings(): array
 {
-    return db()->query('SELECT setting_key, setting_value FROM telemetry_settings ORDER BY setting_key')->fetchAll();
+    return db()
+        ->query(
+            'SELECT setting_key, setting_value FROM telemetry_settings ORDER BY setting_key',
+        )
+        ->fetchAll();
 }
 
 /**
  * Return the aggregate value sum for one metric in a day window.
+
+ * @param string $metricName Metric name to aggregate or filter.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @param int $days Lookback window in days.
+ * @return float Aggregate result produced by the telemetry query.
  */
-function telemetry_model_metric_sum(string $metricName, int $days, string $trafficSegment = 'all'): float
-{
+function telemetry_model_metric_sum(
+    string $metricName,
+    int $days,
+    string $trafficSegment = 'all',
+): float {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT COALESCE(SUM(value_sum), 0) FROM telemetry_hourly_metrics WHERE metric_name = ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql);
-    telemetry_model_profiled_report_execute($stmt, [$metricName, $days], 'metric_sum');
+    $stmt = db()->prepare(
+        'SELECT COALESCE(SUM(value_sum), 0) FROM telemetry_hourly_metrics WHERE metric_name = ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$metricName, $days],
+        'metric_sum',
+    );
     return (float) $stmt->fetchColumn();
 }
 
 /**
  * Return the aggregate event count for one metric in a day window.
+
+ * @param string $metricName Metric name to aggregate or filter.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @param int $days Lookback window in days.
+ * @return int Number of matching telemetry rows.
  */
-function telemetry_model_metric_events(string $metricName, int $days, string $trafficSegment = 'all'): int
-{
+function telemetry_model_metric_events(
+    string $metricName,
+    int $days,
+    string $trafficSegment = 'all',
+): int {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT COALESCE(SUM(event_count), 0) FROM telemetry_hourly_metrics WHERE metric_name = ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql);
-    telemetry_model_profiled_report_execute($stmt, [$metricName, $days], 'metric_events');
+    $stmt = db()->prepare(
+        'SELECT COALESCE(SUM(event_count), 0) FROM telemetry_hourly_metrics WHERE metric_name = ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$metricName, $days],
+        'metric_events',
+    );
     return (int) $stmt->fetchColumn();
 }
 
 /**
  * Return top viewed photo rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of rows returned.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{id:int,filename:string,gallery_title:string,photo_views:int}> Rows containing image id, filename, gallery title, and aggregate photo views.
  */
-function telemetry_model_top_photos(int $days, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_top_photos(
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $limit = max(1, min(50, $limit));
-    $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment, 'm.device_type');
-    $stmt = db()->prepare('SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.event_count) AS photo_views
+    $segmentSql = telemetry_model_traffic_segment_condition(
+        $trafficSegment,
+        'm.device_type',
+    );
+    $stmt = db()->prepare(
+        'SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.event_count) AS photo_views
         FROM telemetry_hourly_metrics m
         JOIN images i ON i.id = m.image_id
         JOIN galleries g ON g.id = i.gallery_id
-        WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0' . $segmentSql . '
+        WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0'
+            . $segmentSql
+            . '
         GROUP BY i.id, i.filename, g.title
         ORDER BY photo_views DESC
-        LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, ['photo.views', $days], 'top_photos');
+        LIMIT '
+            . $limit,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        ['photo.views', $days],
+        'top_photos',
+    );
     return $stmt->fetchAll();
 }
 
 /**
  * Return longest viewed photo rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of rows returned.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{id:int,filename:string,gallery_title:string,avg_view_seconds:float,view_count:int}> Rows containing image id, filename, gallery title, average view seconds, and view count.
  */
-function telemetry_model_longest_viewed_photos(int $days, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_longest_viewed_photos(
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $limit = max(1, min(50, $limit));
-    $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment, 'm.device_type');
-    $stmt = db()->prepare('SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.value_sum) / NULLIF(SUM(m.event_count), 0) AS avg_view_seconds, SUM(m.event_count) AS view_count
+    $segmentSql = telemetry_model_traffic_segment_condition(
+        $trafficSegment,
+        'm.device_type',
+    );
+    $stmt = db()->prepare(
+        'SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.value_sum) / NULLIF(SUM(m.event_count), 0) AS avg_view_seconds, SUM(m.event_count) AS view_count
         FROM telemetry_hourly_metrics m
         JOIN images i ON i.id = m.image_id
         JOIN galleries g ON g.id = i.gallery_id
-        WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0' . $segmentSql . '
+        WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0'
+            . $segmentSql
+            . '
         GROUP BY i.id, i.filename, g.title
         HAVING view_count > 0
         ORDER BY avg_view_seconds DESC
-        LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, ['photo.view_seconds', $days], 'longest_photos');
+        LIMIT '
+            . $limit,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        ['photo.view_seconds', $days],
+        'longest_photos',
+    );
     return $stmt->fetchAll();
 }
 
-
 /**
  * Return a bounded distribution of semantic photo opens per anonymous session.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{bucket:string,sessions:int,photo_opens:int,avg_opens:float,max_opens:int,bucket_order:int}> Rows containing the session-open bucket, session/open counts, average, maximum, and sort order.
  */
-function telemetry_model_report_photo_open_session_buckets(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_photo_open_session_buckets(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare("SELECT
+    $stmt = db()->prepare(
+        "SELECT
         CASE
             WHEN photo_view_count = 0 THEN '0'
             WHEN photo_view_count = 1 THEN '1'
@@ -397,30 +498,39 @@ function telemetry_model_report_photo_open_session_buckets(int $days, string $tr
             ELSE 7
         END AS bucket_order
         FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)" . $segmentSql . "
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)"
+            . $segmentSql
+            . '
         GROUP BY bucket, bucket_order
-        ORDER BY bucket_order ASC");
+        ORDER BY bucket_order ASC',
+    );
     $stmt->execute([$days]);
     return $stmt->fetchAll();
 }
 
 /**
  * Return aggregate outlier-oriented photo-open session counters.
- *
- * @return array<string,mixed>
+ * @param int $threshold Photo-open count above which a session is counted.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array{sessions:int,photo_opens:int,avg_opens_per_session:float,max_opens_per_session:int,sessions_above_threshold:int} Aggregate session and photo-open counters including average, maximum, and above-threshold count.
  */
-function telemetry_model_report_photo_open_anomaly_summary(int $days, int $threshold, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_photo_open_anomaly_summary(
+    int $days,
+    int $threshold,
+    string $trafficSegment = 'all',
+): array {
     $threshold = max(1, min(10000, $threshold));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare("SELECT
+    $stmt = db()->prepare('SELECT
         COUNT(*) AS sessions,
         COALESCE(SUM(photo_view_count), 0) AS photo_opens,
         COALESCE(AVG(photo_view_count), 0) AS avg_opens_per_session,
         COALESCE(MAX(photo_view_count), 0) AS max_opens_per_session,
         SUM(CASE WHEN photo_view_count > ? THEN 1 ELSE 0 END) AS sessions_above_threshold
         FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)" . $segmentSql);
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+        . $segmentSql);
     $stmt->execute([$threshold, $days]);
     return $stmt->fetch() ?: [];
 }
@@ -430,15 +540,23 @@ function telemetry_model_report_photo_open_anomaly_summary(int $days, int $thres
  *
  * This query intentionally exposes only aggregate counts. Session hashes stay inside
  * the grouping subquery and are never returned to the presentation layer.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @param int $minSessions Minimum sessions required for a gallery row.
+ * @param int $limit Maximum number of rows returned.
+ * @return array<int,array{gallery_id:int,title:string,sessions:int,photo_opens:int,avg_opens_per_session:float,max_opens_per_session:int}> Rows containing gallery identity/title and aggregate session/open counts and averages.
  */
-function telemetry_model_report_gallery_photo_opens_per_session(int $days, int $minSessions, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_gallery_photo_opens_per_session(
+    int $days,
+    int $minSessions,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $minSessions = max(1, min(1000, $minSessions));
     $limit = max(1, min(100, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare("SELECT g.id AS gallery_id, g.title,
+    $stmt = db()->prepare(
+        "SELECT g.id AS gallery_id, g.title,
         COUNT(*) AS sessions,
         SUM(session_opens.photo_opens) AS photo_opens,
         AVG(session_opens.photo_opens) AS avg_opens_per_session,
@@ -449,14 +567,18 @@ function telemetry_model_report_gallery_photo_opens_per_session(int $days, int $
             WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
               AND event_name = 'public.photo.opened'
               AND session_hash IS NOT NULL
-              AND gallery_id IS NOT NULL" . $segmentSql . "
+              AND gallery_id IS NOT NULL"
+            . $segmentSql
+            . '
             GROUP BY session_hash, gallery_id
         ) session_opens
         JOIN galleries g ON g.id = session_opens.gallery_id
         GROUP BY g.id, g.title
         HAVING COUNT(*) >= ?
         ORDER BY avg_opens_per_session DESC, photo_opens DESC
-        LIMIT " . $limit);
+        LIMIT '
+            . $limit,
+    );
     $stmt->execute([$days, $minSessions]);
     return $stmt->fetchAll();
 }
@@ -464,53 +586,88 @@ function telemetry_model_report_gallery_photo_opens_per_session(int $days, int $
 /**
  * Return privacy-safe photo-open activation-origin counts from retained raw events.
  *
- * @return array<string,mixed>
+ * @return array<int,array{label:string,events:int}> Rows containing activation-origin labels and event counts.
  * @param int $days Report lookback or configured retention age in days.
  * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
  */
-function telemetry_model_report_photo_open_origins(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_photo_open_origins(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
     $originSql = "CASE
         WHEN context_json IS NULL OR JSON_VALID(context_json) = 0 THEN 'legacy_unclassified'
         ELSE COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(context_json, '$.trigger')), ''), 'legacy_unclassified')
     END";
-    $stmt = db()->prepare('SELECT ' . $originSql . " AS label, COUNT(*) AS events
+    $stmt = db()->prepare(
+        'SELECT '
+            . $originSql
+            . " AS label, COUNT(*) AS events
         FROM telemetry_events
         WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-          AND event_name = 'public.photo.opened'" . $segmentSql . "\n        GROUP BY " . $originSql . "\n        ORDER BY events DESC, label ASC");
-    telemetry_model_profiled_report_execute($stmt, [$days], 'photo_open_origins');
+          AND event_name = 'public.photo.opened'"
+            . $segmentSql
+            . "\n        GROUP BY "
+            . $originSql
+            . "\n        ORDER BY events DESC, label ASC",
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$days],
+        'photo_open_origins',
+    );
     return $stmt->fetchAll();
 }
 
 /**
  * Return browser-family mix rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{browser_family:string,sessions:int}> Rows containing browser family and session count.
  */
-function telemetry_model_browser_mix(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_browser_mix(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT browser_family, COUNT(*) AS sessions FROM telemetry_sessions WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . ' GROUP BY browser_family ORDER BY sessions DESC');
+    $stmt = db()->prepare(
+        'SELECT browser_family, COUNT(*) AS sessions FROM telemetry_sessions WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql
+            . ' GROUP BY browser_family ORDER BY sessions DESC',
+    );
     $stmt->execute([$days]);
     return $stmt->fetchAll();
 }
 
 /**
  * Return cache-result distribution rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{cache_result:?string,events:int}> Rows containing cache result and aggregate event count.
  */
-function telemetry_model_cache_mix(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_cache_mix(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT cache_result, SUM(event_count) AS events FROM telemetry_hourly_metrics WHERE metric_name LIKE ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . ' GROUP BY cache_result ORDER BY events DESC');
-    telemetry_model_profiled_report_execute($stmt, ['cache.%', $days], 'cache_mix');
+    $stmt = db()->prepare(
+        'SELECT cache_result, SUM(event_count) AS events FROM telemetry_hourly_metrics WHERE metric_name LIKE ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql
+            . ' GROUP BY cache_result ORDER BY events DESC',
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        ['cache.%', $days],
+        'cache_mix',
+    );
     return $stmt->fetchAll();
 }
 
 /**
  * Return a telemetry table row count from the constrained report allowlist.
+
+ * @param string $tableName Table name from the model-owned report allowlist.
+ * @return int Number of matching telemetry rows.
  */
 function telemetry_model_report_table_count(string $tableName): int
 {
@@ -523,9 +680,13 @@ function telemetry_model_report_table_count(string $tableName): int
         'telemetry_job_runs',
     ];
     if (!in_array($tableName, $allowedTables, true)) {
-        throw new InvalidArgumentException('Unsupported telemetry report table.');
+        throw new InvalidArgumentException(
+            'Unsupported telemetry report table.',
+        );
     }
-    return (int) db()->query('SELECT COUNT(*) FROM ' . $tableName)->fetchColumn();
+    return (int) db()
+        ->query('SELECT COUNT(*) FROM ' . $tableName)
+        ->fetchColumn();
 }
 
 /**
@@ -535,13 +696,14 @@ function telemetry_model_report_table_count(string $tableName): int
  * request input. Exact row counts intentionally replace the separate COUNT(*)
  * queries already used by the export so the diagnostic snapshot does not add
  * duplicate table scans merely to show storage metadata.
- *
  * @param int $recentDays Recent growth window in days.
  * @return array<string,mixed> Storage diagnostics keyed as rows for presentation.
  * @param array<string,int> $retentionByTable Configured retention days keyed by the bounded telemetry table names.
  */
-function telemetry_model_report_storage_diagnostics(int $recentDays = 7, array $retentionByTable = []): array
-{
+function telemetry_model_report_storage_diagnostics(
+    int $recentDays = 7,
+    array $retentionByTable = [],
+): array {
     $recentDays = max(1, min(30, $recentDays));
     $tableColumns = [
         'telemetry_events' => 'occurred_at',
@@ -554,10 +716,16 @@ function telemetry_model_report_storage_diagnostics(int $recentDays = 7, array $
 
     $sizeStmt = db()->prepare(
         'SELECT table_name, COALESCE(data_length, 0) AS data_bytes, COALESCE(index_length, 0) AS index_bytes'
-        . ' FROM information_schema.tables'
-        . ' WHERE table_schema = DATABASE() AND table_name IN (' . implode(',', array_fill(0, count($tableColumns), '?')) . ')'
+            . ' FROM information_schema.tables'
+            . ' WHERE table_schema = DATABASE() AND table_name IN ('
+            . implode(',', array_fill(0, count($tableColumns), '?'))
+            . ')',
     );
-    telemetry_model_profiled_report_execute($sizeStmt, array_keys($tableColumns), 'storage_sizes');
+    telemetry_model_profiled_report_execute(
+        $sizeStmt,
+        array_keys($tableColumns),
+        'storage_sizes',
+    );
     $sizes = [];
     foreach ($sizeStmt->fetchAll() as $row) {
         $tableName = (string) ($row['table_name'] ?? '');
@@ -572,16 +740,32 @@ function telemetry_model_report_storage_diagnostics(int $recentDays = 7, array $
 
     $rows = [];
     foreach ($tableColumns as $tableName => $timestampColumn) {
-        $retentionDays = max(1, min(3650, (int) ($retentionByTable[$tableName] ?? 3650)));
+        $retentionDays = max(1, min(
+            3650,
+            (int) ($retentionByTable[$tableName] ?? 3650),
+        ));
         $stmt = db()->prepare(
             'SELECT COUNT(*) AS exact_rows,'
-            . ' MIN(' . $timestampColumn . ') AS oldest_row,'
-            . ' MAX(' . $timestampColumn . ') AS newest_row,'
-            . ' COALESCE(SUM(CASE WHEN ' . $timestampColumn . ' >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN 1 ELSE 0 END), 0) AS recent_rows'
-            . ', COALESCE(SUM(CASE WHEN ' . $timestampColumn . ' < DATE_SUB(NOW(), INTERVAL ? DAY) THEN 1 ELSE 0 END), 0) AS overdue_rows'
-            . ' FROM ' . $tableName
+                . ' MIN('
+                . $timestampColumn
+                . ') AS oldest_row,'
+                . ' MAX('
+                . $timestampColumn
+                . ') AS newest_row,'
+                . ' COALESCE(SUM(CASE WHEN '
+                . $timestampColumn
+                . ' >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN 1 ELSE 0 END), 0) AS recent_rows'
+                . ', COALESCE(SUM(CASE WHEN '
+                . $timestampColumn
+                . ' < DATE_SUB(NOW(), INTERVAL ? DAY) THEN 1 ELSE 0 END), 0) AS overdue_rows'
+                . ' FROM '
+                . $tableName,
         );
-        telemetry_model_profiled_report_execute($stmt, [$recentDays, $retentionDays], 'storage_table_scan');
+        telemetry_model_profiled_report_execute(
+            $stmt,
+            [$recentDays, $retentionDays],
+            'storage_table_scan',
+        );
         $row = $stmt->fetch() ?: [];
         $dataBytes = (int) ($sizes[$tableName]['data_bytes'] ?? 0);
         $indexBytes = (int) ($sizes[$tableName]['index_bytes'] ?? 0);
@@ -606,13 +790,14 @@ function telemetry_model_report_storage_diagnostics(int $recentDays = 7, array $
  * The query is intentionally restricted to the selected report window so an
  * administrator can measure whether Stage 6 dimension normalization is reducing
  * new aggregate growth without scanning historical retention unnecessarily.
- *
  * @param int $days Report window in days.
  * @param int $limit Maximum metric rows returned.
  * @return array<int,array<string,mixed>> Metric cardinality diagnostics.
  */
-function telemetry_model_report_hourly_metric_cardinality(int $days, int $limit = 30): array
-{
+function telemetry_model_report_hourly_metric_cardinality(
+    int $days,
+    int $limit = 30,
+): array {
     $days = max(1, min(3650, $days));
     $limit = max(1, min(50, $limit));
     $stmt = db()->prepare('SELECT metric_name,
@@ -633,10 +818,13 @@ function telemetry_model_report_hourly_metric_cardinality(int $days, int $limit 
         GROUP BY metric_name
         ORDER BY row_count DESC, metric_name ASC
         LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, [$days], 'hourly_metric_cardinality');
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$days],
+        'hourly_metric_cardinality',
+    );
     return $stmt->fetchAll();
 }
-
 
 /**
  * Return hourly and daily aggregate totals for completed-day rollup validation.
@@ -645,38 +833,57 @@ function telemetry_model_report_hourly_metric_cardinality(int $days, int $limit 
  * rollup schedule is not reported as inconsistent merely because today's hourly
  * buckets have not yet been condensed. Traffic segmentation is applied to both
  * aggregate tables using the same bounded device_type contract.
- *
  * @param int $completedDays Number of completed calendar days to compare.
  * @param string $trafficSegment Traffic segment selector.
- * @return array{hourly:array<int,array<string,mixed>>,daily:array<int,array<string,mixed>>}
+ * @return array{hourly:array<int,array{metric_name:string,sample_count:int,event_count:int,value_sum:float}>,daily:array<int,array{metric_name:string,sample_count:int,event_count:int,value_sum:float}>} Hourly and daily rows keyed by metric name, with sample counts, event counts, and value sums.
  */
-function telemetry_model_report_daily_rollup_consistency(int $completedDays, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_daily_rollup_consistency(
+    int $completedDays,
+    string $trafficSegment = 'all',
+): array {
     $completedDays = max(1, min(30, $completedDays));
-    $hourlySegmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $dailySegmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
+    $hourlySegmentSql =
+        telemetry_model_traffic_segment_condition($trafficSegment);
+    $dailySegmentSql =
+        telemetry_model_traffic_segment_condition($trafficSegment);
 
-    $hourlyStmt = db()->prepare('SELECT metric_name,
+    $hourlyStmt = db()->prepare(
+        'SELECT metric_name,
         SUM(sample_count) AS sample_count,
         SUM(event_count) AS event_count,
         SUM(value_sum) AS value_sum
         FROM telemetry_hourly_metrics
         WHERE bucket_start >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-          AND bucket_start < CURDATE()' . $hourlySegmentSql . '
+          AND bucket_start < CURDATE()'
+            . $hourlySegmentSql
+            . '
         GROUP BY metric_name
-        ORDER BY metric_name ASC');
-    telemetry_model_profiled_report_execute($hourlyStmt, [$completedDays], 'rollup_consistency_hourly');
+        ORDER BY metric_name ASC',
+    );
+    telemetry_model_profiled_report_execute(
+        $hourlyStmt,
+        [$completedDays],
+        'rollup_consistency_hourly',
+    );
 
-    $dailyStmt = db()->prepare('SELECT metric_name,
+    $dailyStmt = db()->prepare(
+        'SELECT metric_name,
         SUM(sample_count) AS sample_count,
         SUM(event_count) AS event_count,
         SUM(value_sum) AS value_sum
         FROM telemetry_daily_metrics
         WHERE bucket_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-          AND bucket_date < CURDATE()' . $dailySegmentSql . '
+          AND bucket_date < CURDATE()'
+            . $dailySegmentSql
+            . '
         GROUP BY metric_name
-        ORDER BY metric_name ASC');
-    telemetry_model_profiled_report_execute($dailyStmt, [$completedDays], 'rollup_consistency_daily');
+        ORDER BY metric_name ASC',
+    );
+    telemetry_model_profiled_report_execute(
+        $dailyStmt,
+        [$completedDays],
+        'rollup_consistency_daily',
+    );
 
     return [
         'hourly' => $hourlyStmt->fetchAll(),
@@ -690,29 +897,46 @@ function telemetry_model_report_daily_rollup_consistency(int $completedDays, str
  * This operator diagnostic never returns SQL text, bound values, database error
  * messages, or result data. Query definitions and profile names are source-owned,
  * while the returned plan fields are restricted to ordinary optimizer metadata.
- *
- * @return array<int,array<string,mixed>> Flattened safe optimizer-plan rows.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{operation:string,status:string,select_id:?int,select_type:string,table_name:string,access_type:string,possible_keys:string,key_used:string,key_length:string,ref:string,rows_estimate:?int,filtered_percent:?float,extra:string}> Sanitized optimizer-plan rows.
  */
-function telemetry_model_report_query_plans(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_query_plans(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $days = max(1, min(3650, $days));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $gallerySegmentSql = telemetry_model_traffic_segment_condition($trafficSegment, 'm.device_type');
+    $gallerySegmentSql = telemetry_model_traffic_segment_condition(
+        $trafficSegment,
+        'm.device_type',
+    );
     $plans = [
         'session_summary' => [
-            'sql' => 'EXPLAIN SELECT COUNT(*) AS sessions, COALESCE(SUM(page_view_count), 0) AS page_views FROM telemetry_sessions WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql,
+            'sql' =>
+                'EXPLAIN SELECT COUNT(*) AS sessions, COALESCE(SUM(page_view_count), 0) AS page_views FROM telemetry_sessions WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+                    . $segmentSql,
             'params' => [$days],
         ],
         'daily_trends' => [
-            'sql' => 'EXPLAIN SELECT DATE(bucket_start) AS report_date, SUM(event_count) AS event_count FROM telemetry_hourly_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . ' GROUP BY DATE(bucket_start)',
+            'sql' =>
+                'EXPLAIN SELECT DATE(bucket_start) AS report_date, SUM(event_count) AS event_count FROM telemetry_hourly_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+                    . $segmentSql
+                    . ' GROUP BY DATE(bucket_start)',
             'params' => [$days],
         ],
         'top_galleries' => [
-            'sql' => 'EXPLAIN SELECT g.id, SUM(m.event_count) AS event_count FROM telemetry_hourly_metrics m JOIN galleries g ON g.id = m.gallery_id WHERE m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.gallery_id > 0' . $gallerySegmentSql . ' GROUP BY g.id',
+            'sql' =>
+                'EXPLAIN SELECT g.id, SUM(m.event_count) AS event_count FROM telemetry_hourly_metrics m JOIN galleries g ON g.id = m.gallery_id WHERE m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.gallery_id > 0'
+                    . $gallerySegmentSql
+                    . ' GROUP BY g.id',
             'params' => [$days],
         ],
         'page_kind_distribution' => [
-            'sql' => 'EXPLAIN SELECT page_kind, SUM(event_count) AS event_count FROM telemetry_hourly_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND metric_name = ?' . $segmentSql . ' GROUP BY page_kind',
+            'sql' =>
+                'EXPLAIN SELECT page_kind, SUM(event_count) AS event_count FROM telemetry_hourly_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND metric_name = ?'
+                    . $segmentSql
+                    . ' GROUP BY page_kind',
             'params' => [$days, 'public.page_views'],
         ],
     ];
@@ -748,17 +972,51 @@ function telemetry_model_report_query_plans(int $days, string $trafficSegment = 
                 $rows[] = [
                     'operation' => $profileKey,
                     'status' => 'available',
-                    'select_id' => isset($planRow['id']) ? (int) $planRow['id'] : null,
-                    'select_type' => substr((string) ($planRow['select_type'] ?? ''), 0, 40),
-                    'table_name' => substr((string) ($planRow['table'] ?? ''), 0, 80),
-                    'access_type' => substr((string) ($planRow['type'] ?? ''), 0, 40),
-                    'possible_keys' => substr((string) ($planRow['possible_keys'] ?? ''), 0, 255),
-                    'key_used' => substr((string) ($planRow['key'] ?? ''), 0, 120),
-                    'key_length' => substr((string) ($planRow['key_len'] ?? ''), 0, 40),
+                    'select_id' => isset($planRow['id'])
+                        ? (int) $planRow['id']
+                        : null,
+                    'select_type' => substr(
+                        (string) ($planRow['select_type'] ?? ''),
+                        0,
+                        40,
+                    ),
+                    'table_name' => substr(
+                        (string) ($planRow['table'] ?? ''),
+                        0,
+                        80,
+                    ),
+                    'access_type' => substr(
+                        (string) ($planRow['type'] ?? ''),
+                        0,
+                        40,
+                    ),
+                    'possible_keys' => substr(
+                        (string) ($planRow['possible_keys'] ?? ''),
+                        0,
+                        255,
+                    ),
+                    'key_used' => substr(
+                        (string) ($planRow['key'] ?? ''),
+                        0,
+                        120,
+                    ),
+                    'key_length' => substr(
+                        (string) ($planRow['key_len'] ?? ''),
+                        0,
+                        40,
+                    ),
                     'ref' => substr((string) ($planRow['ref'] ?? ''), 0, 120),
-                    'rows_estimate' => isset($planRow['rows']) ? max(0, (int) $planRow['rows']) : null,
-                    'filtered_percent' => isset($planRow['filtered']) ? max(0.0, min(100.0, (float) $planRow['filtered'])) : null,
-                    'extra' => substr((string) ($planRow['Extra'] ?? $planRow['extra'] ?? ''), 0, 255),
+                    'rows_estimate' => isset($planRow['rows'])
+                        ? max(0, (int) $planRow['rows'])
+                        : null,
+                    'filtered_percent' => isset($planRow['filtered'])
+                        ? max(0.0, min(100.0, (float) $planRow['filtered']))
+                        : null,
+                    'extra' => substr(
+                        (string) ($planRow['Extra'] ?? $planRow['extra'] ?? ''),
+                        0,
+                        255,
+                    ),
                 ];
             }
         } catch (\Throwable) {
@@ -782,14 +1040,16 @@ function telemetry_model_report_query_plans(int $days, string $trafficSegment = 
     return $rows;
 }
 
-
 /**
  * Return session quality summary data.
- *
- * @return array<string,mixed>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array{sessions:int,page_views:int,photo_views:int,duration_seconds:int,avg_pages_per_session:float,avg_photos_per_session:float,avg_duration_seconds:float,bounced_sessions:int,previous_sessions:int,recent_sessions:int} One associative row of session, view, duration, bounce, and recent/previous-period aggregates.
  */
-function telemetry_model_report_session_summary(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_session_summary(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
     $stmt = db()->prepare('SELECT
         COUNT(*) AS sessions,
@@ -803,158 +1063,263 @@ function telemetry_model_report_session_summary(int $days, string $trafficSegmen
         COALESCE(SUM(CASE WHEN started_at < DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END), 0) AS previous_sessions,
         COALESCE(SUM(CASE WHEN started_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END), 0) AS recent_sessions
         FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql);
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+        . $segmentSql);
     telemetry_model_profiled_report_execute($stmt, [$days], 'session_summary');
     return $stmt->fetch() ?: [];
 }
 
 /**
  * Return daily trend report rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{report_date:string,page_views:int,photo_views:int,photo_seconds:float,client_errors:int,media_bytes:float}> Daily rows containing report date and page, photo, error, and media aggregates.
  */
-function telemetry_model_report_daily_trends(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_daily_trends(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT DATE(bucket_start) AS report_date,
+    $stmt = db()->prepare(
+        'SELECT DATE(bucket_start) AS report_date,
         SUM(CASE WHEN metric_name = \'public.page_views\' THEN event_count ELSE 0 END) AS page_views,
         SUM(CASE WHEN metric_name = \'photo.views\' THEN event_count ELSE 0 END) AS photo_views,
         SUM(CASE WHEN metric_name = \'photo.view_seconds\' THEN value_sum ELSE 0 END) AS photo_seconds,
         SUM(CASE WHEN metric_name = \'client.errors\' THEN event_count ELSE 0 END) AS client_errors,
         SUM(CASE WHEN metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN value_sum ELSE 0 END) AS media_bytes
         FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . '
+        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql
+            . '
         GROUP BY DATE(bucket_start)
-        ORDER BY report_date ASC');
+        ORDER BY report_date ASC',
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'daily_trends');
     return $stmt->fetchAll();
 }
 
 /**
  * Return canonical daily unique-session counts from telemetry_sessions.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{report_date:string,sessions:int}> Daily rows containing report date and unique session count.
  */
-function telemetry_model_report_daily_sessions(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_daily_sessions(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT DATE(started_at) AS report_date, COUNT(*) AS sessions
+    $stmt = db()->prepare(
+        'SELECT DATE(started_at) AS report_date, COUNT(*) AS sessions
         FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . '
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql
+            . '
         GROUP BY DATE(started_at)
-        ORDER BY report_date ASC');
+        ORDER BY report_date ASC',
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'daily_sessions');
     return $stmt->fetchAll();
 }
 
 /**
  * Return top gallery engagement rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of rows returned.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{id:int,title:string,slug:string,page_views:int,photo_views:int,photo_seconds:float,media_bytes:float}> Rows containing gallery identity and title/slug with page, photo, duration, and media totals.
  */
-function telemetry_model_report_top_galleries(int $days, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_top_galleries(
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $limit = max(1, min(100, $limit));
-    $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment, 'm.device_type');
-    $stmt = db()->prepare('SELECT g.id, g.title, g.slug,
+    $segmentSql = telemetry_model_traffic_segment_condition(
+        $trafficSegment,
+        'm.device_type',
+    );
+    $stmt = db()->prepare(
+        'SELECT g.id, g.title, g.slug,
         SUM(CASE WHEN m.metric_name = \'public.page_views\' THEN m.event_count ELSE 0 END) AS page_views,
         SUM(CASE WHEN m.metric_name = \'photo.views\' THEN m.event_count ELSE 0 END) AS photo_views,
         SUM(CASE WHEN m.metric_name = \'photo.view_seconds\' THEN m.value_sum ELSE 0 END) AS photo_seconds,
         SUM(CASE WHEN m.metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN m.value_sum ELSE 0 END) AS media_bytes
         FROM telemetry_hourly_metrics m
         JOIN galleries g ON g.id = m.gallery_id
-        WHERE m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.gallery_id > 0' . $segmentSql . '
+        WHERE m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.gallery_id > 0'
+            . $segmentSql
+            . '
         GROUP BY g.id, g.title, g.slug
         ORDER BY page_views DESC, photo_views DESC, media_bytes DESC
-        LIMIT ' . $limit);
+        LIMIT '
+            . $limit,
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'top_galleries');
     return $stmt->fetchAll();
 }
 
 /**
  * Return top route rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of rows returned.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{route_name:string,page_views:int,photo_views:int,client_errors:int,media_bytes:float}> Rows containing route name and page, photo, error, and media totals.
  */
-function telemetry_model_report_top_routes(int $days, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_top_routes(
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $limit = max(1, min(100, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT route_name,
+    $stmt = db()->prepare(
+        'SELECT route_name,
         SUM(CASE WHEN metric_name = \'public.page_views\' THEN event_count ELSE 0 END) AS page_views,
         SUM(CASE WHEN metric_name = \'photo.views\' THEN event_count ELSE 0 END) AS photo_views,
         SUM(CASE WHEN metric_name = \'client.errors\' THEN event_count ELSE 0 END) AS client_errors,
         SUM(CASE WHEN metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN value_sum ELSE 0 END) AS media_bytes
         FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND route_name <> \'\'' . $segmentSql . '
+        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND route_name <> \'\''
+            . $segmentSql
+            . '
         GROUP BY route_name
         ORDER BY page_views DESC, photo_views DESC, client_errors DESC
-        LIMIT ' . $limit);
+        LIMIT '
+            . $limit,
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'top_routes');
     return $stmt->fetchAll();
 }
 
 /**
  * Return a constrained hourly metric dimension distribution.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @param string $dimension Dimension name from the model-owned report allowlist.
+ * @param string $metricName Metric name to aggregate or filter.
+ * @param int $limit Maximum number of rows returned.
+ * @return array<int,array{label:string,events:int,value_sum:float}> Rows containing the selected dimension label, event count, and value sum.
  */
-function telemetry_model_report_metric_distribution(string $dimension, int $days, string $metricName, int $limit, string $trafficSegment = 'all'): array
-{
-    $allowed = ['page_kind', 'browser_family', 'os_family', 'device_type', 'viewport_class', 'referrer_category', 'media_variant', 'cache_result'];
+function telemetry_model_report_metric_distribution(
+    string $dimension,
+    int $days,
+    string $metricName,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
+    $allowed = [
+        'page_kind',
+        'browser_family',
+        'os_family',
+        'device_type',
+        'viewport_class',
+        'referrer_category',
+        'media_variant',
+        'cache_result',
+    ];
     if (!in_array($dimension, $allowed, true)) {
-        throw new InvalidArgumentException('Unsupported telemetry metric dimension.');
+        throw new InvalidArgumentException(
+            'Unsupported telemetry metric dimension.',
+        );
     }
     $limit = max(1, min(100, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT ' . $dimension . ' AS label, SUM(event_count) AS events, SUM(value_sum) AS value_sum
+    $stmt = db()->prepare(
+        'SELECT '
+            . $dimension
+            . ' AS label, SUM(event_count) AS events, SUM(value_sum) AS value_sum
         FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND metric_name = ?' . $segmentSql . '
-        GROUP BY ' . $dimension . '
+        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND metric_name = ?'
+            . $segmentSql
+            . '
+        GROUP BY '
+            . $dimension
+            . '
         ORDER BY events DESC, value_sum DESC
-        LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, [$days, $metricName], 'metric_distribution');
+        LIMIT '
+            . $limit,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$days, $metricName],
+        'metric_distribution',
+    );
     return $stmt->fetchAll();
 }
 
 /**
  * Return a constrained session dimension distribution.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @param string $dimension Dimension name from the model-owned report allowlist.
+ * @param int $limit Maximum number of rows returned.
+ * @return array<int,array{label:string,sessions:int,page_views:int,photo_views:int,avg_duration_seconds:float}> Rows containing the selected dimension label and session, view, and average-duration totals.
  */
-function telemetry_model_report_session_distribution(string $dimension, int $days, int $limit, string $trafficSegment = 'all'): array
-{
-    $allowed = ['entry_referrer_category', 'browser_family', 'os_family', 'device_type', 'viewport_class', 'first_route_name', 'last_route_name', 'exit_route_name'];
+function telemetry_model_report_session_distribution(
+    string $dimension,
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
+    $allowed = [
+        'entry_referrer_category',
+        'browser_family',
+        'os_family',
+        'device_type',
+        'viewport_class',
+        'first_route_name',
+        'last_route_name',
+        'exit_route_name',
+    ];
     if (!in_array($dimension, $allowed, true)) {
-        throw new InvalidArgumentException('Unsupported telemetry session dimension.');
+        throw new InvalidArgumentException(
+            'Unsupported telemetry session dimension.',
+        );
     }
     $limit = max(1, min(100, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT COALESCE(NULLIF(' . $dimension . ', \'\'), \'unknown\') AS label,
+    $stmt = db()->prepare(
+        'SELECT COALESCE(NULLIF('
+            . $dimension
+            . ', \'\'), \'unknown\') AS label,
         COUNT(*) AS sessions,
         COALESCE(SUM(page_view_count), 0) AS page_views,
         COALESCE(SUM(photo_view_count), 0) AS photo_views,
         COALESCE(AVG(duration_seconds_capped), 0) AS avg_duration_seconds
         FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . '
-        GROUP BY COALESCE(NULLIF(' . $dimension . ', \'\'), \'unknown\')
+        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql
+            . '
+        GROUP BY COALESCE(NULLIF('
+            . $dimension
+            . ', \'\'), \'unknown\')
         ORDER BY sessions DESC
-        LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, [$days], 'session_distribution');
+        LIMIT '
+            . $limit,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$days],
+        'session_distribution',
+    );
     return $stmt->fetchAll();
 }
 
 /**
  * Return performance metric report rows.
  *
- * @return array<string,mixed>
+ * @return array<int,array{metric_name:string,samples:int,avg_value:?float,min_value:?float,max_value:?float}> Rows containing metric name, sample count, and average/minimum/maximum values.
  * @param int $days Report lookback or configured retention age in days.
  * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
  */
-function telemetry_model_report_performance_metrics(int $days, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_performance_metrics(
+    int $days,
+    string $trafficSegment = 'all',
+): array {
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT metric_name,
+    $stmt = db()->prepare(
+        'SELECT metric_name,
         SUM(event_count) AS samples,
         SUM(value_sum) / NULLIF(SUM(event_count), 0) AS avg_value,
         MIN(value_min) AS min_value,
@@ -962,51 +1327,78 @@ function telemetry_model_report_performance_metrics(int $days, string $trafficSe
         FROM telemetry_hourly_metrics
         WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
           AND (metric_name LIKE \'web_vital.%\' OR metric_name IN (\'client.page_load_ms\', \'client.image_decode_ms\', \'client.image_display_ms\'))
-          AND (metric_name <> \'client.page_load_ms\' OR value_min > 0)' . $segmentSql . '
+          AND (metric_name <> \'client.page_load_ms\' OR value_min > 0)'
+            . $segmentSql
+            . '
         GROUP BY metric_name
-        ORDER BY metric_name ASC');
-    telemetry_model_profiled_report_execute($stmt, [$days], 'performance_metrics');
+        ORDER BY metric_name ASC',
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$days],
+        'performance_metrics',
+    );
     return $stmt->fetchAll();
 }
 
 /**
  * Return client error report rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of rows returned.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{error_kind:string,route_name:string,events:int,last_seen:string}> Rows containing error kind, route, event count, and latest occurrence.
  */
-function telemetry_model_report_client_errors(int $days, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_client_errors(
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $limit = max(1, min(100, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT COALESCE(NULLIF(error_kind, \'\'), \'unknown\') AS error_kind,
+    $stmt = db()->prepare(
+        'SELECT COALESCE(NULLIF(error_kind, \'\'), \'unknown\') AS error_kind,
         COALESCE(NULLIF(route_name, \'\'), \'unknown\') AS route_name,
         COUNT(*) AS events,
         MAX(occurred_at) AS last_seen
         FROM telemetry_events
-        WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY) AND event_name = \'client.error.javascript\'' . $segmentSql . '
+        WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY) AND event_name = \'client.error.javascript\''
+            . $segmentSql
+            . '
         GROUP BY COALESCE(NULLIF(error_kind, \'\'), \'unknown\'), COALESCE(NULLIF(route_name, \'\'), \'unknown\')
         ORDER BY events DESC, last_seen DESC
-        LIMIT ' . $limit);
+        LIMIT '
+            . $limit,
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'client_errors');
     return $stmt->fetchAll();
 }
 
 /**
  * Return recent anonymized event rows.
- *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of rows returned.
+ * @param int $days Lookback window in days.
+ * @param string $trafficSegment Normalized technical traffic segment used to select rows.
+ * @return array<int,array{occurred_at:string,event_name:string,source:string,route_name:?string,page_kind:?string,gallery_id:?int,image_id:?int,referrer_category:?string,browser_family:?string,os_family:?string,device_type:?string,viewport_class:?string,media_variant:?string,cache_result:?string,http_status:?int,error_kind:?string,value_bytes:?int,value_ms:?int,duration_ms_capped:?int}> Anonymized event rows with selected time, event, route, dimension, status, and value fields.
  */
-function telemetry_model_report_recent_events(int $days, int $limit, string $trafficSegment = 'all'): array
-{
+function telemetry_model_report_recent_events(
+    int $days,
+    int $limit,
+    string $trafficSegment = 'all',
+): array {
     $limit = max(1, min(200, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition($trafficSegment);
-    $stmt = db()->prepare('SELECT occurred_at, event_name, source, route_name, page_kind, gallery_id, image_id,
+    $stmt = db()->prepare(
+        'SELECT occurred_at, event_name, source, route_name, page_kind, gallery_id, image_id,
         referrer_category, browser_family, os_family, device_type, viewport_class, media_variant,
         cache_result, http_status, error_kind, value_bytes, value_ms, duration_ms_capped
         FROM telemetry_events
-        WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY)' . $segmentSql . '
+        WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $segmentSql
+            . '
         ORDER BY occurred_at DESC
-        LIMIT ' . $limit);
+        LIMIT '
+            . $limit,
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'recent_events');
     return $stmt->fetchAll();
 }
@@ -1039,18 +1431,20 @@ function telemetry_model_report_database_summary(int $days, int $limit): array
 /**
  * Return total database telemetry counters for a report window.
  *
- * @return array{query_count:float,slow_count:float,failed_count:float,first_bucket:?string,last_bucket:?string}
+ * @return array{query_count:float,slow_count:float,failed_count:float,first_bucket:?string,last_bucket:?string} Aggregate query, slow, and failed counts with first/last bucket timestamps.
  * @param int $days Report lookback or configured retention age in days.
  */
 function telemetry_model_report_database_totals(int $days): array
 {
-    $stmt = db()->prepare('SELECT
+    $stmt = db()->prepare(
+        'SELECT
         COALESCE(SUM(query_count), 0) AS query_count,
         COALESCE(SUM(slow_count), 0) AS slow_count,
         COALESCE(SUM(failed_count), 0) AS failed_count,
         MIN(bucket_start) AS first_bucket, MAX(bucket_start) AS last_bucket
         FROM telemetry_db_query_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)');
+        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)',
+    );
     telemetry_model_profiled_report_execute($stmt, [$days], 'database_totals');
     $row = $stmt->fetch() ?: [];
     return [
@@ -1065,22 +1459,28 @@ function telemetry_model_report_database_totals(int $days): array
 /**
  * Return database query-fingerprint hot spots.
  *
- * @return list<array<string,mixed>>
+ * @return list<array{query_fingerprint:string,route_name:string,operation:string,table_name:string,query_count:int,failed_count:int,slow_count:int,total_latency_ms:float,avg_latency_ms:float,max_latency_ms:float}> Rows containing fingerprint identity and query/failure/latency aggregates.
  * @param int $days Report lookback or configured retention age in days.
  * @param int $limit Maximum rows or items processed by this call.
  * @param string $ranking One of slow, volume or failed; unsupported values are rejected.
  */
-function telemetry_model_report_database_fingerprints(int $days, int $limit, string $ranking = 'slow'): array
-{
+function telemetry_model_report_database_fingerprints(
+    int $days,
+    int $limit,
+    string $ranking = 'slow',
+): array {
     $limit = max(1, min(100, $limit));
     $order = match ($ranking) {
         'slow' => 'slow_count DESC, avg_latency_ms DESC, query_count DESC',
         'volume' => 'query_count DESC, total_latency_ms DESC',
         'failed' => 'failed_count DESC, query_count DESC',
-        default => throw new InvalidArgumentException('Unsupported fingerprint ranking.'),
+        default => throw new InvalidArgumentException(
+            'Unsupported fingerprint ranking.',
+        ),
     };
     $having = $ranking === 'failed' ? ' HAVING SUM(failed_count) > 0' : '';
-    $stmt = db()->prepare('SELECT query_fingerprint, route_name, operation, table_name,
+    $stmt = db()->prepare(
+        'SELECT query_fingerprint, route_name, operation, table_name,
         SUM(query_count) AS query_count,
         SUM(failed_count) AS failed_count,
         SUM(slow_count) AS slow_count,
@@ -1089,10 +1489,22 @@ function telemetry_model_report_database_fingerprints(int $days, int $limit, str
         MAX(latency_ms_max) AS max_latency_ms
         FROM telemetry_db_query_metrics
         WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        GROUP BY query_fingerprint, route_name, operation, table_name' . $having . '
-        ORDER BY ' . $order . ', query_fingerprint ASC
-        LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, [$days], $ranking === 'volume' ? 'database_fingerprints_volume' : 'database_fingerprints');
+        GROUP BY query_fingerprint, route_name, operation, table_name'
+            . $having
+            . '
+        ORDER BY '
+            . $order
+            . ', query_fingerprint ASC
+        LIMIT '
+            . $limit,
+    );
+    telemetry_model_profiled_report_execute(
+        $stmt,
+        [$days],
+        $ranking === 'volume'
+            ? 'database_fingerprints_volume'
+            : 'database_fingerprints',
+    );
     return $stmt->fetchAll();
 }
 
@@ -1126,32 +1538,62 @@ function telemetry_model_daily_select(bool $hourly): string
     $source = $hourly ? 'telemetry_hourly_metrics' : 'telemetry_daily_metrics';
     $time = $hourly ? 'bucket_start' : 'bucket_date';
     // The ten-character web_vital. prefix is a structural metric namespace.
-    $known = "(metric_name IN ('public.sessions', 'public.page_views',"
+    $known =
+        "(metric_name IN ('public.sessions', 'public.page_views',"
         . " 'photo.views', 'photo.view_seconds', 'client.errors',"
         . " 'client.page_load_ms', 'client.image_decode_ms',"
         . " 'client.image_display_ms')"
         . " OR LEFT(metric_name, 10) = 'web_vital.'"
         . " OR metric_name LIKE 'media.%' OR metric_name LIKE 'cache.%')";
-    $groups = ['DATE(' . $time . ')', 'metric_name', 'route_name',
-        'page_kind', 'gallery_id', 'image_id'];
+    $groups = [
+        'DATE(' . $time . ')',
+        'metric_name',
+        'route_name',
+        'page_kind',
+        'gallery_id',
+        'image_id',
+    ];
     foreach (['browser_family', 'os_family'] as $dimension) {
-        $groups[] = "CASE WHEN " . $known . " THEN 'unknown' ELSE "
-            . $dimension . ' END';
+        $groups[] =
+            'CASE WHEN '
+            . $known
+            . " THEN 'unknown' ELSE "
+            . $dimension
+            . ' END';
     }
     $groups[] = 'device_type';
-    foreach (['viewport_class', 'country_code', 'referrer_category'] as $dimension) {
+    foreach ([
+        'viewport_class',
+        'country_code',
+        'referrer_category',
+    ] as $dimension) {
         $neutral = $dimension === 'country_code' ? "''" : "'unknown'";
-        $groups[] = 'CASE WHEN ' . $known . ' THEN ' . $neutral
-            . ' ELSE ' . $dimension . ' END';
+        $groups[] =
+            'CASE WHEN '
+            . $known
+            . ' THEN '
+            . $neutral
+            . ' ELSE '
+            . $dimension
+            . ' END';
     }
     $groups[] = 'media_variant';
     $groups[] = 'cache_result';
     $groupSql = implode(', ', $groups);
-    return 'SELECT ' . $groupSql
-        . ', SUM(sample_count), SUM(event_count), SUM(value_sum),'
-        . ' MIN(value_min), MAX(value_max), MAX(updated_at) FROM ' . $source
-        . ' WHERE ' . $time . ' >= ? AND ' . $time . ' < ?'
-        . ' GROUP BY ' . $groupSql;
+    return (
+        'SELECT '
+            . $groupSql
+            . ', SUM(sample_count), SUM(event_count), SUM(value_sum),'
+            . ' MIN(value_min), MAX(value_max), MAX(updated_at) FROM '
+            . $source
+            . ' WHERE '
+            . $time
+            . ' >= ? AND '
+            . $time
+            . ' < ?'
+            . ' GROUP BY '
+            . $groupSql
+    );
 }
 
 /**
@@ -1160,10 +1602,12 @@ function telemetry_model_daily_select(bool $hourly): string
  */
 function telemetry_model_daily_columns(): string
 {
-    return 'bucket_date, metric_name, route_name, page_kind, gallery_id, image_id,'
-        . ' browser_family, os_family, device_type, viewport_class, country_code,'
-        . ' referrer_category, media_variant, cache_result, sample_count,'
-        . ' event_count, value_sum, value_min, value_max, updated_at';
+    return (
+        'bucket_date, metric_name, route_name, page_kind, gallery_id, image_id,'
+            . ' browser_family, os_family, device_type, viewport_class, country_code,'
+            . ' referrer_category, media_variant, cache_result, sample_count,'
+            . ' event_count, value_sum, value_min, value_max, updated_at'
+    );
 }
 
 /**
@@ -1176,19 +1620,27 @@ function telemetry_model_daily_columns(): string
  * @param string $now Compatibility timestamp; source timestamps remain authoritative.
  * @return int Number of daily aggregate rows inserted.
  */
-function telemetry_model_rollup_daily(string $fromDate, string $toDate, string $now): int
-{
+function telemetry_model_rollup_daily(
+    string $fromDate,
+    string $toDate,
+    string $now,
+): int {
     unset($now);
     $end = date('Y-m-d', strtotime($toDate . ' +1 day'));
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare('DELETE FROM telemetry_daily_metrics'
-            . ' WHERE bucket_date >= ? AND bucket_date < ?');
+        $stmt = $pdo->prepare(
+            'DELETE FROM telemetry_daily_metrics'
+                . ' WHERE bucket_date >= ? AND bucket_date < ?',
+        );
         $stmt->execute([$fromDate, $end]);
-        $stmt = $pdo->prepare('INSERT INTO telemetry_daily_metrics ('
-            . telemetry_model_daily_columns() . ') '
-            . telemetry_model_daily_select(true));
+        $stmt = $pdo->prepare(
+            'INSERT INTO telemetry_daily_metrics ('
+                . telemetry_model_daily_columns()
+                . ') '
+                . telemetry_model_daily_select(true),
+        );
         $stmt->execute([$fromDate . ' 00:00:00', $end . ' 00:00:00']);
         $rows = $stmt->rowCount();
         $pdo->commit();
@@ -1207,15 +1659,27 @@ function telemetry_model_rollup_daily(string $fromDate, string $toDate, string $
  * @param string $before Exclusive stable-day boundary.
  * @return ?string Next populated date, or null when the archive is caught up.
  */
-function telemetry_model_next_daily_compaction_day(?string $after, string $before): ?string
-{
-    $parsed = $after === null ? false
+function telemetry_model_next_daily_compaction_day(
+    ?string $after,
+    string $before,
+): ?string {
+    $parsed = $after === null
+        ? false
         : \DateTimeImmutable::createFromFormat('!Y-m-d', $after);
-    if ($after !== null && ($parsed === false || $parsed->format('Y-m-d') !== $after)) {
+    if (
+        $after !== null
+        && (
+            $parsed === false
+            || $parsed->format('Y-m-d') !== $after
+        )
+    ) {
         throw new \RuntimeException('Invalid telemetry compaction checkpoint.');
     }
-    $stmt = db()->prepare('SELECT MIN(bucket_date) FROM telemetry_daily_metrics'
-        . ' WHERE bucket_date < ?' . ($after !== null ? ' AND bucket_date > ?' : ''));
+    $stmt = db()->prepare(
+        'SELECT MIN(bucket_date) FROM telemetry_daily_metrics'
+            . ' WHERE bucket_date < ?'
+            . ($after !== null ? ' AND bucket_date > ?' : ''),
+    );
     $stmt->execute($after === null ? [$before] : [$before, $after]);
     $value = $stmt->fetchColumn();
     return is_string($value) && $value !== '' ? $value : null;
@@ -1236,17 +1700,30 @@ function telemetry_model_compact_daily(string $day): void
     $end = date('Y-m-d', strtotime($day . ' +1 day'));
     // Temporary DDL does not implicitly commit a MySQL/MariaDB transaction.
     $pdo->exec('DROP TEMPORARY TABLE IF EXISTS telemetry_daily_compact_work');
-    $pdo->exec('CREATE TEMPORARY TABLE telemetry_daily_compact_work'
-        . ' LIKE telemetry_daily_metrics');
+    $pdo->exec(
+        'CREATE TEMPORARY TABLE telemetry_daily_compact_work'
+            . ' LIKE telemetry_daily_metrics',
+    );
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare('INSERT INTO telemetry_daily_compact_work ('
-            . $columns . ') ' . telemetry_model_daily_select(false));
+        $stmt = $pdo->prepare(
+            'INSERT INTO telemetry_daily_compact_work ('
+                . $columns
+                . ') '
+                . telemetry_model_daily_select(false),
+        );
         $stmt->execute([$day, $end]);
-        $stmt = $pdo->prepare('DELETE FROM telemetry_daily_metrics WHERE bucket_date = ?');
+        $stmt = $pdo->prepare(
+            'DELETE FROM telemetry_daily_metrics WHERE bucket_date = ?',
+        );
         $stmt->execute([$day]);
-        $pdo->exec('INSERT INTO telemetry_daily_metrics (' . $columns . ') SELECT '
-            . $columns . ' FROM telemetry_daily_compact_work');
+        $pdo->exec(
+            'INSERT INTO telemetry_daily_metrics ('
+                . $columns
+                . ') SELECT '
+                . $columns
+                . ' FROM telemetry_daily_compact_work',
+        );
         $pdo->commit();
     } catch (\Throwable $exception) {
         if ($pdo->inTransaction()) {
@@ -1254,7 +1731,9 @@ function telemetry_model_compact_daily(string $day): void
         }
         throw $exception;
     } finally {
-        $pdo->exec('DROP TEMPORARY TABLE IF EXISTS telemetry_daily_compact_work');
+        $pdo->exec(
+            'DROP TEMPORARY TABLE IF EXISTS telemetry_daily_compact_work',
+        );
     }
 }
 
@@ -1273,8 +1752,13 @@ function telemetry_model_compact_daily(string $day): void
  * Consumers: bounded maintenance and the compatibility purge helper.
  * Rationale: cap row-lock work while allowing catch-up over repeated slices.
  */
-function telemetry_model_delete_older_than(string $tableName, string $columnName, int $days, int $limit = TELEMETRY_MODEL_DEFAULT_DELETE_BATCH, ?string $before = null): int
-{
+function telemetry_model_delete_older_than(
+    string $tableName,
+    string $columnName,
+    int $days,
+    int $limit = TELEMETRY_MODEL_DEFAULT_DELETE_BATCH,
+    ?string $before = null,
+): int {
     $safeTables = [
         'telemetry_events' => ['occurred_at'],
         'telemetry_sessions' => ['last_seen_at'],
@@ -1283,8 +1767,13 @@ function telemetry_model_delete_older_than(string $tableName, string $columnName
         'telemetry_db_query_metrics' => ['bucket_start'],
         'telemetry_job_runs' => ['started_at'],
     ];
-    if (!isset($safeTables[$tableName]) || !in_array($columnName, $safeTables[$tableName], true)) {
-        throw new InvalidArgumentException('Unsupported telemetry retention target.');
+    if (
+        !isset($safeTables[$tableName])
+        || !in_array($columnName, $safeTables[$tableName], true)
+    ) {
+        throw new InvalidArgumentException(
+            'Unsupported telemetry retention target.',
+        );
     }
     $limit = max(1, min(10000, $limit));
     // Never delete an hourly bucket unless a durable completed-day checkpoint
@@ -1298,9 +1787,18 @@ function telemetry_model_delete_older_than(string $tableName, string $columnName
         $where = ' AND ' . $columnName . ' < ?';
         $params[] = $before;
     }
-    $stmt = db()->prepare('DELETE FROM ' . $tableName . ' WHERE ' . $columnName
-        . ' < DATE_SUB(NOW(), INTERVAL ? DAY)' . $where
-        . ' ORDER BY ' . $columnName . ' ASC LIMIT ' . $limit);
+    $stmt = db()->prepare(
+        'DELETE FROM '
+            . $tableName
+            . ' WHERE '
+            . $columnName
+            . ' < DATE_SUB(NOW(), INTERVAL ? DAY)'
+            . $where
+            . ' ORDER BY '
+            . $columnName
+            . ' ASC LIMIT '
+            . $limit,
+    );
     $stmt->execute($params);
     return $stmt->rowCount();
 }
@@ -1311,7 +1809,6 @@ function telemetry_model_delete_older_than(string $tableName, string $columnName
  * The database observer buffers equivalent executions in memory and persists one
  * aggregate row per request. Counts therefore arrive pre-aggregated and must be
  * added as supplied instead of being converted back into one logical execution.
- *
  * @param array<int,mixed> $params Ordered telemetry_db_query_metrics parameters.
  */
 function telemetry_model_upsert_db_query_metric_aggregate(array $params): void
@@ -1334,15 +1831,22 @@ function telemetry_model_upsert_db_query_metric_aggregate(array $params): void
 
 /**
  * Backward-compatible single-execution database query metric writer.
- *
  * @param array<int,mixed> $params Historical ordered parameter list without query_count.
+
+ * @return void No value; persists the supplied telemetry event, setting, or query aggregate.
  */
 function telemetry_model_upsert_db_query_metric(array $params): void
 {
     if (count($params) !== 12) {
-        throw new InvalidArgumentException('Unexpected database telemetry parameter count.');
+        throw new InvalidArgumentException(
+            'Unexpected database telemetry parameter count.',
+        );
     }
 
-    $aggregateParams = array_merge(array_slice($params, 0, 5), [1], array_slice($params, 5));
+    $aggregateParams = array_merge(
+        array_slice($params, 0, 5),
+        [1],
+        array_slice($params, 5),
+    );
     telemetry_model_upsert_db_query_metric_aggregate($aggregateParams);
 }

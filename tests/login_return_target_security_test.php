@@ -23,11 +23,17 @@ use function Gallery\Core\sanitize_login_return_target;
  * @param string $fallback Safe local fallback URL.
  * @return void No value when the redirect policy is correct.
  */
-function login_return_target_assert(string $input, string $expected, string $fallback): void
-{
+function login_return_target_assert(
+    string $input,
+    string $expected,
+    string $fallback,
+): void {
     $actual = sanitize_login_return_target($input, $fallback);
     if ($actual !== $expected) {
-        throw new RuntimeException('Login return target was not normalized or refused as expected: ' . json_encode($input));
+        throw new RuntimeException(
+            'Login return target was not normalized or refused as expected: '
+                . json_encode($input),
+        );
     }
 }
 

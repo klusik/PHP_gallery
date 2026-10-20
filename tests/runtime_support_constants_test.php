@@ -41,8 +41,12 @@ $root = dirname(__DIR__);
 $before = get_included_files();
 require_once $root . '/app/policy_constants.php';
 $added = array_values(array_diff(get_included_files(), $before));
-runtime_constants_assert(count($added) === 1 && realpath($added[0]) === realpath($root . '/app/policy_constants.php'),
-    'Core policy loading must not load bootstrap, configuration, services or persistence.');
+runtime_constants_assert(
+    count($added) === 1
+        && realpath($added[0]) === realpath($root
+            . '/app/policy_constants.php'),
+    'Core policy loading must not load bootstrap, configuration, services or persistence.',
+);
 
 $expected = [
     'RUNTIME_SUPPORT_MINIMUM_COMPATIBLE' => '8.1',
@@ -52,10 +56,22 @@ $expected = [
     'RUNTIME_SUPPORT_REFERENCE' => 'https://www.php.net/supported-versions.php',
     'RUNTIME_SUPPORT_SCHEDULE' => [
         '8.1' => ['active_until' => null, 'security_until' => '2025-12-31'],
-        '8.2' => ['active_until' => '2024-12-31', 'security_until' => '2026-12-31'],
-        '8.3' => ['active_until' => '2025-12-31', 'security_until' => '2027-12-31'],
-        '8.4' => ['active_until' => '2026-12-31', 'security_until' => '2028-12-31'],
-        '8.5' => ['active_until' => '2027-12-31', 'security_until' => '2029-12-31'],
+        '8.2' => [
+            'active_until' => '2024-12-31',
+            'security_until' => '2026-12-31',
+        ],
+        '8.3' => [
+            'active_until' => '2025-12-31',
+            'security_until' => '2027-12-31',
+        ],
+        '8.4' => [
+            'active_until' => '2026-12-31',
+            'security_until' => '2028-12-31',
+        ],
+        '8.5' => [
+            'active_until' => '2027-12-31',
+            'security_until' => '2029-12-31',
+        ],
     ],
 ];
 $actual = [
@@ -66,16 +82,29 @@ $actual = [
     'RUNTIME_SUPPORT_REFERENCE' => RUNTIME_SUPPORT_REFERENCE,
     'RUNTIME_SUPPORT_SCHEDULE' => RUNTIME_SUPPORT_SCHEDULE,
 ];
-runtime_constants_assert($actual === $expected, 'All six definitions must retain their exact values and scalar/array types.');
+runtime_constants_assert(
+    $actual === $expected,
+    'All six definitions must retain their exact values and scalar/array types.',
+);
 
 $before = get_included_files();
 require_once $root . '/app/services/runtime_support.php';
 $added = array_values(array_diff(get_included_files(), $before));
-runtime_constants_assert(count($added) === 1 && realpath($added[0]) === realpath($root . '/app/services/runtime_support.php'),
-    'Standalone runtime policy must only reuse the already loaded Core owner.');
+runtime_constants_assert(
+    count($added) === 1
+        && realpath($added[0]) === realpath($root
+            . '/app/services/runtime_support.php'),
+    'Standalone runtime policy must only reuse the already loaded Core owner.',
+);
 foreach (array_keys($expected) as $name) {
-    runtime_constants_assert(defined('Gallery\\Core\\' . $name), 'The immutable runtime definition must live in Core.');
-    runtime_constants_assert(!defined('Gallery\\Services\\' . $name), 'No duplicate service-local runtime constant or alias may remain.');
+    runtime_constants_assert(
+        defined('Gallery\\Core\\' . $name),
+        'The immutable runtime definition must live in Core.',
+    );
+    runtime_constants_assert(
+        !defined('Gallery\\Services\\' . $name),
+        'No duplicate service-local runtime constant or alias may remain.',
+    );
 }
 
 $cases = [
@@ -95,16 +124,22 @@ $cases = [
 ];
 foreach ($cases as [$version, $instant, $state, $recommended]) {
     $status = runtime_support_status($version, new DateTimeImmutable($instant));
-    runtime_constants_assert($status['state'] === $state
-        && $status['deployment_recommended'] === $recommended
-        && $status['action_required'] === !$recommended
-        && $status['compatible'], 'Inclusive UTC lifecycle and advisory-only compatibility must remain unchanged.');
-    runtime_constants_assert($status['minimum_compatible'] === '8.1'
-        && $status['minimum_deployment'] === '8.3'
-        && $status['preferred_branch'] === '8.5'
-        && $status['policy_verified_on'] === '2026-09-20'
-        && $status['reference_url'] === $expected['RUNTIME_SUPPORT_REFERENCE'],
-        'The public bounded model must retain the immutable reviewed policy.');
+    runtime_constants_assert(
+        $status['state'] === $state
+            && $status['deployment_recommended'] === $recommended
+            && $status['action_required'] === !$recommended
+            && $status['compatible'],
+        'Inclusive UTC lifecycle and advisory-only compatibility must remain unchanged.',
+    );
+    runtime_constants_assert(
+        $status['minimum_compatible'] === '8.1'
+            && $status['minimum_deployment'] === '8.3'
+            && $status['preferred_branch'] === '8.5'
+            && $status['policy_verified_on'] === '2026-09-20'
+            && $status['reference_url']
+                === $expected['RUNTIME_SUPPORT_REFERENCE'],
+        'The public bounded model must retain the immutable reviewed policy.',
+    );
 }
-echo "PASS runtime constants: six Core definitions, standalone dependencies, exact values and 13 UTC lifecycle cases\n";
-
+echo
+    "PASS runtime constants: six Core definitions, standalone dependencies, exact values and 13 UTC lifecycle cases\n";

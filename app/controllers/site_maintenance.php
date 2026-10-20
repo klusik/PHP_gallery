@@ -70,14 +70,27 @@ use function Gallery\Services\cache_cleanup_diagnostic_buffer;
  */
 function cms_site_maintenance_cron(): void
 {
-    $token = trim((string) ($_SERVER['HTTP_X_SITE_MAINTENANCE_TOKEN'] ?? $_POST['token'] ?? $_GET['token'] ?? ''));
+    $token = trim(
+        (string) (
+            $_SERVER['HTTP_X_SITE_MAINTENANCE_TOKEN']
+            ?? $_POST['token']
+            ?? $_GET['token']
+            ?? ''
+        ),
+    );
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: no-store');
 
     if (!site_maintenance_token_is_valid($token)) {
         http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => t('site_maintenance.invalid_token', 'Invalid maintenance token.') ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => false,
+            'error' => t(
+                'site_maintenance.invalid_token',
+                'Invalid maintenance token.',
+            ),
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         return;
     }
 
@@ -88,25 +101,38 @@ function cms_site_maintenance_cron(): void
 
     if (isset($_POST['update_ticket']) || isset($_GET['update_ticket'])) {
         $ticket = $_POST['update_ticket'] ?? null;
-        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST'
-            || !is_string($ticket) || preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'))
+                !== 'POST'
+            || !is_string($ticket)
+            || preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
             || isset($_GET['update_ticket'])
             || array_diff(array_keys($_POST), ['update_ticket']) !== []
-            || array_diff(array_keys($_GET), ['page']) !== []) {
+            || array_diff(array_keys($_GET), ['page']) !== []
+        ) {
             http_response_code(400);
-            echo json_encode(['ok' => false, 'reason' => 'update_chain_transport_refused']);
+            echo json_encode([
+                'ok' => false,
+                'reason' => 'update_chain_transport_refused',
+            ]);
             return;
         }
         try {
             cms_runtime_kernel()->load('updater-work');
             $result = \Gallery\Services\application_update_background_chain_run(
                 $ticket,
-                static fn(string $nextTicket): bool =>
-                    \Gallery\Services\site_maintenance_fire_background_worker(false, '', $nextTicket)
+                static fn(string $nextTicket): bool => \Gallery\Services\site_maintenance_fire_background_worker(
+                    false,
+                    '',
+                    $nextTicket,
+                ),
             );
         } catch (\Throwable) {
-            $result = ['ok' => false, 'queued' => false,
-                'reason' => 'update_chain_storage_unavailable'];
+            $result = [
+                'ok' => false,
+                'queued' => false,
+                'reason' => 'update_chain_storage_unavailable',
+            ];
         }
         if (empty($result['ok'])) {
             http_response_code(500);
@@ -115,41 +141,76 @@ function cms_site_maintenance_cron(): void
         return;
     }
 
-    $telemetryOnly = (string) ($_POST['telemetry_only'] ?? $_GET['telemetry_only'] ?? '') === '1';
+    $telemetryOnly =
+        (string) ($_POST['telemetry_only'] ?? $_GET['telemetry_only'] ?? '')
+        === '1';
     if ($telemetryOnly) {
-        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST'
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'))
+                !== 'POST'
             || (string) ($_POST['telemetry_only'] ?? '') !== '1'
-            || isset($_POST['cache_only']) || isset($_POST['cache_ticket'])
-            || isset($_GET['cache_only']) || isset($_GET['cache_ticket'])) {
+            || isset($_POST['cache_only'])
+            || isset($_POST['cache_ticket'])
+            || isset($_GET['cache_only'])
+            || isset($_GET['cache_ticket'])
+        ) {
             http_response_code(400);
-            echo json_encode(['ok' => false, 'reason' => 'telemetry_transport_refused']);
+            echo json_encode([
+                'ok' => false,
+                'reason' => 'telemetry_transport_refused',
+            ]);
             return;
         }
         $result = \Gallery\Services\site_maintenance_telemetry_worker_run();
         if (empty($result['ok'])) {
             http_response_code(500);
         }
-        echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode(
+            $result,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
         return;
     }
 
     $force = (string) ($_GET['force'] ?? $_POST['force'] ?? '') === '1';
-    $cacheOnly = (string) ($_GET['cache_only'] ?? $_POST['cache_only'] ?? '') === '1';
+    $cacheOnly =
+        (string) ($_GET['cache_only'] ?? $_POST['cache_only'] ?? '') === '1';
     $cacheTicket = trim((string) ($_POST['cache_ticket'] ?? ''));
     if ($cacheTicket !== '') {
-        if (!$cacheOnly || strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+        if (
+            !$cacheOnly
+            || strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'))
+                !== 'POST'
+        ) {
             http_response_code(400);
-            echo json_encode(['ok'=>false,'reason'=>'cache_chain_transport_refused'], JSON_UNESCAPED_SLASHES);
+            echo json_encode([
+                'ok' => false,
+                'reason' => 'cache_chain_transport_refused',
+            ], JSON_UNESCAPED_SLASHES);
             return;
         }
         $result = site_maintenance_cache_chain_run($cacheTicket);
-        if (empty($result['ok'])) http_response_code(500);
-        echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if (empty($result['ok']))
+            http_response_code(500);
+        echo json_encode(
+            $result,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
         return;
     }
-    $chain = !$cacheOnly && (string) ($_GET['chain'] ?? $_POST['chain'] ?? '1') !== '0';
-    $source = preg_replace('/[^a-z0-9_]/i', '', (string) ($_GET['source'] ?? $_POST['source'] ?? 'web_cron')) ?: 'web_cron';
-    $timeBudget = (int) ($_GET['time_budget'] ?? $_POST['time_budget'] ?? site_maintenance_time_budget_seconds());
+    $chain =
+        !$cacheOnly
+        && (string) ($_GET['chain'] ?? $_POST['chain'] ?? '1') !== '0';
+    $source = preg_replace(
+        '/[^a-z0-9_]/i',
+        '',
+        (string) ($_GET['source'] ?? $_POST['source'] ?? 'web_cron'),
+    ) ?: 'web_cron';
+    $timeBudget = (int) (
+        $_GET['time_budget']
+        ?? $_POST['time_budget']
+        ?? site_maintenance_time_budget_seconds()
+    );
     $result = site_maintenance_run([
         'source' => $source,
         'force' => $force,
@@ -176,7 +237,16 @@ function cms_admin_site_maintenance_settings(): void
 
     $action = (string) ($_POST['site_maintenance_action'] ?? 'save');
 
-    if (in_array($action, ['cache_inventory_start','cache_inventory_step','cache_cleanup_start','cache_cleanup_step'], true)) {
+    if (in_array(
+        $action,
+        [
+            'cache_inventory_start',
+            'cache_inventory_step',
+            'cache_cleanup_start',
+            'cache_cleanup_step',
+        ],
+        true,
+    )) {
         cms_admin_site_cache_lifecycle($action);
         return;
     }
@@ -187,12 +257,25 @@ function cms_admin_site_maintenance_settings(): void
     }
 
     if ($action === 'cache_diagnostic') {
-        $runId = cache_cleanup_diagnostic_id((string) ($_POST['cache_run_id'] ?? ''));
+        $runId = cache_cleanup_diagnostic_id(
+            (string) ($_POST['cache_run_id'] ?? ''),
+        );
         $code = (string) ($_POST['diagnostic_code'] ?? 'network_error');
-        $allowed = ['request_timeout', 'network_error', 'invalid_json', 'http_error', 'completion_error'];
+        $allowed = [
+            'request_timeout',
+            'network_error',
+            'invalid_json',
+            'http_error',
+            'completion_error',
+        ];
         $code = in_array($code, $allowed, true) ? $code : 'network_error';
-        cache_cleanup_diagnostic_event($runId, 'browser_failed', ['failure_code' => $code,
-            'http_status' => max(0, min(599, (int) ($_POST['http_status'] ?? 0)))]);
+        cache_cleanup_diagnostic_event($runId, 'browser_failed', [
+            'failure_code' => $code,
+            'http_status' => max(0, min(
+                599,
+                (int) ($_POST['http_status'] ?? 0),
+            )),
+        ]);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, private');
         echo json_encode(['ok' => true, 'diagnostic_id' => $runId]);
@@ -206,13 +289,19 @@ function cms_admin_site_maintenance_settings(): void
 
     if ($action === 'rotate_token') {
         site_maintenance_rotate_token();
-        flash_message('admin_notice', t('admin.site_maintenance.token_rotated', 'Site maintenance cron token was rotated. Update any external cron URL that used the old token.'));
+        flash_message('admin_notice', t(
+            'admin.site_maintenance.token_rotated',
+            'Site maintenance cron token was rotated. Update any external cron URL that used the old token.',
+        ));
         redirect_to(url_for('admin') . '#admin-tab-maintenance');
     }
 
     if ($action === 'reset_state') {
         site_maintenance_reset_state();
-        flash_message('admin_notice', t('admin.site_maintenance.state_reset', 'Interrupted site maintenance state was reset. The next cron call can start a fresh cycle when due.'));
+        flash_message('admin_notice', t(
+            'admin.site_maintenance.state_reset',
+            'Interrupted site maintenance state was reset. The next cron call can start a fresh cycle when due.',
+        ));
         redirect_to(url_for('admin') . '#admin-tab-maintenance');
     }
 
@@ -220,15 +309,25 @@ function cms_admin_site_maintenance_settings(): void
         $result = site_maintenance_run([
             'source' => 'admin_manual',
             'force' => true,
-            'time_budget_seconds' => site_maintenance_manual_time_budget_seconds(),
+            'time_budget_seconds' =>
+                site_maintenance_manual_time_budget_seconds(),
         ]);
         if (!empty($result['ok'])) {
             $message = !empty($result['done'])
-                ? t('admin.site_maintenance.manual_done', 'Manual maintenance invocation completed the current cycle.')
-                : t('admin.site_maintenance.manual_progress', 'Manual maintenance invocation processed one bounded chunk. Run again or let automatic maintenance continue it.');
+                ? t(
+                    'admin.site_maintenance.manual_done',
+                    'Manual maintenance invocation completed the current cycle.',
+                )
+                : t(
+                    'admin.site_maintenance.manual_progress',
+                    'Manual maintenance invocation processed one bounded chunk. Run again or let automatic maintenance continue it.',
+                );
             flash_message('admin_notice', $message);
         } else {
-            flash_message('admin_notice', t('admin.site_maintenance.manual_failed', 'Manual maintenance invocation failed. Check the admin log for details.'));
+            flash_message('admin_notice', t(
+                'admin.site_maintenance.manual_failed',
+                'Manual maintenance invocation failed. Check the admin log for details.',
+            ));
         }
         redirect_to(url_for('admin') . '#admin-tab-maintenance');
     }
@@ -239,10 +338,15 @@ function cms_admin_site_maintenance_settings(): void
         (int) ($_POST['site_maintenance_batch_size'] ?? 20),
         (int) ($_POST['site_maintenance_time_budget_seconds'] ?? 20),
         !empty($_POST['site_maintenance_request_trigger_enabled']),
-        site_maintenance_window_hours_to_minutes((string) ($_POST['site_maintenance_window_hours'] ?? '3'))
+        site_maintenance_window_hours_to_minutes(
+            (string) ($_POST['site_maintenance_window_hours'] ?? '3'),
+        ),
     );
 
-    flash_message('admin_notice', t('admin.site_maintenance.settings_saved', 'Site maintenance settings saved.'));
+    flash_message('admin_notice', t(
+        'admin.site_maintenance.settings_saved',
+        'Site maintenance settings saved.',
+    ));
     redirect_to(url_for('admin') . '#admin-tab-maintenance');
 }
 
@@ -255,48 +359,146 @@ function cms_admin_site_cache_lifecycle(string $action): void
 {
     require_admin();
     verify_csrf();
-    $runId = cache_cleanup_diagnostic_id((string) ($_POST['cache_run_id'] ?? ''));
+    $runId = cache_cleanup_diagnostic_id(
+        (string) ($_POST['cache_run_id'] ?? ''),
+    );
     $started = microtime(true);
     $finished = false;
-    register_shutdown_function(static function () use ($runId, &$finished): void {
+    register_shutdown_function(static function () use (
+        $runId,
+        &$finished,
+    ): void {
         $error = error_get_last();
-        if (!$finished && is_array($error) && in_array($error['type'], [E_ERROR,E_PARSE,E_CORE_ERROR,E_COMPILE_ERROR,E_USER_ERROR], true)) {
-            cache_cleanup_diagnostic_event($runId, 'fatal', ['reason'=>'cache_lifecycle','failure_code'=>'fatal_shutdown',
-                'error_type'=>(int) $error['type'],'exception_line'=>(int) ($error['line'] ?? 0)]);
+        if (
+            !$finished
+            && is_array($error)
+            && in_array(
+                $error['type'],
+                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR],
+                true,
+            )
+        ) {
+            cache_cleanup_diagnostic_event($runId, 'fatal', [
+                'reason' => 'cache_lifecycle',
+                'failure_code' => 'fatal_shutdown',
+                'error_type' => (int) $error['type'],
+                'exception_line' => (int) ($error['line'] ?? 0),
+            ]);
         }
     });
-    $returnUrl = url_for('admin', ['dashboard_tab'=>'maintenance','maintenance_tab'=>'media']) . '#admin-tab-maintenance';
-    $mutation = admin_mutation_descriptor('cache.lifecycle', 'cache', 'maintenance');
-    $fallback = ['redirect_url'=>$returnUrl];
-    cache_cleanup_diagnostic_event($runId, 'lifecycle_requested', ['source'=>'admin_manual','operation'=>$action]);
+    $returnUrl =
+        url_for('admin', [
+            'dashboard_tab' => 'maintenance',
+            'maintenance_tab' => 'media',
+        ]) . '#admin-tab-maintenance';
+    $mutation = admin_mutation_descriptor(
+        'cache.lifecycle',
+        'cache',
+        'maintenance',
+    );
+    $fallback = ['redirect_url' => $returnUrl];
+    cache_cleanup_diagnostic_event($runId, 'lifecycle_requested', [
+        'source' => 'admin_manual',
+        'operation' => $action,
+    ]);
     try {
         cms_runtime_kernel()->load('site-maintenance-work');
-        $result = \Gallery\Services\site_maintenance_cache_lifecycle_action(substr($action, 6), (string) ($_POST['preview_id'] ?? ''));
+        $result = \Gallery\Services\site_maintenance_cache_lifecycle_action(
+            substr($action, 6),
+            (string) ($_POST['preview_id'] ?? ''),
+        );
         $status = \Gallery\Services\cache_lifecycle_status();
         $operation = $status['operation'] ?? $status;
         $ok = !empty($result['ok']);
-        $message = $ok ? t('admin.cache_lifecycle.progress', 'Cache {phase}: observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
-            ['phase'=>$operation['phase'],'bytes'=>format_bytes($operation['bytes']),'eligible'=>format_bytes($operation['pending_bytes']),'reclaimed'=>format_bytes($operation['bytes_removed'])])
-            : t('admin.cache_lifecycle.refused', 'Cache action stopped safely: {reason}.', ['reason'=>(string) ($result['reason'] ?? 'maintenance_busy')]);
-        $payload = $ok ? admin_mutation_success_envelope($message, $mutation, null, [], $fallback)
-            : admin_mutation_error_envelope($message, 'cache_lifecycle_refused', $mutation, $fallback);
+        $message = $ok
+            ? t(
+                'admin.cache_lifecycle.progress',
+                'Cache {phase}: observed {bytes}; eligible {eligible}; reclaimed {reclaimed}.',
+                [
+                    'phase' => $operation['phase'],
+                    'bytes' => format_bytes($operation['bytes']),
+                    'eligible' => format_bytes($operation['pending_bytes']),
+                    'reclaimed' => format_bytes($operation['bytes_removed']),
+                ],
+            )
+            : t(
+                'admin.cache_lifecycle.refused',
+                'Cache action stopped safely: {reason}.',
+                [
+                    'reason' => (string) (
+                        $result['reason'] ?? 'maintenance_busy'
+                    ),
+                ],
+            );
+        $payload = $ok
+            ? admin_mutation_success_envelope(
+                $message,
+                $mutation,
+                null,
+                [],
+                $fallback,
+            )
+            : admin_mutation_error_envelope(
+                $message,
+                'cache_lifecycle_refused',
+                $mutation,
+                $fallback,
+            );
         $payload['cache_lifecycle'] = $status;
-        $payload['cache_operation_label'] = \Gallery\Views\view_admin_dashboard_cache_operation_label($operation);
-        $payload['cache_owner_labels'] = array_map(static fn(array $total): array => [
-            'bytes'=>isset($total['bytes']) ? format_bytes((int) $total['bytes']) : '—',
-            'eligible'=>isset($total['reclaimable_bytes']) ? format_bytes((int) $total['reclaimable_bytes']) : '—',
-        ], $status['totals']);
-        cache_cleanup_diagnostic_event($runId, $ok ? 'lifecycle_checkpoint' : 'skipped',
-            ['ok'=>$ok,'phase'=>$operation['phase'],'files'=>$operation['files'],'bytes'=>$operation['bytes'],
-                'candidates'=>$operation['candidates'],'candidate_bytes'=>$operation['candidate_bytes'],
-                'removed'=>$operation['removed'],'bytes_removed'=>$operation['bytes_removed'],'errors'=>$operation['errors'],
-                'blocked'=>$operation['blocked'],'skipped'=>$operation['skipped'],'failure_code'=>(string) ($result['last_error'] ?? ''),
-                'reason'=>!empty($result['reason']) ? (string) $result['reason'] : (string) ($result['last_skip_reason'] ?? ''),
-                'elapsed_total_ms'=>(microtime(true)-$started)*1000]);
+        $payload['cache_operation_label'] =
+            \Gallery\Views\view_admin_dashboard_cache_operation_label(
+                $operation,
+            );
+        $payload['cache_owner_labels'] = array_map(
+            static fn(array $total): array => [
+                'bytes' => isset($total['bytes'])
+                    ? format_bytes((int) $total['bytes'])
+                    : '—',
+                'eligible' => isset($total['reclaimable_bytes'])
+                    ? format_bytes((int) $total['reclaimable_bytes'])
+                    : '—',
+            ],
+            $status['totals'],
+        );
+        cache_cleanup_diagnostic_event(
+            $runId,
+            $ok ? 'lifecycle_checkpoint' : 'skipped',
+            [
+                'ok' => $ok,
+                'phase' => $operation['phase'],
+                'files' => $operation['files'],
+                'bytes' => $operation['bytes'],
+                'candidates' => $operation['candidates'],
+                'candidate_bytes' => $operation['candidate_bytes'],
+                'removed' => $operation['removed'],
+                'bytes_removed' => $operation['bytes_removed'],
+                'errors' => $operation['errors'],
+                'blocked' => $operation['blocked'],
+                'skipped' => $operation['skipped'],
+                'failure_code' => (string) ($result['last_error'] ?? ''),
+                'reason' => !empty($result['reason'])
+                    ? (string) $result['reason']
+                    : (string) ($result['last_skip_reason'] ?? ''),
+                'elapsed_total_ms' => (microtime(true) - $started) * 1000,
+            ],
+        );
     } catch (\Throwable $exception) {
-        cache_cleanup_diagnostic_event($runId, 'lifecycle_failed', [], $exception);
-        $message = t('admin.cache_lifecycle.failed', 'Cache action failed safely. Copy diagnostics or check the Admin log.');
-        $payload = admin_mutation_error_envelope($message, 'cache_lifecycle_failed', $mutation, $fallback);
+        cache_cleanup_diagnostic_event(
+            $runId,
+            'lifecycle_failed',
+            [],
+            $exception,
+        );
+        $message = t(
+            'admin.cache_lifecycle.failed',
+            'Cache action failed safely. Copy diagnostics or check the Admin log.',
+        );
+        $payload = admin_mutation_error_envelope(
+            $message,
+            'cache_lifecycle_failed',
+            $mutation,
+            $fallback,
+        );
         $ok = false;
     }
     $payload['diagnostic_id'] = $runId;
@@ -306,7 +508,10 @@ function cms_admin_site_cache_lifecycle(string $action): void
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, private');
         http_response_code($ok ? 200 : 409);
-        echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode(
+            $payload,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
         return;
     }
     flash_message('admin_notice', $message);
@@ -322,21 +527,45 @@ function cms_admin_site_cache_cleanup(): void
 {
     require_admin();
     verify_csrf();
-    $runId = cache_cleanup_diagnostic_id((string) ($_POST['cache_run_id'] ?? ''));
+    $runId = cache_cleanup_diagnostic_id(
+        (string) ($_POST['cache_run_id'] ?? ''),
+    );
     $startedAt = microtime(true);
     $phase = 'admission';
     $finished = false;
-    cache_cleanup_diagnostic_event($runId, 'request_received', ['source' => 'admin_manual',
-        'forced' => true, 'request_method' => (string) ($_SERVER['REQUEST_METHOD'] ?? 'unknown')]);
-    register_shutdown_function(static function () use ($runId, &$finished, &$phase): void {
+    cache_cleanup_diagnostic_event($runId, 'request_received', [
+        'source' => 'admin_manual',
+        'forced' => true,
+        'request_method' => (string) ($_SERVER['REQUEST_METHOD'] ?? 'unknown'),
+    ]);
+    register_shutdown_function(static function () use (
+        $runId,
+        &$finished,
+        &$phase,
+    ): void {
         $error = error_get_last();
-        if (!$finished && is_array($error) && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
-            cache_cleanup_diagnostic_event($runId, 'fatal', ['reason' => $phase,
-                'failure_code' => 'fatal_shutdown', 'error_type' => (int) $error['type'],
-                'exception_line' => (int) ($error['line'] ?? 0)]);
+        if (
+            !$finished
+            && is_array($error)
+            && in_array(
+                $error['type'],
+                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR],
+                true,
+            )
+        ) {
+            cache_cleanup_diagnostic_event($runId, 'fatal', [
+                'reason' => $phase,
+                'failure_code' => 'fatal_shutdown',
+                'error_type' => (int) $error['type'],
+                'exception_line' => (int) ($error['line'] ?? 0),
+            ]);
         }
     });
-    $returnUrl = url_for('admin', ['dashboard_tab' => 'maintenance', 'maintenance_tab' => 'media']) . '#admin-tab-maintenance';
+    $returnUrl =
+        url_for('admin', [
+            'dashboard_tab' => 'maintenance',
+            'maintenance_tab' => 'media',
+        ]) . '#admin-tab-maintenance';
     $mutation = admin_mutation_descriptor('cache.cleanup', 'cache', 'cleanup');
     $fallback = ['redirect_url' => $returnUrl];
     try {
@@ -346,60 +575,142 @@ function cms_admin_site_cache_cleanup(): void
         cms_runtime_kernel()->load('updater-work');
         cms_runtime_kernel()->load('site-maintenance-work');
         $phase = 'worker';
-        cache_cleanup_diagnostic_event($runId, 'worker_started', ['forced' => true]);
-        $result = site_maintenance_run(['source' => 'admin_cache_manual', 'force' => true,
-            'cache_only' => true, 'time_budget_seconds' => 1, 'cache_run_id' => $runId]);
+        cache_cleanup_diagnostic_event($runId, 'worker_started', [
+            'forced' => true,
+        ]);
+        $result = site_maintenance_run([
+            'source' => 'admin_cache_manual',
+            'force' => true,
+            'cache_only' => true,
+            'time_budget_seconds' => 1,
+            'cache_run_id' => $runId,
+        ]);
         $slice = (array) ($result['cache_gc']['value'] ?? []);
-        $busy = !empty($result['busy']) || (!empty($slice['skipped']) && empty($slice['done']));
+        $busy =
+            !empty($result['busy'])
+            || (!empty($slice['skipped']) && empty($slice['done']));
         $ok = !empty($result['ok']) && !$busy;
         $done = !empty($slice['done']);
         $files = max(0, (int) ($slice['removed'] ?? 0));
         $bytes = max(0, (int) ($slice['bytes_removed'] ?? 0));
-        cache_cleanup_diagnostic_event($runId, $busy ? 'skipped' : ($ok ? 'completed' : 'failed'),
-            ['ok' => $ok, 'done' => $done, 'blocked' => !empty($slice['blocked']),
-                'reason' => (string) ($slice['reason'] ?? $result['reason'] ?? ''),
-                'removed' => $files, 'bytes_removed' => $bytes,
+        cache_cleanup_diagnostic_event(
+            $runId,
+            $busy ? 'skipped' : ($ok ? 'completed' : 'failed'),
+            [
+                'ok' => $ok,
+                'done' => $done,
+                'blocked' => !empty($slice['blocked']),
+                'reason' => (string) (
+                    $slice['reason']
+                    ?? $result['reason']
+                    ?? ''
+                ),
+                'removed' => $files,
+                'bytes_removed' => $bytes,
                 'visited' => (int) ($slice['visited'] ?? 0),
                 'elapsed_total_ms' => (microtime(true) - $startedAt) * 1000,
                 'failure_code' => (string) ($slice['failure_code'] ?? ''),
-                'failure_operation' => (string) ($slice['failure_operation'] ?? ''),
-                'exception_class' => (string) ($result['cache_gc']['diagnostic']['exception_class'] ?? ''),
+                'failure_operation' => (string) (
+                    $slice['failure_operation'] ?? ''
+                ),
+                'exception_class' => (string) (
+                    $result['cache_gc']['diagnostic']['exception_class'] ?? ''
+                ),
                 'central_job_id' => (int) ($result['central_job_id'] ?? 0),
-                'central_phase' => (string) ($result['central_phase'] ?? '')]);
+                'central_phase' => (string) ($result['central_phase'] ?? ''),
+            ],
+        );
         $message = $busy
-            ? t('admin.cache_cleanup.busy', 'Cleanup is waiting for active maintenance or an update. Safety locks remain in effect.')
-            : (!$ok ? t('admin.cache_cleanup.failed', 'Cleanup stopped safely. Check maintenance diagnostics before retrying.')
-                : t($done ? 'admin.cache_cleanup.done' : 'admin.cache_cleanup.progress',
-                    $done ? 'Updater trash is empty. This step removed {files} file(s) and reclaimed {bytes}.'
-                        : 'Removed {files} file(s) and reclaimed {bytes}. More updater trash remains; continue or let cron finish.',
-                    ['files' => $files, 'bytes' => format_bytes($bytes)]));
+            ? t(
+                'admin.cache_cleanup.busy',
+                'Cleanup is waiting for active maintenance or an update. Safety locks remain in effect.',
+            )
+            : (
+                !$ok
+                    ? t(
+                        'admin.cache_cleanup.failed',
+                        'Cleanup stopped safely. Check maintenance diagnostics before retrying.',
+                    )
+                    : t(
+                        $done
+                            ? 'admin.cache_cleanup.done'
+                            : 'admin.cache_cleanup.progress',
+                        $done
+                            ? 'Updater trash is empty. This step removed {files} file(s) and reclaimed {bytes}.'
+                            : 'Removed {files} file(s) and reclaimed {bytes}. More updater trash remains; continue or let cron finish.',
+                        ['files' => $files, 'bytes' => format_bytes($bytes)],
+                    )
+            );
         if ($busy) {
-            $message .= ' [' . (string) ($slice['reason'] ?? $result['reason'] ?? 'owner_busy') . ']';
+            $message .=
+                ' ['
+                . (string) (
+                    $slice['reason']
+                    ?? $result['reason']
+                    ?? 'owner_busy'
+                )
+                . ']';
             if (!empty($result['central_job_id'])) {
                 $message .= ' #' . (int) $result['central_job_id'];
             }
         }
-        $payload = $ok ? admin_mutation_success_envelope($message, $mutation, null, [], $fallback)
-            : admin_mutation_error_envelope($message, $busy ? 'cache_cleanup_busy' : 'cache_cleanup_blocked', $mutation, $fallback);
-        $payload['cache_cleanup'] = ['done' => $done, 'can_continue' => $ok && !$done,
-            'removed' => $files, 'bytes_removed' => $bytes];
+        $payload = $ok
+            ? admin_mutation_success_envelope(
+                $message,
+                $mutation,
+                null,
+                [],
+                $fallback,
+            )
+            : admin_mutation_error_envelope(
+                $message,
+                $busy ? 'cache_cleanup_busy' : 'cache_cleanup_blocked',
+                $mutation,
+                $fallback,
+            );
+        $payload['cache_cleanup'] = [
+            'done' => $done,
+            'can_continue' => $ok && !$done,
+            'removed' => $files,
+            'bytes_removed' => $bytes,
+        ];
     } catch (\Throwable $exception) {
-        cache_cleanup_diagnostic_event($runId, 'failed', ['reason' => $phase,
-            'elapsed_total_ms' => (microtime(true) - $startedAt) * 1000], $exception);
-        $message = t('admin.cache_cleanup.failed', 'Cleanup stopped safely. Check maintenance diagnostics before retrying.');
-        $payload = admin_mutation_error_envelope($message, 'cache_cleanup_failed', $mutation, $fallback);
+        cache_cleanup_diagnostic_event(
+            $runId,
+            'failed',
+            [
+                'reason' => $phase,
+                'elapsed_total_ms' => (microtime(true) - $startedAt) * 1000,
+            ],
+            $exception,
+        );
+        $message = t(
+            'admin.cache_cleanup.failed',
+            'Cleanup stopped safely. Check maintenance diagnostics before retrying.',
+        );
+        $payload = admin_mutation_error_envelope(
+            $message,
+            'cache_cleanup_failed',
+            $mutation,
+            $fallback,
+        );
         $ok = false;
         $busy = false;
     }
     $payload['diagnostic_id'] = $runId;
-    cache_cleanup_diagnostic_event($runId, 'response_ready', ['http_status' => $ok ? 200 : ($busy ? 409 : 500)]);
+    cache_cleanup_diagnostic_event($runId, 'response_ready', [
+        'http_status' => $ok ? 200 : ($busy ? 409 : 500),
+    ]);
     $payload['cache_diagnostics'] = cache_cleanup_diagnostic_buffer($runId);
     $finished = true;
     if (admin_wants_json()) {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, private');
         http_response_code($ok ? 200 : ($busy ? 409 : 500));
-        echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(
+            $payload,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         return;
     }
     flash_message('admin_notice', $message);
@@ -414,32 +725,80 @@ function cms_admin_site_cache_job_stop(): void
 {
     require_admin();
     verify_csrf();
-    $runId = cache_cleanup_diagnostic_id((string) ($_POST['cache_run_id'] ?? ''));
-    $returnUrl = url_for('admin', ['dashboard_tab' => 'maintenance', 'maintenance_tab' => 'media']) . '#admin-tab-maintenance';
+    $runId = cache_cleanup_diagnostic_id(
+        (string) ($_POST['cache_run_id'] ?? ''),
+    );
+    $returnUrl =
+        url_for('admin', [
+            'dashboard_tab' => 'maintenance',
+            'maintenance_tab' => 'media',
+        ]) . '#admin-tab-maintenance';
     $mutation = admin_mutation_descriptor('update.cancel', 'update', 'cancel');
     $fallback = ['redirect_url' => $returnUrl];
     $ok = false;
-    cache_cleanup_diagnostic_event($runId, 'stop_requested', ['source' => 'admin_manual']);
+    cache_cleanup_diagnostic_event($runId, 'stop_requested', [
+        'source' => 'admin_manual',
+    ]);
     try {
         cms_runtime_kernel()->load('updater-work');
         $jobId = (string) ($_POST['job_id'] ?? '');
-        $job = \Gallery\Services\application_update_job_public_state(\Gallery\Services\application_update_load_job($jobId));
+        $job = \Gallery\Services\application_update_job_public_state(\Gallery\Services\application_update_load_job(
+            $jobId,
+        ));
         if (empty($job['can_cancel'])) {
-            throw new \RuntimeException('Update cannot be cancelled after activation has begun. Resume or rollback instead.');
+            throw new \RuntimeException(
+                'Update cannot be cancelled after activation has begun. Resume or rollback instead.',
+            );
         }
         $job = \Gallery\Services\application_update_cancel_job($jobId);
         $ok = (string) ($job['status'] ?? '') === 'cancelled';
-        $message = $ok ? t('admin.cache_cleanup.stopped', 'Update stopped. You can run cache cleanup again.')
-            : t('admin.cache_cleanup.stop_busy', 'The update worker is busy. It has not been stopped; retry after its current step.');
-        cache_cleanup_diagnostic_event($runId, $ok ? 'stop_completed' : 'skipped',
-            ['reason' => $ok ? 'cancelled_before_activation' : 'updater_worker_busy', 'updater_job_id' => $jobId,
-                'updater_status' => (string) $job['status'], 'updater_stage' => (string) $job['stage']]);
-        $payload = $ok ? admin_mutation_success_envelope($message, $mutation, null, [], $fallback)
-            : admin_mutation_error_envelope($message, 'updater_worker_busy', $mutation, $fallback);
+        $message = $ok
+            ? t(
+                'admin.cache_cleanup.stopped',
+                'Update stopped. You can run cache cleanup again.',
+            )
+            : t(
+                'admin.cache_cleanup.stop_busy',
+                'The update worker is busy. It has not been stopped; retry after its current step.',
+            );
+        cache_cleanup_diagnostic_event(
+            $runId,
+            $ok ? 'stop_completed' : 'skipped',
+            [
+                'reason' => $ok
+                    ? 'cancelled_before_activation'
+                    : 'updater_worker_busy',
+                'updater_job_id' => $jobId,
+                'updater_status' => (string) $job['status'],
+                'updater_stage' => (string) $job['stage'],
+            ],
+        );
+        $payload = $ok
+            ? admin_mutation_success_envelope(
+                $message,
+                $mutation,
+                null,
+                [],
+                $fallback,
+            )
+            : admin_mutation_error_envelope(
+                $message,
+                'updater_worker_busy',
+                $mutation,
+                $fallback,
+            );
     } catch (\Throwable $exception) {
         cache_cleanup_diagnostic_event($runId, 'stop_failed', [], $exception);
-        $message = t('admin.cache_cleanup.stop_failed', 'Update could not be stopped safely. Check diagnostics and Admin Updates.');
-        $payload = admin_mutation_error_envelope($message, 'update_cancel_refused', $mutation, $fallback);
+        $message = t(
+            'admin.cache_cleanup.stop_failed',
+            'Update could not be stopped safely. Check diagnostics and Admin Updates.',
+        );
+        $payload = admin_mutation_error_envelope(
+            $message,
+            'update_cancel_refused',
+            $mutation,
+            $fallback,
+        );
     }
     $payload['diagnostic_id'] = $runId;
     $payload['cache_diagnostics'] = cache_cleanup_diagnostic_buffer($runId);
@@ -447,7 +806,10 @@ function cms_admin_site_cache_job_stop(): void
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, private');
         http_response_code($ok ? 200 : 409);
-        echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(
+            $payload,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         return;
     }
     flash_message('admin_notice', $message);

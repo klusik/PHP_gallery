@@ -38,7 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
@@ -51,17 +50,23 @@ use function Gallery\Core\url_for;
  */
 function thumbnail_warmup_enabled(): bool
 {
-    return (string) app_setting('thumbnail_background_warmup_enabled', '1') !== '0';
+    return (
+        (string) app_setting('thumbnail_background_warmup_enabled', '1') !== '0'
+    );
 }
 
 /**
  * Persist whether public requests may trigger guarded background thumbnail repair.
  *
  * @param bool $enabled Enabled flag.
+ * @return void Persists whether thumbnail warmup is enabled for public requests.
  */
 function set_thumbnail_warmup_enabled(bool $enabled): void
 {
-    set_app_setting('thumbnail_background_warmup_enabled', $enabled ? '1' : '0');
+    set_app_setting(
+        'thumbnail_background_warmup_enabled',
+        $enabled ? '1' : '0',
+    );
 }
 
 /**
@@ -72,7 +77,12 @@ function set_thumbnail_warmup_enabled(bool $enabled): void
 function thumbnail_warmup_cache_dir(): string
 {
     // $dir stores the process-local cache area used only by this self-healing feature.
-    $dir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnail-warmup';
+    $dir =
+        dirname(__DIR__, 2)
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'thumbnail-warmup';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -93,15 +103,17 @@ function thumbnail_warmup_secret(): string
     if ($secret === '') {
         $secret = trim((string) ($config['setup_key'] ?? ''));
     }
-    return $secret !== '' ? $secret : 'php-gallery-thumbnail-warmup-fallback-secret';
+    return $secret !== ''
+        ? $secret
+        : 'php-gallery-thumbnail-warmup-fallback-secret';
 }
 
 /**
  * Build the stable token payload for one rendered warmup candidate.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{id?:int|string,gallery_id?:int|string,filename?:string,relative_path?:string} $image Image fields included in the token payload.
+ * @param array{folder_path?:string} $gallery Gallery folder field included in the token payload.
+ * @return string Stable pipe-delimited image and gallery identity payload.
  */
 function thumbnail_warmup_token_payload(array $image, array $gallery): string
 {
@@ -117,25 +129,32 @@ function thumbnail_warmup_token_payload(array $image, array $gallery): string
 /**
  * Return a browser-submittable token proving that the server rendered this image as a warmup candidate.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{id?:int|string,gallery_id?:int|string,filename?:string,relative_path?:string} $image Rendered image row identifying the warmup candidate.
+ * @param array{folder_path?:string} $gallery Gallery row containing the candidate image.
+ * @return string HMAC-SHA256 token for the rendered image and gallery identity.
  */
 function thumbnail_warmup_token(array $image, array $gallery): string
 {
-    return hash_hmac('sha256', thumbnail_warmup_token_payload($image, $gallery), thumbnail_warmup_secret());
+    return hash_hmac(
+        'sha256',
+        thumbnail_warmup_token_payload($image, $gallery),
+        thumbnail_warmup_secret(),
+    );
 }
 
 /**
  * Verify a submitted warmup token for one image and gallery.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id?:int|string,gallery_id?:int|string,filename?:string,relative_path?:string} $image Submitted image row to verify.
+ * @param array{folder_path?:string} $gallery Gallery row used to verify the token payload.
  * @param string $token Token value.
  * @return bool True when the condition matches.
  */
-function thumbnail_warmup_token_is_valid(array $image, array $gallery, string $token): bool
-{
+function thumbnail_warmup_token_is_valid(
+    array $image,
+    array $gallery,
+    string $token,
+): bool {
     $expected = thumbnail_warmup_token($image, $gallery);
     return $token !== '' && hash_equals($expected, $token);
 }
@@ -143,13 +162,16 @@ function thumbnail_warmup_token_is_valid(array $image, array $gallery, string $t
 /**
  * Return a compact HTML attribute string for an image that used original media as thumbnail fallback.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param array $sizes Sizes value.
+ * @param array{id?:int|string,gallery_id?:int|string,filename?:string,relative_path?:string} $image Rendered image candidate.
+ * @param array{folder_path?:string} $gallery Gallery containing the candidate.
+ * @param list<int|string> $sizes Thumbnail sizes missing for this rendering context.
  * @return string Text result for the caller.
  */
-function thumbnail_warmup_candidate_attributes(array $image, array $gallery, array $sizes): string
-{
+function thumbnail_warmup_candidate_attributes(
+    array $image,
+    array $gallery,
+    array $sizes,
+): string {
     if (!thumbnail_warmup_enabled()) {
         return '';
     }
@@ -168,9 +190,13 @@ function thumbnail_warmup_candidate_attributes(array $image, array $gallery, arr
 
     return implode(' ', [
         'data-thumbnail-warmup-id="' . $imageId . '"',
-        'data-thumbnail-warmup-token="' . e(thumbnail_warmup_token($image, $gallery)) . '"',
+        'data-thumbnail-warmup-token="'
+            . e(thumbnail_warmup_token($image, $gallery))
+            . '"',
         'data-thumbnail-warmup-sizes="' . e(implode(',', $sizes)) . '"',
-        'data-thumbnail-warmup-endpoint="' . e(url_for('thumbnail_warmup')) . '"',
+        'data-thumbnail-warmup-endpoint="'
+            . e(url_for('thumbnail_warmup'))
+            . '"',
     ]);
 }
 
@@ -199,12 +225,14 @@ function thumbnail_warmup_normalize_sizes(array $sizes): array
 /**
  * Return true when the current visitor may ask the server to repair thumbnails for this image.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id?:int|string,gallery_id?:int|string,filename?:string,relative_path?:string} $image Image whose public visibility is checked.
+ * @param array{id?:int|string|null,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited visibility, access, and NSFW policy fields.
  * @return bool True when the condition matches.
  */
-function thumbnail_warmup_current_visitor_can_process(array $image, array $gallery): bool
-{
+function thumbnail_warmup_current_visitor_can_process(
+    array $image,
+    array $gallery,
+): bool {
     if (current_user() && !current_user_is_known_under_18()) {
         return true;
     }
@@ -219,7 +247,13 @@ function thumbnail_warmup_current_visitor_can_process(array $image, array $galle
  */
 function thumbnail_warmup_cooldown_path(int $imageId): string
 {
-    return thumbnail_warmup_cache_dir() . DIRECTORY_SEPARATOR . 'image-' . $imageId . '.cooldown';
+    return (
+        thumbnail_warmup_cache_dir()
+            . DIRECTORY_SEPARATOR
+            . 'image-'
+            . $imageId
+            . '.cooldown'
+    );
 }
 
 /**
@@ -229,11 +263,15 @@ function thumbnail_warmup_cooldown_path(int $imageId): string
  * @param int $cooldownSeconds Cooldown seconds value.
  * @return bool True when the condition matches.
  */
-function thumbnail_warmup_image_is_cooling_down(int $imageId, int $cooldownSeconds = 60): bool
-{
+function thumbnail_warmup_image_is_cooling_down(
+    int $imageId,
+    int $cooldownSeconds = 60,
+): bool {
     // $path stores the last-attempt marker for this image.
     $path = thumbnail_warmup_cooldown_path($imageId);
-    return is_file($path) && time() - (int) filemtime($path) < $cooldownSeconds;
+    return (
+        is_file($path) && (time() - (int) filemtime($path)) < $cooldownSeconds
+    );
 }
 
 /**
@@ -256,7 +294,6 @@ function thumbnail_warmup_lock_path(): string
     return thumbnail_warmup_cache_dir() . DIRECTORY_SEPARATOR . 'worker.lock';
 }
 
-
 /**
  * Return a compact visitor label for thumbnail warmup logging.
  *
@@ -273,20 +310,27 @@ function thumbnail_warmup_log_visitor_type(): string
 /**
  * Return request metadata that helps admins understand why a warmup event happened.
  *
- * @return array Structured result data for the caller.
+ * @return array{visitor_type:'admin'|'public',referer?:string,user_agent?:string} Sanitized request context with optional truncated referrer and user-agent values.
  */
 function thumbnail_warmup_log_request_context(): array
 {
     // $referer stores the public page that rendered fallback image candidates, when the browser sent it.
     $referer = trim((string) (request_data('server')['HTTP_REFERER'] ?? ''));
     // $userAgent stores a short browser signature for diagnosing repeated warmup activity without logging full headers.
-    $userAgent = trim((string) (request_data('server')['HTTP_USER_AGENT'] ?? ''));
+    $userAgent = trim(
+        (string) (request_data('server')['HTTP_USER_AGENT'] ?? ''),
+    );
 
-    return array_filter([
-        'visitor_type' => thumbnail_warmup_log_visitor_type(),
-        'referer' => $referer !== '' ? substr($referer, 0, 240) : null,
-        'user_agent' => $userAgent !== '' ? substr($userAgent, 0, 180) : null,
-    ], static fn($value): bool => $value !== null && $value !== '');
+    return array_filter(
+        [
+            'visitor_type' => thumbnail_warmup_log_visitor_type(),
+            'referer' => $referer !== '' ? substr($referer, 0, 240) : null,
+            'user_agent' => $userAgent !== ''
+                ? substr($userAgent, 0, 180)
+                : null,
+        ],
+        static fn($value): bool => $value !== null && $value !== '',
+    );
 }
 
 /**
@@ -295,11 +339,17 @@ function thumbnail_warmup_log_request_context(): array
  * @param string $level Level value.
  * @param string $eventKey Event key value.
  * @param string $message Message value.
- * @param array $context Context value.
- * @param array $options Optional behavior flags.
+ * @param array<string,scalar|null|array<array-key,scalar|null|array<array-key,scalar|null>>> $context Sanitized event context fields.
+ * @param array{category?:string,severity?:'error'|'notice'|'warning',subject_type?:string,route_name?:string} $options Optional Admin log category and routing metadata.
+ * @return void Writes the event only when the Admin log service is loaded.
  */
-function thumbnail_warmup_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-{
+function thumbnail_warmup_log_event(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context = [],
+    array $options = [],
+): void {
     if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
@@ -317,8 +367,8 @@ function thumbnail_warmup_log_event(string $level, string $eventKey, string $mes
 /**
  * Return a compact, non-secret summary of normalized warmup candidates.
  *
- * @param array $items Items value.
- * @return array<int array{id:int,sizes:array<int,int>}>.
+ * @param list<array{id:int,token:string,sizes:list<int>}> $items Normalized warmup candidates.
+ * @return list<array{id:int,sizes:list<int>}> Candidate identifiers and requested sizes without tokens.
  */
 function thumbnail_warmup_log_candidate_summary(array $items): array
 {
@@ -326,18 +376,20 @@ function thumbnail_warmup_log_candidate_summary(array $items): array
     foreach ($items as $item) {
         $summary[] = [
             'id' => (int) ($item['id'] ?? 0),
-            'sizes' => array_values(array_map('intval', (array) ($item['sizes'] ?? []))),
+            'sizes' => array_values(array_map(
+                'intval',
+                (array) ($item['sizes'] ?? []),
+            )),
         ];
     }
     return $summary;
 }
 
-
 /**
  * Return the active thumbnail policy for one warmup request before source-specific checks.
  *
- * @param array $items Items value.
- * @return array<string mixed>.
+ * @param list<array{id:int,token:string,sizes:list<int>}> $items Normalized warmup candidates.
+ * @return array{mode:string,compatibility_mode:string,formats_requested:list<string>,enabled_sizes:list<int>,requested_sizes:list<int>,jpg_quality:int,webp_quality:int} Active thumbnail policy summary and size union for the request.
  */
 function thumbnail_warmup_request_policy_summary(array $items): array
 {
@@ -351,35 +403,66 @@ function thumbnail_warmup_request_policy_summary(array $items): array
             }
         }
     }
-    $requestedSizes = thumbnail_warmup_normalize_sizes(array_values($requestedSizes));
+    $requestedSizes = thumbnail_warmup_normalize_sizes(array_values(
+        $requestedSizes,
+    ));
 
     return [
-        'mode' => function_exists('Gallery\\Services\\thumbnail_compatibility_mode_log_value') ? thumbnail_compatibility_mode_log_value() : 'jpg_plus_webp',
-        'compatibility_mode' => function_exists('Gallery\\Services\\thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'legacy',
-        'formats_requested' => function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'],
+        'mode' => function_exists(
+            'Gallery\\Services\\thumbnail_compatibility_mode_log_value',
+        )
+            ? thumbnail_compatibility_mode_log_value()
+            : 'jpg_plus_webp',
+        'compatibility_mode' => function_exists(
+            'Gallery\\Services\\thumbnail_compatibility_mode',
+        )
+            ? thumbnail_compatibility_mode()
+            : 'legacy',
+        'formats_requested' => function_exists(
+            'Gallery\\Services\\thumbnail_policy_requested_formats',
+        )
+            ? thumbnail_policy_requested_formats()
+            : ['jpg', 'webp'],
         'enabled_sizes' => array_values(array_map('intval', thumbnail_sizes())),
         'requested_sizes' => $requestedSizes,
-        'jpg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpg_quality' => function_exists(
+            'Gallery\\Services\\thumbnail_jpeg_quality',
+        )
+            ? thumbnail_jpeg_quality()
+            : 82,
+        'webp_quality' => function_exists(
+            'Gallery\\Services\\thumbnail_webp_quality',
+        )
+            ? thumbnail_webp_quality()
+            : 82,
     ];
 }
 
 /**
  * Return a compact per-image warmup log detail without exposing private tokens.
  *
- * @param array $item Item value.
- * @param ?array $image Image row or image data.
- * @param ?array $gallery Gallery row or gallery data.
+ * @param array{id:int,token?:string,sizes?:list<int>} $item Submitted warmup candidate.
+ * @param ?array{id?:int|string,gallery_id?:int|string,filename?:string,relative_path?:string} $image Resolved image row, when available.
+ * @param ?array{folder_path?:string} $gallery Resolved gallery row, when available.
  * @param string $action Action value.
  * @param string $reason Reason value.
- * @param array $extra Extra value.
- * @return array Structured result data for the caller.
+ * @param array<string,int|float|string|bool|null|list<int|string>|array<string,int|float|string|bool|null|list<string>>> $extra Additional bounded diagnostic values.
+ * @return array{submitted_id:int,requested_sizes:list<int>,action:string,reason:string,image_id?:int,gallery_id?:int,filename?:string,relative_path?:string,gallery_path?:string,...<string,int|float|string|bool|null|list<int|string>|array<string,int|float|string|bool|null|list<string>>>} Sanitized per-image decision details.
  */
-function thumbnail_warmup_log_image_detail(array $item, ?array $image, ?array $gallery, string $action, string $reason, array $extra = []): array
-{
+function thumbnail_warmup_log_image_detail(
+    array $item,
+    ?array $image,
+    ?array $gallery,
+    string $action,
+    string $reason,
+    array $extra = [],
+): array {
     $detail = [
         'submitted_id' => (int) ($item['id'] ?? 0),
-        'requested_sizes' => array_values(array_map('intval', (array) ($item['sizes'] ?? []))),
+        'requested_sizes' => array_values(array_map(
+            'intval',
+            (array) ($item['sizes'] ?? []),
+        )),
         'action' => $action,
         'reason' => $reason,
     ];
@@ -387,12 +470,24 @@ function thumbnail_warmup_log_image_detail(array $item, ?array $image, ?array $g
     if ($image) {
         $detail['image_id'] = (int) ($image['id'] ?? 0);
         $detail['gallery_id'] = (int) ($image['gallery_id'] ?? 0);
-        $detail['filename'] = substr((string) ($image['filename'] ?? ''), 0, 160);
-        $detail['relative_path'] = substr((string) ($image['relative_path'] ?? ''), 0, 220);
+        $detail['filename'] = substr(
+            (string) ($image['filename'] ?? ''),
+            0,
+            160,
+        );
+        $detail['relative_path'] = substr(
+            (string) ($image['relative_path'] ?? ''),
+            0,
+            220,
+        );
     }
 
     if ($gallery) {
-        $detail['gallery_path'] = substr((string) ($gallery['folder_path'] ?? ''), 0, 220);
+        $detail['gallery_path'] = substr(
+            (string) ($gallery['folder_path'] ?? ''),
+            0,
+            220,
+        );
     }
 
     foreach ($extra as $key => $value) {
@@ -405,8 +500,8 @@ function thumbnail_warmup_log_image_detail(array $item, ?array $image, ?array $g
 /**
  * Normalize browser-submitted warmup items.
  *
- * @param mixed $rawItems Decoded JSON item list.
- * @return array<int array{id:int,token:string,sizes:array<int,int>}>.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $rawItems Expected to be an array of item arrays containing `id`, `token`, and optional `sizes` list. Non-array top-level input returns an empty list; non-array entries and entries with non-positive IDs or empty tokens are ignored. Other top-level or entry values are tolerated but do not define accepted item fields.
+ * @return list<array{id:int,token:string,sizes:list<int>}> Deduplicated candidates with valid tokens and supported requested sizes, capped at 24.
  */
 function thumbnail_warmup_normalize_items(mixed $rawItems): array
 {
@@ -428,15 +523,24 @@ function thumbnail_warmup_normalize_items(mixed $rawItems): array
             continue;
         }
         // $sizes stores requested generated variants relevant to the current card/list context.
-        $sizes = thumbnail_warmup_normalize_sizes((array) ($rawItem['sizes'] ?? []));
+        $sizes = thumbnail_warmup_normalize_sizes(
+            (array) ($rawItem['sizes'] ?? []),
+        );
         if (!$sizes) {
             $sizes = [300];
         }
         if (!isset($items[$imageId])) {
-            $items[$imageId] = ['id' => $imageId, 'token' => $token, 'sizes' => $sizes];
+            $items[$imageId] = [
+                'id' => $imageId,
+                'token' => $token,
+                'sizes' => $sizes,
+            ];
             continue;
         }
-        $items[$imageId]['sizes'] = thumbnail_warmup_normalize_sizes(array_merge($items[$imageId]['sizes'], $sizes));
+        $items[$imageId]['sizes'] = thumbnail_warmup_normalize_sizes(array_merge(
+            $items[$imageId]['sizes'],
+            $sizes,
+        ));
     }
 
     return array_slice(array_values($items), 0, 24);
@@ -445,8 +549,8 @@ function thumbnail_warmup_normalize_items(mixed $rawItems): array
 /**
  * Process a small background thumbnail warmup batch.
  *
- * @param array $items Items value.
- * @return array<string mixed>.
+ * @param list<array{id:int,token:string,sizes:list<int>}> $items Normalized browser-submitted candidates.
+ * @return array{ok:bool,enabled:bool,accepted:int,processed:int,created:int,skipped:int,failed:int,busy:bool,remaining?:int,invalid_geometry_deleted?:int,invalid_geometry_files?:list<string>,errors?:list<string>} Batch outcome and optional generation diagnostics.
  */
 function thumbnail_warmup_process_items(array $items): array
 {
@@ -460,13 +564,22 @@ function thumbnail_warmup_process_items(array $items): array
     ]);
 
     if (!thumbnail_warmup_enabled()) {
-        $response = ['ok' => true, 'enabled' => false, 'accepted' => 0, 'processed' => 0, 'created' => 0, 'skipped' => 0, 'failed' => 0, 'busy' => false];
+        $response = [
+            'ok' => true,
+            'enabled' => false,
+            'accepted' => 0,
+            'processed' => 0,
+            'created' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'busy' => false,
+        ];
         thumbnail_warmup_log_event(
             'info',
             'thumbnail_warmup.disabled',
             'Background thumbnail warmup was requested but the feature is disabled.',
             array_merge($baseContext, $response),
-            ['severity' => 'notice']
+            ['severity' => 'notice'],
         );
         return $response;
     }
@@ -474,15 +587,26 @@ function thumbnail_warmup_process_items(array $items): array
     // $lockHandle stores a non-waiting process lock so anonymous traffic cannot stack concurrent GD jobs.
     $lockHandle = @fopen(thumbnail_warmup_lock_path(), 'c');
     if (!$lockHandle || !@flock($lockHandle, LOCK_EX | LOCK_NB)) {
-        $response = ['ok' => true, 'enabled' => true, 'accepted' => count($items), 'processed' => 0, 'created' => 0, 'skipped' => 0, 'failed' => 0, 'busy' => true];
+        $response = [
+            'ok' => true,
+            'enabled' => true,
+            'accepted' => count($items),
+            'processed' => 0,
+            'created' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'busy' => true,
+        ];
         thumbnail_warmup_log_event(
             'info',
             'thumbnail_warmup.busy',
             'Background thumbnail warmup was skipped because another warmup worker is already running.',
             array_merge($baseContext, $response, [
-                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                'elapsed_ms' => (int) round(
+                    (microtime(true) - $startedAt) * 1000,
+                ),
             ]),
-            ['severity' => 'notice']
+            ['severity' => 'notice'],
         );
         return $response;
     }
@@ -527,7 +651,13 @@ function thumbnail_warmup_process_items(array $items): array
             $image = find_image((int) $item['id']);
             if (!$image) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, null, null, 'skipped', 'image_not_found');
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    null,
+                    null,
+                    'skipped',
+                    'image_not_found',
+                );
                 continue;
             }
 
@@ -535,19 +665,44 @@ function thumbnail_warmup_process_items(array $items): array
             $gallery = find_gallery((int) $image['gallery_id']);
             if (!$gallery) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, $image, null, 'skipped', 'gallery_not_found');
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    $image,
+                    null,
+                    'skipped',
+                    'gallery_not_found',
+                );
                 continue;
             }
 
-            if (!thumbnail_warmup_token_is_valid($image, $gallery, (string) $item['token'])) {
+            if (!thumbnail_warmup_token_is_valid(
+                $image,
+                $gallery,
+                (string) $item['token'],
+            )) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'invalid_token');
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    $image,
+                    $gallery,
+                    'skipped',
+                    'invalid_token',
+                );
                 continue;
             }
 
-            if (!thumbnail_warmup_current_visitor_can_process($image, $gallery)) {
+            if (!thumbnail_warmup_current_visitor_can_process(
+                $image,
+                $gallery,
+            )) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'visitor_cannot_access_image');
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    $image,
+                    $gallery,
+                    'skipped',
+                    'visitor_cannot_access_image',
+                );
                 continue;
             }
 
@@ -557,18 +712,37 @@ function thumbnail_warmup_process_items(array $items): array
                 $sizes = [300];
             }
 
-            if (function_exists('Gallery\\Services\\thumbnail_metadata_bundle_data') && thumbnail_metadata_schema_ready()) {
+            if (
+                function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_bundle_data',
+                )
+                && thumbnail_metadata_schema_ready()
+            ) {
                 // $metadata stores the DB-only renderability state so repeated warmup calls do not touch files.
-                $metadata = thumbnail_metadata_bundle_data($image, $gallery, $sizes);
-                $metadataWarmupSizes = array_values(array_map('intval', (array) ($metadata['warmup_sizes'] ?? [])));
+                $metadata = thumbnail_metadata_bundle_data(
+                    $image,
+                    $gallery,
+                    $sizes,
+                );
+                $metadataWarmupSizes = array_values(array_map(
+                    'intval',
+                    (array) ($metadata['warmup_sizes'] ?? []),
+                ));
                 if (!$metadataWarmupSizes) {
                     $skipped++;
-                    $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'db_already_renderable', [
-                        'sizes' => $sizes,
-                        'required' => 0,
-                        'missing_before' => 0,
-                        'metadata_known' => true,
-                    ]);
+                    $details[] = thumbnail_warmup_log_image_detail(
+                        $item,
+                        $image,
+                        $gallery,
+                        'skipped',
+                        'db_already_renderable',
+                        [
+                            'sizes' => $sizes,
+                            'required' => 0,
+                            'missing_before' => 0,
+                            'metadata_known' => true,
+                        ],
+                    );
                     continue;
                 }
                 $sizes = $metadataWarmupSizes;
@@ -578,41 +752,103 @@ function thumbnail_warmup_process_items(array $items): array
             $imageId = (int) $image['id'];
             if (thumbnail_warmup_image_is_cooling_down($imageId)) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'image_cooldown_active');
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    $image,
+                    $gallery,
+                    'skipped',
+                    'image_cooldown_active',
+                );
                 continue;
             }
             thumbnail_warmup_touch_cooldown($imageId);
 
             // $status stores the preflight maintenance state, allowing already-healed items to skip decoding originals.
-            $status = thumbnail_maintenance_status_for_sizes($image, $gallery, $sizes);
-            $invalidGeometryDeleted += (int) ($status['invalid_geometry_deleted'] ?? 0);
-            $invalidGeometryFiles = array_merge($invalidGeometryFiles, (array) ($status['invalid_geometry_files'] ?? []));
+            $status = thumbnail_maintenance_status_for_sizes(
+                $image,
+                $gallery,
+                $sizes,
+            );
+            $invalidGeometryDeleted += (int) (
+                $status['invalid_geometry_deleted'] ?? 0
+            );
+            $invalidGeometryFiles = array_merge(
+                $invalidGeometryFiles,
+                (array) ($status['invalid_geometry_files'] ?? []),
+            );
             if (empty($status['target_formats'])) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'thumbnail_policy_no_writable_formats', [
-                    'sizes' => $sizes,
-                    'required' => (int) ($status['required'] ?? 0),
-                    'missing_before' => (int) ($status['missing'] ?? 0),
-                    'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
-                    'target_formats' => [],
-                    'thumbnail_policy' => is_array($status['thumbnail_policy'] ?? null) ? $status['thumbnail_policy'] : null,
-                    'invalid_geometry_deleted' => (int) ($status['invalid_geometry_deleted'] ?? 0),
-                    'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($status['invalid_geometry_files'] ?? []))))), 0, 24),
-                ]);
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    $image,
+                    $gallery,
+                    'skipped',
+                    'thumbnail_policy_no_writable_formats',
+                    [
+                        'sizes' => $sizes,
+                        'required' => (int) ($status['required'] ?? 0),
+                        'missing_before' => (int) ($status['missing'] ?? 0),
+                        'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
+                        'target_formats' => [],
+                        'thumbnail_policy' => is_array(
+                            $status['thumbnail_policy'] ?? null,
+                        )
+                            ? $status['thumbnail_policy']
+                            : null,
+                        'invalid_geometry_deleted' => (int) (
+                            $status['invalid_geometry_deleted'] ?? 0
+                        ),
+                        'invalid_geometry_files' => array_slice(
+                            array_values(array_unique(array_filter(array_map(
+                                'strval',
+                                (array) (
+                                    $status['invalid_geometry_files'] ?? []
+                                ),
+                            )))),
+                            0,
+                            24,
+                        ),
+                    ],
+                );
                 continue;
             }
             if ((int) ($status['missing'] ?? 0) <= 0) {
                 $skipped++;
-                $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'already_repaired', [
-                    'sizes' => $sizes,
-                    'required' => (int) ($status['required'] ?? 0),
-                    'missing_before' => (int) ($status['missing'] ?? 0),
-                    'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
-                    'target_formats' => array_values(array_map('strval', (array) ($status['target_formats'] ?? []))),
-                    'thumbnail_policy' => is_array($status['thumbnail_policy'] ?? null) ? $status['thumbnail_policy'] : null,
-                    'invalid_geometry_deleted' => (int) ($status['invalid_geometry_deleted'] ?? 0),
-                    'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($status['invalid_geometry_files'] ?? []))))), 0, 24),
-                ]);
+                $details[] = thumbnail_warmup_log_image_detail(
+                    $item,
+                    $image,
+                    $gallery,
+                    'skipped',
+                    'already_repaired',
+                    [
+                        'sizes' => $sizes,
+                        'required' => (int) ($status['required'] ?? 0),
+                        'missing_before' => (int) ($status['missing'] ?? 0),
+                        'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
+                        'target_formats' => array_values(array_map(
+                            'strval',
+                            (array) ($status['target_formats'] ?? []),
+                        )),
+                        'thumbnail_policy' => is_array(
+                            $status['thumbnail_policy'] ?? null,
+                        )
+                            ? $status['thumbnail_policy']
+                            : null,
+                        'invalid_geometry_deleted' => (int) (
+                            $status['invalid_geometry_deleted'] ?? 0
+                        ),
+                        'invalid_geometry_files' => array_slice(
+                            array_values(array_unique(array_filter(array_map(
+                                'strval',
+                                (array) (
+                                    $status['invalid_geometry_files'] ?? []
+                                ),
+                            )))),
+                            0,
+                            24,
+                        ),
+                    ],
+                );
                 continue;
             }
 
@@ -622,26 +858,78 @@ function thumbnail_warmup_process_items(array $items): array
             $created += (int) ($result['created'] ?? 0);
             $skipped += (int) ($result['skipped'] ?? 0);
             $failed += (int) ($result['failed'] ?? 0);
-            $invalidGeometryDeleted += (int) ($result['invalid_geometry_deleted'] ?? 0);
-            $invalidGeometryFiles = array_merge($invalidGeometryFiles, (array) ($result['invalid_geometry_files'] ?? []));
+            $invalidGeometryDeleted += (int) (
+                $result['invalid_geometry_deleted'] ?? 0
+            );
+            $invalidGeometryFiles = array_merge(
+                $invalidGeometryFiles,
+                (array) ($result['invalid_geometry_files'] ?? []),
+            );
             foreach ((array) ($result['errors'] ?? []) as $error) {
                 $errors[] = (string) $error;
             }
-            $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'processed', ((int) ($result['failed'] ?? 0) > 0 ? 'generation_failed' : 'missing_derivatives_generated'), [
-                'sizes' => $sizes,
-                'required' => (int) ($status['required'] ?? 0),
-                'missing_before' => (int) ($status['missing'] ?? 0),
-                'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
-                'target_formats' => array_values(array_map('strval', (array) ($result['target_formats'] ?? ($status['target_formats'] ?? [])))),
-                'thumbnail_policy' => is_array($result['thumbnail_policy'] ?? null) ? $result['thumbnail_policy'] : (is_array($status['thumbnail_policy'] ?? null) ? $status['thumbnail_policy'] : null),
-                'created' => (int) ($result['created'] ?? 0),
-                'created_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($result['created_files'] ?? []))))), 0, 24),
-                'invalid_geometry_deleted' => (int) ($status['invalid_geometry_deleted'] ?? 0) + (int) ($result['invalid_geometry_deleted'] ?? 0),
-                'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', array_merge((array) ($status['invalid_geometry_files'] ?? []), (array) ($result['invalid_geometry_files'] ?? [])))))), 0, 24),
-                'generator_skipped' => (int) ($result['skipped'] ?? 0),
-                'generator_failed' => (int) ($result['failed'] ?? 0),
-                'errors' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($result['errors'] ?? []))))), 0, 6),
-            ]);
+            $details[] = thumbnail_warmup_log_image_detail(
+                $item,
+                $image,
+                $gallery,
+                'processed',
+                (int) ($result['failed'] ?? 0) > 0
+                    ? 'generation_failed'
+                    : 'missing_derivatives_generated',
+                [
+                    'sizes' => $sizes,
+                    'required' => (int) ($status['required'] ?? 0),
+                    'missing_before' => (int) ($status['missing'] ?? 0),
+                    'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
+                    'target_formats' => array_values(array_map(
+                        'strval',
+                        (array) (
+                            $result['target_formats']
+                            ?? $status['target_formats']
+                            ?? []
+                        ),
+                    )),
+                    'thumbnail_policy' => is_array(
+                        $result['thumbnail_policy'] ?? null,
+                    )
+                        ? $result['thumbnail_policy']
+                        : (
+                            is_array($status['thumbnail_policy'] ?? null)
+                                ? $status['thumbnail_policy']
+                                : null
+                        ),
+                    'created' => (int) ($result['created'] ?? 0),
+                    'created_files' => array_slice(
+                        array_values(array_unique(array_filter(array_map(
+                            'strval',
+                            (array) ($result['created_files'] ?? []),
+                        )))),
+                        0,
+                        24,
+                    ),
+                    'invalid_geometry_deleted' =>
+                        (int) ($status['invalid_geometry_deleted'] ?? 0)
+                            + (int) ($result['invalid_geometry_deleted'] ?? 0),
+                    'invalid_geometry_files' => array_slice(
+                        array_values(array_unique(array_filter(array_map('strval', array_merge(
+                            (array) ($status['invalid_geometry_files'] ?? []),
+                            (array) ($result['invalid_geometry_files'] ?? []),
+                        ))))),
+                        0,
+                        24,
+                    ),
+                    'generator_skipped' => (int) ($result['skipped'] ?? 0),
+                    'generator_failed' => (int) ($result['failed'] ?? 0),
+                    'errors' => array_slice(
+                        array_values(array_unique(array_filter(array_map(
+                            'strval',
+                            (array) ($result['errors'] ?? []),
+                        )))),
+                        0,
+                        6,
+                    ),
+                ],
+            );
         }
 
         if ($created > 0 || $invalidGeometryDeleted > 0) {
@@ -657,7 +945,14 @@ function thumbnail_warmup_process_items(array $items): array
             'skipped' => $skipped,
             'failed' => $failed,
             'invalid_geometry_deleted' => $invalidGeometryDeleted,
-            'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', $invalidGeometryFiles)))), 0, 24),
+            'invalid_geometry_files' => array_slice(
+                array_values(array_unique(array_filter(array_map(
+                    'strval',
+                    $invalidGeometryFiles,
+                )))),
+                0,
+                24,
+            ),
             'busy' => false,
             'remaining' => max(0, count($items) - $processed - $skipped),
             'errors' => array_values(array_unique(array_filter($errors))),
@@ -672,11 +967,13 @@ function thumbnail_warmup_process_items(array $items): array
                 array_merge($baseContext, $response, [
                     'max_images' => $maxImages,
                     'deadline_seconds' => $deadlineSeconds,
-                    'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                    'elapsed_ms' => (int) round(
+                        (microtime(true) - $startedAt) * 1000,
+                    ),
                     'stopped_reason' => $stoppedReason,
                     'details' => $details,
                 ]),
-                ['severity' => $severity]
+                ['severity' => $severity],
             );
         }
 

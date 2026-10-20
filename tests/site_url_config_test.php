@@ -25,20 +25,39 @@ declare(strict_types=1);
 
 namespace Gallery\Core {
     /** Return the disposable fixture configuration path. @return string Fixture file path. */
-    function cms_config_path(): string { return $GLOBALS['site_url_test_path']; }
+    function cms_config_path(): string
+    {
+        return $GLOBALS['site_url_test_path'];
+    }
 }
+
 namespace {
     require __DIR__ . '/../app/services/site_url.php';
     use function Gallery\Services\site_url_normalize;
     use function Gallery\Services\site_url_config_source;
     use function Gallery\Services\site_url_save;
 
-    foreach (['https://example.com/', 'https://example.org/gallery///', 'http://localhost:8000'] as $url) {
+    foreach ([
+        'https://example.com/',
+        'https://example.org/gallery///',
+        'http://localhost:8000',
+    ] as $url) {
         if (site_url_normalize($url) !== rtrim($url, '/')) {
             throw new RuntimeException('URL normalization failed.');
         }
     }
-    foreach (['', null, [], '/subdom/galerie', 'javascript:alert(1)', 'https://user:pass@example.org', 'https://example.org?q=1', 'https://example.org#x', "https://example.org/\npath", 'https://example.org\\path'] as $url) {
+    foreach ([
+        '',
+        null,
+        [],
+        '/subdom/galerie',
+        'javascript:alert(1)',
+        'https://user:pass@example.org',
+        'https://example.org?q=1',
+        'https://example.org#x',
+        "https://example.org/\npath",
+        'https://example.org\\path',
+    ] as $url) {
         try {
             site_url_normalize($url);
             throw new RuntimeException('Invalid URL was accepted.');
@@ -68,7 +87,11 @@ namespace {
  *   MIT License (see LICENSE file in repository)
  */
 \n// Keep local configuration.\nreturn [\n 'nested' => ['base_url' => 'keep'],\n 'base_url' /* comment */ => 'https://old.test/subdom/galerie',\n 'secret' => 'unchanged',\n];\n";
-    $expected = str_replace("'https://old.test/subdom/galerie'", "'https://example.com'", $source);
+    $expected = str_replace(
+        "'https://old.test/subdom/galerie'",
+        "'https://example.com'",
+        $source,
+    );
     if (site_url_config_source($source, 'https://example.com/') !== $expected) {
         throw new RuntimeException('Unrelated configuration changed.');
     }
@@ -172,17 +195,23 @@ namespace {
         } catch (RuntimeException $expectedError) {
         }
     }
-    $directory = sys_get_temp_dir() . '/gallery-site-url-' . bin2hex(random_bytes(6));
+    $directory =
+        sys_get_temp_dir() . '/gallery-site-url-' . bin2hex(random_bytes(6));
     mkdir($directory);
     $GLOBALS['site_url_test_path'] = $directory . '/config.php';
     try {
         file_put_contents($GLOBALS['site_url_test_path'], $source);
         site_url_save('https://example.com');
         if (file_get_contents($GLOBALS['site_url_test_path']) !== $expected) {
-            throw new RuntimeException('Persistence changed unrelated content.');
+            throw new RuntimeException(
+                'Persistence changed unrelated content.',
+            );
         }
         $loaded = require $GLOBALS['site_url_test_path'];
-        if ($loaded['base_url'] !== 'https://example.com' || $loaded['secret'] !== 'unchanged') {
+        if (
+            $loaded['base_url'] !== 'https://example.com'
+            || $loaded['secret'] !== 'unchanged'
+        ) {
             throw new RuntimeException('Saved configuration cannot be loaded.');
         }
         file_put_contents($GLOBALS['site_url_test_path'], "<?php

@@ -47,10 +47,16 @@ use function Gallery\Core\url_for;
 
 /**
  * Return the current opaque test-run token from the short-lived HttpOnly cookie.
+ *
+ * @return string Validated lowercase token, or an empty string when absent or invalid.
  */
 function admin_test_run_cookie_token(): string
 {
-    $token = strtolower(trim((string) ($GLOBALS['admin_test_run_request_transport']['cookie_token'] ?? '')));
+    $token = strtolower(trim(
+        (string) (
+            $GLOBALS['admin_test_run_request_transport']['cookie_token'] ?? ''
+        ),
+    ));
     return admin_test_run_token_valid($token) ? $token : '';
 }
 
@@ -58,38 +64,79 @@ function admin_test_run_cookie_token(): string
  * Bind request transport metadata prepared by the Core bootstrap boundary.
  *
  * @param array<string,mixed> $context Bounded request transport context.
+ * @return void Stores bounded transport fields for diagnostics.
  */
 function admin_test_run_bind_request_transport_context(array $context): void
 {
     $GLOBALS['admin_test_run_request_transport'] = [
-        'cookie_token' => substr((string) ($context['cookie_token'] ?? ''), 0, 160),
-        'request_time_float' => is_numeric($context['request_time_float'] ?? null) ? (float) $context['request_time_float'] : null,
-        'request_uri' => substr((string) ($context['request_uri'] ?? ''), 0, 1200),
-        'request_method' => substr((string) ($context['request_method'] ?? ''), 0, 16),
-        'script_name' => substr((string) ($context['script_name'] ?? ''), 0, 500),
+        'cookie_token' => substr(
+            (string) ($context['cookie_token'] ?? ''),
+            0,
+            160,
+        ),
+        'request_time_float' => is_numeric(
+            $context['request_time_float'] ?? null,
+        )
+            ? (float) $context['request_time_float']
+            : null,
+        'request_uri' => substr(
+            (string) ($context['request_uri'] ?? ''),
+            0,
+            1200,
+        ),
+        'request_method' => substr(
+            (string) ($context['request_method'] ?? ''),
+            0,
+            16,
+        ),
+        'script_name' => substr(
+            (string) ($context['script_name'] ?? ''),
+            0,
+            500,
+        ),
         'protocol' => substr((string) ($context['protocol'] ?? ''), 0, 40),
         'https' => !empty($context['https']),
-        'query_keys' => array_values(array_slice(array_map('strval', is_array($context['query_keys'] ?? null) ? $context['query_keys'] : []), 0, 100)),
-        'cookie_names' => array_values(array_slice(array_map('strval', is_array($context['cookie_names'] ?? null) ? $context['cookie_names'] : []), 0, 100)),
+        'query_keys' => array_values(array_slice(
+            array_map(
+                'strval',
+                is_array($context['query_keys'] ?? null)
+                    ? $context['query_keys']
+                    : [],
+            ),
+            0,
+            100,
+        )),
+        'cookie_names' => array_values(array_slice(
+            array_map(
+                'strval',
+                is_array($context['cookie_names'] ?? null)
+                    ? $context['cookie_names']
+                    : [],
+            ),
+            0,
+            100,
+        )),
     ];
 }
 
 /**
  * Return the Core-prepared request transport metadata for test-run diagnostics.
  *
- * @return array<string,mixed>
+ * @return array<string, mixed> Core-prepared transport fields, or an empty array when no context was bound.
  */
 function admin_test_run_request_transport_context(): array
 {
-    return is_array($GLOBALS['admin_test_run_request_transport'] ?? null)
-        ? $GLOBALS['admin_test_run_request_transport']
-        : [];
+    return (
+        is_array($GLOBALS['admin_test_run_request_transport'] ?? null)
+            ? $GLOBALS['admin_test_run_request_transport']
+            : []
+    );
 }
 
 /**
  * Return metadata for the active cookie context when it is still valid.
  *
- * @return array<string,mixed>|null
+ * @return array<string, mixed>|null Active run metadata, or null when the cookie is invalid, expired, or finalized.
  */
 function admin_test_run_active_context(): ?array
 {
@@ -106,7 +153,11 @@ function admin_test_run_active_context(): ?array
     $meta = admin_test_run_read_json(admin_test_run_meta_path($token));
     $createdAt = (int) ($meta['created_at_unix'] ?? 0);
     $finalized = !empty($meta['finalized_at']);
-    if ($createdAt <= 0 || time() - $createdAt > ADMIN_TEST_RUN_TTL_SECONDS || $finalized) {
+    if (
+        $createdAt <= 0
+        || (time() - $createdAt) > ADMIN_TEST_RUN_TTL_SECONDS
+        || $finalized
+    ) {
         $cachedContext = null;
         return null;
     }
@@ -124,11 +175,18 @@ function admin_test_run_active(): bool
 
 /**
  * Normalize a local request target and remove previous test-run control parameters.
+ *
+ * @param string $target Local path and optional query/fragment.
+ * @return string Normalized local target, falling back to `/` for invalid or external targets.
  */
 function admin_test_run_normalize_target(string $target): string
 {
     $target = trim($target);
-    if ($target === '' || str_contains($target, "\r") || str_contains($target, "\n")) {
+    if (
+        $target === ''
+        || str_contains($target, "\r")
+        || str_contains($target, "\n")
+    ) {
         return '/';
     }
     $parts = parse_url($target);
@@ -140,7 +198,12 @@ function admin_test_run_normalize_target(string $target): string
         $path = '/';
     }
     parse_str((string) ($parts['query'] ?? ''), $query);
-    foreach (['test_run_token', 'test_run_cache_bust', 'test_run_phase', 'test_run_starter_request_id'] as $key) {
+    foreach ([
+        'test_run_token',
+        'test_run_cache_bust',
+        'test_run_phase',
+        'test_run_starter_request_id',
+    ] as $key) {
         unset($query[$key]);
     }
     $result = $path;
@@ -157,9 +220,13 @@ function admin_test_run_normalize_target(string $target): string
  * Append query parameters to one normalized local target.
  *
  * @param array<string,string|int> $params Query parameters.
+ * @param string $target Local request target to extend.
+ * @return string Normalized target with encoded parameters and its original fragment.
  */
-function admin_test_run_target_with_params(string $target, array $params): string
-{
+function admin_test_run_target_with_params(
+    string $target,
+    array $params,
+): string {
     $target = admin_test_run_normalize_target($target);
     $fragment = '';
     $fragmentPos = strpos($target, '#');
@@ -168,39 +235,60 @@ function admin_test_run_target_with_params(string $target, array $params): strin
         $target = substr($target, 0, $fragmentPos);
     }
     $separator = str_contains($target, '?') ? '&' : '?';
-    return $target . $separator . http_build_query($params, '', '&', PHP_QUERY_RFC3986) . $fragment;
+    return (
+        $target
+            . $separator
+            . http_build_query($params, '', '&', PHP_QUERY_RFC3986)
+            . $fragment
+    );
 }
 
 /**
  * Return whether the current authenticated Admin owns one Test Run metadata/report payload.
  *
  * @param array<string,mixed> $payload Metadata or report payload.
+ * @return bool True only when the current authenticated Admin id owns the payload.
  */
 function admin_test_run_owned_by_current_admin(array $payload): bool
 {
     $user = current_user();
-    return is_array($user)
-        && (string) ($user['role'] ?? '') === 'admin'
-        && (int) ($user['id'] ?? 0) > 0
-        && (int) ($payload['admin']['id'] ?? 0) === (int) ($user['id'] ?? 0);
+    return (
+        is_array($user)
+            && (string) ($user['role'] ?? '') === 'admin'
+            && (int) ($user['id'] ?? 0) > 0
+            && (int) ($payload['admin']['id'] ?? 0) === (int) ($user['id'] ?? 0)
+    );
 }
 
 /**
  * Persist starter request correlation after the authenticated starter trace is adopted.
+ *
+ * @param string $token Test-run token.
+ * @param string $requestId Valid starter request identifier.
+ * @return void Persists the identifier and a correlation event when the metadata and identifier are valid.
  */
-function admin_test_run_set_starter_request_id(string $token, string $requestId): void
-{
+function admin_test_run_set_starter_request_id(
+    string $token,
+    string $requestId,
+): void {
     $meta = admin_test_run_read_json(admin_test_run_meta_path($token));
     if (!$meta || !preg_match('/^[a-z0-9_.:-]{8,160}$/iD', $requestId)) {
         return;
     }
     $meta['starter_request_id'] = $requestId;
-    $meta['events'][] = ['at' => gmdate('c'), 'type' => 'starter_request_correlated', 'request_id' => $requestId];
+    $meta['events'][] = [
+        'at' => gmdate('c'),
+        'type' => 'starter_request_correlated',
+        'request_id' => $requestId,
+    ];
     admin_test_run_write_json(admin_test_run_meta_path($token), $meta);
 }
 
 /**
  * Set the short-lived HttpOnly cookie that makes same-origin PHP subrequests join one run.
+ *
+ * @param string $token Test-run token to place in the cookie.
+ * @return list<array{name:string,value:string,expires:int,path:string,httponly:bool,samesite:string}> Cookie definition returned for response-header handling.
  */
 function admin_test_run_set_cookie(string $token): array
 {
@@ -216,6 +304,8 @@ function admin_test_run_set_cookie(string $token): array
 
 /**
  * Expire the active diagnostic context cookie.
+ *
+ * @return list<array{name:string,value:string,expires:int,path:string,httponly:bool,samesite:string}> Expired-cookie definition returned for response-header handling.
  */
 function admin_test_run_clear_cookie(): array
 {

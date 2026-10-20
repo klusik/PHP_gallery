@@ -26,23 +26,38 @@ function source_debt_options(array $arguments): array
     foreach (array_slice($arguments, 1) as $argument) {
         if ($argument === '--help') {
             $options['help'] = true;
-        } elseif (in_array($argument, ['--check', '--initialize', '--refresh'], true)) {
+        } elseif (in_array(
+            $argument,
+            ['--check', '--initialize', '--refresh'],
+            true,
+        )) {
             if ($modeSeen) {
-                throw new InvalidArgumentException('Select exactly one maintenance mode.');
+                throw new InvalidArgumentException(
+                    'Select exactly one maintenance mode.',
+                );
             }
             $modeSeen = true;
             $options['mode'] = substr($argument, 2);
         } elseif (str_starts_with($argument, '--provenance-base=')) {
             if ($options['base'] !== '') {
-                throw new InvalidArgumentException('Specify initial provenance once.');
+                throw new InvalidArgumentException(
+                    'Specify initial provenance once.',
+                );
             }
             $options['base'] = substr($argument, strlen('--provenance-base='));
         } else {
-            throw new InvalidArgumentException('Unknown source debt maintenance option.');
+            throw new InvalidArgumentException(
+                'Unknown source debt maintenance option.',
+            );
         }
     }
-    if (!$options['help'] && (($options['mode'] === 'initialize') !== ($options['base'] !== ''))) {
-        throw new InvalidArgumentException('Only initialization requires --provenance-base=REF.');
+    if (
+        !$options['help']
+        && ($options['mode'] === 'initialize') !== ($options['base'] !== '')
+    ) {
+        throw new InvalidArgumentException(
+            'Only initialization requires --provenance-base=REF.',
+        );
     }
     return $options;
 }
@@ -55,12 +70,20 @@ function source_debt_options(array $arguments): array
  */
 function source_debt_commit(string $root, string $reference): string
 {
-    if (preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/.^~{}@-]*$/D', $reference) !== 1) {
+    if (
+        preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/.^~{}@-]*$/D', $reference) !== 1
+    ) {
         throw new InvalidArgumentException('Unsupported provenance reference.');
     }
-    $result = PhpGallery\SourceContracts\source_git_read(['rev-parse', '--verify', $reference . '^{commit}'], $root);
+    $result = PhpGallery\SourceContracts\source_git_read(
+        ['rev-parse', '--verify', $reference . '^{commit}'],
+        $root,
+    );
     $sha = trim($result['stdout']);
-    if ($result['status'] !== 0 || preg_match('/^[0-9a-f]{40,64}$/D', $sha) !== 1) {
+    if (
+        $result['status'] !== 0
+        || preg_match('/^[0-9a-f]{40,64}$/D', $sha) !== 1
+    ) {
         throw new RuntimeException('Reviewed Git provenance is unavailable.');
     }
     return $sha;
@@ -73,18 +96,29 @@ function source_debt_commit(string $root, string $reference): string
  * @param bool $initialize Whether creation must refuse an existing destination.
  * @return void Persists checked JSON; a failed write never silently creates a new budget.
  */
-function source_debt_write(string $path, array $baseline, bool $initialize): void
-{
-    $json = json_encode($baseline, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+function source_debt_write(
+    string $path,
+    array $baseline,
+    bool $initialize,
+): void {
+    $json =
+        json_encode(
+            $baseline,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        ) . "\n";
     if ($initialize) {
         $handle = @fopen($path, 'xb');
         if (!is_resource($handle)) {
-            throw new RuntimeException('Initialization refuses an existing or unwritable baseline.');
+            throw new RuntimeException(
+                'Initialization refuses an existing or unwritable baseline.',
+            );
         }
         $completed = false;
         try {
             if (fwrite($handle, $json) !== strlen($json) || !fflush($handle)) {
-                throw new RuntimeException('Baseline initialization could not complete.');
+                throw new RuntimeException(
+                    'Baseline initialization could not complete.',
+                );
             }
             $completed = true;
         } finally {
@@ -98,7 +132,10 @@ function source_debt_write(string $path, array $baseline, bool $initialize): voi
     }
     $temporary = $path . '.tmp-' . bin2hex(random_bytes(8));
     try {
-        if (file_put_contents($temporary, $json, LOCK_EX) !== strlen($json) || !rename($temporary, $path)) {
+        if (
+            file_put_contents($temporary, $json, LOCK_EX) !== strlen($json)
+            || !rename($temporary, $path)
+        ) {
             throw new RuntimeException('Baseline refresh could not complete.');
         }
     } finally {
@@ -111,8 +148,10 @@ function source_debt_write(string $path, array $baseline, bool $initialize): voi
 try {
     $options = source_debt_options($argv);
     if ($options['help']) {
-        echo "Usage: php scripts/generate_source_debt_baseline.php --check | --refresh | --initialize --provenance-base=REF\n";
-        echo "Check never writes; refresh only lowers reliable caps; initialize requires an absent baseline and reviewed provenance.\n";
+        echo
+            "Usage: php scripts/generate_source_debt_baseline.php --check | --refresh | --initialize --provenance-base=REF\n";
+        echo
+            "Check never writes; refresh only lowers reliable caps; initialize requires an absent baseline and reviewed provenance.\n";
         exit(0);
     }
     require_once __DIR__ . '/check_source_documentation.php';
@@ -120,34 +159,63 @@ try {
     require_once __DIR__ . '/source_contracts/debt_ratchet.php';
     $root = dirname(__DIR__);
     $path = __DIR__ . '/source_contract_debt_baseline.json';
-    if ($options['mode'] === 'initialize' ? file_exists($path) : !is_file($path)) {
-        throw new RuntimeException('Baseline state does not permit the requested maintenance mode.');
+    if (
+        $options['mode'] === 'initialize' ? file_exists($path) : !is_file($path)
+    ) {
+        throw new RuntimeException(
+            'Baseline state does not permit the requested maintenance mode.',
+        );
     }
     $baseline = null;
     if ($options['mode'] !== 'initialize') {
-        $baseline = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        $baseline = json_decode(
+            (string) file_get_contents($path),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
         if (!is_array($baseline)) {
             throw new RuntimeException('Baseline must contain a JSON object.');
         }
         PhpGallery\SourceDebt\validate_baseline($baseline);
     }
-    $initialBaseSha = $options['mode'] === 'initialize' ? source_debt_commit($root, $options['base']) : '';
-    $checkpointSha = $options['mode'] === 'initialize' ? source_debt_commit($root, 'HEAD') : '';
+    $initialBaseSha = $options['mode'] === 'initialize'
+        ? source_debt_commit($root, $options['base'])
+        : '';
+    $checkpointSha = $options['mode'] === 'initialize'
+        ? source_debt_commit($root, 'HEAD')
+        : '';
     $reports = [
-        'documentation' => PhpGallery\SourceContracts\documentation_report($root),
+        'documentation' =>
+            PhpGallery\SourceContracts\documentation_report($root),
         'policy' => PhpGallery\SourceContracts\policy_report($root),
     ];
     if ($options['mode'] === 'initialize') {
-        $baseline = PhpGallery\SourceDebt\create_initial_baseline($reports, $initialBaseSha, $checkpointSha);
+        $baseline = PhpGallery\SourceDebt\create_initial_baseline(
+            $reports,
+            $initialBaseSha,
+            $checkpointSha,
+        );
         source_debt_write($path, $baseline, true);
     } elseif ($options['mode'] === 'refresh') {
-        $baseline = PhpGallery\SourceDebt\refresh_decrease_only($baseline, $reports);
+        $baseline = PhpGallery\SourceDebt\refresh_decrease_only(
+            $baseline,
+            $reports,
+        );
         source_debt_write($path, $baseline, false);
     }
     $evaluation = PhpGallery\SourceDebt\evaluate($baseline, $reports);
-    echo json_encode($evaluation, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+    echo
+        json_encode(
+            $evaluation,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        ),
+        "\n";
     exit($evaluation['status'] === 'PASS' ? 0 : 1);
 } catch (Throwable $error) {
-    fwrite(STDERR, 'Source debt baseline BLOCKED: ' . $error->getMessage() . "\n");
+    fwrite(
+        STDERR,
+        'Source debt baseline BLOCKED: ' . $error->getMessage() . "\n",
+    );
     exit(2);
 }

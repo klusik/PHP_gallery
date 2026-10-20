@@ -116,10 +116,17 @@ namespace {
     $original = $repositoryRoot . '/' . $originalRelative;
     $served = $repositoryRoot . '/' . $servedRelative;
     if (!is_dir($repositoryRoot . '/cache')) {
-        throw new \RuntimeException('Disposable cache directory is unavailable.');
+        throw new \RuntimeException(
+            'Disposable cache directory is unavailable.',
+        );
     }
-    if (file_put_contents($original, 'private original fixture') === false || file_put_contents($served, 'public derivative fixture') === false) {
-        throw new \RuntimeException('Unable to create isolated theme background files.');
+    if (
+        file_put_contents($original, 'private original fixture') === false
+        || file_put_contents($served, 'public derivative fixture') === false
+    ) {
+        throw new \RuntimeException(
+            'Unable to create isolated theme background files.',
+        );
     }
 
     $GLOBALS['original_asset_test_original_path'] = $originalRelative;
@@ -134,16 +141,31 @@ namespace {
         ob_start();
         \Gallery\Controllers\cms_theme_background_asset();
         $response = ob_get_clean();
-        theme_original_asset_assert($response === '' && $GLOBALS['original_asset_test_not_found'] === 1, 'Anonymous original must return a 404 without body.');
-        theme_original_asset_assert($GLOBALS['original_asset_test_original_reads'] === 0 && $GLOBALS['original_asset_test_served_reads'] === 0, 'Unauthorized original request must not resolve either background path.');
+        theme_original_asset_assert(
+            $response === '' && $GLOBALS['original_asset_test_not_found'] === 1,
+            'Anonymous original must return a 404 without body.',
+        );
+        theme_original_asset_assert(
+            $GLOBALS['original_asset_test_original_reads'] === 0
+                && $GLOBALS['original_asset_test_served_reads'] === 0,
+            'Unauthorized original request must not resolve either background path.',
+        );
 
         $GLOBALS['original_asset_test_user'] = ['id' => 1];
         $GLOBALS['original_asset_test_not_found'] = 0;
         ob_start();
         \Gallery\Controllers\cms_theme_background_asset();
         $response = ob_get_clean();
-        theme_original_asset_assert($response === 'private original fixture' && $GLOBALS['original_asset_test_not_found'] === 0, 'Authenticated administrator must retrieve original.');
-        theme_original_asset_assert($GLOBALS['original_asset_test_cache'] === 'private, no-cache, max-age=0, must-revalidate', 'Original asset must remain privately cached.');
+        theme_original_asset_assert(
+            $response === 'private original fixture'
+                && $GLOBALS['original_asset_test_not_found'] === 0,
+            'Authenticated administrator must retrieve original.',
+        );
+        theme_original_asset_assert(
+            $GLOBALS['original_asset_test_cache']
+                === 'private, no-cache, max-age=0, must-revalidate',
+            'Original asset must remain privately cached.',
+        );
 
         $_GET = [];
         $GLOBALS['original_asset_test_user'] = false;
@@ -152,8 +174,16 @@ namespace {
         ob_start();
         \Gallery\Controllers\cms_theme_background_asset();
         $response = ob_get_clean();
-        theme_original_asset_assert($response === 'public derivative fixture' && $GLOBALS['original_asset_test_not_found'] === 0, 'Anonymous visitors must retain the public theme derivative.');
-        theme_original_asset_assert($GLOBALS['original_asset_test_cache'] === 'public, max-age=31536000, immutable', 'Public derivative must remain publicly cacheable.');
+        theme_original_asset_assert(
+            $response === 'public derivative fixture'
+                && $GLOBALS['original_asset_test_not_found'] === 0,
+            'Anonymous visitors must retain the public theme derivative.',
+        );
+        theme_original_asset_assert(
+            $GLOBALS['original_asset_test_cache']
+                === 'public, max-age=31536000, immutable',
+            'Public derivative must remain publicly cacheable.',
+        );
         echo "Theme original asset access contract passed.\n";
     } finally {
         @unlink($original);

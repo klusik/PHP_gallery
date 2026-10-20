@@ -47,7 +47,9 @@ use function Gallery\Core\db;
  */
 function vote_model_score(int $imageId): int
 {
-    $stmt = db()->prepare('SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?');
+    $stmt = db()->prepare(
+        'SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?',
+    );
     $stmt->execute([$imageId]);
     return (int) $stmt->fetchColumn();
 }
@@ -61,7 +63,9 @@ function vote_model_score(int $imageId): int
  */
 function vote_model_user_vote(int $imageId, int $userId): int
 {
-    $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND user_id = ?');
+    $stmt = db()->prepare(
+        'SELECT vote FROM image_votes WHERE image_id = ? AND user_id = ?',
+    );
     $stmt->execute([$imageId, $userId]);
     return (int) ($stmt->fetchColumn() ?: 0);
 }
@@ -75,7 +79,9 @@ function vote_model_user_vote(int $imageId, int $userId): int
  */
 function vote_model_visitor_vote(int $imageId, string $visitorHash): int
 {
-    $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
+    $stmt = db()->prepare(
+        'SELECT vote FROM image_votes WHERE image_id = ? AND visitor_hash = ?',
+    );
     $stmt->execute([$imageId, $visitorHash]);
     return (int) ($stmt->fetchColumn() ?: 0);
 }
@@ -112,8 +118,11 @@ function vote_model_visitor_votes(array $imageIds, string $visitorHash): array
  * @param int|string $actorValue Actor identifier value.
  * @return array<int, int> Votes keyed by image identifier.
  */
-function vote_model_actor_votes(array $imageIds, string $actorColumn, int|string $actorValue): array
-{
+function vote_model_actor_votes(
+    array $imageIds,
+    string $actorColumn,
+    int|string $actorValue,
+): array {
     if ($imageIds === []) {
         return [];
     }
@@ -123,7 +132,13 @@ function vote_model_actor_votes(array $imageIds, string $actorColumn, int|string
 
     $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
     try {
-        $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE ' . $actorColumn . ' = ? AND image_id IN (' . $placeholders . ')');
+        $stmt = db()->prepare(
+            'SELECT image_id, vote FROM image_votes WHERE '
+                . $actorColumn
+                . ' = ? AND image_id IN ('
+                . $placeholders
+                . ')',
+        );
         $stmt->execute(array_merge([$actorValue], $imageIds));
         $votes = [];
         foreach ($stmt->fetchAll() as $row) {
@@ -140,10 +155,14 @@ function vote_model_actor_votes(array $imageIds, string $actorColumn, int|string
  *
  * @param int $imageId Image identifier.
  * @param int $userId User identifier.
+ *
+ * @return void No value; performs the documented operation.
  */
 function vote_model_delete_user_vote(int $imageId, int $userId): void
 {
-    $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND user_id = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM image_votes WHERE image_id = ? AND user_id = ?',
+    );
     $stmt->execute([$imageId, $userId]);
 }
 
@@ -152,10 +171,14 @@ function vote_model_delete_user_vote(int $imageId, int $userId): void
  *
  * @param int $imageId Image identifier.
  * @param string $visitorHash Stable anonymous visitor hash.
+ *
+ * @return void No value; performs the documented operation.
  */
 function vote_model_delete_visitor_vote(int $imageId, string $visitorHash): void
 {
-    $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM image_votes WHERE image_id = ? AND visitor_hash = ?',
+    );
     $stmt->execute([$imageId, $visitorHash]);
 }
 
@@ -166,10 +189,18 @@ function vote_model_delete_visitor_vote(int $imageId, string $visitorHash): void
  * @param int $userId User identifier.
  * @param int $vote Vote value.
  * @param string $now Shared SQL timestamp.
+ *
+ * @return void No value; performs the documented operation.
  */
-function vote_model_upsert_user_vote(int $imageId, int $userId, int $vote, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
+function vote_model_upsert_user_vote(
+    int $imageId,
+    int $userId,
+    int $vote,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)',
+    );
     $stmt->execute([$imageId, $userId, $vote, $now, $now]);
 }
 
@@ -180,9 +211,17 @@ function vote_model_upsert_user_vote(int $imageId, int $userId, int $vote, strin
  * @param string $visitorHash Stable anonymous visitor hash.
  * @param int $vote Vote value.
  * @param string $now Shared SQL timestamp.
+ *
+ * @return void No value; performs the documented operation.
  */
-function vote_model_upsert_visitor_vote(int $imageId, string $visitorHash, int $vote, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
+function vote_model_upsert_visitor_vote(
+    int $imageId,
+    string $visitorHash,
+    int $vote,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)',
+    );
     $stmt->execute([$imageId, $visitorHash, $vote, $now, $now]);
 }

@@ -45,9 +45,15 @@ final class AdminOperationRefusal extends RuntimeException
      * @param string $message Safe human explanation, never native SQL or paths.
      * @return void
      */
-    public function __construct(public readonly string $reason, string $message)
-    {
-        parent::__construct(function_exists('Gallery\\Services\\t') ? t('admin.operation.' . $reason, $message) : $message);
+    public function __construct(
+        public readonly string $reason,
+        string $message,
+    ) {
+        parent::__construct(
+            function_exists('Gallery\\Services\\t')
+                ? t('admin.operation.' . $reason, $message)
+                : $message,
+        );
     }
 }
 
@@ -72,7 +78,9 @@ function admin_operation_new_key(): string
  */
 function admin_operation_form_key(mixed $existing = null): string
 {
-    return is_string($existing) && preg_match('/^[a-f0-9]{64}$/D', $existing) ? $existing : admin_operation_new_key();
+    return is_string($existing) && preg_match('/^[a-f0-9]{64}$/D', $existing)
+        ? $existing
+        : admin_operation_new_key();
 }
 
 /**
@@ -84,7 +92,10 @@ function admin_operation_form_key(mixed $existing = null): string
 function admin_operation_require_key(mixed $key): string
 {
     if (!is_string($key) || !preg_match('/^[a-f0-9]{64}$/D', $key)) {
-        throw new AdminOperationRefusal('operation_key_required', 'Reload this form before submitting. A valid operation key is required to protect retries.');
+        throw new AdminOperationRefusal(
+            'operation_key_required',
+            'Reload this form before submitting. A valid operation key is required to protect retries.',
+        );
     }
     return $key;
 }
@@ -98,12 +109,25 @@ function admin_operation_require_key(mixed $key): string
 function admin_operation_gallery_payload(array $input): array
 {
     $payload = [];
-    foreach (['title', 'folder_name', 'description', 'gallery_date', 'gallery_date_end', 'visibility', 'count_badge_visibility'] as $key) {
+    foreach ([
+        'title',
+        'folder_name',
+        'description',
+        'gallery_date',
+        'gallery_date_end',
+        'visibility',
+        'count_badge_visibility',
+    ] as $key) {
         $value = $input[$key] ?? '';
         if (!is_scalar($value) && $value !== null) {
-            throw new AdminOperationRefusal('operation_payload_invalid', 'The operation contains invalid form values.');
+            throw new AdminOperationRefusal(
+                'operation_payload_invalid',
+                'The operation contains invalid form values.',
+            );
         }
-        $payload[$key] = in_array($key, ['title', 'folder_name'], true) ? trim((string) $value) : (string) $value;
+        $payload[$key] = in_array($key, ['title', 'folder_name'], true)
+            ? trim((string) $value)
+            : (string) $value;
     }
     $payload['parent_id'] = max(0, (int) ($input['parent_id'] ?? 0));
     $payload['voting_enabled'] = !empty($input['voting_enabled']) ? 1 : 0;
@@ -122,30 +146,67 @@ function admin_operation_gallery_payload(array $input): array
  * @param list<array<string,mixed>> $files Validated multipart entries in storage order.
  * @return string SHA-256 payload digest; raw inputs are not retained.
  */
-function admin_operation_fingerprint(string $operation, array $payload, array $files = []): string
-{
-    if (!in_array($operation, ['gallery.create', 'gallery.create_upload', 'image.classic_upload'], true) || count($files) > ADMIN_OPERATION_MAX_FILES) {
-        throw new AdminOperationRefusal('operation_payload_invalid', 'The operation type or file count is not supported.');
+function admin_operation_fingerprint(
+    string $operation,
+    array $payload,
+    array $files = [],
+): string {
+    if (
+        !in_array(
+            $operation,
+            ['gallery.create', 'gallery.create_upload', 'image.classic_upload'],
+            true,
+        )
+        || count($files) > ADMIN_OPERATION_MAX_FILES
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_payload_invalid',
+            'The operation type or file count is not supported.',
+        );
     }
     $semantic = $operation === 'gallery.create'
         ? admin_operation_gallery_payload($payload)
-        : ['gallery' => $operation === 'gallery.create_upload' ? admin_operation_gallery_payload((array) ($payload['gallery'] ?? [])) : null,
-            'gallery_id' => $operation === 'image.classic_upload' ? (int) ($payload['gallery_id'] ?? 0) : 0,
-            'create_thumbnails' => !empty($payload['create_thumbnails'])];
+        : [
+            'gallery' => $operation === 'gallery.create_upload'
+                ? admin_operation_gallery_payload(
+                    (array) ($payload['gallery'] ?? []),
+                )
+                : null,
+            'gallery_id' => $operation === 'image.classic_upload'
+                ? (int) ($payload['gallery_id'] ?? 0)
+                : 0,
+            'create_thumbnails' => !empty($payload['create_thumbnails']),
+        ];
     $identities = [];
     foreach ($files as $file) {
         $path = (string) ($file['tmp_name'] ?? '');
         clearstatcache(true, $path);
         $size = @filesize($path);
-        $hash = $size !== false && is_file($path) ? @hash_file('sha256', $path) : false;
+        $hash = $size !== false && is_file($path)
+            ? @hash_file('sha256', $path)
+            : false;
         if ($size === false || $hash === false) {
-            throw new AdminOperationRefusal('operation_payload_invalid', 'Uploaded file identity could not be verified. No operation was started.');
+            throw new AdminOperationRefusal(
+                'operation_payload_invalid',
+                'Uploaded file identity could not be verified. No operation was started.',
+            );
         }
-        $identities[] = ['name' => (string) ($file['name'] ?? ''), 'bytes' => $size, 'sha256' => $hash];
+        $identities[] = [
+            'name' => (string) ($file['name'] ?? ''),
+            'bytes' => $size,
+            'sha256' => $hash,
+        ];
     }
-    $json = json_encode(['operation' => $operation, 'fields' => $semantic, 'files' => $identities], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode([
+        'operation' => $operation,
+        'fields' => $semantic,
+        'files' => $identities,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if (!is_string($json) || strlen($json) > ADMIN_OPERATION_INPUT_MAX_BYTES) {
-        throw new AdminOperationRefusal('operation_payload_invalid', 'The operation input cannot be represented safely.');
+        throw new AdminOperationRefusal(
+            'operation_payload_invalid',
+            'The operation input cannot be represented safely.',
+        );
     }
     return hash('sha256', $json);
 }
@@ -163,14 +224,38 @@ function admin_operation_assert_storage(): void
 {
     $requirements = [schema_inspection_table('admin_operation_keys')];
     if (schema_inspection_is_available($requirements[0])) {
-        foreach (['actor_id', 'key_hash', 'operation_name', 'payload_hash', 'owner_hash', 'state', 'response_json', 'created_at', 'updated_at'] as $column) {
-            $requirements[] = schema_inspection_column('admin_operation_keys', $column);
+        foreach ([
+            'actor_id',
+            'key_hash',
+            'operation_name',
+            'payload_hash',
+            'owner_hash',
+            'state',
+            'response_json',
+            'created_at',
+            'updated_at',
+        ] as $column) {
+            $requirements[] = schema_inspection_column(
+                'admin_operation_keys',
+                $column,
+            );
         }
-        $requirements[] = schema_inspection_index('admin_operation_keys', 'PRIMARY');
+        $requirements[] = schema_inspection_index(
+            'admin_operation_keys',
+            'PRIMARY',
+        );
     }
-    if (!schema_inspection_is_available(schema_inspection_feature('admin_operation_keys', $requirements))
-        || admin_operation_model_primary_state() !== 'available') {
-        throw new AdminOperationRefusal('operation_storage_unavailable', 'Operation storage could not be verified. Run pending migrations or restore database availability before retrying.');
+    if (
+        !schema_inspection_is_available(schema_inspection_feature(
+            'admin_operation_keys',
+            $requirements,
+        ))
+        || admin_operation_model_primary_state() !== 'available'
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_storage_unavailable',
+            'Operation storage could not be verified. Run pending migrations or restore database availability before retrying.',
+        );
     }
 }
 
@@ -183,11 +268,26 @@ function admin_operation_assert_storage(): void
  * @param string $payloadHash Canonical input digest computed before target mutation.
  * @return array{replay:true,response:array<string,mixed>}|array{replay:false,lock_name:string,actor_id:int|numeric-string,key_hash:string,operation_name:string,payload_hash:string,owner_hash:string,state:'pending',response_json:null,created_at:string,updated_at:string} Either the already-completed canonical response or an owned durable claim that the caller must complete/fail and release.
  */
-function admin_operation_begin(int $actorId, mixed $key, string $operation, string $payloadHash): array
-{
+function admin_operation_begin(
+    int $actorId,
+    mixed $key,
+    string $operation,
+    string $payloadHash,
+): array {
     $key = admin_operation_require_key($key);
-    if ($actorId <= 0 || !in_array($operation, ['gallery.create', 'gallery.create_upload', 'image.classic_upload'], true) || !preg_match('/^[a-f0-9]{64}$/D', $payloadHash)) {
-        throw new AdminOperationRefusal('operation_payload_invalid', 'The operation identity is invalid.');
+    if (
+        $actorId <= 0
+        || !in_array(
+            $operation,
+            ['gallery.create', 'gallery.create_upload', 'image.classic_upload'],
+            true,
+        )
+        || !preg_match('/^[a-f0-9]{64}$/D', $payloadHash)
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_payload_invalid',
+            'The operation identity is invalid.',
+        );
     }
     $lockName = null;
     try {
@@ -195,18 +295,39 @@ function admin_operation_begin(int $actorId, mixed $key, string $operation, stri
         $keyHash = hash('sha256', $key);
         $lockName = admin_operation_model_lock($actorId, $keyHash);
         if ($lockName === null) {
-            throw new AdminOperationRefusal('operation_pending', 'This operation is already running. Retain its key and retry after it finishes.');
+            throw new AdminOperationRefusal(
+                'operation_pending',
+                'This operation is already running. Retain its key and retry after it finishes.',
+            );
         }
         $ownerHash = hash('sha256', random_bytes(ADMIN_OPERATION_KEY_BYTES));
-        $row = admin_operation_model_claim($actorId, $keyHash, $operation, $payloadHash, $ownerHash, gmdate('Y-m-d H:i:s'));
-        if ($row['operation_name'] !== $operation || !hash_equals((string) $row['payload_hash'], $payloadHash)) {
-            throw new AdminOperationRefusal('operation_payload_conflict', 'This operation key was already used with different input. Start a new operation for an intentional change.');
+        $row = admin_operation_model_claim(
+            $actorId,
+            $keyHash,
+            $operation,
+            $payloadHash,
+            $ownerHash,
+            gmdate('Y-m-d H:i:s'),
+        );
+        if (
+            $row['operation_name'] !== $operation
+            || !hash_equals((string) $row['payload_hash'], $payloadHash)
+        ) {
+            throw new AdminOperationRefusal(
+                'operation_payload_conflict',
+                'This operation key was already used with different input. Start a new operation for an intentional change.',
+            );
         }
         if ($row['state'] === 'completed') {
             $json = (string) $row['response_json'];
-            $response = strlen($json) <= ADMIN_OPERATION_RESPONSE_MAX_BYTES ? json_decode($json, true) : null;
+            $response = strlen($json) <= ADMIN_OPERATION_RESPONSE_MAX_BYTES
+                ? json_decode($json, true)
+                : null;
             if (!is_array($response)) {
-                throw new AdminOperationRefusal('operation_result_unavailable', 'The original operation result requires reconciliation. No new work was started.');
+                throw new AdminOperationRefusal(
+                    'operation_result_unavailable',
+                    'The original operation result requires reconciliation. No new work was started.',
+                );
             }
             // Stored safe messages retain their original language and content.
             $response = admin_operation_response($response, false);
@@ -215,8 +336,14 @@ function admin_operation_begin(int $actorId, mixed $key, string $operation, stri
             admin_operation_model_unlock($lockName);
             return ['replay' => true, 'response' => $response];
         }
-        if ($row['state'] !== 'pending' || !hash_equals((string) $row['owner_hash'], $ownerHash)) {
-            throw new AdminOperationRefusal('operation_needs_reconciliation', 'An earlier attempt may have changed gallery data. Reconcile that attempt before starting replacement work.');
+        if (
+            $row['state'] !== 'pending'
+            || !hash_equals((string) $row['owner_hash'], $ownerHash)
+        ) {
+            throw new AdminOperationRefusal(
+                'operation_needs_reconciliation',
+                'An earlier attempt may have changed gallery data. Reconcile that attempt before starting replacement work.',
+            );
         }
         return $row + ['replay' => false, 'lock_name' => $lockName];
     } catch (Throwable $exception) {
@@ -224,7 +351,10 @@ function admin_operation_begin(int $actorId, mixed $key, string $operation, stri
         if ($exception instanceof AdminOperationRefusal) {
             throw $exception;
         }
-        throw new AdminOperationRefusal('operation_storage_unavailable', 'Operation storage is unavailable. No new target work was authorized; retain the key for retry.');
+        throw new AdminOperationRefusal(
+            'operation_storage_unavailable',
+            'Operation storage is unavailable. No new target work was authorized; retain the key for retry.',
+        );
     }
 }
 
@@ -239,17 +369,33 @@ function admin_operation_validate_result_references(array $response): void
     $galleryId = (int) ($response['gallery_id'] ?? 0);
     $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
     $parentId = (int) ($response['parent_gallery_id'] ?? 0);
-    if (!$gallery || (int) ($gallery['parent_id'] ?? 0) !== $parentId || ($parentId > 0 && !find_gallery($parentId, true))) {
-        throw new AdminOperationRefusal('operation_result_unavailable', 'The original gallery or its context has changed. No replacement operation was started.');
+    if (
+        !$gallery
+        || (int) ($gallery['parent_id'] ?? 0) !== $parentId
+        || (
+            $parentId > 0
+            && !find_gallery($parentId, true)
+        )
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_result_unavailable',
+            'The original gallery or its context has changed. No replacement operation was started.',
+        );
     }
     $ids = $response['image_ids'] ?? [];
     if (!is_array($ids) || count($ids) > ADMIN_OPERATION_MAX_FILES) {
-        throw new AdminOperationRefusal('operation_result_unavailable', 'The original image result requires reconciliation.');
+        throw new AdminOperationRefusal(
+            'operation_result_unavailable',
+            'The original image result requires reconciliation.',
+        );
     }
     foreach ($ids as $id) {
         $image = (int) $id > 0 ? find_image((int) $id, true) : null;
         if (!$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId) {
-            throw new AdminOperationRefusal('operation_result_unavailable', 'An original uploaded image is no longer in this gallery. No replacement upload was started.');
+            throw new AdminOperationRefusal(
+                'operation_result_unavailable',
+                'An original uploaded image is no longer in this gallery. No replacement upload was started.',
+            );
         }
     }
 }
@@ -261,23 +407,91 @@ function admin_operation_validate_result_references(array $response): void
  * @param bool $prepareDiagnostics Project raw processing fields only for new completion; replay preserves stored translations.
  * @return array<string,mixed> Bounded private response used for both initial output and replay.
  */
-function admin_operation_response(array $response, bool $prepareDiagnostics = true): array
-{
-    if ($prepareDiagnostics && in_array($response['mutation']['type'] ?? '', ['image.upload', 'gallery.create_with_upload'], true)) {
-        $response = array_replace($response, admin_operation_upload_diagnostics($response));
+function admin_operation_response(
+    array $response,
+    bool $prepareDiagnostics = true,
+): array {
+    if (
+        $prepareDiagnostics
+        && in_array(
+            $response['mutation']['type'] ?? '',
+            ['image.upload', 'gallery.create_with_upload'],
+            true,
+        )
+    ) {
+        $response = array_replace(
+            $response,
+            admin_operation_upload_diagnostics($response),
+        );
     }
-    $allowed = ['ok', 'message', 'mutation', 'panel', 'contexts', 'fallback', 'gallery_id', 'gallery_ids', 'gallery_title', 'gallery_url', 'edit_url', 'parent_gallery_id', 'parent_gallery_url', 'refresh_gallery_id', 'refresh_url', 'created_gallery', 'image_ids', 'uploaded', 'scanned', 'thumbnails', 'thumbnail_failed', 'scan_failed', 'renamed', 'redirect_url'];
-    if (in_array($response['mutation']['type'] ?? '', ['image.upload', 'gallery.create_with_upload'], true)) {
-        $allowed = array_merge($allowed, ['filenames', 'filenames_omitted', 'thumbnail_failed_filenames', 'scan_failed_filenames', 'thumbnail_errors', 'rename_warnings', 'rename_failures', 'upload_events', 'upload_diagnostics']);
+    $allowed = [
+        'ok',
+        'message',
+        'mutation',
+        'panel',
+        'contexts',
+        'fallback',
+        'gallery_id',
+        'gallery_ids',
+        'gallery_title',
+        'gallery_url',
+        'edit_url',
+        'parent_gallery_id',
+        'parent_gallery_url',
+        'refresh_gallery_id',
+        'refresh_url',
+        'created_gallery',
+        'image_ids',
+        'uploaded',
+        'scanned',
+        'thumbnails',
+        'thumbnail_failed',
+        'scan_failed',
+        'renamed',
+        'redirect_url',
+    ];
+    if (in_array(
+        $response['mutation']['type'] ?? '',
+        ['image.upload', 'gallery.create_with_upload'],
+        true,
+    )) {
+        $allowed = array_merge($allowed, [
+            'filenames',
+            'filenames_omitted',
+            'thumbnail_failed_filenames',
+            'scan_failed_filenames',
+            'thumbnail_errors',
+            'rename_warnings',
+            'rename_failures',
+            'upload_events',
+            'upload_diagnostics',
+        ]);
     }
     $response = array_intersect_key($response, array_flip($allowed));
-    if (($response['ok'] ?? false) !== true || !is_array($response['mutation'] ?? null) || !is_array($response['contexts'] ?? null) || !is_array($response['fallback'] ?? null)) {
-        throw new AdminOperationRefusal('operation_result_unavailable', 'The operation result could not be recorded safely. Reconciliation is required.');
+    if (
+        ($response['ok'] ?? false) !== true
+        || !is_array($response['mutation'] ?? null)
+        || !is_array($response['contexts'] ?? null)
+        || !is_array($response['fallback'] ?? null)
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_result_unavailable',
+            'The operation result could not be recorded safely. Reconciliation is required.',
+        );
     }
     admin_operation_assert_response_private($response);
-    $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($json) || strlen($json) > ADMIN_OPERATION_RESPONSE_MAX_BYTES) {
-        throw new AdminOperationRefusal('operation_result_unavailable', 'The operation result exceeds safe storage bounds. Reconciliation is required.');
+    $json = json_encode(
+        $response,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
+    if (
+        !is_string($json)
+        || strlen($json) > ADMIN_OPERATION_RESPONSE_MAX_BYTES
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_result_unavailable',
+            'The operation result exceeds safe storage bounds. Reconciliation is required.',
+        );
     }
     return json_decode($json, true);
 }
@@ -291,19 +505,53 @@ function admin_operation_response(array $response, bool $prepareDiagnostics = tr
 function admin_operation_assert_response_private(array $data): void
 {
     foreach ($data as $key => $value) {
-        if (preg_match('/(?:csrf|password|secret|token|cookie|authorization|session)/i', (string) $key)) {
-            throw new AdminOperationRefusal('operation_result_unavailable', 'The operation result contains private authentication data and was not stored.');
+        if (preg_match(
+            '/(?:csrf|password|secret|token|cookie|authorization|session)/i',
+            (string) $key,
+        )) {
+            throw new AdminOperationRefusal(
+                'operation_result_unavailable',
+                'The operation result contains private authentication data and was not stored.',
+            );
         }
         if (is_array($value)) {
             admin_operation_assert_response_private($value);
         } elseif (is_string($value) && str_ends_with((string) $key, '_url')) {
             $parts = parse_url($value);
-            if ($parts === false || isset($parts['user']) || isset($parts['pass'])) {
-                throw new AdminOperationRefusal('operation_result_unavailable', 'The operation result contains an unsafe URL.');
+            if (
+                $parts === false
+                || isset($parts['user'])
+                || isset($parts['pass'])
+            ) {
+                throw new AdminOperationRefusal(
+                    'operation_result_unavailable',
+                    'The operation result contains an unsafe URL.',
+                );
             }
             parse_str((string) ($parts['query'] ?? ''), $query);
-            if (array_diff(array_keys($query), ['r', 'route', 'id', 'gallery_id', 'public_path', 'page', 'gallery_page', 'photo_page', 'created', 'uploaded', 'scanned', 'thumbnails', 'thumbnail_failed', 'scan_failed', 'tab', 'lang', 'language'])) {
-                throw new AdminOperationRefusal('operation_result_unavailable', 'The operation result contains an unrecognized URL parameter and was not stored.');
+            if (array_diff(array_keys($query), [
+                'r',
+                'route',
+                'id',
+                'gallery_id',
+                'public_path',
+                'page',
+                'gallery_page',
+                'photo_page',
+                'created',
+                'uploaded',
+                'scanned',
+                'thumbnails',
+                'thumbnail_failed',
+                'scan_failed',
+                'tab',
+                'lang',
+                'language',
+            ])) {
+                throw new AdminOperationRefusal(
+                    'operation_result_unavailable',
+                    'The operation result contains an unrecognized URL parameter and was not stored.',
+                );
             }
             admin_operation_assert_response_private($query);
         }
@@ -317,21 +565,39 @@ function admin_operation_assert_response_private(array $data): void
  * @param string $sourceUrl Optional current-page URL supplied by the browser.
  * @return string Canonical gallery URL with only positive pagination overrides.
  */
-function admin_operation_refresh_url(string $canonicalUrl, string $sourceUrl): string
-{
-    $canonicalPath = rtrim((string) parse_url($canonicalUrl, PHP_URL_PATH), '/');
+function admin_operation_refresh_url(
+    string $canonicalUrl,
+    string $sourceUrl,
+): string {
+    $canonicalPath = rtrim(
+        (string) parse_url($canonicalUrl, PHP_URL_PATH),
+        '/',
+    );
     $sourcePath = (string) parse_url($sourceUrl, PHP_URL_PATH);
     // Admit only a bounded clean pagination suffix of this exact canonical
     // gallery. Never copy a source path, host, share token, or arbitrary query.
-    if ($canonicalPath !== '' && !str_contains($canonicalUrl, '?')
-        && preg_match('~^' . preg_quote($canonicalPath, '~') . '/((?:galleries/)?[1-9][0-9]{0,8})/?$~D', $sourcePath, $match)) {
+    if (
+        $canonicalPath !== ''
+        && !str_contains($canonicalUrl, '?')
+        && preg_match(
+            '~^'
+                . preg_quote($canonicalPath, '~')
+                . '/((?:galleries/)?[1-9][0-9]{0,8})/?$~D',
+            $sourcePath,
+            $match,
+        )
+    ) {
         $canonicalUrl = rtrim($canonicalUrl, '/') . '/' . $match[1] . '/';
     }
     parse_str((string) (parse_url($sourceUrl, PHP_URL_QUERY) ?: ''), $query);
     foreach (['gallery_page', 'photo_page'] as $key) {
         $value = $query[$key] ?? null;
         if (is_string($value) && preg_match('/^[1-9][0-9]{0,8}$/D', $value)) {
-            $canonicalUrl .= (str_contains($canonicalUrl, '?') ? '&' : '?') . $key . '=' . $value;
+            $canonicalUrl .=
+                (str_contains($canonicalUrl, '?') ? '&' : '?')
+                . $key
+                . '='
+                . $value;
         }
     }
     return $canonicalUrl;
@@ -349,9 +615,21 @@ function admin_operation_complete(array $claim, array $response): array
     $response = admin_operation_response($response);
     admin_operation_validate_response_binding($claim, $response);
     try {
-        admin_operation_model_complete($claim, json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), gmdate('Y-m-d H:i:s'));
+        admin_operation_model_complete(
+            $claim,
+            json_encode(
+                $response,
+                JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_THROW_ON_ERROR,
+            ),
+            gmdate('Y-m-d H:i:s'),
+        );
     } catch (Throwable) {
-        throw new AdminOperationRefusal('operation_outcome_unknown', 'Work may have completed, but its response could not be confirmed. Retain this key; do not submit a replacement operation.');
+        throw new AdminOperationRefusal(
+            'operation_outcome_unknown',
+            'Work may have completed, but its response could not be confirmed. Retain this key; do not submit a replacement operation.',
+        );
     } finally {
         admin_operation_release($claim);
     }
@@ -365,17 +643,28 @@ function admin_operation_complete(array $claim, array $response): array
  * @param array<string,mixed> $response Prepared canonical response.
  * @return void
  */
-function admin_operation_validate_response_binding(array $claim, array $response): void
-{
+function admin_operation_validate_response_binding(
+    array $claim,
+    array $response,
+): void {
     $type = match ($claim['operation_name'] ?? '') {
         'gallery.create' => 'gallery.create',
         'gallery.create_upload' => 'gallery.create_with_upload',
         'image.classic_upload' => 'image.upload',
         default => '',
     };
-    $expectedIds = $type === 'image.upload' ? ($response['image_ids'] ?? []) : [(int) ($response['gallery_id'] ?? 0)];
-    if ($type === '' || ($response['mutation']['type'] ?? '') !== $type || ($response['mutation']['entity_ids'] ?? null) !== $expectedIds) {
-        throw new AdminOperationRefusal('operation_result_unavailable', 'The original operation and result identities do not match. Reconciliation is required.');
+    $expectedIds = $type === 'image.upload'
+        ? $response['image_ids'] ?? []
+        : [(int) ($response['gallery_id'] ?? 0)];
+    if (
+        $type === ''
+        || ($response['mutation']['type'] ?? '') !== $type
+        || ($response['mutation']['entity_ids'] ?? null) !== $expectedIds
+    ) {
+        throw new AdminOperationRefusal(
+            'operation_result_unavailable',
+            'The original operation and result identities do not match. Reconciliation is required.',
+        );
     }
 }
 
@@ -429,8 +718,18 @@ function admin_operation_release(?array $claim): void
  * @param array<string,mixed> $response Verified canonical original completion response.
  * @return array<string,mixed> Durable original response; no create/upload is rerun.
  */
-function admin_operation_reconcile_completed(int $actorId, string $key, string $payloadHash, array $response): array
-{
+function admin_operation_reconcile_completed(
+    int $actorId,
+    string $key,
+    string $payloadHash,
+    array $response,
+): array {
     admin_operation_require_key($key);
-    return admin_operation_reconcile_result($actorId, hash('sha256', $key), $payloadHash, $response, true);
+    return admin_operation_reconcile_result(
+        $actorId,
+        hash('sha256', $key),
+        $payloadHash,
+        $response,
+        true,
+    );
 }

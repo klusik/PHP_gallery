@@ -46,21 +46,35 @@ require_once dirname(__DIR__) . '/policy_constants.php';
  *   suggested_checks:list<string>} Bounded advisory health model. State is active,
  *   security_only, end_of_life, or unknown; dates are inclusive YYYY-MM-DD or null.
  */
-function runtime_support_status(int $versionId = PHP_VERSION_ID, ?\DateTimeImmutable $asOf = null): array
-{
+function runtime_support_status(
+    int $versionId = PHP_VERSION_ID,
+    ?\DateTimeImmutable $asOf = null,
+): array {
     $utc = new \DateTimeZone('UTC');
-    $today = ($asOf ?? new \DateTimeImmutable('now', $utc))->setTimezone($utc)->format('Y-m-d');
-    $branch = $versionId >= 10000 && $versionId <= 99999
-        ? intdiv($versionId, 10000) . '.' . intdiv($versionId % 10000, 100)
-        : 'unknown';
+    $today = ($asOf ?? new \DateTimeImmutable('now', $utc))
+        ->setTimezone($utc)
+        ->format('Y-m-d');
+    $branch =
+        $versionId >= 10000 && $versionId <= 99999
+            ? intdiv($versionId, 10000) . '.' . intdiv($versionId % 10000, 100)
+            : 'unknown';
     $schedule = RUNTIME_SUPPORT_SCHEDULE[$branch] ?? null;
-    $compatible = $branch !== 'unknown' && version_compare($branch, RUNTIME_SUPPORT_MINIMUM_COMPATIBLE, '>=');
+    $compatible =
+        $branch !== 'unknown'
+        && version_compare($branch, RUNTIME_SUPPORT_MINIMUM_COMPATIBLE, '>=');
     $state = 'unknown';
     if ($schedule !== null && $today >= RUNTIME_SUPPORT_VERIFIED_ON) {
-        $state = $today > $schedule['security_until'] ? 'end_of_life'
-            : ($schedule['active_until'] !== null && $today <= $schedule['active_until'] ? 'active' : 'security_only');
+        $state = $today > $schedule['security_until']
+            ? 'end_of_life'
+            : (
+                $schedule['active_until'] !== null
+                    && $today <= $schedule['active_until']
+                        ? 'active'
+                        : 'security_only'
+            );
     }
-    $recommended = in_array($state, ['active', 'security_only'], true)
+    $recommended =
+        in_array($state, ['active', 'security_only'], true)
         && version_compare($branch, RUNTIME_SUPPORT_MINIMUM_DEPLOYMENT, '>=');
     return [
         'feature' => 'php_runtime',
@@ -76,9 +90,16 @@ function runtime_support_status(int $versionId = PHP_VERSION_ID, ?\DateTimeImmut
         'security_support_until' => $schedule['security_until'] ?? null,
         'policy_verified_on' => RUNTIME_SUPPORT_VERIFIED_ON,
         'reference_url' => RUNTIME_SUPPORT_REFERENCE,
-        'suggested_checks' => $recommended ? [] : ($state === 'unknown'
-            ? ['review_php_support_schedule', 'verify_host_runtime']
-            : ['plan_maintained_php_upgrade', 'verify_staging_extensions']),
+        'suggested_checks' => $recommended
+            ? []
+            : (
+                $state === 'unknown'
+                    ? ['review_php_support_schedule', 'verify_host_runtime']
+                    : [
+                        'plan_maintained_php_upgrade',
+                        'verify_staging_extensions',
+                    ]
+            ),
     ];
 }
 
@@ -99,37 +120,98 @@ function runtime_support_status(int $versionId = PHP_VERSION_ID, ?\DateTimeImmut
  *   reviewed:string,reference:string,action:string},report_lines:list<string>}
  *   Policy fields retain their documented units/states; report lines reuse the visible labels.
  */
-function runtime_support_health_status(int $versionId = PHP_VERSION_ID, ?\DateTimeImmutable $asOf = null): array
-{
+function runtime_support_health_status(
+    int $versionId = PHP_VERSION_ID,
+    ?\DateTimeImmutable $asOf = null,
+): array {
     $policy = runtime_support_status($versionId, $asOf);
     $stateLabel = match ($policy['state']) {
-        'active' => t('admin.runtime_support.state_active', 'Active upstream support'),
-        'security_only' => t('admin.runtime_support.state_security_only', 'Upstream security fixes only'),
-        'end_of_life' => t('admin.runtime_support.state_end_of_life', 'Upstream support ended'),
-        default => t('admin.runtime_support.state_unknown', 'Support status requires review'),
+        'active' => t(
+            'admin.runtime_support.state_active',
+            'Active upstream support',
+        ),
+        'security_only' => t(
+            'admin.runtime_support.state_security_only',
+            'Upstream security fixes only',
+        ),
+        'end_of_life' => t(
+            'admin.runtime_support.state_end_of_life',
+            'Upstream support ended',
+        ),
+        default => t(
+            'admin.runtime_support.state_unknown',
+            'Support status requires review',
+        ),
     };
     $labels = [
         'title' => t('admin.runtime_support.title', 'PHP runtime support'),
-        'summary' => t('admin.runtime_support.summary', 'PHP {branch}: {state}.', [
-            'branch' => $policy['branch'], 'state' => $stateLabel,
-        ]),
+        'summary' => t(
+            'admin.runtime_support.summary',
+            'PHP {branch}: {state}.',
+            [
+                'branch' => $policy['branch'],
+                'state' => $stateLabel,
+            ],
+        ),
         'deadline' => $policy['security_support_until'] !== null
-            ? t('admin.runtime_support.security_until', 'Upstream security support through {date}.', ['date' => $policy['security_support_until']])
-            : t('admin.runtime_support.security_unknown', 'No reviewed security-support deadline is available for this branch.'),
-        'baseline' => t('admin.runtime_support.baseline', 'Compatibility minimum: PHP {minimum}. Deployment baseline at policy review: PHP {maintained}; preferred branch: PHP {preferred}.', [
-            'minimum' => $policy['minimum_compatible'], 'maintained' => $policy['minimum_deployment'], 'preferred' => $policy['preferred_branch'],
-        ]),
+            ? t(
+                'admin.runtime_support.security_until',
+                'Upstream security support through {date}.',
+                ['date' => $policy['security_support_until']],
+            )
+            : t(
+                'admin.runtime_support.security_unknown',
+                'No reviewed security-support deadline is available for this branch.',
+            ),
+        'baseline' => t(
+            'admin.runtime_support.baseline',
+            'Compatibility minimum: PHP {minimum}. Deployment baseline at policy review: PHP {maintained}; preferred branch: PHP {preferred}.',
+            [
+                'minimum' => $policy['minimum_compatible'],
+                'maintained' => $policy['minimum_deployment'],
+                'preferred' => $policy['preferred_branch'],
+            ],
+        ),
         'guidance' => $policy['deployment_recommended']
-            ? t('admin.runtime_support.guidance_maintained', 'Keep this branch at its latest patch level and verify enabled extensions in staging.')
-            : ($policy['state'] === 'unknown'
-                ? t('admin.runtime_support.guidance_review', 'Review the official PHP support schedule and confirm the hosting runtime before deployment.')
-                : t('admin.runtime_support.guidance_upgrade', 'Plan a hosting upgrade to a maintained PHP branch and verify the application and enabled extensions in staging.')),
-        'reviewed' => t('admin.runtime_support.reviewed', 'Policy reviewed: {date}.', ['date' => $policy['policy_verified_on']]),
-        'reference' => t('admin.runtime_support.reference', 'Official PHP support schedule'),
-        'action' => $policy['action_required'] ? t('admin.dashboard.badge_action', 'Action') : '',
+            ? t(
+                'admin.runtime_support.guidance_maintained',
+                'Keep this branch at its latest patch level and verify enabled extensions in staging.',
+            )
+            : (
+                $policy['state'] === 'unknown'
+                    ? t(
+                        'admin.runtime_support.guidance_review',
+                        'Review the official PHP support schedule and confirm the hosting runtime before deployment.',
+                    )
+                    : t(
+                        'admin.runtime_support.guidance_upgrade',
+                        'Plan a hosting upgrade to a maintained PHP branch and verify the application and enabled extensions in staging.',
+                    )
+            ),
+        'reviewed' => t(
+            'admin.runtime_support.reviewed',
+            'Policy reviewed: {date}.',
+            ['date' => $policy['policy_verified_on']],
+        ),
+        'reference' => t(
+            'admin.runtime_support.reference',
+            'Official PHP support schedule',
+        ),
+        'action' => $policy['action_required']
+            ? t('admin.dashboard.badge_action', 'Action')
+            : '',
     ];
-    return ['policy' => $policy, 'labels' => $labels, 'report_lines' => [
-        $labels['title'], $labels['summary'], $labels['deadline'], $labels['baseline'],
-        $labels['guidance'], $labels['reviewed'], $labels['reference'] . ': ' . $policy['reference_url'],
-    ]];
+    return [
+        'policy' => $policy,
+        'labels' => $labels,
+        'report_lines' => [
+            $labels['title'],
+            $labels['summary'],
+            $labels['deadline'],
+            $labels['baseline'],
+            $labels['guidance'],
+            $labels['reviewed'],
+            $labels['reference'] . ': ' . $policy['reference_url'],
+        ],
+    ];
 }

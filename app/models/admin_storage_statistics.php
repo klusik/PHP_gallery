@@ -65,11 +65,11 @@ function admin_storage_statistics_model_gallery_count(): int
  */
 function admin_storage_statistics_model_gallery_rows_after_id(
     int $lastGalleryId,
-    int $limit
+    int $limit,
 ): array {
     $statement = db()->prepare(
         'SELECT id, folder_path FROM galleries'
-        . ' WHERE id > ? ORDER BY id LIMIT ?'
+            . ' WHERE id > ? ORDER BY id LIMIT ?',
     );
     $statement->bindValue(1, max(0, $lastGalleryId), \PDO::PARAM_INT);
     $statement->bindValue(2, max(1, $limit), \PDO::PARAM_INT);
@@ -77,23 +77,41 @@ function admin_storage_statistics_model_gallery_rows_after_id(
     return $statement->fetchAll();
 }
 
-/** Return aggregate image/gallery values used for the storage cache fingerprint. */
+/**
+ * Return aggregate image/gallery values used for the storage cache fingerprint.
+ * @return array{0:array{image_count:int|string,original_bytes:int|string,newest_image_id:int|string,newest_image_update:string},1:array{gallery_count:int|string,newest_gallery_update:string}} Image and gallery aggregate rows used to fingerprint the storage snapshot.
+ */
 function admin_storage_statistics_model_fingerprint_rows(): array
 {
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS original_bytes, COALESCE(MAX(id), 0) AS newest_image_id, COALESCE(MAX(updated_at), '') AS newest_image_update FROM images");
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS image_count, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS original_bytes, COALESCE(MAX(id), 0) AS newest_image_id, COALESCE(MAX(updated_at), '') AS newest_image_update FROM images",
+    );
     $stmt->execute();
     $imageRow = $stmt->fetch() ?: [];
-    $stmt = db()->prepare("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(updated_at), '') AS newest_gallery_update FROM galleries");
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS gallery_count, COALESCE(MAX(updated_at), '') AS newest_gallery_update FROM galleries",
+    );
     $stmt->execute();
     $galleryRow = $stmt->fetch() ?: [];
-    return [is_array($imageRow) ? $imageRow : [], is_array($galleryRow) ? $galleryRow : []];
+    return [
+        is_array($imageRow) ? $imageRow : [],
+        is_array($galleryRow) ? $galleryRow : [],
+    ];
 }
 
-/** Return image rows required by source/generated-media statistics. */
+/**
+ * Return image rows required by source/generated-media statistics.
+ * @param bool $hasDerivativeVersion Whether the installed derivative-version column is available.
+ * @return list<StorageStatisticsImageRow> Source image rows joined with their physical gallery.
+ */
 function admin_storage_statistics_model_image_rows(bool $hasDerivativeVersion): array
 {
-    $derivative = $hasDerivativeVersion ? 'COALESCE(i.thumbnail_derivative_version, 1)' : '1';
-    $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivative AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path");
+    $derivative = $hasDerivativeVersion
+        ? 'COALESCE(i.thumbnail_derivative_version, 1)'
+        : '1';
+    $stmt = db()->prepare(
+        "SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivative AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path",
+    );
     $stmt->execute();
     return $stmt->fetchAll();
 }
@@ -112,15 +130,19 @@ function admin_storage_statistics_model_image_rows_after_id(
     int $lastImageId,
     int $limit,
     bool $hasDerivativeVersion,
-    bool $displayMastersOnly = false
+    bool $displayMastersOnly = false,
 ): array {
-    $derivative = $hasDerivativeVersion ? 'COALESCE(i.thumbnail_derivative_version, 1)' : '1';
+    $derivative = $hasDerivativeVersion
+        ? 'COALESCE(i.thumbnail_derivative_version, 1)'
+        : '1';
     // Stored relative paths are canonical; match the case-insensitive DNG suffix
     // used by image_uses_dng_display_derivatives(), without reading originals.
     $displayPredicate = $displayMastersOnly
         ? " AND LOWER(RIGHT(COALESCE(i.relative_path, i.filename, ''), 4)) = '.dng'"
         : '';
-    $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivative AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ?$displayPredicate ORDER BY i.id LIMIT ?");
+    $stmt = db()->prepare(
+        "SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivative AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ?$displayPredicate ORDER BY i.id LIMIT ?",
+    );
     // PDO execute(array) binds values as strings; emulated LIMIT needs integers.
     $stmt->bindValue(1, max(0, $lastImageId), \PDO::PARAM_INT);
     $stmt->bindValue(2, max(1, $limit), \PDO::PARAM_INT);
@@ -128,16 +150,30 @@ function admin_storage_statistics_model_image_rows_after_id(
     return $stmt->fetchAll();
 }
 
-/** Return durable thumbnail-variant aggregate rows for configured sizes. */
-function admin_storage_statistics_model_thumbnail_summary_rows(array $sizes, bool $matchDerivativeVersion): array
-{
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => $size > 0)));
+/**
+ * Return durable thumbnail-variant aggregate rows for configured sizes.
+ * @param list<int> $sizes Configured thumbnail sizes in pixels.
+ * @param bool $matchDerivativeVersion Whether aggregates must match each image derivative version.
+ * @return list<array{format:string,variant_count:int|string,total_bytes:int|string}> Durable thumbnail-variant aggregates grouped by format.
+ */
+function admin_storage_statistics_model_thumbnail_summary_rows(
+    array $sizes,
+    bool $matchDerivativeVersion,
+): array {
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => $size > 0,
+    )));
     if ($sizes === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($sizes), '?'));
-    $derivativePredicate = $matchDerivativeVersion ? ' AND v.derivative_version = GREATEST(1, i.thumbnail_derivative_version)' : '';
-    $stmt = db()->prepare("SELECT v.format, COUNT(*) AS variant_count, COALESCE(SUM(COALESCE(v.file_size, 0)), 0) AS total_bytes FROM image_thumbnail_variants v INNER JOIN images i ON i.id = v.image_id WHERE v.status = 'valid' AND v.format IN ('jpg', 'webp') AND v.size_px IN ($placeholders)$derivativePredicate GROUP BY v.format ORDER BY v.format");
+    $derivativePredicate = $matchDerivativeVersion
+        ? ' AND v.derivative_version = GREATEST(1, i.thumbnail_derivative_version)'
+        : '';
+    $stmt = db()->prepare(
+        "SELECT v.format, COUNT(*) AS variant_count, COALESCE(SUM(COALESCE(v.file_size, 0)), 0) AS total_bytes FROM image_thumbnail_variants v INNER JOIN images i ON i.id = v.image_id WHERE v.status = 'valid' AND v.format IN ('jpg', 'webp') AND v.size_px IN ($placeholders)$derivativePredicate GROUP BY v.format ORDER BY v.format",
+    );
     $stmt->execute($sizes);
     return $stmt->fetchAll();
 }
@@ -152,8 +188,8 @@ function gallery_attachment_storage_model_pending_count(): int
         // All three structural category identities must exist, even when empty.
         $statement = db()->query(
             'SELECT COUNT(*) FROM galleries g WHERE'
-            . " (SELECT COUNT(*) FROM gallery_attachment_storage s"
-            . " WHERE s.gallery_id = g.id AND s.kind IN ('pdf', 'music', 'ofp')) < 3"
+                . ' (SELECT COUNT(*) FROM gallery_attachment_storage s'
+                . " WHERE s.gallery_id = g.id AND s.kind IN ('pdf', 'music', 'ofp')) < 3",
         );
         return (int) $statement->fetchColumn();
     });
@@ -165,11 +201,16 @@ function gallery_attachment_storage_model_pending_count(): int
  * @param string $kind Validated category to import on the next explicit update.
  * @return void Delete only derived accounting; original media remains intact.
  */
-function gallery_attachment_storage_model_forget(int $galleryId, string $kind): void
-{
-    storage_observer_call('db.attachment_forget', static function () use ($galleryId, $kind): void {
+function gallery_attachment_storage_model_forget(
+    int $galleryId,
+    string $kind,
+): void {
+    storage_observer_call('db.attachment_forget', static function () use (
+        $galleryId,
+        $kind,
+    ): void {
         $statement = db()->prepare(
-            'DELETE FROM gallery_attachment_storage WHERE gallery_id = ? AND kind = ?'
+            'DELETE FROM gallery_attachment_storage WHERE gallery_id = ? AND kind = ?',
         );
         $statement->execute([$galleryId, $kind]);
     });
@@ -191,18 +232,25 @@ function gallery_attachment_storage_model_store(
     int $count,
     int $bytes,
     int $errors = 0,
-    bool $onlyMissing = false
+    bool $onlyMissing = false,
 ): void {
     storage_observer_call('db.attachment_store', static function () use (
-        $galleryId, $kind, $count, $bytes, $errors, $onlyMissing
+        $galleryId,
+        $kind,
+        $count,
+        $bytes,
+        $errors,
+        $onlyMissing,
     ): void {
-        $update = $onlyMissing ? 'gallery_id = VALUES(gallery_id)'
+        $update = $onlyMissing
+            ? 'gallery_id = VALUES(gallery_id)'
             : 'file_count = VALUES(file_count), file_bytes = VALUES(file_bytes),'
-                . ' errors = VALUES(errors)';
+            . ' errors = VALUES(errors)';
         $statement = db()->prepare(
             'INSERT INTO gallery_attachment_storage'
-            . ' (gallery_id, kind, file_count, file_bytes, errors) VALUES (?, ?, ?, ?, ?)'
-            . ' ON DUPLICATE KEY UPDATE ' . $update
+                . ' (gallery_id, kind, file_count, file_bytes, errors) VALUES (?, ?, ?, ?, ?)'
+                . ' ON DUPLICATE KEY UPDATE '
+                . $update,
         );
         $statement->execute([$galleryId, $kind, $count, $bytes, $errors]);
     });
@@ -216,25 +264,32 @@ function gallery_attachment_storage_model_store(
  */
 function gallery_attachment_storage_model_pending(int $limit): array
 {
-    return storage_observer_call('db.attachment_pending_rows', static function () use ($limit): array {
+    return storage_observer_call('db.attachment_pending_rows', static function () use (
+        $limit,
+    ): array {
         // Three structural category identities must exist, including empty totals.
         $statement = db()->prepare(
             'SELECT g.id, g.folder_path,'
-            . ' (SELECT GROUP_CONCAT(s.kind) FROM gallery_attachment_storage s'
-            . ' WHERE s.gallery_id = g.id) AS accounted_kinds'
-            . ' FROM galleries g WHERE'
-            . " (SELECT COUNT(*) FROM gallery_attachment_storage s"
-            . " WHERE s.gallery_id = g.id AND s.kind IN ('pdf', 'music', 'ofp')) < 3"
-            . ' ORDER BY g.id LIMIT ?'
+                . ' (SELECT GROUP_CONCAT(s.kind) FROM gallery_attachment_storage s'
+                . ' WHERE s.gallery_id = g.id) AS accounted_kinds'
+                . ' FROM galleries g WHERE'
+                . ' (SELECT COUNT(*) FROM gallery_attachment_storage s'
+                . " WHERE s.gallery_id = g.id AND s.kind IN ('pdf', 'music', 'ofp')) < 3"
+                . ' ORDER BY g.id LIMIT ?',
         );
         $statement->bindValue(1, $limit, \PDO::PARAM_INT);
         $statement->execute();
         $owners = [];
         foreach ($statement->fetchAll() as $row) {
             $present = explode(',', (string) ($row['accounted_kinds'] ?? ''));
-            $owners[] = ['id' => (int) $row['id'],
+            $owners[] = [
+                'id' => (int) $row['id'],
                 'folder_path' => (string) $row['folder_path'],
-                'missing_kinds' => array_values(array_diff(['pdf', 'music', 'ofp'], $present))];
+                'missing_kinds' => array_values(array_diff(
+                    ['pdf', 'music', 'ofp'],
+                    $present,
+                )),
+            ];
         }
         return $owners;
     });
@@ -250,15 +305,21 @@ function gallery_attachment_storage_model_summary(): array
     return storage_observer_call('db.attachment_summary', static function (): array {
         $statement = db()->query(
             'SELECT s.kind, SUM(s.file_count) AS file_count,'
-            . ' SUM(s.file_bytes) AS file_bytes, SUM(s.errors) AS errors'
-            . ' FROM gallery_attachment_storage s'
-            . ' INNER JOIN galleries g ON g.id = s.gallery_id GROUP BY s.kind'
+                . ' SUM(s.file_bytes) AS file_bytes, SUM(s.errors) AS errors'
+                . ' FROM gallery_attachment_storage s'
+                . ' INNER JOIN galleries g ON g.id = s.gallery_id GROUP BY s.kind',
         );
-        $summary = ['pdf_count' => 0, 'pdf_bytes' => 0,
-            'music_count' => 0, 'music_bytes' => 0, 'errors' => 0];
+        $summary = [
+            'pdf_count' => 0,
+            'pdf_bytes' => 0,
+            'music_count' => 0,
+            'music_bytes' => 0,
+            'errors' => 0,
+        ];
         foreach ($statement->fetchAll() as $row) {
             $kind = $row['kind'] === 'ofp' ? 'pdf' : (string) $row['kind'];
-            if (!in_array($kind, ['pdf', 'music'], true)) continue;
+            if (!in_array($kind, ['pdf', 'music'], true))
+                continue;
             $summary[$kind . '_count'] += (int) $row['file_count'];
             $summary[$kind . '_bytes'] += (int) $row['file_bytes'];
             $summary['errors'] += (int) $row['errors'];

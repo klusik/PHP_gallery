@@ -12,7 +12,9 @@
 declare(strict_types=1);
 namespace Gallery\Services;
 
-if (!function_exists('Gallery\\Models\\gallery_attachment_storage_model_store')) {
+if (!function_exists(
+    'Gallery\\Models\\gallery_attachment_storage_model_store',
+)) {
     require_once __DIR__ . '/../models/admin_storage_statistics.php';
 }
 
@@ -33,25 +35,39 @@ if (!function_exists('Gallery\\Models\\gallery_attachment_storage_model_store'))
 function gallery_attachment_storage_record(
     int $galleryId,
     string $kind,
-    array $entries
+    array $entries,
 ): void {
     if ($galleryId <= 0 || !in_array($kind, ['pdf', 'music', 'ofp'], true)) {
-        throw new \InvalidArgumentException('Invalid attachment accounting owner.');
+        throw new \InvalidArgumentException(
+            'Invalid attachment accounting owner.',
+        );
     }
     try {
         $bytes = 0;
-        foreach ($entries as $entry) $bytes += max(0, (int) $entry['size']);
+        foreach ($entries as $entry)
+            $bytes += max(0, (int) $entry['size']);
         \Gallery\Models\gallery_attachment_storage_model_store(
-            $galleryId, $kind, count($entries), $bytes
+            $galleryId,
+            $kind,
+            count($entries),
+            $bytes,
         );
     } catch (\Throwable) {
         try {
-            \Gallery\Models\gallery_attachment_storage_model_forget($galleryId, $kind);
+            \Gallery\Models\gallery_attachment_storage_model_forget(
+                $galleryId,
+                $kind,
+            );
         } catch (\Throwable) {
             // A database outage can prevent both the write and its invalidation.
         }
-        error_log('Gallery attachment accounting write failed; gallery_id='
-            . $galleryId . '; kind=' . $kind . '; reconciliation required.');
+        error_log(
+            'Gallery attachment accounting write failed; gallery_id='
+                . $galleryId
+                . '; kind='
+                . $kind
+                . '; reconciliation required.',
+        );
     }
     // Also invalidate active jobs after a failed derived write or deletion.
     gallery_attachment_storage_changed();
@@ -72,8 +88,10 @@ function gallery_attachment_storage_changed(): void
 {
     try {
         // A random 128-bit nonce identifies a change, not a numeric policy.
-        set_app_setting('gallery_attachment_storage_revision',
-            bin2hex(random_bytes(16)));
+        set_app_setting(
+            'gallery_attachment_storage_revision',
+            bin2hex(random_bytes(16)),
+        );
     } catch (\Throwable) {
         // Optional reporting failure must not undo committed attachment work.
     }
@@ -86,8 +104,15 @@ function gallery_attachment_storage_changed(): void
  */
 function gallery_pdf_render_dpi_validate(string|int $value): int
 {
-    if (!in_array((string) $value, ['96', '150', '200', '300', '600', '1200', '2400'], true)) {
-        throw new \InvalidArgumentException(t('pdf.dpi_invalid', 'Choose 96, 150, 200, 300, 600, 1200 or 2400 DPI.'));
+    if (!in_array(
+        (string) $value,
+        ['96', '150', '200', '300', '600', '1200', '2400'],
+        true,
+    )) {
+        throw new \InvalidArgumentException(t(
+            'pdf.dpi_invalid',
+            'Choose 96, 150, 200, 300, 600, 1200 or 2400 DPI.',
+        ));
     }
     return (int) $value;
 }
@@ -103,8 +128,17 @@ function gallery_pdf_render_dpi(): int
     // Consumers: gallery PDF conversion forms and settings registry.
     // Rationale: 150 DPI is the product default; originals and older children are unchanged.
     $defaultDpi = 150;
-    $value = (string) app_setting('gallery_pdf_render_dpi', (string) $defaultDpi);
-    return in_array($value, ['96', '150', '200', '300', '600', '1200', '2400'], true) ? (int) $value : $defaultDpi;
+    $value = (string) app_setting(
+        'gallery_pdf_render_dpi',
+        (string) $defaultDpi,
+    );
+    return in_array(
+        $value,
+        ['96', '150', '200', '300', '600', '1200', '2400'],
+        true,
+    )
+        ? (int) $value
+        : $defaultDpi;
 }
 
 /**
@@ -118,8 +152,10 @@ function gallery_pdf_render_dpi(): int
  * @param string|null $language Optional originating UI language; no preference is changed.
  * @return string Localized safe category message; unknown failures use pdf.error.failed.
  */
-function gallery_pdf_operation_error_message(\Throwable $error, ?string $language = null): string
-{
+function gallery_pdf_operation_error_message(
+    \Throwable $error,
+    ?string $language = null,
+): string {
     $message = trim($error->getMessage());
     $categories = [
         'size' => '/^(?:The PDF must be between 16 bytes and 25 MiB\.|Select a PDF of up to 25 MiB and check PHP upload limits\.)$/i',
@@ -139,16 +175,30 @@ function gallery_pdf_operation_error_message(\Throwable $error, ?string $languag
         if (preg_match($pattern, $message) === 1) {
             if ($language !== null && translation_language_allowed($language)) {
                 $strings = translation_load_language($language);
-                return (string) ($strings['pdf.error.' . $category] ?? gallery_pdf_operation_error_fallback($category));
+                return (string) (
+                    $strings['pdf.error.' . $category] ?? gallery_pdf_operation_error_fallback(
+                        $category,
+                    )
+                );
             }
-            return t('pdf.error.' . $category, gallery_pdf_operation_error_fallback($category));
+            return t(
+                'pdf.error.' . $category,
+                gallery_pdf_operation_error_fallback($category),
+            );
         }
     }
     if ($language !== null && translation_language_allowed($language)) {
         $strings = translation_load_language($language);
-        return (string) ($strings['pdf.error.failed'] ?? gallery_pdf_operation_error_fallback('failed'));
+        return (string) (
+            $strings['pdf.error.failed'] ?? gallery_pdf_operation_error_fallback(
+                'failed',
+            )
+        );
     }
-    return t('pdf.error.failed', gallery_pdf_operation_error_fallback('failed'));
+    return t(
+        'pdf.error.failed',
+        gallery_pdf_operation_error_fallback('failed'),
+    );
 }
 
 /**
@@ -159,18 +209,30 @@ function gallery_pdf_operation_error_message(\Throwable $error, ?string $languag
 function gallery_pdf_operation_error_fallback(string $category): string
 {
     return match ($category) {
-        'source' => 'The selected gallery or PDF is no longer available. Reload the gallery and select the document again.',
-        'target' => 'The conversion destination is unavailable or was changed. The original PDF is preserved. Reload and confirm a new result to recreate a missing empty subgallery, or choose another destination.',
-        'storage' => 'PDF storage could not be read or safely updated. Check gallery file permissions and retry.',
-        'confirmation' => 'Confirm the requested replacement, deletion or new conversion before continuing.',
-        'invalid_pdf' => 'The selected file is not a readable, valid PDF. Choose another PDF.',
-        'size' => 'The PDF is outside the allowed size range. Choose a PDF between 16 bytes and 25 MiB.',
-        'settings' => 'Choose a supported DPI and destination, then retry with a valid PDF page count.',
-        'session' => 'This conversion session is invalid or expired. Reload the gallery and start or resume the conversion.',
-        'edited' => 'The source PDF or acknowledged pages changed. Existing files were preserved; reload and start a new conversion.',
-        'incomplete' => 'Not all PDF pages are acknowledged and registered yet. Retry to resume the conversion.',
-        'batch' => 'A prepared page batch is invalid or was not fully acknowledged. Retry the batch.',
-        'browser' => 'PDF page conversion requires JavaScript and a supported browser. Reload the gallery and try again.',
+        'source'
+            => 'The selected gallery or PDF is no longer available. Reload the gallery and select the document again.',
+        'target'
+            => 'The conversion destination is unavailable or was changed. The original PDF is preserved. Reload and confirm a new result to recreate a missing empty subgallery, or choose another destination.',
+        'storage'
+            => 'PDF storage could not be read or safely updated. Check gallery file permissions and retry.',
+        'confirmation'
+            => 'Confirm the requested replacement, deletion or new conversion before continuing.',
+        'invalid_pdf'
+            => 'The selected file is not a readable, valid PDF. Choose another PDF.',
+        'size'
+            => 'The PDF is outside the allowed size range. Choose a PDF between 16 bytes and 25 MiB.',
+        'settings'
+            => 'Choose a supported DPI and destination, then retry with a valid PDF page count.',
+        'session'
+            => 'This conversion session is invalid or expired. Reload the gallery and start or resume the conversion.',
+        'edited'
+            => 'The source PDF or acknowledged pages changed. Existing files were preserved; reload and start a new conversion.',
+        'incomplete'
+            => 'Not all PDF pages are acknowledged and registered yet. Retry to resume the conversion.',
+        'batch'
+            => 'A prepared page batch is invalid or was not fully acknowledged. Retry the batch.',
+        'browser'
+            => 'PDF page conversion requires JavaScript and a supported browser. Reload the gallery and try again.',
         default => 'The PDF operation failed. Check the selected file and gallery storage, then retry.',
     };
 }

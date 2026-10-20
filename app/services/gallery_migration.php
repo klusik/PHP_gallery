@@ -46,8 +46,11 @@ require_once __DIR__ . '/gallery_edit_concurrency.php';
 require_once __DIR__ . '/gallery_description_layout_compatibility.php';
 
 const GALLERY_MIGRATION_PROTOCOL_VERSION = 2;
+
 const GALLERY_MIGRATION_TIMEOUT_SECONDS = 45;
+
 const GALLERY_MIGRATION_RECONNECT_SECONDS = 30;
+
 const GALLERY_MIGRATION_PACKAGE_MAX_ASSETS = 2048;
 
 // This module is split into focused part files under app/services/gallery_migration/.

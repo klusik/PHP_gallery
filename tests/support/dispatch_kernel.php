@@ -34,9 +34,20 @@ function dispatch_fixture_kernel(): Kernel
     foreach (\Gallery\Core\cms_route_handlers() as $page => $handler) {
         $definitions[] = new RouteDefinition($page, $handler, ['fixture']);
     }
-    $fallback = new RouteDefinition('not_found', '\\Gallery\\Controllers\\cms_not_found', ['fixture']);
-    $modules = array_fill_keys(['fixture', 'request-policy', 'public-policy',
-        'schema-unavailable-response', 'feature-disabled-response'], ['depends' => [], 'files' => []]);
-    return new Kernel(new Router(new RouteRegistry($definitions, $fallback)),
-        new ModuleLoader(dirname(__DIR__, 2), $modules));
+    $fallback = new RouteDefinition(
+        'not_found',
+        '\\Gallery\\Controllers\\cms_not_found',
+        ['fixture'],
+    );
+    $modules = array_fill_keys([
+        'fixture',
+        'request-policy',
+        'public-policy',
+        'schema-unavailable-response',
+        'feature-disabled-response',
+    ], ['depends' => [], 'files' => []]);
+    return new Kernel(
+        new Router(new RouteRegistry($definitions, $fallback)),
+        new ModuleLoader(dirname(__DIR__, 2), $modules),
+    );
 }

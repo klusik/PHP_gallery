@@ -45,29 +45,46 @@ namespace Gallery\Core {
      * @param bool $publicOnly Whether the Gallery view selected public-only presentation; intentionally unused because this fixture renders both routes as public pages.
      * @return void Emit the real shared layout header around the production page view.
      */
-    function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
-    {
-        $page = (string) ($GLOBALS['public_theme_width_fixture_page'] ?? 'home');
-        $mode = \Gallery\Services\theme_page_width_mode((string) ($GLOBALS['public_theme_width_fixture_mode'] ?? 'default'));
+    function render_header(
+        string $title,
+        ?array $currentGallery = null,
+        bool $publicOnly = true,
+    ): void {
+        $page = (string) (
+            $GLOBALS['public_theme_width_fixture_page'] ?? 'home'
+        );
+        $mode = \Gallery\Services\theme_page_width_mode(
+            (string) ($GLOBALS['public_theme_width_fixture_mode'] ?? 'default'),
+        );
         $stylesheetUrls = array_map(
-            static fn (string $stylesheet): string => asset_url($stylesheet),
-            \Gallery\Controllers\shared_layout_public_stylesheet_files()
+            static fn(string $stylesheet): string => asset_url($stylesheet),
+            \Gallery\Controllers\shared_layout_public_stylesheet_files(),
         );
         $themeValues = [
             'theme_page_width' => $mode,
             'theme_page_width_custom' => '1320',
         ];
-        $headExtras = '<style id="fixture-generated-theme-css">' . \theme_fixture_css($themeValues) . '</style>'
-            . '<link rel="stylesheet" href="' . e(asset_url('assets/styles/mobile-gallery.css')) . '">';
+        $headExtras =
+            '<style id="fixture-generated-theme-css">'
+            . \theme_fixture_css($themeValues)
+            . '</style>'
+            . '<link rel="stylesheet" href="'
+            . e(asset_url('assets/styles/mobile-gallery.css'))
+            . '">';
 
-        \Gallery\Views\view_render_header($title, [
-            'site_name' => 'PHP Gallery layout fixture',
-            'body_class' => 'public-page',
-            'page_width_class' => ' page-width-' . $mode,
-            'active_language' => 'en',
-            'stylesheet_urls' => $stylesheetUrls,
-            'head_extras' => $headExtras,
-        ], '/index.php?page=' . rawurlencode($page), $page);
+        \Gallery\Views\view_render_header(
+            $title,
+            [
+                'site_name' => 'PHP Gallery layout fixture',
+                'body_class' => 'public-page',
+                'page_width_class' => ' page-width-' . $mode,
+                'active_language' => 'en',
+                'stylesheet_urls' => $stylesheetUrls,
+                'head_extras' => $headExtras,
+            ],
+            '/index.php?page=' . rawurlencode($page),
+            $page,
+        );
     }
 
     /** Render the actual shared production footer with prepared public widget markup.
@@ -76,7 +93,9 @@ namespace Gallery\Core {
      */
     function render_footer(string $publicWidgetFooterHtml = ''): void
     {
-        $page = (string) ($GLOBALS['public_theme_width_fixture_page'] ?? 'home');
+        $page = (string) (
+            $GLOBALS['public_theme_width_fixture_page'] ?? 'home'
+        );
         \Gallery\Views\view_render_footer($page, [
             'github_project_url' => '',
             'public_widget_footer_html' => $publicWidgetFooterHtml,
@@ -88,7 +107,8 @@ namespace {
     require_once __DIR__ . '/theme_appearance_fixture.php';
     require_once __DIR__ . '/theme_css_fixture.php';
     require_once dirname(__DIR__, 2) . '/app/views/admin_test_run_panel.php';
-    require_once dirname(__DIR__, 2) . '/app/services/public_content_widgets.php';
+    require_once
+        dirname(__DIR__, 2) . '/app/services/public_content_widgets.php';
     require_once dirname(__DIR__, 2) . '/app/views/layout.php';
     require_once dirname(__DIR__, 2) . '/app/views/http.php';
     require_once dirname(__DIR__, 2) . '/app/views/gallery_descriptions.php';
@@ -115,8 +135,20 @@ namespace {
     function public_theme_width_fixture_widgets(string $page): array
     {
         $slots = $page === 'home'
-            ? ['left_rail', 'right_rail', 'home_before_grid', 'home_after_grid', 'footer']
-            : ['left_rail', 'right_rail', 'content_top', 'content_bottom', 'footer'];
+            ? [
+                'left_rail',
+                'right_rail',
+                'home_before_grid',
+                'home_after_grid',
+                'footer',
+            ]
+            : [
+                'left_rail',
+                'right_rail',
+                'content_top',
+                'content_bottom',
+                'footer',
+            ];
         $rows = [];
         foreach ($slots as $index => $slot) {
             $number = $index + 1;
@@ -125,8 +157,10 @@ namespace {
                 'widget_id' => sprintf('%032x', $number),
                 ...public_widget_normalize([
                     'title' => $title,
-                    'content_md' => 'Production widget output with a long unbroken token '
-                        . str_repeat('overflowcheck', 9) . ' and readable fixture text.',
+                    'content_md' =>
+                        'Production widget output with a long unbroken token '
+                            . str_repeat('overflowcheck', 9)
+                            . ' and readable fixture text.',
                     'status' => 'published',
                     'page_scope' => 'all',
                     'placement_mode' => 'flow',
@@ -164,8 +198,11 @@ namespace {
      * @param int $currentPage Current one-based page in the three-page fixture; defaults to page two.
      * @return string Actual public pagination controls with route-backed page links.
      */
-    function public_theme_width_fixture_pagination(string $label, string $routeBase, int $currentPage = 2): string
-    {
+    function public_theme_width_fixture_pagination(
+        string $label,
+        string $routeBase,
+        int $currentPage = 2,
+    ): string {
         $pageUrls = [];
         for ($pageNumber = 1; $pageNumber <= 3; $pageNumber++) {
             $pageUrls[] = [
@@ -177,9 +214,13 @@ namespace {
         ob_start();
         view_render_pagination_controls([
             'pagination_needed' => true,
-            'previous_url' => $currentPage > 1 ? rtrim($routeBase, '/') . '/' . ($currentPage - 1) : '',
+            'previous_url' => $currentPage > 1
+                ? rtrim($routeBase, '/') . '/' . ($currentPage - 1)
+                : '',
             'page_urls' => $pageUrls,
-            'next_url' => $currentPage < 3 ? rtrim($routeBase, '/') . '/' . ($currentPage + 1) : '',
+            'next_url' => $currentPage < 3
+                ? rtrim($routeBase, '/') . '/' . ($currentPage + 1)
+                : '',
             'current_page' => $currentPage,
             'total_pages' => 3,
         ], $label);
@@ -192,9 +233,15 @@ namespace {
      * @param int $count Number of production cards to render.
      * @return string HTML emitted by the production public gallery-card View.
      */
-    function public_theme_width_fixture_gallery_cards(string $prefix, int $firstId, int $count): string
-    {
-        $image = 'data:image/svg+xml,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#8aa4b8"/></svg>');
+    function public_theme_width_fixture_gallery_cards(
+        string $prefix,
+        int $firstId,
+        int $count,
+    ): string {
+        $image = 'data:image/svg+xml,'
+        . rawurlencode(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#8aa4b8"/></svg>',
+        );
         ob_start();
         for ($offset = 0; $offset < $count; $offset++) {
             $galleryId = $firstId + $offset;
@@ -218,10 +265,18 @@ namespace {
      * @param int $count Number of production photo cards to render.
      * @return string HTML emitted by the production public photo-card View.
      */
-    function public_theme_width_fixture_photo_cards(int $firstId, int $count): string
-    {
-        $image = 'data:image/svg+xml,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="#b9a27e"/></svg>');
-        $thumbnailHtml = '<img src="' . \Gallery\Core\e($image) . '" width="640" height="480" alt="Disposable public gallery photograph">';
+    function public_theme_width_fixture_photo_cards(
+        int $firstId,
+        int $count,
+    ): string {
+        $image = 'data:image/svg+xml,'
+        . rawurlencode(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="#b9a27e"/></svg>',
+        );
+        $thumbnailHtml =
+            '<img src="'
+            . \Gallery\Core\e($image)
+            . '" width="640" height="480" alt="Disposable public gallery photograph">';
         ob_start();
         for ($offset = 0; $offset < $count; $offset++) {
             $imageId = $firstId + $offset;
@@ -246,7 +301,9 @@ namespace {
     function public_theme_width_fixture_page(string $page): void
     {
         if (!in_array($page, ['home', 'home-page-3', 'gallery'], true)) {
-            throw new InvalidArgumentException('Choose a supported Home or Gallery production page fixture.');
+            throw new InvalidArgumentException(
+                'Choose a supported Home or Gallery production page fixture.',
+            );
         }
         $pageFamily = $page === 'home-page-3' ? 'home' : $page;
         $homeCurrentPage = $page === 'home-page-3' ? 3 : 2;
@@ -254,9 +311,13 @@ namespace {
         $GLOBALS['public_theme_width_fixture_mode'] = 'default';
         $widgets = public_theme_width_fixture_widgets($pageFamily);
         $pagination = public_theme_width_fixture_pagination(
-            $pageFamily === 'home' ? 'Home gallery pages' : 'Gallery listing pages',
-            $pageFamily === 'home' ? '/fixture/home/page' : '/fixture/gallery/page',
-            $homeCurrentPage
+            $pageFamily === 'home'
+                ? 'Home gallery pages'
+                : 'Gallery listing pages',
+            $pageFamily === 'home'
+                ? '/fixture/home/page'
+                : '/fixture/gallery/page',
+            $homeCurrentPage,
         );
         ob_start();
         view_render_back_to_top_button('Back to top', 'Back to top');
@@ -287,7 +348,11 @@ namespace {
                 ],
                 'gallery_count' => 6,
                 'pagination_html' => $pagination,
-                'cards_html' => public_theme_width_fixture_gallery_cards('Home', $homeCurrentPage * 100, 6),
+                'cards_html' => public_theme_width_fixture_gallery_cards(
+                    'Home',
+                    $homeCurrentPage * 100,
+                    6,
+                ),
                 'grid_class' => ' pagination-grid-columns-3',
                 'current_page' => $homeCurrentPage,
                 'total_pages' => 3,
@@ -299,11 +364,11 @@ namespace {
 
         $subgalleryPagination = public_theme_width_fixture_pagination(
             'Subgallery pages',
-            '/fixture/gallery/subgallery/page'
+            '/fixture/gallery/subgallery/page',
         );
         $photoPagination = public_theme_width_fixture_pagination(
             'Photo pages',
-            '/fixture/gallery/photo/page'
+            '/fixture/gallery/photo/page',
         );
         view_render_public_gallery_detail([
             'page_title' => 'Production Gallery fixture',
@@ -329,7 +394,11 @@ namespace {
                 'total_pages' => 3,
                 'pagination_html' => $subgalleryPagination,
                 'grid_class' => ' pagination-grid-columns-2',
-                'cards_html' => public_theme_width_fixture_gallery_cards('Child', 200, 2),
+                'cards_html' => public_theme_width_fixture_gallery_cards(
+                    'Child',
+                    200,
+                    2,
+                ),
             ],
             'image_section' => [
                 'visible' => true,

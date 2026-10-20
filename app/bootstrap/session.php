@@ -41,14 +41,19 @@ use function Gallery\Services\auth_admin_session_lifetime_seconds;
 /**
  * Start the configured admin session without changing the existing lifetime or cookie policy.
  *
- * @param array $config Application configuration.
+ * @param array{admin_session_name:string,...} $config Application configuration with the admin session name.
+ * @return void Start the session when it is not already active.
  */
 function cms_start_session(array $config): void
 {
     session_name((string) $config['admin_session_name']);
     if (session_status() !== PHP_SESSION_ACTIVE) {
         // $adminSessionLifetime stores the browser cookie and PHP session lifetime for admin sessions.
-        $adminSessionLifetime = function_exists('Gallery\\Services\\auth_admin_session_lifetime_seconds') ? auth_admin_session_lifetime_seconds() : 1209600;
+        $adminSessionLifetime = function_exists(
+            'Gallery\\Services\\auth_admin_session_lifetime_seconds',
+        )
+            ? auth_admin_session_lifetime_seconds()
+            : 1209600;
         ini_set('session.gc_maxlifetime', (string) $adminSessionLifetime);
         ini_set('session.cookie_lifetime', (string) $adminSessionLifetime);
         session_cache_limiter('');
@@ -65,7 +70,9 @@ function cms_start_session(array $config): void
                 'save_handler' => (string) ini_get('session.save_handler'),
             ]);
         }
-        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        if (function_exists(
+            'Gallery\\Services\\gallery_benchmark_trace_mark',
+        )) {
             \Gallery\Services\gallery_benchmark_trace_mark('session_start_begin', [
                 'cookie_present' => isset($_COOKIE[session_name()]),
                 'save_handler' => (string) ini_get('session.save_handler'),
@@ -78,7 +85,9 @@ function cms_start_session(array $config): void
                 'session_id_present' => session_id() !== '',
             ]);
         }
-        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        if (function_exists(
+            'Gallery\\Services\\gallery_benchmark_trace_mark',
+        )) {
             \Gallery\Services\gallery_benchmark_trace_mark('session_start_end', [
                 'session_active' => session_status() === PHP_SESSION_ACTIVE,
                 'session_id_present' => session_id() !== '',
@@ -88,11 +97,14 @@ function cms_start_session(array $config): void
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
             \Gallery\Services\admin_test_run_mark('session_already_active');
         }
-        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
-            \Gallery\Services\gallery_benchmark_trace_mark('session_already_active');
+        if (function_exists(
+            'Gallery\\Services\\gallery_benchmark_trace_mark',
+        )) {
+            \Gallery\Services\gallery_benchmark_trace_mark(
+                'session_already_active',
+            );
         }
     }
-
 }
 
 /**
@@ -111,17 +123,24 @@ function cms_start_session(array $config): void
  */
 function cms_release_read_only_media_session_lock(string $page): bool
 {
-    if (!cms_route_is_read_only_media_asset($page) || session_status() !== PHP_SESSION_ACTIVE) {
+    if (
+        !cms_route_is_read_only_media_asset($page)
+        || session_status() !== PHP_SESSION_ACTIVE
+    ) {
         return false;
     }
 
-    if (empty($_SESSION['user_id'])
+    if (
+        empty($_SESSION['user_id'])
         && function_exists('Gallery\\Services\\auth_remember_cookie_name')
-        && isset($_COOKIE[\Gallery\Services\auth_remember_cookie_name()])) {
+        && isset($_COOKIE[\Gallery\Services\auth_remember_cookie_name()])
+    ) {
         current_user();
     }
 
-    cms_request_trace_mark('read_only_media_session_release_begin', ['page' => $page]);
+    cms_request_trace_mark('read_only_media_session_release_begin', [
+        'page' => $page,
+    ]);
     session_write_close();
     cms_request_trace_mark('read_only_media_session_release_end', [
         'page' => $page,

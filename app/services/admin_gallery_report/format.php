@@ -51,7 +51,11 @@ use function Gallery\Core\db;
 function admin_gallery_report_valid_datetime(string $value): bool
 {
     $value = trim($value);
-    return $value !== '' && $value !== '0000-00-00 00:00:00' && $value > '1000-01-01 00:00:00';
+    return (
+        $value !== ''
+            && $value !== '0000-00-00 00:00:00'
+            && $value > '1000-01-01 00:00:00'
+    );
 }
 
 /**
@@ -86,7 +90,10 @@ function admin_gallery_report_compact_label(string $label): string
 function admin_gallery_report_iso_bucket(int $iso): string
 {
     if ($iso <= 100) {
-        return t('admin.gallery_report.export.iso_100_or_lower', 'ISO 100 or lower');
+        return t(
+            'admin.gallery_report.export.iso_100_or_lower',
+            'ISO 100 or lower',
+        );
     }
     if ($iso <= 400) {
         return t('admin.gallery_report.export.iso_101_400', 'ISO 101-400');

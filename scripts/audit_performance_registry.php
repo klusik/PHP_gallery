@@ -24,7 +24,11 @@ return [
         'max_peak_memory_bytes' => 16777216,
     ],
     'application-bootstrap' => [
-        'entry_files' => ['app/early_runtime.php', 'app/diagnostics/admin_test_run_early.php', 'app/bootstrap.php'],
+        'entry_files' => [
+            'app/early_runtime.php',
+            'app/diagnostics/admin_test_run_early.php',
+            'app/bootstrap.php',
+        ],
         'baseline_included_php_files' => 24,
         'max_included_php_files' => 40,
         'max_peak_memory_bytes' => 16777216,

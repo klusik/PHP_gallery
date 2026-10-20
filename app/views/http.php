@@ -45,10 +45,21 @@ use function Gallery\Core\e;
  * @param string $title Translated page title.
  * @param string $message Translated visitor-facing failure message.
  * @param string $requestReference Optional translated request reference line.
+ * @return void Emits the minimal service-unavailable document.
  */
-function view_render_public_service_unavailable(string $title, string $message, string $requestReference = ''): void
-{
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . e($title) . '</title></head><body><main><h1>' . e($title) . '</h1><p>' . e($message) . '</p>';
+function view_render_public_service_unavailable(
+    string $title,
+    string $message,
+    string $requestReference = '',
+): void {
+    echo
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'
+            . e($title)
+            . '</title></head><body><main><h1>'
+            . e($title)
+            . '</h1><p>'
+            . e($message)
+            . '</p>';
     if ($requestReference !== '') {
         echo '<p>' . e($requestReference) . '</p>';
     }
@@ -64,11 +75,29 @@ function view_render_public_service_unavailable(string $title, string $message, 
  * @param string $downShortLabel Visible translated Down label.
  * @return void Echo two initially hidden native buttons in one floating group.
  */
-function view_render_back_to_top_button(string $label, string $shortLabel, string $downLabel = 'Go to bottom', string $downShortLabel = 'Down'): void
-{
+function view_render_back_to_top_button(
+    string $label,
+    string $shortLabel,
+    string $downLabel = 'Go to bottom',
+    string $downShortLabel = 'Down',
+): void {
     echo '<div class="floating-scroll-controls" data-floating-scroll-controls>';
-    echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">↑</span><span>' . e($shortLabel) . '</span></button>';
-    echo '<button type="button" class="back-to-top-button" data-scroll-to-bottom-button hidden aria-label="' . e($downLabel) . '" title="' . e($downLabel) . '"><span aria-hidden="true">↓</span><span>' . e($downShortLabel) . '</span></button>';
+    echo
+        '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span aria-hidden="true">↑</span><span>'
+            . e($shortLabel)
+            . '</span></button>';
+    echo
+        '<button type="button" class="back-to-top-button" data-scroll-to-bottom-button hidden aria-label="'
+            . e($downLabel)
+            . '" title="'
+            . e($downLabel)
+            . '"><span aria-hidden="true">↓</span><span>'
+            . e($downShortLabel)
+            . '</span></button>';
     echo '</div>';
 }
 
@@ -80,10 +109,13 @@ function view_render_back_to_top_button(string $label, string $shortLabel, strin
  */
 function view_render_not_found(string $title, string $message): void
 {
-    echo '<section class="panel"><h1>' . e($title) . '</h1><p>' . e($message) . '</p></section>';
+    echo
+        '<section class="panel"><h1>'
+            . e($title)
+            . '</h1><p>'
+            . e($message)
+            . '</p></section>';
 }
-
-
 
 /**
  * Render an administrator-facing disabled-feature panel.
@@ -92,11 +124,26 @@ function view_render_not_found(string $title, string $message): void
  * @param string $message Translated explanatory message.
  * @param string $settingsUrl URL to the Admin feature settings page.
  * @param string $settingsLabel Translated settings-link label.
+ * @return void Emits the disabled-feature message and settings link.
  */
-function view_render_feature_disabled_admin(string $title, string $message, string $settingsUrl, string $settingsLabel): void
-{
-    echo '<section class="hero"><h1>' . e($title) . '</h1><p class="muted">' . e($message) . '</p></section>';
-    echo '<section class="panel"><p><a class="button" href="' . e($settingsUrl) . '">' . e($settingsLabel) . '</a></p></section>';
+function view_render_feature_disabled_admin(
+    string $title,
+    string $message,
+    string $settingsUrl,
+    string $settingsLabel,
+): void {
+    echo
+        '<section class="hero"><h1>'
+            . e($title)
+            . '</h1><p class="muted">'
+            . e($message)
+            . '</p></section>';
+    echo
+        '<section class="panel"><p><a class="button" href="'
+            . e($settingsUrl)
+            . '">'
+            . e($settingsLabel)
+            . '</a></p></section>';
 }
 
 /**
@@ -117,5 +164,9 @@ function view_public_noindex_meta(): string
  */
 function view_gallery_background_style(string $assetUrl): string
 {
-    return '<style>.theme-background-image{background-image:url("' . css_value($assetUrl) . '");}</style>';
+    return (
+        '<style>.theme-background-image{background-image:url("'
+            . css_value($assetUrl)
+            . '");}</style>'
+    );
 }

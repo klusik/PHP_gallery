@@ -58,6 +58,9 @@ use function Gallery\Views\view_render_admin_features_page;
 
 /**
  * Render the Admin feature settings page.
+ *
+ * @return void Processes an optional feature-settings POST and renders the page
+ *     when no redirect occurs.
  */
 function cms_admin_features(): void
 {
@@ -68,11 +71,20 @@ function cms_admin_features(): void
         verify_csrf();
         try {
             $summary = save_feature_flags_from_post($_POST);
-            admin_log_event('info', 'features.updated', 'Admin updated global feature switches.', $summary);
-            flash_message('admin_notice', t('admin.features.notice_saved', 'Feature settings saved. Enabled: {enabled}. Disabled: {disabled}.', [
-                'enabled' => (string) $summary['enabled'],
-                'disabled' => (string) $summary['disabled'],
-            ]));
+            admin_log_event(
+                'info',
+                'features.updated',
+                'Admin updated global feature switches.',
+                $summary,
+            );
+            flash_message('admin_notice', t(
+                'admin.features.notice_saved',
+                'Feature settings saved. Enabled: {enabled}. Disabled: {disabled}.',
+                [
+                    'enabled' => (string) $summary['enabled'],
+                    'disabled' => (string) $summary['disabled'],
+                ],
+            ));
             redirect_to(url_for('admin_features', ['saved' => 1]));
         } catch (\RuntimeException $exception) {
             $saveError = $exception->getMessage();
@@ -85,7 +97,7 @@ function cms_admin_features(): void
         feature_capability_admin_health_snapshot(),
         $summary,
         (string) flash_message('admin_notice'),
-        $saveError
+        $saveError,
     );
 
     render_header(t('admin.features.page_title', 'Feature settings'));
@@ -103,14 +115,25 @@ function cms_admin_features(): void
  * @param string $saveError Save failure text.
  * @return array<string, mixed> Prepared page presentation model.
  */
-function admin_features_view_model(array $groupedDefinitions, array $healthSnapshot, array $summary, string $notice, string $saveError): array
-{
+function admin_features_view_model(
+    array $groupedDefinitions,
+    array $healthSnapshot,
+    array $summary,
+    string $notice,
+    string $saveError,
+): array {
     $groups = [];
     foreach ($groupedDefinitions as $groupKey => $group) {
         $groupDefinition = (array) ($group['group'] ?? []);
         $features = [];
-        foreach ((array) ($group['features'] ?? []) as $featureKey => $definition) {
-            $features[] = admin_feature_card_view_model((string) $featureKey, (array) $definition, (array) ($healthSnapshot[(string) $featureKey] ?? []));
+        foreach ((array) (
+            $group['features'] ?? []
+        ) as $featureKey => $definition) {
+            $features[] = admin_feature_card_view_model(
+                (string) $featureKey,
+                (array) $definition,
+                (array) ($healthSnapshot[(string) $featureKey] ?? []),
+            );
         }
         $groups[] = [
             'key' => (string) $groupKey,
@@ -123,9 +146,15 @@ function admin_features_view_model(array $groupedDefinitions, array $healthSnaps
     return [
         'kicker' => t('admin.features.kicker', 'Configuration'),
         'title' => t('admin.features.title', 'Feature settings'),
-        'description' => t('admin.features.description', 'Disable unfinished or unwanted features without removing their code or data. Disabled features are hidden from normal navigation and guarded at their routes.'),
+        'description' => t(
+            'admin.features.description',
+            'Disable unfinished or unwanted features without removing their code or data. Disabled features are hidden from normal navigation and guarded at their routes.',
+        ),
         'dashboard_url' => url_for('admin'),
-        'back_label' => t('admin.features.back_to_dashboard', 'Back to dashboard'),
+        'back_label' => t(
+            'admin.features.back_to_dashboard',
+            'Back to dashboard',
+        ),
         'notice' => $notice,
         'save_error' => $saveError,
         'summary_title' => t('admin.features.summary_title', 'Current state'),
@@ -133,17 +162,26 @@ function admin_features_view_model(array $groupedDefinitions, array $healthSnaps
             'enabled' => [
                 'label' => t('admin.features.summary_enabled', 'Enabled'),
                 'value' => (int) ($summary['enabled'] ?? 0),
-                'help' => t('admin.features.summary_enabled_help', 'Visible and usable.'),
+                'help' => t(
+                    'admin.features.summary_enabled_help',
+                    'Visible and usable.',
+                ),
             ],
             'disabled' => [
                 'label' => t('admin.features.summary_disabled', 'Disabled'),
                 'value' => (int) ($summary['disabled'] ?? 0),
-                'help' => t('admin.features.summary_disabled_help', 'Hidden and route-guarded.'),
+                'help' => t(
+                    'admin.features.summary_disabled_help',
+                    'Hidden and route-guarded.',
+                ),
             ],
             'total' => [
                 'label' => t('admin.features.summary_total', 'Total'),
                 'value' => (int) ($summary['total'] ?? 0),
-                'help' => t('admin.features.summary_total_help', 'Registered optional features.'),
+                'help' => t(
+                    'admin.features.summary_total_help',
+                    'Registered optional features.',
+                ),
             ],
         ],
         'registry_revision' => feature_capability_registry_revision(),
@@ -163,12 +201,18 @@ function admin_features_view_model(array $groupedDefinitions, array $healthSnaps
  * @param array<string, mixed> $health Effective feature health data.
  * @return array<string, mixed> Prepared feature-card presentation model.
  */
-function admin_feature_card_view_model(string $featureKey, array $definition, array $health): array
-{
+function admin_feature_card_view_model(
+    string $featureKey,
+    array $definition,
+    array $health,
+): array {
     $configuredEnabled = !empty($health['configured']);
     $effectiveEnabled = !empty($health['effective']);
     $editable = !empty($definition['editable_on_features']);
-    $blockers = array_values(array_filter(array_map('strval', (array) ($health['blockers'] ?? []))));
+    $blockers = array_values(array_filter(array_map(
+        'strval',
+        (array) ($health['blockers'] ?? []),
+    )));
     $contextHint = feature_capability_admin_context_hint($featureKey);
     $cardClass = $configuredEnabled ? ' is-enabled' : ' is-disabled';
     if ($configuredEnabled && !$effectiveEnabled) {
@@ -179,16 +223,31 @@ function admin_feature_card_view_model(string $featureKey, array $definition, ar
     }
 
     $badges = [];
-    foreach (array_values(array_unique(array_filter(array_map('strval', (array) ($definition['behavior_tags'] ?? []))))) as $tag) {
+    foreach (array_values(array_unique(array_filter(array_map(
+        'strval',
+        (array) ($definition['behavior_tags'] ?? []),
+    )))) as $tag) {
         $badges[] = match ($tag) {
             'public' => t('admin.features.badge.public', 'Public'),
             'admin-only' => t('admin.features.badge.admin_only', 'Admin only'),
-            'writes-files' => t('admin.features.badge.writes_files', 'Writes files'),
-            'background-work' => t('admin.features.badge.background_work', 'Background work'),
-            'outbound-network' => t('admin.features.badge.outbound_network', 'Outbound network'),
+            'writes-files' => t(
+                'admin.features.badge.writes_files',
+                'Writes files',
+            ),
+            'background-work' => t(
+                'admin.features.badge.background_work',
+                'Background work',
+            ),
+            'outbound-network' => t(
+                'admin.features.badge.outbound_network',
+                'Outbound network',
+            ),
             'privacy' => t('admin.features.badge.privacy', 'Privacy'),
             'diagnostic' => t('admin.features.badge.diagnostic', 'Diagnostic'),
-            'destructive-maintenance' => t('admin.features.badge.destructive_maintenance', 'Destructive maintenance'),
+            'destructive-maintenance' => t(
+                'admin.features.badge.destructive_maintenance',
+                'Destructive maintenance',
+            ),
             default => str_replace('-', ' ', ucfirst($tag)),
         };
     }
@@ -198,15 +257,23 @@ function admin_feature_card_view_model(string $featureKey, array $definition, ar
         $blockerLabels = [];
         foreach ($blockers as $blockerKey) {
             $blockerDefinition = feature_capability_definition($blockerKey);
-            $blockerLabels[] = is_array($blockerDefinition) ? (string) ($blockerDefinition['label'] ?? $blockerKey) : $blockerKey;
+            $blockerLabels[] = is_array($blockerDefinition)
+                ? (string) ($blockerDefinition['label'] ?? $blockerKey)
+                : $blockerKey;
         }
-        $blockerLabel = t('admin.features.blocked_by', 'Currently unavailable because this dependency is disabled: {feature}', ['feature' => implode(', ', $blockerLabels)]);
+        $blockerLabel = t(
+            'admin.features.blocked_by',
+            'Currently unavailable because this dependency is disabled: {feature}',
+            ['feature' => implode(', ', $blockerLabels)],
+        );
     }
 
     $settingsUrl = '';
     $settingsRoute = trim((string) ($health['settings_route'] ?? ''));
     if ($settingsRoute !== '') {
-        $settingsParams = is_array($health['settings_params'] ?? null) ? $health['settings_params'] : [];
+        $settingsParams = is_array($health['settings_params'] ?? null)
+            ? $health['settings_params']
+            : [];
         $settingsUrl = url_for($settingsRoute, $settingsParams);
         $settingsFragment = trim((string) ($health['settings_fragment'] ?? ''));
         if ($settingsFragment !== '') {
@@ -228,15 +295,38 @@ function admin_feature_card_view_model(string $featureKey, array $definition, ar
         'editable' => $editable,
         'card_class' => $cardClass,
         'badges' => $badges,
-        'configured_state_label' => t('admin.features.configured_state', 'Configured: {state}', ['state' => $configuredEnabled ? $enabledLabel : $disabledLabel]),
-        'effective_state_label' => t('admin.features.effective_state', 'Effective: {state}', ['state' => $effectiveEnabled ? $enabledLabel : $disabledLabel]),
-        'storage_source_label' => t('admin.features.storage_source', 'Storage: {source}', ['source' => $sourceType]),
-        'schema_state_label' => is_string($schemaState) && $schemaState !== '' ? t('admin.features.schema_state', 'Schema: {state}', ['state' => $schemaState]) : '',
+        'configured_state_label' => t(
+            'admin.features.configured_state',
+            'Configured: {state}',
+            ['state' => $configuredEnabled ? $enabledLabel : $disabledLabel],
+        ),
+        'effective_state_label' => t(
+            'admin.features.effective_state',
+            'Effective: {state}',
+            ['state' => $effectiveEnabled ? $enabledLabel : $disabledLabel],
+        ),
+        'storage_source_label' => t(
+            'admin.features.storage_source',
+            'Storage: {source}',
+            ['source' => $sourceType],
+        ),
+        'schema_state_label' => is_string($schemaState) && $schemaState !== ''
+            ? t('admin.features.schema_state', 'Schema: {state}', [
+                'state' => $schemaState,
+            ])
+            : '',
         'blocker_label' => $blockerLabel,
         'context_hint' => is_string($contextHint) ? $contextHint : '',
-        'settings_url' => $featureKey === 'cooperative_galleries' && !$effectiveEnabled ? '' : $settingsUrl,
-        'settings_panel' => $featureKey === 'cooperative_galleries' && $effectiveEnabled,
-        'settings_label' => t('admin.features.specialized_settings', 'Open specialized settings'),
+        'settings_url' => $featureKey === 'cooperative_galleries'
+        && !$effectiveEnabled
+            ? ''
+            : $settingsUrl,
+        'settings_panel' =>
+            $featureKey === 'cooperative_galleries' && $effectiveEnabled,
+        'settings_label' => t(
+            'admin.features.specialized_settings',
+            'Open specialized settings',
+        ),
         'effective_state' => $effectiveEnabled ? $enabledLabel : $disabledLabel,
     ];
 }

@@ -36,18 +36,31 @@ use function Gallery\Core\now_sql;
 use function Gallery\Core\slugify;
 
 const SMART_GALLERY_RULE_VERSION = 1;
+
 const SMART_GALLERY_MAX_DEPTH = 5;
+
 const SMART_GALLERY_MAX_CONDITIONS = 50;
+
 const SMART_GALLERY_PRESENTATION_VERSION = 1;
+
 const SMART_GALLERY_QUERY_MAX_PAGE_SIZE = 200;
+
 const SMART_GALLERY_LIGHTBOX_MAX_WINDOW = 80;
+
 const SMART_GALLERY_MAP_MAX_POINTS = 10000;
+
 const SMART_GALLERY_ATTACHMENT_MAX_PER_PARENT = 100;
+
 const SMART_GALLERY_GRAPH_MAX_DEPTH = 64;
+
 const SMART_GALLERY_GRAPH_MAX_EXPANDED_NODES = 4096;
+
 const SMART_GALLERY_GRAPH_MAX_EXPANDED_SMART_NODES = 1024;
+
 const SMART_GALLERY_GRAPH_MAX_EDGES = 20000;
+
 const SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS = 50000;
+
 const SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE = 20;
 
 /**
@@ -83,14 +96,22 @@ function smart_gallery_presentation_defaults(): array
     ];
 }
 
-/** Return current site-wide capability masters that may suppress Smart Gallery preferences at runtime. */
+/** Return current site-wide capability masters that may suppress Smart Gallery preferences at runtime.
+ *
+ * @return array{lightbox:bool,maps:bool,downloads:bool,voting:bool} Current effective master states for lightbox, maps, downloads and voting.
+ */
 function smart_gallery_presentation_master_status(): array
 {
     $capabilityEnabled = static function (string $capability): bool {
-        if (function_exists('Gallery\\Services\\feature_capability_effective_enabled')) {
+        if (function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )) {
             return feature_capability_effective_enabled($capability);
         }
-        return !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($capability);
+        return (
+            !function_exists('Gallery\\Services\\feature_flag_enabled')
+                || feature_flag_enabled($capability)
+        );
     };
 
     return [
@@ -113,24 +134,54 @@ function smart_gallery_presentation_master_status(): array
 function smart_gallery_normalize_presentation(mixed $value): array
 {
     if (is_string($value)) {
-        if (trim($value) === '') return [];
+        if (trim($value) === '')
+            return [];
         try {
             $value = json_decode($value, true, 16, JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             return [];
         }
     }
-    if (!is_array($value)) return [];
-    if (isset($value['version']) && (int) $value['version'] !== SMART_GALLERY_PRESENTATION_VERSION) return [];
+    if (!is_array($value))
+        return [];
+    if (
+        isset($value['version'])
+        && (int) $value['version'] !== SMART_GALLERY_PRESENTATION_VERSION
+    )
+        return [];
 
     $normalized = [];
-    if (array_key_exists('grid_columns', $value) && $value['grid_columns'] !== null && $value['grid_columns'] !== '') {
-        $columns = filter_var($value['grid_columns'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => CMS_PAGINATION_MAX_COLUMNS]]);
-        if ($columns !== false) $normalized['grid_columns'] = (int) $columns;
+    if (
+        array_key_exists('grid_columns', $value)
+        && $value['grid_columns'] !== null
+        && $value['grid_columns'] !== ''
+    ) {
+        $columns = filter_var(
+            $value['grid_columns'],
+            FILTER_VALIDATE_INT,
+            ['options' => [
+                'min_range' => 1,
+                'max_range' => CMS_PAGINATION_MAX_COLUMNS,
+            ]],
+        );
+        if ($columns !== false)
+            $normalized['grid_columns'] = (int) $columns;
     }
-    if (array_key_exists('grid_rows', $value) && $value['grid_rows'] !== null && $value['grid_rows'] !== '') {
-        $rows = filter_var($value['grid_rows'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => CMS_PAGINATION_MAX_ROWS]]);
-        if ($rows !== false) $normalized['grid_rows'] = (int) $rows;
+    if (
+        array_key_exists('grid_rows', $value)
+        && $value['grid_rows'] !== null
+        && $value['grid_rows'] !== ''
+    ) {
+        $rows = filter_var(
+            $value['grid_rows'],
+            FILTER_VALIDATE_INT,
+            ['options' => [
+                'min_range' => 1,
+                'max_range' => CMS_PAGINATION_MAX_ROWS,
+            ]],
+        );
+        if ($rows !== false)
+            $normalized['grid_rows'] = (int) $rows;
     }
     foreach ([
         'pagination_enabled',
@@ -143,35 +194,90 @@ function smart_gallery_normalize_presentation(mixed $value): array
         'download_enabled',
         'voting_enabled',
     ] as $booleanKey) {
-        if (array_key_exists($booleanKey, $value) && $value[$booleanKey] !== null && $value[$booleanKey] !== 'inherit') {
-            $normalized[$booleanKey] = filter_var($value[$booleanKey], FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
-            if ($normalized[$booleanKey] === null) unset($normalized[$booleanKey]);
+        if (
+            array_key_exists($booleanKey, $value)
+            && $value[$booleanKey] !== null
+            && $value[$booleanKey] !== 'inherit'
+        ) {
+            $normalized[$booleanKey] = filter_var(
+                $value[$booleanKey],
+                FILTER_VALIDATE_BOOL,
+                FILTER_NULL_ON_FAILURE,
+            );
+            if ($normalized[$booleanKey] === null)
+                unset($normalized[$booleanKey]);
         }
     }
     foreach (['thumbnail_min_size', 'thumbnail_max_size'] as $boundKey) {
-        if (array_key_exists($boundKey, $value) && $value[$boundKey] !== null && $value[$boundKey] !== '' && (int) $value[$boundKey] !== 0) {
+        if (
+            array_key_exists($boundKey, $value)
+            && $value[$boundKey] !== null
+            && $value[$boundKey] !== ''
+            && (int) $value[$boundKey] !== 0
+        ) {
             $bound = thumbnail_bound_post_value($value[$boundKey]);
-            if ($bound !== null) $normalized[$boundKey] = $bound;
+            if ($bound !== null)
+                $normalized[$boundKey] = $bound;
         }
     }
-    if (isset($normalized['thumbnail_min_size'], $normalized['thumbnail_max_size']) && $normalized['thumbnail_min_size'] > $normalized['thumbnail_max_size']) {
-        [$normalized['thumbnail_min_size'], $normalized['thumbnail_max_size']] = [$normalized['thumbnail_max_size'], $normalized['thumbnail_min_size']];
+    if (
+        isset(
+            $normalized['thumbnail_min_size'],
+            $normalized['thumbnail_max_size'],
+        )
+        && $normalized['thumbnail_min_size'] > $normalized['thumbnail_max_size']
+    ) {
+        [$normalized['thumbnail_min_size'], $normalized['thumbnail_max_size']] =
+            [
+                $normalized['thumbnail_max_size'],
+                $normalized['thumbnail_min_size'],
+            ];
     }
-    if (array_key_exists('thumbnail_rendering_mode', $value) && !in_array($value['thumbnail_rendering_mode'], [null, '', 'inherit'], true)) {
-        $mode = is_string($value['thumbnail_rendering_mode']) ? trim($value['thumbnail_rendering_mode']) : '';
-        if (in_array($mode, public_thumbnail_rendering_modes(), true)) $normalized['thumbnail_rendering_mode'] = $mode;
+    if (
+        array_key_exists('thumbnail_rendering_mode', $value)
+        && !in_array(
+            $value['thumbnail_rendering_mode'],
+            [null, '', 'inherit'],
+            true,
+        )
+    ) {
+        $mode = is_string($value['thumbnail_rendering_mode'])
+            ? trim($value['thumbnail_rendering_mode'])
+            : '';
+        if (in_array($mode, public_thumbnail_rendering_modes(), true))
+            $normalized['thumbnail_rendering_mode'] = $mode;
     }
-    if (array_key_exists('card_layout', $value) && !in_array($value['card_layout'], [null, '', 'inherit'], true)) {
-        $layout = gallery_description_layout_storage_value($value['card_layout']);
-        if ($layout !== null) $normalized['card_layout'] = $layout;
+    if (
+        array_key_exists('card_layout', $value)
+        && !in_array($value['card_layout'], [null, '', 'inherit'], true)
+    ) {
+        $layout = gallery_description_layout_storage_value(
+            $value['card_layout'],
+        );
+        if ($layout !== null)
+            $normalized['card_layout'] = $layout;
     }
-    if (array_key_exists('lightbox_browsing_mode', $value) && !in_array($value['lightbox_browsing_mode'], [null, '', 'inherit'], true)) {
-        $mode = gallery_lightbox_browsing_mode_storage_value($value['lightbox_browsing_mode']);
-        if ($mode !== null) $normalized['lightbox_browsing_mode'] = $mode;
+    if (
+        array_key_exists('lightbox_browsing_mode', $value)
+        && !in_array(
+            $value['lightbox_browsing_mode'],
+            [null, '', 'inherit'],
+            true,
+        )
+    ) {
+        $mode = gallery_lightbox_browsing_mode_storage_value(
+            $value['lightbox_browsing_mode'],
+        );
+        if ($mode !== null)
+            $normalized['lightbox_browsing_mode'] = $mode;
     }
-    if (array_key_exists('breadcrumb_style', $value) && is_string($value['breadcrumb_style'])) {
+    if (
+        array_key_exists('breadcrumb_style', $value)
+        && is_string($value['breadcrumb_style'])
+    ) {
         $style = trim($value['breadcrumb_style']);
-        if (isset(breadcrumb_style_registry()[$style])) $normalized['breadcrumb_style'] = $style;
+        if (isset(breadcrumb_style_registry()[$style]))
+            $normalized['breadcrumb_style'] = $style;
     }
     return $normalized;
 }
@@ -185,16 +291,27 @@ function smart_gallery_normalize_presentation(mixed $value): array
 function smart_gallery_presentation_preferences(array $gallery): array
 {
     $defaults = smart_gallery_presentation_defaults();
-    $presentationValue = array_key_exists('presentation', $gallery) ? $gallery['presentation'] : ($gallery['presentation_json'] ?? []);
+    $presentationValue = array_key_exists('presentation', $gallery)
+        ? $gallery['presentation']
+        : $gallery['presentation_json'] ?? [];
     $overrides = smart_gallery_normalize_presentation($presentationValue);
     $preferences = array_merge($defaults, $overrides);
     $preferences['breadcrumb_style'] = breadcrumb_style_resolve(
         $overrides['breadcrumb_style'] ?? null,
-        (string) $defaults['breadcrumb_style']
+        (string) $defaults['breadcrumb_style'],
     );
-    $preferences['grid_columns'] = pagination_dimension_value($preferences['grid_columns'], (int) $defaults['grid_columns'], CMS_PAGINATION_MAX_COLUMNS);
-    $preferences['grid_rows'] = pagination_dimension_value($preferences['grid_rows'], (int) $defaults['grid_rows'], CMS_PAGINATION_MAX_ROWS);
-    $preferences['items_per_page'] = (int) $preferences['grid_columns'] * (int) $preferences['grid_rows'];
+    $preferences['grid_columns'] = pagination_dimension_value(
+        $preferences['grid_columns'],
+        (int) $defaults['grid_columns'],
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
+    $preferences['grid_rows'] = pagination_dimension_value(
+        $preferences['grid_rows'],
+        (int) $defaults['grid_rows'],
+        CMS_PAGINATION_MAX_ROWS,
+    );
+    $preferences['items_per_page'] =
+        (int) $preferences['grid_columns'] * (int) $preferences['grid_rows'];
     $preferences['grid_columns_enabled'] = true;
     $preferences['grid_source'] = $overrides === [] ? 'theme' : 'smart_gallery';
     $preferences['source'] = $preferences['grid_source'];
@@ -209,53 +326,130 @@ function smart_gallery_effective_presentation(array $gallery): array
 
     // Global capability masters are applied after local Smart Gallery overrides.
     // Stored local preferences remain untouched and become effective again when the master is re-enabled.
-    $effective['map_enabled'] = !empty($effective['map_enabled']) && !empty($masters['maps']);
-    $effective['lightbox_enabled'] = !empty($effective['lightbox_enabled']) && !empty($masters['lightbox']);
-    $effective['slideshow_enabled'] = !empty($effective['slideshow_enabled']) && $effective['lightbox_enabled'];
-    $effective['download_enabled'] = !empty($effective['download_enabled']) && !empty($masters['downloads']);
-    $effective['voting_enabled'] = !empty($effective['voting_enabled']) && !empty($masters['voting']);
+    $effective['map_enabled'] =
+        !empty($effective['map_enabled']) && !empty($masters['maps']);
+    $effective['lightbox_enabled'] =
+        !empty($effective['lightbox_enabled']) && !empty($masters['lightbox']);
+    $effective['slideshow_enabled'] =
+        !empty($effective['slideshow_enabled'])
+        && $effective['lightbox_enabled'];
+    $effective['download_enabled'] =
+        !empty($effective['download_enabled']) && !empty($masters['downloads']);
+    $effective['voting_enabled'] =
+        !empty($effective['voting_enabled']) && !empty($masters['voting']);
 
     return $effective;
 }
 
-/** Encode normalized Smart Gallery presentation overrides for persistence. */
+/** Encode normalized Smart Gallery presentation overrides for persistence.
+ *
+ * @param array<string,int|bool|string|null>|string|null $value Stored or submitted presentation overrides to encode.
+ * @return string JSON-encoded normalized presentation overrides with the current document version.
+ */
 function smart_gallery_presentation_json(mixed $value): string
 {
     $normalized = smart_gallery_normalize_presentation($value);
-    return json_encode(['version' => SMART_GALLERY_PRESENTATION_VERSION] + $normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    return json_encode(
+        ['version' => SMART_GALLERY_PRESENTATION_VERSION] + $normalized,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+    );
 }
 
-/** Return thumbnail candidates after intersecting Smart Gallery guardrails with physical gallery guardrails. */
-function smart_gallery_thumbnail_sizes(array $presentation, array $image, array $sourceGallery, array $requestedSizes): array
-{
-    $sizes = thumbnail_bound_filter_sizes($requestedSizes, $image, $sourceGallery);
-    $minSize = thumbnail_bound_post_value($presentation['thumbnail_min_size'] ?? null);
-    $maxSize = thumbnail_bound_post_value($presentation['thumbnail_max_size'] ?? null);
-    if ($minSize === null && $maxSize === null) return $sizes;
-    $filtered = array_values(array_filter($sizes, static function (int $size) use ($minSize, $maxSize): bool {
-        return ($minSize === null || $size >= $minSize) && ($maxSize === null || $size <= $maxSize);
+/** Return thumbnail candidates after intersecting Smart Gallery guardrails with physical gallery guardrails.
+ *
+ * @param array<string,int|bool|string|null> $presentation Normalized or stored Smart Gallery presentation overrides.
+ * @param array<string,int|float|string|bool|null> $image Image row whose dimensions constrain candidate thumbnail sizes.
+ * @param array<string,int|float|string|bool|null> $sourceGallery Physical gallery row whose thumbnail policy constrains candidates.
+ * @param list<int> $requestedSizes Candidate thumbnail sizes to intersect with both sets of bounds.
+ * @return list<int> Safe candidate sizes satisfying Smart Gallery and physical-gallery bounds.
+ */
+function smart_gallery_thumbnail_sizes(
+    array $presentation,
+    array $image,
+    array $sourceGallery,
+    array $requestedSizes,
+): array {
+    $sizes = thumbnail_bound_filter_sizes(
+        $requestedSizes,
+        $image,
+        $sourceGallery,
+    );
+    $minSize = thumbnail_bound_post_value(
+        $presentation['thumbnail_min_size'] ?? null,
+    );
+    $maxSize = thumbnail_bound_post_value(
+        $presentation['thumbnail_max_size'] ?? null,
+    );
+    if ($minSize === null && $maxSize === null)
+        return $sizes;
+    $filtered = array_values(array_filter($sizes, static function (int $size) use (
+        $minSize,
+        $maxSize,
+    ): bool {
+        return (
+            ($minSize === null || $size >= $minSize)
+                && ($maxSize === null || $size <= $maxSize)
+        );
     }));
-    if ($filtered !== []) return $filtered;
+    if ($filtered !== [])
+        return $filtered;
     // Contradictory Smart Gallery and source-gallery bounds fall back to the source gallery's canonical safe candidates.
     return $sizes;
 }
 
-/** Inspect the Smart Gallery schema required by backward-compatible read paths. */
+/** Inspect the Smart Gallery schema required by backward-compatible read paths.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Schema state and required table/column checks for backward-compatible reads.
+ */
 function smart_gallery_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.smart_galleries', [
-        'smart_galleries' => ['id', 'slug', 'rules_json', 'rule_version', 'enabled', 'visibility', 'placement_mode', 'parent_gallery_id', 'sort_mode', 'sort_direction'],
-        'smart_gallery_placements' => ['smart_gallery_id', 'gallery_id', 'created_at'],
+        'smart_galleries' => [
+            'id',
+            'slug',
+            'rules_json',
+            'rule_version',
+            'enabled',
+            'visibility',
+            'placement_mode',
+            'parent_gallery_id',
+            'sort_mode',
+            'sort_direction',
+        ],
+        'smart_gallery_placements' => [
+            'smart_gallery_id',
+            'gallery_id',
+            'created_at',
+        ],
         'images' => ['id', 'gallery_id', 'editorial_rating'],
     ]);
 }
 
-/** Inspect the complete schema required before a current-version Smart Gallery write. */
+/** Inspect the complete schema required before a current-version Smart Gallery write.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Schema state and required table/column checks for current-version writes.
+ */
 function smart_gallery_mutation_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.smart_galleries.write', [
-        'smart_galleries' => ['id', 'slug', 'rules_json', 'rule_version', 'enabled', 'visibility', 'placement_mode', 'parent_gallery_id', 'sort_mode', 'sort_direction', 'presentation_json'],
-        'smart_gallery_placements' => ['smart_gallery_id', 'gallery_id', 'created_at'],
+        'smart_galleries' => [
+            'id',
+            'slug',
+            'rules_json',
+            'rule_version',
+            'enabled',
+            'visibility',
+            'placement_mode',
+            'parent_gallery_id',
+            'sort_mode',
+            'sort_direction',
+            'presentation_json',
+        ],
+        'smart_gallery_placements' => [
+            'smart_gallery_id',
+            'gallery_id',
+            'created_at',
+        ],
         'images' => ['id', 'gallery_id', 'editorial_rating'],
     ]);
 }
@@ -266,46 +460,74 @@ function smart_gallery_schema_ready(): bool
     return schema_inspection_is_available(smart_gallery_schema_status());
 }
 
-/** Inspect the attachment metadata required for top/bottom placement and ordering writes. */
+/** Inspect the attachment metadata required for top/bottom placement and ordering writes.
+ *
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Schema state and required placement metadata checks.
+ */
 function smart_gallery_attachment_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.smart_gallery_attachments', [
-        'smart_gallery_placements' => ['smart_gallery_id', 'gallery_id', 'placement', 'placement_order', 'created_at'],
+        'smart_gallery_placements' => [
+            'smart_gallery_id',
+            'gallery_id',
+            'placement',
+            'placement_order',
+            'created_at',
+        ],
     ]);
 }
 
-/** Return true when attachment placement and ordering metadata can be read safely. */
+/** Return true when attachment placement and ordering metadata can be read safely.
+ *
+ * @return bool Whether attachment metadata is conclusively available.
+ */
 function smart_gallery_attachment_schema_ready(): bool
 {
-    return schema_inspection_is_available(smart_gallery_attachment_schema_status());
+    return schema_inspection_is_available(
+        smart_gallery_attachment_schema_status(),
+    );
 }
 
-/** Refuse attachment writes before any mutation when placement metadata is unavailable. */
+/** Refuse attachment writes before any mutation when placement metadata is unavailable.
+ *
+ * @param string $operation Stable operation name included in schema readiness errors.
+ * @return void No value; throws when attachment metadata is unavailable or inconclusive.
+ */
 function smart_gallery_assert_attachment_mutation_ready(string $operation): void
 {
     mutation_schema_assert_available(
         smart_gallery_attachment_schema_status(),
         $operation,
         'Smart Gallery attachment placement requires the pending database migration.',
-        'Smart Gallery attachment storage could not be verified safely.'
+        'Smart Gallery attachment storage could not be verified safely.',
     );
 }
 
-/** Refuse a Smart Gallery write before any mutation when schema is inconclusive. */
+/** Refuse a Smart Gallery write before any mutation when schema is inconclusive.
+ *
+ * @param string $operation Stable operation name included in schema readiness errors.
+ * @return void No value; throws when Smart Gallery write schema is unavailable or inconclusive.
+ */
 function smart_gallery_assert_mutation_ready(string $operation): void
 {
     mutation_schema_assert_available(
         smart_gallery_mutation_schema_status(),
         $operation,
         'Smart Galleries require the pending database migration.',
-        'Smart Gallery storage could not be verified safely.'
+        'Smart Gallery storage could not be verified safely.',
     );
 }
 
-/** Return a new, valid Smart Gallery rule document. */
+/** Return a new, valid Smart Gallery rule document.
+ *
+ * @return array{version:int,root:array{type:'group',operator:'AND',children:list<array<string,scalar|null|array<array-key,scalar|null>>>}} Valid versioned rule document with an empty AND group.
+ */
 function smart_gallery_empty_rules(): array
 {
-    return ['version' => SMART_GALLERY_RULE_VERSION, 'root' => ['type' => 'group', 'operator' => 'AND', 'children' => []]];
+    return [
+        'version' => SMART_GALLERY_RULE_VERSION,
+        'root' => ['type' => 'group', 'operator' => 'AND', 'children' => []],
+    ];
 }
 
 /** Return request-local Smart Gallery graph/cache storage. */
@@ -331,28 +553,48 @@ function smart_gallery_attachment_placement_value(mixed $value): string
 /** Normalize one bounded attachment order value. */
 function smart_gallery_attachment_order_value(mixed $value): int
 {
-    if (!is_numeric($value)) return 0;
+    if (!is_numeric($value))
+        return 0;
     return max(-100000, min(100000, (int) $value));
 }
 
-/** Normalize legacy id lists or structured attachment form rows. */
+/** Normalize legacy id lists or structured attachment form rows.
+ *
+ * @param array<array-key,int|string|bool|array<string,int|string|bool|null>> $input Legacy selected IDs or structured attachment rows.
+ * @return list<array{smart_gallery_id:int,placement:'top'|'bottom',placement_order:int}> Normalized positive Smart Gallery IDs with supported placement and order values.
+ */
 function smart_gallery_normalize_attachment_inputs(array $input): array
 {
     $normalized = [];
     foreach ($input as $key => $value) {
         if (is_array($value)) {
             $id = (int) ($value['smart_gallery_id'] ?? $key);
-            $explicitNormalizedRow = array_key_exists('smart_gallery_id', $value) && array_key_exists('placement', $value) && array_key_exists('placement_order', $value);
-            if ($id <= 0 || (!$explicitNormalizedRow && empty($value['enabled']))) continue;
+            $explicitNormalizedRow =
+                array_key_exists('smart_gallery_id', $value)
+                && array_key_exists('placement', $value)
+                && array_key_exists('placement_order', $value);
+            if (
+                $id <= 0
+                || (
+                    !$explicitNormalizedRow
+                    && empty($value['enabled'])
+                )
+            )
+                continue;
             $normalized[$id] = [
                 'smart_gallery_id' => $id,
-                'placement' => smart_gallery_attachment_placement_value($value['placement'] ?? 'bottom'),
-                'placement_order' => smart_gallery_attachment_order_value($value['placement_order'] ?? 0),
+                'placement' => smart_gallery_attachment_placement_value(
+                    $value['placement'] ?? 'bottom',
+                ),
+                'placement_order' => smart_gallery_attachment_order_value(
+                    $value['placement_order'] ?? 0,
+                ),
             ];
             continue;
         }
         $id = (int) $value;
-        if ($id <= 0) continue;
+        if ($id <= 0)
+            continue;
         $normalized[$id] = [
             'smart_gallery_id' => $id,
             'placement' => 'bottom',
@@ -360,89 +602,169 @@ function smart_gallery_normalize_attachment_inputs(array $input): array
         ];
     }
     if (count($normalized) > SMART_GALLERY_ATTACHMENT_MAX_PER_PARENT) {
-        throw new InvalidArgumentException('A physical gallery may contain at most ' . SMART_GALLERY_ATTACHMENT_MAX_PER_PARENT . ' Smart Gallery attachments.');
+        throw new InvalidArgumentException(
+            'A physical gallery may contain at most '
+                . SMART_GALLERY_ATTACHMENT_MAX_PER_PARENT
+                . ' Smart Gallery attachments.',
+        );
     }
     return array_values($normalized);
 }
 
-/** Collect physical-gallery rule references with exact/descendant inclusion semantics. */
+/** Collect physical-gallery rule references with exact/descendant inclusion semantics.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $rules Versioned Smart Gallery rule document.
+ * @return list<array{gallery_id:int,mode:'exact'|'under'}> Distinct physical gallery references and whether each is exact or descendant-inclusive.
+ */
 function smart_gallery_rule_gallery_reference_specs(array $rules): array
 {
     $validated = smart_gallery_validate_rules($rules);
     $references = [];
-    smart_gallery_rule_gallery_reference_specs_node($validated['root'], true, $references);
+    smart_gallery_rule_gallery_reference_specs_node(
+        $validated['root'],
+        true,
+        $references,
+    );
     $references = array_values($references);
     usort($references, static function (array $left, array $right): int {
-        $idCompare = ((int) $left['gallery_id']) <=> ((int) $right['gallery_id']);
-        return $idCompare !== 0 ? $idCompare : strcmp((string) $left['mode'], (string) $right['mode']);
+        $idCompare = (int) $left['gallery_id'] <=> (int) $right['gallery_id'];
+        return $idCompare !== 0
+            ? $idCompare
+            : strcmp((string) $left['mode'], (string) $right['mode']);
     });
     return $references;
 }
 
-/** Return only the stable physical-gallery IDs referenced by positive inclusion branches. */
+/** Return only the stable physical-gallery IDs referenced by positive inclusion branches.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $rules Versioned Smart Gallery rule document.
+ * @return list<int> Unique positive physical gallery IDs used by positive inclusion branches.
+ */
 function smart_gallery_rule_gallery_references(array $rules): array
 {
-    $ids = array_map(static fn (array $reference): int => (int) $reference['gallery_id'], smart_gallery_rule_gallery_reference_specs($rules));
-    $ids = array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+    $ids = array_map(
+        static fn(array $reference): int => (int) $reference['gallery_id'],
+        smart_gallery_rule_gallery_reference_specs($rules),
+    );
+    $ids = array_values(array_unique(array_filter(
+        $ids,
+        static fn(int $id): bool => $id > 0,
+    )));
     sort($ids, SORT_NUMERIC);
     return $ids;
 }
 
-/** Walk one validated rule node while tracking NOT polarity and exact/under semantics. */
-function smart_gallery_rule_gallery_reference_specs_node(array $node, bool $positive, array &$references): void
-{
+/** Walk one validated rule node while tracking NOT polarity and exact/under semantics.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $node Validated rule node to traverse or summarize.
+ * @param bool $positive Whether the current branch includes results rather than excludes them.
+ * @param array<string,array{gallery_id:int,mode:string}> $references Reference accumulator keyed by mode and physical gallery ID.
+ * @return void No value; appends qualifying references to the supplied accumulator.
+ */
+function smart_gallery_rule_gallery_reference_specs_node(
+    array $node,
+    bool $positive,
+    array &$references,
+): void {
     if (($node['type'] ?? '') === 'group') {
-        $childPositive = ($node['operator'] ?? '') === 'NOT' ? !$positive : $positive;
+        $childPositive = ($node['operator'] ?? '') === 'NOT'
+            ? !$positive
+            : $positive;
         foreach ((array) ($node['children'] ?? []) as $child) {
-            if (is_array($child)) smart_gallery_rule_gallery_reference_specs_node($child, $childPositive, $references);
+            if (is_array($child))
+                smart_gallery_rule_gallery_reference_specs_node(
+                    $child,
+                    $childPositive,
+                    $references,
+                );
         }
         return;
     }
-    if (($node['field'] ?? '') !== 'gallery') return;
+    if (($node['field'] ?? '') !== 'gallery')
+        return;
     $operator = (string) ($node['operator'] ?? '');
     $mode = null;
-    if ($positive && $operator === 'equals') $mode = 'exact';
-    if ($positive && $operator === 'under') $mode = 'under';
-    if (!$positive && $operator === 'not_equals') $mode = 'exact';
-    if (!$positive && $operator === 'not_under') $mode = 'under';
+    if ($positive && $operator === 'equals')
+        $mode = 'exact';
+    if ($positive && $operator === 'under')
+        $mode = 'under';
+    if (!$positive && $operator === 'not_equals')
+        $mode = 'exact';
+    if (!$positive && $operator === 'not_under')
+        $mode = 'under';
     $galleryId = (int) ($node['value'] ?? 0);
-    if ($mode === null || $galleryId <= 0) return;
-    $references[$mode . ':' . $galleryId] = ['gallery_id' => $galleryId, 'mode' => $mode];
+    if ($mode === null || $galleryId <= 0)
+        return;
+    $references[$mode . ':' . $galleryId] = [
+        'gallery_id' => $galleryId,
+        'mode' => $mode,
+    ];
 }
 
-/** Expand one physical-gallery branch with bounded descendant traversal. */
-function smart_gallery_graph_gallery_branch_ids(int $galleryId, array $childrenByParent, bool $includeDescendants): array
-{
-    if ($galleryId <= 0) return [];
-    if (!$includeDescendants) return [$galleryId];
+/** Expand one physical-gallery branch with bounded descendant traversal.
+ *
+ * @param int $galleryId Physical gallery identifier.
+ * @param array<int,list<int>> $childrenByParent Child gallery IDs keyed by physical parent gallery ID.
+ * @param bool $includeDescendants Whether to include descendants of the selected gallery.
+ * @return list<int> Selected physical gallery ID, optionally followed by its descendants.
+ */
+function smart_gallery_graph_gallery_branch_ids(
+    int $galleryId,
+    array $childrenByParent,
+    bool $includeDescendants,
+): array {
+    if ($galleryId <= 0)
+        return [];
+    if (!$includeDescendants)
+        return [$galleryId];
     $queue = [$galleryId];
     $queueIndex = 0;
     $seen = [];
     $result = [];
     while (isset($queue[$queueIndex])) {
         $currentId = (int) $queue[$queueIndex++];
-        if ($currentId <= 0 || isset($seen[$currentId])) continue;
+        if ($currentId <= 0 || isset($seen[$currentId]))
+            continue;
         $seen[$currentId] = true;
         $result[] = $currentId;
         if (count($result) > SMART_GALLERY_GRAPH_MAX_EXPANDED_NODES) {
-            throw new InvalidArgumentException('A gallery-descendant branch is too large to validate Smart Gallery relationships safely.');
+            throw new InvalidArgumentException(
+                'A gallery-descendant branch is too large to validate Smart Gallery relationships safely.',
+            );
         }
         foreach ((array) ($childrenByParent[$currentId] ?? []) as $childId) {
             $childId = (int) $childId;
-            if ($childId > 0 && !isset($seen[$childId])) $queue[] = $childId;
+            if ($childId > 0 && !isset($seen[$childId]))
+                $queue[] = $childId;
         }
     }
     return $result;
 }
 
-/** Add one deduplicated graph edge while enforcing a hard edge ceiling. */
-function smart_gallery_graph_add_edge(array &$adjacency, string $from, string $to, int &$edgeCount): void
-{
-    if ($from === '' || $to === '') return;
-    if (!isset($adjacency[$from])) $adjacency[$from] = [];
-    if (isset($adjacency[$from][$to])) return;
+/** Add one deduplicated graph edge while enforcing a hard edge ceiling.
+ *
+ * @param array<string,array<string,true>> $adjacency Directed graph keyed by source node and destination node.
+ * @param string $from Source graph node key.
+ * @param string $to Destination graph node key.
+ * @param int $edgeCount Deduplicated graph edge count, updated by reference.
+ * @return void No value; adds a deduplicated edge unless the edge limit is reached.
+ */
+function smart_gallery_graph_add_edge(
+    array &$adjacency,
+    string $from,
+    string $to,
+    int &$edgeCount,
+): void {
+    if ($from === '' || $to === '')
+        return;
+    if (!isset($adjacency[$from]))
+        $adjacency[$from] = [];
+    if (isset($adjacency[$from][$to]))
+        return;
     if (++$edgeCount > SMART_GALLERY_GRAPH_MAX_EDGES) {
-        throw new InvalidArgumentException('Smart Gallery relationship graph is too large to validate safely.');
+        throw new InvalidArgumentException(
+            'Smart Gallery relationship graph is too large to validate safely.',
+        );
     }
     $adjacency[$from][$to] = true;
 }
@@ -450,11 +772,31 @@ function smart_gallery_graph_add_edge(array &$adjacency, string $from, string $t
 /**
  * Find a bounded path in the mixed physical-gallery/Smart-Gallery graph.
  *
- * @return array{found:bool,path:array<int,string>,truncated:bool,visited:int,smart_nodes:int}
+ * @param array<string,array<string,true>> $adjacency Directed graph keyed by source node and destination node.
+ * @param string $start Node key at which path search begins.
+ * @param string $target Node key sought by path search.
+ * @param int $maxDepth Maximum path depth to visit.
+ * @param int $maxNodes Maximum graph nodes to visit.
+ * @param int $maxSmartNodes Maximum Smart Gallery nodes to visit.
+
+ * @return array{found:bool,path:list<string>,truncated:bool,visited:int,smart_nodes:int} Path-search result, ordered node path, truncation state and traversal counts.
  */
-function smart_gallery_graph_find_path(array $adjacency, string $start, string $target, int $maxDepth = SMART_GALLERY_GRAPH_MAX_DEPTH, int $maxNodes = SMART_GALLERY_GRAPH_MAX_EXPANDED_NODES, int $maxSmartNodes = SMART_GALLERY_GRAPH_MAX_EXPANDED_SMART_NODES): array
-{
-    if ($start === '' || $target === '') return ['found' => false, 'path' => [], 'truncated' => false, 'visited' => 0, 'smart_nodes' => 0];
+function smart_gallery_graph_find_path(
+    array $adjacency,
+    string $start,
+    string $target,
+    int $maxDepth = SMART_GALLERY_GRAPH_MAX_DEPTH,
+    int $maxNodes = SMART_GALLERY_GRAPH_MAX_EXPANDED_NODES,
+    int $maxSmartNodes = SMART_GALLERY_GRAPH_MAX_EXPANDED_SMART_NODES,
+): array {
+    if ($start === '' || $target === '')
+        return [
+            'found' => false,
+            'path' => [],
+            'truncated' => false,
+            'visited' => 0,
+            'smart_nodes' => 0,
+        ];
     $queue = [[$start, 0]];
     $queueIndex = 0;
     $seen = [];
@@ -463,12 +805,24 @@ function smart_gallery_graph_find_path(array $adjacency, string $start, string $
     $smartNodes = 0;
     while (isset($queue[$queueIndex])) {
         [$node, $depth] = $queue[$queueIndex++];
-        if (isset($seen[$node])) continue;
+        if (isset($seen[$node]))
+            continue;
         $seen[$node] = true;
         $visited++;
-        if (str_starts_with($node, 's:')) $smartNodes++;
-        if ($visited > $maxNodes || $smartNodes > $maxSmartNodes || $depth > $maxDepth) {
-            return ['found' => false, 'path' => [], 'truncated' => true, 'visited' => $visited, 'smart_nodes' => $smartNodes];
+        if (str_starts_with($node, 's:'))
+            $smartNodes++;
+        if (
+            $visited > $maxNodes
+            || $smartNodes > $maxSmartNodes
+            || $depth > $maxDepth
+        ) {
+            return [
+                'found' => false,
+                'path' => [],
+                'truncated' => true,
+                'visited' => $visited,
+                'smart_nodes' => $smartNodes,
+            ];
         }
         if ($node === $target) {
             $path = [$node];
@@ -476,74 +830,148 @@ function smart_gallery_graph_find_path(array $adjacency, string $start, string $
                 $node = $previous[$node];
                 $path[] = $node;
             }
-            return ['found' => true, 'path' => array_reverse($path), 'truncated' => false, 'visited' => $visited, 'smart_nodes' => $smartNodes];
+            return [
+                'found' => true,
+                'path' => array_reverse($path),
+                'truncated' => false,
+                'visited' => $visited,
+                'smart_nodes' => $smartNodes,
+            ];
         }
         foreach (array_keys((array) ($adjacency[$node] ?? [])) as $next) {
-            if (isset($seen[$next]) || isset($previous[$next]) || $next === $start) continue;
+            if (
+                isset($seen[$next])
+                || isset($previous[$next])
+                || $next === $start
+            )
+                continue;
             $previous[$next] = $node;
             $queue[] = [$next, $depth + 1];
         }
     }
-    return ['found' => false, 'path' => [], 'truncated' => false, 'visited' => $visited, 'smart_nodes' => $smartNodes];
+    return [
+        'found' => false,
+        'path' => [],
+        'truncated' => false,
+        'visited' => $visited,
+        'smart_nodes' => $smartNodes,
+    ];
 }
 
-/** Build the canonical mixed relationship graph with optional proposed mutations. */
-function smart_gallery_graph_snapshot(?array $definitionOverride = null, ?array $placementOverride = null, ?array $parentOverride = null): array
-{
+/** Build the canonical mixed relationship graph with optional proposed mutations.
+ *
+ * @param array{id:int,rules:array<string,scalar|null|array<array-key,scalar|null>>}|null $definitionOverride Optional proposed definition and validated rule document.
+ * @param array{gallery_id:int,attachments:list<array{smart_gallery_id:int,placement:string,placement_order:int}>}|null $placementOverride Optional proposed placements for one physical gallery.
+ * @param array{parents?:array<int|string,int>,gallery_id?:int,parent_id?:int}|null $parentOverride Optional proposed physical-gallery parent mapping.
+ * @return array{adjacency:array<string,array<string,true>>,placements:list<array{smart_gallery_id:int,gallery_id:int,placement:'top'|'bottom',placement_order:int}>,smart_errors:array<int,string>,edge_count:int,graph_error?:string} Canonical relationship graph, attachment rows, malformed-rule diagnostics and edge count.
+ */
+function smart_gallery_graph_snapshot(
+    ?array $definitionOverride = null,
+    ?array $placementOverride = null,
+    ?array $parentOverride = null,
+): array {
     $cache = &smart_gallery_graph_request_cache();
-    if ($definitionOverride === null && $placementOverride === null && $parentOverride === null && isset($cache['base_graph'])) {
+    if (
+        $definitionOverride === null
+        && $placementOverride === null
+        && $parentOverride === null
+        && isset($cache['base_graph'])
+    ) {
         return $cache['base_graph'];
     }
     if (!smart_gallery_schema_ready()) {
-        return ['adjacency' => [], 'placements' => [], 'smart_errors' => [], 'edge_count' => 0];
+        return [
+            'adjacency' => [],
+            'placements' => [],
+            'smart_errors' => [],
+            'edge_count' => 0,
+        ];
     }
 
     $adjacency = [];
     $placements = [];
     $smartErrors = [];
     $edgeCount = 0;
-    $galleryRows = \Gallery\Models\smart_gallery_model_graph_gallery_rows(SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS);
+    $galleryRows = \Gallery\Models\smart_gallery_model_graph_gallery_rows(
+        SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS,
+    );
     if (count($galleryRows) > SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS) {
-        throw new InvalidArgumentException('Gallery hierarchy is too large to validate Smart Gallery relationships safely.');
+        throw new InvalidArgumentException(
+            'Gallery hierarchy is too large to validate Smart Gallery relationships safely.',
+        );
     }
     $parentOverrides = [];
     if ($parentOverride !== null) {
-        if (isset($parentOverride['parents']) && is_array($parentOverride['parents'])) {
+        if (
+            isset($parentOverride['parents'])
+            && is_array($parentOverride['parents'])
+        ) {
             foreach ($parentOverride['parents'] as $overrideGalleryId => $overrideParentId) {
                 $overrideGalleryId = (int) $overrideGalleryId;
-                if ($overrideGalleryId > 0) $parentOverrides[$overrideGalleryId] = max(0, (int) $overrideParentId);
+                if ($overrideGalleryId > 0)
+                    $parentOverrides[$overrideGalleryId] = max(
+                        0,
+                        (int) $overrideParentId,
+                    );
             }
         } else {
             $overrideGalleryId = (int) ($parentOverride['gallery_id'] ?? 0);
-            if ($overrideGalleryId > 0) $parentOverrides[$overrideGalleryId] = max(0, (int) ($parentOverride['parent_id'] ?? 0));
+            if ($overrideGalleryId > 0)
+                $parentOverrides[$overrideGalleryId] = max(
+                    0,
+                    (int) ($parentOverride['parent_id'] ?? 0),
+                );
         }
     }
     $childrenByParent = [];
     foreach ($galleryRows as $row) {
         $galleryId = (int) ($row['id'] ?? 0);
-        if ($galleryId <= 0) continue;
+        if ($galleryId <= 0)
+            continue;
         $parentId = array_key_exists($galleryId, $parentOverrides)
             ? $parentOverrides[$galleryId]
             : (isset($row['parent_id']) ? (int) $row['parent_id'] : 0);
-        if ($parentId > 0) $childrenByParent[$parentId][] = $galleryId;
+        if ($parentId > 0)
+            $childrenByParent[$parentId][] = $galleryId;
     }
 
-    $definitionRows = \Gallery\Models\smart_gallery_model_graph_definition_rows(SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS);
+    $definitionRows = \Gallery\Models\smart_gallery_model_graph_definition_rows(
+        SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS,
+    );
     if (count($definitionRows) > SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS) {
-        throw new InvalidArgumentException('There are too many Smart Gallery definitions to validate relationships safely.');
+        throw new InvalidArgumentException(
+            'There are too many Smart Gallery definitions to validate relationships safely.',
+        );
     }
     foreach ($definitionRows as $row) {
         $smartId = (int) ($row['id'] ?? 0);
-        if ($smartId <= 0) continue;
+        if ($smartId <= 0)
+            continue;
         try {
-            $rules = $definitionOverride !== null && $smartId === (int) ($definitionOverride['id'] ?? 0)
-                ? (array) ($definitionOverride['rules'] ?? [])
-                : smart_gallery_rules_from_json((string) ($row['rules_json'] ?? ''));
-            foreach (smart_gallery_rule_gallery_reference_specs($rules) as $reference) {
+            $rules =
+                $definitionOverride !== null
+                && $smartId === (int) ($definitionOverride['id'] ?? 0)
+                    ? (array) ($definitionOverride['rules'] ?? [])
+                    : smart_gallery_rules_from_json(
+                        (string) ($row['rules_json'] ?? ''),
+                    );
+            foreach (smart_gallery_rule_gallery_reference_specs(
+                $rules,
+            ) as $reference) {
                 $galleryId = (int) $reference['gallery_id'];
-                $includeDescendants = ($reference['mode'] ?? 'exact') === 'under';
-                foreach (smart_gallery_graph_gallery_branch_ids($galleryId, $childrenByParent, $includeDescendants) as $resolvedGalleryId) {
-                    smart_gallery_graph_add_edge($adjacency, 's:' . $smartId, 'g:' . $resolvedGalleryId, $edgeCount);
+                $includeDescendants =
+                    ($reference['mode'] ?? 'exact') === 'under';
+                foreach (smart_gallery_graph_gallery_branch_ids(
+                    $galleryId,
+                    $childrenByParent,
+                    $includeDescendants,
+                ) as $resolvedGalleryId) {
+                    smart_gallery_graph_add_edge(
+                        $adjacency,
+                        's:' . $smartId,
+                        'g:' . $resolvedGalleryId,
+                        $edgeCount,
+                    );
                 }
             }
         } catch (InvalidArgumentException) {
@@ -553,192 +981,442 @@ function smart_gallery_graph_snapshot(?array $definitionOverride = null, ?array 
 
     $placementRows = \Gallery\Models\smart_gallery_model_graph_placement_rows(
         SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS,
-        smart_gallery_attachment_schema_ready()
+        smart_gallery_attachment_schema_ready(),
     );
     if (count($placementRows) > SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS) {
-        throw new InvalidArgumentException('There are too many Smart Gallery placements to validate relationships safely.');
+        throw new InvalidArgumentException(
+            'There are too many Smart Gallery placements to validate relationships safely.',
+        );
     }
-    $overrideGalleryId = $placementOverride !== null ? (int) ($placementOverride['gallery_id'] ?? 0) : 0;
+    $overrideGalleryId = $placementOverride !== null
+        ? (int) ($placementOverride['gallery_id'] ?? 0)
+        : 0;
     foreach ($placementRows as $row) {
         $galleryId = (int) ($row['gallery_id'] ?? 0);
-        if ($overrideGalleryId > 0 && $galleryId === $overrideGalleryId) continue;
+        if ($overrideGalleryId > 0 && $galleryId === $overrideGalleryId)
+            continue;
         $smartId = (int) ($row['smart_gallery_id'] ?? 0);
-        if ($galleryId <= 0 || $smartId <= 0) continue;
+        if ($galleryId <= 0 || $smartId <= 0)
+            continue;
         $normalized = [
             'smart_gallery_id' => $smartId,
             'gallery_id' => $galleryId,
-            'placement' => smart_gallery_attachment_placement_value($row['placement'] ?? 'bottom'),
-            'placement_order' => smart_gallery_attachment_order_value($row['placement_order'] ?? 0),
+            'placement' => smart_gallery_attachment_placement_value(
+                $row['placement'] ?? 'bottom',
+            ),
+            'placement_order' => smart_gallery_attachment_order_value(
+                $row['placement_order'] ?? 0,
+            ),
         ];
         $placements[] = $normalized;
-        smart_gallery_graph_add_edge($adjacency, 'g:' . $galleryId, 's:' . $smartId, $edgeCount);
+        smart_gallery_graph_add_edge(
+            $adjacency,
+            'g:' . $galleryId,
+            's:' . $smartId,
+            $edgeCount,
+        );
     }
     if ($placementOverride !== null && $overrideGalleryId > 0) {
-        foreach (smart_gallery_normalize_attachment_inputs((array) ($placementOverride['attachments'] ?? [])) as $attachment) {
+        foreach (smart_gallery_normalize_attachment_inputs(
+            (array) ($placementOverride['attachments'] ?? []),
+        ) as $attachment) {
             $smartId = (int) $attachment['smart_gallery_id'];
             $normalized = $attachment + ['gallery_id' => $overrideGalleryId];
             $normalized['gallery_id'] = $overrideGalleryId;
             $placements[] = $normalized;
-            smart_gallery_graph_add_edge($adjacency, 'g:' . $overrideGalleryId, 's:' . $smartId, $edgeCount);
+            smart_gallery_graph_add_edge(
+                $adjacency,
+                'g:' . $overrideGalleryId,
+                's:' . $smartId,
+                $edgeCount,
+            );
         }
     }
-    $snapshot = ['adjacency' => $adjacency, 'placements' => $placements, 'smart_errors' => $smartErrors, 'edge_count' => $edgeCount];
-    if ($definitionOverride === null && $placementOverride === null && $parentOverride === null) $cache['base_graph'] = $snapshot;
+    $snapshot = [
+        'adjacency' => $adjacency,
+        'placements' => $placements,
+        'smart_errors' => $smartErrors,
+        'edge_count' => $edgeCount,
+    ];
+    if (
+        $definitionOverride === null
+        && $placementOverride === null
+        && $parentOverride === null
+    )
+        $cache['base_graph'] = $snapshot;
     return $snapshot;
 }
 
-/** Build a fail-closed relationship snapshot for read-only Admin/public rendering. */
+/** Build a fail-closed relationship snapshot for read-only Admin/public rendering.
+ *
+ * @return array{adjacency:array<string,array<string,true>>,placements:list<array{smart_gallery_id:int,gallery_id:int,placement:'top'|'bottom',placement_order:int}>,smart_errors:array<int,string>,edge_count:int,graph_error?:string} Current graph snapshot, or a fail-closed snapshot with a graph error.
+ */
 function smart_gallery_graph_read_snapshot(): array
 {
     try {
         return smart_gallery_graph_snapshot();
     } catch (InvalidArgumentException) {
-        return ['adjacency' => [], 'placements' => [], 'smart_errors' => [], 'edge_count' => 0, 'graph_error' => 'graph_limit'];
+        return [
+            'adjacency' => [],
+            'placements' => [],
+            'smart_errors' => [],
+            'edge_count' => 0,
+            'graph_error' => 'graph_limit',
+        ];
     }
 }
 
-/** Return a bounded diagnostic for one concrete physical-gallery attachment edge. */
-function smart_gallery_relationship_diagnostic(int $smartGalleryId, int $galleryId, ?array $snapshot = null): array
-{
-    if ($smartGalleryId <= 0 || $galleryId <= 0) return ['valid' => false, 'code' => 'malformed_relationship', 'path' => []];
+/** Return a bounded diagnostic for one concrete physical-gallery attachment edge.
+ *
+ * @param int $smartGalleryId Smart Gallery definition identifier.
+ * @param int $galleryId Physical gallery identifier.
+ * @param array{adjacency:array<string,array<string,true>>,placements:list<array{smart_gallery_id:int,gallery_id:int,placement:string,placement_order:int}>,smart_errors:array<int,string>,edge_count:int,graph_error?:string}|null $snapshot Relationship graph snapshot to use, or null to load the current snapshot.
+ * @return array{valid:bool,code:string,path:list<string>} Validity, stable diagnostic code and cycle path for one attachment edge.
+ */
+function smart_gallery_relationship_diagnostic(
+    int $smartGalleryId,
+    int $galleryId,
+    ?array $snapshot = null,
+): array {
+    if ($smartGalleryId <= 0 || $galleryId <= 0)
+        return [
+            'valid' => false,
+            'code' => 'malformed_relationship',
+            'path' => [],
+        ];
     $snapshot = $snapshot ?? smart_gallery_graph_read_snapshot();
-    if (isset($snapshot['graph_error'])) return ['valid' => false, 'code' => (string) $snapshot['graph_error'], 'path' => []];
-    if (isset($snapshot['smart_errors'][$smartGalleryId])) return ['valid' => false, 'code' => (string) $snapshot['smart_errors'][$smartGalleryId], 'path' => []];
-    $path = smart_gallery_graph_find_path((array) ($snapshot['adjacency'] ?? []), 's:' . $smartGalleryId, 'g:' . $galleryId);
-    if (!empty($path['truncated'])) return ['valid' => false, 'code' => 'graph_limit', 'path' => []];
-    if (!empty($path['found'])) return ['valid' => false, 'code' => 'cycle', 'path' => (array) $path['path']];
+    if (isset($snapshot['graph_error']))
+        return [
+            'valid' => false,
+            'code' => (string) $snapshot['graph_error'],
+            'path' => [],
+        ];
+    if (isset($snapshot['smart_errors'][$smartGalleryId]))
+        return [
+            'valid' => false,
+            'code' => (string) $snapshot['smart_errors'][$smartGalleryId],
+            'path' => [],
+        ];
+    $path = smart_gallery_graph_find_path(
+        (array) ($snapshot['adjacency'] ?? []),
+        's:' . $smartGalleryId,
+        'g:' . $galleryId,
+    );
+    if (!empty($path['truncated']))
+        return ['valid' => false, 'code' => 'graph_limit', 'path' => []];
+    if (!empty($path['found']))
+        return [
+            'valid' => false,
+            'code' => 'cycle',
+            'path' => (array) $path['path'],
+        ];
     return ['valid' => true, 'code' => 'ok', 'path' => []];
 }
 
-/** Log a bounded relationship diagnostic using IDs and stable codes only. */
-function smart_gallery_log_relationship_diagnostic(int $smartGalleryId, int $galleryId, string $code): void
-{
+/** Log a bounded relationship diagnostic using IDs and stable codes only.
+ *
+ * @param int $smartGalleryId Smart Gallery definition identifier.
+ * @param int $galleryId Physical gallery identifier.
+ * @param string $code Stable relationship diagnostic code to log.
+ * @return void No value; writes a bounded diagnostic when logging is available.
+ */
+function smart_gallery_log_relationship_diagnostic(
+    int $smartGalleryId,
+    int $galleryId,
+    string $code,
+): void {
     static $logged = [];
-    if (count($logged) >= 10) return;
+    if (count($logged) >= 10)
+        return;
     $key = $smartGalleryId . ':' . $galleryId . ':' . $code;
-    if (isset($logged[$key])) return;
+    if (isset($logged[$key]))
+        return;
     $logged[$key] = true;
-    if (!function_exists(__NAMESPACE__ . '\\admin_log_event')) return;
+    if (!function_exists(__NAMESPACE__ . '\\admin_log_event'))
+        return;
     try {
-        admin_log_event('warning', 'smart_gallery.relationship_invalid', 'Smart Gallery relationship was skipped because it is invalid.', [
-            'smart_gallery_id' => $smartGalleryId,
-            'gallery_id' => $galleryId,
-            'reason' => preg_match('/^[a-z_]{1,32}$/D', $code) === 1 ? $code : 'invalid',
-        ], ['category' => 'gallery', 'severity' => 'warning', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]);
+        admin_log_event(
+            'warning',
+            'smart_gallery.relationship_invalid',
+            'Smart Gallery relationship was skipped because it is invalid.',
+            [
+                'smart_gallery_id' => $smartGalleryId,
+                'gallery_id' => $galleryId,
+                'reason' => preg_match('/^[a-z_]{1,32}$/D', $code) === 1
+                    ? $code
+                    : 'invalid',
+            ],
+            [
+                'category' => 'gallery',
+                'severity' => 'warning',
+                'subject_type' => 'smart_gallery',
+                'subject_id' => $smartGalleryId,
+            ],
+        );
     } catch (\Throwable) {
         // Relationship safety must not depend on diagnostic persistence being available.
     }
 }
 
-/** Validate a proposed Smart Gallery rule update against its existing attachments. */
-function smart_gallery_validate_definition_graph(int $smartGalleryId, array $rules): void
-{
-    if ($smartGalleryId <= 0) return;
-    $snapshot = smart_gallery_graph_snapshot(['id' => $smartGalleryId, 'rules' => $rules]);
+/** Validate a proposed Smart Gallery rule update against its existing attachments.
+ *
+ * @param int $smartGalleryId Smart Gallery definition identifier.
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $rules Proposed validated rule document.
+ * @return void No value; throws if the proposed rules make an existing attachment cyclic.
+ */
+function smart_gallery_validate_definition_graph(
+    int $smartGalleryId,
+    array $rules,
+): void {
+    if ($smartGalleryId <= 0)
+        return;
+    $snapshot = smart_gallery_graph_snapshot([
+        'id' => $smartGalleryId,
+        'rules' => $rules,
+    ]);
     foreach ((array) ($snapshot['placements'] ?? []) as $placement) {
-        if ((int) ($placement['smart_gallery_id'] ?? 0) !== $smartGalleryId) continue;
-        $diagnostic = smart_gallery_relationship_diagnostic($smartGalleryId, (int) $placement['gallery_id'], $snapshot);
+        if ((int) ($placement['smart_gallery_id'] ?? 0) !== $smartGalleryId)
+            continue;
+        $diagnostic = smart_gallery_relationship_diagnostic(
+            $smartGalleryId,
+            (int) $placement['gallery_id'],
+            $snapshot,
+        );
         if (!$diagnostic['valid']) {
-            throw new InvalidArgumentException(t('smart_gallery.relationship_cycle_rule_error', 'This Smart Gallery rule would make the gallery contain or attach back to itself. Detach it from the affected physical gallery or change the gallery rule first.'));
+            throw new InvalidArgumentException(t(
+                'smart_gallery.relationship_cycle_rule_error',
+                'This Smart Gallery rule would make the gallery contain or attach back to itself. Detach it from the affected physical gallery or change the gallery rule first.',
+            ));
         }
     }
 }
 
-/** Return true only when a proposed relationship introduces a new invalid edge. */
-function smart_gallery_relationship_change_is_newly_invalid(bool $wasAttached, array $before, array $after): bool
-{
-    if (!empty($after['valid'])) return false;
+/** Return true only when a proposed relationship introduces a new invalid edge.
+ *
+ * @param bool $wasAttached Whether the relationship existed before the proposed change.
+ * @param array{valid:bool,code:string,path:list<string>} $before Relationship diagnostic before the proposed change.
+ * @param array{valid:bool,code:string,path:list<string>} $after Relationship diagnostic after the proposed change.
+ * @return bool Whether the proposed change introduces an invalid relationship.
+ */
+function smart_gallery_relationship_change_is_newly_invalid(
+    bool $wasAttached,
+    array $before,
+    array $after,
+): bool {
+    if (!empty($after['valid']))
+        return false;
     return !$wasAttached || !empty($before['valid']);
 }
 
-/** Validate and normalize all proposed Smart Gallery attachments beneath one physical gallery. */
-function smart_gallery_validate_children_assignment(int $galleryId, array $input, ?int $proposedParentId = null, bool $applyParentOverride = false): array
-{
-    smart_gallery_assert_attachment_mutation_ready('smart_gallery.assign_children');
-    if ($galleryId <= 0) throw new InvalidArgumentException('Select a valid parent gallery.');
+/** Validate and normalize all proposed Smart Gallery attachments beneath one physical gallery.
+ *
+ * @param int $galleryId Physical gallery identifier.
+ * @param array<array-key,int|string|bool|array<string,int|string|bool|null>> $input Proposed attachment rows for the physical gallery.
+ * @param ?int $proposedParentId Proposed parent gallery ID, or null for root.
+ * @param bool $applyParentOverride Whether to validate using the proposed parent override.
+ * @return list<array{smart_gallery_id:int,placement:'top'|'bottom',placement_order:int}> Validated attachment assignments; throws for missing definitions or newly invalid relationships.
+ */
+function smart_gallery_validate_children_assignment(
+    int $galleryId,
+    array $input,
+    ?int $proposedParentId = null,
+    bool $applyParentOverride = false,
+): array {
+    smart_gallery_assert_attachment_mutation_ready(
+        'smart_gallery.assign_children',
+    );
+    if ($galleryId <= 0)
+        throw new InvalidArgumentException('Select a valid parent gallery.');
     $attachments = smart_gallery_normalize_attachment_inputs($input);
     if ($attachments !== []) {
         $ids = array_column($attachments, 'smart_gallery_id');
-        $validIds = \Gallery\Models\smart_gallery_model_existing_ids(array_map('intval', $ids));
+        $validIds = \Gallery\Models\smart_gallery_model_existing_ids(array_map(
+            'intval',
+            $ids,
+        ));
         sort($validIds, SORT_NUMERIC);
         $expectedIds = array_values(array_unique(array_map('intval', $ids)));
         sort($expectedIds, SORT_NUMERIC);
-        if ($validIds !== $expectedIds) throw new InvalidArgumentException('One or more selected Smart Galleries no longer exist.');
+        if ($validIds !== $expectedIds)
+            throw new InvalidArgumentException(
+                'One or more selected Smart Galleries no longer exist.',
+            );
     }
     $baseSnapshot = smart_gallery_graph_snapshot();
     $currentlyAttached = [];
     foreach ((array) ($baseSnapshot['placements'] ?? []) as $placement) {
         if ((int) ($placement['gallery_id'] ?? 0) === $galleryId) {
-            $currentlyAttached[(int) ($placement['smart_gallery_id'] ?? 0)] = true;
+            $currentlyAttached[(int) (
+                $placement['smart_gallery_id'] ?? 0
+            )] = true;
         }
     }
-    $parentOverride = $applyParentOverride ? ['gallery_id' => $galleryId, 'parent_id' => $proposedParentId ?? 0] : null;
-    $snapshot = smart_gallery_graph_snapshot(null, ['gallery_id' => $galleryId, 'attachments' => $attachments], $parentOverride);
+    $parentOverride = $applyParentOverride
+        ? ['gallery_id' => $galleryId, 'parent_id' => $proposedParentId ?? 0]
+        : null;
+    $snapshot = smart_gallery_graph_snapshot(
+        null,
+        ['gallery_id' => $galleryId, 'attachments' => $attachments],
+        $parentOverride,
+    );
     foreach ($attachments as $attachment) {
         $smartId = (int) $attachment['smart_gallery_id'];
-        $diagnostic = smart_gallery_relationship_diagnostic($smartId, $galleryId, $snapshot);
+        $diagnostic = smart_gallery_relationship_diagnostic(
+            $smartId,
+            $galleryId,
+            $snapshot,
+        );
         $wasAttached = isset($currentlyAttached[$smartId]);
         $before = $wasAttached
-            ? smart_gallery_relationship_diagnostic($smartId, $galleryId, $baseSnapshot)
+            ? smart_gallery_relationship_diagnostic(
+                $smartId,
+                $galleryId,
+                $baseSnapshot,
+            )
             : ['valid' => true, 'code' => 'not_attached', 'path' => []];
-        if (smart_gallery_relationship_change_is_newly_invalid($wasAttached, $before, $diagnostic)) {
-            throw new InvalidArgumentException(t('smart_gallery.relationship_cycle_attachment_error', 'A Smart Gallery cannot contain or attach back to itself, directly or indirectly. Change the gallery rule or attachment.'));
+        if (smart_gallery_relationship_change_is_newly_invalid(
+            $wasAttached,
+            $before,
+            $diagnostic,
+        )) {
+            throw new InvalidArgumentException(t(
+                'smart_gallery.relationship_cycle_attachment_error',
+                'A Smart Gallery cannot contain or attach back to itself, directly or indirectly. Change the gallery rule or attachment.',
+            ));
         }
     }
     return $attachments;
 }
 
-/** Validate a complete proposed physical-gallery parent map without blocking unrelated legacy cycles. */
+/** Validate a complete proposed physical-gallery parent map without blocking unrelated legacy cycles.
+ *
+ * @param array<int|string,int|null> $parentByGalleryId Proposed parent IDs keyed by physical gallery ID.
+ * @return void No value; throws if a proposed parent map introduces an invalid attachment cycle.
+ */
 function smart_gallery_validate_gallery_parent_map(array $parentByGalleryId): void
 {
-    if (!smart_gallery_schema_ready() || $parentByGalleryId === []) return;
+    if (!smart_gallery_schema_ready() || $parentByGalleryId === [])
+        return;
     $normalizedParents = [];
     foreach ($parentByGalleryId as $galleryId => $parentId) {
         $galleryId = (int) $galleryId;
-        if ($galleryId <= 0) continue;
+        if ($galleryId <= 0)
+            continue;
         $normalizedParents[$galleryId] = max(0, (int) $parentId);
     }
-    if ($normalizedParents === []) return;
+    if ($normalizedParents === [])
+        return;
     $base = smart_gallery_graph_snapshot();
-    $proposed = smart_gallery_graph_snapshot(null, null, ['parents' => $normalizedParents]);
+    $proposed = smart_gallery_graph_snapshot(null, null, [
+        'parents' => $normalizedParents,
+    ]);
     foreach ((array) ($proposed['placements'] ?? []) as $placement) {
         $smartId = (int) ($placement['smart_gallery_id'] ?? 0);
         $parentGalleryId = (int) ($placement['gallery_id'] ?? 0);
-        if ($smartId <= 0 || $parentGalleryId <= 0) continue;
-        $before = smart_gallery_relationship_diagnostic($smartId, $parentGalleryId, $base);
-        $after = smart_gallery_relationship_diagnostic($smartId, $parentGalleryId, $proposed);
+        if ($smartId <= 0 || $parentGalleryId <= 0)
+            continue;
+        $before = smart_gallery_relationship_diagnostic(
+            $smartId,
+            $parentGalleryId,
+            $base,
+        );
+        $after = smart_gallery_relationship_diagnostic(
+            $smartId,
+            $parentGalleryId,
+            $proposed,
+        );
         if ($before['valid'] && !$after['valid']) {
-            throw new InvalidArgumentException(t('smart_gallery.relationship_cycle_move_error', 'Moving this gallery would make a Smart Gallery contain or attach back to itself. Change or detach the affected Smart Gallery first.'));
+            throw new InvalidArgumentException(t(
+                'smart_gallery.relationship_cycle_move_error',
+                'Moving this gallery would make a Smart Gallery contain or attach back to itself. Change or detach the affected Smart Gallery first.',
+            ));
         }
     }
 }
 
-/** Validate one physical gallery parent change without blocking unrelated legacy cycles. */
-function smart_gallery_validate_gallery_parent_change(int $galleryId, ?int $parentId): void
-{
-    if ($galleryId <= 0) return;
+/** Validate one physical gallery parent change without blocking unrelated legacy cycles.
+ *
+ * @param int $galleryId Physical gallery identifier.
+ * @param ?int $parentId Proposed parent gallery ID, or null for root.
+ * @return void No value; throws if the parent change introduces an invalid attachment cycle.
+ */
+function smart_gallery_validate_gallery_parent_change(
+    int $galleryId,
+    ?int $parentId,
+): void {
+    if ($galleryId <= 0)
+        return;
     smart_gallery_validate_gallery_parent_map([$galleryId => $parentId ?? 0]);
 }
 
 /** Refuse flat result evaluation only when this Smart Gallery's persisted rule document is malformed. */
 function smart_gallery_assert_runtime_safe(array $gallery): void
 {
-    if (!smart_gallery_schema_ready()) return;
+    if (!smart_gallery_schema_ready())
+        return;
     // Result membership is a flat image query and never expands physical placements.
     // Validate only this rule document here so an unrelated oversized/cyclic attachment
     // graph cannot take down an otherwise valid direct/root Smart Gallery result view.
     smart_gallery_rules_from_json((string) ($gallery['rules_json'] ?? ''));
 }
 
-/** Return the public rule-builder field catalog and supported operators. */
+/** Return the public rule-builder field catalog and supported operators.
+ *
+ * @return array<string,array{kind:string,operators:list<string>}> Rule fields mapped to their kind and supported operator list.
+ */
 function smart_gallery_rule_catalog(): array
 {
-    $text = ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'exists', 'missing', 'is_empty', 'not_empty'];
-    $number = ['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte', 'between', 'exists', 'missing'];
+    $text = [
+        'equals',
+        'not_equals',
+        'contains',
+        'not_contains',
+        'starts_with',
+        'ends_with',
+        'exists',
+        'missing',
+        'is_empty',
+        'not_empty',
+    ];
+    $number = [
+        'equals',
+        'not_equals',
+        'gt',
+        'gte',
+        'lt',
+        'lte',
+        'between',
+        'exists',
+        'missing',
+    ];
     return [
-        'gallery' => ['kind' => 'reference', 'operators' => ['equals', 'not_equals', 'under', 'not_under']],
-        'tag' => ['kind' => 'reference', 'operators' => ['has_tag', 'not_has_tag', 'has_any_tags', 'has_all_tags', 'untagged']],
-        'capture_date' => ['kind' => 'date', 'operators' => ['before', 'after', 'between', 'exact', 'year', 'month', 'exists', 'missing']],
+        'gallery' => [
+            'kind' => 'reference',
+            'operators' => ['equals', 'not_equals', 'under', 'not_under'],
+        ],
+        'tag' => [
+            'kind' => 'reference',
+            'operators' => [
+                'has_tag',
+                'not_has_tag',
+                'has_any_tags',
+                'has_all_tags',
+                'untagged',
+            ],
+        ],
+        'capture_date' => [
+            'kind' => 'date',
+            'operators' => [
+                'before',
+                'after',
+                'between',
+                'exact',
+                'year',
+                'month',
+                'exists',
+                'missing',
+            ],
+        ],
         'camera_make' => ['kind' => 'text', 'operators' => $text],
         'camera_model' => ['kind' => 'text', 'operators' => $text],
         'lens' => ['kind' => 'text', 'operators' => $text],
@@ -753,91 +1431,185 @@ function smart_gallery_rule_catalog(): array
         'description' => ['kind' => 'text', 'operators' => $text],
         'gallery_title' => ['kind' => 'text', 'operators' => $text],
         'ai_text' => ['kind' => 'text', 'operators' => $text],
-        'ai_metadata' => ['kind' => 'presence', 'operators' => ['exists', 'missing']],
-        'duplicate_status' => ['kind' => 'enum', 'operators' => ['unresolved', 'resolved', 'exists', 'none']],
-        'rating' => ['kind' => 'number', 'operators' => ['equals', 'gte', 'lte', 'unrated']],
-        'extension' => ['kind' => 'text', 'operators' => ['equals', 'not_equals']],
+        'ai_metadata' => [
+            'kind' => 'presence',
+            'operators' => ['exists', 'missing'],
+        ],
+        'duplicate_status' => [
+            'kind' => 'enum',
+            'operators' => ['unresolved', 'resolved', 'exists', 'none'],
+        ],
+        'rating' => [
+            'kind' => 'number',
+            'operators' => ['equals', 'gte', 'lte', 'unrated'],
+        ],
+        'extension' => [
+            'kind' => 'text',
+            'operators' => ['equals', 'not_equals'],
+        ],
         'width' => ['kind' => 'number', 'operators' => $number],
         'height' => ['kind' => 'number', 'operators' => $number],
         'file_size' => ['kind' => 'number', 'operators' => $number],
-        'media_orientation' => ['kind' => 'enum', 'operators' => ['landscape', 'portrait', 'square']],
+        'media_orientation' => [
+            'kind' => 'enum',
+            'operators' => ['landscape', 'portrait', 'square'],
+        ],
     ];
 }
 
-/** Decode and validate a persisted or submitted rule JSON document. */
+/** Decode and validate a persisted or submitted rule JSON document.
+ *
+ * @param string $json Encoded rule document to decode and validate.
+ * @return array{version:int,root:array<string,scalar|null|array<array-key,scalar|null>>} Normalized versioned rule document; throws when JSON or rule data is invalid.
+ */
 function smart_gallery_rules_from_json(string $json): array
 {
     try {
         $decoded = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
     } catch (\JsonException) {
-        throw new InvalidArgumentException('The rule document is not valid JSON.');
+        throw new InvalidArgumentException(
+            'The rule document is not valid JSON.',
+        );
     }
     if (!is_array($decoded)) {
-        throw new InvalidArgumentException('The rule document must be an object.');
+        throw new InvalidArgumentException(
+            'The rule document must be an object.',
+        );
     }
     return smart_gallery_validate_rules($decoded);
 }
 
-/** Validate and normalize a complete versioned rule document. */
+/** Validate and normalize a complete versioned rule document.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $rules Submitted versioned rule document.
+ * @return array{version:int,root:array<string,scalar|null|array<array-key,scalar|null>>} Normalized versioned rule document; throws when the version or root node is invalid.
+ */
 function smart_gallery_validate_rules(array $rules): array
 {
-    if (($rules['version'] ?? null) !== SMART_GALLERY_RULE_VERSION || !is_array($rules['root'] ?? null)) {
-        throw new InvalidArgumentException('This Smart Gallery uses an unsupported rule version.');
+    if (
+        ($rules['version'] ?? null) !== SMART_GALLERY_RULE_VERSION
+        || !is_array($rules['root'] ?? null)
+    ) {
+        throw new InvalidArgumentException(
+            'This Smart Gallery uses an unsupported rule version.',
+        );
     }
     $count = 0;
     $root = smart_gallery_validate_rule_node($rules['root'], 0, $count);
     return ['version' => SMART_GALLERY_RULE_VERSION, 'root' => $root];
 }
 
-/** Validate one nested rule node while enforcing complexity limits. */
-function smart_gallery_validate_rule_node(array $node, int $depth, int &$conditionCount): array
-{
+/** Validate one nested rule node while enforcing complexity limits.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $node Rule node to validate and normalize.
+ * @param int $depth Current nesting depth of the rule node.
+ * @param int $conditionCount Condition counter, incremented by reference.
+ * @return array<string,scalar|null|array<array-key,scalar|null>> Normalized group or condition node; throws for unsupported fields, operators or complexity.
+ */
+function smart_gallery_validate_rule_node(
+    array $node,
+    int $depth,
+    int &$conditionCount,
+): array {
     if ($depth > SMART_GALLERY_MAX_DEPTH) {
-        throw new InvalidArgumentException('Rule groups may be nested at most five levels deep.');
+        throw new InvalidArgumentException(
+            'Rule groups may be nested at most five levels deep.',
+        );
     }
     $type = (string) ($node['type'] ?? '');
     if ($type === 'group') {
         $operator = strtoupper((string) ($node['operator'] ?? ''));
         if (!in_array($operator, ['AND', 'OR', 'NOT'], true)) {
-            throw new InvalidArgumentException('A rule group must use AND, OR, or NOT.');
+            throw new InvalidArgumentException(
+                'A rule group must use AND, OR, or NOT.',
+            );
         }
         $children = $node['children'] ?? null;
-        if (!is_array($children) || ($operator === 'NOT' && count($children) !== 1)) {
-            throw new InvalidArgumentException($operator === 'NOT' ? 'A NOT group must contain exactly one rule.' : 'A rule group must contain a rule list.');
+        if (
+            !is_array($children)
+            || (
+                $operator === 'NOT'
+                && count($children) !== 1
+            )
+        ) {
+            throw new InvalidArgumentException(
+                $operator === 'NOT'
+                    ? 'A NOT group must contain exactly one rule.'
+                    : 'A rule group must contain a rule list.',
+            );
         }
         if ($depth > 0 && $children === []) {
-            throw new InvalidArgumentException('Nested rule groups cannot be empty.');
+            throw new InvalidArgumentException(
+                'Nested rule groups cannot be empty.',
+            );
         }
         $normalizedChildren = [];
         foreach (array_values($children) as $child) {
             if (!is_array($child)) {
-                throw new InvalidArgumentException('Every rule must be an object.');
+                throw new InvalidArgumentException(
+                    'Every rule must be an object.',
+                );
             }
-            $normalizedChildren[] = smart_gallery_validate_rule_node($child, $depth + 1, $conditionCount);
+            $normalizedChildren[] = smart_gallery_validate_rule_node(
+                $child,
+                $depth + 1,
+                $conditionCount,
+            );
         }
-        return ['type' => 'group', 'operator' => $operator, 'children' => $normalizedChildren];
+        return [
+            'type' => 'group',
+            'operator' => $operator,
+            'children' => $normalizedChildren,
+        ];
     }
     if ($type !== 'condition') {
-        throw new InvalidArgumentException('Every rule must be a condition or group.');
+        throw new InvalidArgumentException(
+            'Every rule must be a condition or group.',
+        );
     }
     if (++$conditionCount > SMART_GALLERY_MAX_CONDITIONS) {
-        throw new InvalidArgumentException('A Smart Gallery may contain at most 50 conditions.');
+        throw new InvalidArgumentException(
+            'A Smart Gallery may contain at most 50 conditions.',
+        );
     }
     $field = (string) ($node['field'] ?? '');
     $operator = (string) ($node['operator'] ?? '');
     $catalog = smart_gallery_rule_catalog();
     if (!isset($catalog[$field])) {
-        throw new InvalidArgumentException('The selected rule field is not supported.');
+        throw new InvalidArgumentException(
+            'The selected rule field is not supported.',
+        );
     }
     if (!in_array($operator, $catalog[$field]['operators'], true)) {
-        throw new InvalidArgumentException('The selected operator is not supported for this field.');
+        throw new InvalidArgumentException(
+            'The selected operator is not supported for this field.',
+        );
     }
-    $valueFree = in_array($operator, ['exists', 'missing', 'is_empty', 'not_empty', 'untagged', 'unrated', 'unresolved', 'resolved', 'none', 'landscape', 'portrait', 'square'], true);
+    $valueFree = in_array(
+        $operator,
+        [
+            'exists',
+            'missing',
+            'is_empty',
+            'not_empty',
+            'untagged',
+            'unrated',
+            'unresolved',
+            'resolved',
+            'none',
+            'landscape',
+            'portrait',
+            'square',
+        ],
+        true,
+    );
     $value = $node['value'] ?? null;
     if (!$valueFree) {
         if ($operator === 'between') {
             if (!is_array($value) || count($value) !== 2) {
-                throw new InvalidArgumentException('Between requires two values.');
+                throw new InvalidArgumentException(
+                    'Between requires two values.',
+                );
             }
             $value = array_values($value);
         } elseif (in_array($operator, ['has_any_tags', 'has_all_tags'], true)) {
@@ -849,73 +1621,131 @@ function smart_gallery_validate_rule_node(array $node, int $depth, int &$conditi
             $dateValues = $operator === 'between' ? $value : [$value];
             if (in_array($operator, ['year', 'month'], true)) {
                 $number = (int) $value;
-                if (($operator === 'year' && ($number < 1000 || $number > 9999)) || ($operator === 'month' && ($number < 1 || $number > 12))) {
-                    throw new InvalidArgumentException('Enter a valid capture year or month.');
+                if (
+                    (
+                        $operator === 'year'
+                        && (
+                            $number < 1000
+                            || $number > 9999
+                        )
+                    )
+                    || (
+                        $operator === 'month'
+                        && (
+                            $number < 1
+                            || $number > 12
+                        )
+                    )
+                ) {
+                    throw new InvalidArgumentException(
+                        'Enter a valid capture year or month.',
+                    );
                 }
                 $value = $number;
             } else {
                 foreach ($dateValues as $dateValue) {
                     $date = (string) $dateValue;
-                    $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+                    $parsed = \DateTimeImmutable::createFromFormat(
+                        '!Y-m-d',
+                        $date,
+                    );
                     if (!$parsed || $parsed->format('Y-m-d') !== $date) {
-                        throw new InvalidArgumentException('Enter a valid capture date.');
+                        throw new InvalidArgumentException(
+                            'Enter a valid capture date.',
+                        );
                     }
                 }
-                $value = $operator === 'between' ? array_map('strval', $dateValues) : (string) $value;
+                $value = $operator === 'between'
+                    ? array_map('strval', $dateValues)
+                    : (string) $value;
             }
         } elseif ($catalog[$field]['kind'] === 'reference') {
             $value = (int) $value;
             if ($value <= 0) {
-                throw new InvalidArgumentException('Select an existing referenced item.');
+                throw new InvalidArgumentException(
+                    'Select an existing referenced item.',
+                );
             }
         } elseif ($catalog[$field]['kind'] === 'number') {
             $values = $operator === 'between' ? $value : [$value];
             foreach ($values as $number) {
                 if (!is_numeric($number)) {
-                    throw new InvalidArgumentException('Enter a valid numeric value.');
+                    throw new InvalidArgumentException(
+                        'Enter a valid numeric value.',
+                    );
                 }
             }
-            $value = $operator === 'between' ? array_map('floatval', $values) : (float) $value;
+            $value = $operator === 'between'
+                ? array_map('floatval', $values)
+                : (float) $value;
             if ($field === 'rating' && ($value < 1 || $value > 5)) {
-                throw new InvalidArgumentException('Ratings must be between 1 and 5.');
+                throw new InvalidArgumentException(
+                    'Ratings must be between 1 and 5.',
+                );
             }
         } else {
             $value = trim((string) $value);
             if ($value === '') {
-                throw new InvalidArgumentException('This condition requires a value.');
+                throw new InvalidArgumentException(
+                    'This condition requires a value.',
+                );
             }
         }
     }
-    $normalized = ['type' => 'condition', 'field' => $field, 'operator' => $operator];
+    $normalized = [
+        'type' => 'condition',
+        'field' => $field,
+        'operator' => $operator,
+    ];
     if (!$valueFree) {
         $normalized['value'] = $value;
     }
     return $normalized;
 }
 
-/** Return all definitions for the Admin list. */
+/** Return all definitions for the Admin list.
+ *
+ * @return list<array<string,scalar|null|array<array-key,scalar|null>>> Admin definition rows enriched with placement IDs and assignments; empty if schema is unavailable.
+ */
 function smart_galleries_all(): array
 {
-    if (!smart_gallery_schema_ready()) return [];
-    return smart_gallery_attach_placement_ids(\Gallery\Models\smart_gallery_model_all());
+    if (!smart_gallery_schema_ready())
+        return [];
+    return smart_gallery_attach_placement_ids(
+        \Gallery\Models\smart_gallery_model_all(),
+    );
 }
 
-/** Attach physical placement IDs and per-parent metadata without issuing N+1 queries. */
+/** Attach physical placement IDs and per-parent metadata without issuing N+1 queries.
+ *
+ * @param list<array<string,scalar|null|array<array-key,scalar|null>>> $rows Definition rows to enrich with placement metadata.
+ * @return list<array<string,scalar|null|array<array-key,scalar|null>>> Definition rows enriched with placement IDs and per-parent placement metadata.
+ */
 function smart_gallery_attach_placement_ids(array $rows): array
 {
-    if ($rows === []) return [];
+    if ($rows === [])
+        return [];
     $placements = [];
-    foreach (\Gallery\Models\smart_gallery_model_all_placements(smart_gallery_attachment_schema_ready()) as $placement) {
+    foreach (\Gallery\Models\smart_gallery_model_all_placements(
+        smart_gallery_attachment_schema_ready(),
+    ) as $placement) {
         $smartId = (int) $placement['smart_gallery_id'];
         $placements[$smartId][] = [
             'gallery_id' => (int) $placement['gallery_id'],
-            'placement' => smart_gallery_attachment_placement_value($placement['placement'] ?? 'bottom'),
-            'placement_order' => smart_gallery_attachment_order_value($placement['placement_order'] ?? 0),
+            'placement' => smart_gallery_attachment_placement_value(
+                $placement['placement'] ?? 'bottom',
+            ),
+            'placement_order' => smart_gallery_attachment_order_value(
+                $placement['placement_order'] ?? 0,
+            ),
         ];
     }
     foreach ($rows as &$row) {
         $attachmentRows = $placements[(int) ($row['id'] ?? 0)] ?? [];
-        $row['placement_gallery_ids'] = array_values(array_map(static fn (array $placement): int => (int) $placement['gallery_id'], $attachmentRows));
+        $row['placement_gallery_ids'] = array_values(array_map(
+            static fn(array $placement): int => (int) $placement['gallery_id'],
+            $attachmentRows,
+        ));
         $row['placement_assignments'] = $attachmentRows;
     }
     unset($row);
@@ -925,50 +1755,109 @@ function smart_gallery_attach_placement_ids(array $rows): array
 /** Find one definition by id. */
 function smart_gallery_find(int $id): ?array
 {
-    if (!smart_gallery_schema_ready()) return null;
+    if (!smart_gallery_schema_ready())
+        return null;
     $row = \Gallery\Models\smart_gallery_model_find($id);
-    return is_array($row) ? smart_gallery_attach_placement_ids([$row])[0] : null;
+    return is_array($row)
+        ? smart_gallery_attach_placement_ids([$row])[0]
+        : null;
 }
 
-/** Find one enabled published definition by slug. */
+/** Find one enabled published definition by slug.
+ *
+ * @param string $slug Public Smart Gallery slug to look up.
+ * @return array<string,scalar|null>|null Enabled public definition matching the slug, or null when disabled, unavailable or not found.
+ */
 function smart_gallery_find_public(string $slug): ?array
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        && !feature_capability_effective_enabled('smart_galleries')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('smart_galleries')
+    ) {
         return null;
     }
-    if (!smart_gallery_schema_ready()) return null;
+    if (!smart_gallery_schema_ready())
+        return null;
     return \Gallery\Models\smart_gallery_model_find_public_by_slug($slug);
 }
 
-/** Find one enabled published definition by trusted database id. */
+/** Find one enabled published definition by trusted database id.
+ *
+ * @param int $id Smart Gallery definition identifier.
+ * @return array<string,scalar|null>|null Enabled public definition matching the ID, or null when disabled, unavailable or not found.
+ */
 function smart_gallery_find_public_by_id(int $id): ?array
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        && !feature_capability_effective_enabled('smart_galleries')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('smart_galleries')
+    ) {
         return null;
     }
-    if ($id <= 0 || !smart_gallery_schema_ready()) return null;
+    if ($id <= 0 || !smart_gallery_schema_ready())
+        return null;
     return \Gallery\Models\smart_gallery_model_find_public_by_id($id);
 }
 
-/** Create or update a definition after normalizing every submitted value. */
+/** Create or update a definition after normalizing every submitted value.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $input Submitted definition fields, rule document and presentation overrides.
+ * @param int $id Smart Gallery definition identifier.
+ * @return array<string,scalar|null|array<array-key,scalar|null>> Saved definition row with placement metadata; throws on invalid input or failed reload.
+ */
 function smart_gallery_save(array $input, int $id = 0): array
 {
-    smart_gallery_assert_mutation_ready($id > 0 ? 'smart_gallery.update' : 'smart_gallery.create');
+    smart_gallery_assert_mutation_ready(
+        $id > 0 ? 'smart_gallery.update' : 'smart_gallery.create',
+    );
     $title = trim((string) ($input['title'] ?? ''));
-    if ($title === '') throw new InvalidArgumentException('Enter a Smart Gallery title.');
-    $rules = is_array($input['rules'] ?? null) ? smart_gallery_validate_rules($input['rules']) : smart_gallery_rules_from_json((string) ($input['rules_json'] ?? ''));
-    if ($id > 0) smart_gallery_validate_definition_graph($id, $rules);
+    if ($title === '')
+        throw new InvalidArgumentException('Enter a Smart Gallery title.');
+    $rules = is_array($input['rules'] ?? null)
+        ? smart_gallery_validate_rules($input['rules'])
+        : smart_gallery_rules_from_json((string) ($input['rules_json'] ?? ''));
+    if ($id > 0)
+        smart_gallery_validate_definition_graph($id, $rules);
     $submittedSlug = trim((string) ($input['slug'] ?? ''));
-    $slug = smart_gallery_unique_slug($submittedSlug !== '' ? $submittedSlug : $title, $id);
-    $visibility = ($input['visibility'] ?? 'private') === 'public' ? 'public' : 'private';
-    $placementMode = in_array($input['placement_mode'] ?? '', ['unlisted', 'root', 'gallery'], true) ? (string) $input['placement_mode'] : 'unlisted';
-    $sortModes = ['capture_date', 'filename', 'created_at', 'title', 'rating', 'default'];
-    $sortMode = in_array($input['sort_mode'] ?? '', $sortModes, true) ? (string) $input['sort_mode'] : 'capture_date';
-    $direction = ($input['sort_direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
-    $json = json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-    $presentationJson = smart_gallery_presentation_json($input['presentation'] ?? $input['presentation_json'] ?? []);
+    $slug = smart_gallery_unique_slug(
+        $submittedSlug !== '' ? $submittedSlug : $title,
+        $id,
+    );
+    $visibility = ($input['visibility'] ?? 'private') === 'public'
+        ? 'public'
+        : 'private';
+    $placementMode = in_array(
+        $input['placement_mode'] ?? '',
+        ['unlisted', 'root', 'gallery'],
+        true,
+    )
+        ? (string) $input['placement_mode']
+        : 'unlisted';
+    $sortModes = [
+        'capture_date',
+        'filename',
+        'created_at',
+        'title',
+        'rating',
+        'default',
+    ];
+    $sortMode = in_array($input['sort_mode'] ?? '', $sortModes, true)
+        ? (string) $input['sort_mode']
+        : 'capture_date';
+    $direction = ($input['sort_direction'] ?? 'desc') === 'asc'
+        ? 'asc'
+        : 'desc';
+    $json = json_encode(
+        $rules,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+    );
+    $presentationJson = smart_gallery_presentation_json(
+        $input['presentation'] ?? $input['presentation_json'] ?? [],
+    );
     $now = now_sql();
     $id = \Gallery\Models\smart_gallery_model_save([
         'title' => $title,
@@ -986,19 +1875,34 @@ function smart_gallery_save(array $input, int $id = 0): array
         'updated_at' => $now,
     ], $id);
     smart_gallery_graph_cache_clear();
-    return smart_gallery_find($id) ?? throw new InvalidArgumentException('The Smart Gallery could not be loaded after saving.');
+    return (
+        smart_gallery_find($id) ?? throw new InvalidArgumentException(
+            'The Smart Gallery could not be loaded after saving.',
+        )
+    );
 }
 
-/** Generate a unique stable public slug. */
+/** Generate a unique stable public slug.
+ *
+ * @param string $value Title or requested slug to normalize.
+ * @param int $excludeId Existing definition ID excluded from slug collision checks.
+ * @return string Available normalized slug, or throws when no candidate is available.
+ */
 function smart_gallery_unique_slug(string $value, int $excludeId = 0): string
 {
     $base = slugify($value) ?: 'smart-gallery';
     $candidate = $base;
     for ($suffix = 2; $suffix < 10000; $suffix++) {
-        if (!\Gallery\Models\smart_gallery_model_slug_exists($candidate, $excludeId)) return $candidate;
+        if (!\Gallery\Models\smart_gallery_model_slug_exists(
+            $candidate,
+            $excludeId,
+        ))
+            return $candidate;
         $candidate = $base . '-' . $suffix;
     }
-    throw new InvalidArgumentException('A unique Smart Gallery slug could not be generated.');
+    throw new InvalidArgumentException(
+        'A unique Smart Gallery slug could not be generated.',
+    );
 }
 
 /** Delete one Smart Gallery definition without touching images or files. */
@@ -1009,25 +1913,57 @@ function smart_gallery_delete(int $id): void
     smart_gallery_graph_cache_clear();
 }
 
-/** Duplicate a definition as a disabled private draft. */
+/** Duplicate a definition as a disabled private draft.
+ *
+ * @param int $id Smart Gallery definition identifier.
+ * @return array<string,scalar|null|array<array-key,scalar|null>> New disabled private draft copied from the source definition.
+ */
 function smart_gallery_duplicate(int $id): array
 {
     smart_gallery_assert_mutation_ready('smart_gallery.duplicate');
-    $source = smart_gallery_find($id) ?? throw new InvalidArgumentException('Smart Gallery not found.');
-    return smart_gallery_save(['title' => $source['title'] . ' copy', 'description' => $source['description'], 'rules_json' => $source['rules_json'], 'enabled' => 0, 'visibility' => 'private', 'placement_mode' => 'unlisted', 'sort_mode' => $source['sort_mode'], 'sort_direction' => $source['sort_direction'], 'presentation_json' => $source['presentation_json'] ?? '']);
+    $source = smart_gallery_find($id) ?? throw new InvalidArgumentException(
+        'Smart Gallery not found.',
+    );
+    return smart_gallery_save([
+        'title' => $source['title'] . ' copy',
+        'description' => $source['description'],
+        'rules_json' => $source['rules_json'],
+        'enabled' => 0,
+        'visibility' => 'private',
+        'placement_mode' => 'unlisted',
+        'sort_mode' => $source['sort_mode'],
+        'sort_direction' => $source['sort_direction'],
+        'presentation_json' => $source['presentation_json'] ?? '',
+    ]);
 }
 
-/** Return all attachment rows for one physical gallery, including Admin-only definitions. */
+/** Return all attachment rows for one physical gallery, including Admin-only definitions.
+ *
+ * @param int $galleryId Physical gallery identifier.
+ * @return list<array<string,scalar|null>> Attachment rows with normalized placement fields and relationship diagnostics.
+ */
 function smart_gallery_attachment_rows_for_gallery(int $galleryId): array
 {
-    if (!smart_gallery_schema_ready() || $galleryId <= 0) return [];
+    if (!smart_gallery_schema_ready() || $galleryId <= 0)
+        return [];
     $snapshot = smart_gallery_graph_read_snapshot();
     $rows = [];
-    foreach (\Gallery\Models\smart_gallery_model_attachment_rows_for_gallery($galleryId, smart_gallery_attachment_schema_ready()) as $row) {
+    foreach (\Gallery\Models\smart_gallery_model_attachment_rows_for_gallery(
+        $galleryId,
+        smart_gallery_attachment_schema_ready(),
+    ) as $row) {
         $smartId = (int) $row['id'];
-        $diagnostic = smart_gallery_relationship_diagnostic($smartId, $galleryId, $snapshot);
-        $row['placement'] = smart_gallery_attachment_placement_value($row['placement'] ?? 'bottom');
-        $row['placement_order'] = smart_gallery_attachment_order_value($row['placement_order'] ?? 0);
+        $diagnostic = smart_gallery_relationship_diagnostic(
+            $smartId,
+            $galleryId,
+            $snapshot,
+        );
+        $row['placement'] = smart_gallery_attachment_placement_value(
+            $row['placement'] ?? 'bottom',
+        );
+        $row['placement_order'] = smart_gallery_attachment_order_value(
+            $row['placement_order'] ?? 0,
+        );
         $row['relationship_valid'] = $diagnostic['valid'] ? 1 : 0;
         $row['relationship_code'] = (string) $diagnostic['code'];
         $rows[] = $row;
@@ -1035,25 +1971,54 @@ function smart_gallery_attachment_rows_for_gallery(int $galleryId): array
     return $rows;
 }
 
-/** Return published Smart Galleries assigned to the public root or one physical parent gallery. */
-function smart_galleries_for_placement(?int $parentGalleryId, bool $publicOnly): array
-{
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        && !feature_capability_effective_enabled('smart_galleries')) {
+/** Return published Smart Galleries assigned to the public root or one physical parent gallery.
+ *
+ * @param ?int $parentGalleryId Physical parent gallery ID, or null for the public root.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @return list<array<string,scalar|null>> Published definitions for the requested root or parent, with safe placement metadata.
+ */
+function smart_galleries_for_placement(
+    ?int $parentGalleryId,
+    bool $publicOnly,
+): array {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('smart_galleries')
+    ) {
         return [];
     }
-    if (!smart_gallery_schema_ready()) return [];
-    $snapshot = $parentGalleryId !== null ? smart_gallery_graph_read_snapshot() : null;
+    if (!smart_gallery_schema_ready())
+        return [];
+    $snapshot = $parentGalleryId !== null
+        ? smart_gallery_graph_read_snapshot()
+        : null;
     $rows = [];
-    foreach (\Gallery\Models\smart_gallery_model_for_placement($parentGalleryId, smart_gallery_attachment_schema_ready()) as $row) {
+    foreach (\Gallery\Models\smart_gallery_model_for_placement(
+        $parentGalleryId,
+        smart_gallery_attachment_schema_ready(),
+    ) as $row) {
         if ($parentGalleryId !== null) {
-            $diagnostic = smart_gallery_relationship_diagnostic((int) $row['id'], $parentGalleryId, $snapshot);
+            $diagnostic = smart_gallery_relationship_diagnostic(
+                (int) $row['id'],
+                $parentGalleryId,
+                $snapshot,
+            );
             if (!$diagnostic['valid']) {
-                smart_gallery_log_relationship_diagnostic((int) $row['id'], $parentGalleryId, (string) $diagnostic['code']);
+                smart_gallery_log_relationship_diagnostic(
+                    (int) $row['id'],
+                    $parentGalleryId,
+                    (string) $diagnostic['code'],
+                );
                 continue;
             }
-            $row['placement'] = smart_gallery_attachment_placement_value($row['placement'] ?? 'bottom');
-            $row['placement_order'] = smart_gallery_attachment_order_value($row['placement_order'] ?? 0);
+            $row['placement'] = smart_gallery_attachment_placement_value(
+                $row['placement'] ?? 'bottom',
+            );
+            $row['placement_order'] = smart_gallery_attachment_order_value(
+                $row['placement_order'] ?? 0,
+            );
         }
         $row['__smart_gallery'] = 1;
         $rows[] = $row;
@@ -1061,35 +2026,77 @@ function smart_galleries_for_placement(?int $parentGalleryId, bool $publicOnly):
     return $rows;
 }
 
-/** Return ordered top and bottom Smart Gallery groups for one physical parent. */
-function smart_gallery_attachment_groups(int $parentGalleryId, bool $publicOnly): array
-{
+/** Return ordered top and bottom Smart Gallery groups for one physical parent.
+ *
+ * @param int $parentGalleryId Physical parent gallery identifier.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @return array{top:list<array<string,scalar|null>>,bottom:list<array<string,scalar|null>>} Ordered attachment rows grouped by top and bottom placement.
+ */
+function smart_gallery_attachment_groups(
+    int $parentGalleryId,
+    bool $publicOnly,
+): array {
     $groups = ['top' => [], 'bottom' => []];
-    foreach (smart_galleries_for_placement($parentGalleryId, $publicOnly) as $row) {
-        $groups[smart_gallery_attachment_placement_value($row['placement'] ?? 'bottom')][] = $row;
+    foreach (smart_galleries_for_placement(
+        $parentGalleryId,
+        $publicOnly,
+    ) as $row) {
+        $groups[smart_gallery_attachment_placement_value(
+            $row['placement'] ?? 'bottom',
+        )][] = $row;
     }
     return $groups;
 }
 
-/** Replace placements beneath one physical gallery without changing other parents. */
-function smart_gallery_assign_children_to_gallery(int $galleryId, array $selectedIds): void
-{
+/** Replace placements beneath one physical gallery without changing other parents.
+ *
+ * @param int $galleryId Physical gallery identifier.
+ * @param array<array-key,scalar|null|array<array-key,scalar|null>> $selectedIds Legacy selected IDs or structured attachment rows.
+ * @return void No value; replaces the selected parent gallery placements after validation.
+ */
+function smart_gallery_assign_children_to_gallery(
+    int $galleryId,
+    array $selectedIds,
+): void {
     smart_gallery_assert_mutation_ready('smart_gallery.assign_children');
-    $attachments = smart_gallery_validate_children_assignment($galleryId, $selectedIds);
-    \Gallery\Models\smart_gallery_model_replace_gallery_attachments($galleryId, $attachments, now_sql());
+    $attachments = smart_gallery_validate_children_assignment(
+        $galleryId,
+        $selectedIds,
+    );
+    \Gallery\Models\smart_gallery_model_replace_gallery_attachments(
+        $galleryId,
+        $attachments,
+        now_sql(),
+    );
     smart_gallery_graph_cache_clear();
 }
 
-/** Return every physical gallery currently listing one Smart Gallery with per-parent metadata. */
+/** Return every physical gallery currently listing one Smart Gallery with per-parent metadata.
+ *
+ * @param int $smartGalleryId Smart Gallery definition identifier.
+ * @return list<array<string,scalar|null>> Physical galleries containing this Smart Gallery, with placement and relationship diagnostics.
+ */
 function smart_gallery_placement_galleries(int $smartGalleryId): array
 {
-    if (!smart_gallery_schema_ready() || $smartGalleryId <= 0) return [];
+    if (!smart_gallery_schema_ready() || $smartGalleryId <= 0)
+        return [];
     $snapshot = smart_gallery_graph_read_snapshot();
     $rows = [];
-    foreach (\Gallery\Models\smart_gallery_model_placement_galleries($smartGalleryId, smart_gallery_attachment_schema_ready()) as $row) {
-        $diagnostic = smart_gallery_relationship_diagnostic($smartGalleryId, (int) $row['id'], $snapshot);
-        $row['placement'] = smart_gallery_attachment_placement_value($row['placement'] ?? 'bottom');
-        $row['placement_order'] = smart_gallery_attachment_order_value($row['placement_order'] ?? 0);
+    foreach (\Gallery\Models\smart_gallery_model_placement_galleries(
+        $smartGalleryId,
+        smart_gallery_attachment_schema_ready(),
+    ) as $row) {
+        $diagnostic = smart_gallery_relationship_diagnostic(
+            $smartGalleryId,
+            (int) $row['id'],
+            $snapshot,
+        );
+        $row['placement'] = smart_gallery_attachment_placement_value(
+            $row['placement'] ?? 'bottom',
+        );
+        $row['placement_order'] = smart_gallery_attachment_order_value(
+            $row['placement_order'] ?? 0,
+        );
         $row['relationship_valid'] = $diagnostic['valid'] ? 1 : 0;
         $row['relationship_code'] = (string) $diagnostic['code'];
         $rows[] = $row;
@@ -1097,30 +2104,63 @@ function smart_gallery_placement_galleries(int $smartGalleryId): array
     return $rows;
 }
 
-/** Update one existing attachment placement/order without changing relationship graph edges. */
-function smart_gallery_update_placement(int $smartGalleryId, int $galleryId, string $placement, int $placementOrder): bool
-{
-    smart_gallery_assert_attachment_mutation_ready('smart_gallery.update_placement');
-    if ($smartGalleryId <= 0 || $galleryId <= 0) throw new InvalidArgumentException('Select a valid Smart Gallery placement.');
+/** Update one existing attachment placement/order without changing relationship graph edges.
+ *
+ * @param int $smartGalleryId Smart Gallery definition identifier.
+ * @param int $galleryId Physical gallery identifier.
+ * @param string $placement Requested attachment area; unsupported values normalize to bottom.
+ * @param int $placementOrder Requested order among attachments in the same area.
+ * @return bool True after the existing attachment is updated; throws if it is absent.
+ */
+function smart_gallery_update_placement(
+    int $smartGalleryId,
+    int $galleryId,
+    string $placement,
+    int $placementOrder,
+): bool {
+    smart_gallery_assert_attachment_mutation_ready(
+        'smart_gallery.update_placement',
+    );
+    if ($smartGalleryId <= 0 || $galleryId <= 0)
+        throw new InvalidArgumentException(
+            'Select a valid Smart Gallery placement.',
+        );
     $updated = \Gallery\Models\smart_gallery_model_update_placement(
         $smartGalleryId,
         $galleryId,
         smart_gallery_attachment_placement_value($placement),
-        smart_gallery_attachment_order_value($placementOrder)
+        smart_gallery_attachment_order_value($placementOrder),
     );
-    if (!$updated) throw new InvalidArgumentException('Smart Gallery placement not found.');
+    if (!$updated)
+        throw new InvalidArgumentException(
+            'Smart Gallery placement not found.',
+        );
     // Placement area/order do not add or remove graph edges, so legacy invalid relations
     // can still be reordered while detach remains available as the repair path.
     return true;
 }
 
-/** Remove one physical placement without modifying any other attachment. */
-function smart_gallery_remove_from_gallery(int $smartGalleryId, int $galleryId): bool
-{
+/** Remove one physical placement without modifying any other attachment.
+ *
+ * @param int $smartGalleryId Smart Gallery definition identifier.
+ * @param int $galleryId Physical gallery identifier.
+ * @return bool Whether an existing physical attachment row was removed.
+ */
+function smart_gallery_remove_from_gallery(
+    int $smartGalleryId,
+    int $galleryId,
+): bool {
     smart_gallery_assert_mutation_ready('smart_gallery.remove_placement');
-    if ($smartGalleryId <= 0 || $galleryId <= 0) throw new InvalidArgumentException('Select a valid Smart Gallery placement.');
-    $removed = \Gallery\Models\smart_gallery_model_remove_placement($smartGalleryId, $galleryId);
-    if ($removed) smart_gallery_graph_cache_clear();
+    if ($smartGalleryId <= 0 || $galleryId <= 0)
+        throw new InvalidArgumentException(
+            'Select a valid Smart Gallery placement.',
+        );
+    $removed = \Gallery\Models\smart_gallery_model_remove_placement(
+        $smartGalleryId,
+        $galleryId,
+    );
+    if ($removed)
+        smart_gallery_graph_cache_clear();
     return $removed;
 }
 
@@ -1128,14 +2168,18 @@ function smart_gallery_remove_from_gallery(int $smartGalleryId, int $galleryId):
 function smart_gallery_all_source_gallery_rows(): array
 {
     $cache = &smart_gallery_graph_request_cache();
-    if (isset($cache['source_gallery_rows']) && is_array($cache['source_gallery_rows'])) {
+    if (
+        isset($cache['source_gallery_rows'])
+        && is_array($cache['source_gallery_rows'])
+    ) {
         return $cache['source_gallery_rows'];
     }
 
     $sourceGalleryRows = [];
     foreach (\Gallery\Models\smart_gallery_model_all_source_galleries() as $sourceGallery) {
         $galleryId = (int) ($sourceGallery['id'] ?? 0);
-        if ($galleryId > 0) $sourceGalleryRows[$galleryId] = $sourceGallery;
+        if ($galleryId > 0)
+            $sourceGalleryRows[$galleryId] = $sourceGallery;
     }
     $cache['source_gallery_rows'] = $sourceGalleryRows;
     return $sourceGalleryRows;
@@ -1145,12 +2189,22 @@ function smart_gallery_all_source_gallery_rows(): array
 function smart_gallery_accessible_gallery_ids(bool $publicOnly): array
 {
     $cache = &smart_gallery_graph_request_cache();
-    $cacheKey = $publicOnly ? 'accessible_gallery_ids_public' : 'accessible_gallery_ids_admin';
-    if (isset($cache[$cacheKey]) && is_array($cache[$cacheKey])) return $cache[$cacheKey];
+    $cacheKey = $publicOnly
+        ? 'accessible_gallery_ids_public'
+        : 'accessible_gallery_ids_admin';
+    if (isset($cache[$cacheKey]) && is_array($cache[$cacheKey]))
+        return $cache[$cacheKey];
 
     $ids = [];
     foreach (smart_gallery_all_source_gallery_rows() as $sourceGallery) {
-        if ($publicOnly && (!gallery_is_public_listed($sourceGallery) || !visitor_can_access_gallery($sourceGallery))) continue;
+        if (
+            $publicOnly
+            && (
+                !gallery_is_public_listed($sourceGallery)
+                || !visitor_can_access_gallery($sourceGallery)
+            )
+        )
+            continue;
         $ids[] = (int) $sourceGallery['id'];
     }
     $cache[$cacheKey] = $ids;
@@ -1159,6 +2213,7 @@ function smart_gallery_accessible_gallery_ids(bool $publicOnly): array
 
 /**
  * Resolve physical attachment sources from the complete canonical result.
+ *
  * @param list<int> $sourceIds Grouped public-result source IDs, independent of
  *     pagination and the temporary source-gallery filter.
  * @return list<array{id:int,folder_path:string}> Listed sources still accessible
@@ -1170,15 +2225,23 @@ function smart_gallery_attachment_sources(array $sourceIds): array
     $sources = [];
     foreach (array_unique($sourceIds) as $id) {
         $source = $rows[$id] ?? null;
-        if ($source === null || !gallery_is_public_listed($source)
-            || !visitor_can_access_gallery($source)) continue;
-        $sources[] = ['id' => $id, 'folder_path' => (string) $source['folder_path']];
+        if (
+            $source === null
+            || !gallery_is_public_listed($source)
+            || !visitor_can_access_gallery($source)
+        )
+            continue;
+        $sources[] = [
+            'id' => $id,
+            'folder_path' => (string) $source['folder_path'],
+        ];
     }
     return $sources;
 }
 
 /**
  * Select music-bearing sources after the shared attachment access check.
+ *
  * @param list<int> $sourceIds Complete canonical result source IDs, independent
  *     of pagination and the temporary source filter.
  * @return list<array{id:int,folder_path:string}> Authorized sources with an
@@ -1188,24 +2251,49 @@ function smart_gallery_music_sources(array $sourceIds): array
 {
     return array_values(array_filter(
         smart_gallery_attachment_sources($sourceIds),
-        static fn (array $source): bool => is_file(
-            gallery_abs_path($source['folder_path']) . '/.gallery-music/index.json'
-        )
+        static fn(array $source): bool => is_file(
+            gallery_abs_path($source['folder_path'])
+                . '/.gallery-music/index.json',
+        ),
     ));
 }
 
-/** Return normalized semantic query inputs without exposing SQL fragments outside the model. */
-function smart_gallery_query_semantics(array $gallery, bool $publicOnly, ?array $accessibleGalleryIds = null, int $sourceGalleryId = 0): array
-{
-    if (!smart_gallery_schema_ready()) throw new InvalidArgumentException('Smart Gallery storage is unavailable.');
+/** Return normalized semantic query inputs without exposing SQL fragments outside the model.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param list<int>|null $accessibleGalleryIds Accessible physical gallery IDs to use.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return array{rules:array<string,scalar|null|array<array-key,scalar|null>>,accessible_gallery_ids:list<int>,allow_nsfw:bool,sort_mode:string,sort_direction:string} Validated rules, accessible gallery IDs, NSFW policy and canonical sorting inputs.
+ */
+function smart_gallery_query_semantics(
+    array $gallery,
+    bool $publicOnly,
+    ?array $accessibleGalleryIds = null,
+    int $sourceGalleryId = 0,
+): array {
+    if (!smart_gallery_schema_ready())
+        throw new InvalidArgumentException(
+            'Smart Gallery storage is unavailable.',
+        );
     smart_gallery_assert_runtime_safe($gallery);
-    $rules = smart_gallery_rules_from_json((string) ($gallery['rules_json'] ?? ''));
-    $ids = $accessibleGalleryIds ?? smart_gallery_accessible_gallery_ids($publicOnly);
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    $rules = smart_gallery_rules_from_json(
+        (string) ($gallery['rules_json'] ?? ''),
+    );
+    $ids = $accessibleGalleryIds ?? smart_gallery_accessible_gallery_ids(
+        $publicOnly,
+    );
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($sourceGalleryId > 0) {
         $ids = in_array($sourceGalleryId, $ids, true) ? [$sourceGalleryId] : [];
     }
-    $allowNsfw = !$publicOnly || !nsfw_guard_schema_ready() || visitor_can_access_nsfw_content();
+    $allowNsfw =
+        !$publicOnly
+        || !nsfw_guard_schema_ready()
+        || visitor_can_access_nsfw_content();
     return [
         'rules' => $rules,
         'accessible_gallery_ids' => $ids,
@@ -1215,35 +2303,82 @@ function smart_gallery_query_semantics(array $gallery, bool $publicOnly, ?array 
     ];
 }
 
-/** Return whether one image remains a member of the canonical Smart Gallery result set. */
-function smart_gallery_contains_image_for_accessible_ids(array $gallery, bool $publicOnly, array $accessibleGalleryIds, int $imageId): bool
-{
-    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, $accessibleGalleryIds);
+/** Return whether one image remains a member of the canonical Smart Gallery result set.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param list<int> $accessibleGalleryIds Accessible physical gallery IDs to use for membership checks.
+ * @param int $imageId Image identifier to test or update.
+ * @return bool Whether the image belongs to the canonical result under the supplied access scope.
+ */
+function smart_gallery_contains_image_for_accessible_ids(
+    array $gallery,
+    bool $publicOnly,
+    array $accessibleGalleryIds,
+    int $imageId,
+): bool {
+    $semantic = smart_gallery_query_semantics(
+        $gallery,
+        $publicOnly,
+        $accessibleGalleryIds,
+    );
     return \Gallery\Models\smart_gallery_model_contains_image(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
         $publicOnly,
         (bool) $semantic['allow_nsfw'],
-        $imageId
+        $imageId,
     );
 }
 
-/** Count matching accessible images without loading image rows into PHP. */
-function smart_gallery_count_images(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): int
-{
-    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, null, $sourceGalleryId);
+/** Count matching accessible images without loading image rows into PHP.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return int Count of matching accessible images.
+ */
+function smart_gallery_count_images(
+    array $gallery,
+    bool $publicOnly,
+    int $sourceGalleryId = 0,
+): int {
+    $semantic = smart_gallery_query_semantics(
+        $gallery,
+        $publicOnly,
+        null,
+        $sourceGalleryId,
+    );
     return \Gallery\Models\smart_gallery_model_count_images(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
         $publicOnly,
-        (bool) $semantic['allow_nsfw']
+        (bool) $semantic['allow_nsfw'],
     );
 }
 
-/** Query one bounded database-paginated page of matching accessible images. */
-function smart_gallery_query_images(array $gallery, bool $publicOnly, int $limit, int $offset, int $sourceGalleryId = 0): array
-{
-    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, null, $sourceGalleryId);
+/** Query one bounded database-paginated page of matching accessible images.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $limit Maximum number of rows requested.
+ * @param int $offset Zero-based result offset.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return list<array<string,scalar|null>> One bounded page of canonical image rows.
+ */
+function smart_gallery_query_images(
+    array $gallery,
+    bool $publicOnly,
+    int $limit,
+    int $offset,
+    int $sourceGalleryId = 0,
+): array {
+    $semantic = smart_gallery_query_semantics(
+        $gallery,
+        $publicOnly,
+        null,
+        $sourceGalleryId,
+    );
     return \Gallery\Models\smart_gallery_model_query_images(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
@@ -1252,21 +2387,57 @@ function smart_gallery_query_images(array $gallery, bool $publicOnly, int $limit
         (string) $semantic['sort_mode'],
         (string) $semantic['sort_direction'],
         max(1, min(SMART_GALLERY_QUERY_MAX_PAGE_SIZE, $limit)),
-        max(0, $offset)
+        max(0, $offset),
     );
 }
 
-/** Query one bounded lazy-lightbox metadata window from the same authoritative result set. */
-function smart_gallery_lightbox_fetch_images(array $gallery, bool $publicOnly, int $offset, int $limit, int $sourceGalleryId = 0): array
-{
-    return smart_gallery_query_images($gallery, $publicOnly, max(1, min(SMART_GALLERY_LIGHTBOX_MAX_WINDOW, $limit)), max(0, $offset), $sourceGalleryId);
+/** Query one bounded lazy-lightbox metadata window from the same authoritative result set.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $offset Zero-based result offset.
+ * @param int $limit Maximum number of rows requested.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return list<array<string,scalar|null>> One bounded lazy-lightbox window of canonical image rows.
+ */
+function smart_gallery_lightbox_fetch_images(
+    array $gallery,
+    bool $publicOnly,
+    int $offset,
+    int $limit,
+    int $sourceGalleryId = 0,
+): array {
+    return smart_gallery_query_images(
+        $gallery,
+        $publicOnly,
+        max(1, min(SMART_GALLERY_LIGHTBOX_MAX_WINDOW, $limit)),
+        max(0, $offset),
+        $sourceGalleryId,
+    );
 }
 
-/** Return one image's exact zero-based position in the canonical Smart Gallery order. */
-function smart_gallery_image_position(array $gallery, bool $publicOnly, int $imageId, int $sourceGalleryId = 0): int
-{
-    if ($imageId <= 0) return -1;
-    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, null, $sourceGalleryId);
+/** Return one image's exact zero-based position in the canonical Smart Gallery order.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $imageId Image identifier to test or update.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return int Zero-based canonical result position, or -1 when the image ID is invalid or absent.
+ */
+function smart_gallery_image_position(
+    array $gallery,
+    bool $publicOnly,
+    int $imageId,
+    int $sourceGalleryId = 0,
+): int {
+    if ($imageId <= 0)
+        return -1;
+    $semantic = smart_gallery_query_semantics(
+        $gallery,
+        $publicOnly,
+        null,
+        $sourceGalleryId,
+    );
     return \Gallery\Models\smart_gallery_model_image_position(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
@@ -1274,10 +2445,9 @@ function smart_gallery_image_position(array $gallery, bool $publicOnly, int $ima
         (bool) $semantic['allow_nsfw'],
         (string) $semantic['sort_mode'],
         (string) $semantic['sort_direction'],
-        $imageId
+        $imageId,
     );
 }
-
 
 /**
  * Return localized grouped provenance for the unfiltered canonical Smart Gallery scope.
@@ -1286,16 +2456,23 @@ function smart_gallery_image_position(array $gallery, bool $publicOnly, int $ima
  * change the grouped projection, allowing the visitor to switch source filters without
  * losing the complete provenance overview.
  *
- * @return array{total_images:int,gallery_count:int,selected_gallery_id:int,selected_valid:bool,items:array<int,array<string,mixed>>}
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $selectedSourceGalleryId Source gallery selected in view state; zero means none.
+
+ * @return array{total_images:int,gallery_count:int,selected_gallery_id:int,selected_valid:bool,items:list<array{gallery_id:int,title:string,breadcrumb:string,breadcrumb_compact:string,source_url:string,image_count:int,selected:bool}>} Canonical source counts and localized provenance items, with selected-source validity.
  */
-function smart_gallery_source_summary(array $gallery, bool $publicOnly, int $selectedSourceGalleryId = 0): array
-{
+function smart_gallery_source_summary(
+    array $gallery,
+    bool $publicOnly,
+    int $selectedSourceGalleryId = 0,
+): array {
     $semantic = smart_gallery_query_semantics($gallery, $publicOnly);
     $rows = \Gallery\Models\smart_gallery_model_source_summary_rows(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
         $publicOnly,
-        (bool) $semantic['allow_nsfw']
+        (bool) $semantic['allow_nsfw'],
     );
 
     $allSourceGalleries = smart_gallery_all_source_gallery_rows();
@@ -1303,16 +2480,29 @@ function smart_gallery_source_summary(array $gallery, bool $publicOnly, int $sel
     $summarySourceRows = [];
     foreach ($rows as $row) {
         $sourceGalleryId = (int) ($row['gallery_id'] ?? 0);
-        if ($sourceGalleryId > 0 && isset($allSourceGalleries[$sourceGalleryId]) && is_array($allSourceGalleries[$sourceGalleryId])) {
-            $summarySourceRows[$sourceGalleryId] = $allSourceGalleries[$sourceGalleryId];
+        if (
+            $sourceGalleryId > 0
+            && isset($allSourceGalleries[$sourceGalleryId])
+            && is_array($allSourceGalleries[$sourceGalleryId])
+        ) {
+            $summarySourceRows[$sourceGalleryId] =
+                $allSourceGalleries[$sourceGalleryId];
         }
     }
     $localizedSummarySources = [];
-    foreach (content_localize_entities('gallery', array_values($summarySourceRows), $contentLanguage) as $source) {
+    foreach (content_localize_entities(
+        'gallery',
+        array_values($summarySourceRows),
+        $contentLanguage,
+    ) as $source) {
         $sourceGalleryId = (int) ($source['id'] ?? 0);
-        if ($sourceGalleryId > 0) $localizedSummarySources[$sourceGalleryId] = $source;
+        if ($sourceGalleryId > 0)
+            $localizedSummarySources[$sourceGalleryId] = $source;
     }
-    $sourceContexts = smart_gallery_source_contexts($localizedSummarySources, $contentLanguage);
+    $sourceContexts = smart_gallery_source_contexts(
+        $localizedSummarySources,
+        $contentLanguage,
+    );
 
     $items = [];
     $totalImages = 0;
@@ -1322,15 +2512,26 @@ function smart_gallery_source_summary(array $gallery, bool $publicOnly, int $sel
         $imageCount = max(0, (int) ($row['image_count'] ?? 0));
         $source = $localizedSummarySources[$sourceGalleryId] ?? null;
         $sourceContext = $sourceContexts[$sourceGalleryId] ?? null;
-        if ($sourceGalleryId <= 0 || $imageCount <= 0 || !is_array($source) || !is_array($sourceContext)) continue;
+        if (
+            $sourceGalleryId <= 0
+            || $imageCount <= 0
+            || !is_array($source)
+            || !is_array($sourceContext)
+        )
+            continue;
 
-        $selected = $selectedSourceGalleryId > 0 && $selectedSourceGalleryId === $sourceGalleryId;
-        if ($selected) $selectedValid = true;
+        $selected =
+            $selectedSourceGalleryId > 0
+            && $selectedSourceGalleryId === $sourceGalleryId;
+        if ($selected)
+            $selectedValid = true;
         $items[] = [
             'gallery_id' => $sourceGalleryId,
             'title' => (string) ($sourceContext['title'] ?? ''),
             'breadcrumb' => (string) ($sourceContext['breadcrumb'] ?? ''),
-            'breadcrumb_compact' => (string) ($sourceContext['breadcrumb_compact'] ?? ''),
+            'breadcrumb_compact' => (string) (
+                $sourceContext['breadcrumb_compact'] ?? ''
+            ),
             'source_url' => (string) ($sourceContext['url'] ?? ''),
             'image_count' => $imageCount,
             'selected' => $selected,
@@ -1347,7 +2548,6 @@ function smart_gallery_source_summary(array $gallery, bool $publicOnly, int $sel
     ];
 }
 
-
 /**
  * Resolve the authorized physical-gallery scope used by aggregate Smart Gallery maps.
  *
@@ -1355,27 +2555,48 @@ function smart_gallery_source_summary(array $gallery, bool $publicOnly, int $sel
  * hero action cannot drift from the endpoint's authorization or inherited GPS rules.
  * Physical gallery rows are loaded once and reused while walking inherited GPS policy.
  *
- * @return array{semantic:?array<string,mixed>,source_galleries:array<int,array<string,mixed>>}
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ *
+ * @return array{semantic:array{rules:array<string,scalar|null|array<array-key,scalar|null>>,accessible_gallery_ids:list<int>,allow_nsfw:bool,sort_mode:string,sort_direction:string}|null,source_galleries:array<int,array<string,scalar|null>>} Authorized query semantics when a map source is eligible, plus loaded source-gallery rows.
  */
-function smart_gallery_map_query_context(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): array
-{
+function smart_gallery_map_query_context(
+    array $gallery,
+    bool $publicOnly,
+    int $sourceGalleryId = 0,
+): array {
     $accessibleIds = smart_gallery_accessible_gallery_ids($publicOnly);
     $allSourceGalleries = smart_gallery_all_source_gallery_rows();
-    $lookup = static fn (int $galleryId): ?array => isset($allSourceGalleries[$galleryId]) && is_array($allSourceGalleries[$galleryId])
-        ? $allSourceGalleries[$galleryId]
-        : null;
+    $lookup = static fn(int $galleryId): ?array => isset(
+        $allSourceGalleries[$galleryId],
+    ) && is_array($allSourceGalleries[$galleryId])
+            ? $allSourceGalleries[$galleryId]
+            : null;
 
     $candidateIds = $sourceGalleryId > 0
-        ? (in_array($sourceGalleryId, $accessibleIds, true) ? [$sourceGalleryId] : [])
+        ? (
+            in_array($sourceGalleryId, $accessibleIds, true)
+                ? [$sourceGalleryId]
+                : []
+        )
         : $accessibleIds;
     $mapGalleryIds = [];
     foreach ($candidateIds as $galleryId) {
         $source = $lookup((int) $galleryId);
-        if ($source && gallery_allows_gps_maps($source, $lookup)) $mapGalleryIds[] = (int) $galleryId;
+        if ($source && gallery_allows_gps_maps($source, $lookup))
+            $mapGalleryIds[] = (int) $galleryId;
     }
 
     return [
-        'semantic' => $mapGalleryIds !== [] ? smart_gallery_query_semantics($gallery, $publicOnly, $mapGalleryIds, $sourceGalleryId) : null,
+        'semantic' => $mapGalleryIds !== []
+            ? smart_gallery_query_semantics(
+                $gallery,
+                $publicOnly,
+                $mapGalleryIds,
+                $sourceGalleryId,
+            )
+            : null,
         'source_galleries' => $allSourceGalleries,
     ];
 }
@@ -1388,11 +2609,22 @@ function smart_gallery_map_query_context(array $gallery, bool $publicOnly, int $
  * the administrator test-run component as counts only, while avoiding thumbnail or
  * marker generation during the normal page render.
  *
- * @return array{available:bool,gps_images:int,map_source_gallery_count:int,point_limit:int,truncated:bool}
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+
+ * @return array{available:bool,gps_images:int,map_source_gallery_count:int,point_limit:int,truncated:bool} GPS availability, point count, eligible source count, configured ceiling, and truncation state.
  */
-function smart_gallery_map_diagnostics(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): array
-{
-    $context = smart_gallery_map_query_context($gallery, $publicOnly, $sourceGalleryId);
+function smart_gallery_map_diagnostics(
+    array $gallery,
+    bool $publicOnly,
+    int $sourceGalleryId = 0,
+): array {
+    $context = smart_gallery_map_query_context(
+        $gallery,
+        $publicOnly,
+        $sourceGalleryId,
+    );
     $semantic = $context['semantic'];
     if (!is_array($semantic)) {
         return [
@@ -1408,22 +2640,37 @@ function smart_gallery_map_diagnostics(array $gallery, bool $publicOnly, int $so
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
         $publicOnly,
-        (bool) $semantic['allow_nsfw']
+        (bool) $semantic['allow_nsfw'],
     );
 
     return [
         'available' => $gpsImages > 0,
         'gps_images' => $gpsImages,
-        'map_source_gallery_count' => count((array) $semantic['accessible_gallery_ids']),
+        'map_source_gallery_count' => count(
+            (array) $semantic['accessible_gallery_ids'],
+        ),
         'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
         'truncated' => $gpsImages > SMART_GALLERY_MAP_MAX_POINTS,
     ];
 }
 
-/** Return whether an aggregate Smart Gallery map has at least one authorized GPS point. */
-function smart_gallery_has_map_payload(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): bool
-{
-    return !empty(smart_gallery_map_diagnostics($gallery, $publicOnly, $sourceGalleryId)['available']);
+/** Return whether an aggregate Smart Gallery map has at least one authorized GPS point.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return bool Whether at least one authorized GPS point exists.
+ */
+function smart_gallery_has_map_payload(
+    array $gallery,
+    bool $publicOnly,
+    int $sourceGalleryId = 0,
+): bool {
+    return !empty(smart_gallery_map_diagnostics(
+        $gallery,
+        $publicOnly,
+        $sourceGalleryId,
+    )['available']);
 }
 
 /**
@@ -1432,11 +2679,28 @@ function smart_gallery_has_map_payload(array $gallery, bool $publicOnly, int $so
  * Source-gallery access is resolved once, then intersected with the canonical
  * inherited GPS presentation policy before the model compiles the normal Smart
  * Gallery rule predicate. The point query is independent from grid pagination.
+
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @return array{ok:true,source_type:'smart_gallery',map_source_type:'exif_point',smart_gallery_id:int,total_images:int,gps_images:int,point_limit:int,truncated:bool,points:list<array<string,scalar|null>>} Aggregate map metadata and bounded GPS points for the Smart Gallery result set.
  */
-function smart_gallery_map_payload(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): array
-{
-    $totalImages = smart_gallery_count_images($gallery, $publicOnly, $sourceGalleryId);
-    $context = smart_gallery_map_query_context($gallery, $publicOnly, $sourceGalleryId);
+function smart_gallery_map_payload(
+    array $gallery,
+    bool $publicOnly,
+    int $sourceGalleryId = 0,
+): array {
+    $totalImages = smart_gallery_count_images(
+        $gallery,
+        $publicOnly,
+        $sourceGalleryId,
+    );
+    $context = smart_gallery_map_query_context(
+        $gallery,
+        $publicOnly,
+        $sourceGalleryId,
+    );
     $semantic = $context['semantic'];
 
     if (!is_array($semantic)) {
@@ -1457,7 +2721,7 @@ function smart_gallery_map_payload(array $gallery, bool $publicOnly, int $source
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
         $publicOnly,
-        (bool) $semantic['allow_nsfw']
+        (bool) $semantic['allow_nsfw'],
     );
     $images = $gpsImages > 0
         ? \Gallery\Models\smart_gallery_model_query_map_images(
@@ -1467,7 +2731,7 @@ function smart_gallery_map_payload(array $gallery, bool $publicOnly, int $source
             (bool) $semantic['allow_nsfw'],
             (string) $semantic['sort_mode'],
             (string) $semantic['sort_direction'],
-            SMART_GALLERY_MAP_MAX_POINTS
+            SMART_GALLERY_MAP_MAX_POINTS,
         )
         : [];
 
@@ -1475,23 +2739,36 @@ function smart_gallery_map_payload(array $gallery, bool $publicOnly, int $source
     $images = content_localize_entities('image', $images, $contentLanguage);
     $sourceGalleries = smart_gallery_source_galleries($images);
     $localizedSourceGalleries = [];
-    foreach (content_localize_entities('gallery', array_values($sourceGalleries), $contentLanguage) as $sourceGallery) {
+    foreach (content_localize_entities(
+        'gallery',
+        array_values($sourceGalleries),
+        $contentLanguage,
+    ) as $sourceGallery) {
         $sourceGalleryId = (int) ($sourceGallery['id'] ?? 0);
-        if ($sourceGalleryId > 0) $localizedSourceGalleries[$sourceGalleryId] = $sourceGallery;
+        if ($sourceGalleryId > 0)
+            $localizedSourceGalleries[$sourceGalleryId] = $sourceGallery;
     }
     $sourceGalleries = $localizedSourceGalleries;
-    $sourceContexts = smart_gallery_source_contexts($sourceGalleries, $contentLanguage);
+    $sourceContexts = smart_gallery_source_contexts(
+        $sourceGalleries,
+        $contentLanguage,
+    );
 
     $points = [];
     foreach ($images as $image) {
         $sourceGalleryId = (int) ($image['gallery_id'] ?? 0);
         $source = $sourceGalleries[$sourceGalleryId] ?? null;
         $sourceContext = $sourceContexts[$sourceGalleryId] ?? null;
-        if (!$source || !is_array($sourceContext) || !image_has_gps($image)) continue;
+        if (!$source || !is_array($sourceContext) || !image_has_gps($image))
+            continue;
         $point = image_map_point($image, $source, false);
         $point['smart_gallery_id'] = (int) ($gallery['id'] ?? 0);
-        $point['source_gallery_title'] = (string) ($sourceContext['title'] ?? '');
-        $point['source_gallery_breadcrumb'] = (string) ($sourceContext['breadcrumb'] ?? '');
+        $point['source_gallery_title'] = (string) (
+            $sourceContext['title'] ?? ''
+        );
+        $point['source_gallery_breadcrumb'] = (string) (
+            $sourceContext['breadcrumb'] ?? ''
+        );
         $point['source_gallery_url'] = (string) ($sourceContext['url'] ?? '');
         $point['thumb'] = \Gallery\Core\url_for('thumb', [
             'id' => (int) ($image['id'] ?? 0),
@@ -1520,50 +2797,91 @@ function smart_gallery_map_payload(array $gallery, bool $publicOnly, int $source
  * Each batch is one UNION statement regardless of the number of Smart Gallery
  * cards in that chunk, so a page with many attachments does not issue count
  * and cover queries once per rendered card.
+
+ *
+ * @param list<array<string,scalar|null|array<array-key,scalar|null>>> $smartGalleries Smart Gallery definitions whose card summaries are requested.
+ * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
+ * @return array<int,array{valid:bool,count:int,cover:array<string,scalar|null>|null,source_gallery:array<string,scalar|null>|null}> Card validity, result count, cover image and cover source keyed by Smart Gallery ID.
  */
-function smart_gallery_card_summaries(array $smartGalleries, bool $publicOnly): array
-{
+function smart_gallery_card_summaries(
+    array $smartGalleries,
+    bool $publicOnly,
+): array {
     $byId = [];
     foreach ($smartGalleries as $smartGallery) {
-        if (!is_array($smartGallery)) continue;
+        if (!is_array($smartGallery))
+            continue;
         $smartId = (int) ($smartGallery['id'] ?? 0);
-        if ($smartId > 0) $byId[$smartId] = $smartGallery;
+        if ($smartId > 0)
+            $byId[$smartId] = $smartGallery;
     }
-    if ($byId === []) return [];
+    if ($byId === [])
+        return [];
 
     $cache = &smart_gallery_graph_request_cache();
     $cacheKey = $publicOnly ? 'card_summaries_public' : 'card_summaries_admin';
-    $cached = isset($cache[$cacheKey]) && is_array($cache[$cacheKey]) ? $cache[$cacheKey] : [];
+    $cached = isset($cache[$cacheKey]) && is_array($cache[$cacheKey])
+        ? $cache[$cacheKey]
+        : [];
     $missing = [];
     foreach ($byId as $smartId => $smartGallery) {
-        if (!array_key_exists($smartId, $cached)) $missing[$smartId] = $smartGallery;
+        if (!array_key_exists($smartId, $cached))
+            $missing[$smartId] = $smartGallery;
     }
 
     if ($missing !== []) {
-        $accessibleGalleryIds = smart_gallery_accessible_gallery_ids($publicOnly);
-        $allowNsfw = !$publicOnly || !nsfw_guard_schema_ready() || visitor_can_access_nsfw_content();
-        foreach (array_chunk($missing, SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE, true) as $chunk) {
+        $accessibleGalleryIds =
+            smart_gallery_accessible_gallery_ids($publicOnly);
+        $allowNsfw =
+            !$publicOnly
+            || !nsfw_guard_schema_ready()
+            || visitor_can_access_nsfw_content();
+        foreach (array_chunk(
+            $missing,
+            SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE,
+            true,
+        ) as $chunk) {
             $definitions = [];
             foreach ($chunk as $smartId => $smartGallery) {
                 try {
                     smart_gallery_assert_runtime_safe($smartGallery);
                     $definitions[] = [
                         'id' => $smartId,
-                        'rules' => smart_gallery_rules_from_json((string) ($smartGallery['rules_json'] ?? '')),
-                        'sort_mode' => (string) ($smartGallery['sort_mode'] ?? ''),
-                        'sort_direction' => (string) ($smartGallery['sort_direction'] ?? 'desc'),
+                        'rules' => smart_gallery_rules_from_json(
+                            (string) ($smartGallery['rules_json'] ?? ''),
+                        ),
+                        'sort_mode' => (string) (
+                            $smartGallery['sort_mode'] ?? ''
+                        ),
+                        'sort_direction' => (string) (
+                            $smartGallery['sort_direction'] ?? 'desc'
+                        ),
                     ];
                 } catch (InvalidArgumentException) {
-                    $cached[$smartId] = ['valid' => false, 'count' => 0, 'cover' => null, 'source_gallery' => null];
+                    $cached[$smartId] = [
+                        'valid' => false,
+                        'count' => 0,
+                        'cover' => null,
+                        'source_gallery' => null,
+                    ];
                 }
             }
-            foreach (\Gallery\Models\smart_gallery_model_card_summary_rows($definitions, $accessibleGalleryIds, $publicOnly, $allowNsfw) as $row) {
+            foreach (\Gallery\Models\smart_gallery_model_card_summary_rows(
+                $definitions,
+                $accessibleGalleryIds,
+                $publicOnly,
+                $allowNsfw,
+            ) as $row) {
                 $smartId = (int) ($row['smart_gallery_id'] ?? 0);
-                if ($smartId <= 0) continue;
+                if ($smartId <= 0)
+                    continue;
                 $cached[$smartId] = [
                     'valid' => true,
                     'count' => max(0, (int) ($row['image_count'] ?? 0)),
-                    'cover_image_id' => max(0, (int) ($row['cover_image_id'] ?? 0)),
+                    'cover_image_id' => max(
+                        0,
+                        (int) ($row['cover_image_id'] ?? 0),
+                    ),
                     'cover' => null,
                     'source_gallery' => null,
                 ];
@@ -1573,20 +2891,36 @@ function smart_gallery_card_summaries(array $smartGalleries, bool $publicOnly): 
         $coverIds = [];
         foreach (array_keys($missing) as $smartId) {
             $coverId = (int) ($cached[$smartId]['cover_image_id'] ?? 0);
-            if ($coverId > 0) $coverIds[$coverId] = $coverId;
+            if ($coverId > 0)
+                $coverIds[$coverId] = $coverId;
         }
-        $coversById = $coverIds === [] ? [] : \Gallery\Models\smart_gallery_model_images_by_ids(array_values($coverIds));
-        $sourceGalleries = smart_gallery_source_galleries(array_values($coversById));
+        $coversById = $coverIds === []
+            ? []
+            : \Gallery\Models\smart_gallery_model_images_by_ids(array_values(
+                $coverIds,
+            ));
+        $sourceGalleries = smart_gallery_source_galleries(array_values(
+            $coversById,
+        ));
         foreach (array_keys($missing) as $smartId) {
             if (!isset($cached[$smartId])) {
-                $cached[$smartId] = ['valid' => false, 'count' => 0, 'cover' => null, 'source_gallery' => null];
+                $cached[$smartId] = [
+                    'valid' => false,
+                    'count' => 0,
+                    'cover' => null,
+                    'source_gallery' => null,
+                ];
                 continue;
             }
             $coverId = (int) ($cached[$smartId]['cover_image_id'] ?? 0);
-            $cover = $coverId > 0 ? ($coversById[$coverId] ?? null) : null;
-            $sourceGalleryId = is_array($cover) ? (int) ($cover['gallery_id'] ?? 0) : 0;
+            $cover = $coverId > 0 ? $coversById[$coverId] ?? null : null;
+            $sourceGalleryId = is_array($cover)
+                ? (int) ($cover['gallery_id'] ?? 0)
+                : 0;
             $cached[$smartId]['cover'] = $cover;
-            $cached[$smartId]['source_gallery'] = $sourceGalleryId > 0 ? ($sourceGalleries[$sourceGalleryId] ?? null) : null;
+            $cached[$smartId]['source_gallery'] = $sourceGalleryId > 0
+                ? $sourceGalleries[$sourceGalleryId] ?? null
+                : null;
             unset($cached[$smartId]['cover_image_id']);
         }
         $cache[$cacheKey] = $cached;
@@ -1594,31 +2928,45 @@ function smart_gallery_card_summaries(array $smartGalleries, bool $publicOnly): 
 
     $result = [];
     foreach (array_keys($byId) as $smartId) {
-        if (isset($cached[$smartId]) && is_array($cached[$smartId])) $result[$smartId] = $cached[$smartId];
+        if (isset($cached[$smartId]) && is_array($cached[$smartId]))
+            $result[$smartId] = $cached[$smartId];
     }
     return $result;
 }
 
-/** Load physical source galleries by id without N+1 lookups. */
+/** Load physical source galleries by id without N+1 lookups.
+ *
+ * @param list<int> $ids Physical gallery IDs to load.
+ * @return array<int,array<string,scalar|null>> Loaded source gallery rows keyed by physical gallery ID.
+ */
 function smart_gallery_source_galleries_by_ids(array $ids): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
-    if ($ids === []) return [];
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
+    if ($ids === [])
+        return [];
 
     $cachedRows = smart_gallery_all_source_gallery_rows();
     $byId = [];
     foreach ($ids as $id) {
-        if (isset($cachedRows[$id]) && is_array($cachedRows[$id])) $byId[$id] = $cachedRows[$id];
+        if (isset($cachedRows[$id]) && is_array($cachedRows[$id]))
+            $byId[$id] = $cachedRows[$id];
     }
     return $byId;
 }
 
-/** Load physical source galleries for a Smart Gallery image set without N+1 lookups. */
+/** Load physical source galleries for a Smart Gallery image set without N+1 lookups.
+ *
+ * @param list<array<string,scalar|null>> $images Image rows whose physical source galleries are requested.
+ * @return array<int,array<string,scalar|null>> Loaded source gallery rows keyed by physical gallery ID for the supplied image rows.
+ */
 function smart_gallery_source_galleries(array $images): array
 {
     return smart_gallery_source_galleries_by_ids(array_map(
-        static fn (array $image): int => (int) ($image['gallery_id'] ?? 0),
-        $images
+        static fn(array $image): int => (int) ($image['gallery_id'] ?? 0),
+        $images,
     ));
 }
 
@@ -1631,19 +2979,24 @@ function smart_gallery_source_galleries(array $images): array
  * The request-cached physical-gallery inventory avoids parent lookup N+1 queries,
  * while ancestor translations are loaded in one batch.
  *
- * @param array<int,array<string,mixed>> $sourceGalleries Localized source galleries keyed by id when possible.
- * @param string $contentLanguage Active authored-content language.
+ * @param array<int,array<string,scalar|null>> $sourceGalleries Authorized, localized source rows keyed by gallery ID.
+ * @param string $contentLanguage Language used to resolve localized gallery titles.
  * @return array<int,array{id:int,title:string,breadcrumb:string,breadcrumb_compact:string,url:string}> Context keyed by source gallery id.
  */
-function smart_gallery_source_contexts(array $sourceGalleries, string $contentLanguage): array
-{
+function smart_gallery_source_contexts(
+    array $sourceGalleries,
+    string $contentLanguage,
+): array {
     $localizedSources = [];
     foreach ($sourceGalleries as $sourceGallery) {
-        if (!is_array($sourceGallery)) continue;
+        if (!is_array($sourceGallery))
+            continue;
         $sourceGalleryId = (int) ($sourceGallery['id'] ?? 0);
-        if ($sourceGalleryId > 0) $localizedSources[$sourceGalleryId] = $sourceGallery;
+        if ($sourceGalleryId > 0)
+            $localizedSources[$sourceGalleryId] = $sourceGallery;
     }
-    if ($localizedSources === []) return [];
+    if ($localizedSources === [])
+        return [];
 
     $allSourceGalleries = smart_gallery_all_source_gallery_rows();
     $ancestorRows = [];
@@ -1652,15 +3005,22 @@ function smart_gallery_source_contexts(array $sourceGalleries, string $contentLa
         $pathIds = [];
         $seen = [];
         $cursorId = $sourceGalleryId;
-        for ($depth = 0; $cursorId > 0 && $depth < SMART_GALLERY_GRAPH_MAX_DEPTH; $depth++) {
-            if (isset($seen[$cursorId])) break;
+        for (
+            $depth = 0;
+            $cursorId > 0 && $depth < SMART_GALLERY_GRAPH_MAX_DEPTH;
+            $depth++
+        ) {
+            if (isset($seen[$cursorId]))
+                break;
             $seen[$cursorId] = true;
             $row = $cursorId === $sourceGalleryId
                 ? $sourceGallery
-                : ($allSourceGalleries[$cursorId] ?? null);
-            if (!is_array($row)) break;
+                : $allSourceGalleries[$cursorId] ?? null;
+            if (!is_array($row))
+                break;
             array_unshift($pathIds, $cursorId);
-            if ($cursorId !== $sourceGalleryId) $ancestorRows[$cursorId] = $row;
+            if ($cursorId !== $sourceGalleryId)
+                $ancestorRows[$cursorId] = $row;
             $cursorId = max(0, (int) ($row['parent_id'] ?? 0));
         }
         $pathsBySource[$sourceGalleryId] = $pathIds;
@@ -1668,21 +3028,32 @@ function smart_gallery_source_contexts(array $sourceGalleries, string $contentLa
 
     $localizedById = $localizedSources;
     if ($ancestorRows !== []) {
-        foreach (content_localize_entities('gallery', array_values($ancestorRows), $contentLanguage) as $ancestor) {
+        foreach (content_localize_entities(
+            'gallery',
+            array_values($ancestorRows),
+            $contentLanguage,
+        ) as $ancestor) {
             $ancestorId = (int) ($ancestor['id'] ?? 0);
-            if ($ancestorId > 0) $localizedById[$ancestorId] = $ancestor;
+            if ($ancestorId > 0)
+                $localizedById[$ancestorId] = $ancestor;
         }
     }
 
     $contexts = [];
     foreach ($localizedSources as $sourceGalleryId => $sourceGallery) {
         $titles = [];
-        foreach ((array) ($pathsBySource[$sourceGalleryId] ?? [$sourceGalleryId]) as $pathId) {
-            $pathTitle = trim((string) ($localizedById[(int) $pathId]['title'] ?? ''));
-            if ($pathTitle !== '') $titles[] = $pathTitle;
+        foreach ((array) (
+            $pathsBySource[$sourceGalleryId] ?? [$sourceGalleryId]
+        ) as $pathId) {
+            $pathTitle = trim(
+                (string) ($localizedById[(int) $pathId]['title'] ?? ''),
+            );
+            if ($pathTitle !== '')
+                $titles[] = $pathTitle;
         }
         $sourceTitle = trim((string) ($sourceGallery['title'] ?? ''));
-        if ($titles === [] && $sourceTitle !== '') $titles[] = $sourceTitle;
+        if ($titles === [] && $sourceTitle !== '')
+            $titles[] = $sourceTitle;
         $breadcrumb = implode(' › ', $titles);
         $compactTitles = array_slice($titles, -2);
         $compactBreadcrumb = implode(' › ', $compactTitles);
@@ -1690,20 +3061,39 @@ function smart_gallery_source_contexts(array $sourceGalleries, string $contentLa
             'id' => $sourceGalleryId,
             'title' => $sourceTitle,
             'breadcrumb' => $breadcrumb !== '' ? $breadcrumb : $sourceTitle,
-            'breadcrumb_compact' => $compactBreadcrumb !== '' ? $compactBreadcrumb : $sourceTitle,
+            'breadcrumb_compact' => $compactBreadcrumb !== ''
+                ? $compactBreadcrumb
+                : $sourceTitle,
             'url' => \Gallery\Core\gallery_public_url($sourceGallery),
         ];
     }
     return $contexts;
 }
 
-/** Convert a compatible text search into a reusable OR rule tree. */
+/** Convert a compatible text search into a reusable OR rule tree.
+ *
+ * @param string $query Text query to convert into compatible Smart Gallery rules.
+ * @return array{version:int,root:array{type:'group',operator:'OR',children:list<array{type:'condition',field:string,operator:'contains',value:string}>}} Versioned OR rule tree matching the normalized query across supported text fields.
+ */
 function smart_gallery_rules_from_search(string $query): array
 {
     $query = public_search_normalize_query($query);
-    if ($query === '') return smart_gallery_empty_rules();
+    if ($query === '')
+        return smart_gallery_empty_rules();
     $fields = ['filename', 'title', 'description', 'gallery_title', 'ai_text'];
-    return ['version' => SMART_GALLERY_RULE_VERSION, 'root' => ['type' => 'group', 'operator' => 'OR', 'children' => array_map(static fn (string $field): array => ['type' => 'condition', 'field' => $field, 'operator' => 'contains', 'value' => $query], $fields)]];
+    return [
+        'version' => SMART_GALLERY_RULE_VERSION,
+        'root' => [
+            'type' => 'group',
+            'operator' => 'OR',
+            'children' => array_map(static fn(string $field): array => [
+                'type' => 'condition',
+                'field' => $field,
+                'operator' => 'contains',
+                'value' => $query,
+            ], $fields),
+        ],
+    ];
 }
 
 /** Build a translated, human-readable nested summary from authoritative rules. */
@@ -1713,36 +3103,89 @@ function smart_gallery_rule_summary(array $rules): array
     return smart_gallery_rule_summary_node($validated['root']);
 }
 
-/** Summarize one group recursively for Admin diagnostics. */
+/** Summarize one group recursively for Admin diagnostics.
+ *
+ * @param array<string,scalar|null|array<array-key,scalar|null>> $node Validated rule node to summarize.
+ * @return array{label:string,children:list<array{label:string,children:list<array<string,mixed>>}>} Localized label and recursively summarized child rules; each child has the same label/children structure.
+ */
 function smart_gallery_rule_summary_node(array $node): array
 {
     if ($node['type'] === 'condition') {
         $value = $node['value'] ?? '';
         if ($node['field'] === 'tag' && !is_array($value) && (int) $value > 0) {
-            $value = \Gallery\Models\smart_gallery_model_tag_name((int) $value) ?? t('smart_gallery.missing_reference', '[missing reference]');
+            $value = \Gallery\Models\smart_gallery_model_tag_name(
+                (int) $value,
+            ) ?? t('smart_gallery.missing_reference', '[missing reference]');
         } elseif ($node['field'] === 'gallery' && (int) $value > 0) {
-            $value = \Gallery\Models\smart_gallery_model_gallery_title((int) $value) ?? t('smart_gallery.missing_reference', '[missing reference]');
+            $value = \Gallery\Models\smart_gallery_model_gallery_title(
+                (int) $value,
+            ) ?? t('smart_gallery.missing_reference', '[missing reference]');
         } elseif (is_array($value)) {
             $value = implode(' – ', array_map('strval', $value));
         }
-        return ['label' => t('smart_gallery.summary_condition', '{field} {operator} {value}', ['field' => smart_gallery_field_label($node['field']), 'operator' => t('smart_gallery.operator.' . $node['operator'], str_replace('_', ' ', $node['operator'])), 'value' => (string) $value]), 'children' => []];
+        return [
+            'label' => t(
+                'smart_gallery.summary_condition',
+                '{field} {operator} {value}',
+                [
+                    'field' => smart_gallery_field_label($node['field']),
+                    'operator' => t('smart_gallery.operator.'
+                        . $node['operator'], str_replace(
+                        '_',
+                        ' ',
+                        $node['operator'],
+                    )),
+                    'value' => (string) $value,
+                ],
+            ),
+            'children' => [],
+        ];
     }
     return [
-        'label' => t('smart_gallery.group.' . strtolower($node['operator']), match ($node['operator']) { 'OR' => 'Any of:', 'NOT' => 'Not:', default => 'All of:' }),
-        'children' => array_map(static fn (array $child): array => smart_gallery_rule_summary_node($child), $node['children']),
+        'label' => t(
+            'smart_gallery.group.' . strtolower($node['operator']),
+            match ($node['operator']) {
+                'OR' => 'Any of:',
+                'NOT' => 'Not:',
+                default => 'All of:',
+            },
+        ),
+        'children' => array_map(
+            static fn(array $child): array => smart_gallery_rule_summary_node(
+                $child,
+            ),
+            $node['children'],
+        ),
     ];
 }
 
-/** Return the translated label for one stable rule field. */
+/** Return the translated label for one stable rule field.
+ *
+ * @param string $field Stable Smart Gallery rule field name.
+ * @return string Localized display label for the stable field name.
+ */
 function smart_gallery_field_label(string $field): string
 {
-    return t('smart_gallery.field.' . $field, ucfirst(str_replace('_', ' ', $field)));
+    return t(
+        'smart_gallery.field.' . $field,
+        ucfirst(str_replace('_', ' ', $field)),
+    );
 }
 
-/** Persist a private editorial image rating, where zero clears the rating. */
+/** Persist a private editorial image rating, where zero clears the rating.
+ *
+ * @param int $imageId Image identifier to test or update.
+ * @param int $rating Editorial rating from zero through five; zero clears the stored rating.
+ * @return void No value; stores ratings 1–5 or clears the rating when zero is supplied.
+ */
 function smart_gallery_set_image_rating(int $imageId, int $rating): void
 {
     smart_gallery_assert_mutation_ready('image.editorial_rating');
-    if ($rating < 0 || $rating > 5) throw new InvalidArgumentException('Ratings must be between 0 and 5.');
-    \Gallery\Models\smart_gallery_model_set_image_rating($imageId, $rating === 0 ? null : $rating, now_sql());
+    if ($rating < 0 || $rating > 5)
+        throw new InvalidArgumentException('Ratings must be between 0 and 5.');
+    \Gallery\Models\smart_gallery_model_set_image_rating(
+        $imageId,
+        $rating === 0 ? null : $rating,
+        now_sql(),
+    );
 }

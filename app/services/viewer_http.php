@@ -50,11 +50,17 @@ use Throwable;
  */
 function viewer_http_registration_lifecycle_available(): bool
 {
-    return viewer_accounts_enabled()
-        && in_array(viewer_registration_mode(), ['invite_only', 'open'], true)
-        && viewer_security_transport_allowed()
-        && viewer_auth_storage_available()
-        && viewer_registration_storage_available();
+    return (
+        viewer_accounts_enabled()
+            && in_array(
+                viewer_registration_mode(),
+                ['invite_only', 'open'],
+                true,
+            )
+            && viewer_security_transport_allowed()
+            && viewer_auth_storage_available()
+            && viewer_registration_storage_available()
+    );
 }
 
 /**
@@ -64,8 +70,10 @@ function viewer_http_registration_lifecycle_available(): bool
  */
 function viewer_http_open_registration_available(): bool
 {
-    return viewer_http_registration_lifecycle_available()
-        && viewer_registration_mode() === 'open';
+    return (
+        viewer_http_registration_lifecycle_available()
+            && viewer_registration_mode() === 'open'
+    );
 }
 
 /**
@@ -127,10 +135,12 @@ function viewer_remember_cookie_encode(array $credential): string
 {
     $selector = trim((string) ($credential['selector'] ?? ''));
     $verifier = trim((string) ($credential['verifier'] ?? ''));
-    if (preg_match('/^[a-f0-9]{36}$/D', $selector) !== 1
+    if (
+        preg_match('/^[a-f0-9]{36}$/D', $selector) !== 1
         || $verifier === ''
         || strlen($verifier) > 512
-        || preg_match('/^[A-Za-z0-9_-]+$/D', $verifier) !== 1) {
+        || preg_match('/^[A-Za-z0-9_-]+$/D', $verifier) !== 1
+    ) {
         return '';
     }
     return $selector . '.' . $verifier;
@@ -148,11 +158,13 @@ function viewer_remember_cookie_parse(string $value): ?array
         return null;
     }
     $parts = explode('.', $value, 2);
-    if (count($parts) !== 2
+    if (
+        count($parts) !== 2
         || preg_match('/^[a-f0-9]{36}$/D', $parts[0]) !== 1
         || $parts[1] === ''
         || strlen($parts[1]) > 512
-        || preg_match('/^[A-Za-z0-9_-]+$/D', $parts[1]) !== 1) {
+        || preg_match('/^[A-Za-z0-9_-]+$/D', $parts[1]) !== 1
+    ) {
         return null;
     }
     return ['selector' => $parts[0], 'verifier' => $parts[1]];
@@ -238,22 +250,27 @@ function viewer_remember_revoke_current_cookie(?array $credential): bool
  * not establish recent reauthentication.
  *
  * @param ?array{selector:string,verifier:string} $credential Parsed browser credential.
- * @return array{restored:bool,cookie_instruction:?array,rotated_selector:?string}
+ * @return array{restored:bool,cookie_instruction:?array{name:string,value:string,expires_at:int,path:string,secure:bool,httponly:bool,samesite:string},rotated_selector:?string} Whether a viewer was restored, the adapter cookie instruction, and the rotated selector when available.
  */
 function viewer_remember_restore_from_cookie(?array $credential): array
 {
     if (!viewer_accounts_enabled()) {
         viewer_session_clear();
-        if (function_exists(__NAMESPACE__ . '\\viewer_clear_reauthentication')) {
+        if (function_exists(__NAMESPACE__
+            . '\\viewer_clear_reauthentication')) {
             viewer_clear_reauthentication();
         }
-        if (function_exists(__NAMESPACE__ . '\\viewer_registration_activation_clear')) {
+        if (function_exists(__NAMESPACE__
+            . '\\viewer_registration_activation_clear')) {
             viewer_registration_activation_clear();
         }
-        if (function_exists(__NAMESPACE__ . '\\viewer_password_reset_state_clear')) {
+        if (function_exists(__NAMESPACE__
+            . '\\viewer_password_reset_state_clear')) {
             viewer_password_reset_state_clear();
         }
-        \Gallery\Core\viewer_identity_session_unset(viewer_csrf_namespace_key());
+        \Gallery\Core\viewer_identity_session_unset(
+            viewer_csrf_namespace_key(),
+        );
         return [
             'restored' => false,
             'cookie_instruction' => viewer_remember_cookie_clear(),
@@ -261,7 +278,11 @@ function viewer_remember_restore_from_cookie(?array $credential): array
         ];
     }
     if (viewer_session_state() !== null || $credential === null) {
-        return ['restored' => false, 'cookie_instruction' => null, 'rotated_selector' => null];
+        return [
+            'restored' => false,
+            'cookie_instruction' => null,
+            'rotated_selector' => null,
+        ];
     }
     if (!viewer_security_transport_allowed()) {
         return [
@@ -272,7 +293,10 @@ function viewer_remember_restore_from_cookie(?array $credential): array
     }
 
     try {
-        $rotated = viewer_remember_restore_and_rotate($credential['selector'], $credential['verifier']);
+        $rotated = viewer_remember_restore_and_rotate(
+            $credential['selector'],
+            $credential['verifier'],
+        );
         if ($rotated === null) {
             return [
                 'restored' => false,
@@ -294,7 +318,8 @@ function viewer_remember_restore_from_cookie(?array $credential): array
                 'rotated_selector' => null,
             ];
         }
-        if (function_exists(__NAMESPACE__ . '\\viewer_clear_reauthentication')) {
+        if (function_exists(__NAMESPACE__
+            . '\\viewer_clear_reauthentication')) {
             viewer_clear_reauthentication();
         }
         return [
@@ -311,4 +336,3 @@ function viewer_remember_restore_from_cookie(?array $credential): array
         ];
     }
 }
-

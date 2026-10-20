@@ -20,7 +20,9 @@ namespace Gallery\Services {
      */
     function gallery_abs_path(string $relativePath): string
     {
-        return $GLOBALS['gallery_cover_fixture_root'] . DIRECTORY_SEPARATOR . trim($relativePath, '/\\');
+        return $GLOBALS['gallery_cover_fixture_root']
+            . DIRECTORY_SEPARATOR
+            . trim($relativePath, '/\\');
     }
 }
 
@@ -38,19 +40,31 @@ namespace {
      * @param string $label Regression case name.
      * @return void No value on success.
      */
-    function gallery_cover_safety_assert(?string $expected, ?string $actual, string $label): void
-    {
+    function gallery_cover_safety_assert(
+        ?string $expected,
+        ?string $actual,
+        string $label,
+    ): void {
         if ($expected !== $actual) {
-            throw new RuntimeException($label . ': expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+            throw new RuntimeException(
+                $label . ': expected ' . var_export($expected, true) . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
     // Expected physical paths use native separators; persisted relative paths below remain portable inputs.
-    $fixtureRoot = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-cover-' . bin2hex(random_bytes(8));
+    $fixtureRoot =
+        sys_get_temp_dir()
+        . DIRECTORY_SEPARATOR
+        . 'php-gallery-cover-'
+        . bin2hex(random_bytes(8));
     $galleryRoot = $fixtureRoot . DIRECTORY_SEPARATOR . 'album';
     $nestedRoot = $galleryRoot . DIRECTORY_SEPARATOR . 'nested';
     if (!mkdir($nestedRoot, 0700, true) && !is_dir($nestedRoot)) {
-        throw new RuntimeException('Unable to create disposable cover fixture.');
+        throw new RuntimeException(
+            'Unable to create disposable cover fixture.',
+        );
     }
     $GLOBALS['gallery_cover_fixture_root'] = $fixtureRoot;
 
@@ -61,41 +75,104 @@ namespace {
     try {
         file_put_contents($validFile, 'fixture cover');
         file_put_contents($outsideFile, 'outside fixture image');
-        $gallery = ['folder_path' => 'album', 'cover_image_path' => 'nested/cover.png'];
+        $gallery = [
+            'folder_path' => 'album',
+            'cover_image_path' => 'nested/cover.png',
+        ];
 
-        gallery_cover_safety_assert($validFile, gallery_cover_asset_abs_path($gallery), 'Nested gallery cover');
+        gallery_cover_safety_assert(
+            $validFile,
+            gallery_cover_asset_abs_path($gallery),
+            'Nested gallery cover',
+        );
         $gallery['cover_image_path'] = 'nested\\cover.png';
-        gallery_cover_safety_assert($validFile, gallery_cover_asset_abs_path($gallery), 'Windows path separator');
+        gallery_cover_safety_assert(
+            $validFile,
+            gallery_cover_asset_abs_path($gallery),
+            'Windows path separator',
+        );
         $gallery['cover_image_path'] = '../outside.png';
-        gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'Parent traversal');
+        gallery_cover_safety_assert(
+            null,
+            gallery_cover_asset_abs_path($gallery),
+            'Parent traversal',
+        );
         $gallery['cover_image_path'] = '..\\outside.png';
-        gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'Windows parent traversal');
+        gallery_cover_safety_assert(
+            null,
+            gallery_cover_asset_abs_path($gallery),
+            'Windows parent traversal',
+        );
         $gallery['cover_image_path'] = 'nested/missing.png';
-        gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'Missing cover');
+        gallery_cover_safety_assert(
+            null,
+            gallery_cover_asset_abs_path($gallery),
+            'Missing cover',
+        );
         $gallery['cover_image_path'] = 'nested';
-        gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'Directory is not a cover');
+        gallery_cover_safety_assert(
+            null,
+            gallery_cover_asset_abs_path($gallery),
+            'Directory is not a cover',
+        );
         $gallery['cover_image_path'] = '';
-        gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'Empty cover');
+        gallery_cover_safety_assert(
+            null,
+            gallery_cover_asset_abs_path($gallery),
+            'Empty cover',
+        );
 
         if (function_exists('symlink') && @symlink($outsideFile, $linkedFile)) {
             $gallery['cover_image_path'] = 'linked.png';
-            gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'External file symlink');
+            gallery_cover_safety_assert(
+                null,
+                gallery_cover_asset_abs_path($gallery),
+                'External file symlink',
+            );
         }
-        if (function_exists('symlink') && @symlink($fixtureRoot, $linkedDirectory)) {
+        if (
+            function_exists('symlink')
+            && @symlink($fixtureRoot, $linkedDirectory)
+        ) {
             $gallery['cover_image_path'] = 'escape/outside.png';
-            gallery_cover_safety_assert(null, gallery_cover_asset_abs_path($gallery), 'External directory symlink');
+            gallery_cover_safety_assert(
+                null,
+                gallery_cover_asset_abs_path($gallery),
+                'External directory symlink',
+            );
         }
 
-        $controller = (string) file_get_contents(dirname(__DIR__) . '/app/controllers/public_media.php');
-        $start = strpos($controller, 'function cms_gallery_cover_asset(): void');
-        $end = strpos($controller, 'function cms_gallery_branding_asset(): void', $start === false ? 0 : $start);
-        $handler = $start !== false && $end !== false ? substr($controller, $start, $end - $start) : '';
+        $controller = (string) file_get_contents(
+            dirname(__DIR__) . '/app/controllers/public_media.php',
+        );
+        $start = strpos(
+            $controller,
+            'function cms_gallery_cover_asset(): void',
+        );
+        $end = strpos(
+            $controller,
+            'function cms_gallery_branding_asset(): void',
+            $start === false ? 0 : $start,
+        );
+        $handler =
+            $start !== false && $end !== false
+                ? substr($controller, $start, $end - $start)
+                : '';
         if (!str_contains($handler, 'gallery_cover_asset_abs_path($gallery)')) {
-            throw new RuntimeException('Gallery cover controller bypasses the canonical safe cover resolver.');
+            throw new RuntimeException(
+                'Gallery cover controller bypasses the canonical safe cover resolver.',
+            );
         }
-        if (!str_contains($handler, 'gallery_branding_mime_extension($mime) === null')
-            || str_contains($handler, "str_starts_with(\$mime, 'image/')")) {
-            throw new RuntimeException('Gallery cover controller must reject active or unsupported image MIME types.');
+        if (
+            !str_contains(
+                $handler,
+                'gallery_branding_mime_extension($mime) === null',
+            )
+            || str_contains($handler, "str_starts_with(\$mime, 'image/')")
+        ) {
+            throw new RuntimeException(
+                'Gallery cover controller must reject active or unsupported image MIME types.',
+            );
         }
 
         echo "Gallery cover path safety passed.\n";

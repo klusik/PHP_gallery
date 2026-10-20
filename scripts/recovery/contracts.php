@@ -40,6 +40,7 @@ const COMPONENTS = [
     'custom_assets',
     'application',
 ];
+
 const CONTROLS = [
     'network_egress_blocked',
     'email_disabled',
@@ -48,6 +49,7 @@ const CONTROLS = [
     'uploads_isolated',
     'database_isolated',
 ];
+
 const OPERATOR_CHECKS = [
     'database_import',
     'gallery_relationships',
@@ -61,20 +63,35 @@ const OPERATOR_CHECKS = [
     'thumbnails',
     'uploads',
 ];
+
 const COUNT_FIELDS = ['images', 'galleries', 'trash_entries'];
 
-/** Create an unverified inventory whose missing evidence remains explicit. */
+/**
+ * Create an unverified inventory whose missing evidence remains explicit.
+ *
+ * @return array{schema:int,set_id:string,recovery_point:string,backup:array{method:string,consistent:bool,off_host:bool,retention_days:?int,previous_restore_verified:bool},targets:array{rto_seconds:?int,rpo_seconds:?int},components:array<string,array{state:string,snapshot_id:?string,receipt_sha256:?string}>,application:array{version:string,manifest_sha256:?string},counts:array{images:int,galleries:int,trash_entries:int},originals:list<array{path:string,sha256:?string}>} New recovery-set template with unverified defaults and empty original-file evidence.
+ */
 function set_template(): array
 {
     $components = [];
     foreach (COMPONENTS as $name) {
-        $components[$name] = ['state' => 'unknown', 'snapshot_id' => null, 'receipt_sha256' => null];
+        $components[$name] = [
+            'state' => 'unknown',
+            'snapshot_id' => null,
+            'receipt_sha256' => null,
+        ];
     }
     return [
         'schema' => 1,
         'set_id' => 'replace-with-opaque-set-id',
         'recovery_point' => gmdate('Y-m-d\TH:i:s\Z'),
-        'backup' => ['method' => 'unknown', 'consistent' => false, 'off_host' => false, 'retention_days' => null, 'previous_restore_verified' => false],
+        'backup' => [
+            'method' => 'unknown',
+            'consistent' => false,
+            'off_host' => false,
+            'retention_days' => null,
+            'previous_restore_verified' => false,
+        ],
         'targets' => ['rto_seconds' => null, 'rpo_seconds' => null],
         'components' => $components,
         'application' => ['version' => 'unknown', 'manifest_sha256' => null],
@@ -83,19 +100,59 @@ function set_template(): array
     ];
 }
 
-/** Validate recovery-set shape, receipt coordination and original catalog safety. */
+/**
+ * Validate recovery-set shape, receipt coordination and original catalog safety.
+ *
+ * @param array<string,mixed> $set Recovery-set document to validate.
+ * @return void Throw a fixed-code error when the document violates its contract.
+ */
 function check_set(array $set): void
 {
-    keys($set, ['schema', 'set_id', 'recovery_point', 'backup', 'targets', 'components', 'application', 'counts', 'originals']);
+    keys($set, [
+        'schema',
+        'set_id',
+        'recovery_point',
+        'backup',
+        'targets',
+        'components',
+        'application',
+        'counts',
+        'originals',
+    ]);
     demand($set['schema'] === 1, 'unsupported_schema');
-    demand(is_string($set['set_id']) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D', $set['set_id']) === 1, 'invalid_set_id');
+    demand(
+        is_string($set['set_id'])
+            && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D', $set['set_id'])
+                === 1,
+        'invalid_set_id',
+    );
     timestamp($set['recovery_point']);
-    keys($set['backup'], ['method', 'consistent', 'off_host', 'retention_days', 'previous_restore_verified']);
-    demand(in_array($set['backup']['method'], ['unknown', 'provider_snapshot', 'maintenance_window'], true), 'invalid_snapshot_method');
+    keys($set['backup'], [
+        'method',
+        'consistent',
+        'off_host',
+        'retention_days',
+        'previous_restore_verified',
+    ]);
+    demand(
+        in_array(
+            $set['backup']['method'],
+            ['unknown', 'provider_snapshot', 'maintenance_window'],
+            true,
+        ),
+        'invalid_snapshot_method',
+    );
     foreach (['consistent', 'off_host', 'previous_restore_verified'] as $key) {
         demand(is_bool($set['backup'][$key]), 'invalid_backup_value');
     }
-    demand($set['backup']['retention_days'] === null || (nonnegative($set['backup']['retention_days']) && $set['backup']['retention_days'] > 0), 'invalid_retention');
+    demand(
+        $set['backup']['retention_days'] === null
+            || (
+                nonnegative($set['backup']['retention_days'])
+                && $set['backup']['retention_days'] > 0
+            ),
+        'invalid_retention',
+    );
     keys($set['targets'], ['rto_seconds', 'rpo_seconds']);
     foreach ($set['targets'] as $target) {
         demand($target === null || nonnegative($target), 'invalid_target');
@@ -103,44 +160,114 @@ function check_set(array $set): void
     keys($set['components'], COMPONENTS);
     foreach ($set['components'] as $name => $component) {
         keys($component, ['state', 'snapshot_id', 'receipt_sha256']);
-        demand(in_array($component['state'], ['unknown', 'present', 'absent', 'not_used'], true), 'invalid_component_state');
-        demand($component['state'] !== 'not_used' || $name === 'custom_assets', 'required_component');
-        demand($component['snapshot_id'] === null || $component['snapshot_id'] === $set['set_id'], 'mixed_recovery_set');
-        demand($component['receipt_sha256'] === null || digest($component['receipt_sha256']), 'invalid_receipt_digest');
+        demand(
+            in_array(
+                $component['state'],
+                ['unknown', 'present', 'absent', 'not_used'],
+                true,
+            ),
+            'invalid_component_state',
+        );
+        demand(
+            $component['state'] !== 'not_used' || $name === 'custom_assets',
+            'required_component',
+        );
+        demand(
+            $component['snapshot_id'] === null
+                || $component['snapshot_id'] === $set['set_id'],
+            'mixed_recovery_set',
+        );
+        demand(
+            $component['receipt_sha256'] === null
+                || digest($component['receipt_sha256']),
+            'invalid_receipt_digest',
+        );
     }
     keys($set['application'], ['version', 'manifest_sha256']);
-    demand(is_string($set['application']['version']) && preg_match('/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$/D', $set['application']['version']) === 1, 'invalid_version');
-    demand($set['application']['manifest_sha256'] === null || digest($set['application']['manifest_sha256']), 'invalid_manifest_digest');
+    demand(
+        is_string($set['application']['version'])
+            && preg_match(
+                '/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$/D',
+                $set['application']['version'],
+            ) === 1,
+        'invalid_version',
+    );
+    demand(
+        $set['application']['manifest_sha256'] === null
+            || digest($set['application']['manifest_sha256']),
+        'invalid_manifest_digest',
+    );
     keys($set['counts'], COUNT_FIELDS);
     foreach ($set['counts'] as $count) {
         demand(nonnegative($count), 'invalid_count');
     }
-    demand(is_array($set['originals']) && array_is_list($set['originals']) && count($set['originals']) <= 100000, 'invalid_catalog');
-    demand(count($set['originals']) === $set['counts']['images'], 'catalog_count_mismatch');
+    demand(
+        is_array($set['originals'])
+            && array_is_list($set['originals'])
+            && count($set['originals']) <= 100000,
+        'invalid_catalog',
+    );
+    demand(
+        count($set['originals']) === $set['counts']['images'],
+        'catalog_count_mismatch',
+    );
     $seen = [];
     foreach ($set['originals'] as $original) {
         keys($original, ['path', 'sha256']);
         $path = relative_path($original['path']);
-        demand(str_starts_with($path, 'galleries/') && preg_match('/\.(jpe?g|png|gif|webp|heic|heif|dng)$/iD', $path) === 1, 'invalid_original_path');
+        demand(
+            str_starts_with($path, 'galleries/')
+                && preg_match(
+                    '/\.(jpe?g|png|gif|webp|heic|heif|dng)$/iD',
+                    $path,
+                ) === 1,
+            'invalid_original_path',
+        );
         demand(!isset($seen[strtolower($path)]), 'duplicate_original');
         $seen[strtolower($path)] = true;
-        demand($original['sha256'] === null || digest($original['sha256']), 'invalid_original_digest');
+        demand(
+            $original['sha256'] === null || digest($original['sha256']),
+            'invalid_original_digest',
+        );
     }
 }
 
-/** Create a fresh run identity with every isolation control unconfirmed. */
+/**
+ * Create a fresh run identity with every isolation control unconfirmed.
+ *
+ * @param array{schema:int,set_id:string,recovery_point:string,backup:array{method:string,consistent:bool,off_host:bool,retention_days:?int,previous_restore_verified:bool},targets:array{rto_seconds:?int,rpo_seconds:?int},components:array<string,array{state:string,snapshot_id:?string,receipt_sha256:?string}>,application:array{version:string,manifest_sha256:?string},counts:array{images:int,galleries:int,trash_entries:int},originals:list<array{path:string,sha256:?string}>} $set Validated recovery-set document to fingerprint.
+ * @return array{schema:int,set_sha256:string,run_id:string,controls:array<string,bool>} Marker with all operator controls unconfirmed.
+ */
 function isolation_template(array $set): array
 {
-    return ['schema' => 1, 'set_sha256' => fingerprint($set), 'run_id' => bin2hex(random_bytes(16)), 'controls' => array_fill_keys(CONTROLS, false)];
+    return [
+        'schema' => 1,
+        'set_sha256' => fingerprint($set),
+        'run_id' => bin2hex(random_bytes(16)),
+        'controls' => array_fill_keys(CONTROLS, false),
+    ];
 }
 
-/** Require a marker bound to this set and affirmative operator isolation controls. */
+/**
+ * Require a marker bound to this set and affirmative operator isolation controls.
+ *
+ * @param string $root Canonical isolated restore root.
+ * @param array<string,mixed> $set Validated recovery-set document.
+ * @return array{schema:int,set_sha256:string,run_id:string,controls:array<string,bool>} Validated isolation marker bound to the set.
+ */
 function check_isolation(string $root, array $set): array
 {
     $marker = read_json(contained_file($root, '.recovery-isolated.json'));
     keys($marker, ['schema', 'set_sha256', 'run_id', 'controls']);
-    demand($marker['schema'] === 1 && $marker['set_sha256'] === fingerprint($set), 'isolation_set_mismatch');
-    demand(is_string($marker['run_id']) && preg_match('/^[a-f0-9]{32}$/D', $marker['run_id']) === 1, 'invalid_run_id');
+    demand(
+        $marker['schema'] === 1 && $marker['set_sha256'] === fingerprint($set),
+        'isolation_set_mismatch',
+    );
+    demand(
+        is_string($marker['run_id'])
+            && preg_match('/^[a-f0-9]{32}$/D', $marker['run_id']) === 1,
+        'invalid_run_id',
+    );
     keys($marker['controls'], CONTROLS);
     foreach ($marker['controls'] as $control) {
         demand($control === true, 'isolation_not_attested');
@@ -152,31 +279,101 @@ function check_isolation(string $root, array $set): array
 function observations_template(array $set, array $marker): array
 {
     return [
-        'schema' => 1, 'set_sha256' => fingerprint($set), 'run_id' => $marker['run_id'],
-        'started_at' => null, 'completed_at' => null,
+        'schema' => 1,
+        'set_sha256' => fingerprint($set),
+        'run_id' => $marker['run_id'],
+        'started_at' => null,
+        'completed_at' => null,
         'counts' => array_fill_keys(COUNT_FIELDS, null),
-        'orphan_images' => null, 'orphan_galleries' => null, 'pending_migrations' => null,
+        'orphan_images' => null,
+        'orphan_galleries' => null,
+        'pending_migrations' => null,
         'checks' => array_fill_keys(OPERATOR_CHECKS, 'pending'),
         'evidence_sha256' => null,
     ];
 }
 
-/** Validate observation identity, bounded results and chronological timestamps. */
-function check_observations(array $observations, array $set, array $marker, int $now): void
-{
-    keys($observations, ['schema', 'set_sha256', 'run_id', 'started_at', 'completed_at', 'counts', 'orphan_images', 'orphan_galleries', 'pending_migrations', 'checks', 'evidence_sha256']);
-    demand($observations['schema'] === 1 && $observations['set_sha256'] === fingerprint($set) && $observations['run_id'] === $marker['run_id'], 'observation_binding_mismatch');
-    $started = $observations['started_at'] === null ? null : timestamp($observations['started_at']);
-    $completed = $observations['completed_at'] === null ? null : timestamp($observations['completed_at']);
-    demand($started === null || ($started >= timestamp($set['recovery_point']) && $started <= $now), 'invalid_restore_start');
-    demand($completed === null || ($started !== null && $completed >= $started && $completed <= $now), 'invalid_restore_end');
+/**
+ * Validate observation identity, bounded results and chronological timestamps.
+ *
+ * @param array<string,mixed> $observations Operator observation document.
+ * @param array<string,mixed> $set Validated recovery-set document.
+ * @param array{schema:int,set_sha256:string,run_id:string,controls:array<string,bool>} $marker Validated isolation marker.
+ * @param int $now Current Unix timestamp used to bound observation times.
+ * @return void Throw a fixed-code error when evidence is malformed or outside its bounds.
+ */
+function check_observations(
+    array $observations,
+    array $set,
+    array $marker,
+    int $now,
+): void {
+    keys($observations, [
+        'schema',
+        'set_sha256',
+        'run_id',
+        'started_at',
+        'completed_at',
+        'counts',
+        'orphan_images',
+        'orphan_galleries',
+        'pending_migrations',
+        'checks',
+        'evidence_sha256',
+    ]);
+    demand(
+        $observations['schema'] === 1
+            && $observations['set_sha256'] === fingerprint($set)
+            && $observations['run_id'] === $marker['run_id'],
+        'observation_binding_mismatch',
+    );
+    $started = $observations['started_at'] === null
+        ? null
+        : timestamp($observations['started_at']);
+    $completed = $observations['completed_at'] === null
+        ? null
+        : timestamp($observations['completed_at']);
+    demand(
+        $started === null
+            || (
+                $started >= timestamp($set['recovery_point'])
+                && $started <= $now
+            ),
+        'invalid_restore_start',
+    );
+    demand(
+        $completed === null
+            || (
+                $started !== null
+                && $completed >= $started
+                && $completed <= $now
+            ),
+        'invalid_restore_end',
+    );
     keys($observations['counts'], COUNT_FIELDS);
-    foreach (array_merge(array_values($observations['counts']), [$observations['orphan_images'], $observations['orphan_galleries'], $observations['pending_migrations']]) as $count) {
-        demand($count === null || nonnegative($count), 'invalid_observed_count');
+    foreach (array_merge(
+        array_values($observations['counts']),
+        [
+            $observations['orphan_images'],
+            $observations['orphan_galleries'],
+            $observations['pending_migrations'],
+        ],
+    ) as $count) {
+        demand(
+            $count === null || nonnegative($count),
+            'invalid_observed_count',
+        );
     }
     keys($observations['checks'], OPERATOR_CHECKS);
     foreach ($observations['checks'] as $status) {
-        demand(in_array($status, ['pass', 'fail', 'pending'], true), 'invalid_observed_status');
+        demand(
+            in_array($status, ['pass', 'fail', 'pending'], true),
+            'invalid_observed_status',
+        );
     }
-    demand($observations['evidence_sha256'] === null || digest($observations['evidence_sha256']), 'invalid_evidence_digest');
+    demand(
+        $observations['evidence_sha256'] === null
+            || digest($observations['evidence_sha256']),
+        'invalid_evidence_digest',
+    );
 }

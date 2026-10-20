@@ -28,6 +28,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 $root = dirname(__DIR__);
 
 /**
@@ -41,7 +43,8 @@ function refactor_test_read(string $relativePath): string
     global $root;
     $contents = file_get_contents($root . '/' . $relativePath);
     if ($contents === false) {
-        throw new RuntimeException('Unable to read refactor test target: ' . $relativePath);
+        throw new RuntimeException('Unable to read refactor test target: '
+            . $relativePath);
     }
     return $contents;
 }
@@ -51,11 +54,14 @@ function refactor_test_read(string $relativePath): string
  *
  * @param string $relativePath Repository-relative path.
  * @param string $needle Required fragment.
+ * @return void Returns normally only when the fragment occurs in the file.
  */
 function refactor_test_contains(string $relativePath, string $needle): void
 {
-    if (!str_contains(refactor_test_read($relativePath), $needle)) {
-        throw new RuntimeException($relativePath . ' is missing expected wiring: ' . $needle);
+    if (!php_source_contains(refactor_test_read($relativePath), $needle)) {
+        throw new RuntimeException(
+            $relativePath . ' is missing expected wiring: ' . $needle,
+        );
     }
 }
 
@@ -71,7 +77,12 @@ $thinCoordinators = [
 foreach ($thinCoordinators as $relativePath => $maxLines) {
     $lineCount = substr_count(refactor_test_read($relativePath), "\n") + 1;
     if ($lineCount > $maxLines) {
-        throw new RuntimeException($relativePath . ' grew beyond its coordinator boundary: ' . $lineCount . ' lines.');
+        throw new RuntimeException(
+            $relativePath
+                . ' grew beyond its coordinator boundary: '
+                . $lineCount
+                . ' lines.',
+        );
     }
 }
 
@@ -115,7 +126,10 @@ foreach ([
     ],
 ] as $coordinator => $modules) {
     foreach ($modules as $module) {
-        refactor_test_contains($coordinator, "require_once __DIR__ . '/" . $module . "';");
+        refactor_test_contains(
+            $coordinator,
+            "require_once __DIR__ . '/" . $module . "';",
+        );
     }
 }
 
@@ -127,7 +141,10 @@ foreach ([
     'app/bootstrap/maintenance.php',
     'app/bootstrap/dispatch.php',
 ] as $bootstrapModule) {
-    refactor_test_contains('app/bootstrap.php', "require __DIR__ . '/" . substr($bootstrapModule, 4) . "';");
+    refactor_test_contains(
+        'app/bootstrap.php',
+        "require __DIR__ . '/" . substr($bootstrapModule, 4) . "';",
+    );
 }
 
 $deploymentExcludedBasenames = [
@@ -143,12 +160,22 @@ foreach ([
     'app/bootstrap/maintenance.php',
     'app/bootstrap/dispatch.php',
 ] as $bootstrapModule) {
-    if (in_array(basename($bootstrapModule), $deploymentExcludedBasenames, true)) {
-        throw new RuntimeException('Required bootstrap module uses a deployment-excluded basename: ' . $bootstrapModule);
+    if (in_array(
+        basename($bootstrapModule),
+        $deploymentExcludedBasenames,
+        true,
+    )) {
+        throw new RuntimeException(
+            'Required bootstrap module uses a deployment-excluded basename: '
+                . $bootstrapModule,
+        );
     }
 }
 
-refactor_test_contains('scripts/generate_manifest.php', "'#^app/bootstrap/config\\.php$#'");
+refactor_test_contains(
+    'scripts/generate_manifest.php',
+    "'#^app/bootstrap/config\\.php$#'",
+);
 
 refactor_test_contains('app/bootstrap.php', 'cms_runtime_kernel()->run();');
 $bootstrap = refactor_test_read('app/runtime/Kernel.php');
@@ -162,7 +189,8 @@ $lastPosition = -1;
 foreach ($orderedCalls as $call) {
     $position = strpos($bootstrap, $call);
     if ($position === false || $position <= $lastPosition) {
-        throw new RuntimeException('Bootstrap request lifecycle order changed around: ' . $call);
+        throw new RuntimeException('Bootstrap request lifecycle order changed around: '
+            . $call);
     }
     $lastPosition = $position;
 }
@@ -187,7 +215,10 @@ foreach ([
     'Gallery\\Controllers\\admin_save_gallery_from_input',
 ] as $functionName) {
     if (!function_exists($functionName)) {
-        throw new RuntimeException('Extracted runtime function is not available through its legacy include contract: ' . $functionName);
+        throw new RuntimeException(
+            'Extracted runtime function is not available through its legacy include contract: '
+                . $functionName,
+        );
     }
 }
 

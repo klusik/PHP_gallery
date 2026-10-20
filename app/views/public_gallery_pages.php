@@ -57,10 +57,14 @@ function view_render_public_gallery_home(array $viewModel): void
     view_render_public_widget_region($widgets, 'content_top');
     $hasRails = !empty($widgets['left_rail']) || !empty($widgets['right_rail']);
     if ($hasRails) {
-        $railMode = !empty($widgets['left_rail']) && !empty($widgets['right_rail']) ? 'both'
+        $railMode = !empty($widgets['left_rail'])
+        && !empty($widgets['right_rail'])
+            ? 'both'
             : (!empty($widgets['left_rail']) ? 'left' : 'right');
-        echo '<div class="public-widget-rails-container"><div class="public-widget-content-layout public-widget-content-layout--' . $railMode
-            . '"><div class="public-widget-primary">';
+        echo
+            '<div class="public-widget-rails-container"><div class="public-widget-content-layout public-widget-content-layout--'
+                . $railMode
+                . '"><div class="public-widget-primary">';
     }
 
     $physicalCount = (int) ($viewModel['physical_gallery_count'] ?? 0);
@@ -69,7 +73,10 @@ function view_render_public_gallery_home(array $viewModel): void
     $canonicalUrl = (string) ($viewModel['canonical_url'] ?? '');
     $creationAction = $viewModel['creation_action'] ?? null;
     if (is_array($creationAction)) {
-        echo '<div class="public-home-toolbar"><div class="hero-actions public-home-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
+        echo
+            '<div class="public-home-toolbar"><div class="hero-actions public-home-actions" aria-label="'
+                . e(t('gallery.actions', 'Gallery actions'))
+                . '">';
         view_render_public_gallery_admin_add_child_link($creationAction);
         echo '</div>';
         view_render_public_search_bar((array) ($viewModel['search_bar'] ?? []));
@@ -80,17 +87,51 @@ function view_render_public_gallery_home(array $viewModel): void
 
     // Keep the root frame mounted while empty so the shared completion coordinator
     // can replace onboarding and verification metadata after the first creation.
-    echo '<div class="gallery-list-frame" data-back-to-top-scope><div class="gallery-list-content" data-back-to-top-list>';
-    echo '<div data-public-gallery-index data-public-root-gallery-count="' . $physicalCount . '" data-public-root-gallery-revision="' . e($revision) . '" data-public-root-smart-gallery-count="' . $smartCount . '" data-admin-mutation-canonical-url="' . e($canonicalUrl) . '" hidden></div>';
+    echo
+        '<div class="gallery-list-frame" data-back-to-top-scope><div class="gallery-list-content" data-back-to-top-list>';
+    echo
+        '<div data-public-gallery-index data-public-root-gallery-count="'
+            . $physicalCount
+            . '" data-public-root-gallery-revision="'
+            . e($revision)
+            . '" data-public-root-smart-gallery-count="'
+            . $smartCount
+            . '" data-admin-mutation-canonical-url="'
+            . e($canonicalUrl)
+            . '" hidden></div>';
     if (is_array($creationAction) && !empty($viewModel['show_first_gallery'])) {
-        echo '<section class="public-home-empty" data-public-home-first-gallery><h2>' . e(t('gallery.home.empty_title', 'No galleries yet')) . '</h2><p class="muted">' . e(t('gallery.home.empty_help', 'Start with a name. You can add photos and adjust the gallery in the side panel.')) . '</p>';
-        view_render_public_gallery_admin_add_child_link(array_merge($creationAction, ['label' => t('gallery.home.add_first', 'Add your first gallery'), 'show_label' => true]));
+        echo
+            '<section class="public-home-empty" data-public-home-first-gallery><h2>'
+                . e(t('gallery.home.empty_title', 'No galleries yet'))
+                . '</h2><p class="muted">'
+                . e(t(
+                    'gallery.home.empty_help',
+                    'Start with a name. You can add photos and adjust the gallery in the side panel.',
+                ))
+                . '</p>';
+        view_render_public_gallery_admin_add_child_link(array_merge($creationAction, [
+            'label' => t('gallery.home.add_first', 'Add your first gallery'),
+            'show_label' => true,
+        ]));
         echo '</section>';
     }
     view_render_public_widget_region($widgets, 'home_before_grid');
     if ((int) ($viewModel['gallery_count'] ?? 0) > 0) {
         echo (string) ($viewModel['pagination_html'] ?? '');
-        echo '<section class="grid public-home-gallery-grid' . e((string) ($viewModel['grid_class'] ?? '')) . '" data-public-gallery-index-grid data-public-root-gallery-count="' . $physicalCount . '" data-public-root-gallery-revision="' . e($revision) . '" data-public-root-smart-gallery-count="' . $smartCount . '" data-public-gallery-page="' . (int) ($viewModel['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($viewModel['total_pages'] ?? 1) . '">';
+        echo
+            '<section class="grid public-home-gallery-grid'
+                . e((string) ($viewModel['grid_class'] ?? ''))
+                . '" data-public-gallery-index-grid data-public-root-gallery-count="'
+                . $physicalCount
+                . '" data-public-root-gallery-revision="'
+                . e($revision)
+                . '" data-public-root-smart-gallery-count="'
+                . $smartCount
+                . '" data-public-gallery-page="'
+                . (int) ($viewModel['current_page'] ?? 1)
+                . '" data-public-gallery-total-pages="'
+                . (int) ($viewModel['total_pages'] ?? 1)
+                . '">';
         echo (string) ($viewModel['cards_html'] ?? '');
         echo '</section>';
         echo (string) ($viewModel['pagination_html'] ?? '');
@@ -113,6 +154,7 @@ function view_render_public_gallery_home(array $viewModel): void
  * Render one ordered Smart Gallery attachment area around physical gallery content.
  *
  * @param array<string,mixed> $viewModel Controller-prepared attachment-group state.
+ * @return void Writes the attachment group when it has rendered cards.
  */
 function view_render_public_smart_gallery_attachment_group(array $viewModel): void
 {
@@ -124,11 +166,27 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
     $placement = (string) ($viewModel['placement'] ?? 'bottom');
     $placement = $placement === 'top' ? 'top' : 'bottom';
     $label = $placement === 'top'
-        ? t('smart_gallery.public_group_top', 'Smart Galleries above gallery content')
-        : t('smart_gallery.public_group_bottom', 'Smart Galleries below gallery content');
+        ? t(
+            'smart_gallery.public_group_top',
+            'Smart Galleries above gallery content',
+        )
+        : t(
+            'smart_gallery.public_group_bottom',
+            'Smart Galleries below gallery content',
+        );
 
-    echo '<section class="panel public-smart-gallery-attachment-panel public-smart-gallery-attachment-' . e($placement) . '" data-smart-gallery-attachment-group="' . e($placement) . '" aria-label="' . e($label) . '">';
-    echo '<div class="grid' . e((string) ($viewModel['grid_class'] ?? '')) . '">';
+    echo
+        '<section class="panel public-smart-gallery-attachment-panel public-smart-gallery-attachment-'
+            . e($placement)
+            . '" data-smart-gallery-attachment-group="'
+            . e($placement)
+            . '" aria-label="'
+            . e($label)
+            . '">';
+    echo
+        '<div class="grid'
+            . e((string) ($viewModel['grid_class'] ?? ''))
+            . '">';
     echo $cardsHtml;
     echo '</div></section>';
 }
@@ -141,7 +199,30 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
  */
 function view_render_public_gallery_hero(array $viewModel): void
 {
-    echo '<section class="hero" data-public-gallery-id="' . (int) ($viewModel['gallery_id'] ?? 0) . '" data-public-gallery-visibility="' . e((string) ($viewModel['visibility'] ?? '')) . '" data-public-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-cover-image-id="' . max(0, (int) ($viewModel['cover_image_id'] ?? 0)) . '" data-public-cover-selection-revision="' . e((string) ($viewModel['cover_selection_revision'] ?? '')) . '" data-public-image-count="' . (int) ($viewModel['image_count'] ?? 0) . '" data-public-image-revision="' . e((string) ($viewModel['image_revision'] ?? '')) . '" data-public-subgallery-count="' . (int) ($viewModel['subgallery_count'] ?? 0) . '" data-public-subgallery-revision="' . e((string) ($viewModel['subgallery_revision'] ?? '')) . '" data-public-smart-gallery-count="' . (int) ($viewModel['smart_gallery_count'] ?? 0) . '" data-admin-mutation-canonical-url="' . e((string) ($viewModel['canonical_url'] ?? '')) . '">';
+    echo
+        '<section class="hero" data-public-gallery-id="'
+            . (int) ($viewModel['gallery_id'] ?? 0)
+            . '" data-public-gallery-visibility="'
+            . e((string) ($viewModel['visibility'] ?? ''))
+            . '" data-public-gallery-updated-at="'
+            . e((string) ($viewModel['updated_at'] ?? ''))
+            . '" data-public-cover-image-id="'
+            . max(0, (int) ($viewModel['cover_image_id'] ?? 0))
+            . '" data-public-cover-selection-revision="'
+            . e((string) ($viewModel['cover_selection_revision'] ?? ''))
+            . '" data-public-image-count="'
+            . (int) ($viewModel['image_count'] ?? 0)
+            . '" data-public-image-revision="'
+            . e((string) ($viewModel['image_revision'] ?? ''))
+            . '" data-public-subgallery-count="'
+            . (int) ($viewModel['subgallery_count'] ?? 0)
+            . '" data-public-subgallery-revision="'
+            . e((string) ($viewModel['subgallery_revision'] ?? ''))
+            . '" data-public-smart-gallery-count="'
+            . (int) ($viewModel['smart_gallery_count'] ?? 0)
+            . '" data-admin-mutation-canonical-url="'
+            . e((string) ($viewModel['canonical_url'] ?? ''))
+            . '">';
     // Title/date and header actions retain their existing columns. Only the
     // description/document row uses the full available width below them.
     echo '<div class="hero-topbar">';
@@ -149,39 +230,99 @@ function view_render_public_gallery_hero(array $viewModel): void
     echo (string) ($viewModel['branding_header_html'] ?? '');
     echo '</div>';
     echo '<div class="hero-meta">';
-    echo '<div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
+    echo
+        '<div class="hero-actions" aria-label="'
+            . e(t('gallery.actions', 'Gallery actions'))
+            . '">';
 
     if (!empty($viewModel['show_count_badge'])) {
         $count = max(0, (int) ($viewModel['branch_image_count'] ?? 0));
         $badge = (array) ($viewModel['count_badge'] ?? []);
         if (!empty($badge['admin'])) {
-            echo '<div class="gallery-hero-count-badge gallery-count-badge-admin" aria-label="' . e(view_gallery_count_admin_label($badge)) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
+            echo
+                '<div class="gallery-hero-count-badge gallery-count-badge-admin" aria-label="'
+                    . e(view_gallery_count_admin_label($badge))
+                    . '" title="'
+                    . e(t(
+                        'gallery.hero.branch_image_count_hint',
+                        'Includes images from this gallery and its subgalleries.',
+                    ))
+                    . '">';
             view_gallery_count_admin_values($badge);
             echo '</div>';
         } else {
             // Retain the pre-existing access-filtered visitor badge exactly.
-            echo '<div class="gallery-hero-count-badge" aria-label="' . e(t('gallery.hero.branch_image_count_aria', 'Image count for this gallery and its subgalleries: {count}', ['count' => $count])) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
-            echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
+            echo
+                '<div class="gallery-hero-count-badge" aria-label="'
+                    . e(t(
+                        'gallery.hero.branch_image_count_aria',
+                        'Image count for this gallery and its subgalleries: {count}',
+                        ['count' => $count],
+                    ))
+                    . '" title="'
+                    . e(t(
+                        'gallery.hero.branch_image_count_hint',
+                        'Includes images from this gallery and its subgalleries.',
+                    ))
+                    . '">';
+            echo
+                '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
             echo '<span class="gallery-hero-count-value">' . $count . '</span>';
             echo '</div>';
         }
     }
 
-    foreach (($viewModel['cooperative_links'] ?? []) as $link) {
-        echo '<p><a class="button secondary" href="' . e($link['url']) . '">' . e($link['label']) . '</a></p>';
+    foreach ($viewModel['cooperative_links'] ?? [] as $link) {
+        echo
+            '<p><a class="button secondary" href="'
+                . e($link['url'])
+                . '">'
+                . e($link['label'])
+                . '</a></p>';
     }
     echo (string) ($viewModel['admin_actions_html'] ?? '');
 
     if (!empty($viewModel['download_enabled'])) {
         $downloadLabel = t('gallery.download', 'Download gallery');
-        echo '<form class="public-download-legacy-form" method="post" action="' . e((string) ($viewModel['download_url'] ?? '')) . '"><input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '"><input type="hidden" name="capability" value="' . e((string) ($viewModel['download_capability'] ?? '')) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e((string) ($viewModel['download_start_url'] ?? '')) . '" aria-label="' . e($downloadLabel) . '" title="' . e($downloadLabel) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e($downloadLabel) . '</span></button></form>';
+        echo
+            '<form class="public-download-legacy-form" method="post" action="'
+                . e((string) ($viewModel['download_url'] ?? ''))
+                . '"><input type="hidden" name="id" value="'
+                . (int) ($viewModel['gallery_id'] ?? 0)
+                . '"><input type="hidden" name="capability" value="'
+                . e((string) ($viewModel['download_capability'] ?? ''))
+                . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="'
+                . e((string) ($viewModel['download_start_url'] ?? ''))
+                . '" aria-label="'
+                . e($downloadLabel)
+                . '" title="'
+                . e($downloadLabel)
+                . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">'
+                . e($downloadLabel)
+                . '</span></button></form>';
     }
     if (!empty($viewModel['map_available'])) {
-        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e((string) ($viewModel['map_url'] ?? '')) . '" data-gallery-map-title="' . e((string) ($viewModel['title'] ?? '')) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
+        echo
+            '<button type="button" class="button secondary map-button" data-gallery-map-url="'
+                . e((string) ($viewModel['map_url'] ?? ''))
+                . '" data-gallery-map-title="'
+                . e((string) ($viewModel['title'] ?? ''))
+                . '">'
+                . e(t('gallery.show_map', 'Show gallery map'))
+                . '</button>';
     }
     if (!empty($viewModel['picture_game_available'])) {
         $pictureGameLabel = t('gallery.play_picture_game', 'Play picture game');
-        echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e((string) ($viewModel['picture_game_url'] ?? '')) . '" aria-label="' . e($pictureGameLabel) . '" title="' . e($pictureGameLabel) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e($pictureGameLabel) . '</span></a>';
+        echo
+            '<a class="button secondary hero-icon-button hero-picture-game-button" href="'
+                . e((string) ($viewModel['picture_game_url'] ?? ''))
+                . '" aria-label="'
+                . e($pictureGameLabel)
+                . '" title="'
+                . e($pictureGameLabel)
+                . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">'
+                . e($pictureGameLabel)
+                . '</span></a>';
     }
     echo '</div></div></div>';
     echo (string) ($viewModel['description_documents_html'] ?? '');
@@ -214,11 +355,37 @@ function view_render_public_subgallery_section(array $viewModel): void
     $currentPage = max(1, (int) ($viewModel['current_page'] ?? 1));
     $totalPages = max(1, (int) ($viewModel['total_pages'] ?? 1));
 
-    echo '<section class="public-subgallery-panel" data-public-subgallery-section data-public-context-gallery-id="' . $galleryId . '" data-public-subgallery-total-count="' . $totalCount . '" data-public-subgallery-revision="' . e($revision) . '" data-public-gallery-page="' . $currentPage . '" data-public-gallery-total-pages="' . $totalPages . '" aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
+    echo
+        '<section class="public-subgallery-panel" data-public-subgallery-section data-public-context-gallery-id="'
+            . $galleryId
+            . '" data-public-subgallery-total-count="'
+            . $totalCount
+            . '" data-public-subgallery-revision="'
+            . e($revision)
+            . '" data-public-gallery-page="'
+            . $currentPage
+            . '" data-public-gallery-total-pages="'
+            . $totalPages
+            . '" aria-label="'
+            . e(t('public.subgalleries', 'Subgalleries'))
+            . '">';
     echo (string) ($viewModel['sort_toolbar_html'] ?? '');
     echo (string) ($viewModel['reorder_toolbar_html'] ?? '');
     echo (string) ($viewModel['pagination_html'] ?? '');
-    echo '<div class="grid' . e((string) ($viewModel['grid_class'] ?? '')) . '" data-public-reorder-list="gallery" data-public-subgallery-grid data-public-context-gallery-id="' . $galleryId . '" data-public-subgallery-total-count="' . $totalCount . '" data-public-subgallery-revision="' . e($revision) . '" data-public-gallery-page="' . $currentPage . '" data-public-gallery-total-pages="' . $totalPages . '">';
+    echo
+        '<div class="grid'
+            . e((string) ($viewModel['grid_class'] ?? ''))
+            . '" data-public-reorder-list="gallery" data-public-subgallery-grid data-public-context-gallery-id="'
+            . $galleryId
+            . '" data-public-subgallery-total-count="'
+            . $totalCount
+            . '" data-public-subgallery-revision="'
+            . e($revision)
+            . '" data-public-gallery-page="'
+            . $currentPage
+            . '" data-public-gallery-total-pages="'
+            . $totalPages
+            . '">';
     echo (string) ($viewModel['cards_html'] ?? '');
     echo '</div>';
     echo (string) ($viewModel['pagination_html'] ?? '');
@@ -229,10 +396,29 @@ function view_render_public_subgallery_section(array $viewModel): void
  * Render one restricted NSFW photo card without exposing thumbnail/media URLs.
  *
  * @param array<string,mixed> $viewModel Controller-prepared restricted-photo state.
+ * @return void Writes the restricted photo card and its prepared admin controls.
  */
 function view_render_public_gallery_nsfw_image_card(array $viewModel): void
 {
-    echo '<article class="image-card nsfw-card" data-public-photo-order-item data-public-order-id="' . (int) ($viewModel['image_id'] ?? 0) . '" data-public-image-visibility="' . e((string) ($viewModel['visibility'] ?? '')) . '" data-public-image-nsfw="' . (!empty($viewModel['nsfw']) ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e((string) ($viewModel['image_url'] ?? '')) . '"><strong>' . e(t('public.nsfw_photo_title', '18+ photo')) . '</strong><span>' . e(t('public.nsfw_photo_message', 'Confirm your age to view this restricted photo.')) . '</span></a></div>';
+    echo
+        '<article class="image-card nsfw-card" data-public-photo-order-item data-public-order-id="'
+            . (int) ($viewModel['image_id'] ?? 0)
+            . '" data-public-image-visibility="'
+            . e((string) ($viewModel['visibility'] ?? ''))
+            . '" data-public-image-nsfw="'
+            . (!empty($viewModel['nsfw']) ? '1' : '0')
+            . '" data-public-image-updated-at="'
+            . e((string) ($viewModel['updated_at'] ?? ''))
+            . '"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="'
+            . e((string) ($viewModel['image_url'] ?? ''))
+            . '"><strong>'
+            . e(t('public.nsfw_photo_title', '18+ photo'))
+            . '</strong><span>'
+            . e(t(
+                'public.nsfw_photo_message',
+                'Confirm your age to view this restricted photo.',
+            ))
+            . '</span></a></div>';
     echo (string) ($viewModel['admin_controls_html'] ?? '');
     echo '</article>';
 }
@@ -245,29 +431,84 @@ function view_render_public_gallery_nsfw_image_card(array $viewModel): void
  */
 function view_render_public_gallery_image_card(array $viewModel): void
 {
-    echo '<article class="' . e((string) ($viewModel['class'] ?? 'image-card')) . '" data-public-photo-order-item data-public-order-id="' . (int) ($viewModel['image_id'] ?? 0) . '" data-public-image-visibility="' . e((string) ($viewModel['visibility'] ?? '')) . '" data-public-image-nsfw="' . (!empty($viewModel['nsfw']) ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '"';
+    echo
+        '<article class="'
+            . e((string) ($viewModel['class'] ?? 'image-card'))
+            . '" data-public-photo-order-item data-public-order-id="'
+            . (int) ($viewModel['image_id'] ?? 0)
+            . '" data-public-image-visibility="'
+            . e((string) ($viewModel['visibility'] ?? ''))
+            . '" data-public-image-nsfw="'
+            . (!empty($viewModel['nsfw']) ? '1' : '0')
+            . '" data-public-image-updated-at="'
+            . e((string) ($viewModel['updated_at'] ?? ''))
+            . '"';
     if (!empty($viewModel['picture_manager_enabled'])) {
-        echo ' data-picture-manager-image data-picture-manager-image-id="' . (int) ($viewModel['image_id'] ?? 0) . '" data-picture-manager-index="' . (int) ($viewModel['display_index'] ?? 0) . '" data-picture-manager-share-url="' . e((string) ($viewModel['preview_url'] ?? '')) . '" data-picture-manager-share-filename="' . e((string) ($viewModel['share_filename'] ?? '')) . '" data-picture-manager-share-title="' . e((string) ($viewModel['display_title'] ?? '')) . '"';
+        echo
+            ' data-picture-manager-image data-picture-manager-image-id="'
+                . (int) ($viewModel['image_id'] ?? 0)
+                . '" data-picture-manager-index="'
+                . (int) ($viewModel['display_index'] ?? 0)
+                . '" data-picture-manager-share-url="'
+                . e((string) ($viewModel['preview_url'] ?? ''))
+                . '" data-picture-manager-share-filename="'
+                . e((string) ($viewModel['share_filename'] ?? ''))
+                . '" data-picture-manager-share-title="'
+                . e((string) ($viewModel['display_title'] ?? ''))
+                . '"';
     }
     echo (string) ($viewModel['lightbox_attributes'] ?? '');
     if (!empty($viewModel['viewer_favourite_available'])) {
-        echo ' data-viewer-favourite="' . (!empty($viewModel['viewer_favourite']) ? '1' : '0') . '"';
+        echo
+            ' data-viewer-favourite="'
+                . (!empty($viewModel['viewer_favourite']) ? '1' : '0')
+                . '"';
     }
     echo '>';
 
     if (!empty($viewModel['reorder_enabled'])) {
-        echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
+        echo
+            '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="'
+                . e(t(
+                    'public.reorder.drag_photo_label',
+                    'Drag photo to reorder visible photos',
+                ))
+                . '" title="'
+                . e(t(
+                    'public.reorder.drag_photo_title',
+                    'Drag to reorder this visible photo',
+                ))
+                . '"><span aria-hidden="true">↕</span><span>'
+                . e(t('public.reorder.move_photo', 'Move photo'))
+                . '</span></button>';
     }
     if (!empty($viewModel['picture_manager_enabled'])) {
         $selectLabel = t('picture_manager.select_photo', 'Select photo');
-        echo '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="' . e($selectLabel) . '" title="' . e($selectLabel) . '"><span aria-hidden="true">✓</span><span class="visually-hidden">' . e($selectLabel) . '</span></button>';
+        echo
+            '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="'
+                . e($selectLabel)
+                . '" title="'
+                . e($selectLabel)
+                . '"><span aria-hidden="true">✓</span><span class="visually-hidden">'
+                . e($selectLabel)
+                . '</span></button>';
     }
 
     echo '<div class="image-stage">';
-    echo '<a class="image-preview-link" href="' . e((string) ($viewModel['image_url'] ?? '')) . '">' . (string) ($viewModel['thumbnail_html'] ?? '') . '</a>';
+    echo
+        '<a class="image-preview-link" href="'
+            . e((string) ($viewModel['image_url'] ?? ''))
+            . '">'
+            . (string) ($viewModel['thumbnail_html'] ?? '')
+            . '</a>';
     if (!empty($viewModel['map_available'])) {
         $mapLabel = t('public.show_photo_location', 'Show photo location');
-        echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="' . e($mapLabel) . '" title="' . e($mapLabel) . '">&#128205;</button>';
+        echo
+            '<button type="button" class="photo-map-pin" data-photo-map aria-label="'
+                . e($mapLabel)
+                . '" title="'
+                . e($mapLabel)
+                . '">&#128205;</button>';
     }
     echo (string) ($viewModel['favourite_html'] ?? '');
     echo (string) ($viewModel['collection_html'] ?? '');
@@ -304,9 +545,35 @@ function view_render_public_gallery_image_section(array $viewModel): void
 
     echo (string) ($viewModel['reorder_toolbar_html'] ?? '');
     echo (string) ($viewModel['pagination_html'] ?? '');
-    echo '<section class="grid gallery-image-grid' . e((string) ($viewModel['grid_class'] ?? '')) . '" data-public-reorder-list="photo" data-gallery-image-list data-public-context-gallery-id="' . (int) ($viewModel['gallery_id'] ?? 0) . '" data-public-image-total-count="' . (int) ($viewModel['total_count'] ?? 0) . '" data-public-image-revision="' . e((string) ($viewModel['revision'] ?? '')) . '" data-public-image-page="' . max(1, (int) ($viewModel['current_page'] ?? 1)) . '" data-public-image-total-pages="' . max(1, (int) ($viewModel['total_pages'] ?? 1)) . '"';
+    echo
+        '<section class="grid gallery-image-grid'
+            . e((string) ($viewModel['grid_class'] ?? ''))
+            . '" data-public-reorder-list="photo" data-gallery-image-list data-public-context-gallery-id="'
+            . (int) ($viewModel['gallery_id'] ?? 0)
+            . '" data-public-image-total-count="'
+            . (int) ($viewModel['total_count'] ?? 0)
+            . '" data-public-image-revision="'
+            . e((string) ($viewModel['revision'] ?? ''))
+            . '" data-public-image-page="'
+            . max(1, (int) ($viewModel['current_page'] ?? 1))
+            . '" data-public-image-total-pages="'
+            . max(1, (int) ($viewModel['total_pages'] ?? 1))
+            . '"';
     if (!empty($viewModel['lightbox_enabled'])) {
-        echo ' data-lightbox-config data-lightbox-endpoint="' . e((string) ($viewModel['lightbox_endpoint'] ?? '')) . '" data-lightbox-total="' . max(0, (int) ($viewModel['lightbox_total'] ?? 0)) . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="' . e((string) ($viewModel['lightbox_browsing_mode'] ?? '')) . '" data-lightbox-maps-enabled="' . (!empty($viewModel['lightbox_maps_enabled']) ? '1' : '0') . '" data-lightbox-gallery-map-url="' . e((string) ($viewModel['gallery_map_url'] ?? '')) . '" data-lightbox-gallery-map-title="' . e((string) ($viewModel['gallery_map_title'] ?? '')) . '"';
+        echo
+            ' data-lightbox-config data-lightbox-endpoint="'
+                . e((string) ($viewModel['lightbox_endpoint'] ?? ''))
+                . '" data-lightbox-total="'
+                . max(0, (int) ($viewModel['lightbox_total'] ?? 0))
+                . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="'
+                . e((string) ($viewModel['lightbox_browsing_mode'] ?? ''))
+                . '" data-lightbox-maps-enabled="'
+                . (!empty($viewModel['lightbox_maps_enabled']) ? '1' : '0')
+                . '" data-lightbox-gallery-map-url="'
+                . e((string) ($viewModel['gallery_map_url'] ?? ''))
+                . '" data-lightbox-gallery-map-title="'
+                . e((string) ($viewModel['gallery_map_title'] ?? ''))
+                . '"';
     }
     echo '>';
     echo (string) ($viewModel['cards_html'] ?? '');
@@ -323,7 +590,11 @@ function view_render_public_gallery_image_section(array $viewModel): void
 function view_render_public_gallery_detail(array $viewModel): void
 {
     $gallery = (array) ($viewModel['gallery'] ?? []);
-    render_header((string) ($viewModel['page_title'] ?? ''), $gallery, !empty($viewModel['public_only']));
+    render_header(
+        (string) ($viewModel['page_title'] ?? ''),
+        $gallery,
+        !empty($viewModel['public_only']),
+    );
     $widgets = (array) ($viewModel['public_widgets'] ?? []);
 
     $notice = (string) ($viewModel['notice'] ?? '');
@@ -334,10 +605,14 @@ function view_render_public_gallery_detail(array $viewModel): void
     view_render_public_widget_region($widgets, 'content_top');
     $hasRails = !empty($widgets['left_rail']) || !empty($widgets['right_rail']);
     if ($hasRails) {
-        $railMode = !empty($widgets['left_rail']) && !empty($widgets['right_rail']) ? 'both'
+        $railMode = !empty($widgets['left_rail'])
+        && !empty($widgets['right_rail'])
+            ? 'both'
             : (!empty($widgets['left_rail']) ? 'left' : 'right');
-        echo '<div class="public-widget-rails-container"><div class="public-widget-content-layout public-widget-content-layout--' . $railMode
-            . '"><div class="public-widget-primary">';
+        echo
+            '<div class="public-widget-rails-container"><div class="public-widget-content-layout public-widget-content-layout--'
+                . $railMode
+                . '"><div class="public-widget-primary">';
     }
     view_render_public_gallery_hero((array) ($viewModel['hero'] ?? []));
     echo (string) ($viewModel['branding_separator_html'] ?? '');
@@ -350,8 +625,12 @@ function view_render_public_gallery_detail(array $viewModel): void
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
     echo (string) ($viewModel['top_smart_group_html'] ?? '');
-    view_render_public_subgallery_section((array) ($viewModel['subgallery_section'] ?? []));
-    view_render_public_gallery_image_section((array) ($viewModel['image_section'] ?? []));
+    view_render_public_subgallery_section(
+        (array) ($viewModel['subgallery_section'] ?? []),
+    );
+    view_render_public_gallery_image_section(
+        (array) ($viewModel['image_section'] ?? []),
+    );
     echo (string) ($viewModel['bottom_smart_group_html'] ?? '');
     if (!empty($viewModel['has_list_content'])) {
         echo '</div>';

@@ -30,11 +30,16 @@ final class ModuleLoader
      * @param list<string>|null $fileOrder Complete canonical order for composed plans; null selects legacy traversal.
      * @return void Initializes the loader without including feature files.
      */
-    public function __construct(string $root, private readonly array $definitions, ?array $fileOrder = null)
-    {
+    public function __construct(
+        string $root,
+        private readonly array $definitions,
+        ?array $fileOrder = null,
+    ) {
         $resolved = realpath($root);
         if ($resolved === false || !is_dir($resolved)) {
-            throw new \InvalidArgumentException('Runtime project root is unavailable.');
+            throw new \InvalidArgumentException(
+                'Runtime project root is unavailable.',
+            );
         }
         $this->root = str_replace('\\', '/', $resolved);
         $this->fileOrder = $fileOrder;
@@ -61,7 +66,9 @@ final class ModuleLoader
         }
         foreach ($ordered as $name) {
             $phase = 'runtime_module.' . $name;
-            if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_start')) {
+            if (function_exists(
+                'Gallery\\Diagnostics\\admin_test_run_early_phase_start',
+            )) {
                 \Gallery\Diagnostics\admin_test_run_early_phase_start($phase);
             }
             try {
@@ -69,12 +76,20 @@ final class ModuleLoader
                     require_once $this->root . '/' . $file;
                 }
             } catch (\Throwable $exception) {
-                if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_end')) {
-                    \Gallery\Diagnostics\admin_test_run_early_phase_end($phase, false, $exception);
+                if (function_exists(
+                    'Gallery\\Diagnostics\\admin_test_run_early_phase_end',
+                )) {
+                    \Gallery\Diagnostics\admin_test_run_early_phase_end(
+                        $phase,
+                        false,
+                        $exception,
+                    );
                 }
                 throw $exception;
             }
-            if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_end')) {
+            if (function_exists(
+                'Gallery\\Diagnostics\\admin_test_run_early_phase_end',
+            )) {
                 \Gallery\Diagnostics\admin_test_run_early_phase_end($phase);
             }
             $this->loaded[$name] = true;
@@ -93,37 +108,69 @@ final class ModuleLoader
         }
         $allFiles = [];
         foreach ($this->definitions as $name => $definition) {
-            if (!is_string($name) || preg_match('/^[a-z][a-z0-9-]*$/D', $name) !== 1
-                || !is_array($definition) || !is_array($definition['depends'] ?? null)
-                || !is_array($definition['files'] ?? null) || !array_is_list($definition['depends'])
-                || !array_is_list($definition['files'])) {
-                throw new \RuntimeException('Invalid composed runtime module plan.');
+            if (
+                !is_string($name)
+                || preg_match('/^[a-z][a-z0-9-]*$/D', $name) !== 1
+                || !is_array($definition)
+                || !is_array($definition['depends'] ?? null)
+                || !is_array($definition['files'] ?? null)
+                || !array_is_list($definition['depends'])
+                || !array_is_list($definition['files'])
+            ) {
+                throw new \RuntimeException(
+                    'Invalid composed runtime module plan.',
+                );
             }
             $seenFiles = [];
             foreach ($definition['files'] as $file) {
-                if (!is_string($file) || preg_match('#^app/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.php$#D', $file) !== 1
-                    || isset($seenFiles[$file])) {
-                    throw new \RuntimeException('Invalid composed runtime module entrypoint: ' . $name);
+                if (
+                    !is_string($file)
+                    || preg_match(
+                        '#^app/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.php$#D',
+                        $file,
+                    ) !== 1
+                    || isset($seenFiles[$file])
+                ) {
+                    throw new \RuntimeException('Invalid composed runtime module entrypoint: '
+                        . $name);
                 }
                 $seenFiles[$file] = true;
                 $allFiles[$file] = true;
             }
             foreach ($definition['depends'] as $dependency) {
-                if (!is_string($dependency) || !isset($this->definitions[$dependency])) {
-                    throw new \RuntimeException('Unknown composed runtime module dependency: ' . $name);
+                if (
+                    !is_string($dependency)
+                    || !isset($this->definitions[$dependency])
+                ) {
+                    throw new \RuntimeException('Unknown composed runtime module dependency: '
+                        . $name);
                 }
             }
         }
         $seenOrder = [];
         foreach ($this->fileOrder as $file) {
-            if (!is_string($file) || preg_match('#^app/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.php$#D', $file) !== 1
-                || !isset($allFiles[$file]) || isset($seenOrder[$file])) {
-                throw new \RuntimeException('Invalid or duplicate path in composed runtime file order.');
+            if (
+                !is_string($file)
+                || preg_match(
+                    '#^app/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.php$#D',
+                    $file,
+                ) !== 1
+                || !isset($allFiles[$file])
+                || isset($seenOrder[$file])
+            ) {
+                throw new \RuntimeException(
+                    'Invalid or duplicate path in composed runtime file order.',
+                );
             }
             $seenOrder[$file] = true;
         }
-        if (count($seenOrder) !== count($allFiles) || $this->fileOrder !== $this->canonicalFileOrder($this->fileOrder)) {
-            throw new \RuntimeException('Composed runtime file order is incomplete or non-canonical.');
+        if (
+            count($seenOrder) !== count($allFiles)
+            || $this->fileOrder !== $this->canonicalFileOrder($this->fileOrder)
+        ) {
+            throw new \RuntimeException(
+                'Composed runtime file order is incomplete or non-canonical.',
+            );
         }
         $visiting = [];
         $visited = [];
@@ -140,13 +187,17 @@ final class ModuleLoader
      * @param array<string,bool> $visited Fully validated modules.
      * @return void Throws when the dependency graph contains a cycle.
      */
-    private function validateComposedGraphNode(string $module, array &$visiting, array &$visited): void
-    {
+    private function validateComposedGraphNode(
+        string $module,
+        array &$visiting,
+        array &$visited,
+    ): void {
         if (isset($visited[$module])) {
             return;
         }
         if (isset($visiting[$module])) {
-            throw new \RuntimeException('Circular composed runtime module dependency: ' . $module);
+            throw new \RuntimeException('Circular composed runtime module dependency: '
+                . $module);
         }
         $visiting[$module] = true;
         foreach ($this->definitions[$module]['depends'] as $dependency) {
@@ -181,12 +232,21 @@ final class ModuleLoader
                 }
                 $owner = $owners[$file];
                 if ($phase !== $owner) {
-                    if ($phase !== null && function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_end')) {
-                        \Gallery\Diagnostics\admin_test_run_early_phase_end('runtime_module.' . $phase);
+                    if (
+                        $phase !== null
+                        && function_exists(
+                            'Gallery\\Diagnostics\\admin_test_run_early_phase_end',
+                        )
+                    ) {
+                        \Gallery\Diagnostics\admin_test_run_early_phase_end('runtime_module.'
+                            . $phase);
                     }
                     $phase = $owner;
-                    if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_start')) {
-                        \Gallery\Diagnostics\admin_test_run_early_phase_start('runtime_module.' . $phase);
+                    if (function_exists(
+                        'Gallery\\Diagnostics\\admin_test_run_early_phase_start',
+                    )) {
+                        \Gallery\Diagnostics\admin_test_run_early_phase_start('runtime_module.'
+                            . $phase);
                     }
                 }
                 require_once $this->root . '/' . $file;
@@ -194,13 +254,28 @@ final class ModuleLoader
                 $this->markCompletedComposedModules($modules, $includedFiles);
             }
         } catch (\Throwable $exception) {
-            if ($phase !== null && function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_end')) {
-                \Gallery\Diagnostics\admin_test_run_early_phase_end('runtime_module.' . $phase, false, $exception);
+            if (
+                $phase !== null
+                && function_exists(
+                    'Gallery\\Diagnostics\\admin_test_run_early_phase_end',
+                )
+            ) {
+                \Gallery\Diagnostics\admin_test_run_early_phase_end(
+                    'runtime_module.' . $phase,
+                    false,
+                    $exception,
+                );
             }
             throw $exception;
         }
-        if ($phase !== null && function_exists('Gallery\\Diagnostics\\admin_test_run_early_phase_end')) {
-            \Gallery\Diagnostics\admin_test_run_early_phase_end('runtime_module.' . $phase);
+        if (
+            $phase !== null
+            && function_exists(
+                'Gallery\\Diagnostics\\admin_test_run_early_phase_end',
+            )
+        ) {
+            \Gallery\Diagnostics\admin_test_run_early_phase_end('runtime_module.'
+                . $phase);
         }
         $this->markCompletedComposedModules($modules, $includedFiles);
     }
@@ -212,8 +287,10 @@ final class ModuleLoader
      * @param array<string,bool> $includedFiles Files successfully traversed by this load.
      * @return void Appends the conservative completed prefix in dependency-first order.
      */
-    private function markCompletedComposedModules(array $modules, array $includedFiles): void
-    {
+    private function markCompletedComposedModules(
+        array $modules,
+        array $includedFiles,
+    ): void {
         foreach ($modules as $name) {
             if (isset($this->loaded[$name])) {
                 continue;
@@ -271,7 +348,7 @@ final class ModuleLoader
     }
 
     /**
-    * Validate the complete graph before any entrypoint executes include-time code.
+     * Validate the complete graph before any entrypoint executes include-time code.
      *
      * @param string $module Logical module currently being visited.
      * @param array<string,bool> $visiting Active dependency chain for cycle detection.
@@ -279,44 +356,71 @@ final class ModuleLoader
      * @param list<string> $ordered Dependency-first modules to execute.
      * @return void Appends validated modules or throws on an invalid dependency/path.
      */
-    private function plan(string $module, array &$visiting, array &$planned, array &$ordered): void
-    {
-        if (isset($this->loaded[$module], $this->definitions[$module]) || isset($planned[$module])) {
+    private function plan(
+        string $module,
+        array &$visiting,
+        array &$planned,
+        array &$ordered,
+    ): void {
+        if (
+            isset($this->loaded[$module], $this->definitions[$module])
+            || isset($planned[$module])
+        ) {
             return;
         }
         if (!isset($this->definitions[$module])) {
             throw new \RuntimeException('Unknown runtime module: ' . $module);
         }
         if (isset($visiting[$module])) {
-            throw new \RuntimeException('Circular runtime module dependency: ' . $module);
+            throw new \RuntimeException('Circular runtime module dependency: '
+                . $module);
         }
         $definition = $this->definitions[$module];
-        if (!is_array($definition) || !is_array($definition['depends'] ?? null)
+        if (
+            !is_array($definition)
+            || !is_array($definition['depends'] ?? null)
             || !is_array($definition['files'] ?? null)
-            || !array_is_list($definition['depends']) || !array_is_list($definition['files'])) {
-            throw new \RuntimeException('Invalid runtime module plan: ' . $module);
+            || !array_is_list($definition['depends'])
+            || !array_is_list($definition['files'])
+        ) {
+            throw new \RuntimeException('Invalid runtime module plan: '
+                . $module);
         }
         $visiting[$module] = true;
         foreach ($definition['depends'] as $dependency) {
             if (!is_string($dependency)) {
-                throw new \RuntimeException('Invalid runtime module dependency: ' . $module);
+                throw new \RuntimeException('Invalid runtime module dependency: '
+                    . $module);
             }
             $this->plan($dependency, $visiting, $planned, $ordered);
         }
         foreach ($definition['files'] as $file) {
-            if (!is_string($file) || preg_match('#^app/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.php$#D', $file) !== 1) {
-                throw new \RuntimeException('Invalid runtime module entrypoint: ' . $module);
+            if (
+                !is_string($file)
+                || preg_match(
+                    '#^app/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.php$#D',
+                    $file,
+                ) !== 1
+            ) {
+                throw new \RuntimeException('Invalid runtime module entrypoint: '
+                    . $module);
             }
             $resolved = realpath($this->root . '/' . $file);
-            $normalized = $resolved !== false ? str_replace('\\', '/', $resolved) : '';
+            $normalized = $resolved !== false
+                ? str_replace('\\', '/', $resolved)
+                : '';
             $prefix = $this->root . '/app/';
             if (PHP_OS_FAMILY === 'Windows') {
                 $normalized = strtolower($normalized);
                 $prefix = strtolower($prefix);
             }
-            if ($resolved === false || !is_file($resolved)
-                || !str_starts_with($normalized, $prefix)) {
-                throw new \RuntimeException('Missing or escaped runtime module entrypoint: ' . $module);
+            if (
+                $resolved === false
+                || !is_file($resolved)
+                || !str_starts_with($normalized, $prefix)
+            ) {
+                throw new \RuntimeException('Missing or escaped runtime module entrypoint: '
+                    . $module);
             }
         }
         unset($visiting[$module]);

@@ -38,7 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use PDOException;
 use Gallery\Models\AppSettingsRollbackException;
 use function Gallery\Core\now_sql;
@@ -61,21 +60,17 @@ use function Gallery\Models\app_settings_model_set;
  * Return all DB gallery rows represented by one filesystem subtree.
  */
 
-
 /**
  * Delete selected gallery folder subtrees from disk and the database.
  */
-
 
 /**
  * Remove one directory tree while refusing to operate outside the configured root.
  */
 
-
 /**
  * Physically move one gallery folder subtree and then make DB paths follow it.
  */
-
 
 /**
  * Ensure all filesystem ancestors of one gallery folder exist as gallery rows.
@@ -86,16 +81,13 @@ use function Gallery\Models\app_settings_model_set;
  * exist under the configured gallery root.
  */
 
-
 /**
  * Create gallery rows for selected discovered folders.
  */
 
-
 /**
  * Import and scan selected folders, returning imported gallery IDs for follow-up work.
  */
-
 
 /**
  * Import/update image rows for images directly inside one gallery folder.
@@ -104,111 +96,89 @@ use function Gallery\Models\app_settings_model_set;
  * represented as subgalleries with their own scans.
  */
 
-
 /**
  * Normalize a PHP multi-upload array into validated image upload entries.
  */
-
 
 /**
  * Return whether the server can decode HEIC/HEIF images for conversion.
  */
 
-
 /**
  * Return whether the server can decode RAW/DNG images for conversion.
  */
-
 
 /**
  * Human-readable upload error for admin notices and JSON responses.
  */
 
-
 /**
  * Build a safe stored filename while keeping the original image extension.
  */
-
 
 /**
  * Return an unused filename and absolute target path inside one gallery folder.
  */
 
-
 /**
  * Move validated uploaded images into the gallery folder and scan the result.
  */
-
 
 /**
  * Return database image ids for uploaded direct gallery filenames.
  */
 
-
 /**
  * Store one uploaded gallery thumbnail outside the indexed image set.
  */
-
 
 /**
  * Scan every imported gallery folder for new or changed direct images.
  */
 
-
 /**
  * Thumbnail variants generated for web views.
  */
-
 
 /**
  * Build a responsive srcset for the supported thumbnail sizes.
  */
 
-
 /**
  * Build a responsive WebP srcset for thumbnails when WebP variants exist.
  */
-
 
 /**
  * Build a responsive srcset for one thumbnail format.
  */
 
-
 /**
  * Resolve the thumbs folder for a gallery and create it when requested.
  */
-
 
 /**
  * Build the generated thumbnail filename for an image, size, and format.
  */
 
-
 /**
  * Resolve one generated thumbnail path.
  */
-
 
 /**
  * Return true when a thumbnail may be safely served directly as a static file.
  */
 
-
 /**
  * Return the public URL for a gallery file when the configured gallery root is web-visible.
  */
-
 
 /**
  * Return the best public URL for an image thumbnail, falling back to the source.
  */
 
-
 /**
  * Return the URL that serves an already existing thumbnail without creating files.
  */
-
 
 /**
  * Find an existing thumbnail to use when the requested variant has not been generated yet.
@@ -218,16 +188,13 @@ use function Gallery\Models\app_settings_model_set;
  * Build image markup with WebP source when the WebP thumbnails exist.
  */
 
-
 /**
  * Return true when the server can create WebP thumbnails for this source without losing required EXIF data.
  */
 
-
 /**
  * Return missing or stale thumbnail variant counts for one image without creating files.
  */
-
 
 /**
  * Summarize pending thumbnail maintenance for the admin area without generating thumbnails.
@@ -237,77 +204,61 @@ use function Gallery\Models\app_settings_model_set;
  * Generate all configured thumbnails for direct images in one gallery.
  */
 
-
 /**
  * Generate all configured thumbnails for every imported image.
  */
-
 
 /**
  * Rebuild web-optimized thumbnails for one source image.
  */
 
-
 /**
  * Rebuild missing or stale thumbnails and report created/skipped variants.
  */
-
-
 
 /**
  * Return image IDs directly owned by the selected galleries.
  */
 
-
 /**
  * Return every imported direct image ID in stable dashboard order.
  */
-
 
 /**
  * Load a GD image resource from the supported source MIME types.
  */
 
-
 /**
  * Resize an image to a maximum longer side and write a progressive JPEG.
  */
-
 
 /**
  * Return true when the source contains EXIF that must survive WebP conversion.
  */
 
-
 /**
  * Resize an image to WebP, preserving EXIF when the source has EXIF metadata.
  */
-
 
 /**
  * Resize an image to WebP with GD for sources that do not need EXIF copying.
  */
 
-
 /**
  * Resize a JPEG to WebP with Imagick while copying the EXIF profile.
  */
-
 
 /**
  * Pick the first direct image as cover when the gallery has no explicit cover.
  */
 
-
 /**
  * Return the gallery thumbnail asset path, if one was uploaded.
  */
 
-
 /**
  * Return true when the uploaded gallery thumbnail column is available.
  */
-
 
 /**
  * Gallery and theme background helpers are loaded from app/services/gallery_backgrounds.php.
@@ -317,137 +268,109 @@ use function Gallery\Models\app_settings_model_set;
  * Update a gallery's uploaded thumbnail asset path.
  */
 
-
 /**
  * Rebuild parent_id links from filesystem folder nesting.
  */
-
 
 /**
  * Return one gallery ID plus all descendant gallery IDs.
  */
 
-
 /**
  * Return whether the admin features added after the initial schema are ready.
  */
-
 
 /**
  * Return whether password-protected gallery columns are available.
  */
 
-
 /**
  * Return true when one gallery has its own password policy.
  */
-
 
 /**
  * Return the protected gallery that controls public access to this gallery.
  */
 
-
 /**
  * Build the session key that records a public gallery unlock.
  */
-
 
 /**
  * Return how long a public gallery unlock should last in this browser session.
  */
 
-
 /**
  * Store a successful public unlock for this browser session.
  */
-
 
 /**
  * Return true while a public gallery unlock is still fresh.
  */
 
-
 /**
  * Return true when the current request token unlocks the controlling gallery.
  */
-
 
 /**
  * Return whether an anonymous visitor may view one gallery branch now.
  */
 
-
 /**
  * Return true when a public listing may include this gallery.
  */
-
 
 /**
  * Create a share token, store its lookup hash, and keep an encrypted admin copy.
  */
 
-
 /**
  * Revoke the share token for one gallery.
  */
-
 
 /**
  * Return whether the encrypted share token display column exists.
  */
 
-
 /**
  * Return the current share token for admin display, upgrading legacy plaintext rows.
  */
-
 
 /**
  * Encrypt one share token using the local config secret.
  */
 
-
 /**
  * Decrypt one stored share token, or null when it is not an encrypted value.
  */
-
 
 /**
  * Derive a stable encryption key from the local application secret.
  */
 
-
 /**
  * Public wrapper for the preferred direct cover image.
  */
-
 
 /**
  * Return the explicit cover image or first direct image for one gallery.
  */
 
-
 /**
  * Return a gallery thumbnail URL from an uploaded asset, if present.
  */
-
 
 /**
  * Function `gallery_cover_collage_images` handles this scoped operation.
  */
 
-
 /**
  * Build visual cover choices from the gallery subtree.
  */
 
-
 /**
  * Apply a cover image path from gallery.json after images have been scanned.
  */
-
-
 
 /**
  * Reset request-local application-setting state.
@@ -470,7 +393,10 @@ function app_settings_reset_request_cache(): void
  */
 function app_settings_prime_request_cache(): void
 {
-    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+    if (
+        !isset($GLOBALS['cms_app_settings_cache'])
+        || !is_array($GLOBALS['cms_app_settings_cache'])
+    ) {
         $GLOBALS['cms_app_settings_cache'] = [];
     }
     if (($GLOBALS['cms_app_settings_cache_loaded'] ?? false) === true) {
@@ -483,7 +409,9 @@ function app_settings_prime_request_cache(): void
             if ($settingKey === '') {
                 continue;
             }
-            $GLOBALS['cms_app_settings_cache'][$settingKey] = (string) ($row['setting_value'] ?? '');
+            $GLOBALS['cms_app_settings_cache'][$settingKey] = (string) (
+                $row['setting_value'] ?? ''
+            );
         }
         $GLOBALS['cms_app_settings_cache_loaded'] = true;
     } catch (PDOException) {
@@ -502,7 +430,10 @@ function app_settings_prime_request_cache(): void
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
-    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+    if (
+        !isset($GLOBALS['cms_app_settings_cache'])
+        || !is_array($GLOBALS['cms_app_settings_cache'])
+    ) {
         // $GLOBALS entry stores DB setting values already read during this request.
         $GLOBALS['cms_app_settings_cache'] = [];
     }
@@ -523,7 +454,9 @@ function app_setting(string $key, ?string $default = null): ?string
     try {
         // Preload failure is deliberately recoverable through the legacy one-key model read.
         $value = app_settings_model_get($key);
-        $GLOBALS['cms_app_settings_cache'][$key] = $value === false ? null : (string) $value;
+        $GLOBALS['cms_app_settings_cache'][$key] = $value === false
+            ? null
+            : (string) $value;
         return $value === false ? $default : (string) $value;
     } catch (PDOException) {
         return $default;
@@ -540,7 +473,10 @@ function set_app_setting(string $key, string $value): void
 {
     app_settings_model_set($key, $value, now_sql());
 
-    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+    if (
+        !isset($GLOBALS['cms_app_settings_cache'])
+        || !is_array($GLOBALS['cms_app_settings_cache'])
+    ) {
         $GLOBALS['cms_app_settings_cache'] = [];
     }
     $GLOBALS['cms_app_settings_cache'][$key] = $value;
@@ -559,32 +495,42 @@ function set_app_setting(string $key, string $value): void
  */
 function set_app_settings_atomically(array $settings, callable $activate): void
 {
-    app_settings_model_set_many_with_activation($settings, now_sql(), $activate);
+    app_settings_model_set_many_with_activation(
+        $settings,
+        now_sql(),
+        $activate,
+    );
     app_settings_reset_request_cache();
 }
 
 /**
  * Remove one or more application settings.
  *
- * @param array $keys Keys value.
+ * @param array<int,string> $keys Application setting keys to remove.
+ * @return void Deletes non-empty unique keys and invalidates their request-cache entries.
  */
 function delete_app_settings(array $keys): void
 {
     // $keys stores an intermediate value used by the surrounding gallery workflow.
-    $keys = array_values(array_unique(array_filter($keys, static fn (string $key): bool => $key !== '')));
+    $keys = array_values(array_unique(array_filter(
+        $keys,
+        static fn(string $key): bool => $key !== '',
+    )));
     if ($keys === []) {
         return;
     }
     app_settings_model_delete($keys);
 
-    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+    if (
+        !isset($GLOBALS['cms_app_settings_cache'])
+        || !is_array($GLOBALS['cms_app_settings_cache'])
+    ) {
         $GLOBALS['cms_app_settings_cache'] = [];
     }
     foreach ($keys as $key) {
         $GLOBALS['cms_app_settings_cache'][$key] = null;
     }
 }
-
 
 /**
  * Return true when generated public links should prefer clean rewritten URLs.
@@ -623,9 +569,11 @@ function url_rewrite_marker_file_ok(string $path): bool
     }
 
     $contents = (string) file_get_contents($path);
-    return stripos($contents, 'mod_rewrite.c') !== false
-        && stripos($contents, 'RewriteEngine On') !== false
-        && stripos($contents, 'RewriteRule') !== false;
+    return (
+        stripos($contents, 'mod_rewrite.c') !== false
+            && stripos($contents, 'RewriteEngine On') !== false
+            && stripos($contents, 'RewriteRule') !== false
+    );
 }
 
 /**
@@ -638,16 +586,23 @@ function url_rewrite_marker_file_ok(string $path): bool
  *
  * @param ?array $server Server value.
  * @param string|null $root Override used by tests.
- * @return array{enabled: bool, status: string, supported: bool, confidence: string, reasons: array<int, string>, details: array<string, mixed>}.
+ * @return array{enabled:bool,status:string,supported:bool,confidence:string,reasons:list<string>,details:array<string,mixed>} Runtime rewrite preference and compatibility evidence, with a status/confidence assessment and explanatory details.
  */
-function url_rewrite_compatibility(?array $server = null, ?string $root = null): array
-{
+function url_rewrite_compatibility(
+    ?array $server = null,
+    ?string $root = null,
+): array {
     $server = $server ?? request_data('server');
     $root = $root ?? dirname(__DIR__, 2);
     $enabled = url_rewrite_enabled();
 
     $rootHtaccess = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . '.htaccess';
-    $publicHtaccess = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . '.htaccess';
+    $publicHtaccess =
+        rtrim($root, '/\\')
+        . DIRECTORY_SEPARATOR
+        . 'public'
+        . DIRECTORY_SEPARATOR
+        . '.htaccess';
     $rootMarker = url_rewrite_marker_file_ok($rootHtaccess);
     $publicMarker = url_rewrite_marker_file_ok($publicHtaccess);
     $serverSoftware = strtolower((string) ($server['SERVER_SOFTWARE'] ?? ''));
@@ -674,7 +629,17 @@ function url_rewrite_compatibility(?array $server = null, ?string $root = null):
         ];
     }
 
-    if ($redirectUrl !== '' || ((string) parse_url($requestUri, PHP_URL_PATH) !== '' && !str_contains((string) parse_url($requestUri, PHP_URL_PATH), 'index.php') && basename($scriptName) === 'index.php')) {
+    if (
+        $redirectUrl !== ''
+        || (
+            (string) parse_url($requestUri, PHP_URL_PATH) !== ''
+            && !str_contains(
+                (string) parse_url($requestUri, PHP_URL_PATH),
+                'index.php',
+            )
+            && basename($scriptName) === 'index.php'
+        )
+    ) {
         $status = 'supported';
         $supported = true;
         $confidence = 'high';
@@ -691,7 +656,18 @@ function url_rewrite_compatibility(?array $server = null, ?string $root = null):
         }
     }
 
-    if (!$supported && ($rootMarker || $publicMarker) && ($serverSoftware === '' || str_contains($serverSoftware, 'apache') || str_contains($serverSoftware, 'litespeed'))) {
+    if (
+        !$supported
+        && (
+            $rootMarker
+            || $publicMarker
+        )
+        && (
+            $serverSoftware === ''
+            || str_contains($serverSoftware, 'apache')
+            || str_contains($serverSoftware, 'litespeed')
+        )
+    ) {
         $status = 'likely_supported';
         $supported = true;
         $confidence = 'medium';
@@ -741,7 +717,11 @@ function url_rewrite_should_emit_clean_urls(): bool
     }
 
     $compatibility = url_rewrite_compatibility();
-    return in_array((string) $compatibility['status'], ['supported', 'likely_supported', 'unknown'], true);
+    return in_array(
+        (string) $compatibility['status'],
+        ['supported', 'likely_supported', 'unknown'],
+        true,
+    );
 }
 
 /**
@@ -765,7 +745,9 @@ function site_name(): string
 function set_site_name(string $name): string
 {
     $normalized = trim($name);
-    $normalized = $normalized !== '' ? substr($normalized, 0, 120) : 'Gallery CMS';
+    $normalized = $normalized !== ''
+        ? substr($normalized, 0, 120)
+        : 'Gallery CMS';
     set_app_setting('site_name', $normalized);
     return $normalized;
 }
@@ -793,12 +775,15 @@ function set_dev_mode_enabled(bool $enabled): void
 /**
  * Return gallery IDs whose admin tree rows should start collapsed.
  *
- * @return array Structured result data for the caller.
+ * @return list<int> Unique positive gallery identifiers configured to start collapsed.
  */
 function collapsed_gallery_ids(): array
 {
     // Variable $decoded stores this steps working value.
-    $decoded = json_decode((string) app_setting('admin_collapsed_gallery_ids', '[]'), true);
+    $decoded = json_decode(
+        (string) app_setting('admin_collapsed_gallery_ids', '[]'),
+        true,
+    );
     if (!is_array($decoded)) {
         return [];
     }
@@ -808,11 +793,18 @@ function collapsed_gallery_ids(): array
 /**
  * Persist the admin gallery tree collapse state.
  *
- * @param array $ids Ids value.
+ * @param array<int,int> $ids Gallery identifiers to persist as collapsed.
+ * @return void Stores unique positive identifiers in the application setting.
  */
 function set_collapsed_gallery_ids(array $ids): void
 {
     // Variable $ids stores this steps working value.
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
-    set_app_setting('admin_collapsed_gallery_ids', json_encode($ids, JSON_THROW_ON_ERROR));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
+    set_app_setting('admin_collapsed_gallery_ids', json_encode(
+        $ids,
+        JSON_THROW_ON_ERROR,
+    ));
 }

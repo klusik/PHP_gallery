@@ -26,9 +26,12 @@ use function Gallery\Tests\CompanionInstalledPolicy\{
     release_file_policy_archive_updater_paths as companion_installed_archive_paths,
     release_file_policy_read as companion_installed_policy_read
 };
-use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_archive_updater_paths as installed_archive_paths;
-use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_paths as installed_policy_paths;
-use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_read as installed_policy_read;
+use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_archive_updater_paths as installed_archive_paths
+;
+use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_paths as installed_policy_paths
+;
+use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_read as installed_policy_read
+;
 
 /**
  * Require a compatibility postcondition without depending on PHP assertion settings.
@@ -37,8 +40,10 @@ use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_read as instal
  * @param string $message Explanation of the failed condition.
  * @return void Throws when the condition does not hold.
  */
-function updater_inventory_compatibility_assert(bool $condition, string $message): void
-{
+function updater_inventory_compatibility_assert(
+    bool $condition,
+    string $message,
+): void {
     if (!$condition) {
         throw new RuntimeException($message);
     }
@@ -57,7 +62,9 @@ function updater_inventory_compatibility_cleanup(string $path): void
     } elseif (is_dir($path)) {
         foreach (scandir($path) ?: [] as $entry) {
             if ($entry !== '.' && $entry !== '..') {
-                updater_inventory_compatibility_cleanup($path . DIRECTORY_SEPARATOR . $entry);
+                updater_inventory_compatibility_cleanup(
+                    $path . DIRECTORY_SEPARATOR . $entry,
+                );
             }
         }
         rmdir($path);
@@ -66,42 +73,62 @@ function updater_inventory_compatibility_cleanup(string $path): void
 
 $root = dirname(__DIR__);
 $inventory = release_file_policy_read($root);
-updater_inventory_compatibility_assert($inventory['companion_files'] !== [], 'The release lost its reviewed companion membership.');
-updater_inventory_compatibility_assert(installed_policy_read($root)['updater_files'] === $inventory['updater_files'],
-    'The installed reader refused the real incoming release inventory or changed its activation set.');
-updater_inventory_compatibility_assert(installed_policy_paths($root, 'updater') === $inventory['updater_files'],
-    'The incoming release is missing a path required by the installed updater.');
+updater_inventory_compatibility_assert(
+    $inventory['companion_files'] !== [],
+    'The release lost its reviewed companion membership.',
+);
+updater_inventory_compatibility_assert(
+    installed_policy_read($root)['updater_files']
+        === $inventory['updater_files'],
+    'The installed reader refused the real incoming release inventory or changed its activation set.',
+);
+updater_inventory_compatibility_assert(
+    installed_policy_paths($root, 'updater') === $inventory['updater_files'],
+    'The incoming release is missing a path required by the installed updater.',
+);
 updater_inventory_compatibility_assert(
     companion_installed_policy_read($root)['updater_files']
         === $inventory['updater_files'],
-    'The installed 0.135.1 reader rejected the real incoming inventory.'
+    'The installed 0.135.1 reader rejected the real incoming inventory.',
 );
 $resources = [
     'winapp/uploader/resources/DejaVuSans.ttf',
     'winapp/uploader/resources/LICENSE_DEJAVU',
 ];
-updater_inventory_compatibility_assert($inventory['companion_resource_files'] === $resources,
-    'The real generated inventory did not isolate the new font and license in its additive field.');
+updater_inventory_compatibility_assert(
+    $inventory['companion_resource_files'] === $resources,
+    'The real generated inventory did not isolate the new font and license in its additive field.',
+);
 
-$fixture = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-old-updater-' . bin2hex(random_bytes(5));
+$fixture =
+    sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'php-gallery-old-updater-'
+    . bin2hex(random_bytes(5));
 try {
     // The running checkout also contains generated scanner/test artifacts.
     // Only an isolated inventory snapshot models the actual incoming package.
     $incomingRoot = $fixture . '/incoming';
     foreach (release_file_policy_paths($root) as $path) {
         $destination = $incomingRoot . '/' . $path;
-        if (!is_dir(dirname($destination))
-            && !mkdir(dirname($destination), 0777, true)) {
-            throw new RuntimeException('Could not create incoming package fixture.');
+        if (
+            !is_dir(dirname($destination))
+            && !mkdir(dirname($destination), 0777, true)
+        ) {
+            throw new RuntimeException(
+                'Could not create incoming package fixture.',
+            );
         }
         if (!copy($root . '/' . $path, $destination)) {
-            throw new RuntimeException('Could not copy incoming package fixture.');
+            throw new RuntimeException(
+                'Could not copy incoming package fixture.',
+            );
         }
     }
     updater_inventory_compatibility_assert(
         companion_installed_archive_paths($incomingRoot)['files']
             === $inventory['updater_files'],
-        'The real incoming package changed installed activation ownership.'
+        'The real incoming package changed installed activation ownership.',
     );
     $unlisted = $incomingRoot . '/app/unlisted-compatibility.php';
     file_put_contents($unlisted, "unlisted fixture\n");
@@ -109,16 +136,21 @@ try {
     try {
         companion_installed_archive_paths($incomingRoot);
     } catch (RuntimeException $exception) {
-        $refused = $exception->getMessage()
+        $refused =
+            $exception->getMessage()
             === 'Update archive contains unexpected updater-owned files.';
     }
     updater_inventory_compatibility_assert(
         $refused,
-        'The installed reader accepted an unlisted file in the real package.'
+        'The installed reader accepted an unlisted file in the real package.',
     );
     unlink($unlisted);
 
-    $production = ['app/production-files.json', 'app/runtime.php', 'winapp/.htaccess'];
+    $production = [
+        'app/production-files.json',
+        'app/runtime.php',
+        'winapp/.htaccess',
+    ];
     $companion = ['winapp/uploader/media.py'];
     $payload = [
         'schema_version' => 1,
@@ -129,8 +161,13 @@ try {
     ];
     foreach (array_merge($production, $companion) as $path) {
         $absolute = $fixture . '/' . $path;
-        if (!is_dir(dirname($absolute)) && !mkdir(dirname($absolute), 0777, true)) {
-            throw new RuntimeException('Could not create an extracted-source compatibility fixture.');
+        if (
+            !is_dir(dirname($absolute))
+            && !mkdir(dirname($absolute), 0777, true)
+        ) {
+            throw new RuntimeException(
+                'Could not create an extracted-source compatibility fixture.',
+            );
         }
         file_put_contents($absolute, "fixture\n");
     }
@@ -145,40 +182,64 @@ try {
     try {
         installed_archive_paths($fixture);
     } catch (RuntimeException $exception) {
-        $reference = strtoupper(substr(hash('sha256', $exception->getMessage()), 0, 12));
+        $reference = strtoupper(substr(
+            hash('sha256', $exception->getMessage()),
+            0,
+            12,
+        ));
     }
-    updater_inventory_compatibility_assert($reference === '385BCD5058D6',
-        'The frozen installed validator did not reproduce the reported package_validate failure.');
+    updater_inventory_compatibility_assert(
+        $reference === '385BCD5058D6',
+        'The frozen installed validator did not reproduce the reported package_validate failure.',
+    );
 
     file_put_contents($sidecar, json_encode($payload, JSON_THROW_ON_ERROR));
     $expected = ['files' => $production, 'legacy' => false];
-    updater_inventory_compatibility_assert(installed_archive_paths($fixture) === $expected,
-        'The installed updater refused the additive inventory or activated companion sources.');
-    updater_inventory_compatibility_assert(release_file_policy_archive_updater_paths($fixture) === $expected,
-        'Current and installed updater activation scopes disagree.');
+    updater_inventory_compatibility_assert(
+        installed_archive_paths($fixture) === $expected,
+        'The installed updater refused the additive inventory or activated companion sources.',
+    );
+    updater_inventory_compatibility_assert(
+        release_file_policy_archive_updater_paths($fixture) === $expected,
+        'Current and installed updater activation scopes disagree.',
+    );
 
     foreach ($resources as $path) {
         $absolute = $fixture . '/' . $path;
-        if (!is_dir(dirname($absolute)) && !mkdir(dirname($absolute), 0777, true)) {
-            throw new RuntimeException('Could not create the companion resource fixture.');
+        if (
+            !is_dir(dirname($absolute))
+            && !mkdir(dirname($absolute), 0777, true)
+        ) {
+            throw new RuntimeException(
+                'Could not create the companion resource fixture.',
+            );
         }
         file_put_contents($absolute, "resource fixture\n");
     }
     $brokenResources = $payload;
     $brokenResources['companion_files'] = array_merge($companion, $resources);
     sort($brokenResources['companion_files'], SORT_STRING);
-    file_put_contents($sidecar, json_encode($brokenResources, JSON_THROW_ON_ERROR));
+    file_put_contents($sidecar, json_encode(
+        $brokenResources,
+        JSON_THROW_ON_ERROR,
+    ));
     $reference = null;
     try {
         companion_installed_archive_paths($fixture);
     } catch (RuntimeException $exception) {
-        $reference = strtoupper(substr(hash('sha256', $exception->getMessage()), 0, 12));
+        $reference = strtoupper(substr(
+            hash('sha256', $exception->getMessage()),
+            0,
+            12,
+        ));
     }
-    updater_inventory_compatibility_assert($reference === 'C35BC3B622B0',
-        'The actual 0.135.1 reader did not reproduce the reported resource rejection.');
+    updater_inventory_compatibility_assert(
+        $reference === 'C35BC3B622B0',
+        'The actual 0.135.1 reader did not reproduce the reported resource rejection.',
+    );
     updater_inventory_compatibility_assert(
         release_file_policy_archive_updater_paths($fixture) === $expected,
-        'Current readers must retain the published 0.136 inventory shape.'
+        'Current readers must retain the published 0.136 inventory shape.',
     );
 
     $payload['companion_resource_files'] = $resources;
@@ -188,14 +249,16 @@ try {
         companion_installed_archive_paths(...),
         release_file_policy_archive_updater_paths(...),
     ] as $reader) {
-        updater_inventory_compatibility_assert($reader($fixture) === $expected,
-            'An additive resource field changed or blocked the installed CMS activation set.');
+        updater_inventory_compatibility_assert(
+            $reader($fixture) === $expected,
+            'An additive resource field changed or blocked the installed CMS activation set.',
+        );
     }
     $allPackagePaths = array_merge($production, $companion, $resources);
     sort($allPackagePaths, SORT_STRING);
     updater_inventory_compatibility_assert(
         release_file_policy_paths($fixture) === $allPackagePaths,
-        'Production distribution lost the font or license during compatibility.'
+        'Production distribution lost the font or license during compatibility.',
     );
 
     file_put_contents($fixture . '/app/unlisted.php', "unlisted\n");
@@ -203,9 +266,14 @@ try {
     try {
         installed_archive_paths($fixture);
     } catch (RuntimeException $exception) {
-        $refused = $exception->getMessage() === 'Update archive contains unexpected updater-owned files.';
+        $refused =
+            $exception->getMessage()
+            === 'Update archive contains unexpected updater-owned files.';
     }
-    updater_inventory_compatibility_assert($refused, 'Compatibility weakened the installed updater archive allowlist.');
+    updater_inventory_compatibility_assert(
+        $refused,
+        'Compatibility weakened the installed updater archive allowlist.',
+    );
 
     echo "Installed updater inventory compatibility checks passed.\n";
 } finally {

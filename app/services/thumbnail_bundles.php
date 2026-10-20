@@ -45,16 +45,24 @@ use function Gallery\Core\url_for;
 /**
  * Return a stable request-local cache key for one image thumbnail bundle.
  *
- * @param array $image Image row or image data.
- * @return string Text result for the caller.
+ * @param array{id?:int|string,gallery_id?:int|string,relative_path?:string,filename?:string} $image Image identity and source paths used to derive a request-local key.
+ * @return string Stable key incorporating image identity, source naming and requested formats.
  */
 function thumbnail_bundle_cache_key(array $image): string
 {
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     return implode(':', [
         (int) ($image['id'] ?? 0),
         (int) ($image['gallery_id'] ?? 0),
-        sha1((string) ($image['relative_path'] ?? '') . '|' . (string) ($image['filename'] ?? '')),
+        sha1(
+            (string) ($image['relative_path'] ?? '')
+                . '|'
+                . (string) ($image['filename'] ?? ''),
+        ),
         implode(',', $formats),
     ]);
 }
@@ -73,18 +81,25 @@ function thumbnail_bundle_normalize_format(string $format): string
 /**
  * Return the safe browser media URL used when no generated thumbnail exists.
  *
- * @param array $image Image row or image data.
- * @param ?array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array<string,mixed> $image Image row used to construct its authorized original-media URL.
+ * @param ?array<string,mixed> $gallery Owning gallery row when already resolved.
+ * @return string Safe browser URL for the original media fallback.
  */
 function thumbnail_bundle_media_url(array $image, ?array $gallery): string
 {
     if ($gallery) {
-        return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
+        return (
+            public_path_schema_ready()
+                ? image_public_media_url($image, $gallery)
+                : image_public_asset_url_with_version(url_for('media', [
+                    'id' => $image['id'],
+                ]), $image)
+        );
     }
-    return image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
+    return image_public_asset_url_with_version(url_for('media', [
+        'id' => $image['id'],
+    ]), $image);
 }
-
 
 /**
  * Warm request-local thumbnail bundles for many image rows.
@@ -115,8 +130,16 @@ function thumbnail_bundles_preload(array $images): void
 
     // $sizes stores all configured thumbnail sizes used by normal bundle discovery.
     $sizes = array_values(array_unique(array_map('intval', thumbnail_sizes())));
-    if (function_exists('Gallery\Services\thumbnail_metadata_preload_renderable_rows') && thumbnail_metadata_schema_ready()) {
-        thumbnail_metadata_preload_renderable_rows(array_values($imagesById), $sizes);
+    if (
+        function_exists(
+            'Gallery\Services\thumbnail_metadata_preload_renderable_rows',
+        )
+        && thumbnail_metadata_schema_ready()
+    ) {
+        thumbnail_metadata_preload_renderable_rows(
+            array_values($imagesById),
+            $sizes,
+        );
     }
 
     foreach ($imagesById as $image) {
@@ -149,94 +172,153 @@ function thumbnail_bundle(array $image): array
     }
 
     public_render_profile_count('thumbnail_bundle_cache_misses');
-    return $cache[$cacheKey] = public_render_profile_span('thumbnail_bundle', /** Discover authorized variants for this persisted image. @return array<string,mixed> */ static function () use ($image): array {
-        // $gallery stores the current gallery row used to build safe thumbnail and media URLs.
-        $gallery = find_gallery((int) ($image['gallery_id'] ?? 0)) ?: null;
-        // $sizes stores generated thumbnail sizes that are valid for this image in this gallery.
-        $sizes = thumbnail_sizes();
-        if ($gallery && function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
-            $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
-        }
-        $sizes = array_values(array_unique(array_map('intval', $sizes)));
-
-        // $bundle stores all safe generated thumbnail URLs discovered for this request.
-        $bundle = [
-            'image' => $image,
-            'gallery' => $gallery,
-            'media_url' => thumbnail_bundle_media_url($image, $gallery),
-            'sizes' => $sizes,
-            'variants' => [
-                'jpg' => [],
-                'webp' => [],
-            ],
-            'warmup_sizes' => [],
-        ];
-
-        if (!$gallery || !thumbnail_legacy_identity_owned($image)) {
-            return $bundle;
-        }
-
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
-            // $metadata stores renderable thumbnail variants selected from DB state only.
-            $metadata = thumbnail_metadata_bundle_data($image, $gallery, $sizes);
-            $bundle['variants'] = $metadata['variants'];
-            $bundle['warmup_sizes'] = $metadata['warmup_sizes'];
-            foreach (['jpg', 'webp'] as $format) {
-                public_render_profile_count('thumbnail_bundle_variant_hits', count($bundle['variants'][$format] ?? []));
+    return $cache[$cacheKey] = public_render_profile_span(
+        'thumbnail_bundle',
+        /** Discover authorized variants for this persisted image. @return array<string,mixed> */ static function () use (
+            $image,
+        ): array {
+            // $gallery stores the current gallery row used to build safe thumbnail and media URLs.
+            $gallery = find_gallery((int) ($image['gallery_id'] ?? 0)) ?: null;
+            // $sizes stores generated thumbnail sizes that are valid for this image in this gallery.
+            $sizes = thumbnail_sizes();
+            if (
+                $gallery
+                && function_exists(
+                    'Gallery\\Services\\thumbnail_bound_filter_sizes',
+                )
+            ) {
+                $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
             }
-            if (!empty($bundle['warmup_sizes'])) {
-                public_render_profile_count('thumbnail_bundle_metadata_warmup_sizes', count($bundle['warmup_sizes']));
-            }
-            return $bundle;
-        }
+            $sizes = array_values(array_unique(array_map('intval', $sizes)));
 
-        // Older installations without the metadata migration keep the legacy filesystem lookup path.
-        $sourceGeometry = null;
-        if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
-            try {
-                // $sourcePath stores the original file path used only for geometry validation.
-                $sourcePath = image_abs_path($image, $gallery);
-                if (is_file($sourcePath)) {
-                    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+            // $bundle stores all safe generated thumbnail URLs discovered for this request.
+            $bundle = [
+                'image' => $image,
+                'gallery' => $gallery,
+                'media_url' => thumbnail_bundle_media_url($image, $gallery),
+                'sizes' => $sizes,
+                'variants' => [
+                    'jpg' => [],
+                    'webp' => [],
+                ],
+                'warmup_sizes' => [],
+            ];
+
+            if (!$gallery || !thumbnail_legacy_identity_owned($image)) {
+                return $bundle;
+            }
+
+            if (
+                function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_schema_ready',
+                )
+                && thumbnail_metadata_schema_ready()
+            ) {
+                // $metadata stores renderable thumbnail variants selected from DB state only.
+                $metadata = thumbnail_metadata_bundle_data(
+                    $image,
+                    $gallery,
+                    $sizes,
+                );
+                $bundle['variants'] = $metadata['variants'];
+                $bundle['warmup_sizes'] = $metadata['warmup_sizes'];
+                foreach (['jpg', 'webp'] as $format) {
+                    public_render_profile_count(
+                        'thumbnail_bundle_variant_hits',
+                        count($bundle['variants'][$format] ?? []),
+                    );
                 }
-            } catch (Throwable) {
-                $sourceGeometry = null;
+                if (!empty($bundle['warmup_sizes'])) {
+                    public_render_profile_count(
+                        'thumbnail_bundle_metadata_warmup_sizes',
+                        count($bundle['warmup_sizes']),
+                    );
+                }
+                return $bundle;
             }
-        }
 
-        $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
-        foreach ($sizes as $size) {
-            if (!in_array($size, thumbnail_sizes(), true)) {
-                continue;
-            }
-            foreach ($formats as $format) {
+            // Older installations without the metadata migration keep the legacy filesystem lookup path.
+            $sourceGeometry = null;
+            if (function_exists(
+                'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+            )) {
                 try {
-                    // $path stores one concrete generated thumbnail candidate.
-                    $path = thumbnail_abs_path($image, $gallery, $size, $format);
-                    if (!public_render_profile_is_file($path)) {
-                        continue;
+                    // $sourcePath stores the original file path used only for geometry validation.
+                    $sourcePath = image_abs_path($image, $gallery);
+                    if (is_file($sourcePath)) {
+                        $sourceGeometry = thumbnail_source_geometry_dimensions(
+                            $sourcePath,
+                            $image,
+                        );
                     }
-                    if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
-                        // $geometryStatus stores whether this cache file still matches the source aspect ratio.
-                        $geometryStatus = thumbnail_file_geometry_status($path, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
-                        if (empty($geometryStatus['valid'])) {
-                            $bundle['warmup_sizes'][(int) $size] = (int) $size;
-                            public_render_profile_count('thumbnail_bundle_invalid_geometry_queued');
-                            continue;
-                        }
-                    }
-                    public_render_profile_count('thumbnail_bundle_variant_hits');
-                    $bundle['variants'][$format][$size] = thumbnail_serving_url($image, $gallery, $size, $format);
-                } catch (RuntimeException) {
+                } catch (Throwable) {
+                    $sourceGeometry = null;
+                }
+            }
+
+            $formats = function_exists(
+                'Gallery\\Services\\thumbnail_policy_requested_formats',
+            )
+                ? thumbnail_policy_requested_formats()
+                : ['webp'];
+            foreach ($sizes as $size) {
+                if (!in_array($size, thumbnail_sizes(), true)) {
                     continue;
                 }
+                foreach ($formats as $format) {
+                    try {
+                        // $path stores one concrete generated thumbnail candidate.
+                        $path = thumbnail_abs_path(
+                            $image,
+                            $gallery,
+                            $size,
+                            $format,
+                        );
+                        if (!public_render_profile_is_file($path)) {
+                            continue;
+                        }
+                        if (
+                            is_array($sourceGeometry)
+                            && function_exists(
+                                'Gallery\\Services\\thumbnail_file_geometry_status',
+                            )
+                        ) {
+                            // $geometryStatus stores whether this cache file still matches the source aspect ratio.
+                            $geometryStatus = thumbnail_file_geometry_status(
+                                $path,
+                                (int) $sourceGeometry['width'],
+                                (int) $sourceGeometry['height'],
+                                (int) $size,
+                            );
+                            if (empty($geometryStatus['valid'])) {
+                                $bundle['warmup_sizes'][(int) $size] =
+                                    (int) $size;
+                                public_render_profile_count(
+                                    'thumbnail_bundle_invalid_geometry_queued',
+                                );
+                                continue;
+                            }
+                        }
+                        public_render_profile_count(
+                            'thumbnail_bundle_variant_hits',
+                        );
+                        $bundle['variants'][$format][$size] = thumbnail_serving_url(
+                            $image,
+                            $gallery,
+                            $size,
+                            $format,
+                        );
+                    } catch (RuntimeException) {
+                        continue;
+                    }
+                }
             }
-        }
 
-        ksort($bundle['variants']['jpg']);
-        ksort($bundle['variants']['webp']);
-        return $bundle;
-    });
+            ksort($bundle['variants']['jpg']);
+            ksort($bundle['variants']['webp']);
+            return $bundle;
+        },
+    );
 }
 
 /**
@@ -250,7 +332,10 @@ function thumbnail_bundle_effective_size(array $bundle, int $preferredSize): int
 {
     $gallery = $bundle['gallery'] ?? null;
     $image = $bundle['image'] ?? [];
-    if (is_array($gallery) && function_exists('Gallery\\Services\\thumbnail_bound_fallback_size')) {
+    if (
+        is_array($gallery)
+        && function_exists('Gallery\\Services\\thumbnail_bound_fallback_size')
+    ) {
         return thumbnail_bound_fallback_size($image, $preferredSize, $gallery);
     }
     return $preferredSize;
@@ -259,24 +344,41 @@ function thumbnail_bundle_effective_size(array $bundle, int $preferredSize): int
 /**
  * Select the best generated thumbnail variant from a precomputed request bundle.
  *
- * @param array $bundle Bundle value.
+ * @param array{image:array<string,mixed>,gallery:array<string,mixed>|null,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:list<int>} $bundle Precomputed authorized thumbnail variants and original-media fallback.
  * @param int $preferredSize Preferred size value.
  * @param string $preferredFormat Preferred format value.
- * @return array{url:string,size:int,format:string,is_media_fallback:bool,is_exact:bool} Structured result data for the caller.
+ * @return array{url:string,size:int,format:string,is_media_fallback:bool,is_exact:bool} Best exact or nearest available variant, falling back to original media when needed.
  */
-function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, string $preferredFormat = ''): array
-{
+function thumbnail_bundle_select_variant(
+    array $bundle,
+    int $preferredSize,
+    string $preferredFormat = '',
+): array {
     // $preferredFormat stores the caller's preferred browser format.
-    $preferredFormat = $preferredFormat !== '' ? $preferredFormat : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
+    $preferredFormat = $preferredFormat !== ''
+        ? $preferredFormat
+        : (
+            function_exists(
+                'Gallery\\Services\\thumbnail_preferred_browser_format',
+            )
+                    ? thumbnail_preferred_browser_format()
+                    : 'jpg'
+        );
     $preferredFormat = thumbnail_bundle_normalize_format($preferredFormat);
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     if (!in_array($preferredFormat, $formats, true)) {
         $preferredFormat = (string) ($formats[0] ?? 'webp');
     }
     // $effectiveSize stores the size after per-gallery bounds are applied.
     $effectiveSize = thumbnail_bundle_effective_size($bundle, $preferredSize);
     // $variants stores discovered generated variants indexed by format and size.
-    $variants = is_array($bundle['variants'] ?? null) ? $bundle['variants'] : ['jpg' => [], 'webp' => []];
+    $variants = is_array($bundle['variants'] ?? null)
+        ? $bundle['variants']
+        : ['jpg' => [], 'webp' => []];
 
     if (isset($variants[$preferredFormat][$effectiveSize])) {
         return [
@@ -295,12 +397,17 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
             $candidateSizes[(int) $size] = (int) $size;
         }
     }
-    usort($candidateSizes, static function (int $left, int $right) use ($effectiveSize): int {
+    usort($candidateSizes, static function (int $left, int $right) use (
+        $effectiveSize,
+    ): int {
         return abs($left - $effectiveSize) <=> abs($right - $effectiveSize);
     });
 
     // $formats stores the same fallback order used by the legacy resolver.
-    $formats = array_values(array_unique(array_merge([$preferredFormat], $formats)));
+    $formats = array_values(array_unique(array_merge(
+        [$preferredFormat],
+        $formats,
+    )));
     foreach ($candidateSizes as $size) {
         foreach ($formats as $format) {
             if (isset($variants[$format][$size])) {
@@ -318,7 +425,12 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
 
     public_render_profile_count('thumbnail_bundle_media_fallbacks');
     return [
-        'url' => (string) ($bundle['media_url'] ?? image_public_asset_url_with_version(url_for('media', ['id' => (int) (($bundle['image']['id'] ?? 0))]), (array) ($bundle['image'] ?? []))),
+        'url' => (string) (
+            $bundle['media_url'] ?? image_public_asset_url_with_version(
+                url_for('media', ['id' => (int) ($bundle['image']['id'] ?? 0)]),
+                (array) ($bundle['image'] ?? []),
+            )
+        ),
         'size' => $effectiveSize,
         'format' => 'media',
         'is_media_fallback' => true,
@@ -329,17 +441,37 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
 /**
  * Return one safe thumbnail URL from a request-local thumbnail bundle.
  *
- * @param array $bundle Bundle value.
+ * @param array{image:array<string,mixed>,gallery:array<string,mixed>|null,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:list<int>} $bundle Precomputed authorized thumbnail variants and original-media fallback.
  * @param int $preferredSize Preferred size value.
  * @param string $preferredFormat Preferred format value.
- * @return string Text result for the caller.
+ * @return string Selected variant or original-media fallback URL.
  */
-function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferredFormat = ''): string
-{
-    $preferredFormat = $preferredFormat !== '' ? $preferredFormat : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
+function thumbnail_bundle_url(
+    array $bundle,
+    int $preferredSize,
+    string $preferredFormat = '',
+): string {
+    $preferredFormat = $preferredFormat !== ''
+        ? $preferredFormat
+        : (
+            function_exists(
+                'Gallery\\Services\\thumbnail_preferred_browser_format',
+            )
+                    ? thumbnail_preferred_browser_format()
+                    : 'jpg'
+        );
     $format = thumbnail_bundle_normalize_format($preferredFormat);
-    public_render_profile_record_thumbnail_purpose(null, $preferredSize, $format, 'bundle');
-    $selected = thumbnail_bundle_select_variant($bundle, $preferredSize, $preferredFormat);
+    public_render_profile_record_thumbnail_purpose(
+        null,
+        $preferredSize,
+        $format,
+        'bundle',
+    );
+    $selected = thumbnail_bundle_select_variant(
+        $bundle,
+        $preferredSize,
+        $preferredFormat,
+    );
     return (string) $selected['url'];
 }
 
@@ -350,19 +482,31 @@ function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferr
  * paths. This helper adds only bounded geometry metadata; it never constructs a
  * raw-file URL or performs filesystem work.
  *
- * @param array $image Image row or image data.
+ * @param array<string,mixed> $image Image row with source dimensions and identity.
  * @param string $previewUrl Existing protected preview URL.
  * @param string $fullUrl Existing protected browser-displayable media URL.
- * @param ?array $bundle Optional request-local thumbnail bundle used to identify the preview size.
+ * @param ?array{image:array<string,mixed>,gallery:array<string,mixed>|null,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:list<int>} $bundle Optional request-local bundle used to determine the preview derivative size.
  * @return array<int,array{src:string,width:int,height:int,kind:string}> Ordered safe source candidates.
  */
-function lightbox_zoom_quality_candidates(array $image, string $previewUrl, string $fullUrl, ?array $bundle = null): array
-{
-    $dimensions = function_exists('Gallery\\Services\\thumbnail_metadata_image_display_dimensions')
+function lightbox_zoom_quality_candidates(
+    array $image,
+    string $previewUrl,
+    string $fullUrl,
+    ?array $bundle = null,
+): array {
+    $dimensions = function_exists(
+        'Gallery\\Services\\thumbnail_metadata_image_display_dimensions',
+    )
         ? thumbnail_metadata_image_display_dimensions($image)
         : null;
-    $sourceWidth = max(0, min(100000, (int) ($dimensions['width'] ?? $image['width'] ?? 0)));
-    $sourceHeight = max(0, min(100000, (int) ($dimensions['height'] ?? $image['height'] ?? 0)));
+    $sourceWidth = max(0, min(
+        100000,
+        (int) ($dimensions['width'] ?? $image['width'] ?? 0),
+    ));
+    $sourceHeight = max(0, min(
+        100000,
+        (int) ($dimensions['height'] ?? $image['height'] ?? 0),
+    ));
     if ($sourceWidth <= 0 || $sourceHeight <= 0) {
         return [];
     }
@@ -372,7 +516,9 @@ function lightbox_zoom_quality_candidates(array $image, string $previewUrl, stri
         $previewMaxSide = 1600;
         if (is_array($bundle)) {
             foreach (['jpg', 'webp'] as $format) {
-                foreach ((array) ($bundle['variants'][$format] ?? []) as $size => $variantUrl) {
+                foreach ((array) (
+                    $bundle['variants'][$format] ?? []
+                ) as $size => $variantUrl) {
                     if ((string) $variantUrl === $previewUrl) {
                         $previewMaxSide = max(1, min(100000, (int) $size));
                         break 2;
@@ -380,7 +526,11 @@ function lightbox_zoom_quality_candidates(array $image, string $previewUrl, stri
                 }
             }
         }
-        $previewDimensions = thumbnail_expected_dimensions($sourceWidth, $sourceHeight, $previewMaxSide);
+        $previewDimensions = thumbnail_expected_dimensions(
+            $sourceWidth,
+            $sourceHeight,
+            $previewMaxSide,
+        );
         $candidatesByUrl[$previewUrl] = [
             'src' => $previewUrl,
             'width' => (int) $previewDimensions['width'],
@@ -396,33 +546,49 @@ function lightbox_zoom_quality_candidates(array $image, string $previewUrl, stri
             'height' => $sourceHeight,
             'kind' => 'full',
         ];
-        if (!isset($candidatesByUrl[$fullUrl]) || (int) $candidatesByUrl[$fullUrl]['width'] < $sourceWidth) {
+        if (
+            !isset($candidatesByUrl[$fullUrl])
+            || (int) $candidatesByUrl[$fullUrl]['width'] < $sourceWidth
+        ) {
             $candidatesByUrl[$fullUrl] = $fullCandidate;
         }
     }
 
     $candidates = array_values($candidatesByUrl);
-    usort($candidates, static fn (array $left, array $right): int => (int) $left['width'] <=> (int) $right['width']);
+    usort(
+        $candidates,
+        static fn(array $left, array $right): int => (
+            (int) $left['width'] <=> (int) $right['width']
+        ),
+    );
     return $candidates;
 }
 
 /**
  * Return a srcset string using only variants already resolved in a thumbnail bundle.
  *
- * @param array $bundle Bundle value.
- * @param array $sizes Sizes value.
- * @param string $format Format value.
- * @return string Text result for the caller.
+ * @param array{image:array<string,mixed>,gallery:array<string,mixed>|null,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:list<int>} $bundle Precomputed authorized variants and source metadata.
+ * @param list<int> $sizes Candidate maximum sides requested by the card.
+ * @param string $format Requested variant format, normalized to jpg or webp.
+ * @return string Comma-separated srcset entries for available bounded variants, or an empty string.
  */
-function thumbnail_bundle_srcset(array $bundle, array $sizes, string $format): string
-{
+function thumbnail_bundle_srcset(
+    array $bundle,
+    array $sizes,
+    string $format,
+): string {
     // $format stores the requested image format for this source set.
     $format = thumbnail_bundle_normalize_format($format);
-    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+    if (
+        function_exists('Gallery\\Services\\thumbnail_policy_format_allowed')
+        && !thumbnail_policy_format_allowed($format)
+    ) {
         return '';
     }
     // $variants stores discovered generated thumbnails for the requested format.
-    $variants = is_array($bundle['variants'][$format] ?? null) ? $bundle['variants'][$format] : [];
+    $variants = is_array($bundle['variants'][$format] ?? null)
+        ? $bundle['variants'][$format]
+        : [];
     if (!$variants) {
         return '';
     }
@@ -431,8 +597,15 @@ function thumbnail_bundle_srcset(array $bundle, array $sizes, string $format): s
     $requestedSizes = array_values(array_unique(array_map('intval', $sizes)));
     $gallery = $bundle['gallery'] ?? null;
     $image = $bundle['image'] ?? [];
-    if (is_array($gallery) && function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
-        $requestedSizes = thumbnail_bound_filter_sizes($requestedSizes, $image, $gallery);
+    if (
+        is_array($gallery)
+        && function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')
+    ) {
+        $requestedSizes = thumbnail_bound_filter_sizes(
+            $requestedSizes,
+            $image,
+            $gallery,
+        );
     }
 
     // $entries stores srcset candidates that already exist on disk.

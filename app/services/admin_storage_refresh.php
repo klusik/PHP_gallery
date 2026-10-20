@@ -82,6 +82,7 @@ require_once __DIR__ . '/../runtime/storage_observer.php';
  *     additional tables retain aggregate counts and an explicit omitted count.
  */
 const ADMIN_STORAGE_REFRESH_TABLE_TIMINGS_LIMIT = 128;
+
 /**
  * Publish bounded progress while a multi-request phase is still running.
  * Type: int. Units: completed phase steps per checkpoint. Scope: one active run.
@@ -89,6 +90,7 @@ const ADMIN_STORAGE_REFRESH_TABLE_TIMINGS_LIMIT = 128;
  * Rationale: ten steps expose long scans without one Admin event per request.
  */
 const ADMIN_STORAGE_REFRESH_LOG_STEP_INTERVAL = 10;
+
 /**
  * Keep the worst request positions for later bottleneck investigation.
  * Type: int. Units: slow-step samples per phase. Scope: run diagnostics.
@@ -105,6 +107,7 @@ const ADMIN_STORAGE_REFRESH_SLOW_STEPS_LIMIT = 3;
  * Rationale: persist and report a deterministic progression from files through database inspection.
  */
 const ADMIN_STORAGE_REFRESH_PHASES = ['files', 'database', 'inspection'];
+
 /** Set the file-statistics share of total workflow progress.
  * @var float
  * Units: percentage points of overall progress.
@@ -113,6 +116,7 @@ const ADMIN_STORAGE_REFRESH_PHASES = ['files', 'database', 'inspection'];
  * Rationale: allocate progress according to the relative work of the file inventory stage.
  */
 const ADMIN_STORAGE_REFRESH_FILE_WEIGHT = 60.0;
+
 /** Set the database-statistics share of total workflow progress.
  * @var float
  * Units: percentage points of overall progress.
@@ -121,6 +125,7 @@ const ADMIN_STORAGE_REFRESH_FILE_WEIGHT = 60.0;
  * Rationale: keep database metadata work bounded while preserving room for the inspection phase.
  */
 const ADMIN_STORAGE_REFRESH_DATABASE_WEIGHT = 20.0;
+
 /** Bound resumed file-statistics work performed by one HTTP step.
  * @var int
  * Units: file-statistics records per request.
@@ -129,6 +134,7 @@ const ADMIN_STORAGE_REFRESH_DATABASE_WEIGHT = 20.0;
  * Rationale: keep each request responsive and allow progress to persist between batches.
  */
 const ADMIN_STORAGE_REFRESH_FILE_BATCH_SIZE = 20;
+
 /** Bound database metadata work performed by one HTTP step.
  * @var int
  * Units: tables analyzed per request.
@@ -137,6 +143,7 @@ const ADMIN_STORAGE_REFRESH_FILE_BATCH_SIZE = 20;
  * Rationale: keep ANALYZE work resumable and below the request-time budget.
  */
 const ADMIN_STORAGE_REFRESH_DATABASE_BATCH_SIZE = 5;
+
 /** Expire abandoned server-owned Update all workflow state.
  * @var int
  * Units: seconds since the last persisted workflow update.
@@ -154,22 +161,34 @@ const ADMIN_STORAGE_REFRESH_JOB_TTL = 3600;
  */
 function admin_storage_refresh_all_start(int $actorId): array
 {
-    return admin_storage_refresh_with_lock(static function () use ($actorId): array {
+    return admin_storage_refresh_with_lock(static function () use (
+        $actorId,
+    ): array {
         if ($actorId <= 0) {
             return admin_storage_refresh_error_payload();
         }
         $active = admin_storage_refresh_read_state();
-        if (is_array($active) && (string) ($active['workflow_status'] ?? '') === 'running') {
+        if (
+            is_array($active)
+            && (string) ($active['workflow_status'] ?? '') === 'running'
+        ) {
             $activeId = (string) ($active['workflow_id'] ?? '');
             $activeOwnerId = (int) ($active['owner_id'] ?? 0);
             $activePhase = (string) ($active['phase'] ?? '');
-            $compatible = preg_match('/^[a-f0-9]{32}$/D', $activeId)
+            $compatible =
+                preg_match('/^[a-f0-9]{32}$/D', $activeId)
                 && $activeOwnerId > 0
-                && in_array($activePhase, ['files', 'database', 'inspection', 'complete'], true)
+                && in_array(
+                    $activePhase,
+                    ['files', 'database', 'inspection', 'complete'],
+                    true,
+                )
                 && is_array($active['stages'] ?? null);
             if ($compatible) {
-                if ($activeOwnerId !== $actorId) return admin_storage_refresh_error_payload();
-                $active['diagnostics'] ??= admin_storage_refresh_diagnostics_new(false);
+                if ($activeOwnerId !== $actorId)
+                    return admin_storage_refresh_error_payload();
+                $active['diagnostics'] ??=
+                    admin_storage_refresh_diagnostics_new(false);
                 $active['diagnostics']['resume_count']++;
                 admin_storage_refresh_write_state($active);
                 admin_storage_refresh_log_run($active, 'resumed');
@@ -185,27 +204,54 @@ function admin_storage_refresh_all_start(int $actorId): array
             'database_processed' => 0,
             'database_total' => 0,
             'database_failed' => 0,
-            'stages' => [admin_storage_refresh_stage('files', 'running', 0, 0, 0)],
+            'stages' => [admin_storage_refresh_stage(
+                'files',
+                'running',
+                0,
+                0,
+                0,
+            )],
             'updated_at' => time(),
             'diagnostics' => admin_storage_refresh_diagnostics_new(),
         ];
 
         admin_storage_refresh_log_run($state, 'started');
         try {
-            $file = admin_storage_refresh_measure($state, 'files',
-                static fn(): array => admin_storage_statistics_start_job());
+            $file = admin_storage_refresh_measure(
+                $state,
+                'files',
+                static fn(): array => admin_storage_statistics_start_job(),
+            );
             admin_storage_refresh_record_files($state, $file);
             $fileStatus = (string) ($file['status'] ?? 'error');
             $processed = max(0, (int) ($file['processed'] ?? 0));
             $total = max(0, (int) ($file['total'] ?? 0));
-            $stageStatus = $fileStatus === 'running' ? 'running' : ($fileStatus === 'complete' ? 'complete' : 'failed');
-            $state['stages'][0] = admin_storage_refresh_stage('files', $stageStatus, $processed, $total, $stageStatus === 'failed' ? 1 : 0);
+            $stageStatus = $fileStatus === 'running'
+                ? 'running'
+                : ($fileStatus === 'complete' ? 'complete' : 'failed');
+            $state['stages'][0] = admin_storage_refresh_stage(
+                'files',
+                $stageStatus,
+                $processed,
+                $total,
+                $stageStatus === 'failed' ? 1 : 0,
+            );
             if ($stageStatus !== 'running') {
                 $state['phase'] = 'database';
             }
         } catch (Throwable $exception) {
-            admin_storage_refresh_log_failure('files', $exception, $state['diagnostics']['run_id'] ?? '');
-            $state['stages'][0] = admin_storage_refresh_stage('files', 'failed', 0, 0, 1);
+            admin_storage_refresh_log_failure(
+                'files',
+                $exception,
+                $state['diagnostics']['run_id'] ?? '',
+            );
+            $state['stages'][0] = admin_storage_refresh_stage(
+                'files',
+                'failed',
+                0,
+                0,
+                1,
+            );
             $state['phase'] = 'database';
         }
 
@@ -226,9 +272,13 @@ function admin_storage_refresh_all_start(int $actorId): array
  */
 function admin_storage_refresh_all_step(string $workflowId, int $actorId): array
 {
-    return admin_storage_refresh_with_lock(static function () use ($workflowId, $actorId): array {
+    return admin_storage_refresh_with_lock(static function () use (
+        $workflowId,
+        $actorId,
+    ): array {
         $state = admin_storage_refresh_read_state();
-        if (!is_array($state)
+        if (
+            !is_array($state)
             || !preg_match('/^[a-f0-9]{32}$/D', $workflowId)
             || !hash_equals((string) ($state['workflow_id'] ?? ''), $workflowId)
             || (int) ($state['owner_id'] ?? 0) !== $actorId
@@ -256,8 +306,12 @@ function admin_storage_refresh_all_step(string $workflowId, int $actorId): array
         admin_storage_refresh_write_state($state);
         if ($state['phase'] !== $phase) {
             admin_storage_refresh_log_run($state, 'stage_completed', $phase);
-        } elseif (($state['diagnostics']['phases'][$phase]['steps'] ?? 0)
-            % ADMIN_STORAGE_REFRESH_LOG_STEP_INTERVAL === 0) {
+        } elseif (
+            (
+                ($state['diagnostics']['phases'][$phase]['steps'] ?? 0)
+                % ADMIN_STORAGE_REFRESH_LOG_STEP_INTERVAL
+            ) === 0
+        ) {
             admin_storage_refresh_log_run($state, 'progress', $phase);
         }
         if ($state['phase'] === 'complete') {
@@ -276,26 +330,49 @@ function admin_storage_refresh_all_step(string $workflowId, int $actorId): array
 function admin_storage_refresh_step_files(array $state): array
 {
     try {
-        $file = admin_storage_refresh_measure($state, 'files',
-            static fn(): array => admin_storage_statistics_process_job(ADMIN_STORAGE_REFRESH_FILE_BATCH_SIZE));
+        $file = admin_storage_refresh_measure(
+            $state,
+            'files',
+            static fn(): array => admin_storage_statistics_process_job(
+                ADMIN_STORAGE_REFRESH_FILE_BATCH_SIZE,
+            ),
+        );
         admin_storage_refresh_record_files($state, $file);
         $status = (string) ($file['status'] ?? 'error');
         $processed = max(0, (int) ($file['processed'] ?? 0));
         $total = max(0, (int) ($file['total'] ?? 0));
-        $stageStatus = $status === 'running' ? 'running' : ($status === 'complete' ? 'complete' : 'failed');
+        $stageStatus = $status === 'running'
+            ? 'running'
+            : ($status === 'complete' ? 'complete' : 'failed');
     } catch (Throwable $exception) {
-        admin_storage_refresh_log_failure('files', $exception, $state['diagnostics']['run_id'] ?? '');
+        admin_storage_refresh_log_failure(
+            'files',
+            $exception,
+            $state['diagnostics']['run_id'] ?? '',
+        );
         $processed = 0;
         $total = 0;
         $stageStatus = 'failed';
     }
-    $state['stages'][0] = admin_storage_refresh_stage('files', $stageStatus, $processed, $total, $stageStatus === 'failed' ? 1 : 0);
+    $state['stages'][0] = admin_storage_refresh_stage(
+        'files',
+        $stageStatus,
+        $processed,
+        $total,
+        $stageStatus === 'failed' ? 1 : 0,
+    );
     if ($stageStatus !== 'running') {
         $state['phase'] = 'database';
         $state['database_processed'] = 0;
         $state['database_total'] = 0;
         $state['database_failed'] = 0;
-        $state['stages'][1] = admin_storage_refresh_stage('database', 'running', 0, 0, 0);
+        $state['stages'][1] = admin_storage_refresh_stage(
+            'database',
+            'running',
+            0,
+            0,
+            0,
+        );
     }
     return $state;
 }
@@ -311,23 +388,41 @@ function admin_storage_refresh_step_database(array $state): array
     $processedBefore = max(0, (int) ($state['database_processed'] ?? 0));
     $failedBefore = max(0, (int) ($state['database_failed'] ?? 0));
     try {
-        $batch = admin_storage_refresh_measure($state, 'database',
+        $batch = admin_storage_refresh_measure(
+            $state,
+            'database',
             static fn(): array => admin_database_usage_recompute_statistics_batch(
-                $processedBefore, ADMIN_STORAGE_REFRESH_DATABASE_BATCH_SIZE));
+                $processedBefore,
+                ADMIN_STORAGE_REFRESH_DATABASE_BATCH_SIZE,
+            ),
+        );
         foreach ($batch['table_timings'] ?? [] as $timing) {
-            if (count($state['diagnostics']['table_timings']) < ADMIN_STORAGE_REFRESH_TABLE_TIMINGS_LIMIT) {
+            if (
+                count($state['diagnostics']['table_timings'])
+                < ADMIN_STORAGE_REFRESH_TABLE_TIMINGS_LIMIT
+            ) {
                 $state['diagnostics']['table_timings'][] = $timing;
             } else {
                 $state['diagnostics']['table_timings_omitted']++;
             }
         }
-        $processed = max($processedBefore, (int) ($batch['processed'] ?? $processedBefore));
+        $processed = max(
+            $processedBefore,
+            (int) ($batch['processed'] ?? $processedBefore),
+        );
         $total = max(0, (int) ($batch['total'] ?? 0));
-        $failed = $failedBefore + max(0, (int) ($batch['failed_table_count'] ?? 0));
+        $failed =
+            $failedBefore + max(0, (int) ($batch['failed_table_count'] ?? 0));
         $complete = !empty($batch['complete']);
-        $status = $complete ? ($failed > 0 ? 'partial' : 'complete') : 'running';
+        $status = $complete
+            ? ($failed > 0 ? 'partial' : 'complete')
+            : 'running';
     } catch (Throwable $exception) {
-        admin_storage_refresh_log_failure('database', $exception, $state['diagnostics']['run_id'] ?? '');
+        admin_storage_refresh_log_failure(
+            'database',
+            $exception,
+            $state['diagnostics']['run_id'] ?? '',
+        );
         $processed = $processedBefore;
         $total = max($processedBefore, (int) ($state['database_total'] ?? 0));
         $failed = $failedBefore + 1;
@@ -336,13 +431,25 @@ function admin_storage_refresh_step_database(array $state): array
     $state['database_processed'] = $processed;
     $state['database_total'] = $total;
     $state['database_failed'] = $failed;
-    $state['stages'][1] = admin_storage_refresh_stage('database', $status, $processed, $total, $failed);
+    $state['stages'][1] = admin_storage_refresh_stage(
+        'database',
+        $status,
+        $processed,
+        $total,
+        $failed,
+    );
     if ($status !== 'running') {
         if (isset($batch)) {
             admin_storage_refresh_log_database_completion($total, $failed);
         }
         $state['phase'] = 'inspection';
-        $state['stages'][2] = admin_storage_refresh_stage('inspection', 'running', 0, 1, 0);
+        $state['stages'][2] = admin_storage_refresh_stage(
+            'inspection',
+            'running',
+            0,
+            1,
+            0,
+        );
     }
     return $state;
 }
@@ -356,27 +463,58 @@ function admin_storage_refresh_step_database(array $state): array
 function admin_storage_refresh_step_inspection(array $state): array
 {
     try {
-        $report = admin_storage_refresh_measure($state, 'inspection',
-            static fn(): array => database_maintenance_inspect());
+        $report = admin_storage_refresh_measure(
+            $state,
+            'inspection',
+            static fn(): array => database_maintenance_inspect(),
+        );
         // Existing report counts describe source reads without rereading files.
         $state['diagnostics']['inspection'] = [
-            'tables' => max(0, (int) ($report['inventory']['table_count'] ?? 0)),
-            'migration_sources_read' => max(0, (int) ($report['migration_audit']['migration_count'] ?? 0)),
-            'code_sources_read' => max(0, (int) ($report['code_audit']['file_count'] ?? 0)),
-            'cleanup_rules_checked' => count($report['cleanup_candidates'] ?? []),
+            'tables' => max(
+                0,
+                (int) ($report['inventory']['table_count'] ?? 0),
+            ),
+            'migration_sources_read' => max(
+                0,
+                (int) ($report['migration_audit']['migration_count'] ?? 0),
+            ),
+            'code_sources_read' => max(
+                0,
+                (int) ($report['code_audit']['file_count'] ?? 0),
+            ),
+            'cleanup_rules_checked' => count(
+                $report['cleanup_candidates'] ?? [],
+            ),
             'cleanup_candidates' => array_sum(array_map(
-                static fn(array $candidate): int => max(0, (int) ($candidate['candidate_count'] ?? 0)),
-                $report['cleanup_candidates'] ?? []
+                static fn(array $candidate): int => max(
+                    0,
+                    (int) ($candidate['candidate_count'] ?? 0),
+                ),
+                $report['cleanup_candidates'] ?? [],
             )),
             'legacy_findings' => count($report['legacy_schema_findings'] ?? []),
         ];
         $status = !empty($report['ok']) ? 'complete' : 'failed';
     } catch (Throwable $exception) {
-        admin_storage_refresh_log_failure('inspection', $exception, $state['diagnostics']['run_id'] ?? '');
+        admin_storage_refresh_log_failure(
+            'inspection',
+            $exception,
+            $state['diagnostics']['run_id'] ?? '',
+        );
         $status = 'failed';
     }
-    $state['stages'][2] = admin_storage_refresh_stage('inspection', $status, 1, 1, $status === 'failed' ? 1 : 0);
-    $hasFailures = array_filter((array) $state['stages'], static fn (array $stage): bool => in_array((string) ($stage['status'] ?? ''), ['partial', 'failed'], true)) !== [];
+    $state['stages'][2] = admin_storage_refresh_stage(
+        'inspection',
+        $status,
+        1,
+        1,
+        $status === 'failed' ? 1 : 0,
+    );
+    $hasFailures = array_filter((array) $state['stages'], static fn(array $stage): bool => in_array(
+        (string) ($stage['status'] ?? ''),
+        ['partial', 'failed'],
+        true,
+    )) !== [];
     $state['workflow_status'] = $hasFailures ? 'partial' : 'complete';
     $state['phase'] = 'complete';
     return $state;
@@ -401,7 +539,9 @@ function admin_storage_refresh_payload(array $state): array
     }
     $phaseProcessed = max(0, (int) ($current['processed'] ?? 0));
     $phaseTotal = max(0, (int) ($current['total'] ?? 0));
-    $phasePercent = $phaseTotal > 0 ? min(100.0, round(($phaseProcessed / $phaseTotal) * 100, 1)) : 0.0;
+    $phasePercent = $phaseTotal > 0
+        ? min(100.0, round(($phaseProcessed / $phaseTotal) * 100, 1))
+        : 0.0;
     if ($phase === 'complete') {
         $phasePercent = 100.0;
         $phaseProcessed = 1;
@@ -410,14 +550,51 @@ function admin_storage_refresh_payload(array $state): array
     $fileStage = $stages[0] ?? [];
     $databaseStage = $stages[1] ?? [];
     $filePercent = (int) ($fileStage['total'] ?? 0) > 0
-        ? min(100.0, ((int) ($fileStage['processed'] ?? 0) / (int) $fileStage['total']) * 100)
-        : (in_array((string) ($fileStage['status'] ?? ''), ['complete', 'partial', 'failed'], true) ? 100.0 : 0.0);
+        ? min(
+            100.0,
+            ((int) ($fileStage['processed'] ?? 0) / (int) $fileStage['total'])
+                * 100,
+        )
+        : (
+            in_array(
+                (string) ($fileStage['status'] ?? ''),
+                ['complete', 'partial', 'failed'],
+                true,
+            )
+                    ? 100.0
+                    : 0.0
+        );
     $databasePercent = (int) ($databaseStage['total'] ?? 0) > 0
-        ? min(100.0, ((int) ($databaseStage['processed'] ?? 0) / (int) $databaseStage['total']) * 100)
-        : (in_array((string) ($databaseStage['status'] ?? ''), ['complete', 'partial', 'failed'], true) ? 100.0 : 0.0);
-    $overall = min(100.0, ($filePercent * ADMIN_STORAGE_REFRESH_FILE_WEIGHT / 100)
-        + ($databasePercent * ADMIN_STORAGE_REFRESH_DATABASE_WEIGHT / 100)
-        + (in_array((string) (($stages[2]['status'] ?? '')), ['complete', 'failed'], true) ? 20.0 : 0.0));
+        ? min(
+            100.0,
+            (
+                (int) ($databaseStage['processed'] ?? 0)
+                / (int) $databaseStage['total']
+            ) * 100,
+        )
+        : (
+            in_array(
+                (string) ($databaseStage['status'] ?? ''),
+                ['complete', 'partial', 'failed'],
+                true,
+            )
+                    ? 100.0
+                    : 0.0
+        );
+    $overall = min(
+        100.0,
+        (($filePercent * ADMIN_STORAGE_REFRESH_FILE_WEIGHT) / 100)
+            + (($databasePercent * ADMIN_STORAGE_REFRESH_DATABASE_WEIGHT) / 100)
+            + (
+                in_array(
+                    (string) ($stages[2]['status'] ?? ''),
+                    ['complete', 'failed'],
+                    true,
+                )
+                    ? 20.0
+                    : 0.0
+            ),
+    );
     if ($phase === 'complete') {
         $overall = 100.0;
     }
@@ -458,14 +635,19 @@ function admin_storage_refresh_error_payload(string $workflowId = ''): array
 {
     return [
         'ok' => false,
-        'workflow_id' => preg_match('/^[a-f0-9]{32}$/D', $workflowId) ? $workflowId : '',
+        'workflow_id' => preg_match('/^[a-f0-9]{32}$/D', $workflowId)
+            ? $workflowId
+            : '',
         'workflow_status' => 'error',
         'phase' => 'complete',
         'processed' => 0,
         'total' => 0,
         'phase_percent' => 0.0,
         'overall_percent' => 0.0,
-        'message' => t('admin.storage.refresh_all.status.error', 'The update could not be started.'),
+        'message' => t(
+            'admin.storage.refresh_all.status.error',
+            'The update could not be started.',
+        ),
         'stages' => [],
     ];
 }
@@ -480,8 +662,13 @@ function admin_storage_refresh_error_payload(string $workflowId = ''): array
  * @param int $failed Failed work units.
  * @return array<string, mixed> Normalized stage record.
  */
-function admin_storage_refresh_stage(string $phase, string $status, int $processed, int $total, int $failed): array
-{
+function admin_storage_refresh_stage(
+    string $phase,
+    string $status,
+    int $processed,
+    int $total,
+    int $failed,
+): array {
     return [
         'phase' => $phase,
         'status' => $status,
@@ -502,7 +689,11 @@ function admin_storage_refresh_with_lock(callable $operation): array
     // Diagnostics belong to explicit workflow execution, not cached Admin views.
     require_once __DIR__ . '/admin_storage_refresh/diagnostics.php';
     $directory = admin_storage_refresh_job_directory();
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
         return admin_storage_refresh_error_payload();
     }
     $handle = @fopen($directory . DIRECTORY_SEPARATOR . 'workflow.lock', 'c');
@@ -533,7 +724,13 @@ function admin_storage_refresh_job_directory(): string
     if (defined('ADMIN_STORAGE_REFRESH_TEST_CACHE_DIR')) {
         return (string) constant('ADMIN_STORAGE_REFRESH_TEST_CACHE_DIR');
     }
-    return dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'admin-storage-refresh';
+    return (
+        dirname(__DIR__, 2)
+            . DIRECTORY_SEPARATOR
+            . 'cache'
+            . DIRECTORY_SEPARATOR
+            . 'admin-storage-refresh'
+    );
 }
 
 /**
@@ -543,8 +740,14 @@ function admin_storage_refresh_job_directory(): string
  */
 function admin_storage_refresh_read_state(): ?array
 {
-    $path = admin_storage_refresh_job_directory() . DIRECTORY_SEPARATOR . 'workflow.json';
-    if (!is_file($path) || (int) @filemtime($path) < time() - ADMIN_STORAGE_REFRESH_JOB_TTL) {
+    $path =
+        admin_storage_refresh_job_directory()
+        . DIRECTORY_SEPARATOR
+        . 'workflow.json';
+    if (
+        !is_file($path)
+        || (int) @filemtime($path) < (time() - ADMIN_STORAGE_REFRESH_JOB_TTL)
+    ) {
         return null;
     }
     $json = @file_get_contents($path);
@@ -560,13 +763,24 @@ function admin_storage_refresh_read_state(): ?array
  */
 function admin_storage_refresh_write_state(array $state): void
 {
-    $json = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode(
+        $state,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($json)) {
-        throw new RuntimeException('Storage refresh state could not be encoded.');
+        throw new RuntimeException(
+            'Storage refresh state could not be encoded.',
+        );
     }
-    $path = admin_storage_refresh_job_directory() . DIRECTORY_SEPARATOR . 'workflow.json';
+    $path =
+        admin_storage_refresh_job_directory()
+        . DIRECTORY_SEPARATOR
+        . 'workflow.json';
     $temporary = $path . '.' . bin2hex(random_bytes(6)) . '.tmp';
-    if (@file_put_contents($temporary, $json . "\n", LOCK_EX) === false || !@rename($temporary, $path)) {
+    if (
+        @file_put_contents($temporary, $json . "\n", LOCK_EX) === false
+        || !@rename($temporary, $path)
+    ) {
         @unlink($temporary);
         throw new RuntimeException('Storage refresh state could not be saved.');
     }
@@ -580,15 +794,24 @@ function admin_storage_refresh_write_state(array $state): void
  * @param string $runId Non-authorizing correlation identity; empty when unknown.
  * @return void Writes one bounded diagnostic event when logging is available.
  */
-function admin_storage_refresh_log_failure(string $phase, Throwable $exception, string $runId = ''): void
-{
+function admin_storage_refresh_log_failure(
+    string $phase,
+    Throwable $exception,
+    string $runId = '',
+): void {
     if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
         try {
-            admin_log_event('error', 'storage.refresh_all_stage_failed', 'An Admin storage refresh stage failed.', [
-                'phase' => $phase,
-                'exception_class' => $exception::class,
-                'run_id' => $runId,
-            ], ['category' => 'database', 'severity' => 'error']);
+            admin_log_event(
+                'error',
+                'storage.refresh_all_stage_failed',
+                'An Admin storage refresh stage failed.',
+                [
+                    'phase' => $phase,
+                    'exception_class' => $exception::class,
+                    'run_id' => $runId,
+                ],
+                ['category' => 'database', 'severity' => 'error'],
+            );
         } catch (Throwable) {
             // Diagnostics must not change the persisted workflow result.
         }
@@ -602,14 +825,25 @@ function admin_storage_refresh_log_failure(string $phase, Throwable $exception, 
  * @param int $failedCount Number of table analyses that failed.
  * @return void Writes one summary event when logging is available.
  */
-function admin_storage_refresh_log_database_completion(int $tableCount, int $failedCount): void
-{
+function admin_storage_refresh_log_database_completion(
+    int $tableCount,
+    int $failedCount,
+): void {
     if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
         try {
-            admin_log_event('info', 'database_usage.recomputed', 'Admin recomputed database table statistics.', [
-                'table_count' => max(0, $tableCount),
-                'failed_table_count' => max(0, $failedCount),
-            ], ['category' => 'database', 'severity' => $failedCount > 0 ? 'warning' : 'notice']);
+            admin_log_event(
+                'info',
+                'database_usage.recomputed',
+                'Admin recomputed database table statistics.',
+                [
+                    'table_count' => max(0, $tableCount),
+                    'failed_table_count' => max(0, $failedCount),
+                ],
+                [
+                    'category' => 'database',
+                    'severity' => $failedCount > 0 ? 'warning' : 'notice',
+                ],
+            );
         } catch (Throwable) {
             // Logging must not change the persisted workflow result.
         }

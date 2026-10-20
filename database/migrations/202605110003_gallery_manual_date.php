@@ -33,6 +33,6 @@
  */
 
 return [
-    "ALTER TABLE galleries ADD COLUMN gallery_date DATE NULL DEFAULT NULL AFTER description",
-    "ALTER TABLE galleries ADD KEY galleries_gallery_date_index (gallery_date)",
+    'ALTER TABLE galleries ADD COLUMN gallery_date DATE NULL DEFAULT NULL AFTER description',
+    'ALTER TABLE galleries ADD KEY galleries_gallery_date_index (gallery_date)',
 ];

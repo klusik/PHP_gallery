@@ -70,7 +70,10 @@ function viewer_collection_positive_id(mixed $value): int
     if (is_int($value)) {
         return $value > 0 ? $value : 0;
     }
-    if (!is_string($value) || preg_match('/^[1-9][0-9]{0,18}$/D', $value) !== 1) {
+    if (
+        !is_string($value)
+        || preg_match('/^[1-9][0-9]{0,18}$/D', $value) !== 1
+    ) {
         return 0;
     }
     $parsed = filter_var($value, FILTER_VALIDATE_INT, [
@@ -109,7 +112,8 @@ function viewer_collection_create_nonce_consume(string $candidate): bool
     foreach ($existing as $index => $nonce) {
         if (is_string($nonce) && hash_equals($nonce, $candidate)) {
             unset($existing[$index]);
-            $_SESSION['viewer_collection_create_nonces'] = array_values($existing);
+            $_SESSION['viewer_collection_create_nonces'] =
+                array_values($existing);
             return true;
         }
     }
@@ -124,7 +128,10 @@ function viewer_collection_create_nonce_consume(string $candidate): bool
 function viewer_collection_require_viewer(): ?array
 {
     viewer_http_no_store();
-    if (!viewer_http_auth_available() || !viewer_collections_storage_available()) {
+    if (
+        !viewer_http_auth_available()
+        || !viewer_collections_storage_available()
+    ) {
         viewer_render_unavailable();
         return null;
     }
@@ -146,9 +153,15 @@ function viewer_collection_render_not_found(): void
 
 /**
  * Render one small error panel for an authenticated collection workflow.
+ *
+ * @param string $message Localized error shown to the viewer.
+ * @param int $status HTTP response status for the error panel.
+ * @return void Set the response status and render the error panel.
  */
-function viewer_collection_render_error(string $message, int $status = 400): void
-{
+function viewer_collection_render_error(
+    string $message,
+    int $status = 400,
+): void {
     viewer_http_no_store();
     http_response_code($status);
     \Gallery\Views\view_render_viewer_collection_error([
@@ -168,8 +181,11 @@ function viewer_collection_render_error(string $message, int $status = 400): voi
  * @param string $className Optional presentation class.
  * @return string HTML markup.
  */
-function render_viewer_collection_add_control_html(int $imageId, array $collections, string $className = ''): string
-{
+function render_viewer_collection_add_control_html(
+    int $imageId,
+    array $collections,
+    string $className = '',
+): string {
     if ($imageId <= 0) {
         return '';
     }
@@ -195,19 +211,25 @@ function render_viewer_collection_add_control_html(int $imageId, array $collecti
         'csrf_token' => viewer_csrf_token(),
     ]);
 }
+
 /**
  * Resolve one owned collection's current renderable item state without exposing denied metadata.
  *
  * @param int $viewerAccountId Authenticated viewer account identifier.
  * @param int $collectionId Owned collection identifier.
- * @return array{references:array,visible:array,visible_ids:array<int,int>,hidden_count:int}
+ * @return array{references:list<array{image_id:int,position:int,created_at:string}>,visible:list<array{image:array<string,mixed>,gallery:array<string,mixed>}>,visible_ids:list<int>,hidden_count:int} Current references, authorized image/gallery pairs, their ids, and hidden-reference count.
  */
-function viewer_collection_visible_state(int $viewerAccountId, int $collectionId): array
-{
-    $references = viewer_collection_item_references($viewerAccountId, $collectionId);
+function viewer_collection_visible_state(
+    int $viewerAccountId,
+    int $collectionId,
+): array {
+    $references = viewer_collection_item_references(
+        $viewerAccountId,
+        $collectionId,
+    );
     $authorizedById = viewer_source_images_resolve_authorized(array_map(
-        static fn (array $row): int => (int) $row['image_id'],
-        $references
+        static fn(array $row): int => (int) $row['image_id'],
+        $references,
     ));
     $visible = [];
     foreach ($references as $reference) {
@@ -219,7 +241,10 @@ function viewer_collection_visible_state(int $viewerAccountId, int $collectionId
     return [
         'references' => $references,
         'visible' => $visible,
-        'visible_ids' => array_map(static fn (array $resolved): int => (int) $resolved['image']['id'], $visible),
+        'visible_ids' => array_map(
+            static fn(array $resolved): int => (int) $resolved['image']['id'],
+            $visible,
+        ),
         'hidden_count' => max(0, count($references) - count($visible)),
     ];
 }
@@ -230,24 +255,50 @@ function viewer_collection_visible_state(int $viewerAccountId, int $collectionId
  * @param int $collectionId Owned collection identifier.
  * @param int $imageId Current visible image identifier.
  * @param string $direction Either up or down.
+ * @param string $label Accessible action label.
+ * @param string $className CSS class for the form.
+ * @return void Render the prepared reorder form.
  */
-function viewer_collection_render_reorder_form(int $collectionId, int $imageId, string $direction, string $label, string $className): void
-{
+function viewer_collection_render_reorder_form(
+    int $collectionId,
+    int $imageId,
+    string $direction,
+    string $label,
+    string $className,
+): void {
     \Gallery\Views\view_render_viewer_collection_reorder_form(
-        viewer_collection_reorder_view_model($collectionId, $imageId, $direction, $label, $className)
+        viewer_collection_reorder_view_model(
+            $collectionId,
+            $imageId,
+            $direction,
+            $label,
+            $className,
+        ),
     );
 }
 
 /**
  * Build one bounded move-up/down form view model.
  *
- * @return array<string,mixed> Controller-prepared reorder form state.
+ * @param int $collectionId Owned collection identifier.
+ * @param int $imageId Current visible image identifier.
+ * @param string $direction Either up or down.
+ * @param string $label Accessible action label.
+ * @param string $className CSS class for the form.
+ * @return array{class_name:string,action_url:string,csrf_token:string,image_id:int,direction:string,label:string} Controller-prepared reorder form state.
  */
-function viewer_collection_reorder_view_model(int $collectionId, int $imageId, string $direction, string $label, string $className): array
-{
+function viewer_collection_reorder_view_model(
+    int $collectionId,
+    int $imageId,
+    string $direction,
+    string $label,
+    string $className,
+): array {
     return [
         'class_name' => $className,
-        'action_url' => url_for('viewer_collection_reorder', ['collection_id' => $collectionId]),
+        'action_url' => url_for('viewer_collection_reorder', [
+            'collection_id' => $collectionId,
+        ]),
         'csrf_token' => viewer_csrf_token(),
         'image_id' => $imageId,
         'direction' => $direction,
@@ -269,6 +320,8 @@ function viewer_collection_capture_html(callable $renderer): string
 
 /**
  * Render/list private collections and accept collection creation.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collections(): void
 {
@@ -283,21 +336,49 @@ function cms_viewer_collections(): void
         if (!viewer_verify_csrf_or_render_error()) {
             return;
         }
-        if (!viewer_collection_create_nonce_consume((string) ($_POST['collection_form_nonce'] ?? ''))) {
-            viewer_collection_render_error(t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'), 400);
+        if (!viewer_collection_create_nonce_consume(
+            (string) ($_POST['collection_form_nonce'] ?? ''),
+        )) {
+            viewer_collection_render_error(
+                t(
+                    'viewer.common.invalid_request_message',
+                    'The request could not be verified. Please reopen the page and try again.',
+                ),
+                400,
+            );
             return;
         }
-        $result = viewer_collection_create($viewer, (string) ($_POST['title'] ?? ''));
+        $result = viewer_collection_create(
+            $viewer,
+            (string) ($_POST['title'] ?? ''),
+        );
         if (!empty($result['ok'])) {
-            redirect_to(url_for('viewer_collection', ['collection_id' => (int) $result['collection_id']]));
+            redirect_to(url_for('viewer_collection', [
+                'collection_id' => (int) $result['collection_id'],
+            ]));
         }
         $reason = (string) ($result['reason'] ?? 'unavailable');
         $error = match ($reason) {
-            'invalid_title' => t('viewer.collections.invalid_title', 'Enter a plain-text collection title of at most 120 characters.'),
-            'quota' => t('viewer.collections.collection_quota_reached', 'Your collection limit has been reached.'),
-            'rate_limited' => t('viewer.collections.rate_limited', 'Too many collections were created recently. Please try again later.'),
-            'account_unavailable' => t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'),
-            default => t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'),
+            'invalid_title' => t(
+                'viewer.collections.invalid_title',
+                'Enter a plain-text collection title of at most 120 characters.',
+            ),
+            'quota' => t(
+                'viewer.collections.collection_quota_reached',
+                'Your collection limit has been reached.',
+            ),
+            'rate_limited' => t(
+                'viewer.collections.rate_limited',
+                'Too many collections were created recently. Please try again later.',
+            ),
+            'account_unavailable' => t(
+                'viewer.collections.unavailable',
+                'Collections are temporarily unavailable.',
+            ),
+            default => t(
+                'viewer.collections.unavailable',
+                'Collections are temporarily unavailable.',
+            ),
         };
     } elseif (request_method() !== 'GET') {
         viewer_collection_render_not_found();
@@ -316,9 +397,15 @@ function cms_viewer_collections(): void
             'id' => $collectionId,
             'title' => (string) $collection['title'],
             'item_count' => (int) $collection['item_count'],
-            'open_url' => url_for('viewer_collection', ['collection_id' => $collectionId]),
-            'rename_url' => url_for('viewer_collection_rename', ['collection_id' => $collectionId]),
-            'delete_url' => url_for('viewer_collection_delete', ['collection_id' => $collectionId]),
+            'open_url' => url_for('viewer_collection', [
+                'collection_id' => $collectionId,
+            ]),
+            'rename_url' => url_for('viewer_collection_rename', [
+                'collection_id' => $collectionId,
+            ]),
+            'delete_url' => url_for('viewer_collection_delete', [
+                'collection_id' => $collectionId,
+            ]),
         ];
     }
 
@@ -330,13 +417,16 @@ function cms_viewer_collections(): void
         'csrf_token' => $csrfToken,
         'nonce' => $nonce,
         'collection_count' => count($collections),
-        'collection_limit' => (int) $quota['max_viewer_collections_per_account'],
+        'collection_limit' =>
+            (int) $quota['max_viewer_collections_per_account'],
         'collections' => $collectionRows,
     ]);
 }
 
 /**
  * Render one owned private collection with live source authorization for every stored reference.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collection(): void
 {
@@ -348,18 +438,26 @@ function cms_viewer_collection(): void
         viewer_collection_render_not_found();
         return;
     }
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
     if ($collectionId <= 0) {
         viewer_collection_render_not_found();
         return;
     }
-    $collection = viewer_collection_owned_get((int) $viewer['id'], $collectionId);
+    $collection = viewer_collection_owned_get(
+        (int) $viewer['id'],
+        $collectionId,
+    );
     if ($collection === null) {
         viewer_collection_render_not_found();
         return;
     }
 
-    $state = viewer_collection_visible_state((int) $viewer['id'], $collectionId);
+    $state = viewer_collection_visible_state(
+        (int) $viewer['id'],
+        $collectionId,
+    );
     $references = $state['references'];
     $visible = $state['visible'];
     $visibleIds = $state['visible_ids'];
@@ -367,13 +465,23 @@ function cms_viewer_collection(): void
 
     $csrfToken = viewer_csrf_token();
     $shareOwnerHtml = '';
-    if (function_exists(__NAMESPACE__ . '\\render_viewer_collection_share_owner_section')) {
-        $shareOwnerHtml = viewer_collection_capture_html(static function () use ($viewer, $collectionId): void {
-            render_viewer_collection_share_owner_section($viewer, $collectionId);
+    if (function_exists(__NAMESPACE__
+        . '\\render_viewer_collection_share_owner_section')) {
+        $shareOwnerHtml = viewer_collection_capture_html(static function () use (
+            $viewer,
+            $collectionId,
+        ): void {
+            render_viewer_collection_share_owner_section(
+                $viewer,
+                $collectionId,
+            );
         });
     }
 
-    $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
+    $candidateSizes = array_values(array_filter(
+        thumbnail_sizes(),
+        static fn(int $size): bool => $size <= 960,
+    ));
     if ($candidateSizes === []) {
         $candidateSizes = [300];
     }
@@ -393,14 +501,26 @@ function cms_viewer_collection(): void
                 '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw',
                 image_alt_text($image, $gallery, $index + 1),
                 $index,
-                $bundle
+                $bundle,
             ),
             'title' => public_image_display_title($image, $gallery),
             'move_up' => $index > 0
-                ? viewer_collection_reorder_view_model($collectionId, $imageId, 'up', t('viewer.collections.move_up', 'Move up'), 'viewer-collection-order-form')
+                ? viewer_collection_reorder_view_model(
+                    $collectionId,
+                    $imageId,
+                    'up',
+                    t('viewer.collections.move_up', 'Move up'),
+                    'viewer-collection-order-form',
+                )
                 : null,
-            'move_down' => $index < count($visibleIds) - 1
-                ? viewer_collection_reorder_view_model($collectionId, $imageId, 'down', t('viewer.collections.move_down', 'Move down'), 'viewer-collection-order-form')
+            'move_down' => $index < (count($visibleIds) - 1)
+                ? viewer_collection_reorder_view_model(
+                    $collectionId,
+                    $imageId,
+                    'down',
+                    t('viewer.collections.move_down', 'Move down'),
+                    'viewer-collection-order-form',
+                )
                 : null,
         ];
     }
@@ -408,14 +528,23 @@ function cms_viewer_collection(): void
     \Gallery\Views\view_render_viewer_collection_detail([
         'title' => (string) $collection['title'],
         'back_url' => url_for('viewer_collections'),
-        'rename_url' => url_for('viewer_collection_rename', ['collection_id' => $collectionId]),
-        'delete_url' => url_for('viewer_collection_delete', ['collection_id' => $collectionId]),
-        'remove_url' => url_for('viewer_collection_item_remove', ['collection_id' => $collectionId]),
+        'rename_url' => url_for('viewer_collection_rename', [
+            'collection_id' => $collectionId,
+        ]),
+        'delete_url' => url_for('viewer_collection_delete', [
+            'collection_id' => $collectionId,
+        ]),
+        'remove_url' => url_for('viewer_collection_item_remove', [
+            'collection_id' => $collectionId,
+        ]),
         'csrf_token' => $csrfToken,
         'share_owner_html' => $shareOwnerHtml,
         'cards' => $cards,
         'empty_message' => count($references) > 0
-            ? t('viewer.collections.none_accessible', 'No items in this collection are currently accessible.')
+            ? t(
+                'viewer.collections.none_accessible',
+                'No items in this collection are currently accessible.',
+            )
             : t('viewer.collections.no_items', 'This collection is empty.'),
         'hidden_count' => $hiddenCount,
     ]);
@@ -423,49 +552,85 @@ function cms_viewer_collection(): void
 
 /**
  * Rename one owned private collection.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collection_rename(): void
 {
     $viewer = viewer_collection_require_viewer();
-    if ($viewer === null) return;
+    if ($viewer === null)
+        return;
     if (request_method() !== 'POST') {
         viewer_collection_render_not_found();
         return;
     }
-    if (!viewer_verify_csrf_or_render_error()) return;
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
+    if (!viewer_verify_csrf_or_render_error())
+        return;
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
     if ($collectionId <= 0) {
         viewer_collection_render_not_found();
         return;
     }
-    $result = viewer_collection_rename($viewer, $collectionId, (string) ($_POST['title'] ?? ''));
+    $result = viewer_collection_rename(
+        $viewer,
+        $collectionId,
+        (string) ($_POST['title'] ?? ''),
+    );
     if (!empty($result['ok'])) {
-        redirect_to(url_for('viewer_collection', ['collection_id' => $collectionId]));
+        redirect_to(url_for('viewer_collection', [
+            'collection_id' => $collectionId,
+        ]));
     }
     if (($result['reason'] ?? '') === 'not_found') {
         viewer_collection_render_not_found();
         return;
     }
-    viewer_collection_render_error(($result['reason'] ?? '') === 'invalid_title'
-        ? t('viewer.collections.invalid_title', 'Enter a plain-text collection title of at most 120 characters.')
-        : t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'), 400);
+    viewer_collection_render_error(
+        ($result['reason'] ?? '') === 'invalid_title'
+            ? t(
+                'viewer.collections.invalid_title',
+                'Enter a plain-text collection title of at most 120 characters.',
+            )
+            : t(
+                'viewer.collections.unavailable',
+                'Collections are temporarily unavailable.',
+            ),
+        400,
+    );
 }
 
 /**
  * Delete one owned private collection without deleting source media or favourites.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collection_delete(): void
 {
     $viewer = viewer_collection_require_viewer();
-    if ($viewer === null) return;
+    if ($viewer === null)
+        return;
     if (request_method() !== 'POST') {
         viewer_collection_render_not_found();
         return;
     }
-    if (!viewer_verify_csrf_or_render_error()) return;
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
-    if ($collectionId <= 0 || (string) ($_POST['confirm_delete_collection'] ?? '') !== '1') {
-        viewer_collection_render_error(t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'), 400);
+    if (!viewer_verify_csrf_or_render_error())
+        return;
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
+    if (
+        $collectionId <= 0
+        || (string) ($_POST['confirm_delete_collection'] ?? '') !== '1'
+    ) {
+        viewer_collection_render_error(
+            t(
+                'viewer.common.invalid_request_message',
+                'The request could not be verified. Please reopen the page and try again.',
+            ),
+            400,
+        );
         return;
     }
     $result = viewer_collection_delete($viewer, $collectionId);
@@ -476,30 +641,50 @@ function cms_viewer_collection_delete(): void
         viewer_collection_render_not_found();
         return;
     }
-    viewer_collection_render_error(t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'), 503);
+    viewer_collection_render_error(
+        t(
+            'viewer.collections.unavailable',
+            'Collections are temporarily unavailable.',
+        ),
+        503,
+    );
 }
 
 /**
  * Add one currently authorized source image reference to one owned collection.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collection_item_add(): void
 {
     $viewer = viewer_collection_require_viewer();
-    if ($viewer === null) return;
+    if ($viewer === null)
+        return;
     if (request_method() !== 'POST') {
         viewer_collection_render_not_found();
         return;
     }
-    if (!viewer_verify_csrf_or_render_error()) return;
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? ($_POST['collection_id'] ?? null));
+    if (!viewer_verify_csrf_or_render_error())
+        return;
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? $_POST['collection_id'] ?? null,
+    );
     $imageId = viewer_collection_positive_id($_POST['image_id'] ?? null);
     if ($collectionId <= 0 || $imageId <= 0) {
-        viewer_collection_render_error(t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'), 400);
+        viewer_collection_render_error(
+            t(
+                'viewer.common.invalid_request_message',
+                'The request could not be verified. Please reopen the page and try again.',
+            ),
+            400,
+        );
         return;
     }
     $result = viewer_collection_item_add($viewer, $collectionId, $imageId);
     if (!empty($result['ok'])) {
-        redirect_to(url_for('viewer_collection', ['collection_id' => $collectionId]));
+        redirect_to(url_for('viewer_collection', [
+            'collection_id' => $collectionId,
+        ]));
     }
     if (($result['reason'] ?? '') === 'not_found') {
         viewer_collection_render_not_found();
@@ -507,99 +692,197 @@ function cms_viewer_collection_item_add(): void
     }
     $reason = (string) ($result['reason'] ?? 'unavailable');
     $message = match ($reason) {
-        'source_forbidden' => t('viewer.collections.source_unavailable', 'This photo is not currently available to your viewer session.'),
-        'quota' => t('viewer.collections.item_quota_reached', 'This collection has reached its item limit.'),
-        default => t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'),
+        'source_forbidden' => t(
+            'viewer.collections.source_unavailable',
+            'This photo is not currently available to your viewer session.',
+        ),
+        'quota' => t(
+            'viewer.collections.item_quota_reached',
+            'This collection has reached its item limit.',
+        ),
+        default => t(
+            'viewer.collections.unavailable',
+            'Collections are temporarily unavailable.',
+        ),
     };
-    viewer_collection_render_error($message, $reason === 'source_forbidden' ? 403 : ($reason === 'quota' ? 409 : 503));
+    viewer_collection_render_error(
+        $message,
+        $reason === 'source_forbidden'
+            ? 403
+            : ($reason === 'quota' ? 409 : 503),
+    );
 }
 
 /**
  * Remove one reference from one owned collection.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collection_item_remove(): void
 {
     $viewer = viewer_collection_require_viewer();
-    if ($viewer === null) return;
+    if ($viewer === null)
+        return;
     if (request_method() !== 'POST') {
         viewer_collection_render_not_found();
         return;
     }
-    if (!viewer_verify_csrf_or_render_error()) return;
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
+    if (!viewer_verify_csrf_or_render_error())
+        return;
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
     $imageId = viewer_collection_positive_id($_POST['image_id'] ?? null);
     if ($collectionId <= 0 || $imageId <= 0) {
-        viewer_collection_render_error(t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'), 400);
+        viewer_collection_render_error(
+            t(
+                'viewer.common.invalid_request_message',
+                'The request could not be verified. Please reopen the page and try again.',
+            ),
+            400,
+        );
         return;
     }
     $result = viewer_collection_item_remove($viewer, $collectionId, $imageId);
     if (!empty($result['ok'])) {
-        redirect_to(url_for('viewer_collection', ['collection_id' => $collectionId]));
+        redirect_to(url_for('viewer_collection', [
+            'collection_id' => $collectionId,
+        ]));
     }
     if (($result['reason'] ?? '') === 'not_found') {
         viewer_collection_render_not_found();
         return;
     }
-    viewer_collection_render_error(t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'), 503);
+    viewer_collection_render_error(
+        t(
+            'viewer.collections.unavailable',
+            'Collections are temporarily unavailable.',
+        ),
+        503,
+    );
 }
 
 /**
  * Transactionally reorder submitted references within one owned collection.
+  *
+ * @return void Render a response or redirect after processing the viewer request.
  */
 function cms_viewer_collection_reorder(): void
 {
     $viewer = viewer_collection_require_viewer();
-    if ($viewer === null) return;
+    if ($viewer === null)
+        return;
     if (request_method() !== 'POST') {
         viewer_collection_render_not_found();
         return;
     }
-    if (!viewer_verify_csrf_or_render_error()) return;
-    $collectionId = viewer_collection_positive_id($_GET['collection_id'] ?? null);
-    $maxItems = (int) viewer_content_quota_config()['max_viewer_items_per_collection'];
+    if (!viewer_verify_csrf_or_render_error())
+        return;
+    $collectionId = viewer_collection_positive_id(
+        $_GET['collection_id'] ?? null,
+    );
+    $maxItems =
+        (int) viewer_content_quota_config()['max_viewer_items_per_collection'];
     if ($collectionId <= 0) {
-        viewer_collection_render_error(t('viewer.collections.invalid_order', 'The submitted collection order is invalid.'), 400);
+        viewer_collection_render_error(
+            t(
+                'viewer.collections.invalid_order',
+                'The submitted collection order is invalid.',
+            ),
+            400,
+        );
         return;
     }
 
     $rawOrder = $_POST['image_ids'] ?? null;
     if (is_array($rawOrder)) {
         if (count($rawOrder) > $maxItems) {
-            viewer_collection_render_error(t('viewer.collections.invalid_order', 'The submitted collection order is invalid.'), 400);
+            viewer_collection_render_error(
+                t(
+                    'viewer.collections.invalid_order',
+                    'The submitted collection order is invalid.',
+                ),
+                400,
+            );
             return;
         }
     } else {
-        $moveImageId = viewer_collection_positive_id($_POST['move_image_id'] ?? null);
+        $moveImageId = viewer_collection_positive_id(
+            $_POST['move_image_id'] ?? null,
+        );
         $direction = (string) ($_POST['move_direction'] ?? '');
         if ($moveImageId <= 0 || !in_array($direction, ['up', 'down'], true)) {
-            viewer_collection_render_error(t('viewer.collections.invalid_order', 'The submitted collection order is invalid.'), 400);
+            viewer_collection_render_error(
+                t(
+                    'viewer.collections.invalid_order',
+                    'The submitted collection order is invalid.',
+                ),
+                400,
+            );
             return;
         }
-        $state = viewer_collection_visible_state((int) $viewer['id'], $collectionId);
+        $state = viewer_collection_visible_state(
+            (int) $viewer['id'],
+            $collectionId,
+        );
         $rawOrder = $state['visible_ids'];
         $index = array_search($moveImageId, $rawOrder, true);
         if ($index === false) {
-            viewer_collection_render_error(t('viewer.collections.invalid_order', 'The submitted collection order is invalid.'), 400);
+            viewer_collection_render_error(
+                t(
+                    'viewer.collections.invalid_order',
+                    'The submitted collection order is invalid.',
+                ),
+                400,
+            );
             return;
         }
         $targetIndex = $direction === 'up' ? $index - 1 : $index + 1;
         if ($targetIndex < 0 || $targetIndex >= count($rawOrder)) {
-            redirect_to(url_for('viewer_collection', ['collection_id' => $collectionId]));
+            redirect_to(url_for('viewer_collection', [
+                'collection_id' => $collectionId,
+            ]));
         }
-        [$rawOrder[$index], $rawOrder[$targetIndex]] = [$rawOrder[$targetIndex], $rawOrder[$index]];
+        [$rawOrder[$index], $rawOrder[$targetIndex]] = [
+            $rawOrder[$targetIndex],
+            $rawOrder[$index],
+        ];
     }
 
     $result = viewer_collection_reorder($viewer, $collectionId, $rawOrder);
     if (!empty($result['ok'])) {
-        redirect_to(url_for('viewer_collection', ['collection_id' => $collectionId]));
+        redirect_to(url_for('viewer_collection', [
+            'collection_id' => $collectionId,
+        ]));
     }
     if (($result['reason'] ?? '') === 'not_found') {
         viewer_collection_render_not_found();
         return;
     }
     $reason = (string) ($result['reason'] ?? 'unavailable');
-    $status = in_array($reason, ['invalid_order', 'duplicate_item', 'foreign_item', 'oversized', 'quota_state_invalid'], true) ? 400 : 503;
-    viewer_collection_render_error($status === 400
-        ? t('viewer.collections.invalid_order', 'The submitted collection order is invalid.')
-        : t('viewer.collections.unavailable', 'Collections are temporarily unavailable.'), $status);
+    $status = in_array(
+        $reason,
+        [
+            'invalid_order',
+            'duplicate_item',
+            'foreign_item',
+            'oversized',
+            'quota_state_invalid',
+        ],
+        true,
+    )
+        ? 400
+        : 503;
+    viewer_collection_render_error(
+        $status === 400
+            ? t(
+                'viewer.collections.invalid_order',
+                'The submitted collection order is invalid.',
+            )
+            : t(
+                'viewer.collections.unavailable',
+                'Collections are temporarily unavailable.',
+            ),
+        $status,
+    );
 }

@@ -115,9 +115,8 @@ function admin_dashboard_gallery_rows(
     bool $pictureGameReady,
     bool $publicPathReady,
     bool $coverAssetReady,
-    bool $editRevisionReady = false
-): array
-{
+    bool $editRevisionReady = false,
+): array {
     return admin_dashboard_model_gallery_rows([
         'access' => $accessReady,
         'gps_map' => $gpsMapReady,
@@ -128,7 +127,9 @@ function admin_dashboard_gallery_rows(
         'public_path' => $publicPathReady,
         'cover_asset' => $coverAssetReady,
         'edit_revision' => $editRevisionReady,
-        'content_localization' => content_localization_enabled() && content_localization_schema_ready('gallery'),
+        'content_localization' =>
+            content_localization_enabled()
+                && content_localization_schema_ready('gallery'),
     ]);
 }
 
@@ -140,7 +141,7 @@ function admin_dashboard_gallery_rows(
 function admin_dashboard_parent_sync_fingerprint(): string
 {
     try {
-        $row = admin_render_profile_db('parent_sync_fingerprint_query', static fn (): array => admin_dashboard_model_parent_sync_fingerprint_row());
+        $row = admin_render_profile_db('parent_sync_fingerprint_query', static fn(): array => admin_dashboard_model_parent_sync_fingerprint_row());
     } catch (Throwable) {
         return '';
     }
@@ -173,8 +174,10 @@ function admin_dashboard_parent_sync_fingerprint(): string
  * @see admin_image_move_pending_health_status()
  * @see admin_mutation_schema_health_statuses()
  */
-function admin_dashboard_view_model(bool $includeMaintenance = false, string $surface = 'complete'): array
-{
+function admin_dashboard_view_model(
+    bool $includeMaintenance = false,
+    string $surface = 'complete',
+): array {
     // Historical callers keep a complete model; navigation opts into the cheap shell.
     $includeGalleries = in_array($surface, ['complete', 'galleries'], true);
     $includeOverview = in_array($surface, ['complete', 'overview'], true);
@@ -187,48 +190,91 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     // $nsfwSchemaStatus retains the established key for compatibility with existing view/tests.
     $nsfwSchemaStatus = $securitySchemaStatuses['nsfw_guard'];
     // $pictureGameEnabled short-circuits optional schema inspection while the effective capability is unavailable.
-    $pictureGameEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_game');
+    $pictureGameEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('picture_game');
     // Variable $pictureGameReady stores this steps working value.
-    $pictureGameReady = $includeGalleries && $pictureGameEnabled && admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready());
+    $pictureGameReady =
+        $includeGalleries
+        && $pictureGameEnabled
+        && admin_render_profile_schema('schema_picture_game', static fn(): bool => picture_game_schema_ready());
     // $gpsMapEnabled short-circuits optional schema inspection while the effective capability is unavailable.
-    $gpsMapEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
+    $gpsMapEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('gallery_maps');
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = ($includeGalleries || $includeMaintenance) && $gpsMapEnabled && admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
+    $gpsMapReady =
+        ($includeGalleries || $includeMaintenance)
+        && $gpsMapEnabled
+        && admin_render_profile_schema('schema_exif_gps', static fn(): bool => exif_gps_schema_ready());
     // $gpsMapOverrideReady stores whether EXIF/GPS display supports inherited per-gallery overrides.
-    $gpsMapOverrideReady = ($includeGalleries || $includeMaintenance) && $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', /**
-     * Resolve inherited GPS override storage for an active gallery or maintenance surface.
-     * @return bool Whether the canonical optional override schema is verified available.
-     */ static fn (): bool => exif_gps_override_schema_ready());
+    $gpsMapOverrideReady =
+        ($includeGalleries || $includeMaintenance)
+        && $gpsMapReady
+        && admin_render_profile_schema('schema_exif_gps_overrides', /**
+         * Resolve inherited GPS override storage for an active gallery or maintenance surface.
+         * @return bool Whether the canonical optional override schema is verified available.
+         */ static fn(): bool => exif_gps_override_schema_ready());
     // $votingEnabled short-circuits optional schema inspection while the effective capability is unavailable.
-    $votingEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('image_voting');
+    $votingEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('image_voting');
     // Variable $votingReady stores this steps working value.
-    $votingReady = $includeGalleries && $votingEnabled && admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready());
+    $votingReady =
+        $includeGalleries
+        && $votingEnabled
+        && admin_render_profile_schema('schema_gallery_voting', static fn(): bool => gallery_voting_schema_ready());
     // Variable $filenameDisplayReady stores this steps working value.
-    $filenameDisplayReady = $includeGalleries && admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
+    $filenameDisplayReady =
+        $includeGalleries
+        && admin_render_profile_schema('schema_filename_display', static fn(): bool => gallery_filename_display_schema_ready());
     // $galleryDateRangeReady stores whether gallery rows can store range end dates.
-    $galleryDateRangeReady = $includeMaintenance && admin_render_profile_schema('schema_gallery_date_ranges', static fn (): bool => gallery_date_range_schema_ready());
+    $galleryDateRangeReady =
+        $includeMaintenance
+        && admin_render_profile_schema('schema_gallery_date_ranges', static fn(): bool => gallery_date_range_schema_ready());
     // Variable $migrationPending stores this steps working value.
-    $migrationPending = admin_render_profile_schema('schema_pending_migrations', static fn (): bool => pending_migrations_exist());
+    $migrationPending = admin_render_profile_schema('schema_pending_migrations', static fn(): bool => pending_migrations_exist());
     // Variable $accessReady stores this steps working value.
-    $accessReady = admin_render_profile_schema('schema_gallery_access', static fn (): bool => gallery_access_schema_ready());
+    $accessReady = admin_render_profile_schema('schema_gallery_access', static fn(): bool => gallery_access_schema_ready());
     // Reuse already resolved mutation health; quick access never adds a revision-column probe.
-    $editRevisionReady = ($mutationSchemaStatuses['mutation_gallery_edit']['state'] ?? 'unknown') === 'available';
+    $editRevisionReady =
+        ($mutationSchemaStatuses['mutation_gallery_edit']['state'] ?? 'unknown')
+        === 'available';
     // $backgroundSourceReady stores whether gallery background source data can be read without optional-column errors.
-    $backgroundSourceReady = $includeGalleries && admin_render_profile_schema('schema_background_source', static fn (): bool => gallery_background_source_schema_ready());
+    $backgroundSourceReady =
+        $includeGalleries
+        && admin_render_profile_schema('schema_background_source', static fn(): bool => gallery_background_source_schema_ready());
     // $publicPathReady stores whether clean public URL paths can be read directly from gallery rows.
-    $publicPathReady = $includeGalleries && admin_render_profile_schema('schema_public_paths', static fn (): bool => public_path_schema_ready());
+    $publicPathReady =
+        $includeGalleries
+        && admin_render_profile_schema('schema_public_paths', static fn(): bool => public_path_schema_ready());
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
-    $coverAssetReady = $includeGalleries && admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
+    $coverAssetReady =
+        $includeGalleries
+        && admin_render_profile_schema('schema_cover_asset', static fn(): bool => gallery_cover_asset_schema_ready());
     // $flightNavdataEnabled short-circuits optional schema inspection while the effective capability is unavailable.
-    $flightNavdataEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('navigation_data');
+    $flightNavdataEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('navigation_data');
     // $flightNavdataReady stores whether route lookup data can be imported and read from the DB.
-    $flightNavdataReady = $includeMaintenance && $flightNavdataEnabled && admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready());
+    $flightNavdataReady =
+        $includeMaintenance
+        && $flightNavdataEnabled
+        && admin_render_profile_schema('schema_flight_navdata', static fn(): bool => flight_map_navdata_schema_ready());
     // $flightNavdataStatus stores maintenance information for the admin navdata card.
-    $flightNavdataStatus = $flightNavdataReady ? admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status()) : [];
+    $flightNavdataStatus = $flightNavdataReady
+        ? admin_render_profile_db('flight_navdata_status', static fn(): array => flight_map_navdata_status()) : [];
     // $exifGpsDefaultEnabled stores the global display default for galleries without explicit overrides.
-    $exifGpsDefaultEnabled = $gpsMapOverrideReady ? exif_gps_default_enabled() : false;
+    $exifGpsDefaultEnabled = $gpsMapOverrideReady
+        ? exif_gps_default_enabled()
+        : false;
     // $exifGpsOverrideCount stores the number of gallery rows with explicit EXIF/GPS overrides.
-    $exifGpsOverrideCount = $gpsMapOverrideReady ? admin_render_profile_db('exif_gps_override_count', static fn (): int => exif_gps_gallery_override_count()) : 0;
+    $exifGpsOverrideCount = $gpsMapOverrideReady
+        ? admin_render_profile_db('exif_gps_override_count', static fn(): int => exif_gps_gallery_override_count()) : 0;
 
     // Dashboard GET requests must remain read-only and bounded. Voting/game
     // synchronization and filesystem-backed parent repair are maintenance
@@ -241,26 +287,57 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     $childrenByParent = [];
     if ($includeGalleries) {
         // Variable $galleries stores this steps working value.
-        $galleries = admin_render_profile_db('dashboard_gallery_rows', /**
-         * Fetch dashboard rows using only the already verified optional column groups.
-         * @return list<array<string,mixed>> Safe inventory with presence flags and available revisions.
-         */ static fn (): array => admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady, $editRevisionReady));
+        $galleries = admin_render_profile_db(
+            'dashboard_gallery_rows',
+            /**
+             * Fetch dashboard rows using only the already verified optional column groups.
+             * @return list<array<string,mixed>> Safe inventory with presence flags and available revisions.
+             */ static fn(): array => admin_dashboard_gallery_rows(
+                $accessReady,
+                $gpsMapReady,
+                $backgroundSourceReady,
+                $filenameDisplayReady,
+                $votingReady,
+                $pictureGameReady,
+                $publicPathReady,
+                $coverAssetReady,
+                $editRevisionReady,
+            ),
+        );
         admin_render_profile_set_counter('gallery_rows', count($galleries));
         // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
-        $galleries = admin_render_profile_span('order_gallery_tree', static fn (): array => admin_ordered_gallery_rows($galleries));
+        $galleries = admin_render_profile_span('order_gallery_tree', static fn(): array => admin_ordered_gallery_rows(
+            $galleries,
+        ));
         $galleries = content_localize_entities('gallery', $galleries);
         $localizedTitles = array_column($galleries, 'title', 'id');
         foreach ($galleries as &$gallery) {
-            $gallery['parent_title'] = $localizedTitles[(int) ($gallery['parent_id'] ?? 0)] ?? $gallery['parent_title'] ?? '';
+            $gallery['parent_title'] =
+                $localizedTitles[(int) ($gallery['parent_id'] ?? 0)]
+                    ?? $gallery['parent_title']
+                    ?? '';
         }
         unset($gallery);
-        admin_render_profile_set_counter('ordered_gallery_rows', count($galleries));
+        admin_render_profile_set_counter(
+            'ordered_gallery_rows',
+            count($galleries),
+        );
         // Variable $collapsedIds stores this steps working value.
-        $collapsedIds = admin_render_profile_setting_read('collapsed_gallery_ids', static fn (): array => array_flip(collapsed_gallery_ids()));
-        admin_render_profile_set_counter('collapsed_gallery_ids', count($collapsedIds));
+        $collapsedIds = admin_render_profile_setting_read('collapsed_gallery_ids', static fn(): array => array_flip(
+            collapsed_gallery_ids(),
+        ));
+        admin_render_profile_set_counter(
+            'collapsed_gallery_ids',
+            count($collapsedIds),
+        );
         // $childrenByParent stores direct child ids once so row rendering does not rescan the full gallery list.
-        $childrenByParent = admin_render_profile_span('gallery_children_index', static fn (): array => admin_gallery_children_by_parent($galleries));
-        admin_render_profile_set_counter('parent_groups', count($childrenByParent));
+        $childrenByParent = admin_render_profile_span('gallery_children_index', static fn(): array => admin_gallery_children_by_parent(
+            $galleries,
+        ));
+        admin_render_profile_set_counter(
+            'parent_groups',
+            count($childrenByParent),
+        );
 
         // Resolve inherited GPS policy against this complete read instead of querying each parent again.
         $galleryRowsById = [];
@@ -272,19 +349,38 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
          * @param int $galleryId Canonical parent gallery identifier.
          * @return array<string,mixed>|null Already fetched ancestor or null for an absent parent.
          */
-        $galleryLookup = static fn (int $galleryId): ?array => $galleryRowsById[$galleryId] ?? null;
+        $galleryLookup = static fn(int $galleryId): ?array => (
+            $galleryRowsById[$galleryId] ?? null
+        );
 
         // Preview URLs may hit cover lookup helpers, so resolve them before handing rows to the view.
         foreach ($galleries as $index => $gallery) {
-            $galleries[$index]['preview_url'] = admin_gallery_preview_url($gallery);
+            $galleries[$index]['preview_url'] =
+                admin_gallery_preview_url($gallery);
             // Presentation-ready domain state keeps policy lookups out of the View layer.
-            $galleries[$index]['view_visibility'] = gallery_effective_visibility($gallery);
-            $galleries[$index]['view_visibility_label'] = gallery_visibility_label($galleries[$index]['view_visibility']);
-            $galleries[$index]['view_gps_map_enabled'] = $gpsMapReady && gallery_effective_gps_map_enabled($gallery, $galleryLookup);
-            $galleries[$index]['view_background_source_set'] = $backgroundSourceReady && gallery_background_source($gallery) !== null;
-            $galleries[$index]['view_own_password_enabled'] = $accessReady && (string) ($gallery['access_mode'] ?? 'normal') === 'password' && !empty($gallery['own_password_set']);
-            $galleries[$index]['view_edit_revision'] = $editRevisionReady && isset($gallery['edit_revision']) ? (int) $gallery['edit_revision'] : null;
-            $galleries[$index]['view_quick_access_ready'] = $accessReady && $editRevisionReady && $galleries[$index]['view_edit_revision'] !== null;
+            $galleries[$index]['view_visibility'] =
+                gallery_effective_visibility($gallery);
+            $galleries[$index]['view_visibility_label'] = gallery_visibility_label(
+                $galleries[$index]['view_visibility'],
+            );
+            $galleries[$index]['view_gps_map_enabled'] =
+                $gpsMapReady
+                && gallery_effective_gps_map_enabled($gallery, $galleryLookup);
+            $galleries[$index]['view_background_source_set'] =
+                $backgroundSourceReady
+                && gallery_background_source($gallery) !== null;
+            $galleries[$index]['view_own_password_enabled'] =
+                $accessReady
+                && (string) ($gallery['access_mode'] ?? 'normal') === 'password'
+                && !empty($gallery['own_password_set']);
+            $galleries[$index]['view_edit_revision'] = $editRevisionReady
+            && isset($gallery['edit_revision'])
+                ? (int) $gallery['edit_revision']
+                : null;
+            $galleries[$index]['view_quick_access_ready'] =
+                $accessReady
+                && $editRevisionReady
+                && $galleries[$index]['view_edit_revision'] !== null;
         }
         $availableFeatures = [];
         foreach ([
@@ -298,33 +394,54 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
                 $availableFeatures[] = $feature;
             }
         }
-        $galleries = admin_dashboard_gallery_subtree_summaries($galleries, $availableFeatures);
+        $galleries = admin_dashboard_gallery_subtree_summaries(
+            $galleries,
+            $availableFeatures,
+        );
     }
 
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
-    $updatePending = admin_render_profile_span('application_update_pending', static fn (): bool => application_update_pending());
+    $updatePending = admin_render_profile_span('application_update_pending', static fn(): bool => application_update_pending());
     // $updateButtonClass stores an intermediate value used by the surrounding gallery workflow.
-    $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
+    $updateButtonClass = $updatePending
+        ? 'button secondary is-update-pending'
+        : 'button secondary';
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
     // $siteMaintenanceStatus stores the persisted cron-safe maintenance state for the media maintenance card.
     $siteMaintenanceStatus = $includeMaintenance
         ? admin_render_profile_setting_read(
             'site_maintenance_status',
-            static fn (): array => function_exists('Gallery\\Services\\site_maintenance_status')
-                ? site_maintenance_status()
-                : []
+            static fn(): array => (
+                function_exists('Gallery\\Services\\site_maintenance_status')
+                    ? site_maintenance_status()
+                    : []
+            ),
         )
         : [];
     // Trash mode affects the always-visible gallery bulk action, so expose its small settings even before deferred Maintenance loads.
-    $galleryTrashEnabled = function_exists('Gallery\Services\gallery_trash_enabled') && gallery_trash_enabled();
-    $galleryTrashAutoPurgeEnabled = function_exists('Gallery\Services\gallery_trash_auto_purge_enabled') && gallery_trash_auto_purge_enabled();
-    $galleryTrashRetentionDays = function_exists('Gallery\Services\gallery_trash_retention_days') ? gallery_trash_retention_days() : 30;
-    $galleryTrashPurgeBatchSize = function_exists('Gallery\Services\gallery_trash_purge_batch_size') ? gallery_trash_purge_batch_size() : 20;
-    $galleryTrashAutoPurgeActive = $galleryTrashEnabled && $galleryTrashAutoPurgeEnabled;
+    $galleryTrashEnabled =
+        function_exists('Gallery\Services\gallery_trash_enabled')
+        && gallery_trash_enabled();
+    $galleryTrashAutoPurgeEnabled =
+        function_exists('Gallery\Services\gallery_trash_auto_purge_enabled')
+        && gallery_trash_auto_purge_enabled();
+    $galleryTrashRetentionDays = function_exists(
+        'Gallery\Services\gallery_trash_retention_days',
+    )
+        ? gallery_trash_retention_days()
+        : 30;
+    $galleryTrashPurgeBatchSize = function_exists(
+        'Gallery\Services\gallery_trash_purge_batch_size',
+    )
+        ? gallery_trash_purge_batch_size()
+        : 20;
+    $galleryTrashAutoPurgeActive =
+        $galleryTrashEnabled && $galleryTrashAutoPurgeEnabled;
     // $galleryTrashSummary stores bounded counters for the Maintenance > Trash badge and panel.
-    $galleryTrashSummary = $includeMaintenance && function_exists('Gallery\\Services\\gallery_trash_summary')
-        ? admin_render_profile_db('gallery_trash_summary', static fn (): array => gallery_trash_summary())
+    $galleryTrashSummary = $includeMaintenance
+    && function_exists('Gallery\\Services\\gallery_trash_summary')
+        ? admin_render_profile_db('gallery_trash_summary', static fn(): array => gallery_trash_summary())
         : [
             'available' => false,
             'count' => 0,
@@ -337,25 +454,39 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
             'bytes' => 0,
         ];
     // $galleryTrashEntries stores active/recoverable/problem rows. Historical restored/purged rows stay out of the dashboard payload.
-    $galleryTrashEntries = $includeMaintenance && !empty($galleryTrashSummary['available']) && function_exists('Gallery\\Services\\gallery_trash_admin_entries')
+    $galleryTrashEntries = $includeMaintenance
+    && !empty($galleryTrashSummary['available'])
+    && function_exists('Gallery\\Services\\gallery_trash_admin_entries')
         ? admin_render_profile_db('gallery_trash_entries', /**
          * Prepare bounded Trash rows with canonical retention and purge policy for the dashboard.
          * @return array<int,array<string,mixed>> Active rows augmented with prepared presentation fields.
-         */ static fn (): array => gallery_trash_admin_entries(['status' => 'active', 'limit' => 200]))
+         */ static fn(): array => gallery_trash_admin_entries([
+            'status' => 'active',
+            'limit' => 200,
+        ]))
         : [];
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
-    admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
-    $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
+    admin_render_profile_set_counter(
+        'thumbnail_maintenance_sample_limit',
+        1000,
+    );
+    $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn(): array => cached_thumbnail_maintenance_summary_if_available(
+        null,
+        1000,
+    ));
     // $lastThumbnailCheck stores an explicit full dry-run result when an admin requested one.
-    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check')
+    $lastThumbnailCheck = function_exists(
+        'Gallery\\Services\\thumbnail_maintenance_last_check',
+    )
         ? admin_render_profile_setting_read(
             'thumbnail_maintenance_last_check',
-            static fn (): array => thumbnail_maintenance_last_check()
+            static fn(): array => thumbnail_maintenance_last_check(),
         )
         : [];
     // $legacyJpgThumbnailInventory is a cheap metadata aggregate. It never mutates thumbnail files.
-    $legacyJpgThumbnailInventory = $includeMaintenance && function_exists('Gallery\Services\thumbnail_legacy_jpg_inventory')
-        ? admin_render_profile_db('legacy_jpg_thumbnail_inventory', static fn (): array => thumbnail_legacy_jpg_inventory())
+    $legacyJpgThumbnailInventory = $includeMaintenance
+    && function_exists('Gallery\Services\thumbnail_legacy_jpg_inventory')
+        ? admin_render_profile_db('legacy_jpg_thumbnail_inventory', static fn(): array => thumbnail_legacy_jpg_inventory())
         : [
             'available' => false,
             'registered_variant_count' => 0,
@@ -366,14 +497,22 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         ];
     if ($lastThumbnailCheck) {
         $thumbnailSummary = [
-            'images_scanned' => (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
-            'images_with_missing' => (int) ($lastThumbnailCheck['images_with_missing'] ?? 0),
-            'missing_variants' => (int) ($lastThumbnailCheck['missing_variants'] ?? 0),
+            'images_scanned' => (int) (
+                $lastThumbnailCheck['images_scanned'] ?? 0
+            ),
+            'images_with_missing' => (int) (
+                $lastThumbnailCheck['images_with_missing'] ?? 0
+            ),
+            'missing_variants' => (int) (
+                $lastThumbnailCheck['missing_variants'] ?? 0
+            ),
             'webp_skipped' => (int) ($lastThumbnailCheck['webp_skipped'] ?? 0),
             'limited' => !empty($lastThumbnailCheck['limited']),
             'deferred' => false,
             'full_check' => true,
-            'inventory_fingerprint' => (string) ($lastThumbnailCheck['inventory_fingerprint'] ?? ''),
+            'inventory_fingerprint' => (string) (
+                $lastThumbnailCheck['inventory_fingerprint'] ?? ''
+            ),
         ];
     }
     // $originalStorageBytes stores the cheap database-only size of imported source files. Generated thumbnails and display derivatives are intentionally not scanned during normal dashboard rendering.
@@ -381,32 +520,44 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         ? admin_dashboard_overview_totals($accessReady)
         : [];
     $originalStorageBytes = $includeOverview && $includeGalleries
-        ? admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes())
+        ? admin_render_profile_db('dashboard_original_storage_bytes', static fn(): int => admin_dashboard_original_storage_bytes())
         : (int) ($overviewTotals['original_bytes'] ?? 0);
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
     $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
     // $databaseUsage stores a cheap information_schema estimate for DB capacity display.
     $databaseUsage = $includeMaintenance
-        && function_exists('Gallery\\Services\\admin_database_usage_summary')
+    && function_exists('Gallery\\Services\\admin_database_usage_summary')
         ? admin_render_profile_db(
             'dashboard_database_usage',
-            static fn (): array => admin_database_usage_summary()
+            static fn(): array => admin_database_usage_summary(),
         )
         : [];
     // $galleryDatabaseUsageBytes stores table-level DB storage for gallery/content metadata.
-    $galleryDatabaseUsageBytes = !empty($databaseUsage['available']) ? max(0, (int) ($databaseUsage['gallery_bytes'] ?? 0)) : 0;
+    $galleryDatabaseUsageBytes = !empty($databaseUsage['available'])
+        ? max(0, (int) ($databaseUsage['gallery_bytes'] ?? 0))
+        : 0;
     // $databaseUsageBytes stores table-level DB storage for the whole app database.
-    $databaseUsageBytes = !empty($databaseUsage['available']) ? max(0, (int) ($databaseUsage['total_bytes'] ?? 0)) : 0;
+    $databaseUsageBytes = !empty($databaseUsage['available'])
+        ? max(0, (int) ($databaseUsage['total_bytes'] ?? 0))
+        : 0;
     // $galleryDatabaseUsageLabel stores a human-readable database storage amount for the dashboard summary card.
-    $galleryDatabaseUsageLabel = !empty($databaseUsage['available']) ? admin_dashboard_format_bytes($galleryDatabaseUsageBytes) : '';
+    $galleryDatabaseUsageLabel = !empty($databaseUsage['available'])
+        ? admin_dashboard_format_bytes($galleryDatabaseUsageBytes)
+        : '';
     // $databaseUsageLabel stores a human-readable database storage amount for all database tables.
-    $databaseUsageLabel = !empty($databaseUsage['available']) ? admin_dashboard_format_bytes($databaseUsageBytes) : '';
+    $databaseUsageLabel = !empty($databaseUsage['available'])
+        ? admin_dashboard_format_bytes($databaseUsageBytes)
+        : '';
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $totalGalleries = $includeGalleries ? count($galleries) : (int) ($overviewTotals['total_galleries'] ?? 0);
+    $totalGalleries = $includeGalleries
+        ? count($galleries)
+        : (int) ($overviewTotals['total_galleries'] ?? 0);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
     $totalImages = (int) ($overviewTotals['total_images'] ?? 0);
     // $unpublishedGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $unpublishedGalleries = (int) ($overviewTotals['unpublished_galleries'] ?? 0);
+    $unpublishedGalleries = (int) (
+        $overviewTotals['unpublished_galleries'] ?? 0
+    );
     // $privateGalleries stores an intermediate value used by the surrounding gallery workflow.
     $privateGalleries = (int) ($overviewTotals['private_galleries'] ?? 0);
     foreach ($galleries as $gallery) {
@@ -418,15 +569,32 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         }
     }
     // $missingThumbnailVariants stores an intermediate value used by the surrounding gallery workflow.
-    $missingThumbnailVariants = (int) ($thumbnailSummary['missing_variants'] ?? 0);
+    $missingThumbnailVariants = (int) (
+        $thumbnailSummary['missing_variants'] ?? 0
+    );
 
-    admin_render_profile_set_counter('thumbnail_missing_variants', $missingThumbnailVariants);
-    admin_render_profile_set_counter('thumbnail_maintenance_deferred', !empty($thumbnailSummary['deferred']) ? 1 : 0);
+    admin_render_profile_set_counter(
+        'thumbnail_missing_variants',
+        $missingThumbnailVariants,
+    );
+    admin_render_profile_set_counter(
+        'thumbnail_maintenance_deferred',
+        !empty($thumbnailSummary['deferred']) ? 1 : 0,
+    );
 
     // Controller/View-facing policy values are resolved once here so rendering remains request-independent.
     $dashboardFeatureEnabled = [];
-    foreach (['public_search', 'downloads', 'media_renamer', 'navigation_data', 'complete_gallery_report', 'telemetry', 'exif_gallery_date_suggestions'] as $featureKey) {
-        $dashboardFeatureEnabled[$featureKey] = feature_capability_effective_enabled($featureKey);
+    foreach ([
+        'public_search',
+        'downloads',
+        'media_renamer',
+        'navigation_data',
+        'complete_gallery_report',
+        'telemetry',
+        'exif_gallery_date_suggestions',
+    ] as $featureKey) {
+        $dashboardFeatureEnabled[$featureKey] =
+            feature_capability_effective_enabled($featureKey);
     }
     $adminSettingsUrls = [
         'default' => admin_settings_url(),
@@ -435,13 +603,29 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         'privacy' => admin_settings_url('privacy'),
     ];
     $seoGuardStatus = $includeMaintenance ? seo_request_guard_status() : [];
-    $browserThumbnailRebuildConfig = $includeMaintenance ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false];
+    $browserThumbnailRebuildConfig = $includeMaintenance
+        ? browser_thumbnail_rebuild_browser_config()
+        : ['enabled' => false];
 
     $runtimeSupportStatus = runtime_support_health_status();
-    $imageMovePendingStatus = admin_image_move_pending_health_status($mutationSchemaStatuses['mutation_gallery_move'] ?? [], $includeMaintenance);
-    $systemActionRequired = $migrationPending || !empty($runtimeSupportStatus['policy']['action_required']) || !empty($imageMovePendingStatus['action_required']);
-    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses, $presentationSchemaStatuses) as $schemaStatus) {
-        if (in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+    $imageMovePendingStatus = admin_image_move_pending_health_status(
+        $mutationSchemaStatuses['mutation_gallery_move'] ?? [],
+        $includeMaintenance,
+    );
+    $systemActionRequired =
+        $migrationPending
+        || !empty($runtimeSupportStatus['policy']['action_required'])
+        || !empty($imageMovePendingStatus['action_required']);
+    foreach (array_merge(
+        $securitySchemaStatuses,
+        $mutationSchemaStatuses,
+        $presentationSchemaStatuses,
+    ) as $schemaStatus) {
+        if (in_array(
+            (string) ($schemaStatus['state'] ?? 'unknown'),
+            ['missing', 'unknown'],
+            true,
+        )) {
             $systemActionRequired = true;
             break;
         }
@@ -516,14 +700,21 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
  * intentionally configuration-gated; NSFW Guard currently has no such feature
  * flag and therefore calls this model with enabled=true.
  *
- * @param array $schemaStatus Aggregate feature inspection result.
+ * @param array{state?:string,requirements?:array<int,array{state?:string,table?:string,object?:string,object_type?:string}>} $schemaStatus Aggregate feature inspection result.
+ * @param string $feature Feature capability key; unsupported characters are normalized to schema_capability.
  * @param bool $enabled Whether configuration intentionally enables the feature.
  * @param string $requestId Safe request correlation identifier for unknown state.
- * @return array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}
+ * @return array{state:string,feature:string,request_id:string,affected_objects:list<string>,suggested_checks:list<string>} Normalized state, feature key, bounded request id, unresolved schema identities, and suggested diagnostic checks.
  */
-function admin_schema_health_model(array $schemaStatus, string $feature, bool $enabled = true, string $requestId = ''): array
-{
-    $safeFeature = preg_match('/^[a-z0-9_]+$/D', $feature) === 1 ? $feature : 'schema_capability';
+function admin_schema_health_model(
+    array $schemaStatus,
+    string $feature,
+    bool $enabled = true,
+    string $requestId = '',
+): array {
+    $safeFeature = preg_match('/^[a-z0-9_]+$/D', $feature) === 1
+        ? $feature
+        : 'schema_capability';
     if (!$enabled) {
         return [
             'state' => 'disabled',
@@ -535,22 +726,37 @@ function admin_schema_health_model(array $schemaStatus, string $feature, bool $e
     }
 
     // $state stores one trusted state from the shared inspection vocabulary.
-    $state = in_array($schemaStatus['state'] ?? '', ['available', 'missing', 'unknown'], true)
+    $state = in_array(
+        $schemaStatus['state'] ?? '',
+        ['available', 'missing', 'unknown'],
+        true,
+    )
         ? (string) $schemaStatus['state']
         : 'unknown';
     // $affectedObjects stores only bounded schema identities, never SQL or exception text.
     $affectedObjects = [];
     foreach ((array) ($schemaStatus['requirements'] ?? []) as $requirement) {
-        if (!is_array($requirement) || ($requirement['state'] ?? '') === 'available') {
+        if (
+            !is_array($requirement)
+            || ($requirement['state'] ?? '') === 'available'
+        ) {
             continue;
         }
         $table = (string) ($requirement['table'] ?? '');
         $object = (string) ($requirement['object'] ?? '');
         $objectType = (string) ($requirement['object_type'] ?? '');
-        if (strlen($table) > 64 || strlen($object) > 64 || preg_match('/^[A-Za-z0-9_]+$/D', $table) !== 1 || preg_match('/^[A-Za-z0-9_]+$/D', $object) !== 1) {
+        if (
+            strlen($table) > 64
+            || strlen($object) > 64
+            || preg_match('/^[A-Za-z0-9_]+$/D', $table) !== 1
+            || preg_match('/^[A-Za-z0-9_]+$/D', $object) !== 1
+        ) {
             continue;
         }
-        $affectedObjects[] = $objectType === 'table' || $table === $object ? $table : $table . '.' . $object;
+        $affectedObjects[] =
+            $objectType === 'table' || $table === $object
+                ? $table
+                : $table . '.' . $object;
     }
 
     return [
@@ -559,7 +765,11 @@ function admin_schema_health_model(array $schemaStatus, string $feature, bool $e
         'request_id' => $state === 'unknown' ? substr($requestId, 0, 64) : '',
         'affected_objects' => array_values(array_unique($affectedObjects)),
         'suggested_checks' => $state === 'unknown'
-            ? ['database_connection', 'selected_database', 'schema_inspection_permissions']
+            ? [
+                'database_connection',
+                'selected_database',
+                'schema_inspection_permissions',
+            ]
             : ($state === 'missing' ? ['pending_migrations'] : []),
     ];
 }
@@ -567,14 +777,22 @@ function admin_schema_health_model(array $schemaStatus, string $feature, bool $e
 /**
  * Build the established NSFW health model through the generic security normalizer.
  *
- * @param array $schemaStatus Aggregate feature inspection result.
+ * @param array{state?:string,requirements?:array<int,array{state?:string,table?:string,object?:string,object_type?:string}>} $schemaStatus Aggregate feature inspection result.
  * @param bool $enabled Whether configuration intentionally enables the feature.
  * @param string $requestId Safe request correlation identifier for unknown state.
- * @return array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}
+ * @return array{state:string,feature:string,request_id:string,affected_objects:list<string>,suggested_checks:list<string>} Normalized NSFW Guard health state and diagnostic details.
  */
-function admin_nsfw_schema_health_model(array $schemaStatus, bool $enabled = true, string $requestId = ''): array
-{
-    return admin_schema_health_model($schemaStatus, 'nsfw_guard', $enabled, $requestId);
+function admin_nsfw_schema_health_model(
+    array $schemaStatus,
+    bool $enabled = true,
+    string $requestId = '',
+): array {
+    return admin_schema_health_model(
+        $schemaStatus,
+        'nsfw_guard',
+        $enabled,
+        $requestId,
+    );
 }
 
 /**
@@ -585,19 +803,32 @@ function admin_nsfw_schema_health_model(array $schemaStatus, bool $enabled = tru
  * refused rather than silently downgraded. Configuration-disabled Google login is
  * represented as disabled so an unused OAuth integration does not create noise.
  *
- * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}>
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:list<string>,suggested_checks:list<string>}> Capability-keyed normalized security health records.
  */
 function admin_security_schema_health_statuses(): array
 {
-    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $requestId = function_exists('Gallery\Services\telemetry_request_id')
+        ? telemetry_request_id()
+        : '';
     $definitions = [
         'gallery_access' => [gallery_access_schema_status(), true],
         'gallery_visibility' => [gallery_visibility_schema_status(), true],
-        'gallery_share_token' => [gallery_access_share_token_schema_status(), true],
+        'gallery_share_token' => [
+            gallery_access_share_token_schema_status(),
+            true,
+        ],
         'nsfw_guard' => [nsfw_guard_schema_status(), true],
-        'auth_persistent_login' => [auth_persistent_login_schema_status(), (bool) (auth_persistence_config()['persistent_login_enabled'] ?? true)],
+        'auth_persistent_login' => [
+            auth_persistent_login_schema_status(),
+            (bool) (
+                auth_persistence_config()['persistent_login_enabled'] ?? true
+            ),
+        ],
         'auth_password_reset' => [auth_password_reset_schema_status(), true],
-        'auth_external_identity' => [google_auth_schema_status(), google_auth_configuration_ready()],
+        'auth_external_identity' => [
+            google_auth_schema_status(),
+            google_auth_configuration_ready(),
+        ],
     ];
 
     $statuses = [];
@@ -606,7 +837,7 @@ function admin_security_schema_health_statuses(): array
             $schemaStatus,
             $feature,
             (bool) $enabled,
-            schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
+            schema_inspection_is_unknown($schemaStatus) ? $requestId : '',
         );
     }
     return $statuses;
@@ -621,11 +852,13 @@ function admin_security_schema_health_statuses(): array
  * means metadata inspection itself failed, so the affected mutation is paused before
  * files, rows, credentials, migration state, or active application files are changed.
  *
- * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>,title?:string,message?:string}>
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:list<string>,suggested_checks:list<string>,title?:string,message?:string}> Capability-keyed mutation health records with optional display title and message.
  */
 function admin_mutation_schema_health_statuses(): array
 {
-    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $requestId = function_exists('Gallery\Services\telemetry_request_id')
+        ? telemetry_request_id()
+        : '';
     $definitions = [
         'mutation_gallery_edit' => [
             'resolver' =>
@@ -633,55 +866,118 @@ function admin_mutation_schema_health_statuses(): array
                  * Resolve exact application-owned revision protection through its bounded schema adapter.
                  * @return array{state:string,requirements:list<array{state:string,table:string,object:string,object_type:string}>} Verified protection state and fixed affected column identity.
                  */
-                static fn (): array => admin_gallery_edit_schema_status(),
+                static fn(): array => admin_gallery_edit_schema_status(),
             'flag' => '',
-            'title' => t('admin.health_gallery_edit.title', 'Gallery edit protection'),
+            'title' => t(
+                'admin.health_gallery_edit.title',
+                'Gallery edit protection',
+            ),
             'messages' => [
-                'available' => t('admin.health_gallery_edit.available', 'The gallery revision column is available and application-owned edit protection is ready.'),
-                'missing' => t('admin.health_gallery_edit.missing', 'The gallery revision column is missing. Run database migrations from the Gallery administration page, then reload this page. Gallery editing remains paused until the migration completes.'),
-                'unknown' => t('admin.health_gallery_edit.unknown', 'Gallery edit protection could not be verified. Retry the database migration from this Gallery page, then review Runtime diagnostics if the problem continues. Gallery editing remains paused; no raw database errors are shown.'),
+                'available' => t(
+                    'admin.health_gallery_edit.available',
+                    'The gallery revision column is available and application-owned edit protection is ready.',
+                ),
+                'missing' => t(
+                    'admin.health_gallery_edit.missing',
+                    'The gallery revision column is missing. Run database migrations from the Gallery administration page, then reload this page. Gallery editing remains paused until the migration completes.',
+                ),
+                'unknown' => t(
+                    'admin.health_gallery_edit.unknown',
+                    'Gallery edit protection could not be verified. Retry the database migration from this Gallery page, then review Runtime diagnostics if the problem continues. Gallery editing remains paused; no raw database errors are shown.',
+                ),
             ],
         ],
-        'mutation_gallery_delete' => ['resolver' => static fn (): array => gallery_deletion_schema_status(), 'flag' => ''],
+        'mutation_gallery_delete' => [
+            'resolver' =>
+                static fn(): array => gallery_deletion_schema_status(),
+            'flag' => '',
+        ],
         // Trash recovery remains intentionally available while the soft-delete master is OFF.
-        'mutation_gallery_trash' => ['resolver' => static fn (): array => gallery_trash_schema_status(), 'flag' => ''],
-        'mutation_gallery_move' => ['resolver' =>
-            /**
-             * Include durable move-journal readiness before reporting mutation availability.
-             * @return array<string,mixed> Aggregate state and schema requirements from the journal policy owner; no pending-row discovery.
-             */
-            static fn (): array => gallery_image_move_journal_schema_status(), 'flag' => ''],
-        'mutation_duplicate_photo_ledger' => ['resolver' => static fn (): array => duplicate_photo_ledger_schema_status(), 'flag' => 'duplicate_photo_detector'],
-        'mutation_upload_ingestion' => ['resolver' => static fn (): array => upload_ingestion_schema_status(), 'flag' => ''],
-        'mutation_upload_automation' => ['resolver' => static fn (): array => upload_automation_schema_status(), 'flag' => 'upload_api'],
-        'mutation_gallery_migration' => ['resolver' => static fn (): array => gallery_migration_schema_status(), 'flag' => 'gallery_migration'],
-        'mutation_mobile_webdav' => ['resolver' => static fn (): array => mobile_webdav_schema_status(), 'flag' => 'mobile_webdav'],
-        'mutation_thumbnail_metadata' => ['resolver' => static fn (): array => thumbnail_metadata_mutation_schema_status(), 'flag' => ''],
-        'mutation_database_maintenance' => ['resolver' => static fn (): array => database_maintenance_mutation_schema_status(), 'flag' => 'advanced_database_maintenance'],
-        'mutation_application_update' => ['resolver' => static fn (): array => application_update_activation_schema_status(), 'flag' => 'built_in_update_installer'],
+        'mutation_gallery_trash' => [
+            'resolver' => static fn(): array => gallery_trash_schema_status(),
+            'flag' => '',
+        ],
+        'mutation_gallery_move' => [
+            'resolver' =>
+                /**
+                 * Include durable move-journal readiness before reporting mutation availability.
+                 * @return array<string,mixed> Aggregate state and schema requirements from the journal policy owner; no pending-row discovery.
+                 */
+                static fn(): array => gallery_image_move_journal_schema_status(),
+            'flag' => '',
+        ],
+        'mutation_duplicate_photo_ledger' => [
+            'resolver' =>
+                static fn(): array => duplicate_photo_ledger_schema_status(),
+            'flag' => 'duplicate_photo_detector',
+        ],
+        'mutation_upload_ingestion' => [
+            'resolver' =>
+                static fn(): array => upload_ingestion_schema_status(),
+            'flag' => '',
+        ],
+        'mutation_upload_automation' => [
+            'resolver' =>
+                static fn(): array => upload_automation_schema_status(),
+            'flag' => 'upload_api',
+        ],
+        'mutation_gallery_migration' => [
+            'resolver' =>
+                static fn(): array => gallery_migration_schema_status(),
+            'flag' => 'gallery_migration',
+        ],
+        'mutation_mobile_webdav' => [
+            'resolver' => static fn(): array => mobile_webdav_schema_status(),
+            'flag' => 'mobile_webdav',
+        ],
+        'mutation_thumbnail_metadata' => [
+            'resolver' =>
+                static fn(): array => thumbnail_metadata_mutation_schema_status(),
+            'flag' => '',
+        ],
+        'mutation_database_maintenance' => [
+            'resolver' =>
+                static fn(): array => database_maintenance_mutation_schema_status(),
+            'flag' => 'advanced_database_maintenance',
+        ],
+        'mutation_application_update' => [
+            'resolver' =>
+                static fn(): array => application_update_activation_schema_status(),
+            'flag' => 'built_in_update_installer',
+        ],
     ];
 
     $statuses = [];
     foreach ($definitions as $feature => $definition) {
         $flag = trim((string) ($definition['flag'] ?? ''));
-        $enabled = $flag === ''
-            || !function_exists('Gallery\Services\feature_capability_effective_enabled')
+        $enabled =
+            $flag === ''
+            || !function_exists(
+                'Gallery\Services\feature_capability_effective_enabled',
+            )
             || feature_capability_effective_enabled($flag);
         if (!$enabled) {
-            $statuses[$feature] = admin_schema_health_model([], $feature, false);
+            $statuses[$feature] = admin_schema_health_model(
+                [],
+                $feature,
+                false,
+            );
             continue;
         }
         $resolver = $definition['resolver'] ?? null;
-        $schemaStatus = is_callable($resolver) ? $resolver() : ['state' => 'unknown'];
+        $schemaStatus = is_callable($resolver)
+            ? $resolver()
+            : ['state' => 'unknown'];
         $statuses[$feature] = admin_schema_health_model(
             $schemaStatus,
             $feature,
             true,
-            schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
+            schema_inspection_is_unknown($schemaStatus) ? $requestId : '',
         );
         if (isset($definition['title'], $definition['messages'])) {
             $statuses[$feature]['title'] = $definition['title'];
-            $statuses[$feature]['message'] = $definition['messages'][$statuses[$feature]['state']];
+            $statuses[$feature]['message'] =
+                $definition['messages'][$statuses[$feature]['state']];
         }
     }
     return $statuses;
@@ -695,22 +991,32 @@ function admin_mutation_schema_health_statuses(): array
  * policy. Unknown means metadata inspection itself failed, so safe reads may be
  * omitted while writes that depend on the capability remain refused.
  *
- * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}>
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:list<string>,suggested_checks:list<string>}> Capability-keyed normalized presentation health records.
  */
 function admin_presentation_schema_health_statuses(): array
 {
-    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $requestId = function_exists('Gallery\Services\telemetry_request_id')
+        ? telemetry_request_id()
+        : '';
     $statuses = [];
     foreach (presentation_schema_health_definitions() as $feature => $definition) {
         $flag = trim((string) ($definition['flag'] ?? ''));
-        $enabled = $flag === ''
-            || !function_exists('Gallery\Services\feature_capability_effective_enabled')
+        $enabled =
+            $flag === ''
+            || !function_exists(
+                'Gallery\Services\feature_capability_effective_enabled',
+            )
             || feature_capability_effective_enabled($flag);
         if (!$enabled) {
             // Disabled optional features do not need metadata inspection. This keeps
             // System Health explicit while avoiding queries for schema that cannot
             // affect the current request.
-            $statuses[$feature] = admin_schema_health_model([], $feature, false, '');
+            $statuses[$feature] = admin_schema_health_model(
+                [],
+                $feature,
+                false,
+                '',
+            );
             continue;
         }
 
@@ -722,7 +1028,7 @@ function admin_presentation_schema_health_statuses(): array
             $schemaStatus,
             $feature,
             true,
-            schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
+            schema_inspection_is_unknown($schemaStatus) ? $requestId : '',
         );
     }
     return $statuses;
@@ -741,41 +1047,79 @@ function admin_nsfw_schema_health_status(): array
 /**
  * Build dashboard notice text from request flags.
  *
- * @param array $query Query value.
+ * @param array<string,mixed> $query Request query values used to select notice messages and counts.
  * @param string $adminNotice Admin notice value.
- * @return array<int string>.
+ * @return list<string> Localized notice messages in display order.
  */
-function admin_dashboard_notice_messages(array $query, string $adminNotice): array
-{
+function admin_dashboard_notice_messages(
+    array $query,
+    string $adminNotice,
+): array {
     $notices = [];
     if ($adminNotice !== '') {
         $notices[] = $adminNotice;
     }
     if (isset($query['deleted_galleries'])) {
-        $notices[] = t('admin.dashboard.notice_deleted_galleries', 'Deleted {count} gallery folder(s).', ['count' => (int) $query['deleted_galleries']]);
+        $notices[] = t(
+            'admin.dashboard.notice_deleted_galleries',
+            'Deleted {count} gallery folder(s).',
+            ['count' => (int) $query['deleted_galleries']],
+        );
     } elseif (isset($query['delete_error'])) {
-        $notices[] = t('admin.dashboard.notice_delete_failed', 'Gallery delete failed:') . ' ' . (string) $query['delete_error'];
+        $notices[] =
+            t('admin.dashboard.notice_delete_failed', 'Gallery delete failed:')
+            . ' '
+            . (string) $query['delete_error'];
     }
     if (isset($query['devmode_saved'])) {
-        $notices[] = t('admin.dashboard.notice_devmode_saved', 'Dev mode setting saved.');
+        $notices[] = t(
+            'admin.dashboard.notice_devmode_saved',
+            'Dev mode setting saved.',
+        );
     }
     if (isset($query['url_rewrite_saved'])) {
-        $notices[] = t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.');
+        $notices[] = t(
+            'admin.dashboard.notice_url_rewrite_saved',
+            'URL rewrite setting saved.',
+        );
     }
     if (isset($query['paths_regenerated'])) {
-        $notices[] = t('admin.dashboard.notice_paths_regenerated', 'Regenerated clean public paths. Updated {gallery_count} gallery path(s) and {image_count} image path(s).', [
-            'gallery_count' => (int) ($query['gallery_paths'] ?? 0),
-            'image_count' => (int) ($query['image_paths'] ?? 0),
-        ]);
+        $notices[] = t(
+            'admin.dashboard.notice_paths_regenerated',
+            'Regenerated clean public paths. Updated {gallery_count} gallery path(s) and {image_count} image path(s).',
+            [
+                'gallery_count' => (int) ($query['gallery_paths'] ?? 0),
+                'image_count' => (int) ($query['image_paths'] ?? 0),
+            ],
+        );
     } elseif (isset($query['paths_error'])) {
-        $notices[] = t('admin.dashboard.notice_paths_failed', 'Path regeneration failed:') . ' ' . (string) $query['paths_error'];
+        $notices[] =
+            t(
+                'admin.dashboard.notice_paths_failed',
+                'Path regeneration failed:',
+            )
+            . ' '
+            . (string) $query['paths_error'];
     }
     if (isset($query['migrations_ran'])) {
-        $notices[] = t('admin.dashboard.notice_migrations_applied', 'Applied migrations:') . ' ' . (string) $query['migrations_ran'] . '.';
+        $notices[] =
+            t(
+                'admin.dashboard.notice_migrations_applied',
+                'Applied migrations:',
+            )
+            . ' '
+            . (string) $query['migrations_ran']
+            . '.';
     } elseif (isset($query['migrations_current'])) {
-        $notices[] = t('admin.dashboard.notice_database_current', 'Database is already current.');
+        $notices[] = t(
+            'admin.dashboard.notice_database_current',
+            'Database is already current.',
+        );
     } elseif (isset($query['migration_failed'])) {
-        $notices[] = t('admin.dashboard.notice_migration_failed', 'Migration failed:') . ' ' . (string) $query['migration_failed'];
+        $notices[] =
+            t('admin.dashboard.notice_migration_failed', 'Migration failed:')
+            . ' '
+            . (string) $query['migration_failed'];
     }
 
     return $notices;
@@ -788,8 +1132,10 @@ function admin_dashboard_notice_messages(array $query, string $adminNotice): arr
  * @param int $precision Precision value.
  * @return string Text result for the caller.
  */
-function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): string
-{
+function admin_dashboard_format_bytes(
+    int|float $bytes,
+    int $precision = 1,
+): string {
     // Reuse the telemetry formatter when it is already available so byte labels
     // stay consistent across admin reports and the dashboard.
     if (function_exists('telemetry_format_bytes')) {
@@ -804,7 +1150,7 @@ function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): str
     // $unitIndex stores the selected unit position after scaling by powers of 1024.
     $unitIndex = 0;
 
-    while ($normalizedBytes >= 1024 && $unitIndex < count($units) - 1) {
+    while ($normalizedBytes >= 1024 && $unitIndex < (count($units) - 1)) {
         $normalizedBytes /= 1024;
         $unitIndex++;
     }
@@ -813,7 +1159,9 @@ function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): str
         return number_format($normalizedBytes, 0) . ' ' . $units[$unitIndex];
     }
 
-    return number_format($normalizedBytes, $precision) . ' ' . $units[$unitIndex];
+    return (
+        number_format($normalizedBytes, $precision) . ' ' . $units[$unitIndex]
+    );
 }
 
 /**
@@ -846,8 +1194,10 @@ function admin_gallery_children_by_parent(array $rows): array
  * @param list<string> $availableFeatures Verified ready feature keys: maps, filenames, voting, game, or background.
  * @return list<array<string,mixed>> Unchanged ordered rows augmented with view_total_image_count, view_subgallery_image_count, view_subgallery_count, view_subtree_count, view_feature_states and view_feature_counts containing on/total integers.
  */
-function admin_dashboard_gallery_subtree_summaries(array $rows, array $availableFeatures): array
-{
+function admin_dashboard_gallery_subtree_summaries(
+    array $rows,
+    array $availableFeatures,
+): array {
     $featureFields = [
         'maps' => 'view_gps_map_enabled',
         'filenames' => 'show_filenames',
@@ -855,7 +1205,10 @@ function admin_dashboard_gallery_subtree_summaries(array $rows, array $available
         'game' => 'picture_game_enabled',
         'background' => 'view_background_source_set',
     ];
-    $featureFields = array_intersect_key($featureFields, array_fill_keys($availableFeatures, true));
+    $featureFields = array_intersect_key($featureFields, array_fill_keys(
+        $availableFeatures,
+        true,
+    ));
     $indexesById = [];
     $aggregates = [];
     foreach ($rows as $index => $row) {
@@ -864,22 +1217,33 @@ function admin_dashboard_gallery_subtree_summaries(array $rows, array $available
         foreach ($featureFields as $feature => $field) {
             $onCounts[$feature] = (int) ($row[$field] ?? 0) === 1 ? 1 : 0;
         }
-        $aggregates[$index] = ['images' => max(0, (int) ($row['image_count'] ?? 0)), 'galleries' => 1, 'on' => $onCounts];
+        $aggregates[$index] = [
+            'images' => max(0, (int) ($row['image_count'] ?? 0)),
+            'galleries' => 1,
+            'on' => $onCounts,
+        ];
     }
     for ($index = count($rows) - 1; $index >= 0; $index--) {
         $aggregate = $aggregates[$index];
         $rows[$index]['view_total_image_count'] = $aggregate['images'];
-        $rows[$index]['view_subgallery_image_count'] = $aggregate['images'] - max(0, (int) ($rows[$index]['image_count'] ?? 0));
+        $rows[$index]['view_subgallery_image_count'] =
+            $aggregate['images']
+            - max(0, (int) ($rows[$index]['image_count'] ?? 0));
         $rows[$index]['view_subgallery_count'] = $aggregate['galleries'] - 1;
         $rows[$index]['view_subtree_count'] = $aggregate['galleries'];
         $rows[$index]['view_feature_states'] = [];
         $rows[$index]['view_feature_counts'] = [];
         foreach ($aggregate['on'] as $feature => $onCount) {
-            $rows[$index]['view_feature_states'][$feature] = $onCount === 0 ? 'off' : ($onCount === $aggregate['galleries'] ? 'on' : 'mixed');
-            $rows[$index]['view_feature_counts'][$feature] = ['on' => $onCount, 'total' => $aggregate['galleries']];
+            $rows[$index]['view_feature_states'][$feature] = $onCount === 0
+                ? 'off'
+                : ($onCount === $aggregate['galleries'] ? 'on' : 'mixed');
+            $rows[$index]['view_feature_counts'][$feature] = [
+                'on' => $onCount,
+                'total' => $aggregate['galleries'],
+            ];
         }
         $parentId = (int) ($rows[$index]['parent_id'] ?? 0);
-        $parentIndex = $parentId > 0 ? ($indexesById[$parentId] ?? null) : null;
+        $parentIndex = $parentId > 0 ? $indexesById[$parentId] ?? null : null;
         // Missing/self/later parents are treated as roots; never create cycles or alter row ordering.
         if ($parentIndex === null || $parentIndex >= $index) {
             continue;
@@ -901,14 +1265,16 @@ function admin_dashboard_gallery_subtree_summaries(array $rows, array $available
  * is generated while rendering the table, so repeated admin navigation stays
  * cheap.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array<string,mixed> $gallery Gallery row used for cover lookup, including its id and any optional cover metadata.
+ * @return string Existing cover thumbnail URL, or an empty string when no cover is available.
  */
 function admin_gallery_preview_url(array $gallery): string
 {
     admin_render_profile_count('preview_requests');
 
-    return admin_render_profile_span('gallery_preview_url', static function () use ($gallery): string {
+    return admin_render_profile_span('gallery_preview_url', static function () use (
+        $gallery,
+    ): string {
         // $coverAssetUrl stores an uploaded gallery-specific cover asset when the optional column exists.
         $coverAssetUrl = gallery_cover_asset_url($gallery, false);
         if ($coverAssetUrl !== '') {
@@ -917,15 +1283,28 @@ function admin_gallery_preview_url(array $gallery): string
         }
 
         // $cover stores the explicit or first direct image for this gallery.
-        $cover = admin_render_profile_db('preview_direct_cover_lookup', static fn (): ?array => gallery_cover_image((int) ($gallery['id'] ?? 0), false));
+        $cover = admin_render_profile_db('preview_direct_cover_lookup', static fn(): ?array => gallery_cover_image(
+            (int) ($gallery['id'] ?? 0),
+            false,
+        ));
         if ($cover) {
             admin_render_profile_count('preview_direct_cover_hits');
-            return admin_render_profile_span('preview_direct_thumbnail_url', static fn (): string => thumbnail_url($cover, 300));
+            return admin_render_profile_span('preview_direct_thumbnail_url', static fn(): string => thumbnail_url(
+                $cover,
+                300,
+            ));
         }
 
-        foreach (admin_render_profile_db('preview_collage_cover_lookup', static fn (): array => gallery_cover_collage_images((int) ($gallery['id'] ?? 0), false, 1)) as $descendantCover) {
+        foreach (admin_render_profile_db('preview_collage_cover_lookup', static fn(): array => gallery_cover_collage_images(
+            (int) ($gallery['id'] ?? 0),
+            false,
+            1,
+        )) as $descendantCover) {
             admin_render_profile_count('preview_collage_cover_hits');
-            return admin_render_profile_span('preview_collage_thumbnail_url', static fn (): string => thumbnail_url($descendantCover, 300));
+            return admin_render_profile_span('preview_collage_thumbnail_url', static fn(): string => thumbnail_url(
+                $descendantCover,
+                300,
+            ));
         }
 
         admin_render_profile_count('preview_empty');
@@ -940,21 +1319,32 @@ function admin_gallery_preview_url(array $gallery): string
  * @param int $ttlSeconds Ttl seconds value.
  * @return bool True when the condition matches.
  */
-function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): bool
-{
+function admin_dashboard_self_heal_due(
+    string $settingKey,
+    int $ttlSeconds,
+): bool {
     // $lastRun stores the Unix timestamp for the last successful repair attempt.
-    $lastRun = (int) admin_render_profile_setting_read('self_heal_last_run_setting', static fn (): string => app_setting($settingKey, '0'));
-    return $lastRun <= 0 || time() - $lastRun >= max(60, $ttlSeconds);
+    $lastRun =
+        (int) admin_render_profile_setting_read('self_heal_last_run_setting', static fn(): string => app_setting(
+            $settingKey,
+            '0',
+        ));
+    return $lastRun <= 0 || (time() - $lastRun) >= max(60, $ttlSeconds);
 }
 
 /**
  * Remember that a periodic dashboard repair task was attempted.
  *
  * @param string $settingKey Setting key value.
+ * @return void Stores the current Unix timestamp under the supplied setting key.
  */
 function admin_dashboard_mark_self_heal(string $settingKey): void
 {
-    admin_render_profile_setting_write('self_heal_last_run_setting_write', static function () use ($settingKey): void { set_app_setting($settingKey, (string) time()); });
+    admin_render_profile_setting_write('self_heal_last_run_setting_write', static function () use (
+        $settingKey,
+    ): void {
+        set_app_setting($settingKey, (string) time());
+    });
 }
 
 /**
@@ -972,14 +1362,19 @@ function admin_dashboard_parent_sync_needed(): bool
     return !hash_equals(
         (string) admin_render_profile_setting_read(
             'parent_sync_fingerprint_setting',
-            static fn (): string => app_setting('admin_dashboard_parent_sync_fingerprint', '')
+            static fn(): string => app_setting(
+                'admin_dashboard_parent_sync_fingerprint',
+                '',
+            ),
         ),
-        $fingerprint
+        $fingerprint,
     );
 }
 
 /**
  * Store the current parent-id repair fingerprint after synchronization.
+ *
+ * @return void Stores the current non-empty gallery hierarchy fingerprint.
  */
 function admin_dashboard_store_parent_sync_fingerprint(): void
 {
@@ -989,8 +1384,11 @@ function admin_dashboard_store_parent_sync_fingerprint(): void
         admin_render_profile_setting_write(
             'parent_sync_fingerprint_setting_write',
             static function () use ($fingerprint): void {
-                set_app_setting('admin_dashboard_parent_sync_fingerprint', $fingerprint);
-            }
+                set_app_setting(
+                    'admin_dashboard_parent_sync_fingerprint',
+                    $fingerprint,
+                );
+            },
         );
     }
 }
@@ -1004,8 +1402,8 @@ function admin_dashboard_store_parent_sync_fingerprint(): void
  * are sorted by sort_order and title, then each direct child list is sorted the
  * same way before being appended below its parent.
  *
- * @param array $rows Raw gallery rows from the Admin dashboard query.
- * @return array Gallery rows flattened in visible tree order.
+ * @param array<int,array<string,mixed>> $rows Raw gallery rows containing id, parent_id, sort_order, and title fields.
+ * @return list<array<string,mixed>> Gallery rows flattened in visible tree order.
  */
 function admin_ordered_gallery_rows(array $rows): array
 {
@@ -1020,12 +1418,17 @@ function admin_ordered_gallery_rows(array $rows): array
     foreach ($childrenByParent as $parentKey => $children) {
         usort($children, static function (array $left, array $right): int {
             // Variable $sortCompare stores the numeric sibling order comparison.
-            $sortCompare = (int) ($left['sort_order'] ?? 0) <=> (int) ($right['sort_order'] ?? 0);
+            $sortCompare =
+                (int) ($left['sort_order'] ?? 0)
+                <=> (int) ($right['sort_order'] ?? 0);
             if ($sortCompare !== 0) {
                 return $sortCompare;
             }
             // Variable $titleCompare stores the stable human fallback when sort_order values match.
-            $titleCompare = strnatcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
+            $titleCompare = strnatcasecmp(
+                (string) ($left['title'] ?? ''),
+                (string) ($right['title'] ?? ''),
+            );
             if ($titleCompare !== 0) {
                 return $titleCompare;
             }
@@ -1043,7 +1446,11 @@ function admin_ordered_gallery_rows(array $rows): array
      * @param int $parentId Parent id whose children should be appended.
      * @return void
      */
-    $appendChildren = static function (int $parentId) use (&$appendChildren, &$orderedRows, $childrenByParent): void {
+    $appendChildren = static function (int $parentId) use (
+        &$appendChildren,
+        &$orderedRows,
+        $childrenByParent,
+    ): void {
         foreach ($childrenByParent[$parentId] ?? [] as $row) {
             $orderedRows[] = $row;
             $appendChildren((int) $row['id']);

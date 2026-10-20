@@ -61,10 +61,18 @@ function admin_test_run_text_prefix(string $value, int $length): string
 
 /**
  * Return a request-safe SQL shape with values removed.
+ *
+ * @param string $sql SQL statement text.
+ * @return string Normalized, value-redacted SQL prefix capped at 2000 characters.
  */
 function admin_test_run_sql_shape(string $sql): string
 {
-    $shape = preg_replace('/\'[^\']*\'|"[^"]*"|\b0x[0-9a-f]+\b|\b-?\d+(?:\.\d+)?\b/i', '?', $sql) ?? $sql;
+    $shape =
+        preg_replace(
+            '/\'[^\']*\'|"[^"]*"|\b0x[0-9a-f]+\b|\b-?\d+(?:\.\d+)?\b/i',
+            '?',
+            $sql,
+        ) ?? $sql;
     $shape = preg_replace('/\s+/', ' ', trim($shape)) ?? trim($shape);
     return admin_test_run_text_prefix($shape, 2000);
 }
@@ -80,9 +88,11 @@ function admin_test_run_sql_shape(string $sql): string
  */
 function admin_test_run_callsite_is_instrumentation(string $file): bool
 {
-    return str_ends_with($file, '/app/database.php')
-        || str_ends_with($file, '/app/services/admin_test_runs.php')
-        || str_contains($file, '/app/services/admin_test_runs/');
+    return (
+        str_ends_with($file, '/app/database.php')
+            || str_ends_with($file, '/app/services/admin_test_runs.php')
+            || str_contains($file, '/app/services/admin_test_runs/')
+    );
 }
 
 /**
@@ -93,7 +103,7 @@ function admin_test_run_callsite_is_instrumentation(string $file): bool
  * query. The module entry file and every part file under
  * app/services/admin_test_runs/ are both instrumentation, so both are skipped.
  *
- * @return array<string,mixed>
+ * @return array{file:string,line:int,function:string}|array{} Application source callsite, or an empty array when no application frame is found.
  */
 function admin_test_run_callsite(): array
 {
@@ -119,14 +129,24 @@ function admin_test_run_callsite(): array
  * Record observation-only lifecycle events from existing updater/maintenance subsystems.
  *
  * @param array<string,mixed> $context Safe event context.
+ * @param string $subsystem Maintenance subsystem identifier.
+ * @param string $event Event name.
+ * @return void Appends a sanitized event to the active request trace when present.
  */
-function admin_test_run_record_maintenance_event(string $subsystem, string $event, array $context = []): void
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
+function admin_test_run_record_maintenance_event(
+    string $subsystem,
+    string $event,
+    array $context = [],
+): void {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+    ) {
         return;
     }
     $GLOBALS['admin_test_run_request']['maintenance_events'][] = [
-        'subsystem' => preg_replace('/[^a-z0-9_.:-]+/i', '_', $subsystem) ?: 'unknown',
+        'subsystem' => preg_replace('/[^a-z0-9_.:-]+/i', '_', $subsystem)
+            ?: 'unknown',
         'event' => preg_replace('/[^a-z0-9_.:-]+/i', '_', $event) ?: 'event',
         'at_unix' => microtime(true),
         'context' => $context,
@@ -137,10 +157,15 @@ function admin_test_run_record_maintenance_event(string $subsystem, string $even
  * Add a high-resolution lifecycle mark to the active request.
  *
  * @param array<string,mixed> $context Structured context.
+ * @param string $name Lifecycle mark name.
+ * @return void Appends a timed mark to the active request trace when present.
  */
 function admin_test_run_mark(string $name, array $context = []): void
 {
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+    ) {
         return;
     }
     $state = &$GLOBALS['admin_test_run_request'];
@@ -148,8 +173,14 @@ function admin_test_run_mark(string $name, array $context = []): void
     $state['marks'][] = [
         'name' => preg_replace('/[^a-z0-9_.:-]+/i', '_', $name) ?: 'mark',
         'at_unix' => $now,
-        'offset_from_request_ms' => max(0.0, ($now - (float) $state['request_time_unix']) * 1000),
-        'offset_from_instrumentation_ms' => max(0.0, ($now - (float) $state['instrumentation_enter_unix']) * 1000),
+        'offset_from_request_ms' => max(
+            0.0,
+            ($now - (float) $state['request_time_unix']) * 1000,
+        ),
+        'offset_from_instrumentation_ms' => max(
+            0.0,
+            ($now - (float) $state['instrumentation_enter_unix']) * 1000,
+        ),
         'memory_usage_bytes' => memory_get_usage(true),
         'context' => $context,
     ];
@@ -159,13 +190,19 @@ function admin_test_run_mark(string $name, array $context = []): void
  * Attach one named diagnostic component snapshot to the current request.
  *
  * @param array<string,mixed> $payload Component payload.
+ * @param string $name Diagnostic component name.
+ * @return void Stores the component payload on the active request when present.
  */
 function admin_test_run_record_component(string $name, array $payload): void
 {
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+    ) {
         return;
     }
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_sanitize_browser_value')) {
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_sanitize_browser_value')) {
         $sanitized = admin_test_run_sanitize_browser_value($payload);
         $payload = is_array($sanitized) ? $sanitized : [];
     }
@@ -174,10 +211,24 @@ function admin_test_run_record_component(string $name, array $payload): void
 
 /**
  * Record the shared PDO connection attempt.
+ *
+ * @param float $elapsedMs Connection duration in milliseconds.
+ * @param bool $ok Whether connection establishment succeeded.
+ * @param string $driver PDO driver name.
+ * @param string|null $error Optional bounded error message.
+ * @return void Appends the connection attempt when an unfinished trace is active.
  */
-function admin_test_run_record_db_connection(float $elapsedMs, bool $ok, string $driver, ?string $error = null): void
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request']) || !empty($GLOBALS['admin_test_run_request']['finished'])) {
+function admin_test_run_record_db_connection(
+    float $elapsedMs,
+    bool $ok,
+    string $driver,
+    ?string $error = null,
+): void {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+        || !empty($GLOBALS['admin_test_run_request']['finished'])
+    ) {
         return;
     }
     $GLOBALS['admin_test_run_request']['db']['connection_attempts'][] = [
@@ -191,17 +242,34 @@ function admin_test_run_record_db_connection(float $elapsedMs, bool $ok, string 
 
 /**
  * Record one PDO prepare operation separately from statement execution.
+ *
+ * @param string $sql Prepared SQL statement text.
+ * @param float $elapsedMs Prepare duration in milliseconds.
+ * @param bool $ok Whether prepare succeeded.
+ * @param string|null $error Optional bounded error message.
+ * @return void Appends the redacted prepare event when an unfinished trace is active.
  */
-function admin_test_run_record_db_prepare(string $sql, float $elapsedMs, bool $ok, ?string $error = null): void
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request']) || !empty($GLOBALS['admin_test_run_request']['finished'])) {
+function admin_test_run_record_db_prepare(
+    string $sql,
+    float $elapsedMs,
+    bool $ok,
+    ?string $error = null,
+): void {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+        || !empty($GLOBALS['admin_test_run_request']['finished'])
+    ) {
         return;
     }
     $GLOBALS['admin_test_run_request']['db']['prepare_events'][] = [
         'at_unix' => microtime(true),
         'elapsed_ms' => $elapsedMs,
         'ok' => $ok,
-        'fingerprint' => function_exists(__NAMESPACE__ . '\\telemetry_sql_fingerprint') ? telemetry_sql_fingerprint($sql) : substr(hash('sha256', admin_test_run_sql_shape($sql)), 0, 16),
+        'fingerprint' => function_exists(__NAMESPACE__
+            . '\\telemetry_sql_fingerprint')
+            ? telemetry_sql_fingerprint($sql)
+            : substr(hash('sha256', admin_test_run_sql_shape($sql)), 0, 16),
         'shape' => admin_test_run_sql_shape($sql),
         'error' => $error,
         'callsite' => admin_test_run_callsite(),
@@ -210,10 +278,24 @@ function admin_test_run_record_db_prepare(string $sql, float $elapsedMs, bool $o
 
 /**
  * Record a database transaction lifecycle event.
+ *
+ * @param string $operation Transaction operation name.
+ * @param float $elapsedMs Operation duration in milliseconds.
+ * @param bool $ok Whether the operation succeeded.
+ * @param string|null $error Optional bounded error message.
+ * @return void Appends the transaction event when an unfinished trace is active.
  */
-function admin_test_run_record_db_transaction(string $operation, float $elapsedMs, bool $ok, ?string $error = null): void
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request']) || !empty($GLOBALS['admin_test_run_request']['finished'])) {
+function admin_test_run_record_db_transaction(
+    string $operation,
+    float $elapsedMs,
+    bool $ok,
+    ?string $error = null,
+): void {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+        || !empty($GLOBALS['admin_test_run_request']['finished'])
+    ) {
         return;
     }
     $GLOBALS['admin_test_run_request']['db']['transaction_events'][] = [
@@ -228,20 +310,42 @@ function admin_test_run_record_db_transaction(string $operation, float $elapsedM
 
 /**
  * Record one PDO operation without persisting raw parameter values.
+ *
+ * @param string $sql Executed SQL statement text.
+ * @param float $elapsedMs Execution duration in milliseconds.
+ * @param bool $ok Whether execution succeeded.
+ * @param int $rowCount Affected or returned row count when available.
+ * @param string|null $error Optional bounded error message.
+ * @return void Updates aggregate counters and appends a bounded redacted query event when tracing is active.
  */
-function admin_test_run_record_db_query(string $sql, float $elapsedMs, bool $ok, int $rowCount = 0, ?string $error = null): void
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request']) || !empty($GLOBALS['admin_test_run_request']['finished'])) {
+function admin_test_run_record_db_query(
+    string $sql,
+    float $elapsedMs,
+    bool $ok,
+    int $rowCount = 0,
+    ?string $error = null,
+): void {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+        || !empty($GLOBALS['admin_test_run_request']['finished'])
+    ) {
         return;
     }
     $dbState = &$GLOBALS['admin_test_run_request']['db'];
     $dbState['query_count_total']++;
     $dbState['query_total_ms'] += $elapsedMs;
-    $dbState['query_max_ms'] = max((float) $dbState['query_max_ms'], $elapsedMs);
+    $dbState['query_max_ms'] = max(
+        (float) $dbState['query_max_ms'],
+        $elapsedMs,
+    );
     if (!$ok) {
         $dbState['failed_count']++;
     }
-    if ((int) $dbState['query_count_recorded'] >= ADMIN_TEST_RUN_MAX_DB_EVENTS_PER_REQUEST) {
+    if (
+        (int) $dbState['query_count_recorded']
+        >= ADMIN_TEST_RUN_MAX_DB_EVENTS_PER_REQUEST
+    ) {
         $dbState['query_events_truncated'] = true;
         return;
     }
@@ -251,9 +355,17 @@ function admin_test_run_record_db_query(string $sql, float $elapsedMs, bool $ok,
         'at_unix' => microtime(true),
         'elapsed_ms' => $elapsedMs,
         'ok' => $ok,
-        'operation' => function_exists(__NAMESPACE__ . '\\telemetry_sql_operation') ? telemetry_sql_operation($sql) : strtolower(strtok(ltrim($sql), " \t\n\r") ?: 'other'),
-        'table' => function_exists(__NAMESPACE__ . '\\telemetry_sql_table_name') ? telemetry_sql_table_name($sql) : '',
-        'fingerprint' => function_exists(__NAMESPACE__ . '\\telemetry_sql_fingerprint') ? telemetry_sql_fingerprint($sql) : substr(hash('sha256', admin_test_run_sql_shape($sql)), 0, 16),
+        'operation' => function_exists(__NAMESPACE__
+            . '\\telemetry_sql_operation')
+            ? telemetry_sql_operation($sql)
+            : strtolower(strtok(ltrim($sql), " \t\n\r") ?: 'other'),
+        'table' => function_exists(__NAMESPACE__ . '\\telemetry_sql_table_name')
+            ? telemetry_sql_table_name($sql)
+            : '',
+        'fingerprint' => function_exists(__NAMESPACE__
+            . '\\telemetry_sql_fingerprint')
+            ? telemetry_sql_fingerprint($sql)
+            : substr(hash('sha256', admin_test_run_sql_shape($sql)), 0, 16),
         'shape' => admin_test_run_sql_shape($sql),
         'row_count' => $rowCount,
         'error' => $error,

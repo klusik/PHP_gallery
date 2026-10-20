@@ -92,7 +92,8 @@ return [
         // seven days; Smart Gallery ZIPs use the same download availability window.
         // Capacity includes completed artifacts plus active
         // build reservations and preserves a filesystem free-space safety margin.
-        'download.legacy_artifact_physical_retention_seconds' => 7 * 24 * 60 * 60,
+        'download.legacy_artifact_physical_retention_seconds' =>
+            7 * 24 * 60 * 60,
         // Preserve completed Smart Gallery downloads for seven days.
         // Type: int. Units: seconds. Scope: managed Smart Gallery ZIP retention.
         // Consumers: legacy-artifact cleanup and cache admission.

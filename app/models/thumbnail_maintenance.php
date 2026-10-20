@@ -48,11 +48,17 @@ function thumbnail_maintenance_model_scope(?array $galleryIds): array
     $where = "i.relative_path NOT LIKE '%/%'";
     $params = [];
     if ($galleryIds !== null) {
-        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        $galleryIds = array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
         if ($galleryIds === []) {
             return ['sql' => '1 = 0', 'params' => []];
         }
-        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
+        $where .=
+            ' AND i.gallery_id IN ('
+            . implode(',', array_fill(0, count($galleryIds), '?'))
+            . ')';
         $params = $galleryIds;
     }
     return ['sql' => $where, 'params' => $params];
@@ -66,13 +72,21 @@ function thumbnail_maintenance_model_scope(?array $galleryIds): array
  * @param bool $includeTitle Whether gallery title is required by the caller.
  * @return array<int,array<string,mixed>> Matching image rows.
  */
-function thumbnail_maintenance_model_rows(?array $galleryIds, ?int $limit = null, bool $includeTitle = false): array
-{
+function thumbnail_maintenance_model_rows(
+    ?array $galleryIds,
+    ?int $limit = null,
+    bool $includeTitle = false,
+): array {
     $scope = thumbnail_maintenance_model_scope($galleryIds);
     $galleryColumns = $includeTitle ? 'g.title AS gallery_title, ' : '';
-    $sql = 'SELECT i.*, ' . $galleryColumns . 'g.folder_path AS gallery_folder_path '
+    $sql =
+        'SELECT i.*, '
+        . $galleryColumns
+        . 'g.folder_path AS gallery_folder_path '
         . 'FROM images i JOIN galleries g ON g.id = i.gallery_id '
-        . 'WHERE ' . $scope['sql'] . ' ORDER BY g.folder_path, i.sort_order, i.filename';
+        . 'WHERE '
+        . $scope['sql']
+        . ' ORDER BY g.folder_path, i.sort_order, i.filename';
     if ($limit !== null) {
         $sql .= ' LIMIT ' . max(1, $limit);
     }
@@ -84,21 +98,28 @@ function thumbnail_maintenance_model_rows(?array $galleryIds, ?int $limit = null
 /**
  * Return selected direct image rows with gallery presentation metadata.
  *
- * @param array $imageIds Image identifiers.
- * @return array<int,array<string,mixed>> Matching direct image rows.
+ * @param array<int,int> $imageIds Image identifiers.
+ * @return array<int,array<string,mixed>> Direct image rows with gallery title
+ *     and folder path, or an empty list when no valid identifiers are supplied
+ *     or no rows match.
  */
 function thumbnail_maintenance_model_rows_by_ids(array $imageIds): array
 {
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($imageIds === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path
+    $stmt = db()->prepare(
+        "SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path
         FROM images i
         JOIN galleries g ON g.id = i.gallery_id
         WHERE i.id IN ($placeholders) AND i.relative_path NOT LIKE '%/%'
-        ORDER BY g.folder_path, i.sort_order, i.filename");
+        ORDER BY g.folder_path, i.sort_order, i.filename",
+    );
     $stmt->execute($imageIds);
     return $stmt->fetchAll() ?: [];
 }
@@ -112,7 +133,10 @@ function thumbnail_maintenance_model_rows_by_ids(array $imageIds): array
 function thumbnail_maintenance_model_count(?array $galleryIds): int
 {
     $scope = thumbnail_maintenance_model_scope($galleryIds);
-    $stmt = db()->prepare('SELECT COUNT(*) FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . $scope['sql']);
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE '
+            . $scope['sql'],
+    );
     $stmt->execute($scope['params']);
     return max(0, (int) $stmt->fetchColumn());
 }
@@ -125,15 +149,24 @@ function thumbnail_maintenance_model_count(?array $galleryIds): int
  * @param int $batchSize Positive batch size.
  * @return array<int,array<string,mixed>> Matching image rows.
  */
-function thumbnail_maintenance_model_batch(?array $galleryIds, int $offset, int $batchSize): array
-{
+function thumbnail_maintenance_model_batch(
+    ?array $galleryIds,
+    int $offset,
+    int $batchSize,
+): array {
     $scope = thumbnail_maintenance_model_scope($galleryIds);
     $offset = max(0, $offset);
     $batchSize = max(1, $batchSize);
-    $sql = 'SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path '
+    $sql =
+        'SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path '
         . 'FROM images i JOIN galleries g ON g.id = i.gallery_id '
-        . 'WHERE ' . $scope['sql'] . ' ORDER BY g.folder_path, i.sort_order, i.filename '
-        . 'LIMIT ' . $batchSize . ' OFFSET ' . $offset;
+        . 'WHERE '
+        . $scope['sql']
+        . ' ORDER BY g.folder_path, i.sort_order, i.filename '
+        . 'LIMIT '
+        . $batchSize
+        . ' OFFSET '
+        . $offset;
     $stmt = db()->prepare($sql);
     $stmt->execute($scope['params']);
     return $stmt->fetchAll() ?: [];
@@ -149,7 +182,9 @@ function thumbnail_maintenance_model_inventory_state(?array $galleryIds): array
 {
     $scope = thumbnail_maintenance_model_scope($galleryIds);
     $where = str_replace('i.', '', $scope['sql']);
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(created_at), '') AS newest_created_at FROM images WHERE $where");
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS image_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(created_at), '') AS newest_created_at FROM images WHERE $where",
+    );
     $stmt->execute($scope['params']);
     $row = $stmt->fetch() ?: [];
     return [
@@ -174,6 +209,15 @@ function thumbnail_maintenance_model_clear_variant_metadata(): void
  */
 function thumbnail_maintenance_model_gallery_folder_paths(): array
 {
-    $stmt = db()->query('SELECT folder_path FROM galleries ORDER BY folder_path');
-    return $stmt ? array_values(array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [])) : [];
+    $stmt = db()->query(
+        'SELECT folder_path FROM galleries ORDER BY folder_path',
+    );
+    return (
+        $stmt
+            ? array_values(array_map(
+                'strval',
+                $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [],
+            ))
+            : []
+    );
 }

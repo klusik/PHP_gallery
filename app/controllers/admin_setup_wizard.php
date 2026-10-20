@@ -86,7 +86,8 @@ function cms_admin_setup_wizard(): void
 
     $steps = admin_setup_wizard_steps();
     $stored = $_SESSION[ADMIN_SETUP_WIZARD_SESSION_KEY] ?? null;
-    $draft = is_array($stored) && admin_setup_wizard_draft_valid($stored, $ownerId, $steps)
+    $draft = is_array($stored)
+    && admin_setup_wizard_draft_valid($stored, $ownerId, $steps)
         ? $stored
         : admin_setup_wizard_begin_draft($ownerId, $steps);
     $errors = [];
@@ -96,10 +97,17 @@ function cms_admin_setup_wizard(): void
 
     if (request_method() === 'POST') {
         verify_csrf();
-        [$draft, $errors] = admin_setup_wizard_process_post($draft, $steps, $errors);
+        [$draft, $errors] = admin_setup_wizard_process_post(
+            $draft,
+            $steps,
+            $errors,
+        );
     } elseif (isset($_GET['step'])) {
         $requestedStep = is_scalar($_GET['step']) ? (string) $_GET['step'] : '';
-        if (isset($steps[$requestedStep]) && $requestedStep !== (string) $draft['step']) {
+        if (
+            isset($steps[$requestedStep])
+            && $requestedStep !== (string) $draft['step']
+        ) {
             $draft['step'] = $requestedStep;
             $draft['revision'] = (int) $draft['revision'] + 1;
         } elseif (!isset($steps[$requestedStep])) {
@@ -114,20 +122,27 @@ function cms_admin_setup_wizard(): void
     view_render_admin_setup_wizard_page([
         'steps' => $presentedSteps,
         'active_step' => $activeStep,
-        'active_step_index' => admin_setup_wizard_step_index($activeStep, $steps),
+        'active_step_index' => admin_setup_wizard_step_index(
+            $activeStep,
+            $steps,
+        ),
         'draft' => $draft,
         'errors' => $errors,
         'revision' => (int) $draft['revision'],
-        'summary' => $activeStep === \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP,
+        'summary' =>
+            $activeStep === \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP,
         'summary_groups' => admin_setup_wizard_summary($draft, $steps),
         'urls' => [
             'settings' => admin_settings_url(),
             'cancel' => admin_settings_url(),
             'restart' => url_for('admin_setup_wizard'),
         ],
-        'theme_preview' => array_merge(admin_setup_wizard_theme_preview($draft), [
-            'background_url' => theme_background_asset_url(),
-        ]),
+        'theme_preview' => array_merge(
+            admin_setup_wizard_theme_preview($draft),
+            [
+                'background_url' => theme_background_asset_url(),
+            ],
+        ),
         'language_selector' => translation_public_language_selector_view_data(),
         'storage_paths' => [
             'galleries_root' => (string) ($config['galleries_root'] ?? ''),
@@ -145,15 +160,27 @@ function cms_admin_setup_wizard(): void
  * @param array<string,mixed> $existingErrors Existing bounded errors.
  * @return array{0:array<string,mixed>,1:array<string,mixed>} Updated draft and errors.
  */
-function admin_setup_wizard_process_post(array $draft, array $steps, array $existingErrors = []): array
-{
-    $action = is_scalar($_POST['wizard_action'] ?? null) ? (string) $_POST['wizard_action'] : '';
-    if (!in_array($action, ['back', 'next', 'skip', 'goto', 'cancel', 'restart', 'apply'], true)) {
+function admin_setup_wizard_process_post(
+    array $draft,
+    array $steps,
+    array $existingErrors = [],
+): array {
+    $action = is_scalar($_POST['wizard_action'] ?? null)
+        ? (string) $_POST['wizard_action']
+        : '';
+    if (!in_array(
+        $action,
+        ['back', 'next', 'skip', 'goto', 'cancel', 'restart', 'apply'],
+        true,
+    )) {
         return [$draft, ['_page' => ['admin.setup_wizard.error.invalid_step']]];
     }
     $postedRevision = $_POST['revision'] ?? null;
-    if (!is_string($postedRevision) || !ctype_digit($postedRevision)
-        || (int) $postedRevision !== (int) $draft['revision']) {
+    if (
+        !is_string($postedRevision)
+        || !ctype_digit($postedRevision)
+        || (int) $postedRevision !== (int) $draft['revision']
+    ) {
         return [$draft, ['_page' => ['admin.setup_wizard.error.stale']]];
     }
     if ($action === 'cancel') {
@@ -170,18 +197,41 @@ function admin_setup_wizard_process_post(array $draft, array $steps, array $exis
 
     $current = (string) $draft['step'];
     if ($current !== \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP) {
-        $postedStep = is_scalar($_POST['wizard_step'] ?? null) ? (string) $_POST['wizard_step'] : '';
+        $postedStep = is_scalar($_POST['wizard_step'] ?? null)
+            ? (string) $_POST['wizard_step']
+            : '';
         if ($postedStep !== $current || !isset($steps[$postedStep])) {
-            return [$draft, ['_page' => ['admin.setup_wizard.error.invalid_step']]];
+            return [
+                $draft,
+                ['_page' => ['admin.setup_wizard.error.invalid_step']],
+            ];
         }
     }
-    $gotoCarriesStepValues = $action === 'goto' && (isset($_POST['settings']) || isset($_POST['include']));
-    if ($current !== \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP
-        && ($action !== 'goto' || $gotoCarriesStepValues)) {
+    $gotoCarriesStepValues =
+        $action === 'goto'
+        && (isset($_POST['settings']) || isset($_POST['include']));
+    if (
+        $current !== \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP
+        && (
+            $action !== 'goto'
+            || $gotoCarriesStepValues
+        )
+    ) {
         $postedStep = (string) $_POST['wizard_step'];
-        if ((isset($_POST['settings']) && !is_array($_POST['settings']))
-            || (isset($_POST['include']) && !is_array($_POST['include']))) {
-            return [$draft, ['_page' => ['admin.setup_wizard.error.invalid_value']]];
+        if (
+            (
+                isset($_POST['settings'])
+                && !is_array($_POST['settings'])
+            )
+            || (
+                isset($_POST['include'])
+                && !is_array($_POST['include'])
+            )
+        ) {
+            return [
+                $draft,
+                ['_page' => ['admin.setup_wizard.error.invalid_value']],
+            ];
         }
         $staged = admin_setup_wizard_stage_step(
             $draft,
@@ -189,7 +239,7 @@ function admin_setup_wizard_process_post(array $draft, array $steps, array $exis
             $postedStep,
             is_array($_POST['settings'] ?? null) ? $_POST['settings'] : [],
             is_array($_POST['include'] ?? null) ? $_POST['include'] : [],
-            $action === 'skip'
+            $action === 'skip',
         );
         if ($staged['errors'] !== []) {
             return [$draft, $staged['errors']];
@@ -197,9 +247,16 @@ function admin_setup_wizard_process_post(array $draft, array $steps, array $exis
         $draft = $staged['draft'];
     }
 
-    $target = is_scalar($_POST['target_step'] ?? null) ? (string) $_POST['target_step'] : '';
+    $target = is_scalar($_POST['target_step'] ?? null)
+        ? (string) $_POST['target_step']
+        : '';
     try {
-        $draft['step'] = admin_setup_wizard_navigation($current, $action, $steps, $target);
+        $draft['step'] = admin_setup_wizard_navigation(
+            $current,
+            $action,
+            $steps,
+            $target,
+        );
         $draft['revision'] = (int) $draft['revision'] + 1;
     } catch (AdminSetupWizardException $exception) {
         return [$draft, ['_page' => [$exception->errorKey()]]];
@@ -215,24 +272,48 @@ function admin_setup_wizard_process_post(array $draft, array $steps, array $exis
  */
 function admin_setup_wizard_process_apply(array $draft): array
 {
-    if ((string) $draft['step'] !== \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP) {
+    if (
+        (string) $draft['step']
+        !== \Gallery\Services\ADMIN_SETUP_WIZARD_SUMMARY_STEP
+    ) {
         return [$draft, ['_page' => ['admin.setup_wizard.error.invalid_step']]];
     }
     if (!is_string($_POST['approval'] ?? null) || $_POST['approval'] !== '1') {
-        return [$draft, ['_page' => ['admin.setup_wizard.error.approval_required']]];
+        return [
+            $draft,
+            ['_page' => ['admin.setup_wizard.error.approval_required']],
+        ];
     }
 
-    $settingIds = array_values(array_map('strval', array_keys($draft['changes'])));
+    $settingIds = array_values(array_map(
+        'strval',
+        array_keys($draft['changes']),
+    ));
     $oldBaseUrl = rtrim((string) (cms_config()['base_url'] ?? ''), '/');
     $settingsUrl = admin_settings_url();
     try {
-        $applied = admin_setup_wizard_apply($draft['changes'], $draft['original']);
-        admin_setup_wizard_log_event('info', 'settings.setup_wizard_applied', 'Admin applied the Setup Wizard summary.', [
-            'setting_ids' => $settingIds,
-        ]);
+        $applied = admin_setup_wizard_apply(
+            $draft['changes'],
+            $draft['original'],
+        );
+        admin_setup_wizard_log_event(
+            'info',
+            'settings.setup_wizard_applied',
+            'Admin applied the Setup Wizard summary.',
+            [
+                'setting_ids' => $settingIds,
+            ],
+        );
         unset($_SESSION[ADMIN_SETUP_WIZARD_SESSION_KEY]);
-        flash_message('admin_notice', t('admin.setup_wizard.notice.saved', 'Setup Wizard settings were saved.'));
-        redirect_to(admin_setup_wizard_post_apply_url($settingsUrl, $oldBaseUrl, $applied));
+        flash_message('admin_notice', t(
+            'admin.setup_wizard.notice.saved',
+            'Setup Wizard settings were saved.',
+        ));
+        redirect_to(admin_setup_wizard_post_apply_url(
+            $settingsUrl,
+            $oldBaseUrl,
+            $applied,
+        ));
     } catch (AdminSetupWizardException $exception) {
         admin_setup_wizard_log_failure($settingIds);
         return [$draft, ['_page' => [$exception->errorKey()]]];
@@ -250,9 +331,14 @@ function admin_setup_wizard_process_apply(array $draft): array
  */
 function admin_setup_wizard_log_failure(array $settingIds): void
 {
-    admin_setup_wizard_log_event('error', 'settings.setup_wizard_apply_failed', 'Setup Wizard apply failed safely.', [
-        'setting_ids' => $settingIds,
-    ]);
+    admin_setup_wizard_log_event(
+        'error',
+        'settings.setup_wizard_apply_failed',
+        'Setup Wizard apply failed safely.',
+        [
+            'setting_ids' => $settingIds,
+        ],
+    );
 }
 
 /**
@@ -264,8 +350,12 @@ function admin_setup_wizard_log_failure(array $settingIds): void
  * @param array{setting_ids:list<string>} $context Identifier-only context.
  * @return void
  */
-function admin_setup_wizard_log_event(string $level, string $eventKey, string $message, array $context): void
-{
+function admin_setup_wizard_log_event(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context,
+): void {
     try {
         admin_log_event($level, $eventKey, $message, $context, [
             'category' => 'settings',
@@ -284,15 +374,25 @@ function admin_setup_wizard_log_event(string $level, string $eventKey, string $m
  * @param array<string,mixed> $applied Applied normalized values.
  * @return string Safe post-apply redirect URL.
  */
-function admin_setup_wizard_post_apply_url(string $settingsUrl, string $oldBaseUrl, array $applied): string
-{
-    if (!isset($applied['base_url']) || !is_string($applied['base_url']) || $oldBaseUrl === '') {
+function admin_setup_wizard_post_apply_url(
+    string $settingsUrl,
+    string $oldBaseUrl,
+    array $applied,
+): string {
+    if (
+        !isset($applied['base_url'])
+        || !is_string($applied['base_url'])
+        || $oldBaseUrl === ''
+    ) {
         return $settingsUrl;
     }
     if (!str_starts_with($settingsUrl, $oldBaseUrl)) {
         return rtrim($applied['base_url'], '/') . '/';
     }
-    return rtrim($applied['base_url'], '/') . substr($settingsUrl, strlen($oldBaseUrl));
+    return (
+        rtrim($applied['base_url'], '/')
+            . substr($settingsUrl, strlen($oldBaseUrl))
+    );
 }
 
 /**

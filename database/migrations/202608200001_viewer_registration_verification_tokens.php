@@ -39,7 +39,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS viewer_registration_verification_tokens (
+    'CREATE TABLE IF NOT EXISTS viewer_registration_verification_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_registration_request_id BIGINT UNSIGNED NOT NULL,
         token_hash CHAR(64) NOT NULL,
@@ -50,5 +50,5 @@ return [
         KEY viewer_registration_verification_tokens_request_index (viewer_registration_request_id, id),
         KEY viewer_registration_verification_tokens_expiry_index (expires_at),
         CONSTRAINT viewer_registration_verification_tokens_request_foreign FOREIGN KEY (viewer_registration_request_id) REFERENCES viewer_registration_requests(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

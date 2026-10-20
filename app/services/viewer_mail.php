@@ -45,10 +45,12 @@ use Throwable;
 use function Gallery\Core\cms_config;
 
 const VIEWER_MAIL_ACTION_VERIFICATION = 'verification';
-const VIEWER_MAIL_ACTION_PASSWORD_RESET = 'password_reset';
-const VIEWER_MAIL_ACTION_INVITATION = 'invitation';
-const VIEWER_MAIL_ACTION_EMAIL_CHANGE = 'email_change';
 
+const VIEWER_MAIL_ACTION_PASSWORD_RESET = 'password_reset';
+
+const VIEWER_MAIL_ACTION_INVITATION = 'invitation';
+
+const VIEWER_MAIL_ACTION_EMAIL_CHANGE = 'email_change';
 
 /**
  * Return the configured trusted base URL for future viewer security links.
@@ -62,7 +64,11 @@ function viewer_security_base_url(): ?string
 {
     $config = cms_config();
     $base = trim((string) ($config['base_url'] ?? ''));
-    if ($base === '' || preg_match('/[\x00-\x1F\x7F]/', $base) === 1 || str_contains($base, '\\')) {
+    if (
+        $base === ''
+        || preg_match('/[\x00-\x1F\x7F]/', $base) === 1
+        || str_contains($base, '\\')
+    ) {
         return null;
     }
 
@@ -72,15 +78,20 @@ function viewer_security_base_url(): ?string
     }
     $scheme = strtolower((string) ($parts['scheme'] ?? ''));
     $host = strtolower((string) ($parts['host'] ?? ''));
-    if (!in_array($scheme, ['http', 'https'], true)
+    if (
+        !in_array($scheme, ['http', 'https'], true)
         || $host === ''
         || isset($parts['user'])
         || isset($parts['pass'])
         || isset($parts['query'])
-        || isset($parts['fragment'])) {
+        || isset($parts['fragment'])
+    ) {
         return null;
     }
-    if ((bool) viewer_accounts_config()['require_https'] && $scheme !== 'https') {
+    if (
+        (bool) viewer_accounts_config()['require_https']
+        && $scheme !== 'https'
+    ) {
         return null;
     }
 
@@ -93,8 +104,16 @@ function viewer_security_base_url(): ?string
         return null;
     }
     $path = rtrim($path, '/');
-    $displayHost = str_contains($host, ':') ? '[' . trim($host, '[]') . ']' : $host;
-    return $scheme . '://' . $displayHost . ($port === null ? '' : ':' . $port) . $path;
+    $displayHost = str_contains($host, ':')
+        ? '[' . trim($host, '[]') . ']'
+        : $host;
+    return (
+        $scheme
+            . '://'
+            . $displayHost
+            . ($port === null ? '' : ':' . $port)
+            . $path
+    );
 }
 
 /**
@@ -108,12 +127,14 @@ function viewer_security_url(string $relativePath, array $query = []): ?string
 {
     $base = viewer_security_base_url();
     $relativePath = trim($relativePath);
-    if ($base === null
+    if (
+        $base === null
         || $relativePath === ''
         || str_contains($relativePath, '?')
         || str_contains($relativePath, '#')
         || str_contains($relativePath, '\\')
-        || preg_match('#(^|/)\.\.(/|$)#', $relativePath) === 1) {
+        || preg_match('#(^|/)\.\.(/|$)#', $relativePath) === 1
+    ) {
         return null;
     }
 
@@ -145,11 +166,24 @@ function viewer_mail_public_result_code(): string
  */
 function viewer_mail_rate_limit_plan(string $action): array
 {
-    if (in_array($action, [VIEWER_MAIL_ACTION_VERIFICATION, VIEWER_MAIL_ACTION_EMAIL_CHANGE], true)) {
+    if (in_array(
+        $action,
+        [VIEWER_MAIL_ACTION_VERIFICATION, VIEWER_MAIL_ACTION_EMAIL_CHANGE],
+        true,
+    )) {
         return [
-            ['bucket' => 'viewer_verify_mail_email_cooldown', 'kind' => 'identifier'],
-            ['bucket' => 'viewer_verify_mail_email_hour', 'kind' => 'identifier'],
-            ['bucket' => 'viewer_verify_mail_email_day', 'kind' => 'identifier'],
+            [
+                'bucket' => 'viewer_verify_mail_email_cooldown',
+                'kind' => 'identifier',
+            ],
+            [
+                'bucket' => 'viewer_verify_mail_email_hour',
+                'kind' => 'identifier',
+            ],
+            [
+                'bucket' => 'viewer_verify_mail_email_day',
+                'kind' => 'identifier',
+            ],
             ['bucket' => 'viewer_verify_mail_ip_hour', 'kind' => 'ip'],
             ['bucket' => 'viewer_verify_mail_ip_day', 'kind' => 'ip'],
             ['bucket' => 'viewer_verify_mail_subnet_hour', 'kind' => 'subnet'],
@@ -160,8 +194,14 @@ function viewer_mail_rate_limit_plan(string $action): array
 
     if ($action === VIEWER_MAIL_ACTION_PASSWORD_RESET) {
         return [
-            ['bucket' => 'viewer_reset_mail_email_cooldown', 'kind' => 'identifier'],
-            ['bucket' => 'viewer_reset_mail_email_hour', 'kind' => 'identifier'],
+            [
+                'bucket' => 'viewer_reset_mail_email_cooldown',
+                'kind' => 'identifier',
+            ],
+            [
+                'bucket' => 'viewer_reset_mail_email_hour',
+                'kind' => 'identifier',
+            ],
             ['bucket' => 'viewer_reset_mail_email_day', 'kind' => 'identifier'],
             ['bucket' => 'viewer_reset_mail_ip_hour', 'kind' => 'ip'],
             ['bucket' => 'viewer_reset_mail_ip_day', 'kind' => 'ip'],
@@ -173,7 +213,10 @@ function viewer_mail_rate_limit_plan(string $action): array
 
     if ($action === VIEWER_MAIL_ACTION_INVITATION) {
         return [
-            ['bucket' => 'viewer_invite_mail_email_day', 'kind' => 'identifier'],
+            [
+                'bucket' => 'viewer_invite_mail_email_day',
+                'kind' => 'identifier',
+            ],
             ['bucket' => 'viewer_invite_mail_global_day', 'kind' => 'global'],
         ];
     }
@@ -194,10 +237,13 @@ function viewer_mail_rate_limit_plan(string $action): array
  * @param string $action Allowlisted viewer mail action.
  * @param string $email Recipient candidate.
  * @param ?string $clientIp Explicit client IP for tests/internal callers, otherwise trusted resolver result.
- * @return array{allowed:bool,reason:string,retry_after_seconds:int,public_result:string}
+ * @return array{allowed:bool,reason:string,retry_after_seconds:int,public_result:string} Whether the requested mail action is allowed, its reason, retry delay and public result code.
  */
-function viewer_mail_authorize_send(string $action, string $email, ?string $clientIp = null): array
-{
+function viewer_mail_authorize_send(
+    string $action,
+    string $email,
+    ?string $clientIp = null,
+): array {
     $publicResult = viewer_mail_public_result_code();
     if (!viewer_accounts_enabled()) {
         return [
@@ -226,10 +272,15 @@ function viewer_mail_authorize_send(string $action, string $email, ?string $clie
         ];
     }
 
-    $resolvedIp = $clientIp === null ? request_client_ip() : request_client_ip_normalize($clientIp);
+    $resolvedIp = $clientIp === null
+        ? request_client_ip()
+        : request_client_ip_normalize($clientIp);
     $plan = viewer_mail_rate_limit_plan($action);
     foreach ($plan as $dimension) {
-        if (in_array($dimension['kind'], ['ip', 'subnet'], true) && $resolvedIp === '') {
+        if (
+            in_array($dimension['kind'], ['ip', 'subnet'], true)
+            && $resolvedIp === ''
+        ) {
             return [
                 'allowed' => false,
                 'reason' => 'client_ip_unavailable',
@@ -249,12 +300,17 @@ function viewer_mail_authorize_send(string $action, string $email, ?string $clie
             } else {
                 $subject = $normalized;
             }
-            $decision = viewer_rate_limit_consume($dimension['bucket'], $kind, $subject);
+            $decision = viewer_rate_limit_consume(
+                $dimension['bucket'],
+                $kind,
+                $subject,
+            );
             if (!$decision['allowed']) {
                 return [
                     'allowed' => false,
                     'reason' => 'rate_limited',
-                    'retry_after_seconds' => (int) $decision['retry_after_seconds'],
+                    'retry_after_seconds' =>
+                        (int) $decision['retry_after_seconds'],
                     'public_result' => $publicResult,
                 ];
             }

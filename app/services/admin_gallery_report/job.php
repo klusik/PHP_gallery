@@ -36,10 +36,10 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+
 use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
-
 use Throwable;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE;
@@ -55,9 +55,14 @@ use function Gallery\Core\db;
  * @param int $telemetryDays Telemetry window in days.
  * @return array<string, mixed> Structured job state.
  */
-function admin_gallery_report_start_job(?array &$checkpoint, int $telemetryDays = ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS): array
-{
-    $telemetryDays = max(1, min(ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS, $telemetryDays));
+function admin_gallery_report_start_job(
+    ?array &$checkpoint,
+    int $telemetryDays = ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS,
+): array {
+    $telemetryDays = max(1, min(
+        ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS,
+        $telemetryDays,
+    ));
     $totalImages = admin_gallery_report_image_count();
     $job = [
         'job_id' => admin_gallery_report_job_id(),
@@ -72,7 +77,10 @@ function admin_gallery_report_start_job(?array &$checkpoint, int $telemetryDays 
         'runtime' => admin_gallery_report_runtime_summary(),
         'database' => admin_gallery_report_database_section(),
         'data_paths' => admin_gallery_report_data_path_summary(),
-        'thumbnail_legacy_inventory' => function_exists(__NAMESPACE__ . '\\thumbnail_legacy_jpg_inventory') ? thumbnail_legacy_jpg_inventory() : ['available' => false],
+        'thumbnail_legacy_inventory' => function_exists(__NAMESPACE__
+            . '\\thumbnail_legacy_jpg_inventory')
+            ? thumbnail_legacy_jpg_inventory()
+            : ['available' => false],
         'tables' => admin_gallery_report_table_counts(),
         'galleries' => admin_gallery_report_gallery_summary(),
         'gallery_rows' => admin_gallery_report_gallery_detail_rows(),
@@ -81,11 +89,24 @@ function admin_gallery_report_start_job(?array &$checkpoint, int $telemetryDays 
         'features' => admin_gallery_report_feature_summary(),
         'logs' => admin_gallery_report_admin_log_summary(),
         'telemetry' => admin_gallery_report_telemetry_section($telemetryDays),
-        'top_images' => admin_gallery_report_largest_images(ADMIN_GALLERY_REPORT_ROW_LIMITS['top_images']),
+        'top_images' => admin_gallery_report_largest_images(
+            ADMIN_GALLERY_REPORT_ROW_LIMITS['top_images'],
+        ),
         'image_summary' => admin_gallery_report_initial_image_summary(),
-        'storage_source' => function_exists('Gallery\\Services\\admin_storage_statistics_source_summary') ? admin_storage_statistics_source_summary([]) : [],
-        'storage_generated' => function_exists('Gallery\\Services\\admin_storage_statistics_initial_generated_summary') ? admin_storage_statistics_initial_generated_summary() : [],
-        'thumbnail_metadata_used' => function_exists('Gallery\\Services\\admin_storage_statistics_thumbnail_metadata_available') && admin_storage_statistics_thumbnail_metadata_available(),
+        'storage_source' => function_exists(
+            'Gallery\\Services\\admin_storage_statistics_source_summary',
+        )
+            ? admin_storage_statistics_source_summary([])
+            : [],
+        'storage_generated' => function_exists(
+            'Gallery\\Services\\admin_storage_statistics_initial_generated_summary',
+        )
+            ? admin_storage_statistics_initial_generated_summary()
+            : [],
+        'thumbnail_metadata_used' =>
+            function_exists(
+                'Gallery\\Services\\admin_storage_statistics_thumbnail_metadata_available',
+            ) && admin_storage_statistics_thumbnail_metadata_available(),
         'errors' => [],
     ];
 
@@ -104,8 +125,10 @@ function admin_gallery_report_start_job(?array &$checkpoint, int $telemetryDays 
  * @param int $batchSize Number of image rows to inspect.
  * @return array<string, mixed> Structured job state.
  */
-function admin_gallery_report_process_job(?array &$checkpoint, int $batchSize = ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE): array
-{
+function admin_gallery_report_process_job(
+    ?array &$checkpoint,
+    int $batchSize = ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE,
+): array {
     $job = admin_gallery_report_job_read($checkpoint);
     if ($job === null || (string) ($job['status'] ?? '') !== 'running') {
         return [
@@ -121,25 +144,64 @@ function admin_gallery_report_process_job(?array &$checkpoint, int $batchSize = 
     $batchSize = max(1, min(ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE, $batchSize));
     $lastImageId = max(0, (int) ($job['last_image_id'] ?? 0));
     $rows = admin_gallery_report_image_rows_after_id($lastImageId, $batchSize);
-    $imageSummary = is_array($job['image_summary'] ?? null) ? $job['image_summary'] : admin_gallery_report_initial_image_summary();
-    $sourceSummary = is_array($job['storage_source'] ?? null) ? $job['storage_source'] : (function_exists('Gallery\\Services\\admin_storage_statistics_source_summary') ? admin_storage_statistics_source_summary([]) : []);
-    $generatedSummary = is_array($job['storage_generated'] ?? null) ? $job['storage_generated'] : (function_exists('Gallery\\Services\\admin_storage_statistics_initial_generated_summary') ? admin_storage_statistics_initial_generated_summary() : []);
+    $imageSummary = is_array($job['image_summary'] ?? null)
+        ? $job['image_summary']
+        : admin_gallery_report_initial_image_summary();
+    $sourceSummary = is_array($job['storage_source'] ?? null)
+        ? $job['storage_source']
+        : (
+            function_exists(
+                'Gallery\\Services\\admin_storage_statistics_source_summary',
+            )
+                    ? admin_storage_statistics_source_summary([])
+                    : []
+        );
+    $generatedSummary = is_array($job['storage_generated'] ?? null)
+        ? $job['storage_generated']
+        : (
+            function_exists(
+                'Gallery\\Services\\admin_storage_statistics_initial_generated_summary',
+            )
+                    ? admin_storage_statistics_initial_generated_summary()
+                    : []
+        );
     $thumbnailMetadataUsed = !empty($job['thumbnail_metadata_used']);
 
     foreach ($rows as $row) {
         admin_gallery_report_accumulate_image_row($imageSummary, $row);
-        if (function_exists('Gallery\\Services\\admin_storage_statistics_accumulate_source_row')) {
-            admin_storage_statistics_accumulate_source_row($sourceSummary, $row);
+        if (function_exists(
+            'Gallery\\Services\\admin_storage_statistics_accumulate_source_row',
+        )) {
+            admin_storage_statistics_accumulate_source_row(
+                $sourceSummary,
+                $row,
+            );
         }
-        if ($thumbnailMetadataUsed && function_exists('Gallery\\Services\\admin_storage_statistics_accumulate_display_master_media_row')) {
-            admin_storage_statistics_accumulate_display_master_media_row($generatedSummary, $row);
-        } elseif (function_exists('Gallery\\Services\\admin_storage_statistics_accumulate_generated_media_row')) {
-            admin_storage_statistics_accumulate_generated_media_row($generatedSummary, $row);
+        if (
+            $thumbnailMetadataUsed
+            && function_exists(
+                'Gallery\\Services\\admin_storage_statistics_accumulate_display_master_media_row',
+            )
+        ) {
+            admin_storage_statistics_accumulate_display_master_media_row(
+                $generatedSummary,
+                $row,
+            );
+        } elseif (function_exists(
+            'Gallery\\Services\\admin_storage_statistics_accumulate_generated_media_row',
+        )) {
+            admin_storage_statistics_accumulate_generated_media_row(
+                $generatedSummary,
+                $row,
+            );
         }
         $lastImageId = max($lastImageId, (int) ($row['image_id'] ?? 0));
     }
 
-    $processed = min(max(0, (int) ($job['total'] ?? 0)), max(0, (int) ($job['processed'] ?? 0)) + count($rows));
+    $processed = min(
+        max(0, (int) ($job['total'] ?? 0)),
+        max(0, (int) ($job['processed'] ?? 0)) + count($rows),
+    );
     $job['image_summary'] = $imageSummary;
     $job['storage_source'] = $sourceSummary;
     $job['storage_generated'] = $generatedSummary;
@@ -168,24 +230,45 @@ function admin_gallery_report_finish_job(array $job, ?array &$checkpoint): array
     $job['processed'] = (int) ($job['total'] ?? $job['processed'] ?? 0);
     $job['updated_at'] = time();
     $job['finished_at'] = time();
-    $job['duration_seconds'] = max(0, (int) ($job['finished_at'] ?? time()) - (int) ($job['started_at'] ?? time()));
-    $job['image_summary'] = admin_gallery_report_finalize_image_summary(is_array($job['image_summary'] ?? null) ? $job['image_summary'] : admin_gallery_report_initial_image_summary());
+    $job['duration_seconds'] = max(
+        0,
+        (int) ($job['finished_at'] ?? time())
+            - (int) ($job['started_at'] ?? time()),
+    );
+    $job['image_summary'] = admin_gallery_report_finalize_image_summary(
+        is_array($job['image_summary'] ?? null)
+            ? $job['image_summary']
+            : admin_gallery_report_initial_image_summary(),
+    );
     $job['storage'] = admin_gallery_report_storage_snapshot($job);
 
     $filename = 'php-gallery-complete-overview-' . gmdate('Ymd-His') . '.html';
     admin_gallery_report_job_clear($checkpoint);
 
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event('info', 'admin_report.generated', 'Admin generated a complete gallery overview report.', [
-            'images' => (int) ($job['total'] ?? 0),
-            'duration_seconds' => (int) ($job['duration_seconds'] ?? 0),
-            'telemetry_days' => (int) ($job['telemetry_days'] ?? ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS),
-        ], ['category' => 'admin', 'severity' => 'notice', 'route_name' => 'admin_gallery_report']);
+        admin_log_event(
+            'info',
+            'admin_report.generated',
+            'Admin generated a complete gallery overview report.',
+            [
+                'images' => (int) ($job['total'] ?? 0),
+                'duration_seconds' => (int) ($job['duration_seconds'] ?? 0),
+                'telemetry_days' => (int) (
+                    $job['telemetry_days']
+                    ?? ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS
+                ),
+            ],
+            [
+                'category' => 'admin',
+                'severity' => 'notice',
+                'route_name' => 'admin_gallery_report',
+            ],
+        );
     }
 
     $job['presentation'] = array_merge(
         is_array($job['presentation'] ?? null) ? $job['presentation'] : [],
-        ['gps_area_km' => ADMIN_GALLERY_REPORT_GPS_AREA_KM]
+        ['gps_area_km' => ADMIN_GALLERY_REPORT_GPS_AREA_KM],
     );
 
     return admin_gallery_report_public_state($job, [

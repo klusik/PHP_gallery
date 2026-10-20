@@ -42,7 +42,6 @@ use function Gallery\Models\lightbox_metadata_model_state_summary;
 use function Gallery\Models\lightbox_metadata_model_total_count;
 use function Gallery\Core\admin_anonymous_preview_active;
 
-
 /**
  * Return true when public or anonymous-preview lightbox output must hide NSFW image rows.
  *
@@ -50,8 +49,10 @@ use function Gallery\Core\admin_anonymous_preview_active;
  * @param bool $publicOnly True when the current request uses anonymous visitor visibility.
  * @return bool True when restricted image rows must not be exposed to the browser.
  */
-function gallery_lightbox_excludes_restricted_nsfw(array $gallery, bool $publicOnly): bool
-{
+function gallery_lightbox_excludes_restricted_nsfw(
+    array $gallery,
+    bool $publicOnly,
+): bool {
     if (!$publicOnly || !nsfw_guard_schema_ready()) {
         return false;
     }
@@ -63,29 +64,39 @@ function gallery_lightbox_excludes_restricted_nsfw(array $gallery, bool $publicO
 /**
  * Return true when a whole gallery is NSFW-gated for the current public lightbox request.
  *
- * @param array $gallery Gallery database row used for inherited NSFW checks.
+ * @param array{id?:int|string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited NSFW policy fields.
  * @param bool $publicOnly True when the current request uses anonymous visitor visibility.
  * @param bool $excludeRestrictedNsfw True when restricted image rows should be removed.
  * @return bool True when no image metadata may be exposed.
  */
-function gallery_lightbox_gallery_restricted_by_nsfw(array $gallery, bool $publicOnly, bool $excludeRestrictedNsfw): bool
-{
-    return $publicOnly
-        && $excludeRestrictedNsfw
-        && nsfw_guard_schema_ready()
-        && gallery_nsfw_requirement($gallery) !== null;
+function gallery_lightbox_gallery_restricted_by_nsfw(
+    array $gallery,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw,
+): bool {
+    return (
+        $publicOnly
+            && $excludeRestrictedNsfw
+            && nsfw_guard_schema_ready()
+            && gallery_nsfw_requirement($gallery) !== null
+    );
 }
 
 /**
  * Build the semantic visibility scope shared by lightbox model queries.
  *
- * @return array{public_only:bool,exclude_restricted_nsfw:bool}
+ * @param bool $publicOnly Whether to include only publicly visible images.
+ * @param bool $excludeRestrictedNsfw Whether to exclude rows restricted by NSFW policy.
+ * @return array{public_only:bool,exclude_restricted_nsfw:bool} Normalized query visibility flags.
  */
-function gallery_lightbox_image_scope(bool $publicOnly, bool $excludeRestrictedNsfw = false): array
-{
+function gallery_lightbox_image_scope(
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw = false,
+): array {
     return [
         'public_only' => $publicOnly,
-        'exclude_restricted_nsfw' => $excludeRestrictedNsfw && nsfw_guard_schema_ready(),
+        'exclude_restricted_nsfw' =>
+            $excludeRestrictedNsfw && nsfw_guard_schema_ready(),
     ];
 }
 
@@ -96,37 +107,59 @@ function gallery_lightbox_image_scope(bool $publicOnly, bool $excludeRestrictedN
  * visibility scope used by the caller. It lets mutation completion verify changes
  * that may live on a different pagination page without loading every image row.
  *
- * @param array $gallery Gallery database row.
+ * @param array{id:int|string,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited NSFW policy fields.
  * @param bool $publicOnly True when only public image rows should be included.
  * @param bool $excludeRestrictedNsfw True when restricted NSFW rows should be removed.
  * @return array{count:int,revision:string} Full count and aggregate image revision.
  */
-function gallery_lightbox_state_summary(array $gallery, bool $publicOnly, bool $excludeRestrictedNsfw = false): array
-{
-    if (gallery_lightbox_gallery_restricted_by_nsfw($gallery, $publicOnly, $excludeRestrictedNsfw)) {
+function gallery_lightbox_state_summary(
+    array $gallery,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw = false,
+): array {
+    if (gallery_lightbox_gallery_restricted_by_nsfw(
+        $gallery,
+        $publicOnly,
+        $excludeRestrictedNsfw,
+    )) {
         return ['count' => 0, 'revision' => ''];
     }
 
     $scope = gallery_lightbox_image_scope($publicOnly, $excludeRestrictedNsfw);
-    return lightbox_metadata_model_state_summary((int) $gallery['id'], $scope['public_only'], $scope['exclude_restricted_nsfw']);
+    return lightbox_metadata_model_state_summary(
+        (int) $gallery['id'],
+        $scope['public_only'],
+        $scope['exclude_restricted_nsfw'],
+    );
 }
 
 /**
  * Count ordered top-level photos in one gallery.
  *
- * @param array $gallery Gallery database row.
+ * @param array{id:int|string,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited NSFW policy fields.
  * @param bool $publicOnly True when only public image rows should be counted.
  * @param bool $excludeRestrictedNsfw True when lightbox-ineligible NSFW rows should be removed.
  * @return int Number of rows matching the request visibility rules.
  */
-function gallery_lightbox_total_count(array $gallery, bool $publicOnly, bool $excludeRestrictedNsfw = false): int
-{
-    if (gallery_lightbox_gallery_restricted_by_nsfw($gallery, $publicOnly, $excludeRestrictedNsfw)) {
+function gallery_lightbox_total_count(
+    array $gallery,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw = false,
+): int {
+    if (gallery_lightbox_gallery_restricted_by_nsfw(
+        $gallery,
+        $publicOnly,
+        $excludeRestrictedNsfw,
+    )) {
         return 0;
     }
 
     $scope = gallery_lightbox_image_scope($publicOnly, $excludeRestrictedNsfw);
-    return lightbox_metadata_model_total_count((int) $gallery['id'], $scope['public_only'], $scope['exclude_restricted_nsfw']);
+    return lightbox_metadata_model_total_count(
+        (int) $gallery['id'],
+        $scope['public_only'],
+        $scope['exclude_restricted_nsfw'],
+    );
 }
 
 /**
@@ -136,16 +169,25 @@ function gallery_lightbox_total_count(array $gallery, bool $publicOnly, bool $ex
  * uses the same helper for lazy lightbox metadata, keeping order and visibility
  * rules identical between server-rendered cards and asynchronous navigation.
  *
- * @param array $gallery Gallery database row.
+ * @param array{id:int|string,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited NSFW policy fields.
  * @param bool $publicOnly True when only public image rows should be selected.
  * @param int $offset Zero-based row offset.
  * @param int|null $limit Maximum rows to return, or null for all rows.
  * @param bool $excludeRestrictedNsfw True when lightbox-ineligible NSFW rows should be removed.
- * @return array<int,array<string,mixed>> Ordered image rows.
+ * @return list<array<string,int|float|string|null>> Ordered persisted image rows with aggregate vote fields.
  */
-function gallery_lightbox_fetch_images(array $gallery, bool $publicOnly, int $offset = 0, ?int $limit = null, bool $excludeRestrictedNsfw = false): array
-{
-    if (gallery_lightbox_gallery_restricted_by_nsfw($gallery, $publicOnly, $excludeRestrictedNsfw)) {
+function gallery_lightbox_fetch_images(
+    array $gallery,
+    bool $publicOnly,
+    int $offset = 0,
+    ?int $limit = null,
+    bool $excludeRestrictedNsfw = false,
+): array {
+    if (gallery_lightbox_gallery_restricted_by_nsfw(
+        $gallery,
+        $publicOnly,
+        $excludeRestrictedNsfw,
+    )) {
         return [];
     }
 
@@ -155,31 +197,43 @@ function gallery_lightbox_fetch_images(array $gallery, bool $publicOnly, int $of
         $scope['public_only'],
         max(0, $offset),
         $limit,
-        $scope['exclude_restricted_nsfw']
+        $scope['exclude_restricted_nsfw'],
     );
 }
 
 /**
  * Return the zero-based ordered position of one image under the supplied visibility rules.
  *
- * @param array $image Image database row whose gallery-local position is needed.
- * @param array $gallery Gallery database row.
+ * @param array{id:int|string,gallery_id?:int|string|null,visibility?:string|null,filename?:string|null} $image Image row whose gallery-local position is needed.
+ * @param array{id:int|string,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited NSFW policy fields.
  * @param bool $publicOnly True when only public image rows should be considered.
  * @param bool $excludeRestrictedNsfw True when lightbox-ineligible NSFW rows should be removed.
  * @return int Zero-based position, or -1 when the image cannot be part of the requested list.
  */
-function gallery_lightbox_image_position(array $image, array $gallery, bool $publicOnly, bool $excludeRestrictedNsfw = false): int
-{
+function gallery_lightbox_image_position(
+    array $image,
+    array $gallery,
+    bool $publicOnly,
+    bool $excludeRestrictedNsfw = false,
+): int {
     if ((int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)) {
         return -1;
     }
     if ($publicOnly && (string) ($image['visibility'] ?? '') !== 'public') {
         return -1;
     }
-    if ($excludeRestrictedNsfw && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content()) {
+    if (
+        $excludeRestrictedNsfw
+        && image_nsfw_restricted($image, $gallery)
+        && !visitor_can_access_nsfw_content()
+    ) {
         return -1;
     }
-    if (gallery_lightbox_gallery_restricted_by_nsfw($gallery, $publicOnly, $excludeRestrictedNsfw)) {
+    if (gallery_lightbox_gallery_restricted_by_nsfw(
+        $gallery,
+        $publicOnly,
+        $excludeRestrictedNsfw,
+    )) {
         return -1;
     }
 
@@ -188,6 +242,6 @@ function gallery_lightbox_image_position(array $image, array $gallery, bool $pub
         (int) $gallery['id'],
         $image,
         $scope['public_only'],
-        $scope['exclude_restricted_nsfw']
+        $scope['exclude_restricted_nsfw'],
     );
 }

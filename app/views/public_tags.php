@@ -49,13 +49,30 @@ use function Gallery\Services\t;
 function view_render_public_tag_page(array $viewModel): void
 {
     view_render_breadcrumbs((array) ($viewModel['breadcrumbs'] ?? []));
-    echo '<section class="hero" data-public-tag-page data-tag-id="' . (int) ($viewModel['tag_id'] ?? 0) . '" data-public-tag-gallery-count="' . (int) ($viewModel['gallery_count'] ?? 0) . '" data-admin-mutation-canonical-url="' . e((string) ($viewModel['canonical_url'] ?? '')) . '"><div class="hero-title-row"><div><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1></div>';
-    view_render_public_tag_admin_actions((array) ($viewModel['admin_actions'] ?? []));
+    echo
+        '<section class="hero" data-public-tag-page data-tag-id="'
+            . (int) ($viewModel['tag_id'] ?? 0)
+            . '" data-public-tag-gallery-count="'
+            . (int) ($viewModel['gallery_count'] ?? 0)
+            . '" data-admin-mutation-canonical-url="'
+            . e((string) ($viewModel['canonical_url'] ?? ''))
+            . '"><div class="hero-title-row"><div><h1>'
+            . e((string) ($viewModel['title'] ?? ''))
+            . '</h1></div>';
+    view_render_public_tag_admin_actions(
+        (array) ($viewModel['admin_actions'] ?? []),
+    );
     echo '</div>';
-    if (!empty($viewModel['description_enabled']) && trim((string) ($viewModel['description'] ?? '')) !== '') {
+    if (
+        !empty($viewModel['description_enabled'])
+        && trim((string) ($viewModel['description'] ?? '')) !== ''
+    ) {
         echo '<p>' . nl2br(e((string) $viewModel['description'])) . '</p>';
     }
-    echo '<p class="muted">' . e((string) ($viewModel['gallery_count_label'] ?? '')) . '</p></section>';
+    echo
+        '<p class="muted">'
+            . e((string) ($viewModel['gallery_count_label'] ?? ''))
+            . '</p></section>';
 
     if (empty($viewModel['has_galleries'])) {
         return;
@@ -64,7 +81,10 @@ function view_render_public_tag_page(array $viewModel): void
     echo '<div class="gallery-list-frame" data-back-to-top-scope>';
     echo '<div class="gallery-list-content" data-back-to-top-list>';
     echo (string) ($viewModel['pagination_top_html'] ?? '');
-    echo '<section class="grid' . e((string) ($viewModel['grid_class'] ?? '')) . '">';
+    echo
+        '<section class="grid'
+            . e((string) ($viewModel['grid_class'] ?? ''))
+            . '">';
     echo (string) ($viewModel['gallery_cards_html'] ?? '');
     echo '</section>';
     echo (string) ($viewModel['pagination_bottom_html'] ?? '');
@@ -85,7 +105,22 @@ function view_render_public_tag_admin_actions(array $viewModel): void
     }
 
     echo '<div class="hero-actions public-tag-admin-actions">';
-    echo '<a class="public-admin-edit-button public-admin-edit-button-hero public-admin-edit-button-tag" href="' . e((string) ($viewModel['edit_url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="tag-edit" data-admin-side-panel-kicker="' . e((string) ($viewModel['panel_kicker'] ?? '')) . '" data-admin-side-panel-title="' . e((string) ($viewModel['panel_title'] ?? '')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e((string) ($viewModel['edit_label'] ?? '')) . '" title="' . e((string) ($viewModel['edit_label'] ?? '')) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e((string) ($viewModel['edit_label'] ?? '')) . '</span></a>';
+    echo
+        '<a class="public-admin-edit-button public-admin-edit-button-hero public-admin-edit-button-tag" href="'
+            . e((string) ($viewModel['edit_url'] ?? ''))
+            . '" data-gallery-side-panel-link data-admin-side-panel-workflow="tag-edit" data-admin-side-panel-kicker="'
+            . e((string) ($viewModel['panel_kicker'] ?? ''))
+            . '" data-admin-side-panel-title="'
+            . e((string) ($viewModel['panel_title'] ?? ''))
+            . '" data-gallery-side-panel-url="'
+            . e((string) ($viewModel['panel_url'] ?? ''))
+            . '" aria-label="'
+            . e((string) ($viewModel['edit_label'] ?? ''))
+            . '" title="'
+            . e((string) ($viewModel['edit_label'] ?? ''))
+            . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">'
+            . e((string) ($viewModel['edit_label'] ?? ''))
+            . '</span></a>';
     view_render_public_tag_admin_delete_form($viewModel);
     echo '</div>';
 }
@@ -101,12 +136,30 @@ function view_render_public_tag_admin_delete_form(array $viewModel): void
         return;
     }
 
-    echo '<form class="public-admin-delete-form public-admin-delete-form-hero public-admin-delete-form-tag" method="post" action="' . e((string) ($viewModel['delete_url'] ?? '')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e((string) ($viewModel['name'] ?? '')) . '" data-public-admin-delete-kind="tag">';
+    echo
+        '<form class="public-admin-delete-form public-admin-delete-form-hero public-admin-delete-form-tag" method="post" action="'
+            . e((string) ($viewModel['delete_url'] ?? ''))
+            . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="'
+            . e((string) ($viewModel['name'] ?? ''))
+            . '" data-public-admin-delete-kind="tag">';
     echo csrf_field();
-    echo '<input type="hidden" name="tag_id" value="' . (int) ($viewModel['tag_id'] ?? 0) . '">';
+    echo
+        '<input type="hidden" name="tag_id" value="'
+            . (int) ($viewModel['tag_id'] ?? 0)
+            . '">';
     echo '<input type="hidden" name="action" value="delete">';
-    echo '<input type="hidden" name="return_url" value="' . e((string) ($viewModel['return_url'] ?? '')) . '">';
-    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e((string) ($viewModel['delete_label'] ?? '')) . '" title="' . e((string) ($viewModel['delete_label'] ?? '')) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e((string) ($viewModel['delete_label'] ?? '')) . '</span></button>';
+    echo
+        '<input type="hidden" name="return_url" value="'
+            . e((string) ($viewModel['return_url'] ?? ''))
+            . '">';
+    echo
+        '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="'
+            . e((string) ($viewModel['delete_label'] ?? ''))
+            . '" title="'
+            . e((string) ($viewModel['delete_label'] ?? ''))
+            . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">'
+            . e((string) ($viewModel['delete_label'] ?? ''))
+            . '</span></button>';
     echo '</form>';
 }
 
@@ -128,36 +181,74 @@ function view_render_tag_list(array $viewModel): void
     echo '<' . $containerTag . ' class="tag-list">';
     if (array_key_exists('label', $viewModel) && $viewModel['label'] !== null) {
         $label = (string) $viewModel['label'];
-        echo '<span class="tag-list-label" title="' . e($label) . '">' . e($label) . '</span>';
+        echo
+            '<span class="tag-list-label" title="'
+                . e($label)
+                . '">'
+                . e($label)
+                . '</span>';
     }
     $visibleLimit = max(1, (int) ($viewModel['visible_limit'] ?? 20));
-    $visibleItems = $inlineDisclosure ? array_slice($items, 0, $visibleLimit) : $items;
-    $overflowItems = $inlineDisclosure ? array_slice($items, $visibleLimit) : [];
+    $visibleItems = $inlineDisclosure
+        ? array_slice($items, 0, $visibleLimit)
+        : $items;
+    $overflowItems = $inlineDisclosure
+        ? array_slice($items, $visibleLimit)
+        : [];
     $hasOverflow = $overflowItems !== [];
     foreach ($visibleItems as $index => $item) {
-        if ($hasOverflow && $index === count($visibleItems) - 1) {
+        if ($hasOverflow && $index === (count($visibleItems) - 1)) {
             echo '<div class="gallery-card-tag-tail">';
         }
         $href = $item['href'] ?? null;
         $name = (string) ($item['name'] ?? '');
         if (is_string($href) && $href !== '') {
-            echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
+            echo
+                '<a class="tag" href="'
+                    . e($href)
+                    . '" title="'
+                    . e($name)
+                    . '">'
+                    . e($name)
+                    . '</a>';
         } else {
-            echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
+            echo
+                '<span class="tag" title="'
+                    . e($name)
+                    . '">'
+                    . e($name)
+                    . '</span>';
         }
     }
     if ($overflowItems !== []) {
         $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
         $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
         echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';
-        echo '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">' . $showAllLabel . '</span><span class="hero-tag-summary-label-expanded">' . $showFewerLabel . '</span></span></summary>';
+        echo
+            '<summary class="tag gallery-card-tags-toggle"><span class="hero-tag-summary-collapsed" aria-hidden="true">[...]</span><span class="hero-tag-summary-expanded" aria-hidden="true">[−]</span><span class="visually-hidden"><span class="hero-tag-summary-label-collapsed">'
+                . $showAllLabel
+                . '</span><span class="hero-tag-summary-label-expanded">'
+                . $showFewerLabel
+                . '</span></span></summary>';
         foreach ($overflowItems as $item) {
             $href = $item['href'] ?? null;
             $name = (string) ($item['name'] ?? '');
             if (is_string($href) && $href !== '') {
-                echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
+                echo
+                    '<a class="tag" href="'
+                        . e($href)
+                        . '" title="'
+                        . e($name)
+                        . '">'
+                        . e($name)
+                        . '</a>';
             } else {
-                echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
+                echo
+                    '<span class="tag" title="'
+                        . e($name)
+                        . '">'
+                        . e($name)
+                        . '</span>';
             }
         }
         echo '</details>';
@@ -190,24 +281,49 @@ function view_render_public_hero_tags(array $viewModel): void
     $rowHeight = [];
     for ($row = 0; $row < $scrollbarRows; $row++) {
         $rowHeight[] = '(1.35em + .2rem + 2px)';
-        if ($row < $scrollbarRows - 1) {
+        if ($row < ($scrollbarRows - 1)) {
             $rowHeight[] = '.28rem';
         }
     }
-    $scrollbarStyle = $scrollbarEnabled ? ' style="--hero-tag-scrollbar-height: calc(' . implode(' + ', $rowHeight) . ')"' : '';
-    echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($scrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $scrollbarRows . '"' . $scrollbarStyle . '>';
-    echo '<div class="hero-tags-content" data-hero-tags-content><div class="tag-list">';
+    $scrollbarStyle = $scrollbarEnabled
+        ? ' style="--hero-tag-scrollbar-height: calc('
+        . implode(' + ', $rowHeight)
+        . ')"'
+        : '';
+    echo
+        '<div class="hero-tags" aria-label="'
+            . e(t('gallery.tags', 'Gallery tags'))
+            . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="'
+            . $visibleLimit
+            . '" data-hero-tag-display-all="'
+            . ($displayAll ? '1' : '0')
+            . '" data-hero-tag-scrollbar-enabled="'
+            . ($scrollbarEnabled ? '1' : '0')
+            . '" data-hero-tag-scrollbar-rows="'
+            . $scrollbarRows
+            . '"'
+            . $scrollbarStyle
+            . '>';
+    echo
+        '<div class="hero-tags-content" data-hero-tags-content><div class="tag-list">';
 
     $renderedTags = 0;
     foreach ($groups as $group) {
         $items = (array) ($group['items'] ?? []);
-        $visibleItems = $displayAll ? $items : array_slice($items, 0, max(0, $visibleLimit - $renderedTags));
+        $visibleItems = $displayAll
+            ? $items
+            : array_slice($items, 0, max(0, $visibleLimit - $renderedTags));
         if ($visibleItems === []) {
             continue;
         }
         if (array_key_exists('label', $group) && $group['label'] !== null) {
             $label = (string) $group['label'];
-            echo '<span class="tag-list-label" title="' . e($label) . '">' . e($label) . '</span>';
+            echo
+                '<span class="tag-list-label" title="'
+                    . e($label)
+                    . '">'
+                    . e($label)
+                    . '</span>';
         }
         view_render_public_gallery_card_tag_items($visibleItems);
         $renderedTags += count($visibleItems);
@@ -242,17 +358,39 @@ function view_render_gallery_card_tags(array $viewModel): void
     $scrollbarEnabled = !empty($viewModel['scrollbar_enabled']);
     $scrollbarRows = max(1, min(12, (int) ($viewModel['scrollbar_rows'] ?? 5)));
     $hasInfoPanel = !$displayAll && count($items) > $visibleLimit;
-    $visibleItems = $displayAll ? $items : array_slice($items, 0, $visibleLimit);
+    $visibleItems = $displayAll
+        ? $items
+        : array_slice($items, 0, $visibleLimit);
     $rowHeight = [];
     for ($row = 0; $row < $scrollbarRows; $row++) {
         $rowHeight[] = '(1.35em + .2rem + 2px)';
-        if ($row < $scrollbarRows - 1) {
+        if ($row < ($scrollbarRows - 1)) {
             $rowHeight[] = '.28rem';
         }
     }
-    $scrollbarStyle = $scrollbarEnabled ? ' style="--hero-tag-scrollbar-height: calc(' . implode(' + ', $rowHeight) . ')"' : '';
-    echo '<div class="gallery-card-tags' . ($scrollbarEnabled ? ' has-tag-scrollbar' : '') . '" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($scrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $scrollbarRows . '"' . $scrollbarStyle . '>';
-    echo '<div class="gallery-card-tags-content" data-hero-tags-content><div class="tag-list gallery-card-tag-preview">';
+    $scrollbarStyle = $scrollbarEnabled
+        ? ' style="--hero-tag-scrollbar-height: calc('
+        . implode(' + ', $rowHeight)
+        . ')"'
+        : '';
+    echo
+        '<div class="gallery-card-tags'
+            . ($scrollbarEnabled ? ' has-tag-scrollbar' : '')
+            . '" aria-label="'
+            . e(t('gallery.tags', 'Gallery tags'))
+            . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="'
+            . $visibleLimit
+            . '" data-hero-tag-display-all="'
+            . ($displayAll ? '1' : '0')
+            . '" data-hero-tag-scrollbar-enabled="'
+            . ($scrollbarEnabled ? '1' : '0')
+            . '" data-hero-tag-scrollbar-rows="'
+            . $scrollbarRows
+            . '"'
+            . $scrollbarStyle
+            . '>';
+    echo
+        '<div class="gallery-card-tags-content" data-hero-tags-content><div class="tag-list gallery-card-tag-preview">';
     view_render_public_gallery_card_tag_items($visibleItems);
     if ($hasInfoPanel) {
         view_render_public_gallery_tag_info_panel($viewModel);
@@ -270,23 +408,55 @@ function view_render_gallery_card_tags(array $viewModel): void
 function view_render_public_gallery_tag_info_panel(array $viewModel): void
 {
     $tagsOnly = !empty($viewModel['tags_only']);
-    $infoLabel = e($tagsOnly ? t('gallery.all_tags', 'All tags') : t('gallery.public_info', 'Gallery information'));
-    $groups = (array) ($viewModel['groups'] ?? [['items' => (array) ($viewModel['items'] ?? [])]]);
+    $infoLabel = e(
+        $tagsOnly
+            ? t('gallery.all_tags', 'All tags')
+            : t('gallery.public_info', 'Gallery information'),
+    );
+    $groups = (array) (
+        $viewModel['groups'] ?? [[
+            'items' => (array) ($viewModel['items'] ?? []),
+        ]]
+    );
     $publicTitle = trim((string) ($viewModel['public_title'] ?? ''));
-    $publicDescriptionHtml = trim((string) ($viewModel['public_description_html'] ?? ''));
+    $publicDescriptionHtml = trim(
+        (string) ($viewModel['public_description_html'] ?? ''),
+    );
     $publicDateHtml = trim((string) ($viewModel['public_date_html'] ?? ''));
-    echo '<details class="hero-tag-disclosure gallery-card-info-disclosure" data-hero-tags-disclosure data-gallery-card-info-disclosure>';
-    echo '<summary class="tag gallery-card-tags-toggle gallery-card-info-toggle" aria-label="' . $infoLabel . '" title="' . $infoLabel . '"><span aria-hidden="true">…</span><span class="visually-hidden">' . $infoLabel . '</span></summary>';
-    echo '<section class="gallery-card-public-info-panel' . ($tagsOnly ? ' hero-tag-info-panel' : '') . '" role="region" aria-label="' . $infoLabel . '">';
+    echo
+        '<details class="hero-tag-disclosure gallery-card-info-disclosure" data-hero-tags-disclosure data-gallery-card-info-disclosure>';
+    echo
+        '<summary class="tag gallery-card-tags-toggle gallery-card-info-toggle" aria-label="'
+            . $infoLabel
+            . '" title="'
+            . $infoLabel
+            . '"><span aria-hidden="true">…</span><span class="visually-hidden">'
+            . $infoLabel
+            . '</span></summary>';
+    echo
+        '<section class="gallery-card-public-info-panel'
+            . ($tagsOnly ? ' hero-tag-info-panel' : '')
+            . '" role="region" aria-label="'
+            . $infoLabel
+            . '">';
     echo '<h3>' . $infoLabel . '</h3>';
     if ($publicTitle !== '') {
-        echo '<h4 class="gallery-card-public-info-title">' . e($publicTitle) . '</h4>';
+        echo
+            '<h4 class="gallery-card-public-info-title">'
+                . e($publicTitle)
+                . '</h4>';
     }
     if ($publicDescriptionHtml !== '') {
-        echo '<div class="gallery-card-public-info-description">' . $publicDescriptionHtml . '</div>';
+        echo
+            '<div class="gallery-card-public-info-description">'
+                . $publicDescriptionHtml
+                . '</div>';
     }
     if ($publicDateHtml !== '') {
-        echo '<div class="gallery-card-public-info-date">' . $publicDateHtml . '</div>';
+        echo
+            '<div class="gallery-card-public-info-date">'
+                . $publicDateHtml
+                . '</div>';
     }
     echo '<div class="gallery-card-public-info-tags">';
     if (!$tagsOnly) {
@@ -319,9 +489,21 @@ function view_render_public_gallery_card_tag_items(array $items): void
         $href = $item['href'] ?? null;
         $name = (string) ($item['name'] ?? '');
         if (is_string($href) && $href !== '') {
-            echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
+            echo
+                '<a class="tag" href="'
+                    . e($href)
+                    . '" title="'
+                    . e($name)
+                    . '">'
+                    . e($name)
+                    . '</a>';
         } else {
-            echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
+            echo
+                '<span class="tag" title="'
+                    . e($name)
+                    . '">'
+                    . e($name)
+                    . '</span>';
         }
     }
 }
@@ -342,14 +524,27 @@ function view_render_compact_tag_list(array $viewModel): void
     foreach ($items as $item) {
         $href = $item['href'] ?? null;
         if (is_string($href) && $href !== '') {
-            echo '<a class="tag" href="' . e($href) . '">' . e((string) ($item['name'] ?? '')) . '</a>';
+            echo
+                '<a class="tag" href="'
+                    . e($href)
+                    . '">'
+                    . e((string) ($item['name'] ?? ''))
+                    . '</a>';
         } else {
-            echo '<span class="tag">' . e((string) ($item['name'] ?? '')) . '</span>';
+            echo
+                '<span class="tag">'
+                    . e((string) ($item['name'] ?? ''))
+                    . '</span>';
         }
     }
     if ((int) ($viewModel['hidden_count'] ?? 0) > 0) {
         $moreLabel = (string) ($viewModel['more_label'] ?? '');
-        echo '<span class="tag tag-more" title="' . e($moreLabel) . '" aria-label="' . e($moreLabel) . '">...</span>';
+        echo
+            '<span class="tag tag-more" title="'
+                . e($moreLabel)
+                . '" aria-label="'
+                . e($moreLabel)
+                . '">...</span>';
     }
     echo '</p>';
 }

@@ -26,9 +26,20 @@ function cooperative_proposal_error_status(string $reason): int
     return match ($reason) {
         'proposal_not_found' => 404,
         'proposal_unauthorized' => 403,
-        'proposal_mismatch', 'proposal_declined', 'proposal_revision_unsupported', 'proposal_already_active',
-        'verification_unavailable', 'verification_expired', 'consent_missing', 'consent_stale', 'friendship_changed' => 409,
-        'source_unavailable', 'friendship_unavailable', 'credential_unavailable' => 503,
+        'proposal_mismatch',
+        'proposal_declined',
+        'proposal_revision_unsupported',
+        'proposal_already_active',
+        'verification_unavailable',
+        'verification_expired',
+        'consent_missing',
+        'consent_stale',
+        'friendship_changed',
+            => 409,
+        'source_unavailable',
+        'friendship_unavailable',
+        'credential_unavailable',
+            => 503,
         default => cooperative_pairing_error_status($reason),
     };
 }
@@ -42,15 +53,27 @@ function cms_cooperative_proposal_api(): void
         session_write_close();
     }
     if (Core\request_method() !== 'POST') {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     try {
-        cooperative_pairing_json(Service\cooperative_proposal_receive(cooperative_pairing_request_body(), cooperative_pairing_bearer()));
+        cooperative_pairing_json(Service\cooperative_proposal_receive(
+            cooperative_pairing_request_body(),
+            cooperative_pairing_bearer(),
+        ));
     } catch (CooperativeException $error) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => $error->reason], cooperative_proposal_error_status($error->reason));
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => $error->reason,
+        ], cooperative_proposal_error_status($error->reason));
     } catch (\Throwable) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'proposal_unavailable'], 503);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'proposal_unavailable',
+        ], 503);
     }
 }
 
@@ -61,7 +84,10 @@ function cms_admin_cooperative_proposals(): void
 {
     Core\require_admin();
     if (Core\request_method() !== 'GET') {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     try {
@@ -70,13 +96,22 @@ function cms_admin_cooperative_proposals(): void
         if (!is_string($id) || !is_string($cursor)) {
             throw new CooperativeException('invalid_input');
         }
-        $state = $id === '' ? Service\cooperative_proposal_exchange_inbox($cursor)
-            : Service\cooperative_proposal_exchange_projection(Service\cooperative_proposal_exchange_load($id));
+        $state = $id === ''
+            ? Service\cooperative_proposal_exchange_inbox($cursor)
+            : Service\cooperative_proposal_exchange_projection(Service\cooperative_proposal_exchange_load(
+                $id,
+            ));
         cooperative_pairing_json(['ok' => true, 'state' => $state]);
     } catch (CooperativeException $error) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => $error->reason], cooperative_proposal_error_status($error->reason));
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => $error->reason,
+        ], cooperative_proposal_error_status($error->reason));
     } catch (\Throwable) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'proposal_unavailable'], 503);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'proposal_unavailable',
+        ], 503);
     }
 }
 
@@ -86,7 +121,10 @@ function cms_admin_cooperative_proposals(): void
  */
 function cooperative_proposal_form_list(string $key): array
 {
-    $raw = cooperative_pairing_form_string($key, Service\COOPERATIVE_PAIRING_MAX_BYTES);
+    $raw = cooperative_pairing_form_string(
+        $key,
+        Service\COOPERATIVE_PAIRING_MAX_BYTES,
+    );
     try {
         $value = json_decode($raw, true, 8, JSON_THROW_ON_ERROR);
     } catch (\Throwable) {
@@ -105,7 +143,10 @@ function cms_admin_cooperative_proposal_action(): void
 {
     Core\require_admin();
     if (Core\request_method() !== 'POST') {
-        cooperative_proposal_action_response(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_proposal_action_response([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     Core\verify_csrf();
@@ -120,47 +161,129 @@ function cms_admin_cooperative_proposal_action(): void
             throw new CooperativeException('invalid_revision');
         }
         if (in_array($action, ['prepare', 'reference'], true)) {
-            $galleryId = filter_var($_POST['gallery_id'] ?? 0, FILTER_VALIDATE_INT);
+            $galleryId = filter_var(
+                $_POST['gallery_id'] ?? 0,
+                FILTER_VALIDATE_INT,
+            );
             if ($galleryId === false || $galleryId < 1) {
                 throw new CooperativeException('invalid_gallery');
             }
-            $result = $action === 'reference' ? ['reference_code' => Service\cooperative_album_reference_code($galleryId, ($_POST['photos'] ?? '') === '1')]
-                : ['member' => Service\cooperative_album_source_member($galleryId, cooperative_proposal_form_list('scopes'))];
+            $result = $action === 'reference'
+                ? ['reference_code' => Service\cooperative_album_reference_code(
+                    $galleryId,
+                    ($_POST['photos'] ?? '') === '1',
+                )]
+                : ['member' => Service\cooperative_album_source_member(
+                    $galleryId,
+                    cooperative_proposal_form_list('scopes'),
+                )];
         } else {
             $proposal = match ($action) {
-                'compose' => Service\cooperative_proposal_compose(cooperative_pairing_form_string('request_id', 32), cooperative_proposal_gallery_id(), cooperative_pairing_form_string('references', Service\COOPERATIVE_PAIRING_MAX_BYTES), ($_POST['photos'] ?? '') === '1'),
-                'expand' => Service\cooperative_proposal_expand($id, $revision, cooperative_pairing_form_string('request_id', 32), cooperative_pairing_form_string('reference', 512)),
-                'synchronize' => Service\cooperative_proposal_synchronize($id, $revision),
-                'email' => Service\cooperative_proposal_email($id, $revision, cooperative_pairing_form_string('peer_id', 32), cooperative_pairing_form_string('email', 254)),
-                'create' => Service\cooperative_proposal_exchange_create(cooperative_pairing_form_string('request_id', 32), cooperative_proposal_form_list('members')),
-                'approve', 'decline' => Service\cooperative_proposal_exchange_decide($id, $revision, cooperative_pairing_form_string('digest', 64), $action === 'approve' ? 'approved' : 'declined'),
-                'advance' => Service\cooperative_maintenance_step($id, $revision),
-                'verify_start' => Service\cooperative_verification_start($id, $revision),
-                'verify_peer' => Service\cooperative_verification_peer($id, $revision, cooperative_pairing_form_string('round_id', 32), cooperative_pairing_form_string('peer_id', 32)),
-                'activate' => Service\cooperative_activation_finalize($id, $revision, cooperative_pairing_form_string('round_id', 32)),
-                'deliver', 'refresh' => Service\cooperative_proposal_exchange_contact($id, $revision, cooperative_pairing_form_string('peer_id', 32), $action === 'deliver' ? 'offer' : 'decision'),
+                'compose' => Service\cooperative_proposal_compose(
+                    cooperative_pairing_form_string('request_id', 32),
+                    cooperative_proposal_gallery_id(),
+                    cooperative_pairing_form_string(
+                        'references',
+                        Service\COOPERATIVE_PAIRING_MAX_BYTES,
+                    ),
+                    ($_POST['photos'] ?? '') === '1',
+                ),
+                'expand' => Service\cooperative_proposal_expand(
+                    $id,
+                    $revision,
+                    cooperative_pairing_form_string('request_id', 32),
+                    cooperative_pairing_form_string('reference', 512),
+                ),
+                'synchronize' => Service\cooperative_proposal_synchronize(
+                    $id,
+                    $revision,
+                ),
+                'email' => Service\cooperative_proposal_email(
+                    $id,
+                    $revision,
+                    cooperative_pairing_form_string('peer_id', 32),
+                    cooperative_pairing_form_string('email', 254),
+                ),
+                'create' => Service\cooperative_proposal_exchange_create(
+                    cooperative_pairing_form_string('request_id', 32),
+                    cooperative_proposal_form_list('members'),
+                ),
+                'approve',
+                'decline',
+                    => Service\cooperative_proposal_exchange_decide(
+                    $id,
+                    $revision,
+                    cooperative_pairing_form_string('digest', 64),
+                    $action === 'approve' ? 'approved' : 'declined',
+                ),
+                'advance' => Service\cooperative_maintenance_step(
+                    $id,
+                    $revision,
+                ),
+                'verify_start' => Service\cooperative_verification_start(
+                    $id,
+                    $revision,
+                ),
+                'verify_peer' => Service\cooperative_verification_peer(
+                    $id,
+                    $revision,
+                    cooperative_pairing_form_string('round_id', 32),
+                    cooperative_pairing_form_string('peer_id', 32),
+                ),
+                'activate' => Service\cooperative_activation_finalize(
+                    $id,
+                    $revision,
+                    cooperative_pairing_form_string('round_id', 32),
+                ),
+                'deliver',
+                'refresh',
+                    => Service\cooperative_proposal_exchange_contact(
+                    $id,
+                    $revision,
+                    cooperative_pairing_form_string('peer_id', 32),
+                    $action === 'deliver' ? 'offer' : 'decision',
+                ),
                 default => throw new CooperativeException('invalid_action'),
             };
             $galleryId = $proposal['gallery_id'];
             $result = ['proposal' => $proposal];
         }
         $envelope = Core\admin_mutation_success_envelope(
-            Service\t('admin.cooperative.proposal.updated', 'Album proposal state updated.'),
-            Core\admin_mutation_descriptor('cooperative_proposal.' . $action, 'cooperative_album', $action, [$galleryId]),
-            null, (in_array($action, ['approve', 'decline'], true)
-                || in_array($action, ['advance', 'activate', 'synchronize'], true) && ($proposal['state'] ?? '') === 'active')
-                ? [Core\admin_mutation_public_gallery_context($galleryId, Core\url_for('gallery', ['id' => $galleryId]))] : [], []
+            Service\t(
+                'admin.cooperative.proposal.updated',
+                'Album proposal state updated.',
+            ),
+            Core\admin_mutation_descriptor(
+                'cooperative_proposal.' . $action,
+                'cooperative_album',
+                $action,
+                [$galleryId],
+            ),
+            null,
+            in_array($action, ['approve', 'decline'], true)
+            || in_array($action, ['advance', 'activate', 'synchronize'], true)
+            && ($proposal['state'] ?? '') === 'active'
+                ? [Core\admin_mutation_public_gallery_context($galleryId, Core\url_for('gallery', [
+                    'id' => $galleryId,
+                ]))] : [],
+            [],
         );
         cooperative_proposal_action_response($envelope + $result);
     } catch (CooperativeException $error) {
         cooperative_proposal_action_response(Core\admin_mutation_error_envelope(
-            Service\t('admin.cooperative.proposal.refused', 'The album proposal operation could not be completed.'),
-            'cooperative.' . $error->reason
+            Service\t(
+                'admin.cooperative.proposal.refused',
+                'The album proposal operation could not be completed.',
+            ),
+            'cooperative.' . $error->reason,
         ), cooperative_proposal_error_status($error->reason));
     } catch (\Throwable) {
         cooperative_proposal_action_response(Core\admin_mutation_error_envelope(
-            Service\t('admin.cooperative.proposal.refused', 'The album proposal operation could not be completed.'),
-            'cooperative.proposal_unavailable'
+            Service\t(
+                'admin.cooperative.proposal.refused',
+                'The album proposal operation could not be completed.',
+            ),
+            'cooperative.proposal_unavailable',
         ), 503);
     }
 }
@@ -170,8 +293,10 @@ function cms_admin_cooperative_proposal_action(): void
  * @param int $status HTTP response status.
  * @return void Emit JSON or the requested UI representation.
  */
-function cooperative_proposal_action_response(array $envelope, int $status = 200): void
-{
+function cooperative_proposal_action_response(
+    array $envelope,
+    int $status = 200,
+): void {
     if (($_POST['cooperative_proposal_ui'] ?? '') === '1') {
         admin_cooperative_proposals_response($envelope, $status);
         return;
@@ -185,6 +310,8 @@ function cooperative_proposal_action_response(array $envelope, int $status = 200
 function cooperative_proposal_gallery_id(): int
 {
     $value = filter_var($_POST['gallery_id'] ?? 0, FILTER_VALIDATE_INT);
-    if ($value === false || $value < 1) { throw new CooperativeException('invalid_gallery'); }
+    if ($value === false || $value < 1) {
+        throw new CooperativeException('invalid_gallery');
+    }
     return $value;
 }

@@ -109,7 +109,7 @@ function viewer_collection_title_prepare(string $rawTitle): array
  * references regardless of current source-image authorization; no image metadata is joined here.
  *
  * @param int $viewerAccountId Authenticated viewer account identifier.
- * @return array<int,array{id:int,title:string,created_at:string,updated_at:string,item_count:int}>
+ * @return array<int,array{id:int,title:string,created_at:string,updated_at:string,item_count:int}> Owned collection metadata with stored reference counts, ordered by most recent update.
  */
 function viewer_collections_for_owner(int $viewerAccountId): array
 {
@@ -118,9 +118,15 @@ function viewer_collections_for_owner(int $viewerAccountId): array
     }
 
     try {
-        $limit = max(1, (int) viewer_content_quota_config()['max_viewer_collections_per_account']);
+        $limit = max(
+            1,
+            (int) viewer_content_quota_config()['max_viewer_collections_per_account'],
+        );
         $rows = [];
-        foreach (viewer_collection_model_list_for_owner($viewerAccountId, $limit) as $row) {
+        foreach (viewer_collection_model_list_for_owner(
+            $viewerAccountId,
+            $limit,
+        ) as $row) {
             $rows[] = [
                 'id' => (int) ($row['id'] ?? 0),
                 'title' => (string) ($row['title'] ?? ''),
@@ -140,16 +146,25 @@ function viewer_collections_for_owner(int $viewerAccountId): array
  *
  * @param int $viewerAccountId Authenticated viewer account identifier.
  * @param int $collectionId Collection identifier.
- * @return ?array{id:int,title:string,created_at:string,updated_at:string,item_count:int}
+ * @return ?array{id:int,title:string,created_at:string,updated_at:string,item_count:int} Owned collection metadata and stored reference count, or null when unavailable or not owned.
  */
-function viewer_collection_owned_get(int $viewerAccountId, int $collectionId): ?array
-{
-    if ($viewerAccountId <= 0 || $collectionId <= 0 || !viewer_collections_storage_available()) {
+function viewer_collection_owned_get(
+    int $viewerAccountId,
+    int $collectionId,
+): ?array {
+    if (
+        $viewerAccountId <= 0
+        || $collectionId <= 0
+        || !viewer_collections_storage_available()
+    ) {
         return null;
     }
 
     try {
-        $row = viewer_collection_model_owned_get($viewerAccountId, $collectionId);
+        $row = viewer_collection_model_owned_get(
+            $viewerAccountId,
+            $collectionId,
+        );
         if (!$row) {
             return null;
         }
@@ -173,18 +188,31 @@ function viewer_collection_owned_get(int $viewerAccountId, int $collectionId): ?
  *
  * @param int $viewerAccountId Authenticated viewer account identifier.
  * @param int $collectionId Collection identifier.
- * @return array<int,array{image_id:int,position:int,created_at:string}>
+ * @return array<int,array{image_id:int,position:int,created_at:string}> Ordered canonical image references without source-image metadata.
  */
-function viewer_collection_item_references(int $viewerAccountId, int $collectionId): array
-{
-    if ($viewerAccountId <= 0 || $collectionId <= 0 || !viewer_collections_storage_available()) {
+function viewer_collection_item_references(
+    int $viewerAccountId,
+    int $collectionId,
+): array {
+    if (
+        $viewerAccountId <= 0
+        || $collectionId <= 0
+        || !viewer_collections_storage_available()
+    ) {
         return [];
     }
 
     try {
-        $limit = max(1, (int) viewer_content_quota_config()['max_viewer_items_per_collection']);
+        $limit = max(
+            1,
+            (int) viewer_content_quota_config()['max_viewer_items_per_collection'],
+        );
         $rows = [];
-        foreach (viewer_collection_model_item_references($viewerAccountId, $collectionId, $limit) as $row) {
+        foreach (viewer_collection_model_item_references(
+            $viewerAccountId,
+            $collectionId,
+            $limit,
+        ) as $row) {
             $rows[] = [
                 'image_id' => (int) ($row['image_id'] ?? 0),
                 'position' => (int) ($row['position'] ?? 0),
@@ -200,13 +228,23 @@ function viewer_collection_item_references(int $viewerAccountId, int $collection
 /**
  * Lock and revalidate the current viewer account before a collection mutation.
  *
- * @param mixed $transactionContextOrViewer Viewer principal, or legacy transaction context followed by viewer principal.
- * @param ?array $viewer Optional viewer principal for legacy internal callers.
- * @return ?array Locked account row, or null when authority changed.
+ * @param array{id?:int|string,security_version?:int|string}|object $transactionContextOrViewer
+ *     Viewer principal, or legacy transaction context followed by viewer principal.
+ * @param ?array{id?:int|string,security_version?:int|string} $viewer
+ *     Optional viewer principal for legacy internal callers.
+ * @return ?array{id:int|string,email:string,normalized_email:string,password_hash:string,must_change_password:int|string,status:string,security_version:int|string,email_verified_at:?string} Locked viewer-account row, or null when authority changed or the account is unavailable.
  */
-function viewer_collection_lock_mutation_account(mixed $transactionContextOrViewer, ?array $viewer = null): ?array
-{
-    $viewer = $viewer ?? (is_array($transactionContextOrViewer) ? $transactionContextOrViewer : []);
+function viewer_collection_lock_mutation_account(
+    mixed $transactionContextOrViewer,
+    ?array $viewer = null,
+): ?array {
+    $viewer =
+        $viewer
+        ?? (
+            is_array($transactionContextOrViewer)
+                ? $transactionContextOrViewer
+                : []
+        );
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     $expectedSecurityVersion = (int) ($viewer['security_version'] ?? 0);
     if ($viewerAccountId <= 0 || $expectedSecurityVersion <= 0) {
@@ -214,9 +252,12 @@ function viewer_collection_lock_mutation_account(mixed $transactionContextOrView
     }
 
     $account = viewer_collection_model_account_lock($viewerAccountId);
-    if (!$account
+    if (
+        !$account
         || !viewer_account_can_mutate_content($account)
-        || (int) ($account['security_version'] ?? 0) !== $expectedSecurityVersion) {
+        || (int) ($account['security_version'] ?? 0)
+            !== $expectedSecurityVersion
+    ) {
         return null;
     }
     return $account;
@@ -225,17 +266,26 @@ function viewer_collection_lock_mutation_account(mixed $transactionContextOrView
 /**
  * Lock one collection under an explicit owner predicate.
  *
- * @param mixed $transactionContextOrViewerAccountId Viewer account id, or legacy transaction context.
+ * @param int|string|object $transactionContextOrViewerAccountId Viewer account id, or legacy transaction context.
  * @param int $viewerAccountIdOrCollectionId Viewer account id or collection id depending on call shape.
  * @param ?int $collectionId Optional collection id for legacy internal callers.
- * @return ?array Locked collection row.
+ * @return ?array{id:int|string,viewer_account_id:int|string,title:string,created_at:string,updated_at:string} Locked owned collection row, or null when it does not belong to the requested owner.
  */
-function viewer_collection_lock_owned(mixed $transactionContextOrViewerAccountId, int $viewerAccountIdOrCollectionId, ?int $collectionId = null): ?array
-{
+function viewer_collection_lock_owned(
+    mixed $transactionContextOrViewerAccountId,
+    int $viewerAccountIdOrCollectionId,
+    ?int $collectionId = null,
+): ?array {
     if ($collectionId === null) {
-        return viewer_collection_model_owned_lock((int) $transactionContextOrViewerAccountId, $viewerAccountIdOrCollectionId);
+        return viewer_collection_model_owned_lock(
+            (int) $transactionContextOrViewerAccountId,
+            $viewerAccountIdOrCollectionId,
+        );
     }
-    return viewer_collection_model_owned_lock($viewerAccountIdOrCollectionId, $collectionId);
+    return viewer_collection_model_owned_lock(
+        $viewerAccountIdOrCollectionId,
+        $collectionId,
+    );
 }
 
 /**
@@ -244,13 +294,16 @@ function viewer_collection_lock_owned(mixed $transactionContextOrViewerAccountId
  * The caller must already hold the owned collection row lock. At the Phase 2 quota this is a
  * bounded update and prevents repeated remove/add churn from causing unbounded position growth.
  *
- * @param mixed $transactionContextOrCollectionId Collection id, or legacy transaction context.
+ * @param int|string|object $transactionContextOrCollectionId Collection id, or legacy transaction context.
  * @param ?int $collectionId Optional locked collection id for legacy internal callers.
  * @return int Number of collection items after normalization.
  */
-function viewer_collection_normalize_positions(mixed $transactionContextOrCollectionId, ?int $collectionId = null): int
-{
-    return viewer_collection_model_normalize_positions($collectionId ?? (int) $transactionContextOrCollectionId);
+function viewer_collection_normalize_positions(
+    mixed $transactionContextOrCollectionId,
+    ?int $collectionId = null,
+): int {
+    return viewer_collection_model_normalize_positions($collectionId
+        ?? (int) $transactionContextOrCollectionId);
 }
 
 /**
@@ -260,12 +313,13 @@ function viewer_collection_normalize_positions(mixed $transactionContextOrCollec
  * @param int $viewerAccountId Viewer account identifier.
  * @param string $outcome Outcome category.
  * @param int $collectionId Collection identifier.
+ * @return void
  */
 function viewer_collection_security_event_best_effort(
     string $eventKey,
     int $viewerAccountId,
     string $outcome,
-    int $collectionId
+    int $collectionId,
 ): void {
     try {
         viewer_security_event_record($eventKey, $viewerAccountId, $outcome, [
@@ -282,72 +336,149 @@ function viewer_collection_security_event_best_effort(
  * Collection-count admission is serialized by the locked viewer-account row. A dedicated
  * account rate limit bounds repeated object creation without affecting reads or existing data.
  *
- * @param array $viewer Current viewer principal returned by current_viewer().
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param string $rawTitle Submitted title.
- * @return array{ok:bool,collection_id:int,changed:bool,reason:string,retry_after_seconds:int}
+ * @return array{ok:bool,collection_id:int,changed:bool,reason:string,retry_after_seconds:int} Collection-creation outcome, including the new id and any admission retry delay.
  */
 function viewer_collection_create(array $viewer, string $rawTitle): array
 {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     $expectedSecurityVersion = (int) ($viewer['security_version'] ?? 0);
     if ($viewerAccountId <= 0 || $expectedSecurityVersion <= 0) {
-        return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'invalid', 'retry_after_seconds' => 0];
+        return [
+            'ok' => false,
+            'collection_id' => 0,
+            'changed' => false,
+            'reason' => 'invalid',
+            'retry_after_seconds' => 0,
+        ];
     }
     if (!viewer_collections_storage_available()) {
-        return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'unavailable', 'retry_after_seconds' => 0];
+        return [
+            'ok' => false,
+            'collection_id' => 0,
+            'changed' => false,
+            'reason' => 'unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     $prepared = viewer_collection_title_prepare($rawTitle);
     if (!$prepared['valid']) {
-        return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'invalid_title', 'retry_after_seconds' => 0];
+        return [
+            'ok' => false,
+            'collection_id' => 0,
+            'changed' => false,
+            'reason' => 'invalid_title',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     try {
-        $rate = viewer_rate_limit_consume('viewer_collection_create_account', 'account', (string) $viewerAccountId);
+        $rate = viewer_rate_limit_consume(
+            'viewer_collection_create_account',
+            'account',
+            (string) $viewerAccountId,
+        );
     } catch (Throwable) {
-        return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'unavailable', 'retry_after_seconds' => 0];
+        return [
+            'ok' => false,
+            'collection_id' => 0,
+            'changed' => false,
+            'reason' => 'unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
     if (empty($rate['allowed'])) {
         return [
             'ok' => false,
             'collection_id' => 0,
             'changed' => false,
-            'reason' => (string) ($rate['reason'] ?? '') === 'storage_unavailable' ? 'unavailable' : 'rate_limited',
-            'retry_after_seconds' => max(0, (int) ($rate['retry_after_seconds'] ?? 0)),
+            'reason' => (string) ($rate['reason'] ?? '')
+            === 'storage_unavailable'
+                ? 'unavailable'
+                : 'rate_limited',
+            'retry_after_seconds' => max(
+                0,
+                (int) ($rate['retry_after_seconds'] ?? 0),
+            ),
         ];
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $prepared): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $prepared,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'account_unavailable', 'retry_after_seconds' => 0]);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'collection_id' => 0,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                    'retry_after_seconds' => 0,
+                ]);
             }
             $quota = viewer_content_quota_config();
-            if (viewer_collection_model_owner_count($viewerAccountId) >= (int) $quota['max_viewer_collections_per_account']) {
-                viewer_collection_model_abort(['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'quota', 'retry_after_seconds' => 0]);
+            if (
+                viewer_collection_model_owner_count($viewerAccountId)
+                >= (int) $quota['max_viewer_collections_per_account']
+            ) {
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'collection_id' => 0,
+                    'changed' => false,
+                    'reason' => 'quota',
+                    'retry_after_seconds' => 0,
+                ]);
             }
-            $collectionId = viewer_collection_model_insert($viewerAccountId, $prepared['title'], now_sql());
-            return ['ok' => true, 'collection_id' => $collectionId, 'changed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0];
+            $collectionId = viewer_collection_model_insert(
+                $viewerAccountId,
+                $prepared['title'],
+                now_sql(),
+            );
+            return [
+                'ok' => true,
+                'collection_id' => $collectionId,
+                'changed' => true,
+                'reason' => 'ok',
+                'retry_after_seconds' => 0,
+            ];
         });
         if ($result['ok']) {
-            viewer_collection_security_event_best_effort('viewer.collection_created', $viewerAccountId, 'success', (int) $result['collection_id']);
+            viewer_collection_security_event_best_effort(
+                'viewer.collection_created',
+                $viewerAccountId,
+                'success',
+                (int) $result['collection_id'],
+            );
         }
         return $result;
     } catch (Throwable) {
-        return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'unavailable', 'retry_after_seconds' => 0];
+        return [
+            'ok' => false,
+            'collection_id' => 0,
+            'changed' => false,
+            'reason' => 'unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
 }
 
 /**
  * Rename one collection under current-viewer ownership.
  *
- * @param array $viewer Current viewer principal.
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Collection identifier.
  * @param string $rawTitle Submitted title.
- * @return array{ok:bool,changed:bool,reason:string}
+ * @return array{ok:bool,changed:bool,reason:string} Rename outcome indicating whether the title changed and the bounded result reason.
  */
-function viewer_collection_rename(array $viewer, int $collectionId, string $rawTitle): array
-{
+function viewer_collection_rename(
+    array $viewer,
+    int $collectionId,
+    string $rawTitle,
+): array {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     if ($viewerAccountId <= 0 || $collectionId <= 0) {
         return ['ok' => false, 'changed' => false, 'reason' => 'invalid'];
@@ -361,22 +492,49 @@ function viewer_collection_rename(array $viewer, int $collectionId, string $rawT
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $prepared): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+            $prepared,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                ]);
             }
-            $collection = viewer_collection_lock_owned($viewerAccountId, $collectionId);
+            $collection = viewer_collection_lock_owned(
+                $viewerAccountId,
+                $collectionId,
+            );
             if ($collection === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'not_found',
+                ]);
             }
-            $changed = (string) ($collection['title'] ?? '') !== $prepared['title'];
+            $changed =
+                (string) ($collection['title'] ?? '') !== $prepared['title'];
             if ($changed) {
-                viewer_collection_model_rename($viewerAccountId, $collectionId, $prepared['title'], now_sql());
+                viewer_collection_model_rename(
+                    $viewerAccountId,
+                    $collectionId,
+                    $prepared['title'],
+                    now_sql(),
+                );
             }
             return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
         });
         if ($result['changed']) {
-            viewer_collection_security_event_best_effort('viewer.collection_renamed', $viewerAccountId, 'success', $collectionId);
+            viewer_collection_security_event_best_effort(
+                'viewer.collection_renamed',
+                $viewerAccountId,
+                'success',
+                $collectionId,
+            );
         }
         return $result;
     } catch (Throwable) {
@@ -390,9 +548,9 @@ function viewer_collection_rename(array $viewer, int $collectionId, string $rawT
  * Canonical images, galleries, favourites, Smart Galleries, and gallery share links are not
  * children of viewer_collections and are never touched by this operation.
  *
- * @param array $viewer Current viewer principal.
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Collection identifier.
- * @return array{ok:bool,changed:bool,reason:string}
+ * @return array{ok:bool,changed:bool,reason:string} Deletion outcome indicating whether the owned collection was removed.
  */
 function viewer_collection_delete(array $viewer, int $collectionId): array
 {
@@ -405,18 +563,38 @@ function viewer_collection_delete(array $viewer, int $collectionId): array
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                ]);
             }
-            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
+            if (
+                viewer_collection_lock_owned($viewerAccountId, $collectionId)
+                === null
+            ) {
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'not_found',
+                ]);
             }
             viewer_collection_model_delete($viewerAccountId, $collectionId);
             return ['ok' => true, 'changed' => true, 'reason' => 'ok'];
         });
         if ($result['changed']) {
-            viewer_collection_security_event_best_effort('viewer.collection_deleted', $viewerAccountId, 'success', $collectionId);
+            viewer_collection_security_event_best_effort(
+                'viewer.collection_deleted',
+                $viewerAccountId,
+                'success',
+                $collectionId,
+            );
         }
         return $result;
     } catch (Throwable) {
@@ -431,13 +609,16 @@ function viewer_collection_delete(array $viewer, int $collectionId): array
  * is not copied into the item row. Collection-row locking serializes duplicate/quota/position
  * decisions for this collection; the composite primary key provides an additional race-safe guard.
  *
- * @param array $viewer Current viewer principal.
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Collection identifier.
  * @param int $imageId Canonical image identifier.
- * @return array{ok:bool,changed:bool,reason:string}
+ * @return array{ok:bool,changed:bool,reason:string} Addition outcome indicating whether the authorized image reference was inserted.
  */
-function viewer_collection_item_add(array $viewer, int $collectionId, int $imageId): array
-{
+function viewer_collection_item_add(
+    array $viewer,
+    int $collectionId,
+    int $imageId,
+): array {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     if ($viewerAccountId <= 0 || $collectionId <= 0 || $imageId <= 0) {
         return ['ok' => false, 'changed' => false, 'reason' => 'invalid'];
@@ -446,40 +627,88 @@ function viewer_collection_item_add(array $viewer, int $collectionId, int $image
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
     if (!viewer_source_image_can_reference($imageId)) {
-        return ['ok' => false, 'changed' => false, 'reason' => 'source_forbidden'];
+        return [
+            'ok' => false,
+            'changed' => false,
+            'reason' => 'source_forbidden',
+        ];
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $imageId): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+            $imageId,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                ]);
             }
-            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
+            if (
+                viewer_collection_lock_owned($viewerAccountId, $collectionId)
+                === null
+            ) {
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'not_found',
+                ]);
             }
             if (viewer_collection_model_item_exists($collectionId, $imageId)) {
-                return ['ok' => true, 'changed' => false, 'reason' => 'already_present'];
+                return [
+                    'ok' => true,
+                    'changed' => false,
+                    'reason' => 'already_present',
+                ];
             }
             $quota = viewer_content_quota_config();
-            $state = viewer_collection_model_item_count_and_max_position($collectionId);
+            $state =
+                viewer_collection_model_item_count_and_max_position(
+                    $collectionId,
+                );
             $itemCount = (int) $state['item_count'];
             if ($itemCount >= (int) $quota['max_viewer_items_per_collection']) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'quota']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'quota',
+                ]);
             }
             if ((int) $state['max_position'] !== $itemCount) {
-                $itemCount = viewer_collection_normalize_positions($collectionId);
+                $itemCount =
+                    viewer_collection_normalize_positions($collectionId);
             }
             $position = $itemCount + 1;
             if ($position <= 0 || $position > 4294967295) {
-                throw new \RuntimeException('Viewer collection position is out of range.');
+                throw new \RuntimeException(
+                    'Viewer collection position is out of range.',
+                );
             }
             $now = now_sql();
-            viewer_collection_model_item_insert($collectionId, $imageId, $position, $now);
-            viewer_collection_model_touch($viewerAccountId, $collectionId, $now);
+            viewer_collection_model_item_insert(
+                $collectionId,
+                $imageId,
+                $position,
+                $now,
+            );
+            viewer_collection_model_touch(
+                $viewerAccountId,
+                $collectionId,
+                $now,
+            );
             return ['ok' => true, 'changed' => true, 'reason' => 'ok'];
         });
         if ($result['changed']) {
-            viewer_collection_security_event_best_effort('viewer.collection_item_added', $viewerAccountId, 'success', $collectionId);
+            viewer_collection_security_event_best_effort(
+                'viewer.collection_item_added',
+                $viewerAccountId,
+                'success',
+                $collectionId,
+            );
         }
         return $result;
     } catch (Throwable) {
@@ -490,13 +719,16 @@ function viewer_collection_item_add(array $viewer, int $collectionId, int $image
 /**
  * Remove one image reference from one owned collection without touching source media/favourites.
  *
- * @param array $viewer Current viewer principal.
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Collection identifier.
  * @param int $imageId Canonical image identifier.
- * @return array{ok:bool,changed:bool,reason:string}
+ * @return array{ok:bool,changed:bool,reason:string} Removal outcome indicating whether the collection reference was deleted.
  */
-function viewer_collection_item_remove(array $viewer, int $collectionId, int $imageId): array
-{
+function viewer_collection_item_remove(
+    array $viewer,
+    int $collectionId,
+    int $imageId,
+): array {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     if ($viewerAccountId <= 0 || $collectionId <= 0 || $imageId <= 0) {
         return ['ok' => false, 'changed' => false, 'reason' => 'invalid'];
@@ -506,22 +738,50 @@ function viewer_collection_item_remove(array $viewer, int $collectionId, int $im
     }
 
     try {
-        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $imageId): array {
+        $result = viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+            $imageId,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                ]);
             }
-            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
+            if (
+                viewer_collection_lock_owned($viewerAccountId, $collectionId)
+                === null
+            ) {
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'not_found',
+                ]);
             }
-            $changed = viewer_collection_model_item_delete($collectionId, $imageId);
+            $changed = viewer_collection_model_item_delete(
+                $collectionId,
+                $imageId,
+            );
             if ($changed) {
                 viewer_collection_normalize_positions($collectionId);
-                viewer_collection_model_touch($viewerAccountId, $collectionId, now_sql());
+                viewer_collection_model_touch(
+                    $viewerAccountId,
+                    $collectionId,
+                    now_sql(),
+                );
             }
             return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
         });
         if ($result['changed']) {
-            viewer_collection_security_event_best_effort('viewer.collection_item_removed', $viewerAccountId, 'success', $collectionId);
+            viewer_collection_security_event_best_effort(
+                'viewer.collection_item_removed',
+                $viewerAccountId,
+                'success',
+                $collectionId,
+            );
         }
         return $result;
     } catch (Throwable) {
@@ -537,13 +797,16 @@ function viewer_collection_item_remove(array $viewer, int $collectionId, int $im
  * Every submitted id must belong to this same owned collection. Invalid, duplicate, foreign, or
  * oversized requests are rejected before any position update is issued.
  *
- * @param array $viewer Current viewer principal.
+ * @param array{id:int|string,security_version:int|string} $viewer Current authenticated viewer principal.
  * @param int $collectionId Collection identifier.
  * @param array<int,mixed> $submittedImageIds Ordered image ids.
- * @return array{ok:bool,changed:bool,reason:string}
+ * @return array{ok:bool,changed:bool,reason:string} Reorder outcome indicating whether submitted reference positions changed.
  */
-function viewer_collection_reorder(array $viewer, int $collectionId, array $submittedImageIds): array
-{
+function viewer_collection_reorder(
+    array $viewer,
+    int $collectionId,
+    array $submittedImageIds,
+): array {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     if ($viewerAccountId <= 0 || $collectionId <= 0) {
         return ['ok' => false, 'changed' => false, 'reason' => 'invalid'];
@@ -552,7 +815,8 @@ function viewer_collection_reorder(array $viewer, int $collectionId, array $subm
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 
-    $maxItems = (int) viewer_content_quota_config()['max_viewer_items_per_collection'];
+    $maxItems =
+        (int) viewer_content_quota_config()['max_viewer_items_per_collection'];
     if (count($submittedImageIds) > $maxItems) {
         return ['ok' => false, 'changed' => false, 'reason' => 'oversized'];
     }
@@ -560,29 +824,61 @@ function viewer_collection_reorder(array $viewer, int $collectionId, array $subm
     $submitted = [];
     $seen = [];
     foreach ($submittedImageIds as $rawImageId) {
-        $imageId = filter_var($rawImageId, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $imageId = filter_var($rawImageId, FILTER_VALIDATE_INT, ['options' => [
+            'min_range' => 1,
+        ]]);
         if ($imageId === false) {
-            return ['ok' => false, 'changed' => false, 'reason' => 'invalid_order'];
+            return [
+                'ok' => false,
+                'changed' => false,
+                'reason' => 'invalid_order',
+            ];
         }
         $imageId = (int) $imageId;
         if (isset($seen[$imageId])) {
-            return ['ok' => false, 'changed' => false, 'reason' => 'duplicate_item'];
+            return [
+                'ok' => false,
+                'changed' => false,
+                'reason' => 'duplicate_item',
+            ];
         }
         $seen[$imageId] = true;
         $submitted[] = $imageId;
     }
 
     try {
-        return viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $maxItems, $submitted, $seen): array {
+        return viewer_collection_model_transaction(static function () use (
+            $viewer,
+            $viewerAccountId,
+            $collectionId,
+            $maxItems,
+            $submitted,
+            $seen,
+        ): array {
             if (viewer_collection_lock_mutation_account($viewer) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'account_unavailable',
+                ]);
             }
-            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
+            if (
+                viewer_collection_lock_owned($viewerAccountId, $collectionId)
+                === null
+            ) {
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'not_found',
+                ]);
             }
             $rows = viewer_collection_model_items_lock($collectionId);
             if (count($rows) > $maxItems) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'quota_state_invalid']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'quota_state_invalid',
+                ]);
             }
 
             $currentOrder = [];
@@ -590,17 +886,27 @@ function viewer_collection_reorder(array $viewer, int $collectionId, array $subm
             foreach ($rows as $row) {
                 $imageId = (int) ($row['image_id'] ?? 0);
                 if ($imageId <= 0) {
-                    throw new \RuntimeException('Viewer collection contains an invalid image reference.');
+                    throw new \RuntimeException(
+                        'Viewer collection contains an invalid image reference.',
+                    );
                 }
                 $currentOrder[] = $imageId;
                 $currentSet[$imageId] = true;
             }
             if ($submitted === [] && $currentOrder !== []) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'invalid_order']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'invalid_order',
+                ]);
             }
             foreach ($submitted as $imageId) {
                 if (!isset($currentSet[$imageId])) {
-                    viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'foreign_item']);
+                    viewer_collection_model_abort([
+                        'ok' => false,
+                        'changed' => false,
+                        'reason' => 'foreign_item',
+                    ]);
                 }
             }
 
@@ -613,20 +919,31 @@ function viewer_collection_reorder(array $viewer, int $collectionId, array $subm
                 }
             }
             if ($submittedIndex !== count($submitted)) {
-                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'invalid_order']);
+                viewer_collection_model_abort([
+                    'ok' => false,
+                    'changed' => false,
+                    'reason' => 'invalid_order',
+                ]);
             }
 
             $positionsNormalized = true;
             foreach ($rows as $index => $row) {
-                if ((int) ($row['position'] ?? 0) !== $index + 1) {
+                if ((int) ($row['position'] ?? 0) !== ($index + 1)) {
                     $positionsNormalized = false;
                     break;
                 }
             }
             $changed = $newOrder !== $currentOrder || !$positionsNormalized;
             if ($changed) {
-                viewer_collection_model_update_positions($collectionId, $newOrder);
-                viewer_collection_model_touch($viewerAccountId, $collectionId, now_sql());
+                viewer_collection_model_update_positions(
+                    $collectionId,
+                    $newOrder,
+                );
+                viewer_collection_model_touch(
+                    $viewerAccountId,
+                    $collectionId,
+                    now_sql(),
+                );
             }
             return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
         });

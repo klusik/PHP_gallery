@@ -24,9 +24,9 @@ final class Router
      * @param RouteRegistry $registry Validated canonical route definitions.
      * @return void Initializes route ownership.
      */
-    public function __construct(private readonly RouteRegistry $registry)
-    {
-    }
+    public function __construct(
+        private readonly RouteRegistry $registry,
+    ) {}
 
     /**
      * Match the normalized requested page before loading its domain implementation.

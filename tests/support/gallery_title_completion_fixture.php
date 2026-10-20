@@ -34,22 +34,44 @@ namespace Gallery\Tests {
         /** @var ?int One-based query number at which to simulate a storage failure. */
         public ?int $failAtQuery = null;
 
-        /** Create an isolated gallery schema with its existing parent index. */
+        /**
+         * Create an isolated gallery schema with its existing parent index.
+         *
+         * @return void Initialize the in-memory database schema.
+         */
         public function __construct()
         {
-            $this->pdo = new \PDO('sqlite::memory:', null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
-            $this->pdo->exec('CREATE TABLE galleries (id INTEGER PRIMARY KEY, parent_id INTEGER NULL, title VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)');
-            $this->pdo->exec('CREATE INDEX galleries_parent_id_index ON galleries(parent_id)');
+            $this->pdo = new \PDO('sqlite::memory:', null, null, [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            ]);
+            $this->pdo->exec(
+                'CREATE TABLE galleries (id INTEGER PRIMARY KEY, parent_id INTEGER NULL, title VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)',
+            );
+            $this->pdo->exec(
+                'CREATE INDEX galleries_parent_id_index ON galleries(parent_id)',
+            );
         }
 
-        /** Reset a synthetic catalog; setup statements are outside measurements. */
+        /**
+         * Reset a synthetic catalog; setup statements are outside measurements.
+         *
+         * @param list<array{id:int,parent_id:?int,title:string,created_at:string}> $rows Synthetic gallery rows to seed.
+         * @return void Replace fixture rows and reset query measurements.
+         */
         public function seed(array $rows): void
         {
             $this->pdo->exec('DELETE FROM galleries');
-            $stmt = $this->pdo->prepare('INSERT INTO galleries (id, parent_id, title, created_at) VALUES (?, ?, ?, ?)');
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO galleries (id, parent_id, title, created_at) VALUES (?, ?, ?, ?)',
+            );
             $this->pdo->beginTransaction();
             foreach ($rows as $row) {
-                $stmt->execute([$row['id'], $row['parent_id'], $row['title'], $row['created_at']]);
+                $stmt->execute([
+                    $row['id'],
+                    $row['parent_id'],
+                    $row['title'],
+                    $row['created_at'],
+                ]);
             }
             $this->pdo->commit();
             $this->queries = [];
@@ -73,18 +95,37 @@ namespace Gallery\Tests {
         /** @var int Monotonic execution start time in nanoseconds. */
         private int $started;
 
-        /** Retain the fixture and model SQL without executing a query yet. */
-        public function __construct(private TitleCompletionFixtureDatabase $database, private string $sql)
-        {
-        }
+        /**
+         * Retain the fixture and model SQL without executing a query yet.
+         *
+         * @param TitleCompletionFixtureDatabase $database Owning disposable database fixture.
+         * @param string $sql Prepared model query.
+         * @return void Store the statement dependencies.
+         */
+        public function __construct(
+            private TitleCompletionFixtureDatabase $database,
+            private string $sql,
+        ) {}
 
-        /** Execute parameterized model SQL or raise the configured fixture failure. */
+        /**
+         * Execute parameterized model SQL or raise the configured fixture failure.
+         *
+         * @param array<int|string,scalar|null> $params Bound SQL parameters.
+         * @return void Execute the statement and record its initial measurements.
+         */
         public function execute(array $params): void
         {
             $this->queryIndex = count($this->database->queries);
-            $this->database->queries[] = ['sql' => $this->sql, 'params' => $params, 'rows' => 0, 'milliseconds' => 0.0];
-            if ($this->database->failAtQuery === $this->queryIndex + 1) {
-                throw new \RuntimeException('Private database error: /secret/path password=never-expose');
+            $this->database->queries[] = [
+                'sql' => $this->sql,
+                'params' => $params,
+                'rows' => 0,
+                'milliseconds' => 0.0,
+            ];
+            if ($this->database->failAtQuery === ($this->queryIndex + 1)) {
+                throw new \RuntimeException(
+                    'Private database error: /secret/path password=never-expose',
+                );
             }
             $this->started = hrtime(true);
             $this->statement = $this->database->pdo->prepare($this->sql);
@@ -96,19 +137,25 @@ namespace Gallery\Tests {
         {
             $rows = $this->statement->fetchAll($mode);
             $this->database->queries[$this->queryIndex]['rows'] = count($rows);
-            $this->database->queries[$this->queryIndex]['milliseconds'] = (hrtime(true) - $this->started) / 1000000;
+            $this->database->queries[$this->queryIndex]['milliseconds'] =
+                (hrtime(true) - $this->started) / 1000000;
             return $rows;
         }
     }
 
-    /** Stable ties exercise the id component of the newest-first keyset. */
+    /**
+     * Stable ties exercise the id component of the newest-first keyset.
+     *
+     * @param int $size Number of synthetic gallery rows to create.
+     * @return list<array{id:int,parent_id:?int,title:string,created_at:string}> Deterministic gallery rows with tied timestamps.
+     */
     function title_completion_fixture_rows(int $size): array
     {
         $rows = [];
         for ($id = 1; $id <= $size; $id++) {
             $rows[] = [
                 'id' => $id,
-                'parent_id' => $id % 4 === 0 ? 7 : null,
+                'parent_id' => ($id % 4) === 0 ? 7 : null,
                 'title' => sprintf('Flight %05d', $id),
                 'created_at' => '2026-09-20 12:00:00',
             ];

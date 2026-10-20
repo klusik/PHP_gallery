@@ -64,7 +64,7 @@ use function Gallery\Models\public_path_model_public_images;
 use function Gallery\Models\gallery_model_public_listing_filter_sql;
 
 /**
-Public URL path and slug helpers.
+ * Public URL path and slug helpers.
  *
  * This module owns clean public gallery paths, image slugs, sitemap entries, and
  * regeneration logic. It does not render public pages and does not touch theme
@@ -74,16 +74,18 @@ Public URL path and slug helpers.
 /**
  * Return all public gallery sitemap URLs in filesystem order.
  *
- * @return array Structured result data for the caller.
+ * @return list<string> Public gallery sitemap URLs in filesystem order.
  */
 function public_gallery_sitemap_entries(): array
 {
     return array_values(array_map(
-        static fn (array $entry): string => (string) $entry['loc'],
+        static fn(array $entry): string => (string) $entry['loc'],
         array_filter(
             public_sitemap_entries(),
-            static fn (array $entry): bool => (string) ($entry['type'] ?? '') === 'gallery'
-        )
+            static fn(array $entry): bool => (
+                (string) ($entry['type'] ?? '') === 'gallery'
+            ),
+        ),
     ));
 }
 
@@ -94,7 +96,7 @@ function public_gallery_sitemap_entries(): array
  * Image Search can discover strong thumbnails, titles, captions, and canonical
  * image detail URLs without crawling every lightbox interaction first.
  *
- * @return array Structured result data for the caller.
+ * @return list<array{type:string,loc:string,lastmod:?string,priority:string,images:list<array{loc:string,title:string,caption:string}>}> Unique gallery, image, and homepage sitemap entries.
  */
 function public_sitemap_entries(): array
 {
@@ -103,14 +105,20 @@ function public_sitemap_entries(): array
     gallery_access_assert_public_policy_available();
     $entries = [public_homepage_sitemap_entry()];
     foreach (public_sitemap_gallery_rows() as $gallery) {
-        if (gallery_access_schema_ready() && gallery_access_requirement($gallery) !== null) {
+        if (
+            gallery_access_schema_ready()
+            && gallery_access_requirement($gallery) !== null
+        ) {
             continue;
         }
         $images = public_sitemap_gallery_images($gallery, 50);
         $entries[] = [
             'type' => 'gallery',
             'loc' => gallery_public_url($gallery),
-            'lastmod' => public_sitemap_lastmod(public_sitemap_gallery_last_modified($gallery, $images)),
+            'lastmod' => public_sitemap_lastmod(public_sitemap_gallery_last_modified(
+                $gallery,
+                $images,
+            )),
             'priority' => public_sitemap_gallery_priority($gallery),
             'images' => public_sitemap_image_payloads($gallery, $images),
         ];
@@ -118,7 +126,9 @@ function public_sitemap_entries(): array
             $entries[] = [
                 'type' => 'image',
                 'loc' => image_public_url($image, $gallery),
-                'lastmod' => public_sitemap_lastmod(public_sitemap_image_last_modified($image)),
+                'lastmod' => public_sitemap_lastmod(public_sitemap_image_last_modified(
+                    $image,
+                )),
                 'priority' => '0.5',
                 'images' => public_sitemap_image_payloads($gallery, [$image]),
             ];
@@ -164,15 +174,21 @@ function public_sitemap_gallery_rows(): array
 /**
  * Fetch public images suitable for sitemap output for one gallery.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row containing its ID and visibility data.
  * @param int $limit Maximum number of items.
- * @return array Structured result data for the caller.
+ * @return list<array<string,mixed>> Public image rows that pass visitor visibility checks.
  */
 function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
 {
     $images = [];
-    foreach (public_path_model_public_images((int) $gallery['id'], $limit) as $image) {
-        if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+    foreach (public_path_model_public_images(
+        (int) $gallery['id'],
+        $limit,
+    ) as $image) {
+        if (
+            function_exists('Gallery\\Services\\image_nsfw_restricted')
+            && image_nsfw_restricted($image, $gallery)
+        ) {
             continue;
         }
         $images[] = $image;
@@ -183,9 +199,9 @@ function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
 /**
  * Convert public images into Google image sitemap payloads.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $gallery Gallery data used to build image captions.
+ * @param list<array<string,mixed>> $images Public image rows to describe.
+ * @return list<array{loc:string,title:string,caption:string}> Google image sitemap payloads.
  */
 function public_sitemap_image_payloads(array $gallery, array $images): array
 {
@@ -194,8 +210,16 @@ function public_sitemap_image_payloads(array $gallery, array $images): array
     foreach ($images as $image) {
         $payloads[] = [
             'loc' => absolute_public_url(thumbnail_url($image, 1200, 'jpg')),
-            'title' => public_sitemap_clean_text(image_alt_text($image, $gallery, $position)),
-            'caption' => public_sitemap_clean_text(public_sitemap_image_caption($image, $gallery, $position)),
+            'title' => public_sitemap_clean_text(image_alt_text(
+                $image,
+                $gallery,
+                $position,
+            )),
+            'caption' => public_sitemap_clean_text(public_sitemap_image_caption(
+                $image,
+                $gallery,
+                $position,
+            )),
         ];
         $position++;
     }
@@ -205,13 +229,16 @@ function public_sitemap_image_payloads(array $gallery, array $images): array
 /**
  * Build a meaningful image caption from the image description and gallery context.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Image data with description/title fields.
+ * @param array<string,mixed> $gallery Gallery data used for SEO title fallback.
  * @param int $position Position value.
  * @return string Text result for the caller.
  */
-function public_sitemap_image_caption(array $image, array $gallery, int $position): string
-{
+function public_sitemap_image_caption(
+    array $image,
+    array $gallery,
+    int $position,
+): string {
     $description = trim((string) ($image['description'] ?? ''));
     if ($description !== '') {
         return $description;
@@ -220,23 +247,35 @@ function public_sitemap_image_caption(array $image, array $gallery, int $positio
     if ($title !== '') {
         return $title . ' - ' . gallery_seo_title($gallery);
     }
-    return image_alt_text($image, $gallery, $position) . ' - ' . gallery_seo_title($gallery);
+    return (
+        image_alt_text($image, $gallery, $position)
+            . ' - '
+            . gallery_seo_title($gallery)
+    );
 }
 
 /**
  * Return the strongest known last modified value for one gallery URL.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
+ * @param array<string,mixed> $gallery Gallery row with database timestamps and folder path.
+ * @param list<array<string,mixed>> $images Public image rows contributing freshness.
  * @return ?string Text result for the caller.
  */
-function public_sitemap_gallery_last_modified(array $gallery, array $images): ?string
-{
+function public_sitemap_gallery_last_modified(
+    array $gallery,
+    array $images,
+): ?string {
     $values = public_sitemap_gallery_filesystem_dates($gallery);
-    foreach (public_sitemap_gallery_freshness_images($gallery, $images) as $image) {
+    foreach (public_sitemap_gallery_freshness_images(
+        $gallery,
+        $images,
+    ) as $image) {
         $values[] = public_sitemap_image_last_modified($image, $gallery);
     }
-    $values = array_filter($values, static fn (?string $value): bool => trim((string) $value) !== '');
+    $values = array_filter(
+        $values,
+        static fn(?string $value): bool => trim((string) $value) !== '',
+    );
     if (!$values) {
         return public_sitemap_newest_date([
             (string) ($gallery['updated_at'] ?? ''),
@@ -253,16 +292,23 @@ function public_sitemap_gallery_last_modified(array $gallery, array $images): ?s
  * URL lastmod should still reflect newer public photos that are not part of the
  * first payload set.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $seedImages Seed images value.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $gallery Gallery row with its database ID.
+ * @param list<array<string,mixed>> $seedImages Already loaded public images used if the expanded lookup fails.
+ * @return list<array<string,mixed>> Public image rows for freshness calculation.
  */
-function public_sitemap_gallery_freshness_images(array $gallery, array $seedImages): array
-{
+function public_sitemap_gallery_freshness_images(
+    array $gallery,
+    array $seedImages,
+): array {
     try {
         $images = [];
-        foreach (public_path_model_public_images((int) $gallery['id']) as $image) {
-            if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+        foreach (public_path_model_public_images(
+            (int) $gallery['id'],
+        ) as $image) {
+            if (
+                function_exists('Gallery\\Services\\image_nsfw_restricted')
+                && image_nsfw_restricted($image, $gallery)
+            ) {
                 continue;
             }
             $images[] = $image;
@@ -276,16 +322,20 @@ function public_sitemap_gallery_freshness_images(array $gallery, array $seedImag
 /**
  * Return filesystem-derived dates that can make one gallery URL fresh.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $gallery Gallery row with its physical folder path.
+ * @return list<?string> Gallery folder and sidecar modification dates.
  */
 function public_sitemap_gallery_filesystem_dates(array $gallery): array
 {
     $values = [];
     try {
-        $galleryPath = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+        $galleryPath = gallery_abs_path(
+            (string) ($gallery['folder_path'] ?? ''),
+        );
         $values[] = public_sitemap_file_lastmod($galleryPath);
-        $values[] = public_sitemap_file_lastmod($galleryPath . DIRECTORY_SEPARATOR . 'gallery.json');
+        $values[] = public_sitemap_file_lastmod(
+            $galleryPath . DIRECTORY_SEPARATOR . 'gallery.json',
+        );
     } catch (Throwable) {
         return [];
     }
@@ -295,15 +345,20 @@ function public_sitemap_gallery_filesystem_dates(array $gallery): array
 /**
  * Return the strongest known last modified value for one image URL.
  *
- * @param array $image Image row or image data.
- * @param ?array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Image row with source path and database dates.
+ * @param ?array<string,mixed> $gallery Optional owning gallery data for filesystem lookup.
  * @return ?string Text result for the caller.
  */
-function public_sitemap_image_last_modified(array $image, ?array $gallery = null): ?string
-{
+function public_sitemap_image_last_modified(
+    array $image,
+    ?array $gallery = null,
+): ?string {
     if ($gallery !== null) {
         try {
-            $fileDate = public_sitemap_file_lastmod(image_abs_path($image, $gallery));
+            $fileDate = public_sitemap_file_lastmod(image_abs_path(
+                $image,
+                $gallery,
+            ));
             if ($fileDate !== null) {
                 return $fileDate;
             }
@@ -342,7 +397,7 @@ function public_sitemap_file_lastmod(string $path): ?string
 /**
  * Return the newest valid date string from mixed SQL, ISO, and filesystem values.
  *
- * @param array $values Values value.
+ * @param list<?string> $values Mixed SQL, ISO, and filesystem date strings.
  * @return ?string Text result for the caller.
  */
 function public_sitemap_newest_date(array $values): ?string
@@ -389,12 +444,15 @@ function public_sitemap_lastmod(?string $value): ?string
 /**
  * Assign a light priority hint by gallery depth.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row with public or physical path fields.
  * @return string Text result for the caller.
  */
 function public_sitemap_gallery_priority(array $gallery): string
 {
-    $path = trim((string) ($gallery['url_path'] ?? $gallery['folder_path'] ?? ''), '/');
+    $path = trim(
+        (string) ($gallery['url_path'] ?? $gallery['folder_path'] ?? ''),
+        '/',
+    );
     if ($path === '') {
         return '0.8';
     }
@@ -427,8 +485,8 @@ function public_sitemap_clean_text(string $value): string
 /**
  * Remove duplicate sitemap URLs while preserving their first occurrence.
  *
- * @param array $entries Entries value.
- * @return array Structured result data for the caller.
+ * @param list<array<string,mixed>> $entries Sitemap entries to deduplicate by URL.
+ * @return list<array<string,mixed>> Entries retaining the first occurrence of each nonempty URL.
  */
 function public_sitemap_unique_entries(array $entries): array
 {
@@ -448,14 +506,19 @@ function public_sitemap_unique_entries(array $entries): array
 /**
  * Resolve a clean public gallery or image path into database records.
  *
- * @param string $publicPath Public path filesystem path.
- * @param bool $publicOnly Public only value.
- * @return array Structured result data for the caller.
+ * @param string $publicPath Decoded clean gallery or image URL path.
+ * @param bool $publicOnly Whether to hide non-public image rows.
+ * @return array{gallery:array<string,mixed>|null,image:array<string,mixed>|null} Resolved gallery and optional visible image.
  */
-function resolve_public_gallery_path(string $publicPath, bool $publicOnly = true): array
-{
+function resolve_public_gallery_path(
+    string $publicPath,
+    bool $publicOnly = true,
+): array {
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
-    $normalizedPath = trim(str_replace('\\', '/', rawurldecode($publicPath)), '/');
+    $normalizedPath = trim(
+        str_replace('\\', '/', rawurldecode($publicPath)),
+        '/',
+    );
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = preg_replace('#/+#', '/', $normalizedPath) ?: '';
 
@@ -486,8 +549,17 @@ function resolve_public_gallery_path(string $publicPath, bool $publicOnly = true
     }
 
     // $image stores an intermediate value used by the surrounding gallery workflow.
-    $image = find_image_by_public_slug((int) $gallery['id'], (string) $imageSlug);
-    if ($image && (!$publicOnly || (string) $image['visibility'] === 'public')) {
+    $image = find_image_by_public_slug(
+        (int) $gallery['id'],
+        (string) $imageSlug,
+    );
+    if (
+        $image
+        && (
+            !$publicOnly
+            || (string) $image['visibility'] === 'public'
+        )
+    ) {
         return ['gallery' => $gallery, 'image' => $image];
     }
 
@@ -505,7 +577,10 @@ function find_gallery_by_public_path(string $publicPath): ?array
     static $cache = [];
 
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
-    $normalizedPath = trim(str_replace('\\', '/', rawurldecode($publicPath)), '/');
+    $normalizedPath = trim(
+        str_replace('\\', '/', rawurldecode($publicPath)),
+        '/',
+    );
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = preg_replace('#/+#', '/', $normalizedPath) ?: '';
     if ($normalizedPath === '') {
@@ -519,7 +594,10 @@ function find_gallery_by_public_path(string $publicPath): ?array
 
     if (public_path_schema_ready()) {
         // $gallery stores an intermediate value used by the surrounding gallery workflow.
-        $gallery = public_path_model_find_gallery_by_path_hash(hash('sha256', $normalizedPath));
+        $gallery = public_path_model_find_gallery_by_path_hash(hash(
+            'sha256',
+            $normalizedPath,
+        ));
         if ($gallery) {
             return $cache[$cacheKey] = $gallery;
         }
@@ -569,7 +647,14 @@ function find_image_by_public_slug(int $galleryId, string $slug): ?array
 
     foreach (public_path_model_gallery_images($galleryId) as $image) {
         // $candidate stores an intermediate value used by the surrounding gallery workflow.
-        $candidate = slugify((string) ($image['url_slug'] ?: pathinfo((string) $image['filename'], PATHINFO_FILENAME)));
+        $candidate = slugify(
+            (string) (
+                $image['url_slug'] ?: pathinfo(
+                    (string) $image['filename'],
+                    PATHINFO_FILENAME,
+                )
+            ),
+        );
         if ($candidate === $cleanSlug) {
             return $cache[$cacheKey] = $image;
         }
@@ -590,7 +675,14 @@ function public_gallery_listing_sql_fragment(string $alias = 'g'): string
 {
     gallery_visibility_assert_public_policy_available();
     gallery_access_assert_public_policy_available();
-    return ltrim(gallery_model_public_listing_filter_sql($alias, true, gallery_access_schema_ready()), ' AND');
+    return ltrim(
+        gallery_model_public_listing_filter_sql(
+            $alias,
+            true,
+            gallery_access_schema_ready(),
+        ),
+        ' AND',
+    );
 }
 
 /**
@@ -607,7 +699,8 @@ function public_path_schema_ready(): bool
 
     try {
         // $ready stores an intermediate value used by the surrounding gallery workflow.
-        $ready = db_column_exists('galleries', 'url_slug')
+        $ready =
+            db_column_exists('galleries', 'url_slug')
             && db_column_exists('galleries', 'url_path')
             && db_column_exists('galleries', 'url_path_hash')
             && db_column_exists('images', 'url_slug');
@@ -622,30 +715,39 @@ function public_path_schema_ready(): bool
 /**
  * Regenerate clean public gallery and image URL paths from current titles and filenames.
  *
- * @return array Structured result data for the caller.
+ * @return array{galleries:int,images:int} Number of regenerated gallery paths and image slugs.
  */
 function regenerate_public_paths(): array
 {
     if (!public_path_schema_ready()) {
-        throw new RuntimeException('Clean public path columns are missing. Run database migrations first.');
+        throw new RuntimeException(
+            'Clean public path columns are missing. Run database migrations first.',
+        );
     }
 
     $galleryRows = public_path_model_gallery_regeneration_rows();
-    $parentAssignments = gallery_parent_id_assignments_from_folder_paths($galleryRows);
-    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+    $parentAssignments =
+        gallery_parent_id_assignments_from_folder_paths($galleryRows);
+    if (function_exists(__NAMESPACE__
+        . '\\smart_gallery_validate_gallery_parent_map')) {
         smart_gallery_validate_gallery_parent_map($parentAssignments);
     }
     $pathAssignments = gallery_public_path_assignments($galleryRows);
-    $imageAssignments = image_public_slug_assignments(public_path_model_image_regeneration_rows());
+    $imageAssignments = image_public_slug_assignments(
+        public_path_model_image_regeneration_rows(),
+    );
     $result = public_path_model_apply_full_regeneration(
         $galleryRows,
         $parentAssignments,
         $pathAssignments,
         $imageAssignments,
-        now_sql()
+        now_sql(),
     );
 
-    if ($result['parent_changed'] > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+    if (
+        $result['parent_changed'] > 0
+        && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')
+    ) {
         smart_gallery_graph_cache_clear();
     }
 
@@ -672,8 +774,10 @@ function refresh_gallery_public_paths(): int
     }
 
     $galleryRows = public_path_model_gallery_regeneration_rows();
-    $parentAssignments = gallery_parent_id_assignments_from_folder_paths($galleryRows);
-    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+    $parentAssignments =
+        gallery_parent_id_assignments_from_folder_paths($galleryRows);
+    if (function_exists(__NAMESPACE__
+        . '\\smart_gallery_validate_gallery_parent_map')) {
         smart_gallery_validate_gallery_parent_map($parentAssignments);
     }
     $pathAssignments = gallery_public_path_assignments($galleryRows);
@@ -681,9 +785,12 @@ function refresh_gallery_public_paths(): int
         $galleryRows,
         $parentAssignments,
         $pathAssignments,
-        now_sql()
+        now_sql(),
     );
-    if ($result['parent_changed'] > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+    if (
+        $result['parent_changed'] > 0
+        && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')
+    ) {
         smart_gallery_graph_cache_clear();
     }
     return $result['galleries'];
@@ -709,7 +816,9 @@ function gallery_public_path_assignments(array $galleries): array
         if ($galleryId <= 0) {
             continue;
         }
-        $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+        $folderPath = normalize_relative_path(
+            (string) ($gallery['folder_path'] ?? ''),
+        );
         $byId[$galleryId] = $gallery;
         $folderPathById[$galleryId] = $folderPath;
     }
@@ -737,8 +846,16 @@ function gallery_public_path_assignments(array $galleries): array
         $usedSlugs = [];
         foreach ($siblings as $sibling) {
             $siblingId = (int) ($sibling['id'] ?? 0);
-            $baseName = basename(str_replace('\\', '/', trim((string) ($sibling['folder_path'] ?? ''), '/')));
-            $base = (string) (($sibling['title'] ?? '') ?: $baseName ?: ($sibling['slug'] ?? '') ?: 'gallery');
+            $baseName = basename(str_replace(
+                '\\',
+                '/',
+                trim((string) ($sibling['folder_path'] ?? ''), '/'),
+            ));
+            $base = (string) (
+                $sibling['title'] ?? ''
+                ?: $baseName
+                ?: $sibling['slug'] ?? '' ?: 'gallery'
+            );
             $slug = unique_public_slug_in_set($base, $usedSlugs);
             $slugById[$siblingId] = $slug;
             $usedSlugs[$slug] = true;
@@ -754,7 +871,7 @@ function gallery_public_path_assignments(array $galleries): array
         $byId,
         $folderPathById,
         $parentIdById,
-        $slugById
+        $slugById,
     ): string {
         if (isset($pathsById[$galleryId])) {
             return $pathsById[$galleryId];
@@ -771,15 +888,22 @@ function gallery_public_path_assignments(array $galleries): array
         $visiting[$galleryId] = true;
         $slug = $slugById[$galleryId] ?? 'gallery';
         $parentId = (int) ($parentIdById[$galleryId] ?? 0);
-        if ($parentId > 0 && isset($byId[$parentId]) && $parentId !== $galleryId) {
+        if (
+            $parentId > 0
+            && isset($byId[$parentId])
+            && $parentId !== $galleryId
+        ) {
             $path = trim($buildPath($parentId) . '/' . $slug, '/');
         } else {
             // When an intermediate gallery row is absent, preserve every real
             // folder ancestor in the public URL instead of collapsing the leaf
             // gallery to a root URL. Existing ancestor rows still use their
             // titles through the recursive branch above.
-            $physicalParentPath = gallery_folder_parent_path($folderPathById[$galleryId] ?? '');
-            $prefix = gallery_public_path_from_folder_segments($physicalParentPath);
+            $physicalParentPath = gallery_folder_parent_path(
+                $folderPathById[$galleryId] ?? '',
+            );
+            $prefix =
+                gallery_public_path_from_folder_segments($physicalParentPath);
             $path = trim(($prefix !== '' ? $prefix . '/' : '') . $slug, '/');
         }
         unset($visiting[$galleryId]);
@@ -817,7 +941,9 @@ function gallery_parent_id_assignments_from_folder_paths(array $galleries): arra
         if ($galleryId <= 0) {
             continue;
         }
-        $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+        $folderPath = normalize_relative_path(
+            (string) ($gallery['folder_path'] ?? ''),
+        );
         $byId[$galleryId] = $gallery;
         $folderPathById[$galleryId] = $folderPath;
         if ($folderPath !== '') {
@@ -827,8 +953,12 @@ function gallery_parent_id_assignments_from_folder_paths(array $galleries): arra
 
     $assignments = [];
     foreach ($byId as $galleryId => $gallery) {
-        $parentPath = gallery_folder_parent_path($folderPathById[$galleryId] ?? '');
-        $parentId = $parentPath !== '' ? (int) ($galleryIdByFolderPath[$parentPath] ?? 0) : 0;
+        $parentPath = gallery_folder_parent_path(
+            $folderPathById[$galleryId] ?? '',
+        );
+        $parentId = $parentPath !== ''
+            ? (int) ($galleryIdByFolderPath[$parentPath] ?? 0)
+            : 0;
         if ($parentId === $galleryId) {
             $parentId = 0;
         }
@@ -891,12 +1021,20 @@ function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
 {
     $rows = public_path_model_gallery_regeneration_rows($pdo);
     $assignments = gallery_parent_id_assignments_from_folder_paths($rows);
-    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+    if (function_exists(__NAMESPACE__
+        . '\\smart_gallery_validate_gallery_parent_map')) {
         smart_gallery_validate_gallery_parent_map($assignments);
     }
 
-    $changed = public_path_model_apply_parent_assignments($rows, $assignments, $pdo);
-    if ($changed > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+    $changed = public_path_model_apply_parent_assignments(
+        $rows,
+        $assignments,
+        $pdo,
+    );
+    if (
+        $changed > 0
+        && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')
+    ) {
         smart_gallery_graph_cache_clear();
     }
     return $changed;
@@ -911,8 +1049,10 @@ function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
 function regenerate_gallery_public_paths(PDO $pdo): int
 {
     $galleries = public_path_model_gallery_regeneration_rows($pdo);
-    $parentAssignments = gallery_parent_id_assignments_from_folder_paths($galleries);
-    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+    $parentAssignments =
+        gallery_parent_id_assignments_from_folder_paths($galleries);
+    if (function_exists(__NAMESPACE__
+        . '\\smart_gallery_validate_gallery_parent_map')) {
         smart_gallery_validate_gallery_parent_map($parentAssignments);
     }
     $assignments = gallery_public_path_assignments($galleries);
@@ -921,9 +1061,12 @@ function regenerate_gallery_public_paths(PDO $pdo): int
         $parentAssignments,
         $assignments,
         now_sql(),
-        $pdo
+        $pdo,
     );
-    if ($result['parent_changed'] > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+    if (
+        $result['parent_changed'] > 0
+        && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')
+    ) {
         smart_gallery_graph_cache_clear();
     }
     return $result['galleries'];
@@ -956,7 +1099,10 @@ function regenerate_gallery_image_public_slugs(int $galleryId): int
     if (!$images) {
         return 0;
     }
-    return public_path_model_apply_image_slugs(image_public_slug_assignments($images), now_sql());
+    return public_path_model_apply_image_slugs(
+        image_public_slug_assignments($images),
+        now_sql(),
+    );
 }
 
 /**
@@ -968,7 +1114,11 @@ function regenerate_gallery_image_public_slugs(int $galleryId): int
 function regenerate_image_public_slugs(PDO $pdo): int
 {
     $images = public_path_model_image_regeneration_rows($pdo);
-    return public_path_model_apply_image_slugs(image_public_slug_assignments($images), now_sql(), $pdo);
+    return public_path_model_apply_image_slugs(
+        image_public_slug_assignments($images),
+        now_sql(),
+        $pdo,
+    );
 }
 
 /**
@@ -990,8 +1140,11 @@ function image_public_slug_assignments(array $images): array
         if (!isset($usedByGallery[$galleryId])) {
             $usedByGallery[$galleryId] = [];
         }
-        $baseName = pathinfo((string) ($image['filename'] ?? ''), PATHINFO_FILENAME);
-        $base = (string) (($image['title'] ?? '') ?: $baseName ?: 'image');
+        $baseName = pathinfo(
+            (string) ($image['filename'] ?? ''),
+            PATHINFO_FILENAME,
+        );
+        $base = (string) ($image['title'] ?? '' ?: $baseName ?: 'image');
         $slug = unique_public_slug_in_set($base, $usedByGallery[$galleryId]);
         $usedByGallery[$galleryId][$slug] = true;
         $assignments[$imageId] = $slug;

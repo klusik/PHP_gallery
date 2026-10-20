@@ -55,9 +55,9 @@ use function Gallery\Core\unique_slug;
 /**
  * Build an asset descriptor for one original image.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return ?array Structured result data for the caller.
+ * @param array<string,int|float|string|bool|null> $image Persisted image row used to resolve and describe the original file.
+ * @param array<string,int|float|string|bool|null> $gallery Persisted owning gallery row used to resolve the source path.
+ * @return array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string}|null Original-image transfer descriptor, or null when the source file is unavailable.
  */
 function gallery_migration_original_asset(array $image, array $gallery): ?array
 {
@@ -76,19 +76,28 @@ function gallery_migration_original_asset(array $image, array $gallery): ?array
         'kind' => 'original',
         'source_image_id' => (int) ($image['id'] ?? 0),
         'filename' => (string) ($image['filename'] ?? basename($path)),
-        'relative_path' => normalize_relative_path((string) ($image['relative_path'] ?? basename($path))),
+        'relative_path' => normalize_relative_path(
+            (string) ($image['relative_path'] ?? basename($path)),
+        ),
         'file_size' => filesize($path) ?: 0,
-        'checksum_sha256' => (string) (($image['checksum_sha256'] ?? '') ?: (hash_file('sha256', $path) ?: '')),
-        'mime_type' => gallery_migration_asset_mime($path, (string) ($image['mime_type'] ?? 'application/octet-stream')),
+        'checksum_sha256' => (string) (
+            $image['checksum_sha256'] ?? '' ?: (
+                hash_file('sha256', $path) ?: ''
+            )
+        ),
+        'mime_type' => gallery_migration_asset_mime(
+            $path,
+            (string) ($image['mime_type'] ?? 'application/octet-stream'),
+        ),
     ];
 }
 
 /**
  * Build asset descriptors for generated thumbnails that already exist.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return array<int array<string, mixed>>.
+ * @param array<string,int|float|string|bool|null> $image Persisted image row used to resolve generated thumbnail paths.
+ * @param array<string,int|float|string|bool|null> $gallery Persisted owning gallery row used to resolve thumbnail paths.
+ * @return list<array{scope:'image',source_gallery_id:int,kind:'thumbnail',source_image_id:int,size:int,format:'jpg'|'webp',filename:string,file_size:int,checksum_sha256:string,mime_type:string}> Existing generated thumbnail descriptors for the supported sizes and formats.
  */
 function gallery_migration_thumbnail_assets(array $image, array $gallery): array
 {
@@ -96,7 +105,12 @@ function gallery_migration_thumbnail_assets(array $image, array $gallery): array
     foreach (thumbnail_sizes() as $size) {
         foreach (['jpg', 'webp'] as $format) {
             try {
-                $path = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+                $path = thumbnail_abs_path(
+                    $image,
+                    $gallery,
+                    (int) $size,
+                    $format,
+                );
             } catch (Throwable) {
                 continue;
             }
@@ -113,7 +127,10 @@ function gallery_migration_thumbnail_assets(array $image, array $gallery): array
                 'filename' => basename($path),
                 'file_size' => filesize($path) ?: 0,
                 'checksum_sha256' => hash_file('sha256', $path) ?: '',
-                'mime_type' => gallery_migration_asset_mime($path, $format === 'webp' ? 'image/webp' : 'image/jpeg'),
+                'mime_type' => gallery_migration_asset_mime(
+                    $path,
+                    $format === 'webp' ? 'image/webp' : 'image/jpeg',
+                ),
             ];
         }
     }
@@ -125,19 +142,29 @@ function gallery_migration_thumbnail_assets(array $image, array $gallery): array
  * Build descriptors for gallery-level visual assets stored under the gallery folder.
  *
  * @param array<string,mixed> $gallery Persisted gallery data including media asset paths.
- * @return list<array<string,int|string>> Existing gallery asset descriptors from owned files.
+ * @return list<array{scope:'gallery',source_gallery_id:int,kind:'cover_image_path'|'banner_image_path'|'logo_image_path'|'separator_image_path',relative_path:string,filename:string,file_size:int,checksum_sha256:string,mime_type:string}> Existing owned gallery artwork descriptors.
  */
 function gallery_migration_gallery_assets(array $gallery): array
 {
     $assets = [];
-    $columns = ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'];
+    $columns = [
+        'cover_image_path',
+        'banner_image_path',
+        'logo_image_path',
+        'separator_image_path',
+    ];
     $galleryRoot = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
     foreach ($columns as $column) {
-        $relativePath = normalize_relative_path((string) ($gallery[$column] ?? ''));
+        $relativePath = normalize_relative_path(
+            (string) ($gallery[$column] ?? ''),
+        );
         if ($relativePath === '') {
             continue;
         }
-        $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $path =
+            $galleryRoot
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (!is_file($path) || !path_inside($galleryRoot, $path)) {
             continue;
         }
@@ -159,9 +186,9 @@ function gallery_migration_gallery_assets(array $gallery): array
 /**
  * Return source asset descriptors for one image.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return array<int array<string, mixed>>.
+ * @param array<string,int|float|string|bool|null> $image Persisted image row used to enumerate original and thumbnail assets.
+ * @param array<string,int|float|string|bool|null> $gallery Persisted owning gallery row used to enumerate image assets.
+ * @return list<array{scope:'image',source_gallery_id:int,kind:'original'|'thumbnail',source_image_id:int,filename:string,file_size:int,checksum_sha256:string,mime_type:string,relative_path?:string,size?:int,format?:'jpg'|'webp'}> Original and existing thumbnail descriptors for one image.
  */
 function gallery_migration_image_assets(array $image, array $gallery): array
 {
@@ -171,19 +198,24 @@ function gallery_migration_image_assets(array $image, array $gallery): array
         $assets[] = $original;
     }
 
-    return array_merge($assets, gallery_migration_thumbnail_assets($image, $gallery));
+    return array_merge($assets, gallery_migration_thumbnail_assets(
+        $image,
+        $gallery,
+    ));
 }
 
 /**
  * Compare a submitted asset reference with one manifest asset.
  *
- * @param array $asset Asset value.
- * @param array $request Request data.
+ * @param array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string} $asset Manifest asset descriptor used for identity comparison.
+ * @param array{scope?:string,kind?:string,source_gallery_id?:int|string,source_image_id?:int|string,image_id?:int|string,size?:int|string,format?:string} $request Submitted transfer asset identity fields.
  * @return bool True when the condition matches.
  */
 function gallery_migration_asset_matches(array $asset, array $request): bool
 {
-    if ((string) ($asset['scope'] ?? '') !== (string) ($request['scope'] ?? '')) {
+    if (
+        (string) ($asset['scope'] ?? '') !== (string) ($request['scope'] ?? '')
+    ) {
         return false;
     }
     if ((string) ($asset['kind'] ?? '') !== (string) ($request['kind'] ?? '')) {
@@ -195,12 +227,18 @@ function gallery_migration_asset_matches(array $asset, array $request): bool
         return false;
     }
     if ((string) ($asset['scope'] ?? '') === 'image') {
-        if ((int) ($asset['source_image_id'] ?? 0) !== (int) ($request['source_image_id'] ?? 0)) {
+        if (
+            (int) ($asset['source_image_id'] ?? 0)
+            !== (int) ($request['source_image_id'] ?? 0)
+        ) {
             return false;
         }
         if ((string) ($asset['kind'] ?? '') === 'thumbnail') {
-            return (int) ($asset['size'] ?? 0) === (int) ($request['size'] ?? 0)
-                && (string) ($asset['format'] ?? '') === (string) ($request['format'] ?? '');
+            return (
+                (int) ($asset['size'] ?? 0) === (int) ($request['size'] ?? 0)
+                    && (string) ($asset['format'] ?? '')
+                    === (string) ($request['format'] ?? '')
+            );
         }
         return true;
     }
@@ -223,7 +261,11 @@ function gallery_migration_asset_ref_from_input(array $input): array
         'scope' => in_array($scope, ['image', 'gallery'], true) ? $scope : '',
         'source_gallery_id' => (int) ($input['source_gallery_id'] ?? 0),
         'kind' => $kind,
-        'source_image_id' => (int) ($input['source_image_id'] ?? $input['image_id'] ?? 0),
+        'source_image_id' => (int) (
+            $input['source_image_id']
+            ?? $input['image_id']
+            ?? 0
+        ),
         'size' => (int) ($input['size'] ?? 0),
         'format' => in_array($format, ['jpg', 'webp'], true) ? $format : '',
     ];
@@ -232,17 +274,17 @@ function gallery_migration_asset_ref_from_input(array $input): array
 /**
  * Return a stable key for one manifest asset.
  *
- * @param array $asset Asset value.
+ * @param array{scope:'image'|'gallery',source_gallery_id:int,kind:string,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string} $asset Manifest asset identity fields used to derive its stable transfer key.
  * @return string Text result for the caller.
  */
 function gallery_migration_asset_key(array $asset): string
 {
     $parts = [
-        (string) ((int) ($asset['source_gallery_id'] ?? 0)),
+        (string) (int) ($asset['source_gallery_id'] ?? 0),
         (string) ($asset['scope'] ?? ''),
         (string) ($asset['kind'] ?? ''),
-        (string) ((int) ($asset['source_image_id'] ?? 0)),
-        (string) ((int) ($asset['size'] ?? 0)),
+        (string) (int) ($asset['source_image_id'] ?? 0),
+        (string) (int) ($asset['size'] ?? 0),
         (string) ($asset['format'] ?? ''),
         (string) ($asset['relative_path'] ?? ''),
     ];
@@ -258,8 +300,11 @@ function gallery_migration_asset_key(array $asset): string
  * @param bool $includeSubgalleries Include descendants value.
  * @return bool True when the gallery is in scope.
  */
-function gallery_migration_source_gallery_allowed(int $rootGalleryId, int $sourceGalleryId, bool $includeSubgalleries): bool
-{
+function gallery_migration_source_gallery_allowed(
+    int $rootGalleryId,
+    int $sourceGalleryId,
+    bool $includeSubgalleries,
+): bool {
     if ($rootGalleryId <= 0 || $sourceGalleryId <= 0) {
         return false;
     }
@@ -271,13 +316,20 @@ function gallery_migration_source_gallery_allowed(int $rootGalleryId, int $sourc
     }
 
     $root = find_gallery($rootGalleryId, true) ?: find_gallery($rootGalleryId);
-    $candidate = find_gallery($sourceGalleryId, true) ?: find_gallery($sourceGalleryId);
+    $candidate = find_gallery($sourceGalleryId, true) ?: find_gallery(
+        $sourceGalleryId,
+    );
     if (!$root || !$candidate) {
         return false;
     }
-    $rootFolder = normalize_relative_path((string) ($root['folder_path'] ?? ''));
-    $candidateFolder = normalize_relative_path((string) ($candidate['folder_path'] ?? ''));
-    return $rootFolder !== '' && str_starts_with($candidateFolder, $rootFolder . '/');
+    $rootFolder = normalize_relative_path(
+        (string) ($root['folder_path'] ?? ''),
+    );
+    $candidateFolder = normalize_relative_path(
+        (string) ($candidate['folder_path'] ?? ''),
+    );
+    return $rootFolder !== ''
+        && str_starts_with($candidateFolder, $rootFolder . '/');
 }
 
 /**
@@ -288,58 +340,124 @@ function gallery_migration_source_gallery_allowed(int $rootGalleryId, int $sourc
  * @param bool $includeSubgalleries Whether authorized gallery descendants are exportable.
  * @return array{path:string,filename:string,mime_type:string} Safe local source asset descriptor.
  */
-function gallery_migration_source_asset_descriptor(int $galleryId, array $request, bool $includeSubgalleries = true): array
-{
+function gallery_migration_source_asset_descriptor(
+    int $galleryId,
+    array $request,
+    bool $includeSubgalleries = true,
+): array {
     $sourceGalleryId = (int) ($request['source_gallery_id'] ?? 0);
     if ($sourceGalleryId <= 0) {
         $sourceGalleryId = $galleryId;
     }
-    if (!gallery_migration_source_gallery_allowed($galleryId, $sourceGalleryId, $includeSubgalleries)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.api_key_scope', 'API key is not allowed to export the requested gallery.'));
+    if (!gallery_migration_source_gallery_allowed(
+        $galleryId,
+        $sourceGalleryId,
+        $includeSubgalleries,
+    )) {
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.api_key_scope',
+            'API key is not allowed to export the requested gallery.',
+        ));
     }
 
-    $gallery = find_gallery($sourceGalleryId, true) ?: find_gallery($sourceGalleryId);
+    $gallery = find_gallery($sourceGalleryId, true) ?: find_gallery(
+        $sourceGalleryId,
+    );
     if (!$gallery) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.gallery_missing', 'Gallery was not found.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.gallery_missing',
+            'Gallery was not found.',
+        ));
     }
 
     $scope = (string) ($request['scope'] ?? '');
     $kind = (string) ($request['kind'] ?? '');
     if ($scope === 'gallery') {
-        if (!in_array($kind, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true)) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is invalid.'));
+        if (!in_array(
+            $kind,
+            [
+                'cover_image_path',
+                'banner_image_path',
+                'logo_image_path',
+                'separator_image_path',
+            ],
+            true,
+        )) {
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.asset_invalid',
+                'Requested migration asset is invalid.',
+            ));
         }
-        $relativePath = normalize_relative_path((string) ($gallery[$kind] ?? ''));
+        $relativePath = normalize_relative_path(
+            (string) ($gallery[$kind] ?? ''),
+        );
         if ($relativePath === '') {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_missing', 'Requested migration asset is not available.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.asset_missing',
+                'Requested migration asset is not available.',
+            ));
         }
         $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
-        $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $path =
+            $galleryRoot
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (!is_file($path) || !path_inside($galleryRoot, $path)) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_missing', 'Requested migration asset is not available.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.asset_missing',
+                'Requested migration asset is not available.',
+            ));
         }
-        return ['path' => $path, 'filename' => basename($path), 'mime_type' => gallery_migration_asset_mime($path)];
+        return [
+            'path' => $path,
+            'filename' => basename($path),
+            'mime_type' => gallery_migration_asset_mime($path),
+        ];
     }
 
     if ($scope !== 'image') {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is invalid.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.asset_invalid',
+            'Requested migration asset is invalid.',
+        ));
     }
     $image = find_image((int) ($request['source_image_id'] ?? 0));
     if (!$image || (int) ($image['gallery_id'] ?? 0) !== $sourceGalleryId) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_missing', 'Requested source image was not found.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.image_missing',
+            'Requested source image was not found.',
+        ));
     }
 
     if ($kind === 'original') {
         $path = image_abs_path($image, $gallery);
     } elseif ($kind === 'thumbnail') {
-        $path = thumbnail_abs_path($image, $gallery, (int) ($request['size'] ?? 0), (string) ($request['format'] ?? ''));
+        $path = thumbnail_abs_path(
+            $image,
+            $gallery,
+            (int) ($request['size'] ?? 0),
+            (string) ($request['format'] ?? ''),
+        );
     } else {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is invalid.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.asset_invalid',
+            'Requested migration asset is invalid.',
+        ));
     }
 
     if (!is_file($path)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_missing', 'Requested migration asset is not available.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.asset_missing',
+            'Requested migration asset is not available.',
+        ));
     }
 
-    return ['path' => $path, 'filename' => basename($path), 'mime_type' => gallery_migration_asset_mime($path, (string) ($image['mime_type'] ?? 'application/octet-stream'))];
+    return [
+        'path' => $path,
+        'filename' => basename($path),
+        'mime_type' => gallery_migration_asset_mime(
+            $path,
+            (string) ($image['mime_type'] ?? 'application/octet-stream'),
+        ),
+    ];
 }

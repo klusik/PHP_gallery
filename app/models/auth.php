@@ -47,9 +47,11 @@ use function Gallery\Core\db;
  */
 function auth_model_session_user(int $userId, bool $emailAvailable): ?array
 {
-    $stmt = db()->prepare($emailAvailable
-        ? 'SELECT id, username, email, role FROM users WHERE id = ?'
-        : 'SELECT id, username, role FROM users WHERE id = ?');
+    $stmt = db()->prepare(
+        $emailAvailable
+            ? 'SELECT id, username, email, role FROM users WHERE id = ?'
+            : 'SELECT id, username, role FROM users WHERE id = ?',
+    );
     $stmt->execute([$userId]);
     return $stmt->fetch() ?: null;
 }
@@ -61,13 +63,22 @@ function auth_model_session_user(int $userId, bool $emailAvailable): ?array
  */
 function auth_model_admin_exists(): bool
 {
-    return (bool) db()->query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")->fetchColumn();
+    return (bool) db()
+        ->query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")
+        ->fetchColumn();
 }
 
-/** @return array<string,mixed>|null */
+/**
+ * Find a user by case-insensitive email address.
+ *
+ * @param string $email Email address to match.
+ * @return array<string,mixed>|null Matching user row, or null when absent.
+ */
 function auth_model_find_user_by_email(string $email): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT * FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) LIMIT 1',
+    );
     $stmt->execute([$email]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -86,10 +97,13 @@ function auth_model_find_user_by_username(string $username): ?array
  * Delete expired or already-consumed password-reset tokens.
  *
  * @param string $now Current SQL timestamp.
+ * @return void Deletes expired and consumed reset-token rows.
  */
 function auth_model_cleanup_password_reset_tokens(string $now): void
 {
-    $stmt = db()->prepare('DELETE FROM password_reset_tokens WHERE expires_at < ? OR used_at IS NOT NULL');
+    $stmt = db()->prepare(
+        'DELETE FROM password_reset_tokens WHERE expires_at < ? OR used_at IS NOT NULL',
+    );
     $stmt->execute([$now]);
 }
 
@@ -102,19 +116,47 @@ function auth_model_cleanup_password_reset_tokens(string $now): void
  * @param string $requestedAt Token creation timestamp.
  * @param string $expiresAt Token expiration timestamp.
  * @param string $requestHash Privacy-safe request fingerprint.
+ * @return void Invalidates prior unused tokens and inserts the replacement.
  */
-function auth_model_replace_password_reset_token(int $userId, string $selector, string $tokenHash, string $requestedAt, string $expiresAt, string $requestHash): void
-{
-    $stmt = db()->prepare('UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL');
+function auth_model_replace_password_reset_token(
+    int $userId,
+    string $selector,
+    string $tokenHash,
+    string $requestedAt,
+    string $expiresAt,
+    string $requestHash,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL',
+    );
     $stmt->execute([$requestedAt, $userId]);
-    $stmt = db()->prepare('INSERT INTO password_reset_tokens (user_id, selector, token_hash, requested_at, expires_at, request_hash) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$userId, $selector, $tokenHash, $requestedAt, $expiresAt, $requestHash]);
+    $stmt = db()->prepare(
+        'INSERT INTO password_reset_tokens (user_id, selector, token_hash, requested_at, expires_at, request_hash) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    $stmt->execute([
+        $userId,
+        $selector,
+        $tokenHash,
+        $requestedAt,
+        $expiresAt,
+        $requestHash,
+    ]);
 }
 
-/** @return array<string,mixed>|null */
-function auth_model_find_valid_password_reset(string $selector, string $now): ?array
-{
-    $stmt = db()->prepare('SELECT prt.*, u.username, u.email FROM password_reset_tokens prt INNER JOIN users u ON u.id = prt.user_id WHERE prt.selector = ? AND prt.used_at IS NULL AND prt.expires_at >= ? LIMIT 1');
+/**
+ * Find an unused, unexpired password-reset token by selector.
+ *
+ * @param string $selector Public token selector.
+ * @param string $now Current SQL timestamp used for expiry comparison.
+ * @return array<string,mixed>|null Matching token and user row, or null when invalid.
+ */
+function auth_model_find_valid_password_reset(
+    string $selector,
+    string $now,
+): ?array {
+    $stmt = db()->prepare(
+        'SELECT prt.*, u.username, u.email FROM password_reset_tokens prt INNER JOIN users u ON u.id = prt.user_id WHERE prt.selector = ? AND prt.used_at IS NULL AND prt.expires_at >= ? LIMIT 1',
+    );
     $stmt->execute([$selector, $now]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -126,10 +168,16 @@ function auth_model_find_valid_password_reset(string $selector, string $now): ?a
  * @param int $userId User identifier.
  * @param string $passwordHash Password hash created by the service layer.
  * @param string $now Current SQL timestamp.
+ * @return void Updates the user's password hash and timestamp.
  */
-function auth_model_update_user_password(int $userId, string $passwordHash, string $now): void
-{
-    $stmt = db()->prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?');
+function auth_model_update_user_password(
+    int $userId,
+    string $passwordHash,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?',
+    );
     $stmt->execute([$passwordHash, $now, $userId]);
 }
 
@@ -138,10 +186,15 @@ function auth_model_update_user_password(int $userId, string $passwordHash, stri
  *
  * @param int $resetTokenId Password-reset token identifier.
  * @param string $now Current SQL timestamp.
+ * @return void Marks the reset token as consumed.
  */
-function auth_model_mark_password_reset_used(int $resetTokenId, string $now): void
-{
-    $stmt = db()->prepare('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?');
+function auth_model_mark_password_reset_used(
+    int $resetTokenId,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE password_reset_tokens SET used_at = ? WHERE id = ?',
+    );
     $stmt->execute([$now, $resetTokenId]);
 }
 
@@ -180,7 +233,9 @@ function auth_model_account_row(int $userId, bool $emailSchemaAvailable): ?array
  */
 function auth_model_username_taken(string $username, int $excludeUserId): bool
 {
-    $stmt = db()->prepare('SELECT id FROM users WHERE username = ? AND id <> ?');
+    $stmt = db()->prepare(
+        'SELECT id FROM users WHERE username = ? AND id <> ?',
+    );
     $stmt->execute([$username, $excludeUserId]);
     return (bool) $stmt->fetch();
 }
@@ -194,7 +249,9 @@ function auth_model_username_taken(string $username, int $excludeUserId): bool
  */
 function auth_model_email_taken(string $email, int $excludeUserId): bool
 {
-    $stmt = db()->prepare('SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) AND id <> ?');
+    $stmt = db()->prepare(
+        'SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) AND id <> ?',
+    );
     $stmt->execute([$email, $excludeUserId]);
     return (bool) $stmt->fetch();
 }
@@ -208,9 +265,16 @@ function auth_model_email_taken(string $email, int $excludeUserId): bool
  * @param bool $emailSchemaAvailable Whether the installed schema supports email.
  * @param ?string $passwordHash Optional replacement password hash.
  * @param string $now Current SQL timestamp.
+ * @return void Persists the editable account fields supported by the schema.
  */
-function auth_model_update_account(int $userId, string $username, ?string $email, bool $emailSchemaAvailable, ?string $passwordHash, string $now): void
-{
+function auth_model_update_account(
+    int $userId,
+    string $username,
+    ?string $email,
+    bool $emailSchemaAvailable,
+    ?string $passwordHash,
+    string $now,
+): void {
     $fields = ['username = ?'];
     $params = [$username];
     if ($emailSchemaAvailable) {
@@ -224,7 +288,9 @@ function auth_model_update_account(int $userId, string $username, ?string $email
         $params[] = $passwordHash;
     }
     $params[] = $userId;
-    $stmt = db()->prepare('UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = ?',
+    );
     $stmt->execute($params);
 }
 
@@ -235,9 +301,16 @@ function auth_model_update_account(int $userId, string $username, ?string $email
  * @param ?string $email Optional recovery email.
  * @param string $passwordHash Password hash created by the service layer.
  * @param string $now Current SQL timestamp.
+ * @return void Creates the initial Admin account or updates its setup credentials.
  */
-function auth_model_upsert_setup_admin(string $username, ?string $email, string $passwordHash, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO users (username, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash), updated_at = VALUES(updated_at)');
+function auth_model_upsert_setup_admin(
+    string $username,
+    ?string $email,
+    string $passwordHash,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO users (username, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash), updated_at = VALUES(updated_at)',
+    );
     $stmt->execute([$username, $email, $passwordHash, 'admin', $now, $now]);
 }

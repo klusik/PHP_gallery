@@ -56,9 +56,10 @@ const TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS = 7;
  */
 const TELEMETRY_DATABASE_RETENTION_MAX_DAYS = 90;
 
-
 const TELEMETRY_SEMANTICS_VERSION = '2';
+
 const TELEMETRY_SEMANTICS_VERSION_KEY = 'telemetry_semantics_version';
+
 const TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY = 'telemetry_semantics_v2_effective_at';
 
 use InvalidArgumentException;
@@ -85,7 +86,10 @@ use function Gallery\Models\telemetry_model_setting;
  */
 function telemetry_settings_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_telemetry_settings_schema_status(), 'telemetry_settings_render');
+    return presentation_schema_render_available(
+        presentation_telemetry_settings_schema_status(),
+        'telemetry_settings_render',
+    );
 }
 
 /**
@@ -114,6 +118,7 @@ function telemetry_setting(string $key, ?string $default = null): ?string
  *
  * @param string $key Lookup key.
  * @param string $value Value to process.
+ * @return void Persists one setting after schema write readiness is verified.
  */
 function telemetry_set_setting(string $key, string $value): void
 {
@@ -121,7 +126,7 @@ function telemetry_set_setting(string $key, string $value): void
         presentation_telemetry_settings_schema_status(),
         'telemetry_setting_save',
         'Telemetry settings schema is not ready. Run migrations first.',
-        'Telemetry settings schema could not be verified. No telemetry setting was changed.'
+        'Telemetry settings schema could not be verified. No telemetry setting was changed.',
     );
     telemetry_model_set_setting($key, $value, now_sql());
 }
@@ -139,7 +144,9 @@ function telemetry_all_settings(): array
     // $settings stores the normalized key-value setting map.
     $settings = [];
     foreach (telemetry_model_all_settings() as $row) {
-        $settings[(string) $row['setting_key']] = (string) ($row['setting_value'] ?? '');
+        $settings[(string) $row['setting_key']] = (string) (
+            $row['setting_value'] ?? ''
+        );
     }
     return $settings;
 }
@@ -164,16 +171,56 @@ function telemetry_setting_enabled(string $key, string $default = '0'): bool
 function telemetry_admin_editable_setting_definitions(): array
 {
     return [
-        'telemetry_enabled' => ['input_type' => 'checkbox', 'default' => '0', 'validation' => []],
-        'telemetry_public_usage_enabled' => ['input_type' => 'checkbox', 'default' => '0', 'validation' => []],
-        'telemetry_performance_enabled' => ['input_type' => 'checkbox', 'default' => '0', 'validation' => []],
-        'telemetry_cache_enabled' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
-        'telemetry_database_enabled' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
-        'telemetry_respect_dnt' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
-        'telemetry_admin_excluded' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
-        'telemetry_max_photo_view_seconds' => ['input_type' => 'number', 'default' => '900', 'validation' => ['min' => 10, 'max' => 3600, 'step' => 1]],
-        'telemetry_raw_retention_days' => ['input_type' => 'number', 'default' => '7', 'validation' => ['min' => 1, 'max' => 90, 'step' => 1]],
-        'telemetry_hourly_retention_days' => ['input_type' => 'number', 'default' => '90', 'validation' => ['min' => 7, 'max' => 730, 'step' => 1]],
+        'telemetry_enabled' => [
+            'input_type' => 'checkbox',
+            'default' => '0',
+            'validation' => [],
+        ],
+        'telemetry_public_usage_enabled' => [
+            'input_type' => 'checkbox',
+            'default' => '0',
+            'validation' => [],
+        ],
+        'telemetry_performance_enabled' => [
+            'input_type' => 'checkbox',
+            'default' => '0',
+            'validation' => [],
+        ],
+        'telemetry_cache_enabled' => [
+            'input_type' => 'checkbox',
+            'default' => '1',
+            'validation' => [],
+        ],
+        'telemetry_database_enabled' => [
+            'input_type' => 'checkbox',
+            'default' => '1',
+            'validation' => [],
+        ],
+        'telemetry_respect_dnt' => [
+            'input_type' => 'checkbox',
+            'default' => '1',
+            'validation' => [],
+        ],
+        'telemetry_admin_excluded' => [
+            'input_type' => 'checkbox',
+            'default' => '1',
+            'validation' => [],
+        ],
+        'telemetry_max_photo_view_seconds' => [
+            'input_type' => 'number',
+            'default' => '900',
+            'validation' => ['min' => 10, 'max' => 3600, 'step' => 1],
+        ],
+        'telemetry_raw_retention_days' => [
+            'input_type' => 'number',
+            'default' => '7',
+            'validation' => ['min' => 1, 'max' => 90, 'step' => 1],
+        ],
+        'telemetry_hourly_retention_days' => [
+            'input_type' => 'number',
+            'default' => '90',
+            'validation' => ['min' => 7, 'max' => 730, 'step' => 1],
+        ],
         'telemetry_database_retention_days' => [
             'input_type' => 'number',
             'default' => (string) TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS,
@@ -183,7 +230,11 @@ function telemetry_admin_editable_setting_definitions(): array
                 'step' => 1,
             ],
         ],
-        'telemetry_daily_retention_days' => ['input_type' => 'number', 'default' => '730', 'validation' => ['min' => 30, 'max' => 3650, 'step' => 1]],
+        'telemetry_daily_retention_days' => [
+            'input_type' => 'number',
+            'default' => '730',
+            'validation' => ['min' => 30, 'max' => 3650, 'step' => 1],
+        ],
     ];
 }
 
@@ -204,7 +255,9 @@ function telemetry_admin_editable_settings(): array
     if ($available) {
         try {
             foreach (telemetry_model_all_settings() as $row) {
-                $stored[(string) $row['setting_key']] = (string) ($row['setting_value'] ?? '');
+                $stored[(string) $row['setting_key']] = (string) (
+                    $row['setting_value'] ?? ''
+                );
             }
         } catch (Throwable) {
             $available = false;
@@ -227,9 +280,9 @@ function telemetry_admin_editable_settings(): array
 /**
  * Strictly normalize one safe telemetry preference.
  *
- * @param string $id Stable telemetry setting id.
- * @param mixed $value Candidate setting value.
- * @return string Canonical persisted scalar.
+ * @param string $id Stable key from the editable telemetry setting registry.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Checkbox accepts bool, integer 0 or 1, or string '0'/'1' after trimming. Numeric settings accept scalar values whose trimmed string is non-empty decimal digits and falls within the registered bounds. Arrays, objects, resources, null, unsupported scalars, and out-of-range values throw InvalidArgumentException.
+ * @return string Canonical checkbox value '0' or '1', or a validated decimal integer string within the registered setting's inclusive bounds; invalid input throws InvalidArgumentException.
  */
 function telemetry_admin_setting_normalize(string $id, mixed $value): string
 {
@@ -258,8 +311,13 @@ function telemetry_admin_setting_normalize(string $id, mixed $value): string
     }
     $number = (int) $candidate;
     $validation = $definitions[$id]['validation'];
-    if ($number < (int) ($validation['min'] ?? 0) || $number > (int) ($validation['max'] ?? PHP_INT_MAX)) {
-        throw new InvalidArgumentException('Telemetry value is outside the supported range.');
+    if (
+        $number < (int) ($validation['min'] ?? 0)
+        || $number > (int) ($validation['max'] ?? PHP_INT_MAX)
+    ) {
+        throw new InvalidArgumentException(
+            'Telemetry value is outside the supported range.',
+        );
     }
     return (string) $number;
 }
@@ -285,11 +343,18 @@ function telemetry_admin_setting_save(string $id, mixed $value): string
  */
 function telemetry_public_usage_enabled(): bool
 {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+    if (
+        function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('telemetry')
+    ) {
         return false;
     }
 
-    return telemetry_setting_enabled('telemetry_enabled') && telemetry_setting_enabled('telemetry_public_usage_enabled');
+    return (
+        telemetry_setting_enabled('telemetry_enabled')
+            && telemetry_setting_enabled('telemetry_public_usage_enabled')
+    );
 }
 
 /**
@@ -300,7 +365,10 @@ function telemetry_public_usage_enabled(): bool
 function telemetry_max_photo_view_ms(): int
 {
     // $seconds stores the bounded visible-time cap configured by the admin.
-    $seconds = (int) telemetry_setting('telemetry_max_photo_view_seconds', '900');
+    $seconds = (int) telemetry_setting(
+        'telemetry_max_photo_view_seconds',
+        '900',
+    );
     $seconds = max(10, min(3600, $seconds));
     return $seconds * 1000;
 }
@@ -314,13 +382,16 @@ function telemetry_max_photo_view_ms(): int
  * @param int $maximum Maximum value.
  * @return int Integer result for the caller.
  */
-function telemetry_retention_days(string $key, int $default, int $minimum, int $maximum): int
-{
+function telemetry_retention_days(
+    string $key,
+    int $default,
+    int $minimum,
+    int $maximum,
+): int {
     // $days stores the bounded retention duration in days.
     $days = (int) telemetry_setting($key, (string) $default);
     return max($minimum, min($maximum, $days));
 }
-
 
 /**
  * Return the stored telemetry semantics version.
@@ -332,7 +403,10 @@ function telemetry_retention_days(string $key, int $default, int $minimum, int $
  */
 function telemetry_semantics_version(): string
 {
-    $version = trim((string) telemetry_setting(TELEMETRY_SEMANTICS_VERSION_KEY, '1'));
+    $version = trim((string) telemetry_setting(
+        TELEMETRY_SEMANTICS_VERSION_KEY,
+        '1',
+    ));
     return $version !== '' ? $version : '1';
 }
 
@@ -343,7 +417,10 @@ function telemetry_semantics_version(): string
  */
 function telemetry_semantics_effective_at(): ?string
 {
-    $value = trim((string) telemetry_setting(TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY, ''));
+    $value = trim((string) telemetry_setting(
+        TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY,
+        '',
+    ));
     return $value !== '' ? $value : null;
 }
 
@@ -352,6 +429,9 @@ function telemetry_semantics_effective_at(): ?string
  *
  * Marker persistence is diagnostic metadata only. Failure to write the marker
  * must never make an otherwise valid anonymous telemetry event fail.
+ *
+ * @return void Attempts the version/effective-time markers at most once per
+ *     request and tolerates persistence failures.
  */
 function telemetry_ensure_current_semantics_marker(): void
 {
@@ -364,10 +444,16 @@ function telemetry_ensure_current_semantics_marker(): void
     try {
         $effectiveAt = telemetry_semantics_effective_at();
         if ($effectiveAt === null) {
-            telemetry_set_setting(TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY, now_sql());
+            telemetry_set_setting(
+                TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY,
+                now_sql(),
+            );
         }
         if (telemetry_semantics_version() !== TELEMETRY_SEMANTICS_VERSION) {
-            telemetry_set_setting(TELEMETRY_SEMANTICS_VERSION_KEY, TELEMETRY_SEMANTICS_VERSION);
+            telemetry_set_setting(
+                TELEMETRY_SEMANTICS_VERSION_KEY,
+                TELEMETRY_SEMANTICS_VERSION,
+            );
         }
     } catch (Throwable) {
         // The event ingestion path deliberately continues without the marker.
@@ -389,14 +475,18 @@ function telemetry_database_retention_days(bool $strict = false): int
             'telemetry_database_retention_days',
             TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS,
             1,
-            TELEMETRY_DATABASE_RETENTION_MAX_DAYS
+            TELEMETRY_DATABASE_RETENTION_MAX_DAYS,
         );
     }
     $value = telemetry_model_setting('telemetry_database_retention_days');
     if ($value === false) {
         return TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS;
     }
-    if (!ctype_digit((string) $value) || (int) $value < 1 || (int) $value > TELEMETRY_DATABASE_RETENTION_MAX_DAYS) {
+    if (
+        !ctype_digit((string) $value)
+        || (int) $value < 1
+        || (int) $value > TELEMETRY_DATABASE_RETENTION_MAX_DAYS
+    ) {
         throw new RuntimeException('Invalid database telemetry retention.');
     }
     return (int) $value;

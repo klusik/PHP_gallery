@@ -56,26 +56,65 @@ function view_render_admin_upload_support_matrix(array $support): void
     $heicSupported = !empty($support['heic']);
     $rawSupported = !empty($support['raw']);
 
-    echo '<table class="support-matrix"><thead><tr><th>' . e(t('admin.upload.type', 'Type')) . '</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th><th>PDF</th></tr></thead><tbody><tr>';
-    echo '<th scope="row">' . e(t('admin.upload.available', 'Available')) . '</th>';
+    echo
+        '<table class="support-matrix"><thead><tr><th>'
+            . e(t('admin.upload.type', 'Type'))
+            . '</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th><th>PDF</th></tr></thead><tbody><tr>';
+    echo
+        '<th scope="row">'
+            . e(t('admin.upload.available', 'Available'))
+            . '</th>';
     echo '<td class="support-yes">✓</td>';
     echo '<td class="support-yes">✓</td>';
     echo '<td class="support-yes">✓</td>';
     echo '<td class="support-yes">✓</td>';
-    echo '<td class="' . ($heicSupported ? 'support-yes' : 'support-no') . '">' . ($heicSupported ? '✓' : '✕') . '</td>';
-    echo '<td class="' . ($rawSupported ? 'support-yes' : 'support-no') . '">' . ($rawSupported ? '✓' : '✕') . '</td>';
+    echo
+        '<td class="'
+            . ($heicSupported ? 'support-yes' : 'support-no')
+            . '">'
+            . ($heicSupported ? '✓' : '✕')
+            . '</td>';
+    echo
+        '<td class="'
+            . ($rawSupported ? 'support-yes' : 'support-no')
+            . '">'
+            . ($rawSupported ? '✓' : '✕')
+            . '</td>';
     echo '<td class="support-yes">✓</td>';
-    echo '</tr><tr><th scope="row">' . e(t('pdf.documents', 'Documents / PDFs')) . '</th><td colspan="7">' . e(t('pdf.convert_help', 'PDF originals are stored separately; page conversion to PNG runs in the browser.')) . '</td></tr></tbody></table>';
+    echo
+        '</tr><tr><th scope="row">'
+            . e(t('pdf.documents', 'Documents / PDFs'))
+            . '</th><td colspan="7">'
+            . e(t(
+                'pdf.convert_help',
+                'PDF originals are stored separately; page conversion to PNG runs in the browser.',
+            ))
+            . '</td></tr></tbody></table>';
 }
 
 /**
  * Render a compact upload support panel for the normal upload page.
  *
- * @param array $support Support value.
+ * @param array{heic?:bool,raw?:bool} $support Whether server support exists for HEIC and DNG conversion.
+ * @return void Emit the compact support panel and file-format matrix.
  */
 function view_render_admin_upload_support_panel(array $support): void
 {
-    echo '<section class="panel compact-support"><div class="admin-tab-intro admin-cinematic-intro"><div><p class="admin-kicker">' . e(t('admin.upload.support_kicker', 'Upload')) . '</p><h2>' . e(t('admin.upload.support_title', 'Upload support')) . '</h2></div><div class="admin-cinematic-intro-side"><p class="muted">' . e(t('admin.upload.support_settings_hint', 'Format handling and browser pipeline limits are configured on the dedicated upload settings page.')) . '</p><div class="admin-hero-actions"><a class="button secondary" href="' . e(url_for('admin_upload_settings')) . '">' . e(t('admin.upload.open_upload_settings', 'Upload settings')) . '</a></div></div></div>';
+    echo
+        '<section class="panel compact-support"><div class="admin-tab-intro admin-cinematic-intro"><div><p class="admin-kicker">'
+            . e(t('admin.upload.support_kicker', 'Upload'))
+            . '</p><h2>'
+            . e(t('admin.upload.support_title', 'Upload support'))
+            . '</h2></div><div class="admin-cinematic-intro-side"><p class="muted">'
+            . e(t(
+                'admin.upload.support_settings_hint',
+                'Format handling and browser pipeline limits are configured on the dedicated upload settings page.',
+            ))
+            . '</p><div class="admin-hero-actions"><a class="button secondary" href="'
+            . e(url_for('admin_upload_settings'))
+            . '">'
+            . e(t('admin.upload.open_upload_settings', 'Upload settings'))
+            . '</a></div></div></div>';
     view_render_admin_upload_support_matrix($support);
     echo '</section>';
 }
@@ -83,26 +122,60 @@ function view_render_admin_upload_support_panel(array $support): void
 /**
  * Render the dedicated Admin upload settings page.
  *
- * @param array $model Model value.
+ * @param array{active_tab?:string,notices?:list<string>,support?:array{heic?:bool,raw?:bool},browser_settings?:array<string,mixed>,central_settings_url?:string} $model Controller-prepared upload settings page state.
+ * @return void Emit the page header, selected settings form, and footer.
  */
 function view_render_admin_upload_settings_page(array $model): void
 {
-    $activeTab = view_admin_upload_settings_normalize_tab((string) ($model['active_tab'] ?? 'general'));
+    $activeTab = view_admin_upload_settings_normalize_tab(
+        (string) ($model['active_tab'] ?? 'general'),
+    );
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
     $support = is_array($model['support'] ?? null) ? $model['support'] : [];
-    $browserSettings = is_array($model['browser_settings'] ?? null) ? $model['browser_settings'] : [];
+    $browserSettings = is_array($model['browser_settings'] ?? null)
+        ? $model['browser_settings']
+        : [];
 
     render_header(t('admin.upload_settings.title', 'Upload settings'));
     view_render_admin_hero([
         'kicker' => t('admin.upload_settings.kicker', 'Admin settings'),
         'title' => t('admin.upload_settings.title', 'Upload settings'),
-        'description' => t('admin.upload_settings.description', 'Configure upload preferences separately from the upload workflow. Browser-side preparation is the default when enabled, and the upload form can still be unchecked to use the normal server fallback.'),
+        'description' => t(
+            'admin.upload_settings.description',
+            'Configure upload preferences separately from the upload workflow. Browser-side preparation is the default when enabled, and the upload form can still be unchecked to use the normal server fallback.',
+        ),
         'actions' => [
-            ['label' => t('admin.settings.open_centralized', 'Open centralized settings'), 'url' => (string) ($model['central_settings_url'] ?? url_for('admin_settings')), 'class' => 'button secondary'],
-            ['label' => t('admin.upload_settings.back_to_upload', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
-            ['label' => t('admin.common.back_to_dashboard', 'Back to dashboard'), 'url' => url_for('admin'), 'class' => 'button secondary'],
+            [
+                'label' => t(
+                    'admin.settings.open_centralized',
+                    'Open centralized settings',
+                ),
+                'url' => (string) (
+                    $model['central_settings_url'] ?? url_for('admin_settings')
+                ),
+                'class' => 'button secondary',
+            ],
+            [
+                'label' => t(
+                    'admin.upload_settings.back_to_upload',
+                    'Upload photos',
+                ),
+                'url' => url_for('admin_upload'),
+                'class' => 'button secondary',
+            ],
+            [
+                'label' => t(
+                    'admin.common.back_to_dashboard',
+                    'Back to dashboard',
+                ),
+                'url' => url_for('admin'),
+                'class' => 'button secondary',
+            ],
         ],
-        'actions_aria_label' => t('admin.upload_settings.actions_label', 'Upload settings actions'),
+        'actions_aria_label' => t(
+            'admin.upload_settings.actions_label',
+            'Upload settings actions',
+        ),
     ]);
 
     foreach ($notices as $notice) {
@@ -114,25 +187,52 @@ function view_render_admin_upload_settings_page(array $model): void
         echo '<div class="notice ' . e($kind) . '">' . e($message) . '</div>';
     }
 
-    echo '<section class="panel compact-support"><h2>' . e(t('admin.upload.support_title', 'Upload support')) . '</h2>';
+    echo
+        '<section class="panel compact-support"><h2>'
+            . e(t('admin.upload.support_title', 'Upload support'))
+            . '</h2>';
     view_render_admin_upload_support_matrix($support);
     echo '</section>';
 
     $tabs = [
-        ['id' => 'upload-settings-general', 'label' => t('admin.upload_settings.general_tab', 'General')],
-        ['id' => 'upload-settings-browser', 'label' => t('admin.upload_settings.browser_tab', 'Browser pipeline')],
+        [
+            'id' => 'upload-settings-general',
+            'label' => t('admin.upload_settings.general_tab', 'General'),
+        ],
+        [
+            'id' => 'upload-settings-browser',
+            'label' => t(
+                'admin.upload_settings.browser_tab',
+                'Browser pipeline',
+            ),
+        ],
     ];
-    $activeId = $activeTab === 'browser' ? 'upload-settings-browser' : 'upload-settings-general';
-    echo '<div class="admin-subtab-scope admin-upload-settings-scope" data-admin-subtab-scope>';
-    view_render_admin_subtabs($tabs, $activeId, t('admin.upload_settings.tabs_aria', 'Upload settings sections'));
+    $activeId = $activeTab === 'browser'
+        ? 'upload-settings-browser'
+        : 'upload-settings-general';
+    echo
+        '<div class="admin-subtab-scope admin-upload-settings-scope" data-admin-subtab-scope>';
+    view_render_admin_subtabs(
+        $tabs,
+        $activeId,
+        t('admin.upload_settings.tabs_aria', 'Upload settings sections'),
+    );
 
     ob_start();
     view_render_admin_upload_general_settings_form($model);
-    view_render_admin_subtab_panel('upload-settings-general', (string) ob_get_clean(), $activeTab === 'general');
+    view_render_admin_subtab_panel(
+        'upload-settings-general',
+        (string) ob_get_clean(),
+        $activeTab === 'general',
+    );
 
     ob_start();
     view_render_admin_upload_browser_settings_form($browserSettings);
-    view_render_admin_subtab_panel('upload-settings-browser', (string) ob_get_clean(), $activeTab === 'browser');
+    view_render_admin_subtab_panel(
+        'upload-settings-browser',
+        (string) ob_get_clean(),
+        $activeTab === 'browser',
+    );
     echo '</div>';
 
     render_footer();
@@ -157,73 +257,380 @@ function view_admin_upload_settings_normalize_tab(string $tab): string
  */
 function view_render_admin_upload_general_settings_form(array $model): void
 {
-    $clientFormatMode = (string) ($model['client_format_mode'] ?? 'server_supported');
+    $clientFormatMode = (string) (
+        $model['client_format_mode'] ?? 'server_supported'
+    );
     $autoRenameEnabled = !empty($model['auto_rename_enabled']);
 
     view_render_admin_tab_intro([
-        'kicker' => t('admin.upload_settings.general_kicker', 'Normal upload path'),
-        'title' => t('admin.upload_settings.general_title', 'General upload preferences'),
-        'description' => t('admin.upload_settings.general_description', 'These settings affect the default server-side upload path and companion upload tools.'),
+        'kicker' => t(
+            'admin.upload_settings.general_kicker',
+            'Normal upload path',
+        ),
+        'title' => t(
+            'admin.upload_settings.general_title',
+            'General upload preferences',
+        ),
+        'description' => t(
+            'admin.upload_settings.general_description',
+            'These settings affect the default server-side upload path and companion upload tools.',
+        ),
     ]);
 
-    echo '<form method="post" action="' . e(url_for('admin_upload_settings')) . '" class="form-grid admin-upload-settings-form">' . csrf_field();
-    echo '<input type="hidden" name="update_upload_general_settings" value="1">';
-    echo '<label>' . e(t('admin.upload.client_format_mode', 'Phone upload format')) . '<select name="admin_upload_client_format_mode"><option value="server_supported"' . ($clientFormatMode === 'server_supported' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_server_supported', 'Allow all server-supported formats')) . '</option><option value="phone_jpeg"' . ($clientFormatMode === 'phone_jpeg' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_phone_jpeg', 'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG')) . '</option></select><span class="muted">' . e(t('admin.upload.client_format_help', 'Use the phone-rendered mode when iPhone ProRAW/DNG uploads produce poor color. Browsers treat this as a picker request, not an absolute conversion guarantee.')) . '</span></label>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="admin_upload_auto_rename_enabled" value="1"' . ($autoRenameEnabled ? ' checked' : '') . '> <span>' . e(t('admin.upload.auto_rename_enabled', 'Rename uploaded photos automatically')) . '</span><span class="muted">' . e(t('admin.upload.auto_rename_help', 'When enabled, browser, API, and WebDAV uploads are renamed after scan with the same default media-renamer template: {pattern}.', ['pattern' => (string) ($model['media_renamer_default_pattern'] ?? '{gallery_context}_{seq4}')])) . '</span></label>';
-    echo '<label>' . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)')) . '<select name="gallery_pdf_render_dpi">';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_upload_settings'))
+            . '" class="form-grid admin-upload-settings-form">'
+            . csrf_field();
+    echo
+        '<input type="hidden" name="update_upload_general_settings" value="1">';
+    echo
+        '<label>'
+            . e(t('admin.upload.client_format_mode', 'Phone upload format'))
+            . '<select name="admin_upload_client_format_mode"><option value="server_supported"'
+            . ($clientFormatMode === 'server_supported' ? ' selected' : '')
+            . '>'
+            . e(t(
+                'admin.upload.client_format_server_supported',
+                'Allow all server-supported formats',
+            ))
+            . '</option><option value="phone_jpeg"'
+            . ($clientFormatMode === 'phone_jpeg' ? ' selected' : '')
+            . '>'
+            . e(t(
+                'admin.upload.client_format_phone_jpeg',
+                'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG',
+            ))
+            . '</option></select><span class="muted">'
+            . e(t(
+                'admin.upload.client_format_help',
+                'Use the phone-rendered mode when iPhone ProRAW/DNG uploads produce poor color. Browsers treat this as a picker request, not an absolute conversion guarantee.',
+            ))
+            . '</span></label>';
+    echo
+        '<label class="checkbox-label"><input type="checkbox" name="admin_upload_auto_rename_enabled" value="1"'
+            . ($autoRenameEnabled ? ' checked' : '')
+            . '> <span>'
+            . e(t(
+                'admin.upload.auto_rename_enabled',
+                'Rename uploaded photos automatically',
+            ))
+            . '</span><span class="muted">'
+            . e(t(
+                'admin.upload.auto_rename_help',
+                'When enabled, browser, API, and WebDAV uploads are renamed after scan with the same default media-renamer template: {pattern}.',
+                [
+                    'pattern' => (string) (
+                        $model['media_renamer_default_pattern']
+                        ?? '{gallery_context}_{seq4}'
+                    ),
+                ],
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)'))
+            . '<select name="gallery_pdf_render_dpi">';
     foreach ([96, 150, 200, 300, 600, 1200, 2400] as $dpi) {
-        echo '<option value="' . $dpi . '"' . ($dpi === (int) ($model['pdf_render_dpi'] ?? 150) ? ' selected' : '') . '>' . $dpi . ' DPI</option>';
+        echo
+            '<option value="'
+                . $dpi
+                . '"'
+                . (
+                    $dpi === (int) ($model['pdf_render_dpi'] ?? 150)
+                        ? ' selected'
+                        : ''
+                )
+                . '>'
+                . $dpi
+                . ' DPI</option>';
     }
-    echo '</select><span class="muted">' . e(t('pdf.dpi_help', 'Higher DPI increases dimensions, memory, upload size and processing time. PNG pages are lossless.')) . '</span></label>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.upload_settings.save_general', 'Save general upload settings')) . '</button>';
+    echo
+        '</select><span class="muted">'
+            . e(t(
+                'pdf.dpi_help',
+                'Higher DPI increases dimensions, memory, upload size and processing time. PNG pages are lossless.',
+            ))
+            . '</span></label>';
+    echo
+        '<button type="submit" class="secondary">'
+            . e(t(
+                'admin.upload_settings.save_general',
+                'Save general upload settings',
+            ))
+            . '</button>';
     echo '</form>';
 }
 
 /**
  * Render the browser pipeline settings form.
  *
- * @param array $settings Settings used by this workflow.
+ * @param array{enabled?:bool,max_zip_batch_bytes?:int,thumbnail_rebuild_source_chunk_bytes?:int,default_worker_count?:int,max_worker_count?:int,hard_worker_cap?:int,zip_size_threshold_ratio?:float,max_items_per_batch?:int} $settings Prepared browser upload limits and defaults.
+ * @return void Emit the browser-pipeline settings form.
  */
 function view_render_admin_upload_browser_settings_form(array $settings): void
 {
     $workerMinimum = (int) cms_runtime_limit('browser_upload.min_worker_count');
-    $workerDefault = (int) cms_runtime_limit('browser_upload.default_worker_count');
+    $workerDefault = (int) cms_runtime_limit(
+        'browser_upload.default_worker_count',
+    );
     $workerHardCap = (int) cms_runtime_limit('browser_upload.hard_worker_cap');
-    $zipRatioMinimum = (float) cms_runtime_limit('browser_upload.min_zip_ratio');
-    $zipRatioDefault = (float) cms_runtime_limit('browser_upload.default_zip_ratio');
-    $zipRatioMaximum = (float) cms_runtime_limit('browser_upload.max_zip_ratio');
-    $itemsMinimum = (int) cms_runtime_limit('browser_upload.min_items_per_batch');
-    $itemsDefault = (int) cms_runtime_limit('browser_upload.default_max_items_per_batch');
-    $itemsMaximum = (int) cms_runtime_limit('browser_upload.max_items_per_batch');
-    $zipBytesMinimum = (int) cms_runtime_limit('browser_upload.min_max_zip_batch_bytes');
-    $zipBytesDefault = (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes');
-    $zipBytesMaximum = (int) cms_runtime_limit('browser_upload.hard_max_zip_batch_bytes');
-    $sourceChunkBytesMinimum = (int) cms_runtime_limit('browser_thumbnail_rebuild.min_chunk_bytes');
-    $sourceChunkBytesDefault = (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes');
-    $sourceChunkBytesMaximum = (int) cms_runtime_limit('browser_thumbnail_rebuild.hard_chunk_bytes');
+    $zipRatioMinimum = (float) cms_runtime_limit(
+        'browser_upload.min_zip_ratio',
+    );
+    $zipRatioDefault = (float) cms_runtime_limit(
+        'browser_upload.default_zip_ratio',
+    );
+    $zipRatioMaximum = (float) cms_runtime_limit(
+        'browser_upload.max_zip_ratio',
+    );
+    $itemsMinimum = (int) cms_runtime_limit(
+        'browser_upload.min_items_per_batch',
+    );
+    $itemsDefault = (int) cms_runtime_limit(
+        'browser_upload.default_max_items_per_batch',
+    );
+    $itemsMaximum = (int) cms_runtime_limit(
+        'browser_upload.max_items_per_batch',
+    );
+    $zipBytesMinimum = (int) cms_runtime_limit(
+        'browser_upload.min_max_zip_batch_bytes',
+    );
+    $zipBytesDefault = (int) cms_runtime_limit(
+        'browser_upload.default_max_zip_batch_bytes',
+    );
+    $zipBytesMaximum = (int) cms_runtime_limit(
+        'browser_upload.hard_max_zip_batch_bytes',
+    );
+    $sourceChunkBytesMinimum = (int) cms_runtime_limit(
+        'browser_thumbnail_rebuild.min_chunk_bytes',
+    );
+    $sourceChunkBytesDefault = (int) cms_runtime_limit(
+        'browser_thumbnail_rebuild.default_chunk_bytes',
+    );
+    $sourceChunkBytesMaximum = (int) cms_runtime_limit(
+        'browser_thumbnail_rebuild.hard_chunk_bytes',
+    );
 
-    $maxZipMegabytes = number_format(((int) ($settings['max_zip_batch_bytes'] ?? $zipBytesDefault)) / 1048576, 0, '.', '');
-    $sourceChunkMegabytes = number_format(((int) ($settings['thumbnail_rebuild_source_chunk_bytes'] ?? $sourceChunkBytesDefault)) / 1048576, 0, '.', '');
+    $maxZipMegabytes = number_format(
+        (int) ($settings['max_zip_batch_bytes'] ?? $zipBytesDefault) / 1048576,
+        0,
+        '.',
+        '',
+    );
+    $sourceChunkMegabytes = number_format(
+        (int) (
+            $settings['thumbnail_rebuild_source_chunk_bytes']
+            ?? $sourceChunkBytesDefault
+        ) / 1048576,
+        0,
+        '.',
+        '',
+    );
 
     view_render_admin_tab_intro([
         'kicker' => t('admin.upload_settings.browser_kicker', 'Browser'),
-        'title' => t('admin.upload_settings.browser_title', 'Browser-side preparation limits'),
-        'description' => t('admin.upload_settings.browser_description', 'These settings control the browser-side preparation pipeline. When enabled, upload forms keep it checked by default and can be unchecked per upload to use the normal server fallback.'),
+        'title' => t(
+            'admin.upload_settings.browser_title',
+            'Browser-side preparation limits',
+        ),
+        'description' => t(
+            'admin.upload_settings.browser_description',
+            'These settings control the browser-side preparation pipeline. When enabled, upload forms keep it checked by default and can be unchecked per upload to use the normal server fallback.',
+        ),
     ]);
 
-    echo '<form method="post" action="' . e(url_for('admin_upload_settings')) . '" class="form-grid admin-upload-settings-form">' . csrf_field();
-    echo '<input type="hidden" name="update_browser_upload_settings" value="1">';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_upload_settings'))
+            . '" class="form-grid admin-upload-settings-form">'
+            . csrf_field();
+    echo
+        '<input type="hidden" name="update_browser_upload_settings" value="1">';
     echo '<div class="browser-upload-settings-grid">';
-    echo '<label class="checkbox-label"><input type="checkbox" name="browser_upload_enabled" value="1"' . (!empty($settings['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.upload.browser_enabled', 'Enable browser-side upload preparation')) . '</span><span class="muted">' . e(t('admin.upload.browser_enabled_help', 'When enabled, upload forms use browser-side preparation by default. Unchecking the upload-form option uses the normal server-side fallback.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_default_workers', 'Default worker count')) . '<input type="number" name="browser_upload_default_worker_count" min="' . $workerMinimum . '" max="' . $workerHardCap . '" value="' . (int) ($settings['default_worker_count'] ?? $workerDefault) . '"><span class="muted">' . e(t('admin.upload.browser_default_workers_help', 'Configured default is {default}. The browser will also respect the maximum worker count and hard cap.', ['default' => $workerDefault])) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_max_workers', 'Maximum worker count')) . '<input type="number" name="browser_upload_max_worker_count" min="' . $workerMinimum . '" max="' . $workerHardCap . '" value="' . (int) ($settings['max_worker_count'] ?? $workerHardCap) . '"><span class="muted">' . e(t('admin.upload.browser_max_workers_help', 'Upper bound for worker pool parallelism.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_hard_cap', 'Worker hard cap')) . '<input type="number" name="browser_upload_hard_worker_cap" min="' . $workerMinimum . '" max="' . $workerHardCap . '" value="' . (int) ($settings['hard_worker_cap'] ?? $workerHardCap) . '"><span class="muted">' . e(t('admin.upload.browser_hard_cap_help', 'Configured absolute maximum is {max}, even if the submitted value is higher.', ['max' => $workerHardCap])) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_batch_policy', 'Batch size policy')) . '<select name="browser_upload_batch_size_policy"><option value="upload_limit_ratio" selected>' . e(t('admin.upload.browser_batch_policy_ratio', 'Use PHP upload limit ratio')) . '</option></select><span class="muted">' . e(t('admin.upload.browser_batch_policy_help', 'ZIP packages are split below the detected upload_max_filesize and post_max_size limits.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_zip_ratio', 'ZIP size threshold ratio')) . '<input type="number" name="browser_upload_zip_size_threshold_ratio" min="' . e(number_format($zipRatioMinimum, 2, '.', '')) . '" max="' . e(number_format($zipRatioMaximum, 2, '.', '')) . '" step="0.05" value="' . e(number_format((float) ($settings['zip_size_threshold_ratio'] ?? $zipRatioDefault), 2, '.', '')) . '"><span class="muted">' . e(t('admin.upload.browser_zip_ratio_help', 'Configured default {default} targets about {percent}% of the server upload limit for each store-only ZIP batch.', ['default' => number_format($zipRatioDefault, 2, '.', ''), 'percent' => number_format($zipRatioDefault * 100, 0, '.', '')])) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_max_items_per_batch', 'Maximum images per ZIP batch')) . '<input type="number" name="browser_upload_max_items_per_batch" min="' . $itemsMinimum . '" max="' . $itemsMaximum . '" value="' . (int) ($settings['max_items_per_batch'] ?? $itemsDefault) . '"><span class="muted">' . e(t('admin.upload.browser_max_items_per_batch_help', 'Configured default is {default}. This keeps many small uploads from becoming one huge server-side unpacking job.', ['default' => $itemsDefault])) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_max_zip_batch_mb', 'Preferred ZIP batch target, MB')) . '<input type="number" name="browser_upload_max_zip_batch_megabytes" min="' . (int) ceil($zipBytesMinimum / 1048576) . '" max="' . (int) floor($zipBytesMaximum / 1048576) . '" step="1" value="' . e($maxZipMegabytes) . '"><span class="muted">' . e(t('admin.upload.browser_max_zip_batch_mb_help', 'Configured default is {default} MB. Normal multi-image ZIP batches stay below this target. If one image plus its browser-prepared thumbnails is larger, it is sent alone and may exceed this target up to the detected PHP upload limit.', ['default' => number_format($zipBytesDefault / 1048576, 0, '.', '')])) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_thumbnail_source_chunk_mb', 'Thumbnail rebuild source chunk, MB')) . '<input type="number" name="browser_thumbnail_rebuild_source_chunk_megabytes" min="' . (int) ceil($sourceChunkBytesMinimum / 1048576) . '" max="' . (int) floor($sourceChunkBytesMaximum / 1048576) . '" step="16" value="' . e($sourceChunkMegabytes) . '"><span class="muted">' . e(t('admin.upload.browser_thumbnail_source_chunk_mb_help', 'Configured default is {default} MB. This controls how many original source files the browser downloads per browser thumbnail rebuild chunk. Large values are fast on strong browsers but use more RAM and bandwidth.', ['default' => number_format($sourceChunkBytesDefault / 1048576, 0, '.', '')])) . '</span></label>';
+    echo
+        '<label class="checkbox-label"><input type="checkbox" name="browser_upload_enabled" value="1"'
+            . (!empty($settings['enabled']) ? ' checked' : '')
+            . '> <span>'
+            . e(t(
+                'admin.upload.browser_enabled',
+                'Enable browser-side upload preparation',
+            ))
+            . '</span><span class="muted">'
+            . e(t(
+                'admin.upload.browser_enabled_help',
+                'When enabled, upload forms use browser-side preparation by default. Unchecking the upload-form option uses the normal server-side fallback.',
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t(
+                'admin.upload.browser_default_workers',
+                'Default worker count',
+            ))
+            . '<input type="number" name="browser_upload_default_worker_count" min="'
+            . $workerMinimum
+            . '" max="'
+            . $workerHardCap
+            . '" value="'
+            . (int) ($settings['default_worker_count'] ?? $workerDefault)
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_default_workers_help',
+                'Configured default is {default}. The browser will also respect the maximum worker count and hard cap.',
+                ['default' => $workerDefault],
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t('admin.upload.browser_max_workers', 'Maximum worker count'))
+            . '<input type="number" name="browser_upload_max_worker_count" min="'
+            . $workerMinimum
+            . '" max="'
+            . $workerHardCap
+            . '" value="'
+            . (int) ($settings['max_worker_count'] ?? $workerHardCap)
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_max_workers_help',
+                'Upper bound for worker pool parallelism.',
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t('admin.upload.browser_hard_cap', 'Worker hard cap'))
+            . '<input type="number" name="browser_upload_hard_worker_cap" min="'
+            . $workerMinimum
+            . '" max="'
+            . $workerHardCap
+            . '" value="'
+            . (int) ($settings['hard_worker_cap'] ?? $workerHardCap)
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_hard_cap_help',
+                'Configured absolute maximum is {max}, even if the submitted value is higher.',
+                ['max' => $workerHardCap],
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t('admin.upload.browser_batch_policy', 'Batch size policy'))
+            . '<select name="browser_upload_batch_size_policy"><option value="upload_limit_ratio" selected>'
+            . e(t(
+                'admin.upload.browser_batch_policy_ratio',
+                'Use PHP upload limit ratio',
+            ))
+            . '</option></select><span class="muted">'
+            . e(t(
+                'admin.upload.browser_batch_policy_help',
+                'ZIP packages are split below the detected upload_max_filesize and post_max_size limits.',
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t('admin.upload.browser_zip_ratio', 'ZIP size threshold ratio'))
+            . '<input type="number" name="browser_upload_zip_size_threshold_ratio" min="'
+            . e(number_format($zipRatioMinimum, 2, '.', ''))
+            . '" max="'
+            . e(number_format($zipRatioMaximum, 2, '.', ''))
+            . '" step="0.05" value="'
+            . e(number_format(
+                (float) (
+                    $settings['zip_size_threshold_ratio'] ?? $zipRatioDefault
+                ),
+                2,
+                '.',
+                '',
+            ))
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_zip_ratio_help',
+                'Configured default {default} targets about {percent}% of the server upload limit for each store-only ZIP batch.',
+                [
+                    'default' => number_format($zipRatioDefault, 2, '.', ''),
+                    'percent' => number_format(
+                        $zipRatioDefault * 100,
+                        0,
+                        '.',
+                        '',
+                    ),
+                ],
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t(
+                'admin.upload.browser_max_items_per_batch',
+                'Maximum images per ZIP batch',
+            ))
+            . '<input type="number" name="browser_upload_max_items_per_batch" min="'
+            . $itemsMinimum
+            . '" max="'
+            . $itemsMaximum
+            . '" value="'
+            . (int) ($settings['max_items_per_batch'] ?? $itemsDefault)
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_max_items_per_batch_help',
+                'Configured default is {default}. This keeps many small uploads from becoming one huge server-side unpacking job.',
+                ['default' => $itemsDefault],
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t(
+                'admin.upload.browser_max_zip_batch_mb',
+                'Preferred ZIP batch target, MB',
+            ))
+            . '<input type="number" name="browser_upload_max_zip_batch_megabytes" min="'
+            . (int) ceil($zipBytesMinimum / 1048576)
+            . '" max="'
+            . (int) floor($zipBytesMaximum / 1048576)
+            . '" step="1" value="'
+            . e($maxZipMegabytes)
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_max_zip_batch_mb_help',
+                'Configured default is {default} MB. Normal multi-image ZIP batches stay below this target. If one image plus its browser-prepared thumbnails is larger, it is sent alone and may exceed this target up to the detected PHP upload limit.',
+                ['default' => number_format(
+                    $zipBytesDefault / 1048576,
+                    0,
+                    '.',
+                    '',
+                )],
+            ))
+            . '</span></label>';
+    echo
+        '<label>'
+            . e(t(
+                'admin.upload.browser_thumbnail_source_chunk_mb',
+                'Thumbnail rebuild source chunk, MB',
+            ))
+            . '<input type="number" name="browser_thumbnail_rebuild_source_chunk_megabytes" min="'
+            . (int) ceil($sourceChunkBytesMinimum / 1048576)
+            . '" max="'
+            . (int) floor($sourceChunkBytesMaximum / 1048576)
+            . '" step="16" value="'
+            . e($sourceChunkMegabytes)
+            . '"><span class="muted">'
+            . e(t(
+                'admin.upload.browser_thumbnail_source_chunk_mb_help',
+                'Configured default is {default} MB. This controls how many original source files the browser downloads per browser thumbnail rebuild chunk. Large values are fast on strong browsers but use more RAM and bandwidth.',
+                ['default' => number_format(
+                    $sourceChunkBytesDefault / 1048576,
+                    0,
+                    '.',
+                    '',
+                )],
+            ))
+            . '</span></label>';
     echo '</div>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.upload_settings.save_browser', 'Save browser upload settings')) . '</button>';
+    echo
+        '<button type="submit" class="secondary">'
+            . e(t(
+                'admin.upload_settings.save_browser',
+                'Save browser upload settings',
+            ))
+            . '</button>';
     echo '</form>';
 }

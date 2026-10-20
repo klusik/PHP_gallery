@@ -45,7 +45,7 @@ require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/gallery_branding.php';
 
 if (!function_exists('t')) {
-        /**
+    /**
      * Return a deterministic translation fallback for standalone model tests.
      *
      * @param string $key Lookup key.
@@ -61,14 +61,21 @@ if (!function_exists('t')) {
 /**
  * Throw when a branding model expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @param bool|int|float|string|null|array<array-key,scalar|null|array<array-key,scalar|null>> $expected Expected scalar or branding row/list value.
+ * @param bool|int|float|string|null|array<array-key,scalar|null|array<array-key,scalar|null>> $actual Actual scalar or branding row/list value.
  * @param string $label Label value.
+ * @return void Throw when the actual value differs strictly from the expected value.
  */
-function assert_gallery_branding_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_gallery_branding_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
@@ -105,24 +112,88 @@ function test_gallery_branding_uses_separator(array $paths): bool
     return !empty($paths['separator']);
 }
 
-assert_gallery_branding_same('banner_image_path', gallery_branding_asset_column('banner'), 'banner persistence column');
-assert_gallery_branding_same('logo_image_path', gallery_branding_asset_column('logo'), 'logo persistence column');
-assert_gallery_branding_same('separator_image_path', gallery_branding_asset_column('separator'), 'separator persistence column');
-assert_gallery_branding_same('theme_branding_banner_path', theme_branding_asset_setting('banner'), 'theme banner fallback setting');
-assert_gallery_branding_same('theme_branding_separator_path', theme_branding_asset_setting('separator'), 'theme separator fallback setting');
-assert_gallery_branding_same('banner', theme_branding_asset_filename_stem('banner'), 'theme banner fallback filename stem');
-assert_gallery_branding_same('separator', theme_branding_asset_filename_stem('separator'), 'theme separator fallback filename stem');
+assert_gallery_branding_same(
+    'banner_image_path',
+    gallery_branding_asset_column('banner'),
+    'banner persistence column',
+);
+assert_gallery_branding_same(
+    'logo_image_path',
+    gallery_branding_asset_column('logo'),
+    'logo persistence column',
+);
+assert_gallery_branding_same(
+    'separator_image_path',
+    gallery_branding_asset_column('separator'),
+    'separator persistence column',
+);
+assert_gallery_branding_same(
+    'theme_branding_banner_path',
+    theme_branding_asset_setting('banner'),
+    'theme banner fallback setting',
+);
+assert_gallery_branding_same(
+    'theme_branding_separator_path',
+    theme_branding_asset_setting('separator'),
+    'theme separator fallback setting',
+);
+assert_gallery_branding_same(
+    'banner',
+    theme_branding_asset_filename_stem('banner'),
+    'theme banner fallback filename stem',
+);
+assert_gallery_branding_same(
+    'separator',
+    theme_branding_asset_filename_stem('separator'),
+    'theme separator fallback filename stem',
+);
 
-assert_gallery_branding_same('jpg', gallery_branding_mime_extension('image/jpeg'), 'jpeg MIME extension');
-assert_gallery_branding_same('png', gallery_branding_mime_extension('image/png'), 'png MIME extension');
-assert_gallery_branding_same('gif', gallery_branding_mime_extension('image/gif'), 'gif MIME extension');
-assert_gallery_branding_same('webp', gallery_branding_mime_extension('image/webp'), 'webp MIME extension');
-assert_gallery_branding_same(null, gallery_branding_mime_extension('image/svg+xml'), 'svg MIME rejected');
+assert_gallery_branding_same(
+    'jpg',
+    gallery_branding_mime_extension('image/jpeg'),
+    'jpeg MIME extension',
+);
+assert_gallery_branding_same(
+    'png',
+    gallery_branding_mime_extension('image/png'),
+    'png MIME extension',
+);
+assert_gallery_branding_same(
+    'gif',
+    gallery_branding_mime_extension('image/gif'),
+    'gif MIME extension',
+);
+assert_gallery_branding_same(
+    'webp',
+    gallery_branding_mime_extension('image/webp'),
+    'webp MIME extension',
+);
+assert_gallery_branding_same(
+    null,
+    gallery_branding_mime_extension('image/svg+xml'),
+    'svg MIME rejected',
+);
 
-assert_gallery_branding_same(true, gallery_branding_upload_extension_allowed('Brand Logo.PNG'), 'uppercase png extension accepted');
-assert_gallery_branding_same(true, gallery_branding_upload_extension_allowed('separator.webp'), 'webp extension accepted');
-assert_gallery_branding_same(false, gallery_branding_upload_extension_allowed('script.php'), 'php extension rejected');
-assert_gallery_branding_same(false, gallery_branding_upload_extension_allowed('vector.svg'), 'svg extension rejected');
+assert_gallery_branding_same(
+    true,
+    gallery_branding_upload_extension_allowed('Brand Logo.PNG'),
+    'uppercase png extension accepted',
+);
+assert_gallery_branding_same(
+    true,
+    gallery_branding_upload_extension_allowed('separator.webp'),
+    'webp extension accepted',
+);
+assert_gallery_branding_same(
+    false,
+    gallery_branding_upload_extension_allowed('script.php'),
+    'php extension rejected',
+);
+assert_gallery_branding_same(
+    false,
+    gallery_branding_upload_extension_allowed('vector.svg'),
+    'svg extension rejected',
+);
 
 $cases = [
     'plain gallery keeps text title' => [
@@ -132,37 +203,61 @@ $cases = [
         'separator' => false,
     ],
     'banner replaces visible title text' => [
-        'paths' => ['banner' => 'branding/banner.jpg', 'logo' => null, 'separator' => null],
+        'paths' => [
+            'banner' => 'branding/banner.jpg',
+            'logo' => null,
+            'separator' => null,
+        ],
         'title_mode' => 'banner',
         'logo' => false,
         'separator' => false,
     ],
     'logo supplements text title' => [
-        'paths' => ['banner' => null, 'logo' => 'branding/logo.png', 'separator' => null],
+        'paths' => [
+            'banner' => null,
+            'logo' => 'branding/logo.png',
+            'separator' => null,
+        ],
         'title_mode' => 'text',
         'logo' => true,
         'separator' => false,
     ],
     'logo supplements banner' => [
-        'paths' => ['banner' => 'branding/banner.webp', 'logo' => 'branding/logo.png', 'separator' => null],
+        'paths' => [
+            'banner' => 'branding/banner.webp',
+            'logo' => 'branding/logo.png',
+            'separator' => null,
+        ],
         'title_mode' => 'banner',
         'logo' => true,
         'separator' => false,
     ],
     'separator is independent from title assets' => [
-        'paths' => ['banner' => null, 'logo' => null, 'separator' => 'branding/separator.gif'],
+        'paths' => [
+            'banner' => null,
+            'logo' => null,
+            'separator' => 'branding/separator.gif',
+        ],
         'title_mode' => 'text',
         'logo' => false,
         'separator' => true,
     ],
     'theme fallback banner follows banner title precedence' => [
-        'paths' => ['banner' => 'cache/theme-branding/banner.jpg', 'logo' => null, 'separator' => null],
+        'paths' => [
+            'banner' => 'cache/theme-branding/banner.jpg',
+            'logo' => null,
+            'separator' => null,
+        ],
         'title_mode' => 'banner',
         'logo' => false,
         'separator' => false,
     ],
     'theme fallback separator follows separator placement' => [
-        'paths' => ['banner' => null, 'logo' => null, 'separator' => 'cache/theme-branding/separator.png'],
+        'paths' => [
+            'banner' => null,
+            'logo' => null,
+            'separator' => 'cache/theme-branding/separator.png',
+        ],
         'title_mode' => 'text',
         'logo' => false,
         'separator' => true,
@@ -170,9 +265,21 @@ $cases = [
 ];
 
 foreach ($cases as $label => $case) {
-    assert_gallery_branding_same($case['title_mode'], test_gallery_branding_title_mode($case['paths']), $label . ': title mode');
-    assert_gallery_branding_same($case['logo'], test_gallery_branding_uses_logo($case['paths']), $label . ': logo behavior');
-    assert_gallery_branding_same($case['separator'], test_gallery_branding_uses_separator($case['paths']), $label . ': separator behavior');
+    assert_gallery_branding_same(
+        $case['title_mode'],
+        test_gallery_branding_title_mode($case['paths']),
+        $label . ': title mode',
+    );
+    assert_gallery_branding_same(
+        $case['logo'],
+        test_gallery_branding_uses_logo($case['paths']),
+        $label . ': logo behavior',
+    );
+    assert_gallery_branding_same(
+        $case['separator'],
+        test_gallery_branding_uses_separator($case['paths']),
+        $label . ': separator behavior',
+    );
 }
 
 echo "Gallery branding model tests passed.\n";

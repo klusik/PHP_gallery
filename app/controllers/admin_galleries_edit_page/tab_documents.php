@@ -50,11 +50,15 @@ use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
  * @return void Emit independent attachment forms and presentation controls
  *     associated with the existing guarded gallery settings form.
  */
-function admin_edit_gallery_render_documents_tab(array $gallery, string $activeEditTab): void
-{
-    if (!feature_capability_effective_enabled('gallery_pdf_documents')
+function admin_edit_gallery_render_documents_tab(
+    array $gallery,
+    string $activeEditTab,
+): void {
+    if (
+        !feature_capability_effective_enabled('gallery_pdf_documents')
         && !feature_capability_effective_enabled('gallery_music')
-        && !feature_capability_effective_enabled('lightbox_modes')) {
+        && !feature_capability_effective_enabled('lightbox_modes')
+    ) {
         return;
     }
     $presentationHtml = '';
@@ -78,7 +82,8 @@ function admin_edit_gallery_render_documents_tab(array $gallery, string $activeE
         'presentation_html' => $presentationHtml,
         'documents_html' => admin_gallery_pdf_documents_html($gallery),
         'music_html' => admin_gallery_music_html($gallery),
-        'simbrief_html' => admin_edit_gallery_simbrief_legacy_panel_html($gallery),
+        'simbrief_html' =>
+            admin_edit_gallery_simbrief_legacy_panel_html($gallery),
     ]);
 }
 
@@ -93,22 +98,33 @@ function admin_edit_gallery_render_documents_tab(array $gallery, string $activeE
  */
 function admin_edit_gallery_simbrief_legacy_panel_html(array $gallery): string
 {
-    if (!feature_capability_effective_enabled('simbrief')
-        || !feature_capability_effective_enabled('gallery_pdf_documents')) {
+    if (
+        !feature_capability_effective_enabled('simbrief')
+        || !feature_capability_effective_enabled('gallery_pdf_documents')
+    ) {
         return '';
     }
     require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
     $root = \Gallery\Services\simbrief_ofp_gallery_directory($gallery);
     $hasPdf = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery) !== null;
-    $occupied = $root !== null
-        && (file_exists($root . '/simbrief-ofp.pdf') || is_link($root . '/simbrief-ofp.pdf'));
+    $occupied =
+        $root !== null
+        && (
+            file_exists($root . '/simbrief-ofp.pdf')
+            || is_link($root . '/simbrief-ofp.pdf')
+        );
     $manifest = \Gallery\Services\simbrief_ofp_gallery_manifest($gallery);
     $flightMap = null;
-    if (feature_capability_effective_enabled('flight_maps')
-        && function_exists('Gallery\\Services\\gallery_flight_map_row')) {
+    if (
+        feature_capability_effective_enabled('flight_maps')
+        && function_exists('Gallery\\Services\\gallery_flight_map_row')
+    ) {
         $flightMap = gallery_flight_map_row((int) $gallery['id']);
     }
-    $prefill = \Gallery\Services\simbrief_ofp_dispatch_prefill($gallery, $flightMap);
+    $prefill = \Gallery\Services\simbrief_ofp_dispatch_prefill(
+        $gallery,
+        $flightMap,
+    );
     $id = (int) $gallery['id'];
     ob_start();
     view_render_admin_simbrief_legacy_panel([
@@ -116,10 +132,16 @@ function admin_edit_gallery_simbrief_legacy_panel_html(array $gallery): string
         'csrf_html' => csrf_field(),
         'action_url' => url_for('admin_edit_gallery', ['id' => $id]),
         'pdf_view_url' => url_for('gallery_ofp_pdf', ['id' => $id]),
-        'pdf_download_url' => url_for('gallery_ofp_pdf', ['id' => $id, 'download' => 1]),
+        'pdf_download_url' => url_for('gallery_ofp_pdf', [
+            'id' => $id,
+            'download' => 1,
+        ]),
         'has_pdf' => $hasPdf,
         'occupied' => $occupied,
-        'provenance' => (string) ($manifest['pdf_provenance'] ?? ($hasPdf ? 'original_simbrief_import' : '')),
+        'provenance' => (string) (
+            $manifest['pdf_provenance']
+            ?? ($hasPdf ? 'original_simbrief_import' : '')
+        ),
         'prefill' => $prefill,
     ]);
     return (string) ob_get_clean();

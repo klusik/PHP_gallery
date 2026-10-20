@@ -45,59 +45,119 @@ use InvalidArgumentException;
 function admin_setup_wizard_operational_safe_settings(): array
 {
     $settings = [];
-    if (function_exists(__NAMESPACE__ . '\\thumbnail_warmup_enabled')
-        && function_exists(__NAMESPACE__ . '\\set_thumbnail_warmup_enabled')) {
+    if (
+        function_exists(__NAMESPACE__ . '\\thumbnail_warmup_enabled')
+        && function_exists(__NAMESPACE__ . '\\set_thumbnail_warmup_enabled')
+    ) {
         $settings['thumbnail_background_warmup_enabled'] = admin_setup_wizard_operational_definition(
             'checkbox',
-            thumbnail_warmup_enabled() ? '1' : '0'
+            thumbnail_warmup_enabled() ? '1' : '0',
         );
     }
-    if (function_exists(__NAMESPACE__ . '\\seo_request_guard_enabled')
-        && function_exists(__NAMESPACE__ . '\\seo_request_guard_logging_enabled')
+    if (
+        function_exists(__NAMESPACE__ . '\\seo_request_guard_enabled')
+        && function_exists(__NAMESPACE__
+            . '\\seo_request_guard_logging_enabled')
         && function_exists(__NAMESPACE__ . '\\set_seo_request_guard_enabled')
-        && function_exists(__NAMESPACE__ . '\\set_seo_request_guard_logging_enabled')) {
-        $settings['seo_request_guard_enabled'] = admin_setup_wizard_operational_definition('checkbox', seo_request_guard_enabled() ? '1' : '0');
-        $settings['seo_request_guard_logging_enabled'] = admin_setup_wizard_operational_definition('checkbox', seo_request_guard_logging_enabled() ? '1' : '0');
+        && function_exists(__NAMESPACE__
+            . '\\set_seo_request_guard_logging_enabled')
+    ) {
+        $settings['seo_request_guard_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            seo_request_guard_enabled() ? '1' : '0',
+        );
+        $settings['seo_request_guard_logging_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            seo_request_guard_logging_enabled() ? '1' : '0',
+        );
     }
-    if (function_exists(__NAMESPACE__ . '\\gallery_trash_enabled')
+    if (
+        function_exists(__NAMESPACE__ . '\\gallery_trash_enabled')
         && function_exists(__NAMESPACE__ . '\\gallery_trash_auto_purge_enabled')
         && function_exists(__NAMESPACE__ . '\\gallery_trash_retention_days')
         && function_exists(__NAMESPACE__ . '\\gallery_trash_purge_batch_size')
-        && function_exists(__NAMESPACE__ . '\\set_gallery_trash_settings')) {
-        $settings['gallery_trash_enabled'] = admin_setup_wizard_operational_definition('checkbox', gallery_trash_enabled() ? '1' : '0');
-        $settings['gallery_trash_auto_purge_enabled'] = admin_setup_wizard_operational_definition('checkbox', gallery_trash_auto_purge_enabled() ? '1' : '0');
-        $settings['gallery_trash_retention_days'] = admin_setup_wizard_operational_definition('number', (string) gallery_trash_retention_days(), [
-            'min' => GALLERY_TRASH_MIN_RETENTION_DAYS,
-            'max' => GALLERY_TRASH_MAX_RETENTION_DAYS,
-            'step' => 1,
-        ]);
-        $settings['gallery_trash_purge_batch'] = admin_setup_wizard_operational_definition('number', (string) gallery_trash_purge_batch_size(), [
-            'min' => GALLERY_TRASH_MIN_PURGE_BATCH,
-            'max' => GALLERY_TRASH_MAX_PURGE_BATCH,
-            'step' => 1,
-        ]);
+        && function_exists(__NAMESPACE__ . '\\set_gallery_trash_settings')
+    ) {
+        $settings['gallery_trash_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            gallery_trash_enabled() ? '1' : '0',
+        );
+        $settings['gallery_trash_auto_purge_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            gallery_trash_auto_purge_enabled() ? '1' : '0',
+        );
+        $settings['gallery_trash_retention_days'] = admin_setup_wizard_operational_definition(
+            'number',
+            (string) gallery_trash_retention_days(),
+            [
+                'min' => GALLERY_TRASH_MIN_RETENTION_DAYS,
+                'max' => GALLERY_TRASH_MAX_RETENTION_DAYS,
+                'step' => 1,
+            ],
+        );
+        $settings['gallery_trash_purge_batch'] = admin_setup_wizard_operational_definition(
+            'number',
+            (string) gallery_trash_purge_batch_size(),
+            [
+                'min' => GALLERY_TRASH_MIN_PURGE_BATCH,
+                'max' => GALLERY_TRASH_MAX_PURGE_BATCH,
+                'step' => 1,
+            ],
+        );
     }
-    if (function_exists(__NAMESPACE__ . '\\application_autoupdate_enabled')
-        && function_exists(__NAMESPACE__ . '\\set_application_autoupdate_enabled')) {
-        $settings['application_autoupdate_enabled'] = admin_setup_wizard_operational_definition('checkbox', application_autoupdate_enabled() ? '1' : '0');
+    if (
+        function_exists(__NAMESPACE__ . '\\application_autoupdate_enabled')
+        && function_exists(__NAMESPACE__
+            . '\\set_application_autoupdate_enabled')
+    ) {
+        $settings['application_autoupdate_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            application_autoupdate_enabled() ? '1' : '0',
+        );
     }
-    if (function_exists(__NAMESPACE__ . '\\site_maintenance_enabled')
-        && function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_enabled')
+    if (
+        function_exists(__NAMESPACE__ . '\\site_maintenance_enabled')
+        && function_exists(__NAMESPACE__
+            . '\\site_maintenance_request_trigger_enabled')
         && function_exists(__NAMESPACE__ . '\\site_maintenance_utc_time')
         && function_exists(__NAMESPACE__ . '\\site_maintenance_window_minutes')
         && function_exists(__NAMESPACE__ . '\\site_maintenance_batch_size')
-        && function_exists(__NAMESPACE__ . '\\site_maintenance_time_budget_seconds')
-        && function_exists(__NAMESPACE__ . '\\set_site_maintenance_settings')) {
-        $settings['site_maintenance_enabled'] = admin_setup_wizard_operational_definition('checkbox', site_maintenance_enabled() ? '1' : '0');
-        $settings['site_maintenance_request_trigger_enabled'] = admin_setup_wizard_operational_definition('checkbox', site_maintenance_request_trigger_enabled() ? '1' : '0');
-        $settings['site_maintenance_utc_time'] = admin_setup_wizard_operational_definition('time', site_maintenance_utc_time(), ['pattern' => '^(?:[01]\\d|2[0-3]):[0-5]\\d$']);
-        $settings['site_maintenance_window_minutes'] = admin_setup_wizard_operational_definition('number', (string) site_maintenance_window_minutes(), [
-            'min' => SITE_MAINTENANCE_MIN_WINDOW_MINUTES,
-            'max' => SITE_MAINTENANCE_MAX_WINDOW_MINUTES,
-            'step' => 1,
-        ]);
-        $settings['site_maintenance_batch_size'] = admin_setup_wizard_operational_definition('number', (string) site_maintenance_batch_size(), ['min' => 1, 'max' => 50, 'step' => 1]);
-        $settings['site_maintenance_time_budget_seconds'] = admin_setup_wizard_operational_definition('number', (string) site_maintenance_time_budget_seconds(), ['min' => 3, 'max' => 120, 'step' => 1]);
+        && function_exists(__NAMESPACE__
+            . '\\site_maintenance_time_budget_seconds')
+        && function_exists(__NAMESPACE__ . '\\set_site_maintenance_settings')
+    ) {
+        $settings['site_maintenance_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            site_maintenance_enabled() ? '1' : '0',
+        );
+        $settings['site_maintenance_request_trigger_enabled'] = admin_setup_wizard_operational_definition(
+            'checkbox',
+            site_maintenance_request_trigger_enabled() ? '1' : '0',
+        );
+        $settings['site_maintenance_utc_time'] = admin_setup_wizard_operational_definition(
+            'time',
+            site_maintenance_utc_time(),
+            ['pattern' => '^(?:[01]\\d|2[0-3]):[0-5]\\d$'],
+        );
+        $settings['site_maintenance_window_minutes'] = admin_setup_wizard_operational_definition(
+            'number',
+            (string) site_maintenance_window_minutes(),
+            [
+                'min' => SITE_MAINTENANCE_MIN_WINDOW_MINUTES,
+                'max' => SITE_MAINTENANCE_MAX_WINDOW_MINUTES,
+                'step' => 1,
+            ],
+        );
+        $settings['site_maintenance_batch_size'] = admin_setup_wizard_operational_definition(
+            'number',
+            (string) site_maintenance_batch_size(),
+            ['min' => 1, 'max' => 50, 'step' => 1],
+        );
+        $settings['site_maintenance_time_budget_seconds'] = admin_setup_wizard_operational_definition(
+            'number',
+            (string) site_maintenance_time_budget_seconds(),
+            ['min' => 3, 'max' => 120, 'step' => 1],
+        );
     }
     return $settings;
 }
@@ -110,8 +170,11 @@ function admin_setup_wizard_operational_safe_settings(): array
  * @param array<string,mixed> $validation Validation metadata.
  * @return array{adapter:string,input_type:string,current:string,validation:array<string,mixed>} Definition.
  */
-function admin_setup_wizard_operational_definition(string $inputType, string $current, array $validation = []): array
-{
+function admin_setup_wizard_operational_definition(
+    string $inputType,
+    string $current,
+    array $validation = [],
+): array {
     return [
         'adapter' => 'operational_safe',
         'input_type' => $inputType,
@@ -127,38 +190,62 @@ function admin_setup_wizard_operational_definition(string $inputType, string $cu
  * @param scalar|null $value Submitted scalar value.
  * @return string Canonical scalar value.
  */
-function admin_setup_wizard_operational_setting_normalize(string $id, mixed $value): string
-{
-    if (in_array($id, [
-        'thumbnail_background_warmup_enabled',
-        'seo_request_guard_enabled',
-        'seo_request_guard_logging_enabled',
-        'gallery_trash_enabled',
-        'gallery_trash_auto_purge_enabled',
-        'application_autoupdate_enabled',
-        'site_maintenance_enabled',
-        'site_maintenance_request_trigger_enabled',
-    ], true)) {
+function admin_setup_wizard_operational_setting_normalize(
+    string $id,
+    mixed $value,
+): string {
+    if (in_array(
+        $id,
+        [
+            'thumbnail_background_warmup_enabled',
+            'seo_request_guard_enabled',
+            'seo_request_guard_logging_enabled',
+            'gallery_trash_enabled',
+            'gallery_trash_auto_purge_enabled',
+            'application_autoupdate_enabled',
+            'site_maintenance_enabled',
+            'site_maintenance_request_trigger_enabled',
+        ],
+        true,
+    )) {
         return admin_setup_wizard_operational_bool($value);
     }
     if ($id === 'site_maintenance_utc_time') {
-        if (!is_string($value) || preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', trim($value)) !== 1) {
+        if (
+            !is_string($value)
+            || preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/', trim($value)) !== 1
+        ) {
             throw new InvalidArgumentException('Invalid maintenance UTC time.');
         }
         return trim($value);
     }
     $bounds = match ($id) {
-        'gallery_trash_retention_days' => [GALLERY_TRASH_MIN_RETENTION_DAYS, GALLERY_TRASH_MAX_RETENTION_DAYS],
-        'gallery_trash_purge_batch' => [GALLERY_TRASH_MIN_PURGE_BATCH, GALLERY_TRASH_MAX_PURGE_BATCH],
-        'site_maintenance_window_minutes' => [SITE_MAINTENANCE_MIN_WINDOW_MINUTES, SITE_MAINTENANCE_MAX_WINDOW_MINUTES],
+        'gallery_trash_retention_days' => [
+            GALLERY_TRASH_MIN_RETENTION_DAYS,
+            GALLERY_TRASH_MAX_RETENTION_DAYS,
+        ],
+        'gallery_trash_purge_batch' => [
+            GALLERY_TRASH_MIN_PURGE_BATCH,
+            GALLERY_TRASH_MAX_PURGE_BATCH,
+        ],
+        'site_maintenance_window_minutes' => [
+            SITE_MAINTENANCE_MIN_WINDOW_MINUTES,
+            SITE_MAINTENANCE_MAX_WINDOW_MINUTES,
+        ],
         'site_maintenance_batch_size' => [1, 50],
         'site_maintenance_time_budget_seconds' => [3, 120],
         default => null,
     };
     if ($bounds === null) {
-        throw new InvalidArgumentException('Unsupported operational Setup Wizard setting.');
+        throw new InvalidArgumentException(
+            'Unsupported operational Setup Wizard setting.',
+        );
     }
-    return (string) admin_setup_wizard_operational_integer($value, $bounds[0], $bounds[1]);
+    return (string) admin_setup_wizard_operational_integer(
+        $value,
+        $bounds[0],
+        $bounds[1],
+    );
 }
 
 /**
@@ -169,8 +256,10 @@ function admin_setup_wizard_operational_setting_normalize(string $id, mixed $val
  */
 function admin_setup_wizard_operational_group(string $id): string
 {
-    if (str_starts_with($id, 'gallery_trash_')) return 'gallery_trash';
-    if (str_starts_with($id, 'site_maintenance_')) return 'site_maintenance';
+    if (str_starts_with($id, 'gallery_trash_'))
+        return 'gallery_trash';
+    if (str_starts_with($id, 'site_maintenance_'))
+        return 'site_maintenance';
     return '';
 }
 
@@ -181,21 +270,30 @@ function admin_setup_wizard_operational_group(string $id): string
  * @param array<string,mixed> $changes Normalized changed values for this group.
  * @return void
  */
-function admin_setup_wizard_operational_group_save(string $group, array $changes): void
-{
+function admin_setup_wizard_operational_group_save(
+    string $group,
+    array $changes,
+): void {
     if ($group === 'gallery_trash') {
         $enabled = gallery_trash_enabled();
         $autoPurge = gallery_trash_auto_purge_enabled();
         $retention = gallery_trash_retention_days();
         $batch = gallery_trash_purge_batch_size();
         foreach ($changes as $id => $value) {
-            $normalized = admin_setup_wizard_operational_setting_normalize((string) $id, $value);
+            $normalized = admin_setup_wizard_operational_setting_normalize(
+                (string) $id,
+                $value,
+            );
             match ((string) $id) {
                 'gallery_trash_enabled' => $enabled = $normalized === '1',
-                'gallery_trash_auto_purge_enabled' => $autoPurge = $normalized === '1',
-                'gallery_trash_retention_days' => $retention = (int) $normalized,
+                'gallery_trash_auto_purge_enabled' => $autoPurge =
+                    $normalized === '1',
+                'gallery_trash_retention_days' => $retention =
+                    (int) $normalized,
                 'gallery_trash_purge_batch' => $batch = (int) $normalized,
-                default => throw new InvalidArgumentException('Unsupported Gallery Trash preference.'),
+                default => throw new InvalidArgumentException(
+                    'Unsupported Gallery Trash preference.',
+                ),
             };
         }
         set_gallery_trash_settings($enabled, $autoPurge, $retention, $batch);
@@ -209,21 +307,38 @@ function admin_setup_wizard_operational_group_save(string $group, array $changes
         $requestTrigger = site_maintenance_request_trigger_enabled();
         $windowMinutes = site_maintenance_window_minutes();
         foreach ($changes as $id => $value) {
-            $normalized = admin_setup_wizard_operational_setting_normalize((string) $id, $value);
+            $normalized = admin_setup_wizard_operational_setting_normalize(
+                (string) $id,
+                $value,
+            );
             match ((string) $id) {
                 'site_maintenance_enabled' => $enabled = $normalized === '1',
                 'site_maintenance_utc_time' => $utcTime = $normalized,
                 'site_maintenance_batch_size' => $batchSize = (int) $normalized,
-                'site_maintenance_time_budget_seconds' => $timeBudget = (int) $normalized,
-                'site_maintenance_request_trigger_enabled' => $requestTrigger = $normalized === '1',
-                'site_maintenance_window_minutes' => $windowMinutes = (int) $normalized,
-                default => throw new InvalidArgumentException('Unsupported scheduled maintenance preference.'),
+                'site_maintenance_time_budget_seconds' => $timeBudget =
+                    (int) $normalized,
+                'site_maintenance_request_trigger_enabled' => $requestTrigger =
+                    $normalized === '1',
+                'site_maintenance_window_minutes' => $windowMinutes =
+                    (int) $normalized,
+                default => throw new InvalidArgumentException(
+                    'Unsupported scheduled maintenance preference.',
+                ),
             };
         }
-        set_site_maintenance_settings($enabled, $utcTime, $batchSize, $timeBudget, $requestTrigger, $windowMinutes);
+        set_site_maintenance_settings(
+            $enabled,
+            $utcTime,
+            $batchSize,
+            $timeBudget,
+            $requestTrigger,
+            $windowMinutes,
+        );
         return;
     }
-    throw new InvalidArgumentException('Unknown coupled operational preference group.');
+    throw new InvalidArgumentException(
+        'Unknown coupled operational preference group.',
+    );
 }
 
 /**
@@ -233,8 +348,10 @@ function admin_setup_wizard_operational_group_save(string $group, array $changes
  * @param scalar|null $value Canonical normalized value.
  * @return void
  */
-function admin_setup_wizard_operational_setting_save(string $id, mixed $value): void
-{
+function admin_setup_wizard_operational_setting_save(
+    string $id,
+    mixed $value,
+): void {
     $normalized = admin_setup_wizard_operational_setting_normalize($id, $value);
     if ($id === 'thumbnail_background_warmup_enabled') {
         set_thumbnail_warmup_enabled($normalized === '1');
@@ -257,7 +374,9 @@ function admin_setup_wizard_operational_setting_save(string $id, mixed $value): 
         admin_setup_wizard_operational_group_save($group, [$id => $normalized]);
         return;
     }
-    throw new InvalidArgumentException('Unsupported operational Setup Wizard setting.');
+    throw new InvalidArgumentException(
+        'Unsupported operational Setup Wizard setting.',
+    );
 }
 
 /**
@@ -268,8 +387,16 @@ function admin_setup_wizard_operational_setting_save(string $id, mixed $value): 
  */
 function admin_setup_wizard_operational_bool(mixed $value): string
 {
-    if ($value === true || $value === 1 || $value === '1') return '1';
-    if ($value === false || $value === 0 || $value === '0' || $value === '' || $value === null) return '0';
+    if ($value === true || $value === 1 || $value === '1')
+        return '1';
+    if (
+        $value === false
+        || $value === 0
+        || $value === '0'
+        || $value === ''
+        || $value === null
+    )
+        return '0';
     throw new InvalidArgumentException('Invalid boolean preference.');
 }
 
@@ -281,17 +408,25 @@ function admin_setup_wizard_operational_bool(mixed $value): string
  * @param int $max Inclusive maximum.
  * @return int Validated integer.
  */
-function admin_setup_wizard_operational_integer(mixed $value, int $min, int $max): int
-{
+function admin_setup_wizard_operational_integer(
+    mixed $value,
+    int $min,
+    int $max,
+): int {
     if (is_int($value)) {
         $number = $value;
-    } elseif (is_string($value) && preg_match('/^-?\\d+$/', trim($value)) === 1) {
+    } elseif (
+        is_string($value)
+        && preg_match('/^-?\\d+$/', trim($value)) === 1
+    ) {
         $number = (int) trim($value);
     } else {
         throw new InvalidArgumentException('Invalid integer preference.');
     }
     if ($number < $min || $number > $max) {
-        throw new InvalidArgumentException('Preference is outside the allowed range.');
+        throw new InvalidArgumentException(
+            'Preference is outside the allowed range.',
+        );
     }
     return $number;
 }

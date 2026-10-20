@@ -11,6 +11,7 @@
  */
 declare(strict_types=1);
 namespace Gallery\Controllers;
+
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Core\request_method;
@@ -35,7 +36,10 @@ function admin_gallery_features_json(array $payload, int $status = 200): void
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
-    echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+    echo json_encode(
+        $payload,
+        JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE,
+    );
 }
 
 /** Verify the common authority boundary before parsing any feature intentions.
@@ -45,7 +49,13 @@ function admin_gallery_features_authorized(): bool
 {
     require_admin();
     if (request_method() !== 'POST') {
-        admin_gallery_features_json(admin_mutation_error_envelope('Use POST to review gallery feature changes.', 'method_not_allowed'), 405);
+        admin_gallery_features_json(
+            admin_mutation_error_envelope(
+                'Use POST to review gallery feature changes.',
+                'method_not_allowed',
+            ),
+            405,
+        );
         return false;
     }
     verify_csrf();
@@ -77,9 +87,23 @@ function cms_admin_gallery_features_plan(): void
         return;
     }
     try {
-        admin_gallery_features_json(['ok' => true, 'plan' => gallery_feature_plan_preview(admin_gallery_features_intents())]);
+        admin_gallery_features_json([
+            'ok' => true,
+            'plan' => gallery_feature_plan_preview(
+                admin_gallery_features_intents(),
+            ),
+        ]);
     } catch (\Throwable $exception) {
-        admin_gallery_features_json(admin_mutation_error_envelope(t('admin.gallery_features.review_failed', 'Gallery changes could not be reviewed. Check feature availability and System Health, then try again.'), 'feature_plan_unavailable'), 409);
+        admin_gallery_features_json(
+            admin_mutation_error_envelope(
+                t(
+                    'admin.gallery_features.review_failed',
+                    'Gallery changes could not be reviewed. Check feature availability and System Health, then try again.',
+                ),
+                'feature_plan_unavailable',
+            ),
+            409,
+        );
     }
 }
 
@@ -91,15 +115,33 @@ function cms_admin_gallery_features_apply(): void
     if (!admin_gallery_features_authorized()) {
         return;
     }
-    $fallback = ['redirect_url' => url_for('admin', ['dashboard_tab' => 'galleries'])];
+    $fallback = ['redirect_url' => url_for('admin', [
+        'dashboard_tab' => 'galleries',
+    ])];
     try {
         $fingerprint = $_POST['fingerprint'] ?? '';
         if (!is_string($fingerprint)) {
-            throw new \InvalidArgumentException('Invalid reviewed fingerprint.');
+            throw new \InvalidArgumentException(
+                'Invalid reviewed fingerprint.',
+            );
         }
-        $result = gallery_feature_plan_apply(admin_gallery_features_intents(), $fingerprint);
+        $result = gallery_feature_plan_apply(
+            admin_gallery_features_intents(),
+            $fingerprint,
+        );
     } catch (\Throwable $exception) {
-        admin_gallery_features_json(admin_mutation_error_envelope(t('admin.gallery_features.apply_failed', 'Gallery changes were not applied. The hierarchy, feature state or availability may have changed. Review the changes again.'), 'feature_plan_refused', null, $fallback), 409);
+        admin_gallery_features_json(
+            admin_mutation_error_envelope(
+                t(
+                    'admin.gallery_features.apply_failed',
+                    'Gallery changes were not applied. The hierarchy, feature state or availability may have changed. Review the changes again.',
+                ),
+                'feature_plan_refused',
+                null,
+                $fallback,
+            ),
+            409,
+        );
         return;
     }
     $contexts = [];
@@ -108,16 +150,35 @@ function cms_admin_gallery_features_apply(): void
         foreach ($result['entity_ids'] as $id) {
             $gallery = find_gallery($id, true);
             if (is_array($gallery)) {
-                $contexts[] = admin_mutation_public_gallery_context($id, gallery_public_url($gallery));
+                $contexts[] = admin_mutation_public_gallery_context(
+                    $id,
+                    gallery_public_url($gallery),
+                );
             }
         }
     } catch (\Throwable $exception) {
         $refreshDegraded = true;
     }
-    $message = t('admin.gallery_features.applied', 'Gallery feature changes saved.');
+    $message = t(
+        'admin.gallery_features.applied',
+        'Gallery feature changes saved.',
+    );
     if ($result['sidecar_refresh_failed'] || $refreshDegraded) {
-        $message = t('admin.gallery_features.applied_refresh_warning', 'Gallery feature changes saved. Some metadata could not be refreshed; check System Health.');
+        $message = t(
+            'admin.gallery_features.applied_refresh_warning',
+            'Gallery feature changes saved. Some metadata could not be refreshed; check System Health.',
+        );
     }
-    admin_gallery_features_json(admin_mutation_success_envelope($message,
-        admin_mutation_descriptor('gallery.features.update', 'gallery', 'update', $result['entity_ids']), null, $contexts, $fallback));
+    admin_gallery_features_json(admin_mutation_success_envelope(
+        $message,
+        admin_mutation_descriptor(
+            'gallery.features.update',
+            'gallery',
+            'update',
+            $result['entity_ids'],
+        ),
+        null,
+        $contexts,
+        $fallback,
+    ));
 }

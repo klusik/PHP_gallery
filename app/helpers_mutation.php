@@ -54,12 +54,18 @@ function admin_wants_json(): bool
     $post = request_data('post');
     $query = request_data('query');
     $server = request_data('server');
-    return !empty($post['ajax'])
-        || !empty($query['ajax'])
-        || !empty($post['panel'])
-        || !empty($query['panel'])
-        || strtolower((string) ($server['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-        || str_contains(strtolower((string) ($server['HTTP_ACCEPT'] ?? '')), 'application/json');
+    return (
+        !empty($post['ajax'])
+            || !empty($query['ajax'])
+            || !empty($post['panel'])
+            || !empty($query['panel'])
+            || strtolower((string) ($server['HTTP_X_REQUESTED_WITH'] ?? ''))
+            === 'xmlhttprequest'
+            || str_contains(
+                strtolower((string) ($server['HTTP_ACCEPT'] ?? '')),
+                'application/json',
+            )
+    );
 }
 
 /**
@@ -69,10 +75,14 @@ function admin_wants_json(): bool
  * @param string $entity Stable entity family such as gallery or image.
  * @param string $action Stable action such as create, update, delete, or upload.
  * @param array<int, int|string> $entityIds Persisted stable entity identifiers.
- * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}
+ * @return array{type:string,entity:string,action:string,entity_ids:list<int>} Normalized mutation descriptor with unique positive integer entity ids.
  */
-function admin_mutation_descriptor(string $type, string $entity, string $action, array $entityIds = []): array
-{
+function admin_mutation_descriptor(
+    string $type,
+    string $entity,
+    string $action,
+    array $entityIds = [],
+): array {
     $normalizedIds = [];
     foreach ($entityIds as $entityId) {
         $id = (int) $entityId;
@@ -95,10 +105,13 @@ function admin_mutation_descriptor(string $type, string $entity, string $action,
  * @param string $workflow Side-panel workflow that owns the refreshed fragment.
  * @param string $refreshUrl Server-render URL used to refresh that workflow.
  * @param bool $keepOpen Whether the drawer remains mounted after persistence.
- * @return array{workflow:string,refresh_url:string,keep_open:bool}
+ * @return array{workflow:string,refresh_url:string,keep_open:bool} Side-panel refresh and open-state instructions for mutation completion.
  */
-function admin_mutation_panel_metadata(string $workflow, string $refreshUrl = '', bool $keepOpen = true): array
-{
+function admin_mutation_panel_metadata(
+    string $workflow,
+    string $refreshUrl = '',
+    bool $keepOpen = true,
+): array {
     return [
         'workflow' => trim($workflow),
         'refresh_url' => trim($refreshUrl),
@@ -148,7 +161,9 @@ function admin_mutation_postcondition(string $type, array $data = []): array
         'tag_identity',
     ];
     if (!in_array($type, $supportedTypes, true)) {
-        throw new \InvalidArgumentException('Unsupported mutation postcondition type.');
+        throw new \InvalidArgumentException(
+            'Unsupported mutation postcondition type.',
+        );
     }
 
     $postcondition = ['type' => $type];
@@ -180,7 +195,10 @@ function admin_mutation_postcondition(string $type, array $data = []): array
         $imageIds = [];
         foreach ($data['image_ids'] as $imageId) {
             $normalizedImageId = (int) $imageId;
-            if ($normalizedImageId > 0 && !in_array($normalizedImageId, $imageIds, true)) {
+            if (
+                $normalizedImageId > 0
+                && !in_array($normalizedImageId, $imageIds, true)
+            ) {
                 $imageIds[] = $normalizedImageId;
             }
         }
@@ -221,7 +239,10 @@ function admin_mutation_postcondition(string $type, array $data = []): array
         }
     }
     if (array_key_exists('placement_order', $data)) {
-        $postcondition['placement_order'] = max(0, (int) $data['placement_order']);
+        $postcondition['placement_order'] = max(
+            0,
+            (int) $data['placement_order'],
+        );
     }
 
     return $postcondition;
@@ -251,13 +272,16 @@ function admin_mutation_gallery_context_count(int $parentGalleryId): int
  * @param int $parentGalleryId Stable parent gallery id, or zero for the root index.
  * @return bool True when the card belongs to the rendered context.
  */
-function admin_mutation_gallery_is_rendered_in_context(array $gallery, int $parentGalleryId): bool
-{
+function admin_mutation_gallery_is_rendered_in_context(
+    array $gallery,
+    int $parentGalleryId,
+): bool {
     $actualParentId = max(0, (int) ($gallery['parent_id'] ?? 0));
     if ($parentGalleryId > 0) {
         return $actualParentId === $parentGalleryId;
     }
-    return $actualParentId === 0 && \Gallery\Services\gallery_is_public_listed($gallery);
+    return $actualParentId === 0
+        && \Gallery\Services\gallery_is_public_listed($gallery);
 }
 
 /**
@@ -272,8 +296,11 @@ function admin_mutation_gallery_is_rendered_in_context(array $gallery, int $pare
  * @param bool $present Whether the target card should belong to this context.
  * @return array<string, mixed> Canonical gallery_membership postcondition.
  */
-function admin_mutation_gallery_membership_postcondition(int $galleryId, int $parentGalleryId, bool $present): array
-{
+function admin_mutation_gallery_membership_postcondition(
+    int $galleryId,
+    int $parentGalleryId,
+    bool $present,
+): array {
     return admin_mutation_postcondition('gallery_membership', [
         'gallery_id' => $galleryId,
         'present' => $present,
@@ -293,9 +320,15 @@ function admin_mutation_gallery_membership_postcondition(int $galleryId, int $pa
  * @param string $renderMode preserve_view keeps pagination/filter state; canonical forces render_url.
  * @return array{type:string,gallery_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>} Root uses gallery_index/null; physical gallery uses gallery/positive ID. Null postcondition means no observable assertion was supplied.
  */
-function admin_mutation_public_gallery_context(int $galleryId, string $renderUrl, ?array $postcondition = null, string $renderMode = 'preserve_view'): array
-{
-    $normalizedRenderMode = $renderMode === 'canonical' ? 'canonical' : 'preserve_view';
+function admin_mutation_public_gallery_context(
+    int $galleryId,
+    string $renderUrl,
+    ?array $postcondition = null,
+    string $renderMode = 'preserve_view',
+): array {
+    $normalizedRenderMode = $renderMode === 'canonical'
+        ? 'canonical'
+        : 'preserve_view';
     $context = [
         'type' => $galleryId > 0 ? 'gallery' : 'gallery_index',
         'gallery_id' => $galleryId > 0 ? $galleryId : null,
@@ -318,9 +351,15 @@ function admin_mutation_public_gallery_context(int $galleryId, string $renderUrl
  * @param string $renderMode preserve_view keeps the current URL; canonical forces render_url.
  * @return array{type:string,tag_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>} Stable tag identity plus canonical render metadata; an invalid ID maps to null, not another tag.
  */
-function admin_mutation_public_tag_context(int $tagId, string $renderUrl, ?array $postcondition = null, string $renderMode = 'preserve_view'): array
-{
-    $normalizedRenderMode = $renderMode === 'canonical' ? 'canonical' : 'preserve_view';
+function admin_mutation_public_tag_context(
+    int $tagId,
+    string $renderUrl,
+    ?array $postcondition = null,
+    string $renderMode = 'preserve_view',
+): array {
+    $normalizedRenderMode = $renderMode === 'canonical'
+        ? 'canonical'
+        : 'preserve_view';
     $context = [
         'type' => 'tag',
         'tag_id' => $tagId > 0 ? $tagId : null,
@@ -348,8 +387,13 @@ function admin_mutation_public_tag_context(int $tagId, string $renderUrl, ?array
  * @param array<string, mixed> $fallback Direct-page fallback metadata such as redirect_url.
  * @return array{ok:true,message:string,mutation:array<string,mixed>,panel:?array<string,mixed>,contexts:list<array<string,mixed>>,fallback:array<string,mixed>} Canonical completion consumed unchanged by the shared coordinator.
  */
-function admin_mutation_success_envelope(string $message, array $mutation, ?array $panel = null, array $contexts = [], array $fallback = []): array
-{
+function admin_mutation_success_envelope(
+    string $message,
+    array $mutation,
+    ?array $panel = null,
+    array $contexts = [],
+    array $fallback = [],
+): array {
     return [
         'ok' => true,
         'message' => $message,
@@ -372,10 +416,15 @@ function admin_mutation_success_envelope(string $message, array $mutation, ?arra
  * @param array<string, mixed> $fallback Direct-page fallback metadata when useful.
  * @return array{ok:false,message:string,error:string,error_code:string,mutation:?array<string,mixed>,panel:null,contexts:array{},fallback:array<string,mixed>} Refusal never requests a success refresh; message/error are the same safe human explanation.
  */
-function admin_mutation_error_envelope(string $message, string $errorCode = 'mutation_failed', ?array $mutation = null, array $fallback = []): array
-{
+function admin_mutation_error_envelope(
+    string $message,
+    string $errorCode = 'mutation_failed',
+    ?array $mutation = null,
+    array $fallback = [],
+): array {
     $normalizedErrorCode = strtolower(trim($errorCode));
-    $normalizedErrorCode = preg_replace('/[^a-z0-9_.-]+/', '_', $normalizedErrorCode) ?? '';
+    $normalizedErrorCode =
+        preg_replace('/[^a-z0-9_.-]+/', '_', $normalizedErrorCode) ?? '';
     $normalizedErrorCode = trim($normalizedErrorCode, '._-');
     if ($normalizedErrorCode === '') {
         $normalizedErrorCode = 'mutation_failed';

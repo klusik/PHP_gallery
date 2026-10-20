@@ -61,8 +61,11 @@ namespace {
      * @param string $label Failure description.
      * @return void No value after expected rejection.
      */
-    function thumbnail_symlink_rejected(array $image, array $gallery, string $label): void
-    {
+    function thumbnail_symlink_rejected(
+        array $image,
+        array $gallery,
+        string $label,
+    ): void {
         try {
             Gallery\Services\thumbnail_abs_path($image, $gallery, 300, 'jpg');
         } catch (RuntimeException) {
@@ -72,7 +75,11 @@ namespace {
     }
 
     // Native expected destinations also work for not-yet-created thumbnail directories and files.
-    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gallery-thumbnail-path-' . bin2hex(random_bytes(8));
+    $root =
+        sys_get_temp_dir()
+        . DIRECTORY_SEPARATOR
+        . 'gallery-thumbnail-path-'
+        . bin2hex(random_bytes(8));
     $galleryRoot = $root . DIRECTORY_SEPARATOR . 'gallery';
     $thumbnailDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbs';
     $outsideDir = $root . DIRECTORY_SEPARATOR . 'outside';
@@ -81,7 +88,10 @@ namespace {
     }
     $GLOBALS['thumbnail_symlink_gallery_root'] = $galleryRoot;
     $gallery = ['folder_path' => 'gallery'];
-    $image = ['filename' => 'photo.jpg', 'thumbnail_source_identity_version' => 0];
+    $image = [
+        'filename' => 'photo.jpg',
+        'thumbnail_source_identity_version' => 0,
+    ];
     $photoName = 'photo_thumb300.jpg';
     $outsideFile = $outsideDir . DIRECTORY_SEPARATOR . $photoName;
     $insideFile = $thumbnailDir . DIRECTORY_SEPARATOR . $photoName;
@@ -90,53 +100,82 @@ namespace {
 
         // A future thumbs/ directory and a future file must both be permitted.
         thumbnail_symlink_assert(
-            Gallery\Services\gallery_thumbs_dir($gallery, false) === $thumbnailDir,
-            'Missing legitimate thumbnail directory must remain usable.'
+            Gallery\Services\gallery_thumbs_dir($gallery, false)
+                === $thumbnailDir,
+            'Missing legitimate thumbnail directory must remain usable.',
         );
         thumbnail_symlink_assert(
-            Gallery\Services\thumbnail_abs_path($image, $gallery, 300, 'jpg') === $insideFile,
-            'Missing legitimate thumbnail destination must remain usable.'
+            Gallery\Services\thumbnail_abs_path($image, $gallery, 300, 'jpg')
+                === $insideFile,
+            'Missing legitimate thumbnail destination must remain usable.',
         );
 
         mkdir($thumbnailDir, 0700);
         file_put_contents($insideFile, 'normal thumbnail fixture');
         thumbnail_symlink_assert(
-            Gallery\Services\thumbnail_abs_path($image, $gallery, 300, 'jpg') === $insideFile,
-            'Existing normal thumbnail must remain accessible.'
+            Gallery\Services\thumbnail_abs_path($image, $gallery, 300, 'jpg')
+                === $insideFile,
+            'Existing normal thumbnail must remain accessible.',
         );
         thumbnail_symlink_assert(
-            Gallery\Services\thumbnail_path_inside_existing_gallery($galleryRoot, $insideFile),
-            'Existing image must be contained in owning gallery.'
+            Gallery\Services\thumbnail_path_inside_existing_gallery(
+                $galleryRoot,
+                $insideFile,
+            ),
+            'Existing image must be contained in owning gallery.',
         );
 
         // An individually symlinked thumbnail can escape even with a valid thumbs/ parent.
         @unlink($insideFile);
         if (function_exists('symlink') && @symlink($outsideFile, $insideFile)) {
             thumbnail_symlink_assert(
-                !Gallery\Services\thumbnail_path_inside_existing_gallery($galleryRoot, $insideFile),
-                'Final thumbnail symlink escape must be rejected.'
+                !Gallery\Services\thumbnail_path_inside_existing_gallery(
+                    $galleryRoot,
+                    $insideFile,
+                ),
+                'Final thumbnail symlink escape must be rejected.',
             );
-            thumbnail_symlink_rejected($image, $gallery, 'Thumbnail resolver allowed escaped file symlink.');
+            thumbnail_symlink_rejected(
+                $image,
+                $gallery,
+                'Thumbnail resolver allowed escaped file symlink.',
+            );
             @unlink($insideFile);
         }
 
         // A symlink replacing thumbs/ must not redirect generated or existing files outside.
         @rmdir($thumbnailDir);
-        if (function_exists('symlink') && @symlink($outsideDir, $thumbnailDir)) {
+        if (
+            function_exists('symlink')
+            && @symlink($outsideDir, $thumbnailDir)
+        ) {
             thumbnail_symlink_assert(
-                !Gallery\Services\thumbnail_path_inside_existing_gallery($galleryRoot, $thumbnailDir),
-                'Escaping thumbnail directory symlink must be rejected.'
+                !Gallery\Services\thumbnail_path_inside_existing_gallery(
+                    $galleryRoot,
+                    $thumbnailDir,
+                ),
+                'Escaping thumbnail directory symlink must be rejected.',
             );
             thumbnail_symlink_assert(
-                !Gallery\Services\thumbnail_path_inside_existing_gallery($galleryRoot, $thumbnailDir . '/future.jpg'),
-                'Future file through an escaping ancestor symlink must be rejected.'
+                !Gallery\Services\thumbnail_path_inside_existing_gallery(
+                    $galleryRoot,
+                    $thumbnailDir . '/future.jpg',
+                ),
+                'Future file through an escaping ancestor symlink must be rejected.',
             );
-            thumbnail_symlink_rejected($image, $gallery, 'Thumbnail resolver allowed escaped thumbs directory.');
+            thumbnail_symlink_rejected(
+                $image,
+                $gallery,
+                'Thumbnail resolver allowed escaped thumbs directory.',
+            );
         }
 
         thumbnail_symlink_assert(
-            !Gallery\Services\thumbnail_path_inside_existing_gallery($galleryRoot, $root . '/outside/other.jpg'),
-            'Lexically out-of-gallery thumbnail target must be refused.'
+            !Gallery\Services\thumbnail_path_inside_existing_gallery(
+                $galleryRoot,
+                $root . '/outside/other.jpg',
+            ),
+            'Lexically out-of-gallery thumbnail target must be refused.',
         );
         echo "Thumbnail canonical path containment passed.\n";
     } finally {

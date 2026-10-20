@@ -34,5 +34,5 @@
 
 return [
     "ALTER TABLE galleries ADD COLUMN description_layout ENUM('vertical','horizontal') NULL AFTER show_filenames",
-    "ALTER TABLE galleries ADD KEY galleries_description_layout_index (description_layout)",
+    'ALTER TABLE galleries ADD KEY galleries_description_layout_index (description_layout)',
 ];

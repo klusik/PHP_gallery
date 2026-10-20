@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Views;
 
-
 /**
  * Normalize SimBrief text for presentation without depending on the service layer.
  *
@@ -60,16 +59,34 @@ function view_simbrief_description_plain_text(string $value): string
 function view_simbrief_description_markdown(array $details): string
 {
     $originCode = view_simbrief_markdown_code($details['origin_code'] ?? '');
-    $destinationCode = view_simbrief_markdown_code($details['destination_code'] ?? '');
-    $originLabel = view_simbrief_place_label((string) ($details['origin_name'] ?? ''), $originCode);
-    $destinationLabel = view_simbrief_place_label((string) ($details['destination_name'] ?? ''), $destinationCode);
-    $aircraft = view_simbrief_markdown_text((string) ($details['aircraft'] ?? ''));
-    $flightLabel = view_simbrief_markdown_code((string) ($details['flight_label'] ?? ''));
+    $destinationCode = view_simbrief_markdown_code(
+        $details['destination_code'] ?? '',
+    );
+    $originLabel = view_simbrief_place_label(
+        (string) ($details['origin_name'] ?? ''),
+        $originCode,
+    );
+    $destinationLabel = view_simbrief_place_label(
+        (string) ($details['destination_name'] ?? ''),
+        $destinationCode,
+    );
+    $aircraft = view_simbrief_markdown_text(
+        (string) ($details['aircraft'] ?? ''),
+    );
+    $flightLabel = view_simbrief_markdown_code(
+        (string) ($details['flight_label'] ?? ''),
+    );
 
     $openingParts = [];
-    $opening = '**' . $originCode . ' to ' . $destinationCode . '** was planned as';
+    $opening =
+        '**' . $originCode . ' to ' . $destinationCode . '** was planned as';
     if ($aircraft !== '') {
-        $opening .= ' ' . view_simbrief_indefinite_article($aircraft) . ' ' . $aircraft . ' sector';
+        $opening .=
+            ' '
+            . view_simbrief_indefinite_article($aircraft)
+            . ' '
+            . $aircraft
+            . ' sector';
     } else {
         $opening .= ' a flight-sim sector';
     }
@@ -81,33 +98,55 @@ function view_simbrief_description_markdown(array $details): string
         $dispatchContext[] = 'flight `' . $flightLabel . '`';
     }
     if (($details['cruise'] ?? '') !== '') {
-        $dispatchContext[] = 'a planned cruise at `' . view_simbrief_markdown_code((string) $details['cruise']) . '`';
+        $dispatchContext[] =
+            'a planned cruise at `'
+            . view_simbrief_markdown_code((string) $details['cruise'])
+            . '`';
     }
     if (($details['ete'] ?? '') !== '') {
-        $dispatchContext[] = 'an estimated en-route time of about ' . view_simbrief_markdown_text((string) $details['ete']);
+        $dispatchContext[] =
+            'an estimated en-route time of about '
+            . view_simbrief_markdown_text((string) $details['ete']);
     }
     if ($dispatchContext !== []) {
-        $openingParts[] = 'The OFP gives it ' . view_simbrief_join_phrase($dispatchContext) . '.';
+        $openingParts[] =
+            'The OFP gives it '
+            . view_simbrief_join_phrase($dispatchContext)
+            . '.';
     }
 
     $paragraphs = [implode(' ', $openingParts)];
 
     $routeParts = [];
     if (($details['route'] ?? '') !== '') {
-        $routeParts[] = 'SimBrief filed the route as `' . view_simbrief_markdown_code((string) $details['route']) . '`.';
+        $routeParts[] =
+            'SimBrief filed the route as `'
+            . view_simbrief_markdown_code((string) $details['route'])
+            . '`.';
     }
     $runwayParts = [];
     if (($details['origin_runway'] ?? '') !== '') {
-        $runwayParts[] = 'departure runway ' . view_simbrief_markdown_text((string) $details['origin_runway']);
+        $runwayParts[] =
+            'departure runway '
+            . view_simbrief_markdown_text((string) $details['origin_runway']);
     }
     if (($details['destination_runway'] ?? '') !== '') {
-        $runwayParts[] = 'arrival runway ' . view_simbrief_markdown_text((string) $details['destination_runway']);
+        $runwayParts[] = 'arrival runway '
+        . view_simbrief_markdown_text(
+            (string) $details['destination_runway'],
+        );
     }
     if ($runwayParts !== []) {
-        $routeParts[] = 'The plan also notes ' . view_simbrief_join_phrase($runwayParts) . '.';
+        $routeParts[] =
+            'The plan also notes '
+            . view_simbrief_join_phrase($runwayParts)
+            . '.';
     }
     if (($details['alternate_code'] ?? '') !== '') {
-        $routeParts[] = 'The listed alternate is `' . view_simbrief_markdown_code((string) $details['alternate_code']) . '`.';
+        $routeParts[] =
+            'The listed alternate is `'
+            . view_simbrief_markdown_code((string) $details['alternate_code'])
+            . '`.';
     }
     if ($routeParts !== []) {
         $paragraphs[] = implode(' ', $routeParts);
@@ -115,19 +154,29 @@ function view_simbrief_description_markdown(array $details): string
 
     $dispatchParts = [];
     if (($details['distance'] ?? '') !== '') {
-        $dispatchParts[] = 'planned distance ' . view_simbrief_markdown_text((string) $details['distance']);
+        $dispatchParts[] =
+            'planned distance '
+            . view_simbrief_markdown_text((string) $details['distance']);
     }
     if (($details['passengers'] ?? '') !== '') {
-        $dispatchParts[] = view_simbrief_markdown_text((string) $details['passengers']) . ' passengers';
+        $dispatchParts[] =
+            view_simbrief_markdown_text((string) $details['passengers'])
+            . ' passengers';
     }
     if (($details['fuel'] ?? '') !== '') {
-        $dispatchParts[] = 'dispatch fuel ' . view_simbrief_markdown_text((string) $details['fuel']);
+        $dispatchParts[] =
+            'dispatch fuel '
+            . view_simbrief_markdown_text((string) $details['fuel']);
     }
     if (($details['airac'] ?? '') !== '') {
-        $dispatchParts[] = 'AIRAC ' . view_simbrief_markdown_text((string) $details['airac']);
+        $dispatchParts[] =
+            'AIRAC ' . view_simbrief_markdown_text((string) $details['airac']);
     }
     if ($dispatchParts !== []) {
-        $paragraphs[] = 'For the gallery, this gives the flight a clean dispatch-log frame: ' . view_simbrief_join_phrase($dispatchParts) . '. The photos can sit around that planned story rather than only showing a raw route string.';
+        $paragraphs[] =
+            'For the gallery, this gives the flight a clean dispatch-log frame: '
+            . view_simbrief_join_phrase($dispatchParts)
+            . '. The photos can sit around that planned story rather than only showing a raw route string.';
     }
 
     return trim(implode("\n\n", $paragraphs));
@@ -168,7 +217,11 @@ function view_simbrief_indefinite_article(string $label): string
 function view_simbrief_markdown_text(string $value): string
 {
     $value = view_simbrief_description_plain_text($value);
-    $value = str_replace(['\\', '`', '*', '_', '[', ']', '<', '>'], ['\\\\', '\`', '\*', '\_', '\[', '\]', '', ''], $value);
+    $value = str_replace(
+        ['\\', '`', '*', '_', '[', ']', '<', '>'],
+        ['\\\\', '\`', '\*', '\_', '\[', '\]', '', ''],
+        $value,
+    );
     return trim($value);
 }
 
@@ -221,11 +274,15 @@ function view_simbrief_shorten(string $value, int $limit): string
     if ($limit <= 0) {
         return '';
     }
-    $length = function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($value, 'UTF-8')
+        : strlen($value);
     if ($length <= $limit) {
         return $value;
     }
-    $cut = function_exists('mb_substr') ? (string) mb_substr($value, 0, max(1, $limit - 6), 'UTF-8') : substr($value, 0, max(1, $limit - 6));
+    $cut = function_exists('mb_substr')
+        ? (string) mb_substr($value, 0, max(1, $limit - 6), 'UTF-8')
+        : substr($value, 0, max(1, $limit - 6));
     $cut = preg_replace('/\s+\S*$/u', '', $cut) ?: $cut;
     return rtrim($cut, ' ,;:') . ' (...)';
 }
@@ -235,12 +292,15 @@ function view_simbrief_shorten(string $value, int $limit): string
  *
  * Used by server-rendered view helpers.
  *
- * @param array $parts Parts value.
+ * @param list<string> $parts Non-empty phrases to join in readable English.
  * @return string Text result for the caller.
  */
 function view_simbrief_join_phrase(array $parts): string
 {
-    $parts = array_values(array_filter(array_map(static fn (string $part): string => trim($part), $parts), static fn (string $part): bool => $part !== ''));
+    $parts = array_values(array_filter(
+        array_map(static fn(string $part): string => trim($part), $parts),
+        static fn(string $part): bool => $part !== '',
+    ));
     $count = count($parts);
     if ($count === 0) {
         return '';

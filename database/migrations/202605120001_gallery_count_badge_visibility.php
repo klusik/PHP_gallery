@@ -34,5 +34,5 @@
 
 return [
     "ALTER TABLE galleries ADD COLUMN count_badge_visibility ENUM('show','hide') NULL AFTER description_layout",
-    "ALTER TABLE galleries ADD KEY galleries_count_badge_visibility_index (count_badge_visibility)",
+    'ALTER TABLE galleries ADD KEY galleries_count_badge_visibility_index (count_badge_visibility)',
 ];

@@ -46,6 +46,7 @@ use function Gallery\Views\view_render_not_found;
 use function Gallery\Views\view_render_public_service_unavailable;
 
 const PUBLIC_SCHEMA_UNAVAILABLE_EVENT = 'security.public_schema_inspection_unavailable';
+
 const NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT = 'security.nsfw_schema_inspection_unavailable';
 
 /**
@@ -59,11 +60,43 @@ const NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT = 'security.nsfw_schema_inspection_una
  */
 function public_schema_unavailable_response_format(string $page): string
 {
-    if ($page === 'cooperative_gallery' && ($_GET['fragment'] ?? '') === '1') { return 'json'; }
-    if (in_array($page, ['cooperative_content_api', 'cooperative_metadata_api', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'gallery_map_data', 'public_search'], true)) {
+    if ($page === 'cooperative_gallery' && ($_GET['fragment'] ?? '') === '1') {
         return 'json';
     }
-    if (in_array($page, ['cooperative_media', 'media', 'gallery_ofp_pdf', 'gallery_music', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'download_gallery', 'sitemap', 'robots'], true)) {
+    if (in_array(
+        $page,
+        [
+            'cooperative_content_api',
+            'cooperative_metadata_api',
+            'gallery_lightbox_data',
+            'smart_gallery_lightbox_data',
+            'smart_gallery_map_data',
+            'gallery_map_data',
+            'public_search',
+        ],
+        true,
+    )) {
+        return 'json';
+    }
+    if (in_array(
+        $page,
+        [
+            'cooperative_media',
+            'media',
+            'gallery_ofp_pdf',
+            'gallery_music',
+            'thumb',
+            'public_media',
+            'public_thumb',
+            'thumbnail_warmup',
+            'gallery_cover_asset',
+            'gallery_branding_asset',
+            'download_gallery',
+            'sitemap',
+            'robots',
+        ],
+        true,
+    )) {
         return 'text';
     }
     return 'html';
@@ -94,20 +127,35 @@ function nsfw_guard_unavailable_response_format(string $page): string
  * @param string $requestId Safe request correlation identifier.
  * @param string $schemaState Bounded missing/unknown state.
  * @param string $errorCode Stable bounded failure reason.
+ * @return void Best-effort record a bounded operational event for the protected response.
  */
-function public_schema_log_unavailable(string $feature, string $page, string $format, string $requestId, string $schemaState = 'unknown', string $errorCode = 'inspection_failed'): void
-{
+function public_schema_log_unavailable(
+    string $feature,
+    string $page,
+    string $format,
+    string $requestId,
+    string $schemaState = 'unknown',
+    string $errorCode = 'inspection_failed',
+): void {
     if (!function_exists('Gallery\Services\admin_log_event')) {
         return;
     }
 
-    $feature = preg_match('/^[A-Za-z0-9_.-]{1,120}$/D', $feature) === 1 ? $feature : 'public_schema';
-    $schemaState = in_array($schemaState, ['missing', 'unknown'], true) ? $schemaState : 'unknown';
-    $errorCode = preg_match('/^[a-z0-9_]{1,80}$/D', $errorCode) === 1 ? $errorCode : 'inspection_failed';
+    $feature = preg_match('/^[A-Za-z0-9_.-]{1,120}$/D', $feature) === 1
+        ? $feature
+        : 'public_schema';
+    $schemaState = in_array($schemaState, ['missing', 'unknown'], true)
+        ? $schemaState
+        : 'unknown';
+    $errorCode = preg_match('/^[a-z0-9_]{1,80}$/D', $errorCode) === 1
+        ? $errorCode
+        : 'inspection_failed';
     try {
         admin_log_event(
             'error',
-            $feature === 'nsfw_guard' ? NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT : PUBLIC_SCHEMA_UNAVAILABLE_EVENT,
+            $feature === 'nsfw_guard'
+                ? NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT
+                : PUBLIC_SCHEMA_UNAVAILABLE_EVENT,
             'Protected public request was refused because required schema policy could not be verified.',
             [
                 'feature' => $feature,
@@ -121,7 +169,7 @@ function public_schema_log_unavailable(string $feature, string $page, string $fo
                 'severity' => 'error',
                 'request_id' => $requestId,
                 'route_name' => substr($page, 0, 80),
-            ]
+            ],
         );
     } catch (\Throwable) {
         // A secondary observability failure must never weaken the protective response.
@@ -134,9 +182,13 @@ function public_schema_log_unavailable(string $feature, string $page, string $fo
  * @param string $page Resolved route identifier.
  * @param string $format Normalized response representation.
  * @param string $requestId Safe request correlation identifier.
+ * @return void Record the compatibility NSFW schema failure event.
  */
-function nsfw_guard_log_schema_unavailable(string $page, string $format, string $requestId): void
-{
+function nsfw_guard_log_schema_unavailable(
+    string $page,
+    string $format,
+    string $requestId,
+): void {
     public_schema_log_unavailable('nsfw_guard', $page, $format, $requestId);
 }
 
@@ -152,17 +204,34 @@ function nsfw_guard_log_schema_unavailable(string $page, string $format, string 
  * @param string $feature Stable capability key for bounded diagnostics.
  * @param string $schemaState Bounded missing/unknown state.
  * @param string $errorCode Stable bounded failure reason.
+ * @return void Send the route-appropriate no-store 503 response.
  */
-function cms_public_schema_unavailable(string $page, string $feature, string $schemaState = 'unknown', string $errorCode = 'inspection_failed'): void
-{
+function cms_public_schema_unavailable(
+    string $page,
+    string $feature,
+    string $schemaState = 'unknown',
+    string $errorCode = 'inspection_failed',
+): void {
     // $requestId stores the safe correlation identifier shown to the visitor.
-    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $requestId = function_exists('Gallery\Services\telemetry_request_id')
+        ? telemetry_request_id()
+        : '';
     // $message stores the translated public wording shared by every representation.
-    $message = t('public.schema_temporarily_unavailable', 'The gallery is temporarily unavailable. Please try again later.');
+    $message = t(
+        'public.schema_temporarily_unavailable',
+        'The gallery is temporarily unavailable. Please try again later.',
+    );
     // $format stores the route-appropriate response representation.
     $format = public_schema_unavailable_response_format($page);
 
-    public_schema_log_unavailable($feature, $page, $format, $requestId, $schemaState, $errorCode);
+    public_schema_log_unavailable(
+        $feature,
+        $page,
+        $format,
+        $requestId,
+        $schemaState,
+        $errorCode,
+    );
 
     http_response_code(503);
     clear_response_cache_headers();
@@ -184,7 +253,11 @@ function cms_public_schema_unavailable(string $page, string $feature, string $sc
         header('Content-Type: text/plain; charset=utf-8');
         echo $message;
         if ($requestId !== '') {
-            echo "\n" . t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId]);
+            echo
+                "\n"
+                    . t('public.request_reference', 'Reference: {request_id}', [
+                        'request_id' => $requestId,
+                    ]);
         }
         return;
     }
@@ -192,7 +265,9 @@ function cms_public_schema_unavailable(string $page, string $feature, string $sc
     header('Content-Type: text/html; charset=utf-8');
     $title = t('public.service_unavailable_title', 'Temporarily unavailable');
     $requestReference = $requestId !== ''
-        ? t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])
+        ? t('public.request_reference', 'Reference: {request_id}', [
+            'request_id' => $requestId,
+        ])
         : '';
     view_render_public_service_unavailable($title, $message, $requestReference);
 }
@@ -224,19 +299,33 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
     $etag = '"' . sha1($path . '|' . $mtime . '|' . $size) . '"';
     header('ETag: ' . $etag);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
-    header('Cache-Control: ' . ((string) ($_GET['preview'] ?? '') === 'visual' ? 'private, no-store, max-age=0' : $cacheControl));
+    header(
+        'Cache-Control: '
+            . (
+                (string) ($_GET['preview'] ?? '') === 'visual'
+                    ? 'private, no-store, max-age=0'
+                    : $cacheControl
+            ),
+    );
 
     // $clientEtag stores an intermediate value used by the surrounding gallery workflow.
     $clientEtag = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
     // $clientModifiedSince stores an intermediate value used by the surrounding gallery workflow.
     $clientModifiedSince = (string) ($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '');
-    if ((string) ($_GET['preview'] ?? '') !== 'visual'
-        && ($clientEtag === $etag || ($clientModifiedSince !== '' && (int) strtotime($clientModifiedSince) >= $mtime))) {
+    if (
+        (string) ($_GET['preview'] ?? '') !== 'visual'
+        && (
+            $clientEtag === $etag
+            || (
+                $clientModifiedSince !== ''
+                && (int) strtotime($clientModifiedSince) >= $mtime
+            )
+        )
+    ) {
         http_response_code(304);
-        exit;
+        exit();
     }
 }
-
 
 /**
  * Remove inherited PHP/session cache headers before an asset route sets its own policy.
@@ -257,7 +346,14 @@ function clear_response_cache_headers(): void
 function send_asset_cache_control(string $cacheControl): void
 {
     clear_response_cache_headers();
-    header('Cache-Control: ' . ((string) ($_GET['preview'] ?? '') === 'visual' ? 'private, no-store, max-age=0' : $cacheControl));
+    header(
+        'Cache-Control: '
+            . (
+                (string) ($_GET['preview'] ?? '') === 'visual'
+                    ? 'private, no-store, max-age=0'
+                    : $cacheControl
+            ),
+    );
 }
 
 /**
@@ -271,12 +367,13 @@ function render_back_to_top_button(): void
         t('public.back_to_top_label', 'Go back to top'),
         t('public.back_to_top_short', 'Top'),
         t('public.back_to_bottom_label', 'Go to bottom'),
-        t('public.back_to_bottom_short', 'Down')
+        t('public.back_to_bottom_short', 'Down'),
     );
 }
 
 /**
- * Handles cms not found logic for the gallery application.
+ * Render the standard not-found response for an unavailable route or resource.
+ * @return void Render the standard not-found response and terminate route handling.
  */
 function cms_not_found(): void
 {
@@ -287,7 +384,7 @@ function cms_not_found(): void
     render_header(t('public.not_found_title', 'Not found'));
     view_render_not_found(
         t('public.not_found_title', 'Not found'),
-        t('public.not_found_message', 'The requested page was not found.')
+        t('public.not_found_message', 'The requested page was not found.'),
     );
     render_footer();
 }

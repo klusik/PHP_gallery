@@ -38,7 +38,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS viewer_invitations (
+    'CREATE TABLE IF NOT EXISTS viewer_invitations (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         token_hash CHAR(64) NOT NULL,
         target_email_fingerprint CHAR(64) NULL,
@@ -52,12 +52,12 @@ return [
         KEY viewer_invitations_creator_created_index (created_by_admin_user_id, created_at),
         KEY viewer_invitations_expiry_index (expires_at),
         CONSTRAINT viewer_invitations_admin_foreign FOREIGN KEY (created_by_admin_user_id) REFERENCES users(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_registration_state (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_registration_state (
         state_key VARCHAR(64) NOT NULL PRIMARY KEY,
         active_request_count INT UNSIGNED NOT NULL DEFAULT 0,
         updated_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
     "CREATE TABLE IF NOT EXISTS viewer_registration_requests (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(190) NOT NULL,

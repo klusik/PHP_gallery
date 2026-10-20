@@ -36,9 +36,9 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+
 require_once dirname(__DIR__) . '/policy_constants.php';
 use const Gallery\Core\SETUP_LOCK_DIRECTORY_PERMISSIONS;
-
 use function Gallery\Core\now_sql;
 use function Gallery\Models\auth_model_account_row;
 use function Gallery\Models\auth_model_cleanup_password_reset_tokens;
@@ -65,7 +65,10 @@ use function Gallery\Models\auth_model_username_taken;
 function auth_setup_is_locked(): bool
 {
     $root = dirname(__DIR__, 2);
-    return is_file($root . '/config.php') && is_file($root . '/cache/installed.lock');
+    return (
+        is_file($root . '/config.php')
+            && is_file($root . '/cache/installed.lock')
+    );
 }
 
 /**
@@ -80,11 +83,25 @@ function auth_setup_is_locked(): bool
 function auth_setup_write_lock(): void
 {
     $directory = dirname(__DIR__, 2) . '/cache';
-    if (!is_dir($directory) && !@mkdir($directory, SETUP_LOCK_DIRECTORY_PERMISSIONS, true) && !is_dir($directory)) {
-        throw new \RuntimeException('The setup completion marker directory could not be prepared.');
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, SETUP_LOCK_DIRECTORY_PERMISSIONS, true)
+        && !is_dir($directory)
+    ) {
+        throw new \RuntimeException(
+            'The setup completion marker directory could not be prepared.',
+        );
     }
-    if (@file_put_contents($directory . '/installed.lock', 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX) === false) {
-        throw new \RuntimeException('The setup completion marker could not be written.');
+    if (
+        @file_put_contents(
+            $directory . '/installed.lock',
+            'installed=' . gmdate('c') . PHP_EOL,
+            LOCK_EX,
+        ) === false
+    ) {
+        throw new \RuntimeException(
+            'The setup completion marker could not be written.',
+        );
     }
 }
 
@@ -100,12 +117,22 @@ function auth_setup_write_lock(): void
  */
 function auth_account_session_user(int $userId): ?array
 {
-    $emailSchemaStatus = function_exists('Gallery\Services\auth_user_email_schema_status')
-        ? auth_user_email_schema_status() : ['state' => 'missing'];
-    if (function_exists('Gallery\Services\schema_inspection_is_unknown') && schema_inspection_is_unknown($emailSchemaStatus)) {
-        auth_log_schema_unavailable('auth_user_email', 'current_user_optional_email');
+    $emailSchemaStatus = function_exists(
+        'Gallery\Services\auth_user_email_schema_status',
+    )
+        ? auth_user_email_schema_status()
+        : ['state' => 'missing'];
+    if (
+        function_exists('Gallery\Services\schema_inspection_is_unknown')
+        && schema_inspection_is_unknown($emailSchemaStatus)
+    ) {
+        auth_log_schema_unavailable(
+            'auth_user_email',
+            'current_user_optional_email',
+        );
     }
-    $emailAvailable = function_exists('Gallery\Services\schema_inspection_is_available')
+    $emailAvailable =
+        function_exists('Gallery\Services\schema_inspection_is_available')
         && schema_inspection_is_available($emailSchemaStatus);
     $user = \Gallery\Models\auth_model_session_user($userId, $emailAvailable);
     if ($user && !array_key_exists('email', $user)) {
@@ -167,10 +194,23 @@ function auth_account_cleanup_password_reset_tokens(): void
  * @param string $tokenHash SHA-256 hash of the secret token.
  * @param string $expiresAt Token expiration timestamp.
  * @param string $requestHash Privacy-safe request fingerprint.
+ * @return void Replaces the user's outstanding reset token with the supplied hashed credential and expiry metadata.
  */
-function auth_account_replace_password_reset_token(int $userId, string $selector, string $tokenHash, string $expiresAt, string $requestHash): void
-{
-    auth_model_replace_password_reset_token($userId, $selector, $tokenHash, now_sql(), $expiresAt, $requestHash);
+function auth_account_replace_password_reset_token(
+    int $userId,
+    string $selector,
+    string $tokenHash,
+    string $expiresAt,
+    string $requestHash,
+): void {
+    auth_model_replace_password_reset_token(
+        $userId,
+        $selector,
+        $tokenHash,
+        now_sql(),
+        $expiresAt,
+        $requestHash,
+    );
 }
 
 /** @return array<string,mixed>|null */
@@ -185,10 +225,18 @@ function auth_account_find_valid_password_reset(string $selector): ?array
  * @param int $userId User identifier.
  * @param int $resetTokenId Password-reset token identifier.
  * @param string $newPassword New plaintext password supplied by the authenticated reset flow.
+ * @return void Hashes and persists the replacement password, then marks the reset token as consumed.
  */
-function auth_account_complete_password_reset(int $userId, int $resetTokenId, string $newPassword): void
-{
-    auth_model_update_user_password($userId, password_hash($newPassword, PASSWORD_DEFAULT), now_sql());
+function auth_account_complete_password_reset(
+    int $userId,
+    int $resetTokenId,
+    string $newPassword,
+): void {
+    auth_model_update_user_password(
+        $userId,
+        password_hash($newPassword, PASSWORD_DEFAULT),
+        now_sql(),
+    );
     auth_model_mark_password_reset_used($resetTokenId, now_sql());
 }
 
@@ -205,9 +253,17 @@ function auth_account_password_matches(int $userId, string $password): bool
     return $hash !== null && password_verify($password, $hash);
 }
 
-/** @return array<string,mixed>|null */
-function auth_account_profile_row(int $userId, bool $emailSchemaAvailable): ?array
-{
+/**
+ * Return one account profile row for the Admin profile form.
+ *
+ * @param int $userId User identifier to load.
+ * @param bool $emailSchemaAvailable Whether the installed schema has the email field.
+ * @return array<string,mixed>|null Account row with optional email field, or null when unavailable.
+ */
+function auth_account_profile_row(
+    int $userId,
+    bool $emailSchemaAvailable,
+): ?array {
     return auth_model_account_row($userId, $emailSchemaAvailable);
 }
 
@@ -243,11 +299,26 @@ function auth_account_email_taken(string $email, int $excludeUserId): bool
  * @param string $email Normalized recovery email, possibly empty.
  * @param bool $emailSchemaAvailable Whether the installed schema supports email.
  * @param string $newPassword Optional plaintext replacement password, possibly empty.
+ * @return void Hashes a non-empty replacement password and persists the supplied supported profile fields.
  */
-function auth_account_update_profile(int $userId, string $username, string $email, bool $emailSchemaAvailable, string $newPassword): void
-{
-    $passwordHash = $newPassword !== '' ? password_hash($newPassword, PASSWORD_DEFAULT) : null;
-    auth_model_update_account($userId, $username, $emailSchemaAvailable && $email !== '' ? $email : null, $emailSchemaAvailable, $passwordHash, now_sql());
+function auth_account_update_profile(
+    int $userId,
+    string $username,
+    string $email,
+    bool $emailSchemaAvailable,
+    string $newPassword,
+): void {
+    $passwordHash = $newPassword !== ''
+        ? password_hash($newPassword, PASSWORD_DEFAULT)
+        : null;
+    auth_model_update_account(
+        $userId,
+        $username,
+        $emailSchemaAvailable && $email !== '' ? $email : null,
+        $emailSchemaAvailable,
+        $passwordHash,
+        now_sql(),
+    );
 }
 
 /**
@@ -256,8 +327,17 @@ function auth_account_update_profile(int $userId, string $username, string $emai
  * @param string $username Admin username.
  * @param string $email Optional recovery email, possibly empty.
  * @param string $password Plaintext password from the setup form.
+ * @return void Creates or replaces the setup administrator with a password hash and optional email.
  */
-function auth_setup_upsert_admin(string $username, string $email, string $password): void
-{
-    auth_model_upsert_setup_admin($username, $email !== '' ? $email : null, password_hash($password, PASSWORD_DEFAULT), now_sql());
+function auth_setup_upsert_admin(
+    string $username,
+    string $email,
+    string $password,
+): void {
+    auth_model_upsert_setup_admin(
+        $username,
+        $email !== '' ? $email : null,
+        password_hash($password, PASSWORD_DEFAULT),
+        now_sql(),
+    );
 }

@@ -34,48 +34,58 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 /**
  * Require one source fragment to remain present.
  *
  * @param string $source Source text.
  * @param string $needle Required fragment.
  * @param string $label Assertion label.
+ * @return void Throw when the required source fragment is absent.
  */
-function assert_tag_metadata_mysql_source_contains(string $source, string $needle, string $label): void
-{
-    if (!str_contains($source, $needle)) {
-        throw new RuntimeException($label . ' is missing required source fragment: ' . $needle);
+function assert_tag_metadata_mysql_source_contains(
+    string $source,
+    string $needle,
+    string $label,
+): void {
+    if (!php_source_contains($source, $needle)) {
+        throw new RuntimeException(
+            $label . ' is missing required source fragment: ' . $needle,
+        );
     }
 }
 
-$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/tag_metadata.php');
+$serviceSource = (string) file_get_contents(__DIR__
+    . '/../app/services/tag_metadata.php');
 $modelSource = (string) file_get_contents(__DIR__ . '/../app/models/tags.php');
-$adminTagsViewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_tags.php');
+$adminTagsViewSource = (string) file_get_contents(__DIR__
+    . '/../app/views/admin_tags.php');
 
 assert_tag_metadata_mysql_source_contains(
     $modelSource,
     'SELECT DISTINCT i.id, i.relative_path, i.filename, i.gallery_id, i.sort_order AS image_sort_order, g.title AS gallery_title, g.slug AS gallery_slug',
-    'Admin tag image usage DISTINCT projection'
+    'Admin tag image usage DISTINCT projection',
 );
 assert_tag_metadata_mysql_source_contains(
     $modelSource,
     'SELECT DISTINCT g.id, g.title, g.slug, g.url_path, g.folder_path',
-    'Admin tag gallery usage includes the stored clean public path'
+    'Admin tag gallery usage includes the stored clean public path',
 );
 assert_tag_metadata_mysql_source_contains(
     $serviceSource,
     '\'public_url\' => gallery_public_url($row)',
-    'Admin tag gallery usage exposes the preferred public URL'
+    'Admin tag gallery usage exposes the preferred public URL',
 );
 assert_tag_metadata_mysql_source_contains(
     $adminTagsViewSource,
-    'e((string) ($gallery[\'public_url\'] ?? \'\')) . \'" target="_blank" rel="noopener"',
-    'Admin tag gallery usage links to the public gallery URL'
+    "e((string) (\$gallery['public_url'] ?? '')) . '\" target=\"_blank\" rel=\"noopener\">'",
+    'Admin tag gallery usage links to the public gallery URL with safe new-tab attributes',
 );
 assert_tag_metadata_mysql_source_contains(
     $modelSource,
     'ORDER BY g.title, i.sort_order, i.filename, i.id',
-    'Admin tag image usage deterministic ordering'
+    'Admin tag image usage deterministic ordering',
 );
 
 echo "Tag metadata MySQL compatibility regression test passed.\n";

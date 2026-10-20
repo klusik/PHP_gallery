@@ -15,7 +15,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS gallery_image_move_journal (
+    'CREATE TABLE IF NOT EXISTS gallery_image_move_journal (
         operation_id CHAR(32) NOT NULL PRIMARY KEY,
         source_gallery_id BIGINT UNSIGNED NOT NULL,
         destination_gallery_id BIGINT UNSIGNED NOT NULL,
@@ -28,5 +28,5 @@ return [
         KEY gallery_image_move_journal_pending (state, updated_at),
         KEY gallery_image_move_journal_source (source_gallery_id),
         KEY gallery_image_move_journal_destination (destination_gallery_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

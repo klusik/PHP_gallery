@@ -40,7 +40,6 @@ namespace Gallery\Services;
 use function Gallery\Models\admin_gallery_report_model_image_count;
 use function Gallery\Models\admin_gallery_report_model_image_rows_after_id;
 
-
 /**
  * Return total image count.
  *
@@ -58,19 +57,38 @@ function admin_gallery_report_image_count(): int
  * @param int $limit Maximum number of rows.
  * @return array<int, array<string, mixed>> Image rows.
  */
-function admin_gallery_report_image_rows_after_id(int $lastImageId, int $limit): array
-{
+function admin_gallery_report_image_rows_after_id(
+    int $lastImageId,
+    int $limit,
+): array {
     $columns = [
-        'exif_taken_at', 'exif_camera_make', 'exif_camera_model', 'exif_lens_model',
-        'exif_focal_length', 'exif_aperture', 'exif_exposure_time', 'exif_iso',
-        'gps_lat', 'gps_lng', 'gps_altitude', 'gps_extracted_at', 'exif_orientation',
+        'exif_taken_at',
+        'exif_camera_make',
+        'exif_camera_model',
+        'exif_lens_model',
+        'exif_focal_length',
+        'exif_aperture',
+        'exif_exposure_time',
+        'exif_iso',
+        'gps_lat',
+        'gps_lng',
+        'gps_altitude',
+        'gps_extracted_at',
+        'exif_orientation',
         'thumbnail_derivative_version',
     ];
     $capabilities = [];
     foreach ($columns as $column) {
-        $capabilities[$column] = admin_gallery_report_column_exists('images', $column);
+        $capabilities[$column] = admin_gallery_report_column_exists(
+            'images',
+            $column,
+        );
     }
-    return admin_gallery_report_model_image_rows_after_id($lastImageId, $limit, $capabilities);
+    return admin_gallery_report_model_image_rows_after_id(
+        $lastImageId,
+        $limit,
+        $capabilities,
+    );
 }
 
 /**
@@ -130,11 +148,15 @@ function admin_gallery_report_initial_image_summary(): array
 /**
  * Add one image row to the report accumulators.
  *
- * @param array $summary Image summary accumulator.
- * @param array $row Image row.
+ * @param array<string, mixed> $summary Image counters and aggregate groups,
+ *     updated in place.
+ * @param array<string, mixed> $row Image metadata keyed by database column.
+ * @return void The summary accumulator is updated in place.
  */
-function admin_gallery_report_accumulate_image_row(array &$summary, array $row): void
-{
+function admin_gallery_report_accumulate_image_row(
+    array &$summary,
+    array $row,
+): void {
     $summary['image_count'] = (int) ($summary['image_count'] ?? 0) + 1;
     $visibility = (string) ($row['image_visibility'] ?? 'unknown');
     if ($visibility === 'public') {
@@ -144,122 +166,313 @@ function admin_gallery_report_accumulate_image_row(array &$summary, array $row):
     } elseif ($visibility === 'private') {
         $summary['private_count'] = (int) ($summary['private_count'] ?? 0) + 1;
     }
-    admin_gallery_report_add_group($summary['visibility_groups'], 'visibility-' . $visibility, $visibility, 1, 0, []);
+    admin_gallery_report_add_group(
+        $summary['visibility_groups'],
+        'visibility-' . $visibility,
+        $visibility,
+        1,
+        0,
+        [],
+    );
 
-    $extension = admin_gallery_report_file_extension((string) ($row['filename'] ?? $row['relative_path'] ?? ''));
-    admin_gallery_report_add_group($summary['type_groups'], 'type-' . $extension, strtoupper($extension), 1, (int) ($row['file_size'] ?? 0), [
-        'extension' => $extension,
-        'mime_type' => (string) ($row['mime_type'] ?? ''),
-    ]);
+    $extension = admin_gallery_report_file_extension(
+        (string) ($row['filename'] ?? $row['relative_path'] ?? ''),
+    );
+    admin_gallery_report_add_group(
+        $summary['type_groups'],
+        'type-' . $extension,
+        strtoupper($extension),
+        1,
+        (int) ($row['file_size'] ?? 0),
+        [
+            'extension' => $extension,
+            'mime_type' => (string) ($row['mime_type'] ?? ''),
+        ],
+    );
 
     $width = max(0, (int) ($row['width'] ?? 0));
     $height = max(0, (int) ($row['height'] ?? 0));
     if ($width > 0 && $height > 0) {
-        $summary['known_dimensions_count'] = (int) ($summary['known_dimensions_count'] ?? 0) + 1;
-        $summary['pixel_count_total'] = (int) ($summary['pixel_count_total'] ?? 0) + ($width * $height);
+        $summary['known_dimensions_count'] =
+            (int) ($summary['known_dimensions_count'] ?? 0) + 1;
+        $summary['pixel_count_total'] =
+            (int) ($summary['pixel_count_total'] ?? 0) + ($width * $height);
         $ratio = $height > 0 ? $width / $height : 0.0;
         if (abs($ratio - 1.0) < 0.05) {
             $orientation = 'square';
-            $summary['square_count'] = (int) ($summary['square_count'] ?? 0) + 1;
+            $summary['square_count'] =
+                (int) ($summary['square_count'] ?? 0) + 1;
         } elseif ($ratio >= 2.0) {
             // panorama_count remains a compatibility counter. Aspect ratio alone proves only a wide image.
             $orientation = 'panorama';
-            $summary['panorama_count'] = (int) ($summary['panorama_count'] ?? 0) + 1;
+            $summary['panorama_count'] =
+                (int) ($summary['panorama_count'] ?? 0) + 1;
         } elseif ($ratio > 1.0) {
             $orientation = 'landscape';
-            $summary['landscape_count'] = (int) ($summary['landscape_count'] ?? 0) + 1;
+            $summary['landscape_count'] =
+                (int) ($summary['landscape_count'] ?? 0) + 1;
         } else {
             $orientation = 'portrait';
-            $summary['portrait_count'] = (int) ($summary['portrait_count'] ?? 0) + 1;
+            $summary['portrait_count'] =
+                (int) ($summary['portrait_count'] ?? 0) + 1;
         }
-        $orientationLabel = $orientation === 'panorama' ? 'Wide (>= 2:1)' : ucfirst($orientation);
-        admin_gallery_report_add_group($summary['dimension_groups'], 'orientation-' . $orientation, $orientationLabel, 1, 0, []);
+        $orientationLabel = $orientation === 'panorama'
+            ? 'Wide (>= 2:1)'
+            : ucfirst($orientation);
+        admin_gallery_report_add_group(
+            $summary['dimension_groups'],
+            'orientation-' . $orientation,
+            $orientationLabel,
+            1,
+            0,
+            [],
+        );
     } else {
-        $summary['unknown_dimensions_count'] = (int) ($summary['unknown_dimensions_count'] ?? 0) + 1;
+        $summary['unknown_dimensions_count'] =
+            (int) ($summary['unknown_dimensions_count'] ?? 0) + 1;
     }
 
-    admin_gallery_report_update_date_range($summary, 'image_created_min', 'image_created_max', (string) ($row['image_created_at'] ?? ''));
-    $hasExifDate = admin_gallery_report_valid_datetime((string) ($row['exif_taken_at'] ?? ''));
-    $hasGps = is_numeric($row['gps_lat'] ?? null) && is_numeric($row['gps_lng'] ?? null);
+    admin_gallery_report_update_date_range(
+        $summary,
+        'image_created_min',
+        'image_created_max',
+        (string) ($row['image_created_at'] ?? ''),
+    );
+    $hasExifDate = admin_gallery_report_valid_datetime(
+        (string) ($row['exif_taken_at'] ?? ''),
+    );
+    $hasGps =
+        is_numeric($row['gps_lat'] ?? null)
+        && is_numeric($row['gps_lng'] ?? null);
     if ($hasExifDate) {
-        $summary['exif_date_count'] = (int) ($summary['exif_date_count'] ?? 0) + 1;
-        admin_gallery_report_update_date_range($summary, 'exif_date_min', 'exif_date_max', (string) ($row['exif_taken_at'] ?? ''));
+        $summary['exif_date_count'] =
+            (int) ($summary['exif_date_count'] ?? 0) + 1;
+        admin_gallery_report_update_date_range(
+            $summary,
+            'exif_date_min',
+            'exif_date_max',
+            (string) ($row['exif_taken_at'] ?? ''),
+        );
     }
     if ($hasGps) {
         $summary['gps_count'] = (int) ($summary['gps_count'] ?? 0) + 1;
         $lat = (float) $row['gps_lat'];
         $lng = (float) $row['gps_lng'];
-        admin_gallery_report_update_float_range($summary, 'gps_lat_min', 'gps_lat_max', $lat);
-        admin_gallery_report_update_float_range($summary, 'gps_lng_min', 'gps_lng_max', $lng);
+        admin_gallery_report_update_float_range(
+            $summary,
+            'gps_lat_min',
+            'gps_lat_max',
+            $lat,
+        );
+        admin_gallery_report_update_float_range(
+            $summary,
+            'gps_lng_min',
+            'gps_lng_max',
+            $lng,
+        );
         if (is_numeric($row['gps_altitude'] ?? null)) {
-            $summary['gps_altitude_known_count'] = (int) ($summary['gps_altitude_known_count'] ?? 0) + 1;
-            admin_gallery_report_update_float_range($summary, 'gps_altitude_min', 'gps_altitude_max', (float) $row['gps_altitude']);
+            $summary['gps_altitude_known_count'] =
+                (int) ($summary['gps_altitude_known_count'] ?? 0) + 1;
+            admin_gallery_report_update_float_range(
+                $summary,
+                'gps_altitude_min',
+                'gps_altitude_max',
+                (float) $row['gps_altitude'],
+            );
         }
         if (admin_gallery_report_is_probable_game_gps($row)) {
-            $summary['probable_game_gps_count'] = (int) ($summary['probable_game_gps_count'] ?? 0) + 1;
+            $summary['probable_game_gps_count'] =
+                (int) ($summary['probable_game_gps_count'] ?? 0) + 1;
         } else {
-            $summary['clustered_gps_count'] = (int) ($summary['clustered_gps_count'] ?? 0) + 1;
-            admin_gallery_report_accumulate_gps_cluster($summary['gps_clusters'], $row, $lat, $lng);
+            $summary['clustered_gps_count'] =
+                (int) ($summary['clustered_gps_count'] ?? 0) + 1;
+            admin_gallery_report_accumulate_gps_cluster(
+                $summary['gps_clusters'],
+                $row,
+                $lat,
+                $lng,
+            );
         }
     }
     if ($hasExifDate && $hasGps) {
-        $summary['both_exif_date_and_gps_count'] = (int) ($summary['both_exif_date_and_gps_count'] ?? 0) + 1;
+        $summary['both_exif_date_and_gps_count'] =
+            (int) ($summary['both_exif_date_and_gps_count'] ?? 0) + 1;
     }
     if (!$hasExifDate && !$hasGps) {
-        $summary['neither_exif_date_nor_gps_count'] = (int) ($summary['neither_exif_date_nor_gps_count'] ?? 0) + 1;
+        $summary['neither_exif_date_nor_gps_count'] =
+            (int) ($summary['neither_exif_date_nor_gps_count'] ?? 0) + 1;
     }
 
-    $camera = admin_gallery_report_compact_label(trim((string) ($row['exif_camera_make'] ?? '')) . ' ' . trim((string) ($row['exif_camera_model'] ?? '')));
+    $camera = admin_gallery_report_compact_label(
+        trim((string) ($row['exif_camera_make'] ?? '')) . ' '
+            . trim((string) ($row['exif_camera_model'] ?? '')),
+    );
     if ($camera !== '') {
-        $summary['camera_known_count'] = (int) ($summary['camera_known_count'] ?? 0) + 1;
-        admin_gallery_report_add_group($summary['camera_groups'], 'camera-' . hash('sha1', $camera), $camera, 1, 0, []);
+        $summary['camera_known_count'] =
+            (int) ($summary['camera_known_count'] ?? 0) + 1;
+        admin_gallery_report_add_group(
+            $summary['camera_groups'],
+            'camera-' . hash('sha1', $camera),
+            $camera,
+            1,
+            0,
+            [],
+        );
     }
-    $lens = admin_gallery_report_compact_label((string) ($row['exif_lens_model'] ?? ''));
+    $lens = admin_gallery_report_compact_label(
+        (string) ($row['exif_lens_model'] ?? ''),
+    );
     if ($lens !== '') {
-        $summary['lens_known_count'] = (int) ($summary['lens_known_count'] ?? 0) + 1;
-        admin_gallery_report_add_group($summary['lens_groups'], 'lens-' . hash('sha1', $lens), $lens, 1, 0, []);
+        $summary['lens_known_count'] =
+            (int) ($summary['lens_known_count'] ?? 0) + 1;
+        admin_gallery_report_add_group(
+            $summary['lens_groups'],
+            'lens-' . hash('sha1', $lens),
+            $lens,
+            1,
+            0,
+            [],
+        );
     }
     $iso = max(0, (int) ($row['exif_iso'] ?? 0));
     if ($iso > 0) {
-        $summary['iso_known_count'] = (int) ($summary['iso_known_count'] ?? 0) + 1;
+        $summary['iso_known_count'] =
+            (int) ($summary['iso_known_count'] ?? 0) + 1;
         $isoBucket = admin_gallery_report_iso_bucket($iso);
-        admin_gallery_report_add_group($summary['iso_groups'], 'iso-' . $isoBucket, $isoBucket, 1, 0, []);
+        admin_gallery_report_add_group(
+            $summary['iso_groups'],
+            'iso-' . $isoBucket,
+            $isoBucket,
+            1,
+            0,
+            [],
+        );
     }
-    $aperture = admin_gallery_report_compact_label((string) ($row['exif_aperture'] ?? ''));
+    $aperture = admin_gallery_report_compact_label(
+        (string) ($row['exif_aperture'] ?? ''),
+    );
     if ($aperture !== '') {
-        $summary['aperture_known_count'] = (int) ($summary['aperture_known_count'] ?? 0) + 1;
-        admin_gallery_report_add_group($summary['aperture_groups'], 'aperture-' . hash('sha1', $aperture), $aperture, 1, 0, []);
+        $summary['aperture_known_count'] =
+            (int) ($summary['aperture_known_count'] ?? 0) + 1;
+        admin_gallery_report_add_group(
+            $summary['aperture_groups'],
+            'aperture-' . hash('sha1', $aperture),
+            $aperture,
+            1,
+            0,
+            [],
+        );
     }
-    $exposure = admin_gallery_report_compact_label((string) ($row['exif_exposure_time'] ?? ''));
+    $exposure = admin_gallery_report_compact_label(
+        (string) ($row['exif_exposure_time'] ?? ''),
+    );
     if ($exposure !== '') {
-        $summary['exposure_known_count'] = (int) ($summary['exposure_known_count'] ?? 0) + 1;
+        $summary['exposure_known_count'] =
+            (int) ($summary['exposure_known_count'] ?? 0) + 1;
     }
-    $focal = admin_gallery_report_compact_label((string) ($row['exif_focal_length'] ?? ''));
+    $focal = admin_gallery_report_compact_label(
+        (string) ($row['exif_focal_length'] ?? ''),
+    );
     if ($focal !== '') {
-        $summary['focal_known_count'] = (int) ($summary['focal_known_count'] ?? 0) + 1;
-        admin_gallery_report_add_group($summary['focal_groups'], 'focal-' . hash('sha1', $focal), $focal, 1, 0, []);
+        $summary['focal_known_count'] =
+            (int) ($summary['focal_known_count'] ?? 0) + 1;
+        admin_gallery_report_add_group(
+            $summary['focal_groups'],
+            'focal-' . hash('sha1', $focal),
+            $focal,
+            1,
+            0,
+            [],
+        );
     }
 }
 
 /**
  * Finalize image summary rows for rendering.
  *
- * @param array $summary Image summary accumulator.
- * @return array<string, mixed> Finalized summary.
+ * @param array<string, mixed> $summary Image counters, ranges and aggregate
+ *     groups accumulated for the report.
+ * @return array<string, mixed>&array{type_rows:array<int,array<string,mixed>>,visibility_rows:array<int,array<string,mixed>>,dimension_rows:array<int,array<string,mixed>>,camera_rows:array<int,array<string,mixed>>,lens_rows:array<int,array<string,mixed>>,iso_rows:array<int,array<string,mixed>>,aperture_rows:array<int,array<string,mixed>>,focal_rows:array<int,array<string,mixed>>,gps_cluster_rows:array<int,array<string,mixed>>,average_megapixels:float} Summary with grouped accumulators replaced by render-ready rows.
  */
 function admin_gallery_report_finalize_image_summary(array $summary): array
 {
-    $summary['type_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['type_groups'] ?? null) ? $summary['type_groups'] : [], 'count', 50);
-    $summary['visibility_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['visibility_groups'] ?? null) ? $summary['visibility_groups'] : [], 'count', 10);
-    $summary['dimension_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['dimension_groups'] ?? null) ? $summary['dimension_groups'] : [], 'count', 10);
-    $summary['camera_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['camera_groups'] ?? null) ? $summary['camera_groups'] : [], 'count', 80);
-    $summary['lens_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['lens_groups'] ?? null) ? $summary['lens_groups'] : [], 'count', 80);
-    $summary['iso_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['iso_groups'] ?? null) ? $summary['iso_groups'] : [], 'count', 20);
-    $summary['aperture_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['aperture_groups'] ?? null) ? $summary['aperture_groups'] : [], 'count', 40);
-    $summary['focal_rows'] = admin_gallery_report_finalize_group_rows(is_array($summary['focal_groups'] ?? null) ? $summary['focal_groups'] : [], 'count', 50);
-    $summary['gps_cluster_rows'] = admin_gallery_report_finalize_gps_clusters(is_array($summary['gps_clusters'] ?? null) ? $summary['gps_clusters'] : []);
-    unset($summary['type_groups'], $summary['visibility_groups'], $summary['dimension_groups'], $summary['camera_groups'], $summary['lens_groups'], $summary['iso_groups'], $summary['aperture_groups'], $summary['focal_groups'], $summary['gps_clusters']);
+    $summary['type_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['type_groups'] ?? null)
+            ? $summary['type_groups']
+            : [],
+        'count',
+        50,
+    );
+    $summary['visibility_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['visibility_groups'] ?? null)
+            ? $summary['visibility_groups']
+            : [],
+        'count',
+        10,
+    );
+    $summary['dimension_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['dimension_groups'] ?? null)
+            ? $summary['dimension_groups']
+            : [],
+        'count',
+        10,
+    );
+    $summary['camera_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['camera_groups'] ?? null)
+            ? $summary['camera_groups']
+            : [],
+        'count',
+        80,
+    );
+    $summary['lens_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['lens_groups'] ?? null)
+            ? $summary['lens_groups']
+            : [],
+        'count',
+        80,
+    );
+    $summary['iso_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['iso_groups'] ?? null) ? $summary['iso_groups'] : [],
+        'count',
+        20,
+    );
+    $summary['aperture_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['aperture_groups'] ?? null)
+            ? $summary['aperture_groups']
+            : [],
+        'count',
+        40,
+    );
+    $summary['focal_rows'] = admin_gallery_report_finalize_group_rows(
+        is_array($summary['focal_groups'] ?? null)
+            ? $summary['focal_groups']
+            : [],
+        'count',
+        50,
+    );
+    $summary['gps_cluster_rows'] = admin_gallery_report_finalize_gps_clusters(
+        is_array($summary['gps_clusters'] ?? null)
+            ? $summary['gps_clusters']
+            : [],
+    );
+    unset(
+        $summary['type_groups'],
+        $summary['visibility_groups'],
+        $summary['dimension_groups'],
+        $summary['camera_groups'],
+        $summary['lens_groups'],
+        $summary['iso_groups'],
+        $summary['aperture_groups'],
+        $summary['focal_groups'],
+        $summary['gps_clusters'],
+    );
     $knownDimensions = (int) ($summary['known_dimensions_count'] ?? 0);
-    $summary['average_megapixels'] = $knownDimensions > 0 ? round(((int) ($summary['pixel_count_total'] ?? 0) / $knownDimensions) / 1000000, 2) : 0.0;
+    $summary['average_megapixels'] = $knownDimensions > 0
+        ? round(
+            ((int) ($summary['pixel_count_total'] ?? 0) / $knownDimensions)
+                / 1000000,
+            2,
+        )
+        : 0.0;
     return $summary;
 }

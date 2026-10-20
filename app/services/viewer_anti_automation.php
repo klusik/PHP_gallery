@@ -60,7 +60,6 @@ use const Gallery\Core\VIEWER_ANTI_AUTOMATION_PRUNE_CANDIDATE_CAP;
 
 require_once dirname(__DIR__) . '/policy_constants.php';
 
-
 /**
  * Return whether first-party viewer anti-automation protection is enabled.
  *
@@ -79,10 +78,14 @@ function viewer_anti_automation_enabled(): bool
  */
 function viewer_anti_automation_action_is_allowed(string $action): bool
 {
-    return in_array($action, [
-        VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
-        VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
-    ], true);
+    return in_array(
+        $action,
+        [
+            VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
+            VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
+        ],
+        true,
+    );
 }
 
 /**
@@ -104,7 +107,11 @@ function viewer_anti_automation_base64url_encode(string $value): string
  */
 function viewer_anti_automation_base64url_decode(string $value): ?string
 {
-    if ($value === '' || strlen($value) > 900 || preg_match('/^[A-Za-z0-9_-]+$/D', $value) !== 1) {
+    if (
+        $value === ''
+        || strlen($value) > 900
+        || preg_match('/^[A-Za-z0-9_-]+$/D', $value) !== 1
+    ) {
         return null;
     }
     $padding = strlen($value) % 4;
@@ -123,7 +130,10 @@ function viewer_anti_automation_base64url_decode(string $value): ?string
  */
 function viewer_anti_automation_payload_signature(string $encodedPayload): string
 {
-    return viewer_security_fingerprint('viewer-anti-automation-ticket-v1', $encodedPayload);
+    return viewer_security_fingerprint(
+        'viewer-anti-automation-ticket-v1',
+        $encodedPayload,
+    );
 }
 
 /**
@@ -134,9 +144,14 @@ function viewer_anti_automation_payload_signature(string $encodedPayload): strin
  */
 function viewer_anti_automation_ticket_encode(array $payload): string
 {
-    $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $payload,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     if (!is_string($json) || $json === '' || strlen($json) > 640) {
-        throw new InvalidArgumentException('Viewer anti-automation ticket payload is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer anti-automation ticket payload is invalid.',
+        );
     }
     $encoded = viewer_anti_automation_base64url_encode($json);
     return $encoded . '.' . viewer_anti_automation_payload_signature($encoded);
@@ -150,15 +165,24 @@ function viewer_anti_automation_ticket_encode(array $payload): string
  */
 function viewer_anti_automation_ticket_decode(string $ticket): ?array
 {
-    if ($ticket === '' || strlen($ticket) > VIEWER_ANTI_AUTOMATION_TICKET_MAX_BYTES) {
+    if (
+        $ticket === ''
+        || strlen($ticket) > VIEWER_ANTI_AUTOMATION_TICKET_MAX_BYTES
+    ) {
         return null;
     }
     $parts = explode('.', $ticket, 2);
-    if (count($parts) !== 2 || preg_match('/^[a-f0-9]{64}$/D', $parts[1]) !== 1) {
+    if (
+        count($parts) !== 2
+        || preg_match('/^[a-f0-9]{64}$/D', $parts[1]) !== 1
+    ) {
         return null;
     }
     $expectedSignature = viewer_anti_automation_payload_signature($parts[0]);
-    if ($expectedSignature === '' || !hash_equals($expectedSignature, $parts[1])) {
+    if (
+        $expectedSignature === ''
+        || !hash_equals($expectedSignature, $parts[1])
+    ) {
         return null;
     }
     $json = viewer_anti_automation_base64url_decode($parts[0]);
@@ -177,7 +201,10 @@ function viewer_anti_automation_ticket_decode(string $ticket): ?array
  */
 function viewer_anti_automation_nonce_fingerprint(string $nonce): string
 {
-    return viewer_security_fingerprint('viewer-anti-automation-nonce-v1', $nonce);
+    return viewer_security_fingerprint(
+        'viewer-anti-automation-nonce-v1',
+        $nonce,
+    );
 }
 
 /**
@@ -197,13 +224,22 @@ function viewer_anti_automation_nonce_fingerprint(string $nonce): string
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
  * @return void Publish normalized ticket entries into the caller's context only.
  */
-function viewer_anti_automation_context_prune(array &$ticketContext, ?int $nowTimestamp = null): void
-{
+function viewer_anti_automation_context_prune(
+    array &$ticketContext,
+    ?int $nowTimestamp = null,
+): void {
     $now = $nowTimestamp ?? time();
-    $entries = is_array($ticketContext['entries'] ?? null) ? $ticketContext['entries'] : [];
+    $entries = is_array($ticketContext['entries'] ?? null)
+        ? $ticketContext['entries']
+        : [];
     $normalized = [];
     foreach ($entries as $fingerprint => $entry) {
-        if (count($normalized) >= VIEWER_ANTI_AUTOMATION_PRUNE_CANDIDATE_CAP || !is_string($fingerprint) || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1 || !is_array($entry)) {
+        if (
+            count($normalized) >= VIEWER_ANTI_AUTOMATION_PRUNE_CANDIDATE_CAP
+            || !is_string($fingerprint)
+            || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1
+            || !is_array($entry)
+        ) {
             continue;
         }
         $kind = (string) ($entry['kind'] ?? '');
@@ -211,11 +247,20 @@ function viewer_anti_automation_context_prune(array &$ticketContext, ?int $nowTi
         $issuedAt = (int) ($entry['issued_at'] ?? 0);
         $expiresAt = (int) ($entry['expires_at'] ?? 0);
         $difficulty = (int) ($entry['difficulty'] ?? 0);
-        if (!in_array($kind, [VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE], true)
+        if (
+            !in_array(
+                $kind,
+                [
+                    VIEWER_ANTI_AUTOMATION_KIND_FORM,
+                    VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
+                ],
+                true,
+            )
             || !viewer_anti_automation_action_is_allowed($action)
             || $issuedAt <= 0
             || $expiresAt <= $now
-            || $expiresAt < $issuedAt) {
+            || $expiresAt < $issuedAt
+        ) {
             continue;
         }
         $normalized[$fingerprint] = [
@@ -226,7 +271,8 @@ function viewer_anti_automation_context_prune(array &$ticketContext, ?int $nowTi
             'difficulty' => $difficulty,
         ];
     }
-    uasort($normalized,
+    uasort(
+        $normalized,
         /**
          * Order retained authorities oldest first; equal timestamps retain their insertion order.
          * @param array{issued_at:int} $left First normalized ticket entry.
@@ -234,8 +280,9 @@ function viewer_anti_automation_context_prune(array &$ticketContext, ?int $nowTi
          * @return int Ordering used to evict oldest entries above the outstanding-authority cap.
          */
         static function (array $left, array $right): int {
-            return ((int) $left['issued_at']) <=> ((int) $right['issued_at']);
-        });
+            return (int) $left['issued_at'] <=> (int) $right['issued_at'];
+        },
+    );
     while (count($normalized) > VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP) {
         array_shift($normalized);
     }
@@ -262,14 +309,18 @@ function viewer_anti_automation_context_register(
     string $action,
     int $issuedAt,
     int $expiresAt,
-    int $difficulty = 0
+    int $difficulty = 0,
 ): void {
     viewer_anti_automation_context_prune($ticketContext, $issuedAt);
     $fingerprint = viewer_anti_automation_nonce_fingerprint($nonce);
     if ($fingerprint === '') {
-        throw new InvalidArgumentException('Viewer anti-automation nonce is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer anti-automation nonce is invalid.',
+        );
     }
-    $entries = is_array($ticketContext['entries'] ?? null) ? $ticketContext['entries'] : [];
+    $entries = is_array($ticketContext['entries'] ?? null)
+        ? $ticketContext['entries']
+        : [];
     $entries[$fingerprint] = [
         'kind' => $kind,
         'action' => $action,
@@ -303,17 +354,20 @@ function viewer_anti_automation_context_consume(
     int $issuedAt,
     int $expiresAt,
     int $difficulty = 0,
-    ?int $nowTimestamp = null
+    ?int $nowTimestamp = null,
 ): bool {
     $now = $nowTimestamp ?? time();
     viewer_anti_automation_context_prune($ticketContext, $now);
     $fingerprint = viewer_anti_automation_nonce_fingerprint($nonce);
-    $entries = is_array($ticketContext['entries'] ?? null) ? $ticketContext['entries'] : [];
+    $entries = is_array($ticketContext['entries'] ?? null)
+        ? $ticketContext['entries']
+        : [];
     $entry = $entries[$fingerprint] ?? null;
     if (!is_array($entry)) {
         return false;
     }
-    $matches = (string) ($entry['kind'] ?? '') === $kind
+    $matches =
+        (string) ($entry['kind'] ?? '') === $kind
         && (string) ($entry['action'] ?? '') === $action
         && (int) ($entry['issued_at'] ?? 0) === $issuedAt
         && (int) ($entry['expires_at'] ?? 0) === $expiresAt
@@ -339,30 +393,43 @@ function viewer_anti_automation_ticket_payload_validate(
     array $payload,
     string $expectedKind,
     string $expectedAction,
-    ?int $nowTimestamp = null
+    ?int $nowTimestamp = null,
 ): ?array {
-    if (!viewer_anti_automation_action_is_allowed($expectedAction)
-        || !in_array($expectedKind, [VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE], true)) {
+    if (
+        !viewer_anti_automation_action_is_allowed($expectedAction)
+        || !in_array(
+            $expectedKind,
+            [
+                VIEWER_ANTI_AUTOMATION_KIND_FORM,
+                VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
+            ],
+            true,
+        )
+    ) {
         return null;
     }
     $requiredKeys = $expectedKind === VIEWER_ANTI_AUTOMATION_KIND_FORM
         ? ['v', 'k', 'a', 'n', 'i', 'e', 'h']
         : ['v', 'k', 'a', 'n', 'i', 'e', 'd'];
-    if (array_keys($payload) !== $requiredKeys
+    if (
+        array_keys($payload) !== $requiredKeys
         || (int) ($payload['v'] ?? 0) !== 1
         || (string) ($payload['k'] ?? '') !== $expectedKind
-        || (string) ($payload['a'] ?? '') !== $expectedAction) {
+        || (string) ($payload['a'] ?? '') !== $expectedAction
+    ) {
         return null;
     }
     $nonce = (string) ($payload['n'] ?? '');
     $issuedAt = is_int($payload['i'] ?? null) ? $payload['i'] : 0;
     $expiresAt = is_int($payload['e'] ?? null) ? $payload['e'] : 0;
     $now = $nowTimestamp ?? time();
-    if (preg_match('/^[A-Za-z0-9_-]{32,86}$/D', $nonce) !== 1
+    if (
+        preg_match('/^[A-Za-z0-9_-]{32,86}$/D', $nonce) !== 1
         || $issuedAt <= 0
         || $expiresAt <= $issuedAt
         || $expiresAt <= $now
-        || $issuedAt > $now + 5) {
+        || $issuedAt > ($now + 5)
+    ) {
         return null;
     }
     if ($expectedKind === VIEWER_ANTI_AUTOMATION_KIND_FORM) {
@@ -370,8 +437,9 @@ function viewer_anti_automation_ticket_payload_validate(
         if (preg_match('/^vf_[a-f0-9]{16}$/D', $honeypot) !== 1) {
             return null;
         }
-        $lifetime = (int) viewer_accounts_config()['anti_automation_form_lifetime_seconds'];
-        if ($expiresAt - $issuedAt !== $lifetime) {
+        $lifetime =
+            (int) viewer_accounts_config()['anti_automation_form_lifetime_seconds'];
+        if (($expiresAt - $issuedAt) !== $lifetime) {
             return null;
         }
         return [
@@ -388,12 +456,14 @@ function viewer_anti_automation_ticket_payload_validate(
 
     $difficulty = is_int($payload['d'] ?? null) ? $payload['d'] : 0;
     $config = viewer_accounts_config();
-    if ($difficulty < (int) $config['anti_automation_pow_min_bits']
+    if (
+        $difficulty < (int) $config['anti_automation_pow_min_bits']
         || $difficulty > (int) $config['anti_automation_pow_max_bits']
-        || $expiresAt - $issuedAt !== min(
+        || ($expiresAt - $issuedAt) !== min(
             VIEWER_ANTI_AUTOMATION_CHALLENGE_LIFETIME_SECONDS,
-            (int) $config['anti_automation_form_lifetime_seconds']
-        )) {
+            (int) $config['anti_automation_form_lifetime_seconds'],
+        )
+    ) {
         return null;
     }
     return [
@@ -429,26 +499,34 @@ function viewer_anti_automation_ticket_validate(
     string $expectedKind,
     string $expectedAction,
     bool $consume = false,
-    ?int $nowTimestamp = null
+    ?int $nowTimestamp = null,
 ): ?array {
     $payload = viewer_anti_automation_ticket_decode($ticket);
     if ($payload === null) {
         return null;
     }
-    $normalized = viewer_anti_automation_ticket_payload_validate($payload, $expectedKind, $expectedAction, $nowTimestamp);
+    $normalized = viewer_anti_automation_ticket_payload_validate(
+        $payload,
+        $expectedKind,
+        $expectedAction,
+        $nowTimestamp,
+    );
     if ($normalized === null) {
         return null;
     }
-    if ($consume && !viewer_anti_automation_context_consume(
-        $ticketContext,
-        (string) $normalized['nonce'],
-        $expectedKind,
-        $expectedAction,
-        (int) $normalized['issued_at'],
-        (int) $normalized['expires_at'],
-        (int) $normalized['difficulty'],
-        $nowTimestamp
-    )) {
+    if (
+        $consume
+        && !viewer_anti_automation_context_consume(
+            $ticketContext,
+            (string) $normalized['nonce'],
+            $expectedKind,
+            $expectedAction,
+            (int) $normalized['issued_at'],
+            (int) $normalized['expires_at'],
+            (int) $normalized['difficulty'],
+            $nowTimestamp,
+        )
+    ) {
         return null;
     }
     return $normalized;
@@ -463,13 +541,19 @@ function viewer_anti_automation_ticket_validate(
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
  * @return array{ticket:string,honeypot_field:string,issued_at:int,expires_at:int} Form state.
  */
-function viewer_anti_automation_form_issue(array &$ticketContext, string $action, ?int $nowTimestamp = null): array
-{
+function viewer_anti_automation_form_issue(
+    array &$ticketContext,
+    string $action,
+    ?int $nowTimestamp = null,
+): array {
     if (!viewer_anti_automation_action_is_allowed($action)) {
-        throw new InvalidArgumentException('Viewer anti-automation action is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer anti-automation action is invalid.',
+        );
     }
     $now = $nowTimestamp ?? time();
-    $lifetime = (int) viewer_accounts_config()['anti_automation_form_lifetime_seconds'];
+    $lifetime =
+        (int) viewer_accounts_config()['anti_automation_form_lifetime_seconds'];
     $nonce = security_opaque_token_generate(24);
     $honeypot = 'vf_' . bin2hex(random_bytes(8));
     $expiresAt = $now + $lifetime;
@@ -482,7 +566,14 @@ function viewer_anti_automation_form_issue(array &$ticketContext, string $action
         'e' => $expiresAt,
         'h' => $honeypot,
     ];
-    viewer_anti_automation_context_register($ticketContext, $nonce, VIEWER_ANTI_AUTOMATION_KIND_FORM, $action, $now, $expiresAt);
+    viewer_anti_automation_context_register(
+        $ticketContext,
+        $nonce,
+        VIEWER_ANTI_AUTOMATION_KIND_FORM,
+        $action,
+        $now,
+        $expiresAt,
+    );
     return [
         'ticket' => viewer_anti_automation_ticket_encode($payload),
         'honeypot_field' => $honeypot,
@@ -513,8 +604,11 @@ function viewer_anti_automation_difficulty_normalize(int $difficulty): int
  * @param int $subnetAttempts Current anti-automation subnet attempts.
  * @return int Configured bounded leading-zero-bit target.
  */
-function viewer_anti_automation_difficulty_for_signals(int $ageSeconds, int $ipAttempts, int $subnetAttempts): int
-{
+function viewer_anti_automation_difficulty_for_signals(
+    int $ageSeconds,
+    int $ipAttempts,
+    int $subnetAttempts,
+): int {
     $config = viewer_accounts_config();
     $minimum = (int) $config['anti_automation_pow_min_bits'];
     $maximum = (int) $config['anti_automation_pow_max_bits'];
@@ -538,16 +632,22 @@ function viewer_anti_automation_difficulty_for_signals(int $ageSeconds, int $ipA
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
  * @return array{ticket:string,challenge:string,difficulty:int,issued_at:int,expires_at:int,max_counter:int} Challenge state.
  */
-function viewer_anti_automation_challenge_issue(array &$ticketContext, string $action, int $difficulty, ?int $nowTimestamp = null): array
-{
+function viewer_anti_automation_challenge_issue(
+    array &$ticketContext,
+    string $action,
+    int $difficulty,
+    ?int $nowTimestamp = null,
+): array {
     if (!viewer_anti_automation_action_is_allowed($action)) {
-        throw new InvalidArgumentException('Viewer anti-automation action is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer anti-automation action is invalid.',
+        );
     }
     $now = $nowTimestamp ?? time();
     $difficulty = viewer_anti_automation_difficulty_normalize($difficulty);
     $lifetime = min(
         VIEWER_ANTI_AUTOMATION_CHALLENGE_LIFETIME_SECONDS,
-        (int) viewer_accounts_config()['anti_automation_form_lifetime_seconds']
+        (int) viewer_accounts_config()['anti_automation_form_lifetime_seconds'],
     );
     $expiresAt = $now + $lifetime;
     $nonce = security_opaque_token_generate(24);
@@ -567,7 +667,7 @@ function viewer_anti_automation_challenge_issue(array &$ticketContext, string $a
         $action,
         $now,
         $expiresAt,
-        $difficulty
+        $difficulty,
     );
     return [
         'ticket' => viewer_anti_automation_ticket_encode($payload),
@@ -598,23 +698,37 @@ function viewer_anti_automation_rate_signals(string $clientIp): array
         ];
     }
     try {
-        $ipDecision = viewer_rate_limit_consume('viewer_automation_ip', 'ip', $clientIp);
+        $ipDecision = viewer_rate_limit_consume(
+            'viewer_automation_ip',
+            'ip',
+            $clientIp,
+        );
         if (empty($ipDecision['allowed'])) {
             return [
                 'allowed' => false,
                 'reason' => (string) ($ipDecision['reason'] ?? 'rate_limited'),
                 'ip_attempts' => (int) ($ipDecision['attempts'] ?? 0),
                 'subnet_attempts' => 0,
-                'retry_after_seconds' => (int) ($ipDecision['retry_after_seconds'] ?? 0),
+                'retry_after_seconds' => (int) (
+                    $ipDecision['retry_after_seconds'] ?? 0
+                ),
             ];
         }
-        $subnetDecision = viewer_rate_limit_consume('viewer_automation_subnet', 'subnet', $clientIp);
+        $subnetDecision = viewer_rate_limit_consume(
+            'viewer_automation_subnet',
+            'subnet',
+            $clientIp,
+        );
         return [
             'allowed' => !empty($subnetDecision['allowed']),
-            'reason' => !empty($subnetDecision['allowed']) ? 'ok' : (string) ($subnetDecision['reason'] ?? 'rate_limited'),
+            'reason' => !empty($subnetDecision['allowed'])
+                ? 'ok'
+                : (string) ($subnetDecision['reason'] ?? 'rate_limited'),
             'ip_attempts' => (int) ($ipDecision['attempts'] ?? 0),
             'subnet_attempts' => (int) ($subnetDecision['attempts'] ?? 0),
-            'retry_after_seconds' => (int) ($subnetDecision['retry_after_seconds'] ?? 0),
+            'retry_after_seconds' => (int) (
+                $subnetDecision['retry_after_seconds'] ?? 0
+            ),
         ];
     } catch (Throwable) {
         return [
@@ -635,32 +749,56 @@ function viewer_anti_automation_rate_signals(string $clientIp): array
  * @param array{allowed:bool,reason:string,ip_attempts:int,subnet_attempts:int,retry_after_seconds:int} $rateSignals Existing limiter result.
  * @return array{result:string,reason:string,difficulty:int} Small fixed authorization result.
  */
-function viewer_anti_automation_policy_decision(int $ageSeconds, bool $honeypotFilled, array $rateSignals): array
-{
+function viewer_anti_automation_policy_decision(
+    int $ageSeconds,
+    bool $honeypotFilled,
+    array $rateSignals,
+): array {
     if ($honeypotFilled) {
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS, 'reason' => 'honeypot', 'difficulty' => 0];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS,
+            'reason' => 'honeypot',
+            'difficulty' => 0,
+        ];
     }
     if (empty($rateSignals['allowed'])) {
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS, 'reason' => 'hard_limit', 'difficulty' => 0];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS,
+            'reason' => 'hard_limit',
+            'difficulty' => 0,
+        ];
     }
     $ipAttempts = max(0, (int) ($rateSignals['ip_attempts'] ?? 0));
     $subnetAttempts = max(0, (int) ($rateSignals['subnet_attempts'] ?? 0));
-    $minimumAge = (int) viewer_accounts_config()['anti_automation_min_form_age_seconds'];
+    $minimumAge =
+        (int) viewer_accounts_config()['anti_automation_min_form_age_seconds'];
     if ($ageSeconds < $minimumAge) {
         return [
             'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,
             'reason' => 'form_too_fast',
-            'difficulty' => viewer_anti_automation_difficulty_for_signals($ageSeconds, $ipAttempts, $subnetAttempts),
+            'difficulty' => viewer_anti_automation_difficulty_for_signals(
+                $ageSeconds,
+                $ipAttempts,
+                $subnetAttempts,
+            ),
         ];
     }
     if ($ipAttempts >= 3 || $subnetAttempts >= 12) {
         return [
             'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,
             'reason' => 'repeated_request',
-            'difficulty' => viewer_anti_automation_difficulty_for_signals($ageSeconds, $ipAttempts, $subnetAttempts),
+            'difficulty' => viewer_anti_automation_difficulty_for_signals(
+                $ageSeconds,
+                $ipAttempts,
+                $subnetAttempts,
+            ),
         ];
     }
-    return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'reason' => 'ok', 'difficulty' => 0];
+    return [
+        'result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW,
+        'reason' => 'ok',
+        'difficulty' => 0,
+    ];
 }
 
 /**
@@ -670,8 +808,10 @@ function viewer_anti_automation_policy_decision(int $ageSeconds, bool $honeypotF
  * @param int $requiredBits Required leading zero bits.
  * @return bool True only when the target is satisfied.
  */
-function viewer_anti_automation_digest_has_leading_zero_bits(string $digest, int $requiredBits): bool
-{
+function viewer_anti_automation_digest_has_leading_zero_bits(
+    string $digest,
+    int $requiredBits,
+): bool {
     if (strlen($digest) !== 32 || $requiredBits < 1 || $requiredBits > 256) {
         return false;
     }
@@ -697,8 +837,11 @@ function viewer_anti_automation_digest_has_leading_zero_bits(string $digest, int
  * @param int $counter Bounded proposed counter.
  * @return string Canonical proof input.
  */
-function viewer_anti_automation_pow_input(string $action, string $challenge, int $counter): string
-{
+function viewer_anti_automation_pow_input(
+    string $action,
+    string $challenge,
+    int $counter,
+): string {
     return "viewer-aa-pow-v1\n" . $action . "\n" . $challenge . "\n" . $counter;
 }
 
@@ -715,11 +858,13 @@ function viewer_anti_automation_pow_verify(
     string $action,
     string $challenge,
     int $difficulty,
-    string $counterValue
+    string $counterValue,
 ): bool {
-    if (!viewer_anti_automation_action_is_allowed($action)
+    if (
+        !viewer_anti_automation_action_is_allowed($action)
         || preg_match('/^[A-Za-z0-9_-]{32,86}$/D', $challenge) !== 1
-        || preg_match('/^(0|[1-9][0-9]{0,6})$/D', $counterValue) !== 1) {
+        || preg_match('/^(0|[1-9][0-9]{0,6})$/D', $counterValue) !== 1
+    ) {
         return false;
     }
     $counter = (int) $counterValue;
@@ -727,8 +872,15 @@ function viewer_anti_automation_pow_verify(
         return false;
     }
     $difficulty = viewer_anti_automation_difficulty_normalize($difficulty);
-    $digest = hash('sha256', viewer_anti_automation_pow_input($action, $challenge, $counter), true);
-    return viewer_anti_automation_digest_has_leading_zero_bits($digest, $difficulty);
+    $digest = hash(
+        'sha256',
+        viewer_anti_automation_pow_input($action, $challenge, $counter),
+        true,
+    );
+    return viewer_anti_automation_digest_has_leading_zero_bits(
+        $digest,
+        $difficulty,
+    );
 }
 
 /**
@@ -739,13 +891,14 @@ function viewer_anti_automation_pow_verify(
  * @param string $action Protected action.
  * @param string $reason Bounded local reason class.
  * @param int $attempts Optional local attempt count.
+ * @return void
  */
 function viewer_anti_automation_event(
     string $eventKey,
     string $outcome,
     string $action,
     string $reason,
-    int $attempts = 0
+    int $attempts = 0,
 ): void {
     viewer_security_event_record_best_effort($eventKey, null, $outcome, [
         'action' => substr($action, 0, 32),
@@ -773,7 +926,7 @@ function viewer_anti_automation_authorize_challenge(
     string $action,
     array $post,
     string $clientIp,
-    ?int $nowTimestamp = null
+    ?int $nowTimestamp = null,
 ): array {
     $now = $nowTimestamp ?? time();
     $ticket = is_string($post['viewer_aa_challenge_ticket'] ?? null)
@@ -785,10 +938,13 @@ function viewer_anti_automation_authorize_challenge(
         VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
         $action,
         true,
-        $now
+        $now,
     );
     if ($state === null) {
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_INVALID, 'reason' => 'challenge_invalid'];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_INVALID,
+            'reason' => 'challenge_invalid',
+        ];
     }
 
     $rateSignals = viewer_anti_automation_rate_signals($clientIp);
@@ -798,25 +954,46 @@ function viewer_anti_automation_authorize_challenge(
             'suppressed',
             $action,
             'challenge_hard_limit',
-            (int) ($rateSignals['ip_attempts'] ?? 0)
+            (int) ($rateSignals['ip_attempts'] ?? 0),
         );
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS, 'reason' => 'challenge_hard_limit'];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS,
+            'reason' => 'challenge_hard_limit',
+        ];
     }
 
     $fallbackRequested = (string) ($post['viewer_aa_fallback'] ?? '') === '1';
     if ($fallbackRequested) {
         $ageSeconds = max(0, $now - (int) $state['issued_at']);
         if ($ageSeconds < VIEWER_ANTI_AUTOMATION_FALLBACK_MIN_AGE_SECONDS) {
-            $challenge = viewer_anti_automation_challenge_issue($ticketContext, $action, (int) $state['difficulty'], $now);
-            viewer_anti_automation_event('viewer.automation_challenge_required', 'required', $action, 'fallback_too_fast');
+            $challenge = viewer_anti_automation_challenge_issue(
+                $ticketContext,
+                $action,
+                (int) $state['difficulty'],
+                $now,
+            );
+            viewer_anti_automation_event(
+                'viewer.automation_challenge_required',
+                'required',
+                $action,
+                'fallback_too_fast',
+            );
             return [
                 'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,
                 'reason' => 'fallback_too_fast',
                 'challenge' => $challenge,
             ];
         }
-        viewer_anti_automation_event('viewer.automation_challenge_passed', 'success', $action, 'fallback');
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'reason' => 'fallback'];
+        viewer_anti_automation_event(
+            'viewer.automation_challenge_passed',
+            'success',
+            $action,
+            'fallback',
+        );
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW,
+            'reason' => 'fallback',
+        ];
     }
 
     $counterValue = is_string($post['viewer_aa_pow_counter'] ?? null)
@@ -826,14 +1003,32 @@ function viewer_anti_automation_authorize_challenge(
         $action,
         (string) $state['nonce'],
         (int) $state['difficulty'],
-        $counterValue
+        $counterValue,
     )) {
-        viewer_anti_automation_event('viewer.automation_challenge_passed', 'success', $action, 'proof_of_work');
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'reason' => 'proof_of_work'];
+        viewer_anti_automation_event(
+            'viewer.automation_challenge_passed',
+            'success',
+            $action,
+            'proof_of_work',
+        );
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW,
+            'reason' => 'proof_of_work',
+        ];
     }
 
-    $challenge = viewer_anti_automation_challenge_issue($ticketContext, $action, (int) $state['difficulty'], $now);
-    viewer_anti_automation_event('viewer.automation_challenge_failed', 'failed', $action, 'proof_invalid');
+    $challenge = viewer_anti_automation_challenge_issue(
+        $ticketContext,
+        $action,
+        (int) $state['difficulty'],
+        $now,
+    );
+    viewer_anti_automation_event(
+        'viewer.automation_challenge_failed',
+        'failed',
+        $action,
+        'proof_invalid',
+    );
     return [
         'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,
         'reason' => 'proof_invalid',
@@ -857,63 +1052,101 @@ function viewer_anti_automation_authorize_submission(
     string $action,
     array $post,
     string $clientIp,
-    ?int $nowTimestamp = null
+    ?int $nowTimestamp = null,
 ): array {
     if (!viewer_anti_automation_action_is_allowed($action)) {
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_INVALID, 'reason' => 'action_invalid'];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_INVALID,
+            'reason' => 'action_invalid',
+        ];
     }
     if (!viewer_anti_automation_enabled()) {
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'reason' => 'disabled'];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW,
+            'reason' => 'disabled',
+        ];
     }
     if (isset($post['viewer_aa_challenge_ticket'])) {
-        return viewer_anti_automation_authorize_challenge($ticketContext, $action, $post, $clientIp, $nowTimestamp);
+        return viewer_anti_automation_authorize_challenge(
+            $ticketContext,
+            $action,
+            $post,
+            $clientIp,
+            $nowTimestamp,
+        );
     }
 
     $now = $nowTimestamp ?? time();
-    $ticket = is_string($post['viewer_aa_form_ticket'] ?? null) ? (string) $post['viewer_aa_form_ticket'] : '';
+    $ticket = is_string($post['viewer_aa_form_ticket'] ?? null)
+        ? (string) $post['viewer_aa_form_ticket']
+        : '';
     $state = viewer_anti_automation_ticket_validate(
         $ticketContext,
         $ticket,
         VIEWER_ANTI_AUTOMATION_KIND_FORM,
         $action,
         true,
-        $now
+        $now,
     );
     if ($state === null) {
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_INVALID, 'reason' => 'form_invalid'];
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_INVALID,
+            'reason' => 'form_invalid',
+        ];
     }
 
     $honeypotField = (string) $state['honeypot_field'];
     $honeypotRaw = $post[$honeypotField] ?? '';
-    $honeypotFilled = !is_string($honeypotRaw)
-        || strlen((string) $honeypotRaw) > VIEWER_ANTI_AUTOMATION_HONEYPOT_MAX_BYTES
+    $honeypotFilled =
+        !is_string($honeypotRaw)
+        || strlen((string) $honeypotRaw)
+            > VIEWER_ANTI_AUTOMATION_HONEYPOT_MAX_BYTES
         || trim((string) $honeypotRaw) !== '';
     if ($honeypotFilled) {
-        viewer_anti_automation_event('viewer.automation_request_suppressed', 'suppressed', $action, 'honeypot');
-        return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS, 'reason' => 'honeypot'];
+        viewer_anti_automation_event(
+            'viewer.automation_request_suppressed',
+            'suppressed',
+            $action,
+            'honeypot',
+        );
+        return [
+            'result' => VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS,
+            'reason' => 'honeypot',
+        ];
     }
 
     $ageSeconds = max(0, $now - (int) $state['issued_at']);
     $rateSignals = viewer_anti_automation_rate_signals($clientIp);
-    $decision = viewer_anti_automation_policy_decision($ageSeconds, false, $rateSignals);
+    $decision = viewer_anti_automation_policy_decision(
+        $ageSeconds,
+        false,
+        $rateSignals,
+    );
     if ($decision['result'] === VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS) {
         viewer_anti_automation_event(
             'viewer.automation_request_suppressed',
             'suppressed',
             $action,
             (string) $decision['reason'],
-            (int) ($rateSignals['ip_attempts'] ?? 0)
+            (int) ($rateSignals['ip_attempts'] ?? 0),
         );
         return $decision;
     }
-    if ($decision['result'] === VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED) {
-        $challenge = viewer_anti_automation_challenge_issue($ticketContext, $action, (int) $decision['difficulty'], $now);
+    if (
+        $decision['result'] === VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED
+    ) {
+        $challenge = viewer_anti_automation_challenge_issue(
+            $ticketContext,
+            $action,
+            (int) $decision['difficulty'],
+            $now,
+        );
         viewer_anti_automation_event(
             'viewer.automation_challenge_required',
             'required',
             $action,
             (string) $decision['reason'],
-            (int) ($rateSignals['ip_attempts'] ?? 0)
+            (int) ($rateSignals['ip_attempts'] ?? 0),
         );
         return [
             'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,

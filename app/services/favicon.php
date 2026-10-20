@@ -120,16 +120,19 @@ function favicon_safe_size(int $size): int
 /**
  * Store an uploaded favicon image after applying an optional square crop.
  *
- * @param array $file File value.
+ * @param array{tmp_name?:string,name?:string,type?:string,error?:int,size?:int} $file PHP uploaded-file record; tmp_name is used as the image source.
  * @param ?string $croppedPngData Cropped png data value.
  * @return string Text result for the caller.
  */
 function store_uploaded_favicon(array $file, ?string $croppedPngData): string
 {
     if (!extension_loaded('gd')) {
-        throw new RuntimeException('Favicon cropping requires the GD extension.');
+        throw new RuntimeException(
+            'Favicon cropping requires the GD extension.',
+        );
     }
-    foreach (glob(favicon_storage_dir() . DIRECTORY_SEPARATOR . 'favicon-*.*') ?: [] as $oldFile) {
+    foreach (glob(favicon_storage_dir() . DIRECTORY_SEPARATOR . 'favicon-*.*')
+        ?: [] as $oldFile) {
         if (is_file($oldFile)) {
             @unlink($oldFile);
         }
@@ -141,9 +144,15 @@ function store_uploaded_favicon(array $file, ?string $croppedPngData): string
     $sourceWidth = 0;
     // Variable $sourceHeight stores this steps working value.
     $sourceHeight = 0;
-    if ($croppedPngData !== null && preg_match('/^data:image\/png;base64,/', $croppedPngData)) {
+    if (
+        $croppedPngData !== null
+        && preg_match('/^data:image\/png;base64,/', $croppedPngData)
+    ) {
         // $raw stores an intermediate value used by the surrounding gallery workflow.
-        $raw = base64_decode(substr($croppedPngData, strpos($croppedPngData, ',') + 1), true);
+        $raw = base64_decode(
+            substr($croppedPngData, strpos($croppedPngData, ',') + 1),
+            true,
+        );
         if ($raw !== false && strlen($raw) <= 2_000_000) {
             // $source stores an intermediate value used by the surrounding gallery workflow.
             $source = @imagecreatefromstring($raw);
@@ -161,13 +170,21 @@ function store_uploaded_favicon(array $file, ?string $croppedPngData): string
         $tmpPath = (string) ($file['tmp_name'] ?? '');
         // $info stores an intermediate value used by the surrounding gallery workflow.
         $info = @getimagesize($tmpPath);
-        if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-            throw new RuntimeException('The uploaded favicon source is not a valid image.');
+        if (
+            $info === false
+            || empty($info['mime'])
+            || !str_starts_with((string) $info['mime'], 'image/')
+        ) {
+            throw new RuntimeException(
+                'The uploaded favicon source is not a valid image.',
+            );
         }
         // $source stores an intermediate value used by the surrounding gallery workflow.
         $source = image_create_from_path($tmpPath, (string) $info['mime']);
         if (!$source) {
-            throw new RuntimeException('Could not decode the uploaded favicon source. Use JPG, PNG, GIF, or WebP.');
+            throw new RuntimeException(
+                'Could not decode the uploaded favicon source. Use JPG, PNG, GIF, or WebP.',
+            );
         }
         // $sourceWidth stores an intermediate value used by the surrounding gallery workflow.
         $sourceWidth = (int) $info[0];
@@ -180,7 +197,14 @@ function store_uploaded_favicon(array $file, ?string $croppedPngData): string
         // $cropY stores an intermediate value used by the surrounding gallery workflow.
         $cropY = (int) floor(($sourceHeight - $cropSide) / 2);
         // $source stores an intermediate value used by the surrounding gallery workflow.
-        $source = crop_image_square($source, $sourceWidth, $sourceHeight, $cropX, $cropY, $cropSide);
+        $source = crop_image_square(
+            $source,
+            $sourceWidth,
+            $sourceHeight,
+            $cropX,
+            $cropY,
+            $cropSide,
+        );
         // $sourceWidth stores an intermediate value used by the surrounding gallery workflow.
         $sourceWidth = imagesx($source);
         // $sourceHeight stores an intermediate value used by the surrounding gallery workflow.
@@ -189,12 +213,26 @@ function store_uploaded_favicon(array $file, ?string $croppedPngData): string
 
     foreach ([32, 48, 180] as $size) {
         // $targetPath stores an intermediate value used by the surrounding gallery workflow.
-        $targetPath = favicon_storage_dir() . DIRECTORY_SEPARATOR . 'favicon-' . $size . '.png';
-        if (!write_resized_png($source, $sourceWidth, $sourceHeight, $size, $targetPath)) {
+        $targetPath =
+            favicon_storage_dir()
+            . DIRECTORY_SEPARATOR
+            . 'favicon-'
+            . $size
+            . '.png';
+        if (!write_resized_png(
+            $source,
+            $sourceWidth,
+            $sourceHeight,
+            $size,
+            $targetPath,
+        )) {
             imagedestroy($source);
             throw new RuntimeException('Could not write favicon image.');
         }
-        set_app_setting('favicon_path_' . $size, 'cache/favicon/favicon-' . $size . '.png');
+        set_app_setting(
+            'favicon_path_' . $size,
+            'cache/favicon/favicon-' . $size . '.png',
+        );
     }
     imagedestroy($source);
     set_app_setting('favicon_version', (string) time());
@@ -212,8 +250,14 @@ function store_uploaded_favicon(array $file, ?string $croppedPngData): string
  * @param int $cropSide Crop side value.
  * @return GdImage Result value for the caller.
  */
-function crop_image_square(GdImage $source, int $width, int $height, int $cropX, int $cropY, int $cropSide): GdImage
-{
+function crop_image_square(
+    GdImage $source,
+    int $width,
+    int $height,
+    int $cropX,
+    int $cropY,
+    int $cropSide,
+): GdImage {
     // $side stores an intermediate value used by the surrounding gallery workflow.
     $side = max(1, min($cropSide, $width, $height));
     // $safeX stores an intermediate value used by the surrounding gallery workflow.
@@ -227,7 +271,18 @@ function crop_image_square(GdImage $source, int $width, int $height, int $cropX,
     // $transparent stores an intermediate value used by the surrounding gallery workflow.
     $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
     imagefilledrectangle($target, 0, 0, $side, $side, $transparent);
-    imagecopyresampled($target, $source, 0, 0, $safeX, $safeY, $side, $side, $side, $side);
+    imagecopyresampled(
+        $target,
+        $source,
+        0,
+        0,
+        $safeX,
+        $safeY,
+        $side,
+        $side,
+        $side,
+        $side,
+    );
     imagedestroy($source);
     return $target;
 }
@@ -242,8 +297,13 @@ function crop_image_square(GdImage $source, int $width, int $height, int $cropX,
  * @param string $targetPath Target filesystem path.
  * @return bool True when the condition matches.
  */
-function write_resized_png(GdImage $source, int $width, int $height, int $targetSize, string $targetPath): bool
-{
+function write_resized_png(
+    GdImage $source,
+    int $width,
+    int $height,
+    int $targetSize,
+    string $targetPath,
+): bool {
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = imagecreatetruecolor($targetSize, $targetSize);
     imagealphablending($target, false);
@@ -251,7 +311,18 @@ function write_resized_png(GdImage $source, int $width, int $height, int $target
     // $transparent stores an intermediate value used by the surrounding gallery workflow.
     $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
     imagefilledrectangle($target, 0, 0, $targetSize, $targetSize, $transparent);
-    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetSize, $targetSize, $width, $height);
+    imagecopyresampled(
+        $target,
+        $source,
+        0,
+        0,
+        0,
+        0,
+        $targetSize,
+        $targetSize,
+        $width,
+        $height,
+    );
     // $written stores an intermediate value used by the surrounding gallery workflow.
     $written = imagepng($target, $targetPath, 6);
     imagedestroy($target);
@@ -263,7 +334,8 @@ function write_resized_png(GdImage $source, int $width, int $height, int $target
  */
 function remove_stored_favicon(): void
 {
-    foreach (glob(favicon_storage_dir() . DIRECTORY_SEPARATOR . 'favicon-*.*') ?: [] as $oldFile) {
+    foreach (glob(favicon_storage_dir() . DIRECTORY_SEPARATOR . 'favicon-*.*')
+        ?: [] as $oldFile) {
         if (is_file($oldFile)) {
             @unlink($oldFile);
         }

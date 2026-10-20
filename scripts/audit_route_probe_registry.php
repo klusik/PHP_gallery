@@ -25,7 +25,10 @@ return [
     ],
     'home' => [
         'response_kind' => 'html',
-        'response_markers' => ['data-public-gallery-index-grid', 'Workflow seed'],
+        'response_markers' => [
+            'data-public-gallery-index-grid',
+            'Workflow seed',
+        ],
         'route' => 'home',
         'request_uri' => '/',
         'expected_outcome' => 'success',
@@ -35,7 +38,10 @@ return [
     ],
     'gallery' => [
         'response_kind' => 'html',
-        'response_markers' => ['data-public-gallery-id="', 'data-public-photo-order-item'],
+        'response_markers' => [
+            'data-public-gallery-id="',
+            'data-public-photo-order-item',
+        ],
         'route' => 'gallery',
         'request_uri' => '/gallery/{gallery_path}',
         'expected_outcome' => 'success',
@@ -73,7 +79,10 @@ return [
     ],
     'admin_telemetry' => [
         'response_kind' => 'html',
-        'response_markers' => ['class="admin-telemetry-page"', 'telemetry-privacy-note'],
+        'response_markers' => [
+            'class="admin-telemetry-page"',
+            'telemetry-privacy-note',
+        ],
         'route' => 'admin_telemetry',
         'request_uri' => '/?page=admin_telemetry',
         'expected_outcome' => 'success',

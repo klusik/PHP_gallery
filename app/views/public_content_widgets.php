@@ -37,33 +37,70 @@ function view_public_widget_region_html(array $plan, string $slot): string
         return '';
     }
     $tag = in_array($slot, ['left_rail', 'right_rail'], true) ? 'aside' : 'div';
-    $html = '<' . $tag . ' class="public-widget-region public-widget-region--' . e($slot)
-        . '" data-public-widget-zone="' . e($slot) . '">';
+    $html =
+        '<'
+        . $tag
+        . ' class="public-widget-region public-widget-region--'
+        . e($slot)
+        . '" data-public-widget-zone="'
+        . e($slot)
+        . '">';
     foreach ($rows as $row) {
         $id = (string) ($row['widget_id'] ?? '');
-        $appearance = ($row['appearance'] ?? '') === 'minimal' ? 'minimal' : 'card';
-        $language = in_array($row['source_language'] ?? '', ['en', 'cs', 'de', 'sv'], true)
-            ? (string) $row['source_language'] : 'en';
+        $appearance = ($row['appearance'] ?? '') === 'minimal'
+            ? 'minimal'
+            : 'card';
+        $language = in_array(
+            $row['source_language'] ?? '',
+            ['en', 'cs', 'de', 'sv'],
+            true,
+        )
+            ? (string) $row['source_language']
+            : 'en';
         $floating = $slot === 'floating';
-        $html .= '<article class="public-content-widget public-content-widget--' . $appearance
-            . '" data-public-widget-id="' . e($id) . '" data-public-widget-sort-order="'
-            . max(0, (int) ($row['sort_order'] ?? 0)) . '" lang="' . e($language) . '"'
-            . ' style="--public-widget-max-width:' . (int) ($row['width_px'] ?? 320) . 'px"';
+        $html .=
+            '<article class="public-content-widget public-content-widget--'
+            . $appearance
+            . '" data-public-widget-id="'
+            . e($id)
+            . '" data-public-widget-sort-order="'
+            . max(0, (int) ($row['sort_order'] ?? 0))
+            . '" lang="'
+            . e($language)
+            . '"'
+            . ' style="--public-widget-max-width:'
+            . (int) ($row['width_px'] ?? 320)
+            . 'px"';
         if ($floating) {
-            $html .= ' data-public-widget-floating="1" data-public-widget-width="' . (int) ($row['width_px'] ?? 320) . '"'
-                . ' data-public-widget-dismiss-label="' . e(t('lightbox.close', 'Close')) . '"'
+            $html .=
+                ' data-public-widget-floating="1" data-public-widget-width="'
+                . (int) ($row['width_px'] ?? 320)
+                . '"'
+                . ' data-public-widget-dismiss-label="'
+                . e(t('lightbox.close', 'Close'))
+                . '"'
                 . ' data-public-widget-anchor="'
-                . e((string) ($row['floating_anchor'] ?? 'bottom-right')) . '"'
-                . ' data-public-widget-x="' . (int) ($row['x_permille'] ?? 900) . '"'
-                . ' data-public-widget-y="' . (int) ($row['y_permille'] ?? 900) . '"';
+                . e((string) ($row['floating_anchor'] ?? 'bottom-right'))
+                . '"'
+                . ' data-public-widget-x="'
+                . (int) ($row['x_permille'] ?? 900)
+                . '"'
+                . ' data-public-widget-y="'
+                . (int) ($row['y_permille'] ?? 900)
+                . '"';
         }
         $html .= '>';
         $title = trim((string) ($row['title'] ?? ''));
         if ($title !== '') {
-            $html .= '<h2 class="public-content-widget-title">' . e($title) . '</h2>';
+            $html .=
+                '<h2 class="public-content-widget-title">'
+                . e($title)
+                . '</h2>';
         }
-        $html .= '<div class="public-content-widget-body">'
-            . (string) ($row['body_html'] ?? '') . '</div></article>';
+        $html .=
+            '<div class="public-content-widget-body">'
+            . (string) ($row['body_html'] ?? '')
+            . '</div></article>';
     }
     return $html . '</' . $tag . '>';
 }

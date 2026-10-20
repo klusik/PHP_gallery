@@ -48,9 +48,13 @@ use function Gallery\Models\openai_text_assist_model_save_settings;
 use function Gallery\Models\openai_text_assist_model_user_settings;
 
 const OPENAI_TEXT_ASSIST_ENDPOINT = 'https://api.openai.com/v1/responses';
+
 const OPENAI_TEXT_ASSIST_TIMEOUT_SECONDS = 35;
+
 const OPENAI_TEXT_ASSIST_DEFAULT_MODEL = 'gpt-5.4-mini';
+
 const OPENAI_TEXT_ASSIST_MAX_CONTEXT_CHARS = 9000;
+
 const OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT = 3;
 
 /**
@@ -58,11 +62,14 @@ const OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT = 3;
  *
  * @param string $key Lookup key.
  * @param string $fallback Fallback value.
- * @param array $parameters Parameters value.
- * @return string Text result for the caller.
+ * @param array<string,string|int|float> $parameters Scalar substitutions keyed by placeholder name.
+ * @return string Translated text, or the fallback with substitutions applied.
  */
-function openai_text_assist_t(string $key, string $fallback, array $parameters = []): string
-{
+function openai_text_assist_t(
+    string $key,
+    string $fallback,
+    array $parameters = [],
+): string {
     if (function_exists('Gallery\\Services\\t')) {
         return t($key, $fallback, $parameters);
     }
@@ -80,7 +87,10 @@ function openai_text_assist_t(string $key, string $fallback, array $parameters =
  */
 function openai_text_assist_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_openai_text_schema_status(), 'openai_text_settings_render');
+    return presentation_schema_render_available(
+        presentation_openai_text_schema_status(),
+        'openai_text_settings_render',
+    );
 }
 
 /**
@@ -127,7 +137,10 @@ function openai_text_assist_user_settings(int $userId): array
  */
 function openai_text_assist_image_input_column_ready(): bool
 {
-    return presentation_schema_render_available(presentation_openai_image_input_schema_status(), 'openai_image_input_render');
+    return presentation_schema_render_available(
+        presentation_openai_image_input_schema_status(),
+        'openai_image_input_render',
+    );
 }
 
 /**
@@ -138,7 +151,11 @@ function openai_text_assist_image_input_column_ready(): bool
  */
 function openai_text_assist_image_input_allowed(int $userId): bool
 {
-    if ($userId <= 0 || !openai_text_assist_available($userId) || !openai_text_assist_image_input_column_ready()) {
+    if (
+        $userId <= 0
+        || !openai_text_assist_available($userId)
+        || !openai_text_assist_image_input_column_ready()
+    ) {
         return false;
     }
 
@@ -156,23 +173,47 @@ function openai_text_assist_model_catalog(): array
     return [
         'gpt-5.4-mini' => [
             'label' => 'GPT-5.4 mini',
-            'description' => openai_text_assist_t('admin.openai.model_desc_gpt_54_mini', 'Recommended default. Good quality for gallery descriptions and rewrites with lower latency and lower cost.'),
-            'badge' => openai_text_assist_t('admin.openai.model_badge_recommended', 'Recommended'),
+            'description' => openai_text_assist_t(
+                'admin.openai.model_desc_gpt_54_mini',
+                'Recommended default. Good quality for gallery descriptions and rewrites with lower latency and lower cost.',
+            ),
+            'badge' => openai_text_assist_t(
+                'admin.openai.model_badge_recommended',
+                'Recommended',
+            ),
         ],
         'gpt-5.4-nano' => [
             'label' => 'GPT-5.4 nano',
-            'description' => openai_text_assist_t('admin.openai.model_desc_gpt_54_nano', 'Lowest-cost option for short spelling fixes and simple cleanup. Use mini if descriptions become too plain.'),
-            'badge' => openai_text_assist_t('admin.openai.model_badge_lowest_cost', 'Lowest cost'),
+            'description' => openai_text_assist_t(
+                'admin.openai.model_desc_gpt_54_nano',
+                'Lowest-cost option for short spelling fixes and simple cleanup. Use mini if descriptions become too plain.',
+            ),
+            'badge' => openai_text_assist_t(
+                'admin.openai.model_badge_lowest_cost',
+                'Lowest cost',
+            ),
         ],
         'gpt-5.4' => [
             'label' => 'GPT-5.4',
-            'description' => openai_text_assist_t('admin.openai.model_desc_gpt_54', 'Stronger wording and reasoning for larger parent-gallery summaries, with higher cost than mini.'),
-            'badge' => openai_text_assist_t('admin.openai.model_badge_stronger', 'Stronger'),
+            'description' => openai_text_assist_t(
+                'admin.openai.model_desc_gpt_54',
+                'Stronger wording and reasoning for larger parent-gallery summaries, with higher cost than mini.',
+            ),
+            'badge' => openai_text_assist_t(
+                'admin.openai.model_badge_stronger',
+                'Stronger',
+            ),
         ],
         'gpt-5.5' => [
             'label' => 'GPT-5.5',
-            'description' => openai_text_assist_t('admin.openai.model_desc_gpt_55', 'Flagship quality for complex text work. Usually more than this gallery helper needs.'),
-            'badge' => openai_text_assist_t('admin.openai.model_badge_flagship', 'Flagship'),
+            'description' => openai_text_assist_t(
+                'admin.openai.model_desc_gpt_55',
+                'Flagship quality for complex text work. Usually more than this gallery helper needs.',
+            ),
+            'badge' => openai_text_assist_t(
+                'admin.openai.model_badge_flagship',
+                'Flagship',
+            ),
         ],
     ];
 }
@@ -243,16 +284,25 @@ function openai_text_assist_encrypt_secret(string $secret): string
 
     $iv = random_bytes(12);
     $tag = '';
-    $cipher = openssl_encrypt($secret, 'aes-256-gcm', openai_text_assist_secret_key(), OPENSSL_RAW_DATA, $iv, $tag, 'openai-text-assist');
+    $cipher = openssl_encrypt(
+        $secret,
+        'aes-256-gcm',
+        openai_text_assist_secret_key(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        'openai-text-assist',
+    );
     if ($cipher === false || $tag === '') {
         return '';
     }
 
-    return 'v1:' . base64_encode(json_encode([
-        'iv' => base64_encode($iv),
-        'tag' => base64_encode($tag),
-        'cipher' => base64_encode($cipher),
-    ], JSON_UNESCAPED_SLASHES));
+    return 'v1:'
+        . base64_encode(json_encode([
+            'iv' => base64_encode($iv),
+            'tag' => base64_encode($tag),
+            'cipher' => base64_encode($cipher),
+        ], JSON_UNESCAPED_SLASHES));
 }
 
 /**
@@ -263,7 +313,11 @@ function openai_text_assist_encrypt_secret(string $secret): string
  */
 function openai_text_assist_decrypt_secret(string $encoded): string
 {
-    if ($encoded === '' || !str_starts_with($encoded, 'v1:') || !function_exists('openssl_decrypt')) {
+    if (
+        $encoded === ''
+        || !str_starts_with($encoded, 'v1:')
+        || !function_exists('openssl_decrypt')
+    ) {
         return '';
     }
 
@@ -283,7 +337,15 @@ function openai_text_assist_decrypt_secret(string $encoded): string
         return '';
     }
 
-    $plain = openssl_decrypt($cipher, 'aes-256-gcm', openai_text_assist_secret_key(), OPENSSL_RAW_DATA, $iv, $tag, 'openai-text-assist');
+    $plain = openssl_decrypt(
+        $cipher,
+        'aes-256-gcm',
+        openai_text_assist_secret_key(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        'openai-text-assist',
+    );
     return $plain === false ? '' : $plain;
 }
 
@@ -300,9 +362,15 @@ function openai_text_assist_secret_key(): string
         (string) ($config['setup_key'] ?? ''),
         (string) ($config['admin_session_name'] ?? ''),
         (string) ($config['base_url'] ?? ''),
-        is_array($config['database'] ?? null) ? (string) ($config['database']['password'] ?? '') : '',
+        is_array($config['database'] ?? null)
+            ? (string) ($config['database']['password'] ?? '')
+            : '',
     ]);
-    return hash('sha256', $keyMaterial !== '||||' ? $keyMaterial : __FILE__, true);
+    return hash(
+        'sha256',
+        $keyMaterial !== '||||' ? $keyMaterial : __FILE__,
+        true,
+    );
 }
 
 /**
@@ -316,27 +384,53 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
 {
     $errors = [];
     if ($userId <= 0) {
-        $errors[] = openai_text_assist_t('admin.openai.error_user_missing', 'The current user account could not be resolved.');
+        $errors[] = openai_text_assist_t(
+            'admin.openai.error_user_missing',
+            'The current user account could not be resolved.',
+        );
     }
     $schemaStatus = presentation_openai_text_schema_status();
     if (schema_inspection_is_missing($schemaStatus)) {
-        $errors[] = openai_text_assist_t('admin.openai.error_migration_required', 'OpenAI profile settings are not available until database migrations are applied.');
+        $errors[] = openai_text_assist_t(
+            'admin.openai.error_migration_required',
+            'OpenAI profile settings are not available until database migrations are applied.',
+        );
     } elseif (schema_inspection_is_unknown($schemaStatus)) {
-        presentation_schema_log_degraded($schemaStatus, 'openai_text_settings_save');
-        $errors[] = openai_text_assist_t('admin.openai.error_schema_unavailable', 'OpenAI profile settings cannot be saved because the database schema could not be verified.');
+        presentation_schema_log_degraded(
+            $schemaStatus,
+            'openai_text_settings_save',
+        );
+        $errors[] = openai_text_assist_t(
+            'admin.openai.error_schema_unavailable',
+            'OpenAI profile settings cannot be saved because the database schema could not be verified.',
+        );
     }
     $imageInputSchemaStatus = presentation_openai_image_input_schema_status();
     if (schema_inspection_is_unknown($imageInputSchemaStatus)) {
-        presentation_schema_log_degraded($imageInputSchemaStatus, 'openai_image_input_settings_save');
-        $errors[] = openai_text_assist_t('admin.openai.error_image_input_schema_unavailable', 'OpenAI image-input settings cannot be saved because the optional database column could not be verified.');
+        presentation_schema_log_degraded(
+            $imageInputSchemaStatus,
+            'openai_image_input_settings_save',
+        );
+        $errors[] = openai_text_assist_t(
+            'admin.openai.error_image_input_schema_unavailable',
+            'OpenAI image-input settings cannot be saved because the optional database column could not be verified.',
+        );
     }
 
-    $existing = schema_inspection_is_available($schemaStatus) ? openai_text_assist_user_settings($userId) : [];
+    $existing = schema_inspection_is_available($schemaStatus)
+        ? openai_text_assist_user_settings($userId)
+        : [];
     $enabled = !empty($input['openai_text_enabled']);
     $clearKey = !empty($input['openai_text_clear_key']);
     $submittedKey = trim((string) ($input['openai_text_api_key'] ?? ''));
-    $model = openai_text_assist_normalize_model((string) ($input['openai_text_model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL));
-    $allowImageInput = !empty($input['openai_text_allow_image_input']) && schema_inspection_is_available($imageInputSchemaStatus);
+    $model = openai_text_assist_normalize_model(
+        (string) (
+            $input['openai_text_model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL
+        ),
+    );
+    $allowImageInput =
+        !empty($input['openai_text_allow_image_input'])
+        && schema_inspection_is_available($imageInputSchemaStatus);
     $cipher = (string) ($existing['api_key_cipher'] ?? '');
     $hint = (string) ($existing['api_key_hint'] ?? '');
 
@@ -347,11 +441,17 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
 
     if ($submittedKey !== '') {
         if (!openai_text_assist_api_key_format_valid($submittedKey)) {
-            $errors[] = openai_text_assist_t('admin.openai.error_api_key_format', 'Enter a valid OpenAI API key without spaces.');
+            $errors[] = openai_text_assist_t(
+                'admin.openai.error_api_key_format',
+                'Enter a valid OpenAI API key without spaces.',
+            );
         } else {
             $cipher = openai_text_assist_encrypt_secret($submittedKey);
             if ($cipher === '') {
-                $errors[] = openai_text_assist_t('admin.openai.error_encryption_unavailable', 'This server cannot encrypt the API key. Enable the OpenSSL PHP extension before saving OpenAI settings.');
+                $errors[] = openai_text_assist_t(
+                    'admin.openai.error_encryption_unavailable',
+                    'This server cannot encrypt the API key. Enable the OpenSSL PHP extension before saving OpenAI settings.',
+                );
             } else {
                 $hint = openai_text_assist_key_hint($submittedKey);
             }
@@ -359,7 +459,10 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
     }
 
     if ($enabled && $cipher === '') {
-        $errors[] = openai_text_assist_t('admin.openai.error_key_required_when_enabled', 'OpenAI text assistance needs a saved API key before it can be enabled.');
+        $errors[] = openai_text_assist_t(
+            'admin.openai.error_key_required_when_enabled',
+            'OpenAI text assistance needs a saved API key before it can be enabled.',
+        );
     }
 
     if ($errors !== []) {
@@ -373,14 +476,21 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
         ];
     }
 
-    $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s');
-    openai_text_assist_model_save_settings($userId, [
-        'enabled' => $enabled ? 1 : 0,
-        'api_key_cipher' => $cipher === '' ? null : $cipher,
-        'api_key_hint' => $hint === '' ? null : $hint,
-        'model' => $model,
-        'allow_image_input' => $allowImageInput ? 1 : 0,
-    ], $now, schema_inspection_is_available($imageInputSchemaStatus));
+    $now = function_exists('Gallery\\Core\\now_sql')
+        ? now_sql()
+        : date('Y-m-d H:i:s');
+    openai_text_assist_model_save_settings(
+        $userId,
+        [
+            'enabled' => $enabled ? 1 : 0,
+            'api_key_cipher' => $cipher === '' ? null : $cipher,
+            'api_key_hint' => $hint === '' ? null : $hint,
+            'model' => $model,
+            'allow_image_input' => $allowImageInput ? 1 : 0,
+        ],
+        $now,
+        schema_inspection_is_available($imageInputSchemaStatus),
+    );
 
     return [
         'ok' => true,
@@ -400,7 +510,12 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
  */
 function openai_text_assist_available(int $userId): bool
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('openai_text_assist')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('openai_text_assist')
+    ) {
         return false;
     }
     if ($userId <= 0 || !openai_text_assist_schema_ready()) {
@@ -410,7 +525,11 @@ function openai_text_assist_available(int $userId): bool
     if ((int) ($settings['enabled'] ?? 0) !== 1) {
         return false;
     }
-    return openai_text_assist_decrypt_secret((string) ($settings['api_key_cipher'] ?? '')) !== '';
+    return (
+        openai_text_assist_decrypt_secret(
+            (string) ($settings['api_key_cipher'] ?? ''),
+        ) !== ''
+    );
 }
 
 /**
@@ -421,21 +540,42 @@ function openai_text_assist_available(int $userId): bool
  */
 function openai_text_assist_gallery_context(int $galleryId): array
 {
-    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery($galleryId) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery')
+        ? find_gallery($galleryId)
+        : null;
     if (!$gallery) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_gallery_missing',
+            'The gallery could not be found. Reload the editor and try again.',
+        ));
     }
 
-    $children = function_exists('Gallery\\Services\\child_galleries') ? child_galleries($galleryId, false) : [];
-    $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($galleryId, false) : [];
-    $tags = function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', $galleryId) : '';
-    $branchCount = function_exists('Gallery\\Services\\gallery_branch_image_count') ? gallery_branch_image_count($galleryId, false) : count($images);
+    $children = function_exists('Gallery\\Services\\child_galleries')
+        ? child_galleries($galleryId, false)
+        : [];
+    $images = function_exists('Gallery\\Services\\gallery_images')
+        ? gallery_images($galleryId, false)
+        : [];
+    $tags = function_exists('Gallery\\Services\\tag_names_for_entity')
+        ? (string) tag_names_for_entity('gallery', $galleryId)
+        : '';
+    $branchCount = function_exists(
+        'Gallery\\Services\\gallery_branch_image_count',
+    )
+        ? gallery_branch_image_count($galleryId, false)
+        : count($images);
 
     $childSummaries = [];
     foreach (array_slice($children, 0, 12) as $child) {
         $childSummaries[] = [
-            'title' => openai_text_assist_text_limit((string) ($child['title'] ?? ''), 140),
-            'description' => openai_text_assist_text_limit((string) ($child['description'] ?? ''), 360),
+            'title' => openai_text_assist_text_limit(
+                (string) ($child['title'] ?? ''),
+                140,
+            ),
+            'description' => openai_text_assist_text_limit(
+                (string) ($child['description'] ?? ''),
+                360,
+            ),
             'image_count' => (int) ($child['image_count'] ?? 0),
         ];
     }
@@ -443,18 +583,36 @@ function openai_text_assist_gallery_context(int $galleryId): array
     $imageSummaries = [];
     foreach (array_slice($images, 0, 24) as $image) {
         $imageSummaries[] = [
-            'filename' => openai_text_assist_text_limit((string) ($image['filename'] ?? $image['relative_path'] ?? ''), 160),
-            'title' => openai_text_assist_text_limit((string) ($image['title'] ?? ''), 160),
-            'description' => openai_text_assist_text_limit((string) ($image['description'] ?? ''), 260),
+            'filename' => openai_text_assist_text_limit(
+                (string) ($image['filename'] ?? $image['relative_path'] ?? ''),
+                160,
+            ),
+            'title' => openai_text_assist_text_limit(
+                (string) ($image['title'] ?? ''),
+                160,
+            ),
+            'description' => openai_text_assist_text_limit(
+                (string) ($image['description'] ?? ''),
+                260,
+            ),
         ];
     }
 
     return [
         'gallery' => [
             'id' => (int) ($gallery['id'] ?? 0),
-            'title' => openai_text_assist_text_limit((string) ($gallery['title'] ?? ''), 180),
-            'description' => openai_text_assist_text_limit((string) ($gallery['description'] ?? ''), 1200),
-            'folder_path' => openai_text_assist_text_limit((string) ($gallery['folder_path'] ?? ''), 280),
+            'title' => openai_text_assist_text_limit(
+                (string) ($gallery['title'] ?? ''),
+                180,
+            ),
+            'description' => openai_text_assist_text_limit(
+                (string) ($gallery['description'] ?? ''),
+                1200,
+            ),
+            'folder_path' => openai_text_assist_text_limit(
+                (string) ($gallery['folder_path'] ?? ''),
+                280,
+            ),
             'tags' => openai_text_assist_text_limit($tags, 600),
             'direct_image_count' => count($images),
             'branch_image_count' => $branchCount,
@@ -473,25 +631,57 @@ function openai_text_assist_gallery_context(int $galleryId): array
  */
 function openai_text_assist_image_context(int $imageId): array
 {
-    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image')
+        ? find_image($imageId)
+        : null;
     if (!$image) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_image_missing',
+            'The photo could not be found. Reload the editor and try again.',
+        ));
     }
 
-    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
-    $imageTags = function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('image', $imageId) : '';
-    $galleryTags = $gallery && function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
+    $gallery = function_exists('Gallery\\Services\\find_gallery')
+        ? find_gallery((int) ($image['gallery_id'] ?? 0))
+        : null;
+    $imageTags = function_exists('Gallery\\Services\\tag_names_for_entity')
+        ? (string) tag_names_for_entity('image', $imageId)
+        : '';
+    $galleryTags = $gallery
+    && function_exists('Gallery\\Services\\tag_names_for_entity')
+        ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0))
+        : '';
 
     $metadataSummary = [];
-    $localAiMetadataEnabled = !function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
+    $localAiMetadataEnabled =
+        !function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
         || feature_capability_effective_enabled('ai_image_metadata');
-    if ($localAiMetadataEnabled && function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
+    if (
+        $localAiMetadataEnabled
+        && function_exists(
+            'Gallery\\Services\\ai_image_analysis_latest_metadata_for_image',
+        )
+    ) {
         $metadata = ai_image_analysis_latest_metadata_for_image($imageId);
         if (is_array($metadata)) {
             $metadataSummary = [
-                'searchable_text' => openai_text_assist_text_limit((string) ($metadata['searchable_text'] ?? ''), 900),
-                'dominant_colors' => openai_text_assist_text_limit((string) ($metadata['dominant_colors'] ?? ''), 260),
-                'generated_by' => openai_text_assist_text_limit(trim((string) ($metadata['model_name'] ?? '') . ' ' . (string) ($metadata['model_version'] ?? '')), 160),
+                'searchable_text' => openai_text_assist_text_limit(
+                    (string) ($metadata['searchable_text'] ?? ''),
+                    900,
+                ),
+                'dominant_colors' => openai_text_assist_text_limit(
+                    (string) ($metadata['dominant_colors'] ?? ''),
+                    260,
+                ),
+                'generated_by' => openai_text_assist_text_limit(
+                    trim(
+                        (string) ($metadata['model_name'] ?? '')
+                            . ' '
+                            . (string) ($metadata['model_version'] ?? ''),
+                    ),
+                    160,
+                ),
             ];
         }
     }
@@ -499,20 +689,59 @@ function openai_text_assist_image_context(int $imageId): array
     return [
         'image' => [
             'id' => (int) ($image['id'] ?? 0),
-            'filename' => openai_text_assist_text_limit((string) ($image['filename'] ?? $image['relative_path'] ?? ''), 180),
-            'title' => openai_text_assist_text_limit((string) ($image['title'] ?? ''), 180),
-            'description' => openai_text_assist_text_limit((string) ($image['description'] ?? ''), 1200),
+            'filename' => openai_text_assist_text_limit(
+                (string) ($image['filename'] ?? $image['relative_path'] ?? ''),
+                180,
+            ),
+            'title' => openai_text_assist_text_limit(
+                (string) ($image['title'] ?? ''),
+                180,
+            ),
+            'description' => openai_text_assist_text_limit(
+                (string) ($image['description'] ?? ''),
+                1200,
+            ),
             'tags' => openai_text_assist_text_limit($imageTags, 600),
-            'taken_at' => openai_text_assist_text_limit((string) ($image['exif_taken_at'] ?? ''), 80),
-            'camera' => openai_text_assist_text_limit(trim((string) ($image['exif_camera_make'] ?? '') . ' ' . (string) ($image['exif_camera_model'] ?? '')), 140),
-            'lens' => openai_text_assist_text_limit((string) ($image['exif_lens_model'] ?? ''), 140),
-            'gps' => openai_text_assist_text_limit(trim((string) ($image['gps_lat'] ?? '') . ', ' . (string) ($image['gps_lng'] ?? ''), ' ,'), 90),
+            'taken_at' => openai_text_assist_text_limit(
+                (string) ($image['exif_taken_at'] ?? ''),
+                80,
+            ),
+            'camera' => openai_text_assist_text_limit(
+                trim(
+                    (string) ($image['exif_camera_make'] ?? '')
+                        . ' '
+                        . (string) ($image['exif_camera_model'] ?? ''),
+                ),
+                140,
+            ),
+            'lens' => openai_text_assist_text_limit(
+                (string) ($image['exif_lens_model'] ?? ''),
+                140,
+            ),
+            'gps' => openai_text_assist_text_limit(
+                trim(
+                    (string) ($image['gps_lat'] ?? '')
+                        . ', '
+                        . (string) ($image['gps_lng'] ?? ''),
+                    ' ,',
+                ),
+                90,
+            ),
         ],
         'gallery' => [
             'id' => (int) ($gallery['id'] ?? 0),
-            'title' => openai_text_assist_text_limit((string) ($gallery['title'] ?? ''), 180),
-            'description' => openai_text_assist_text_limit((string) ($gallery['description'] ?? ''), 900),
-            'folder_path' => openai_text_assist_text_limit((string) ($gallery['folder_path'] ?? ''), 280),
+            'title' => openai_text_assist_text_limit(
+                (string) ($gallery['title'] ?? ''),
+                180,
+            ),
+            'description' => openai_text_assist_text_limit(
+                (string) ($gallery['description'] ?? ''),
+                900,
+            ),
+            'folder_path' => openai_text_assist_text_limit(
+                (string) ($gallery['folder_path'] ?? ''),
+                280,
+            ),
             'tags' => openai_text_assist_text_limit($galleryTags, 600),
         ],
         'internal_ai_metadata' => $metadataSummary,
@@ -528,15 +757,25 @@ function openai_text_assist_image_context(int $imageId): array
  */
 function openai_text_assist_text_limit(string $value, int $limit): string
 {
-    $value = trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/u', ' ', $value) ?? '');
+    $value = trim(
+        preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/u', ' ', $value) ?? '',
+    );
     if ($limit <= 0) {
         return '';
     }
-    $length = function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($value, 'UTF-8')
+        : strlen($value);
     if ($length <= $limit) {
         return $value;
     }
-    return (function_exists('mb_substr') ? mb_substr($value, 0, $limit, 'UTF-8') : substr($value, 0, $limit)) . '…';
+    return (
+        (
+            function_exists('mb_substr')
+                ? mb_substr($value, 0, $limit, 'UTF-8')
+                : substr($value, 0, $limit)
+        ) . '…'
+    );
 }
 
 /**
@@ -548,7 +787,16 @@ function openai_text_assist_text_limit(string $value, int $limit): string
 function openai_text_assist_normalize_task(string $task): string
 {
     $task = strtolower(trim($task));
-    $allowed = ['gallery_description', 'gallery_summary', 'image_description', 'image_visual_description', 'gallery_visual_description', 'cleanup_text', 'expand_text', 'translate_text'];
+    $allowed = [
+        'gallery_description',
+        'gallery_summary',
+        'image_description',
+        'image_visual_description',
+        'gallery_visual_description',
+        'cleanup_text',
+        'expand_text',
+        'translate_text',
+    ];
     return in_array($task, $allowed, true) ? $task : 'gallery_description';
 }
 
@@ -561,7 +809,11 @@ function openai_text_assist_normalize_task(string $task): string
 function openai_text_assist_task_uses_images(string $task): bool
 {
     $task = openai_text_assist_normalize_task($task);
-    return in_array($task, ['image_visual_description', 'gallery_visual_description'], true);
+    return in_array(
+        $task,
+        ['image_visual_description', 'gallery_visual_description'],
+        true,
+    );
 }
 
 /**
@@ -573,27 +825,42 @@ function openai_text_assist_language_catalog(): array
 {
     return [
         'auto' => [
-            'label' => openai_text_assist_t('admin.openai.language_auto', 'Auto'),
+            'label' => openai_text_assist_t(
+                'admin.openai.language_auto',
+                'Auto',
+            ),
             'flag' => '🌐',
             'instruction' => 'Choose the output language from the supplied title, existing text, tags, and gallery context.',
         ],
         'cs' => [
-            'label' => openai_text_assist_t('admin.openai.language_cs', 'Czech'),
+            'label' => openai_text_assist_t(
+                'admin.openai.language_cs',
+                'Czech',
+            ),
             'flag' => '🇨🇿',
             'instruction' => 'Write the final output in Czech.',
         ],
         'en' => [
-            'label' => openai_text_assist_t('admin.openai.language_en', 'English'),
+            'label' => openai_text_assist_t(
+                'admin.openai.language_en',
+                'English',
+            ),
             'flag' => '🇬🇧',
             'instruction' => 'Write the final output in English.',
         ],
         'de' => [
-            'label' => openai_text_assist_t('admin.openai.language_de', 'German'),
+            'label' => openai_text_assist_t(
+                'admin.openai.language_de',
+                'German',
+            ),
             'flag' => '🇩🇪',
             'instruction' => 'Write the final output in German.',
         ],
         'sv' => [
-            'label' => openai_text_assist_t('admin.openai.language_sv', 'Swedish'),
+            'label' => openai_text_assist_t(
+                'admin.openai.language_sv',
+                'Swedish',
+            ),
             'flag' => '🇸🇪',
             'instruction' => 'Write the final output in Swedish.',
         ],
@@ -615,7 +882,9 @@ function openai_text_assist_normalize_language(string $language): string
 
     $language = str_replace('_', '-', $language);
     $primary = explode('-', $language)[0] ?? '';
-    return array_key_exists($primary, openai_text_assist_language_catalog()) ? $primary : 'auto';
+    return array_key_exists($primary, openai_text_assist_language_catalog())
+        ? $primary
+        : 'auto';
 }
 
 /**
@@ -625,7 +894,9 @@ function openai_text_assist_normalize_language(string $language): string
  */
 function openai_text_assist_default_language(): string
 {
-    $active = function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : '';
+    $active = function_exists('Gallery\\Services\\translation_active_language')
+        ? translation_active_language()
+        : '';
     $normalized = openai_text_assist_normalize_language($active);
     return $normalized === 'auto' ? 'en' : $normalized;
 }
@@ -640,7 +911,9 @@ function openai_text_assist_language_instruction(string $language): string
 {
     $normalized = openai_text_assist_normalize_language($language);
     $catalog = openai_text_assist_language_catalog();
-    return (string) ($catalog[$normalized]['instruction'] ?? $catalog['auto']['instruction']);
+    return (string) (
+        $catalog[$normalized]['instruction'] ?? $catalog['auto']['instruction']
+    );
 }
 
 /**
@@ -652,8 +925,12 @@ function openai_text_assist_language_instruction(string $language): string
  * @param string $language Language value.
  * @return array{instructions:string,input:string,max_output_tokens:int} Structured result data for the caller.
  */
-function openai_text_assist_prompt(string $task, array $context, string $existingText, string $language = 'auto'): array
-{
+function openai_text_assist_prompt(
+    string $task,
+    array $context,
+    string $existingText,
+    string $language = 'auto',
+): array {
     $task = openai_text_assist_normalize_task($task);
     $language = openai_text_assist_normalize_language($language);
     $existingText = openai_text_assist_text_limit($existingText, 2500);
@@ -690,36 +967,57 @@ function openai_text_assist_prompt(string $task, array $context, string $existin
         'output_language' => $language,
         'context' => $promptContext,
     ];
-    $encoded = json_encode($input, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    $encoded = json_encode(
+        $input,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT,
+    );
     if (!is_string($encoded)) {
         $encoded = '{}';
     }
 
     return [
         'instructions' => $baseInstructions . "\n" . $taskInstructions[$task],
-        'input' => openai_text_assist_text_limit($encoded, OPENAI_TEXT_ASSIST_MAX_CONTEXT_CHARS),
-        'max_output_tokens' => in_array($task, ['cleanup_text', 'translate_text'], true) ? 900 : 1200,
+        'input' => openai_text_assist_text_limit(
+            $encoded,
+            OPENAI_TEXT_ASSIST_MAX_CONTEXT_CHARS,
+        ),
+        'max_output_tokens' => in_array(
+            $task,
+            ['cleanup_text', 'translate_text'],
+            true,
+        )
+            ? 900
+            : 1200,
     ];
 }
-
 
 /**
  * Return one compact thumbnail reference for image-input prompts.
  *
- * @param array $image Image row or image data.
- * @return array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string} Structured result data for the caller.
+ * @param array<string,mixed> $image Image row used to find its gallery and thumbnail.
+ * @return array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string} Encoded thumbnail and its display metadata.
  */
 function openai_text_assist_thumbnail_reference_for_image(array $image): array
 {
-    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery')
+        ? find_gallery((int) ($image['gallery_id'] ?? 0))
+        : null;
     if (!$gallery) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_gallery_missing',
+            'The gallery could not be found. Reload the editor and try again.',
+        ));
     }
 
     foreach (thumbnail_sizes() as $size) {
         foreach (['webp', 'jpg'] as $format) {
             try {
-                $path = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+                $path = thumbnail_abs_path(
+                    $image,
+                    $gallery,
+                    (int) $size,
+                    $format,
+                );
             } catch (RuntimeException) {
                 continue;
             }
@@ -742,7 +1040,8 @@ function openai_text_assist_thumbnail_reference_for_image(array $image): array
                 'image_id' => (int) ($image['id'] ?? 0),
                 'label' => openai_text_assist_text_limit($label, 160),
                 'detail' => 'low',
-                'data_url' => 'data:' . $mimeType . ';base64,' . base64_encode($binary),
+                'data_url' =>
+                    'data:' . $mimeType . ';base64,' . base64_encode($binary),
                 'size' => (int) $size,
                 'format' => $format,
                 'mime_type' => $mimeType,
@@ -750,7 +1049,10 @@ function openai_text_assist_thumbnail_reference_for_image(array $image): array
         }
     }
 
-    throw new RuntimeException(openai_text_assist_t('admin.openai.error_thumbnail_missing', 'No generated thumbnail was found for this photo. Create thumbnails first, then try again.'));
+    throw new RuntimeException(openai_text_assist_t(
+        'admin.openai.error_thumbnail_missing',
+        'No generated thumbnail was found for this photo. Create thumbnails first, then try again.',
+    ));
 }
 
 /**
@@ -761,9 +1063,14 @@ function openai_text_assist_thumbnail_reference_for_image(array $image): array
  */
 function openai_text_assist_thumbnail_reference_for_image_id(int $imageId): array
 {
-    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image')
+        ? find_image($imageId)
+        : null;
     if (!$image) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_image_missing',
+            'The photo could not be found. Reload the editor and try again.',
+        ));
     }
 
     return openai_text_assist_thumbnail_reference_for_image($image);
@@ -777,12 +1084,19 @@ function openai_text_assist_thumbnail_reference_for_image_id(int $imageId): arra
  */
 function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
 {
-    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery($galleryId) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery')
+        ? find_gallery($galleryId)
+        : null;
     if (!$gallery) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_gallery_missing',
+            'The gallery could not be found. Reload the editor and try again.',
+        ));
     }
 
-    $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($galleryId, false) : [];
+    $images = function_exists('Gallery\\Services\\gallery_images')
+        ? gallery_images($galleryId, false)
+        : [];
     $candidates = [];
     foreach ($images as $image) {
         $imageId = (int) ($image['id'] ?? 0);
@@ -791,9 +1105,16 @@ function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
         }
         $candidates[] = [
             'id' => $imageId,
-            'filename' => openai_text_assist_text_limit((string) ($image['filename'] ?? $image['relative_path'] ?? ''), 180),
-            'title' => openai_text_assist_text_limit((string) ($image['title'] ?? ''), 180),
-            'has_description' => trim((string) ($image['description'] ?? '')) !== '',
+            'filename' => openai_text_assist_text_limit(
+                (string) ($image['filename'] ?? $image['relative_path'] ?? ''),
+                180,
+            ),
+            'title' => openai_text_assist_text_limit(
+                (string) ($image['title'] ?? ''),
+                180,
+            ),
+            'has_description' =>
+                trim((string) ($image['description'] ?? '')) !== '',
         ];
     }
 
@@ -807,18 +1128,27 @@ function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
  * @param string $description Description value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function openai_text_assist_save_image_description(int $imageId, string $description): array
-{
-    $image = function_exists('Gallery\Services\find_image') ? find_image($imageId) : null;
+function openai_text_assist_save_image_description(
+    int $imageId,
+    string $description,
+): array {
+    $image = function_exists('Gallery\Services\find_image')
+        ? find_image($imageId)
+        : null;
     if (!$image) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_image_missing',
+            'The photo could not be found. Reload the editor and try again.',
+        ));
     }
 
     $description = openai_text_assist_text_limit($description, 8000);
     $updated = openai_text_assist_model_save_image_description(
         $imageId,
         $description,
-        function_exists('Gallery\Core\now_sql') ? now_sql() : date('Y-m-d H:i:s')
+        function_exists('Gallery\Core\now_sql')
+            ? now_sql()
+            : date('Y-m-d H:i:s'),
     );
     return $updated ?? array_merge($image, ['description' => $description]);
 }
@@ -830,8 +1160,10 @@ function openai_text_assist_save_image_description(int $imageId, string $descrip
  * @param int $limit Maximum number of items.
  * @return array<int,array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string}> Structured result data for the caller.
  */
-function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $limit = OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT): array
-{
+function openai_text_assist_gallery_thumbnail_references(
+    int $galleryId,
+    int $limit = OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT,
+): array {
     $limit = max(1, min(12, $limit));
     $queue = [$galleryId];
     $visited = [];
@@ -844,10 +1176,13 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
         }
         $visited[$currentGalleryId] = true;
 
-        $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($currentGalleryId, false) : [];
+        $images = function_exists('Gallery\\Services\\gallery_images')
+            ? gallery_images($currentGalleryId, false)
+            : [];
         foreach ($images as $image) {
             try {
-                $references[] = openai_text_assist_thumbnail_reference_for_image($image);
+                $references[] =
+                    openai_text_assist_thumbnail_reference_for_image($image);
             } catch (Throwable) {
                 continue;
             }
@@ -860,7 +1195,9 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
             break;
         }
 
-        $children = function_exists('Gallery\\Services\\child_galleries') ? child_galleries($currentGalleryId, false) : [];
+        $children = function_exists('Gallery\\Services\\child_galleries')
+            ? child_galleries($currentGalleryId, false)
+            : [];
         foreach ($children as $child) {
             $childId = (int) ($child['id'] ?? 0);
             if ($childId > 0 && !isset($visited[$childId])) {
@@ -870,7 +1207,10 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
     }
 
     if ($references === []) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_thumbnail_missing', 'No generated thumbnails were found in this gallery. Create thumbnails first, then try again.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_gallery_thumbnail_missing',
+            'No generated thumbnails were found in this gallery. Create thumbnails first, then try again.',
+        ));
     }
 
     return $references;
@@ -881,10 +1221,12 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
  *
  * @param array<string,mixed> $prompt Prompt instructions and text context.
  * @param array<int,array<string,mixed>> $visualReferences Thumbnail references.
- * @return string|array<int,array<string,mixed>> Structured result data for the caller.
+ * @return string|array{role:string,content:list<array{type:string,text?:string,image_url?:string,detail?:string}>} Responses API text or multimodal input.
  */
-function openai_text_assist_payload_input(array $prompt, array $visualReferences)
-{
+function openai_text_assist_payload_input(
+    array $prompt,
+    array $visualReferences,
+): string|array {
     if ($visualReferences === []) {
         return (string) ($prompt['input'] ?? '');
     }
@@ -925,30 +1267,71 @@ function openai_text_assist_payload_input(array $prompt, array $visualReferences
  * @param string $language Language value.
  * @return array{text:string,model:string} Structured result data for the caller.
  */
-function openai_text_assist_generate(int $userId, string $task, array $context, string $existingText, string $language = 'auto'): array
-{
+function openai_text_assist_generate(
+    int $userId,
+    string $task,
+    array $context,
+    string $existingText,
+    string $language = 'auto',
+): array {
     if (!openai_text_assist_available($userId)) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_not_enabled', 'OpenAI text assistance is not enabled for this account.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_not_enabled',
+            'OpenAI text assistance is not enabled for this account.',
+        ));
     }
 
     $settings = openai_text_assist_user_settings($userId);
-    $apiKey = openai_text_assist_decrypt_secret((string) ($settings['api_key_cipher'] ?? ''));
+    $apiKey = openai_text_assist_decrypt_secret(
+        (string) ($settings['api_key_cipher'] ?? ''),
+    );
     if ($apiKey === '') {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_key_unreadable', 'The saved OpenAI API key could not be read. Save the key again from your profile.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_key_unreadable',
+            'The saved OpenAI API key could not be read. Save the key again from your profile.',
+        ));
     }
 
-    $model = openai_text_assist_normalize_model((string) ($settings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL));
-    if (openai_text_assist_task_uses_images($task) && !openai_text_assist_image_input_allowed($userId)) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_input_disabled', 'Sending thumbnails to OpenAI is disabled for this account. Enable it in your profile first.'));
+    $model = openai_text_assist_normalize_model(
+        (string) ($settings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL),
+    );
+    if (
+        openai_text_assist_task_uses_images($task)
+        && !openai_text_assist_image_input_allowed($userId)
+    ) {
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_image_input_disabled',
+            'Sending thumbnails to OpenAI is disabled for this account. Enable it in your profile first.',
+        ));
     }
 
-    $prompt = openai_text_assist_prompt($task, $context, $existingText, $language);
+    $prompt = openai_text_assist_prompt(
+        $task,
+        $context,
+        $existingText,
+        $language,
+    );
     $visualReferences = [];
-    if (openai_text_assist_task_uses_images($task) && isset($context['visual_references']) && is_array($context['visual_references'])) {
-        $visualReferences = array_values(array_filter($context['visual_references'], static fn ($item): bool => is_array($item) && !empty($item['data_url'])));
+    if (
+        openai_text_assist_task_uses_images($task)
+        && isset($context['visual_references'])
+        && is_array($context['visual_references'])
+    ) {
+        $visualReferences = array_values(array_filter(
+            $context['visual_references'],
+            static fn(mixed $item): bool => (
+                is_array($item) && !empty($item['data_url'])
+            ),
+        ));
     }
-    if (openai_text_assist_task_uses_images($task) && $visualReferences === []) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_thumbnail_missing', 'No generated thumbnail was found for this photo. Create thumbnails first, then try again.'));
+    if (
+        openai_text_assist_task_uses_images($task)
+        && $visualReferences === []
+    ) {
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_thumbnail_missing',
+            'No generated thumbnail was found for this photo. Create thumbnails first, then try again.',
+        ));
     }
 
     $payload = [
@@ -958,10 +1341,18 @@ function openai_text_assist_generate(int $userId, string $task, array $context, 
         'max_output_tokens' => (int) ($prompt['max_output_tokens'] ?? 1200),
     ];
 
-    $response = openai_text_assist_post_json(OPENAI_TEXT_ASSIST_ENDPOINT, $payload, $apiKey, OPENAI_TEXT_ASSIST_TIMEOUT_SECONDS);
+    $response = openai_text_assist_post_json(
+        OPENAI_TEXT_ASSIST_ENDPOINT,
+        $payload,
+        $apiKey,
+        OPENAI_TEXT_ASSIST_TIMEOUT_SECONDS,
+    );
     $text = openai_text_assist_extract_output_text($response);
     if ($text === '') {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_empty_response', 'OpenAI returned an empty text suggestion. Try again or use the manual description field.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_empty_response',
+            'OpenAI returned an empty text suggestion. Try again or use the manual description field.',
+        ));
     }
 
     return [
@@ -980,11 +1371,21 @@ function openai_text_assist_generate(int $userId, string $task, array $context, 
  * @param int $timeoutSeconds Timeout seconds value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function openai_text_assist_post_json(string $url, array $payload, string $apiKey, int $timeoutSeconds): array
-{
-    $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+function openai_text_assist_post_json(
+    string $url,
+    array $payload,
+    string $apiKey,
+    int $timeoutSeconds,
+): array {
+    $body = json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($body)) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_encode_failed', 'Could not prepare the OpenAI request.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_encode_failed',
+            'Could not prepare the OpenAI request.',
+        ));
     }
 
     $headers = [
@@ -996,7 +1397,10 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
     if (function_exists('curl_init')) {
         $handle = curl_init($url);
         if ($handle === false) {
-            throw new RuntimeException(openai_text_assist_t('admin.openai.error_http_client', 'Could not initialize the OpenAI HTTP client.'));
+            throw new RuntimeException(openai_text_assist_t(
+                'admin.openai.error_http_client',
+                'Could not initialize the OpenAI HTTP client.',
+            ));
         }
         curl_setopt_array($handle, [
             CURLOPT_POST => true,
@@ -1007,13 +1411,23 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'unknown'),
+            CURLOPT_USERAGENT =>
+                'PHP-Gallery-CMS/'
+                    . (
+                        function_exists('Gallery\\Core\\cms_current_version')
+                            ? cms_current_version()
+                            : 'unknown'
+                    ),
         ]);
         $responseBody = curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
         $error = curl_error($handle);
         curl_close($handle);
-        return openai_text_assist_decode_http_response((string) $responseBody, $status, $error);
+        return openai_text_assist_decode_http_response(
+            (string) $responseBody,
+            $status,
+            $error,
+        );
     }
 
     $context = stream_context_create([
@@ -1027,12 +1441,16 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
     ]);
     $responseBody = @file_get_contents($url, false, $context);
     $status = 0;
-    foreach (($http_response_header ?? []) as $line) {
+    foreach ($http_response_header ?? [] as $line) {
         if (preg_match('/^HTTP\/\S+\s+(\d+)/', $line, $match)) {
             $status = (int) $match[1];
         }
     }
-    return openai_text_assist_decode_http_response($responseBody === false ? '' : (string) $responseBody, $status, $responseBody === false ? 'HTTP request failed.' : '');
+    return openai_text_assist_decode_http_response(
+        $responseBody === false ? '' : (string) $responseBody,
+        $status,
+        $responseBody === false ? 'HTTP request failed.' : '',
+    );
 }
 
 /**
@@ -1043,23 +1461,39 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
  * @param string $transportError Transport error value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function openai_text_assist_decode_http_response(string $responseBody, int $status, string $transportError): array
-{
+function openai_text_assist_decode_http_response(
+    string $responseBody,
+    int $status,
+    string $transportError,
+): array {
     if ($responseBody === '' || $status >= 400 || $status === 0) {
         $decodedError = json_decode($responseBody, true);
         $message = '';
         if (is_array($decodedError)) {
-            $message = (string) ($decodedError['error']['message'] ?? $decodedError['message'] ?? '');
+            $message = (string) (
+                $decodedError['error']['message']
+                ?? $decodedError['message']
+                ?? ''
+            );
         }
         if ($message === '') {
-            $message = $transportError !== '' ? $transportError : 'HTTP status ' . $status;
+            $message = $transportError !== ''
+                ? $transportError
+                : 'HTTP status ' . $status;
         }
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_api_failed', 'OpenAI request failed: {message}', ['message' => $message]));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_api_failed',
+            'OpenAI request failed: {message}',
+            ['message' => $message],
+        ));
     }
 
     $decoded = json_decode($responseBody, true);
     if (!is_array($decoded)) {
-        throw new RuntimeException(openai_text_assist_t('admin.openai.error_invalid_response', 'OpenAI returned an unreadable response.'));
+        throw new RuntimeException(openai_text_assist_t(
+            'admin.openai.error_invalid_response',
+            'OpenAI returned an unreadable response.',
+        ));
     }
     return $decoded;
 }
@@ -1078,11 +1512,11 @@ function openai_text_assist_extract_output_text(array $response): string
     }
 
     $parts = [];
-    foreach (($response['output'] ?? []) as $item) {
+    foreach ($response['output'] ?? [] as $item) {
         if (!is_array($item)) {
             continue;
         }
-        foreach (($item['content'] ?? []) as $content) {
+        foreach ($item['content'] ?? [] as $content) {
             if (!is_array($content)) {
                 continue;
             }

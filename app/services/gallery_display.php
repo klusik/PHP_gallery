@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-
 /**
  * Gallery display-preference service layer.
  *
@@ -63,12 +62,15 @@ function gallery_filename_display_schema_ready(): bool
  * The default is intentionally false. Gallery cards and lightbox metadata should
  * not expose raw uploaded filenames unless the admin opts in per gallery.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return bool True when the condition matches.
+ * @param array{show_filenames?:int|string|null} $gallery Gallery row with its optional filename-display flag.
+ * @return bool True when filename display storage is available and the gallery flag is 1.
  */
 function gallery_shows_filenames(array $gallery): bool
 {
-    return gallery_filename_display_schema_ready() && (int) ($gallery['show_filenames'] ?? 0) === 1;
+    return (
+        gallery_filename_display_schema_ready()
+            && (int) ($gallery['show_filenames'] ?? 0) === 1
+    );
 }
 
 /**
@@ -90,7 +92,8 @@ function public_image_display_title(array $image, array $gallery): string
     // Variable $filenameStem stores the uploaded filename without its extension.
     $filenameStem = trim((string) pathinfo($filename, PATHINFO_FILENAME));
     // Variable $titleLooksLikeFilename records whether older scans stored a filename-derived value as the image title.
-    $titleLooksLikeFilename = $title !== '' && ($title === $filename || $title === $filenameStem);
+    $titleLooksLikeFilename =
+        $title !== '' && ($title === $filename || $title === $filenameStem);
 
     if ($title !== '' && !$titleLooksLikeFilename) {
         return $title;

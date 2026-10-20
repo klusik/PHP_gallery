@@ -40,7 +40,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use CURLFile;
 use RuntimeException;
 use Throwable;
@@ -61,11 +60,14 @@ use function Gallery\Core\unique_slug;
  *
  * @param string $key Translation key.
  * @param string $fallback English fallback text.
- * @param array $parameters Parameters value.
- * @return string Resolved text.
+ * @param array<string,string|int|float|bool> $parameters Scalar translation placeholders indexed by placeholder name.
+ * @return string Translated message for the key with the supplied fallback and scalar placeholders.
  */
-function gallery_migration_t(string $key, string $fallback, array $parameters = []): string
-{
+function gallery_migration_t(
+    string $key,
+    string $fallback,
+    array $parameters = [],
+): string {
     if (function_exists('Gallery\\Services\\t')) {
         return t($key, $fallback, $parameters);
     }
@@ -83,11 +85,16 @@ function gallery_migration_t(string $key, string $fallback, array $parameters = 
  * @param string $targetVersion Target version value.
  * @return array{ok:bool,source_version:string,target_version:string,policy:string,message:string} Structured result data for the caller.
  */
-function gallery_migration_compatibility_result(string $sourceVersion, string $targetVersion): array
-{
+function gallery_migration_compatibility_result(
+    string $sourceVersion,
+    string $targetVersion,
+): array {
     $sourceVersion = trim($sourceVersion);
     $targetVersion = trim($targetVersion);
-    $ok = $sourceVersion !== '' && $targetVersion !== '' && $sourceVersion === $targetVersion;
+    $ok =
+        $sourceVersion !== ''
+        && $targetVersion !== ''
+        && $sourceVersion === $targetVersion;
 
     return [
         'ok' => $ok,
@@ -95,11 +102,21 @@ function gallery_migration_compatibility_result(string $sourceVersion, string $t
         'target_version' => $targetVersion,
         'policy' => 'exact',
         'message' => $ok
-            ? gallery_migration_t('gallery_migration.compatibility_ok', 'Source and target versions match.')
+            ? gallery_migration_t(
+                'gallery_migration.compatibility_ok',
+                'Source and target versions match.',
+            )
             : gallery_migration_t(
                 'gallery_migration.compatibility_failed',
                 'Migration requires identical PHP Gallery versions for now. Source: {source}. Target: {target}.',
-                ['source' => $sourceVersion !== '' ? $sourceVersion : 'unknown', 'target' => $targetVersion !== '' ? $targetVersion : 'unknown']
+                [
+                    'source' => $sourceVersion !== ''
+                        ? $sourceVersion
+                        : 'unknown',
+                    'target' => $targetVersion !== ''
+                        ? $targetVersion
+                        : 'unknown',
+                ],
             ),
     ];
 }
@@ -111,9 +128,14 @@ function gallery_migration_compatibility_result(string $sourceVersion, string $t
  * @param string $targetVersion Target version value.
  * @return bool True when the condition matches.
  */
-function gallery_migration_versions_compatible(string $sourceVersion, string $targetVersion): bool
-{
-    return gallery_migration_compatibility_result($sourceVersion, $targetVersion)['ok'];
+function gallery_migration_versions_compatible(
+    string $sourceVersion,
+    string $targetVersion,
+): bool {
+    return gallery_migration_compatibility_result(
+        $sourceVersion,
+        $targetVersion,
+    )['ok'];
 }
 
 /**
@@ -123,7 +145,11 @@ function gallery_migration_versions_compatible(string $sourceVersion, string $ta
  */
 function gallery_migration_current_version(): string
 {
-    return function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : (defined('Gallery\\Core\\CMS_VERSION') ? CMS_VERSION : '');
+    return (
+        function_exists('Gallery\\Core\\cms_current_version')
+            ? cms_current_version()
+            : (defined('Gallery\\Core\\CMS_VERSION') ? CMS_VERSION : '')
+    );
 }
 
 /**
@@ -148,7 +174,12 @@ function gallery_migration_timeout_seconds(?int $seconds = null): int
  */
 function gallery_migration_request_timeout_seconds(): int
 {
-    return gallery_migration_timeout_seconds((int) (request_data('post')['reconnect_seconds'] ?? GALLERY_MIGRATION_RECONNECT_SECONDS));
+    return gallery_migration_timeout_seconds(
+        (int) (
+            request_data('post')['reconnect_seconds']
+            ?? GALLERY_MIGRATION_RECONNECT_SECONDS
+        ),
+    );
 }
 
 /**

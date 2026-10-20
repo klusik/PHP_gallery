@@ -35,7 +35,9 @@ require_once dirname(__DIR__) . '/scripts/source_contracts/inventory.php';
 $root = dirname(__DIR__);
 $failures = [];
 $audited = 0;
-foreach (\PhpGallery\SourceContracts\inventory($root)['files'] as $relative => $extension) {
+foreach (\PhpGallery\SourceContracts\inventory(
+    $root,
+)['files'] as $relative => $extension) {
     $source = file_get_contents($root . '/' . $relative);
     if (!is_string($source)) {
         $failures[] = $relative . ': unable to read source file';
@@ -43,14 +45,29 @@ foreach (\PhpGallery\SourceContracts\inventory($root)['files'] as $relative => $
     }
 
     $audited++;
-    foreach (\PhpGallery\SourceContracts\header_issues($source, $relative) as $rule) {
-        $failures[] = $relative . ': ' . $rule . ' missing from the leading native header';
+    foreach (\PhpGallery\SourceContracts\header_issues(
+        $source,
+        $relative,
+    ) as $rule) {
+        $failures[] =
+            $relative
+            . ': '
+            . $rule
+            . ' missing from the leading native header';
     }
 }
 
 if ($failures !== []) {
-    fwrite(STDERR, "Source header author contract failed:\n - " . implode("\n - ", $failures) . "\n");
+    fwrite(
+        STDERR,
+        "Source header author contract failed:\n - "
+            . implode("\n - ", $failures)
+            . "\n",
+    );
     exit(1);
 }
 
-echo 'PASS source_header_author: complete native headers in ' . $audited . " first-party source files.\n";
+echo
+    'PASS source_header_author: complete native headers in '
+        . $audited
+        . " first-party source files.\n";

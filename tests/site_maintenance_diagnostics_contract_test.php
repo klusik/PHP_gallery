@@ -63,10 +63,30 @@ namespace Gallery\Services {
         }
     }
 
-    /** Capture one maintenance log event without external persistence. */
-    function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-    {
-        $GLOBALS['site_maintenance_test_logs'][] = compact('level', 'eventKey', 'message', 'context', 'options');
+    /**
+     * Capture one maintenance log event without external persistence.
+     *
+     * @param string $level Event severity.
+     * @param string $eventKey Stable event identifier.
+     * @param string $message Safe event summary.
+     * @param array<string,scalar|null|array<string,scalar|null>> $context Structured maintenance event fields.
+     * @param array<string,scalar|null> $options Event classification and correlation options.
+     * @return void Append the event fields to the fixture log collection.
+     */
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
+        $GLOBALS['site_maintenance_test_logs'][] = compact(
+            'level',
+            'eventKey',
+            'message',
+            'context',
+            'options',
+        );
     }
 }
 
@@ -74,9 +94,17 @@ namespace {
     use function Gallery\Services\site_maintenance_last_failure;
     use function Gallery\Services\site_maintenance_run_cleanup_operation;
 
-    /** Throw when one maintenance diagnostic contract fails. */
-    function site_maintenance_diagnostics_assert(bool $condition, string $label): void
-    {
+    /**
+     * Throw when one maintenance diagnostic contract fails.
+     *
+     * @param bool $condition Whether the expected diagnostic contract holds.
+     * @param string $label Failure description.
+     * @return void Throw when the condition is false.
+     */
+    function site_maintenance_diagnostics_assert(
+        bool $condition,
+        string $label,
+    ): void {
         if (!$condition) {
             throw new RuntimeException($label);
         }
@@ -88,31 +116,89 @@ namespace {
     require_once $root . '/app/services/site_maintenance.php';
 
     $state = ['cycle_date' => 'manual-2026-09-19-100000', 'source' => 'admin'];
-    $success = site_maintenance_run_cleanup_operation('fixture_success', static fn(): array => ['deleted' => 2], $state);
-    site_maintenance_diagnostics_assert($success['ok'] === true && ($success['value']['deleted'] ?? 0) === 2, 'Successful cleanup must return its existing result value.');
-    site_maintenance_diagnostics_assert(($success['diagnostic']['status'] ?? '') === 'completed' && ($success['diagnostic']['operation'] ?? '') === 'fixture_success', 'Successful cleanup must expose stable operation/result diagnostics.');
+    $success = site_maintenance_run_cleanup_operation(
+        'fixture_success',
+        static fn(): array => ['deleted' => 2],
+        $state,
+    );
+    site_maintenance_diagnostics_assert(
+        $success['ok'] === true && ($success['value']['deleted'] ?? 0) === 2,
+        'Successful cleanup must return its existing result value.',
+    );
+    site_maintenance_diagnostics_assert(
+        ($success['diagnostic']['status'] ?? '') === 'completed'
+            && ($success['diagnostic']['operation'] ?? '')
+                === 'fixture_success',
+        'Successful cleanup must expose stable operation/result diagnostics.',
+    );
 
-    $failure = site_maintenance_run_cleanup_operation('fixture_failure', static function (): never {
-        throw new RuntimeException('private path /secret/example and SQL SELECT * FROM users');
-    }, $state);
-    site_maintenance_diagnostics_assert($failure['ok'] === false, 'Optional cleanup failure must be isolated rather than thrown to the whole cycle.');
-    site_maintenance_diagnostics_assert(($failure['diagnostic']['error_code'] ?? '') === 'cleanup_exception', 'Failed cleanup must expose a stable safe error code.');
-    site_maintenance_diagnostics_assert(($failure['diagnostic']['exception_class'] ?? '') === RuntimeException::class, 'Failed cleanup may expose only the bounded exception class, not the message.');
+    $failure = site_maintenance_run_cleanup_operation(
+        'fixture_failure',
+        static function (): never {
+            throw new RuntimeException(
+                'private path /secret/example and SQL SELECT * FROM users',
+            );
+        },
+        $state,
+    );
+    site_maintenance_diagnostics_assert(
+        $failure['ok'] === false,
+        'Optional cleanup failure must be isolated rather than thrown to the whole cycle.',
+    );
+    site_maintenance_diagnostics_assert(
+        ($failure['diagnostic']['error_code'] ?? '') === 'cleanup_exception',
+        'Failed cleanup must expose a stable safe error code.',
+    );
+    site_maintenance_diagnostics_assert(
+        ($failure['diagnostic']['exception_class'] ?? '')
+            === RuntimeException::class,
+        'Failed cleanup may expose only the bounded exception class, not the message.',
+    );
 
-    $serialized = json_encode([$failure, $GLOBALS['site_maintenance_test_settings'], $GLOBALS['site_maintenance_test_logs']], JSON_UNESCAPED_SLASHES);
-    site_maintenance_diagnostics_assert(is_string($serialized) && !str_contains($serialized, '/secret/example') && !str_contains($serialized, 'SELECT * FROM users'), 'Exception messages containing paths or SQL must not be persisted or logged.');
+    $serialized = json_encode(
+        [
+            $failure,
+            $GLOBALS['site_maintenance_test_settings'],
+            $GLOBALS['site_maintenance_test_logs'],
+        ],
+        JSON_UNESCAPED_SLASHES,
+    );
+    site_maintenance_diagnostics_assert(
+        is_string($serialized)
+            && !str_contains($serialized, '/secret/example')
+            && !str_contains($serialized, 'SELECT * FROM users'),
+        'Exception messages containing paths or SQL must not be persisted or logged.',
+    );
 
     $lastFailure = site_maintenance_last_failure();
-    site_maintenance_diagnostics_assert(($lastFailure['operation'] ?? '') === 'fixture_failure' && ($lastFailure['error_code'] ?? '') === 'cleanup_exception', 'Most recent isolated cleanup failure must be persisted for authenticated Admin diagnostics.');
-
-    $serviceSource = (string) file_get_contents($root . '/app/services/site_maintenance.php');
-    $viewSource = (string) file_get_contents($root . '/app/views/admin_dashboard_sections.php');
     site_maintenance_diagnostics_assert(
-        str_contains($serviceSource, "'last_success' => site_maintenance_last_success()")
-            && str_contains($serviceSource, "'last_failure' => site_maintenance_last_failure()")
-            && str_contains($viewSource, 'admin.site_maintenance.last_success_summary')
-            && str_contains($viewSource, 'admin.site_maintenance.last_failure_summary'),
-        'Authenticated Admin diagnostics must surface distinct most-recent success and failure outcomes.'
+        ($lastFailure['operation'] ?? '') === 'fixture_failure'
+            && ($lastFailure['error_code'] ?? '') === 'cleanup_exception',
+        'Most recent isolated cleanup failure must be persisted for authenticated Admin diagnostics.',
+    );
+
+    $serviceSource = (string) file_get_contents($root
+        . '/app/services/site_maintenance.php');
+    $viewSource = (string) file_get_contents($root
+        . '/app/views/admin_dashboard_sections.php');
+    site_maintenance_diagnostics_assert(
+        str_contains(
+            $serviceSource,
+            "'last_success' => site_maintenance_last_success()",
+        )
+            && str_contains(
+                $serviceSource,
+                "'last_failure' => site_maintenance_last_failure()",
+            )
+            && str_contains(
+                $viewSource,
+                'admin.site_maintenance.last_success_summary',
+            )
+            && str_contains(
+                $viewSource,
+                'admin.site_maintenance.last_failure_summary',
+            ),
+        'Authenticated Admin diagnostics must surface distinct most-recent success and failure outcomes.',
     );
 
     echo "site_maintenance_diagnostics_contract_test: ok\n";

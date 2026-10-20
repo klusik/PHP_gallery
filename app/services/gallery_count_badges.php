@@ -130,7 +130,9 @@ function gallery_count_badge_override_label(string $value): string
  */
 function gallery_count_badge_state_label(bool $enabled): string
 {
-    return $enabled ? t('gallery.count_badge.shown', 'shown') : t('gallery.count_badge.hidden', 'hidden');
+    return $enabled
+        ? t('gallery.count_badge.shown', 'shown')
+        : t('gallery.count_badge.hidden', 'hidden');
 }
 
 /**
@@ -141,8 +143,16 @@ function gallery_count_badge_state_label(bool $enabled): string
  */
 function gallery_count_badge_source_label(array $gallery): string
 {
-    if (gallery_count_badge_schema_ready() && gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null) !== null) {
-        return t('admin.gallery_editor.count_badge_source_gallery', 'gallery override');
+    if (
+        gallery_count_badge_schema_ready()
+        && gallery_count_badge_storage_value(
+            $gallery['count_badge_visibility'] ?? null,
+        ) !== null
+    ) {
+        return t(
+            'admin.gallery_editor.count_badge_source_gallery',
+            'gallery override',
+        );
     }
     return t('admin.gallery_editor.count_badge_source_theme', 'Theme default');
 }
@@ -158,7 +168,9 @@ function gallery_count_badge_source_label(array $gallery): string
  */
 function gallery_count_badge_mode_normalize(mixed $value): string
 {
-    return in_array($value, ['public', 'all', 'both', 'hidden'], true) ? $value : 'both';
+    return in_array($value, ['public', 'all', 'both', 'hidden'], true)
+        ? $value
+        : 'both';
 }
 
 /**
@@ -168,7 +180,10 @@ function gallery_count_badge_mode_normalize(mixed $value): string
  */
 function theme_gallery_count_badge_mode(): string
 {
-    return gallery_count_badge_mode_normalize(app_setting('theme_gallery_count_badge_mode', 'both'));
+    return gallery_count_badge_mode_normalize(app_setting(
+        'theme_gallery_count_badge_mode',
+        'both',
+    ));
 }
 
 /**
@@ -190,7 +205,9 @@ function theme_gallery_count_badge_icons_enabled(): bool
 function gallery_effective_count_badge_mode(array $gallery): string
 {
     if (gallery_count_badge_schema_ready()) {
-        $override = gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null);
+        $override = gallery_count_badge_storage_value(
+            $gallery['count_badge_visibility'] ?? null,
+        );
         if ($override !== null) {
             return match ($override) {
                 'public' => 'public',
@@ -211,7 +228,9 @@ function gallery_effective_count_badge_mode(array $gallery): string
  */
 function gallery_count_badge_mode_label(string $mode): string
 {
-    return gallery_count_badge_override_label($mode === 'hidden' ? 'hide' : $mode);
+    return gallery_count_badge_override_label(
+        $mode === 'hidden' ? 'hide' : $mode,
+    );
 }
 
 /**
@@ -223,7 +242,12 @@ function gallery_count_badge_mode_label(string $mode): string
  */
 function gallery_count_badge_needs_total(array $gallery, bool $isAdmin): bool
 {
-    return $isAdmin && in_array(gallery_effective_count_badge_mode($gallery), ['all', 'both'], true);
+    return $isAdmin
+        && in_array(
+            gallery_effective_count_badge_mode($gallery),
+            ['all', 'both'],
+            true,
+        );
 }
 
 /**
@@ -238,13 +262,21 @@ function gallery_count_badge_needs_total(array $gallery, bool $isAdmin): bool
  * @param ?int $totalCount All live registered branch images, for Admin only.
  * @return array{visible:bool,admin:bool,mode:string,icons:bool,public_count:int,all_count:?int} Presentation.
  */
-function gallery_count_badge_presentation(array $gallery, bool $isAdmin, int $publicCount, ?int $totalCount): array
-{
+function gallery_count_badge_presentation(
+    array $gallery,
+    bool $isAdmin,
+    int $publicCount,
+    ?int $totalCount,
+): array {
     $mode = gallery_effective_count_badge_mode($gallery);
     if (!$isAdmin && $mode !== 'hidden') {
         $mode = 'public';
     }
-    if ($mode === 'both' && $totalCount !== null && $publicCount === $totalCount) {
+    if (
+        $mode === 'both'
+        && $totalCount !== null
+        && $publicCount === $totalCount
+    ) {
         $mode = 'all';
     }
     return [
@@ -253,8 +285,11 @@ function gallery_count_badge_presentation(array $gallery, bool $isAdmin, int $pu
         'mode' => $mode,
         'icons' => $isAdmin && theme_gallery_count_badge_icons_enabled(),
         'public_count' => max(0, $publicCount),
-        'all_count' => $isAdmin && in_array($mode, ['all', 'both'], true) && $totalCount !== null
-            ? max(0, $totalCount)
-            : null,
+        'all_count' =>
+            $isAdmin
+            && in_array($mode, ['all', 'both'], true)
+            && $totalCount !== null
+                ? max(0, $totalCount)
+                : null,
     ];
 }

@@ -42,7 +42,9 @@ require_once __DIR__ . '/support/gallery_edit_writer_source.php';
 function gallery_revision_direct_update_count(string $source): int
 {
     $count = 0;
-    $tokenSource = str_starts_with(ltrim($source), '<?php') ? $source : '<?php ' . $source;
+    $tokenSource = str_starts_with(ltrim($source), '<?php')
+        ? $source
+        : '<?php ' . $source;
     foreach (token_get_all($tokenSource) as $token) {
         if (!is_array($token) || $token[0] !== T_CONSTANT_ENCAPSED_STRING) {
             continue;
@@ -114,28 +116,38 @@ $contractedDirectCounts = [];
 
 foreach ($contracts as $relativePath => $functionsWithExpectedCounts) {
     $source = module_source($root . '/' . $relativePath);
-    gallery_writer_check($source !== '', 'Missing runtime model source: ' . $relativePath);
+    gallery_writer_check(
+        $source !== '',
+        'Missing runtime model source: ' . $relativePath,
+    );
     $functions = gallery_writer_functions($source);
     $expectedFileCount = array_sum($functionsWithExpectedCounts);
-    $contractedDirectCounts[str_replace('\\', '/', $relativePath)] = $expectedFileCount;
+    $contractedDirectCounts[str_replace('\\', '/', $relativePath)] =
+        $expectedFileCount;
     $actualFileCount = gallery_revision_direct_update_count($source);
     gallery_writer_check(
         $actualFileCount === $expectedFileCount,
-        'Uncontracted direct gallery UPDATE in ' . $relativePath . '.'
+        'Uncontracted direct gallery UPDATE in ' . $relativePath . '.',
     );
     foreach ($functionsWithExpectedCounts as $functionName => $expectedDirectCount) {
         $function = $functions[$functionName] ?? null;
-        gallery_writer_check(is_array($function), 'Missing runtime gallery writer: ' . $functionName);
         gallery_writer_check(
-            gallery_revision_direct_update_count($function['body']) === $expectedDirectCount,
-            'Gallery UPDATE inventory changed in ' . $functionName . '.'
+            is_array($function),
+            'Missing runtime gallery writer: ' . $functionName,
+        );
+        gallery_writer_check(
+            gallery_revision_direct_update_count($function['body'])
+                === $expectedDirectCount,
+            'Gallery UPDATE inventory changed in ' . $functionName . '.',
         );
         gallery_writer_check(
             str_contains(
                 gallery_revision_normalized_source($function['body']),
-                'edit_revision=edit_revision+1'
+                'edit_revision=edit_revision+1',
             ),
-            'Application-owned revision increment missing in ' . $functionName . '.'
+            'Application-owned revision increment missing in '
+                . $functionName
+                . '.',
         );
     }
 }
@@ -146,26 +158,41 @@ foreach ($contracts as $relativePath => $functionsWithExpectedCounts) {
  * represented by their named zero-direct-count contracts.
  */
 $modelFiles = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($root . '/app/models', FilesystemIterator::SKIP_DOTS)
+    new RecursiveDirectoryIterator(
+        $root . '/app/models',
+        FilesystemIterator::SKIP_DOTS,
+    ),
 );
 foreach ($modelFiles as $modelFile) {
-    if (!$modelFile->isFile() || strtolower($modelFile->getExtension()) !== 'php') {
+    if (
+        !$modelFile->isFile()
+        || strtolower($modelFile->getExtension()) !== 'php'
+    ) {
         continue;
     }
     $source = file_get_contents($modelFile->getPathname());
-    gallery_writer_check(is_string($source), 'Could not read runtime model source: ' . $modelFile->getPathname());
+    gallery_writer_check(
+        is_string($source),
+        'Could not read runtime model source: ' . $modelFile->getPathname(),
+    );
     $directCount = gallery_revision_direct_update_count($source);
     if ($directCount === 0) {
         continue;
     }
-    $relativePath = str_replace('\\', '/', substr($modelFile->getPathname(), strlen($root) + 1));
+    $relativePath = str_replace(
+        '\\',
+        '/',
+        substr($modelFile->getPathname(), strlen($root) + 1),
+    );
     gallery_writer_check(
         array_key_exists($relativePath, $contractedDirectCounts),
-        'Direct gallery UPDATE lacks a revision contract: ' . $relativePath . '.'
+        'Direct gallery UPDATE lacks a revision contract: '
+            . $relativePath
+            . '.',
     );
     gallery_writer_check(
         $directCount === $contractedDirectCounts[$relativePath],
-        'Direct gallery UPDATE inventory changed in ' . $relativePath . '.'
+        'Direct gallery UPDATE inventory changed in ' . $relativePath . '.',
     );
 }
 

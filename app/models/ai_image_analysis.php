@@ -49,8 +49,13 @@ use function Gallery\Core\db;
  * @param string $now Current SQL timestamp.
  * @return int Number of inserted jobs.
  */
-function ai_image_analysis_model_enqueue_missing_jobs(int $galleryId, string $modelName, string $modelVersion, int $limit, string $now): int
-{
+function ai_image_analysis_model_enqueue_missing_jobs(
+    int $galleryId,
+    string $modelName,
+    string $modelVersion,
+    int $limit,
+    string $now,
+): int {
     $limit = max(1, min(100, $limit));
     $sql = "INSERT IGNORE INTO image_ai_analysis_jobs (
             gallery_id, image_id, job_key, model_name, model_version,
@@ -88,9 +93,18 @@ function ai_image_analysis_model_enqueue_missing_jobs(int $galleryId, string $mo
         LIMIT " . $limit;
     $stmt = db()->prepare($sql);
     $stmt->execute([
-        $modelName, $modelVersion, $modelName, $modelVersion,
-        $now, $now, $now,
-        $modelName, $modelVersion, $galleryId, $modelName, $modelVersion,
+        $modelName,
+        $modelVersion,
+        $modelName,
+        $modelVersion,
+        $now,
+        $now,
+        $now,
+        $modelName,
+        $modelVersion,
+        $galleryId,
+        $modelName,
+        $modelVersion,
     ]);
     return max(0, (int) $stmt->rowCount());
 }
@@ -102,13 +116,17 @@ function ai_image_analysis_model_enqueue_missing_jobs(int $galleryId, string $mo
  * @param string $now Current SQL timestamp.
  * @return int Number of released jobs.
  */
-function ai_image_analysis_model_release_expired_claims(int $galleryId, string $now): int
-{
-    $stmt = db()->prepare("UPDATE image_ai_analysis_jobs
+function ai_image_analysis_model_release_expired_claims(
+    int $galleryId,
+    string $now,
+): int {
+    $stmt = db()->prepare(
+        "UPDATE image_ai_analysis_jobs
         SET state = 'queued', claim_owner = NULL, claim_token_hash = NULL,
             claim_expires_at = NULL, progress_message = 'Lease expired before completion.', updated_at = ?
         WHERE gallery_id = ? AND state = 'claimed'
-          AND claim_expires_at IS NOT NULL AND claim_expires_at < ?");
+          AND claim_expires_at IS NOT NULL AND claim_expires_at < ?",
+    );
     $stmt->execute([$now, $galleryId, $now]);
     return max(0, (int) $stmt->rowCount());
 }
@@ -125,16 +143,25 @@ function ai_image_analysis_model_release_expired_claims(int $galleryId, string $
  * @param string $claimUntil Lease expiry timestamp.
  * @return ?int Claimed job identifier, or null when no eligible work exists.
  */
-function ai_image_analysis_model_claim_next_job(int $galleryId, string $modelName, string $modelVersion, string $workerId, string $claimTokenHash, string $now, string $claimUntil): ?int
-{
+function ai_image_analysis_model_claim_next_job(
+    int $galleryId,
+    string $modelName,
+    string $modelVersion,
+    string $workerId,
+    string $claimTokenHash,
+    string $now,
+    string $claimUntil,
+): ?int {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $release = $pdo->prepare("UPDATE image_ai_analysis_jobs
+        $release = $pdo->prepare(
+            "UPDATE image_ai_analysis_jobs
             SET state = 'queued', claim_owner = NULL, claim_token_hash = NULL,
                 claim_expires_at = NULL, progress_message = 'Lease expired before completion.', updated_at = ?
             WHERE gallery_id = ? AND state = 'claimed'
-              AND claim_expires_at IS NOT NULL AND claim_expires_at < ?");
+              AND claim_expires_at IS NOT NULL AND claim_expires_at < ?",
+        );
         $release->execute([$now, $galleryId, $now]);
 
         $stmt = $pdo->prepare("SELECT j.*
@@ -160,7 +187,15 @@ function ai_image_analysis_model_claim_next_job(int $galleryId, string $modelNam
                 claimed_at = ?, heartbeat_at = ?, progress_percent = 0,
                 progress_message = 'Claimed by worker.', attempt_count = attempt_count + 1, updated_at = ?
             WHERE id = ? AND state = 'queued'");
-        $update->execute([$workerId, $claimTokenHash, $claimUntil, $now, $now, $now, (int) $job['id']]);
+        $update->execute([
+            $workerId,
+            $claimTokenHash,
+            $claimUntil,
+            $now,
+            $now,
+            $now,
+            (int) $job['id'],
+        ]);
         if ($update->rowCount() < 1) {
             $pdo->rollBack();
             return null;
@@ -198,8 +233,12 @@ function ai_image_analysis_model_find_job(int $jobId): ?array
  * @param string $now Current SQL timestamp.
  * @return ?array<string,mixed> Matching job row or null.
  */
-function ai_image_analysis_model_validate_claim(int $galleryId, int $jobId, string $claimTokenHash, string $now): ?array
-{
+function ai_image_analysis_model_validate_claim(
+    int $galleryId,
+    int $jobId,
+    string $claimTokenHash,
+    string $now,
+): ?array {
     $stmt = db()->prepare("SELECT * FROM image_ai_analysis_jobs
         WHERE id = ? AND gallery_id = ? AND claim_token_hash = ?
           AND state = 'claimed' AND claim_expires_at IS NOT NULL AND claim_expires_at >= ?
@@ -217,10 +256,15 @@ function ai_image_analysis_model_validate_claim(int $galleryId, int $jobId, stri
  * @param string $claimTokenHash Hashed claim token.
  * @return bool True when a matching completed job exists.
  */
-function ai_image_analysis_model_claim_completed(int $galleryId, int $jobId, string $claimTokenHash): bool
-{
-    $stmt = db()->prepare("SELECT id FROM image_ai_analysis_jobs
-        WHERE id = ? AND gallery_id = ? AND claim_token_hash = ? AND state = 'succeeded' LIMIT 1");
+function ai_image_analysis_model_claim_completed(
+    int $galleryId,
+    int $jobId,
+    string $claimTokenHash,
+): bool {
+    $stmt = db()->prepare(
+        "SELECT id FROM image_ai_analysis_jobs
+        WHERE id = ? AND gallery_id = ? AND claim_token_hash = ? AND state = 'succeeded' LIMIT 1",
+    );
     $stmt->execute([$jobId, $galleryId, $claimTokenHash]);
     return (bool) $stmt->fetchColumn();
 }
@@ -236,12 +280,26 @@ function ai_image_analysis_model_claim_completed(int $galleryId, int $jobId, str
  * @param string $message Bounded progress message.
  * @return bool True when one job row was updated.
  */
-function ai_image_analysis_model_heartbeat(int $galleryId, int $jobId, string $now, string $claimUntil, int $progressPercent, string $message): bool
-{
-    $stmt = db()->prepare("UPDATE image_ai_analysis_jobs
+function ai_image_analysis_model_heartbeat(
+    int $galleryId,
+    int $jobId,
+    string $now,
+    string $claimUntil,
+    int $progressPercent,
+    string $message,
+): bool {
+    $stmt = db()->prepare('UPDATE image_ai_analysis_jobs
         SET heartbeat_at = ?, claim_expires_at = ?, progress_percent = ?, progress_message = ?, updated_at = ?
-        WHERE id = ? AND gallery_id = ?");
-    $stmt->execute([$now, $claimUntil, $progressPercent, $message, $now, $jobId, $galleryId]);
+        WHERE id = ? AND gallery_id = ?');
+    $stmt->execute([
+        $now,
+        $claimUntil,
+        $progressPercent,
+        $message,
+        $now,
+        $jobId,
+        $galleryId,
+    ]);
     return $stmt->rowCount() > 0;
 }
 
@@ -253,19 +311,33 @@ function ai_image_analysis_model_heartbeat(int $galleryId, int $jobId, string $n
  * @param int $imageId Image identifier.
  * @param string $modelName Model name.
  * @param string $modelVersion Model version.
- * @param mixed $checksum Source checksum.
- * @param mixed $fileSize Source file size.
- * @param mixed $modifiedAt Source modified timestamp.
+ * @param ?string $checksum Nullable SHA-256 checksum of the analyzed source.
+ * @param int|string|null $fileSize Nullable source byte length as stored or fetched from the database.
+ * @param ?string $modifiedAt Nullable source modification timestamp.
  * @param string $metadataJson Encoded metadata JSON.
  * @param string $searchableText Derived searchable text.
  * @param string $now Current SQL timestamp.
+
+ * @return void Persist the analysis result and mark its claimed queue job complete atomically.
  */
-function ai_image_analysis_model_complete_success(int $galleryId, int $jobId, int $imageId, string $modelName, string $modelVersion, mixed $checksum, mixed $fileSize, mixed $modifiedAt, string $metadataJson, string $searchableText, string $now): void
-{
+function ai_image_analysis_model_complete_success(
+    int $galleryId,
+    int $jobId,
+    int $imageId,
+    string $modelName,
+    string $modelVersion,
+    mixed $checksum,
+    mixed $fileSize,
+    mixed $modifiedAt,
+    string $metadataJson,
+    string $searchableText,
+    string $now,
+): void {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare("INSERT INTO image_ai_metadata (
+        $stmt = $pdo->prepare(
+            'INSERT INTO image_ai_metadata (
                 image_id, model_name, model_version, source_checksum_sha256, source_file_size,
                 source_modified_at, metadata_json, searchable_text, generated_at, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -274,8 +346,21 @@ function ai_image_analysis_model_complete_success(int $galleryId, int $jobId, in
                 source_file_size = VALUES(source_file_size),
                 source_modified_at = VALUES(source_modified_at),
                 metadata_json = VALUES(metadata_json), searchable_text = VALUES(searchable_text),
-                generated_at = VALUES(generated_at), updated_at = VALUES(updated_at)");
-        $stmt->execute([$imageId, $modelName, $modelVersion, $checksum, $fileSize, $modifiedAt, $metadataJson, $searchableText, $now, $now, $now]);
+                generated_at = VALUES(generated_at), updated_at = VALUES(updated_at)',
+        );
+        $stmt->execute([
+            $imageId,
+            $modelName,
+            $modelVersion,
+            $checksum,
+            $fileSize,
+            $modifiedAt,
+            $metadataJson,
+            $searchableText,
+            $now,
+            $now,
+            $now,
+        ]);
 
         $update = $pdo->prepare("UPDATE image_ai_analysis_jobs
             SET state = 'succeeded', heartbeat_at = ?, progress_percent = 100,
@@ -283,10 +368,12 @@ function ai_image_analysis_model_complete_success(int $galleryId, int $jobId, in
             WHERE id = ? AND gallery_id = ?");
         $update->execute([$now, $now, $now, $jobId, $galleryId]);
 
-        $cancel = $pdo->prepare("UPDATE image_ai_analysis_jobs
+        $cancel = $pdo->prepare(
+            "UPDATE image_ai_analysis_jobs
             SET state = 'cancelled', updated_at = ?, last_error = 'Superseded by a completed result.'
             WHERE image_id = ? AND model_name = ? AND model_version = ? AND id <> ?
-              AND state IN ('queued', 'claimed')");
+              AND state IN ('queued', 'claimed')",
+        );
         $cancel->execute([$now, $imageId, $modelName, $modelVersion, $jobId]);
         $pdo->commit();
     } catch (Throwable $exception) {
@@ -308,18 +395,31 @@ function ai_image_analysis_model_complete_success(int $galleryId, int $jobId, in
  * @param string $errorMessage Bounded error message.
  * @return bool True when one row was updated.
  */
-function ai_image_analysis_model_complete_failure(int $galleryId, int $jobId, bool $finalFailure, string $now, ?string $availableAt, string $errorMessage): bool
-{
-    $stmt = db()->prepare("UPDATE image_ai_analysis_jobs
+function ai_image_analysis_model_complete_failure(
+    int $galleryId,
+    int $jobId,
+    bool $finalFailure,
+    string $now,
+    ?string $availableAt,
+    string $errorMessage,
+): bool {
+    $stmt = db()->prepare('UPDATE image_ai_analysis_jobs
         SET state = ?, claim_owner = NULL, claim_token_hash = NULL, claim_expires_at = NULL,
             heartbeat_at = ?, progress_percent = 0, progress_message = ?, available_at = ?,
             completed_at = CASE WHEN ? = 1 THEN ? ELSE completed_at END,
             last_error = ?, updated_at = ?
-        WHERE id = ? AND gallery_id = ?");
+        WHERE id = ? AND gallery_id = ?');
     $stmt->execute([
-        $finalFailure ? 'failed' : 'queued', $now,
-        $finalFailure ? 'Failed permanently.' : 'Retry scheduled.', $availableAt,
-        $finalFailure ? 1 : 0, $now, $errorMessage, $now, $jobId, $galleryId,
+        $finalFailure ? 'failed' : 'queued',
+        $now,
+        $finalFailure ? 'Failed permanently.' : 'Retry scheduled.',
+        $availableAt,
+        $finalFailure ? 1 : 0,
+        $now,
+        $errorMessage,
+        $now,
+        $jobId,
+        $galleryId,
     ]);
     return $stmt->rowCount() > 0;
 }
@@ -327,17 +427,25 @@ function ai_image_analysis_model_complete_failure(int $galleryId, int $jobId, bo
 /**
  * Return ordered image identifiers belonging to selected galleries.
  *
- * @param array $galleryIds Gallery identifiers.
- * @return array<int,int> Image identifiers.
+
+ * @param list<int> $galleryIds Positive physical gallery identifiers.
+ * @return list<int> Image identifiers ordered by gallery id and then image id.
  */
 function ai_image_analysis_model_image_ids_for_galleries(array $galleryIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id FROM images WHERE gallery_id IN (' . $placeholders . ') ORDER BY gallery_id ASC, id ASC');
+    $stmt = db()->prepare(
+        'SELECT id FROM images WHERE gallery_id IN ('
+            . $placeholders
+            . ') ORDER BY gallery_id ASC, id ASC',
+    );
     $stmt->execute($ids);
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
 }
@@ -345,12 +453,16 @@ function ai_image_analysis_model_image_ids_for_galleries(array $galleryIds): arr
 /**
  * Delete metadata and queue jobs for selected images atomically.
  *
- * @param array $imageIds Image identifiers.
- * @return array{metadata_deleted:int,jobs_deleted:int} Deleted row counts.
+
+ * @param list<int> $imageIds Positive image identifiers whose metadata and queue jobs are deleted.
+ * @return array{metadata_deleted:int,jobs_deleted:int} Counts of removed metadata rows and queue jobs.
  */
 function ai_image_analysis_model_reset_images(array $imageIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return ['metadata_deleted' => 0, 'jobs_deleted' => 0];
     }
@@ -358,11 +470,22 @@ function ai_image_analysis_model_reset_images(array $imageIds): array
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $metadata = $pdo->prepare('DELETE FROM image_ai_metadata WHERE image_id IN (' . $placeholders . ')');
+        $metadata = $pdo->prepare(
+            'DELETE FROM image_ai_metadata WHERE image_id IN ('
+                . $placeholders
+                . ')',
+        );
         $metadata->execute($ids);
-        $jobs = $pdo->prepare('DELETE FROM image_ai_analysis_jobs WHERE image_id IN (' . $placeholders . ')');
+        $jobs = $pdo->prepare(
+            'DELETE FROM image_ai_analysis_jobs WHERE image_id IN ('
+                . $placeholders
+                . ')',
+        );
         $jobs->execute($ids);
-        $result = ['metadata_deleted' => max(0, (int) $metadata->rowCount()), 'jobs_deleted' => max(0, (int) $jobs->rowCount())];
+        $result = [
+            'metadata_deleted' => max(0, (int) $metadata->rowCount()),
+            'jobs_deleted' => max(0, (int) $jobs->rowCount()),
+        ];
         $pdo->commit();
         return $result;
     } catch (Throwable $exception) {
@@ -384,7 +507,9 @@ function ai_image_analysis_model_gallery_branch_ids(string $folderPath): array
     if ($folderPath === '') {
         return [];
     }
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+    $stmt = db()->prepare(
+        'SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+    );
     $stmt->execute([$folderPath, $folderPath . '/%']);
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
 }
@@ -392,23 +517,39 @@ function ai_image_analysis_model_gallery_branch_ids(string $folderPath): array
 /**
  * Return distinct historical model/version pairs for selected images.
  *
- * @param array $imageIds Image identifiers.
- * @return array<int,array{model_name:string,model_version:string}> Distinct raw model pairs.
+
+ * @param list<int> $imageIds Positive image identifiers whose historical model/version pairs are requested.
+ * @return list<array{model_name:string,model_version:string}> Distinct historical model/version pairs.
  */
 function ai_image_analysis_model_reprocess_pairs(array $imageIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     $pairs = [];
     foreach (['image_ai_metadata', 'image_ai_analysis_jobs'] as $table) {
-        $stmt = db()->prepare('SELECT DISTINCT model_name, model_version FROM ' . $table . ' WHERE image_id IN (' . $placeholders . ')');
+        $stmt = db()->prepare(
+            'SELECT DISTINCT model_name, model_version FROM '
+                . $table
+                . ' WHERE image_id IN ('
+                . $placeholders
+                . ')',
+        );
         $stmt->execute($ids);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
-            $key = (string) ($row['model_name'] ?? '') . "\0" . (string) ($row['model_version'] ?? '');
-            $pairs[$key] = ['model_name' => (string) ($row['model_name'] ?? ''), 'model_version' => (string) ($row['model_version'] ?? '')];
+            $key =
+                (string) ($row['model_name'] ?? '')
+                . "\0"
+                . (string) ($row['model_version'] ?? '');
+            $pairs[$key] = [
+                'model_name' => (string) ($row['model_name'] ?? ''),
+                'model_version' => (string) ($row['model_version'] ?? ''),
+            ];
         }
     }
     return array_values($pairs);
@@ -422,7 +563,9 @@ function ai_image_analysis_model_reprocess_pairs(array $imageIds): array
  */
 function ai_image_analysis_model_latest_metadata(int $imageId): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM image_ai_metadata WHERE image_id = ? ORDER BY generated_at DESC, id DESC LIMIT 1");
+    $stmt = db()->prepare(
+        'SELECT * FROM image_ai_metadata WHERE image_id = ? ORDER BY generated_at DESC, id DESC LIMIT 1',
+    );
     $stmt->execute([$imageId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;

@@ -46,11 +46,15 @@ use function Gallery\Core\db;
 function media_renamer_model_gallery_rows(bool $hideEmptyGalleries): array
 {
     $having = $hideEmptyGalleries ? ' HAVING direct_image_count > 0' : '';
-    $stmt = db()->query("SELECT g.*, COUNT(i.id) AS direct_image_count
+    $stmt = db()->query(
+        "SELECT g.*, COUNT(i.id) AS direct_image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
-        GROUP BY g.id" . $having . "
-        ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.title, g.id");
+        GROUP BY g.id"
+            . $having
+            . '
+        ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.title, g.id',
+    );
     return $stmt ? ($stmt->fetchAll() ?: []) : [];
 }
 
@@ -63,15 +67,23 @@ function media_renamer_model_gallery_rows(bool $hideEmptyGalleries): array
 function media_renamer_model_all_gallery_ids(bool $hideEmptyGalleries): array
 {
     if (!$hideEmptyGalleries) {
-        $stmt = db()->query('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+        $stmt = db()->query(
+            'SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+        );
     } else {
-        $stmt = db()->query("SELECT g.id
+        $stmt = db()->query(
+            "SELECT g.id
             FROM galleries g
             INNER JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
             GROUP BY g.id
-            ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.id");
+            ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.id",
+        );
     }
-    return $stmt ? array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []) : [];
+    return (
+        $stmt
+            ? array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [])
+            : []
+    );
 }
 
 /**
@@ -82,7 +94,9 @@ function media_renamer_model_all_gallery_ids(bool $hideEmptyGalleries): array
  */
 function media_renamer_model_indexed_paths(int $galleryId): array
 {
-    $stmt = db()->prepare('SELECT id, relative_path FROM images WHERE gallery_id = ?');
+    $stmt = db()->prepare(
+        'SELECT id, relative_path FROM images WHERE gallery_id = ?',
+    );
     $stmt->execute([$galleryId]);
     return $stmt->fetchAll() ?: [];
 }
@@ -90,17 +104,24 @@ function media_renamer_model_indexed_paths(int $galleryId): array
 /**
  * Return requested gallery identifiers that still exist.
  *
- * @param array $galleryIds Requested gallery identifiers.
- * @return array<int,int> Existing gallery identifiers.
+ * @param list<int> $galleryIds Requested gallery identifiers.
+ * @return list<int> Existing gallery identifiers ordered by gallery path.
  */
 function media_renamer_model_existing_gallery_ids(array $galleryIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE id IN (' . $placeholders . ') ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+    $stmt = db()->prepare(
+        'SELECT id FROM galleries WHERE id IN ('
+            . $placeholders
+            . ') ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+    );
     $stmt->execute($ids);
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
 }
@@ -108,17 +129,24 @@ function media_renamer_model_existing_gallery_ids(array $galleryIds): array
 /**
  * Return image ownership rows for a selected image batch.
  *
- * @param array $imageIds Image identifiers.
- * @return array<int,array{id:int,gallery_id:int}> Ownership rows.
+ * @param list<int> $imageIds Image identifiers.
+ * @return list<array{id:int|string,gallery_id:int|string}> Ownership rows ordered by gallery and image.
  */
 function media_renamer_model_image_gallery_rows(array $imageIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id, gallery_id FROM images WHERE id IN (' . $placeholders . ') ORDER BY gallery_id, sort_order, id');
+    $stmt = db()->prepare(
+        'SELECT id, gallery_id FROM images WHERE id IN ('
+            . $placeholders
+            . ') ORDER BY gallery_id, sort_order, id',
+    );
     $stmt->execute($ids);
     return $stmt->fetchAll() ?: [];
 }
@@ -128,6 +156,7 @@ function media_renamer_model_image_gallery_rows(array $imageIds): array
  *
  * @param array<int,array{id:int,temp_relative_path:string,relative_path:string,filename:string,title:?string}> $updates Prepared row updates.
  * @param string $now Current SQL timestamp.
+ * @return void Applies both rename phases atomically, rolling back and rethrowing on failure.
  */
 function media_renamer_model_apply_updates(array $updates, string $now): void
 {
@@ -137,12 +166,22 @@ function media_renamer_model_apply_updates(array $updates, string $now): void
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $tempStmt = $pdo->prepare('UPDATE images SET relative_path = ?, relative_path_hash = ?, filename = ?, updated_at = ? WHERE id = ?');
+        $tempStmt = $pdo->prepare(
+            'UPDATE images SET relative_path = ?, relative_path_hash = ?, filename = ?, updated_at = ? WHERE id = ?',
+        );
         foreach ($updates as $update) {
             $tempPath = (string) $update['temp_relative_path'];
-            $tempStmt->execute([$tempPath, hash('sha256', $tempPath), $tempPath, $now, (int) $update['id']]);
+            $tempStmt->execute([
+                $tempPath,
+                hash('sha256', $tempPath),
+                $tempPath,
+                $now,
+                (int) $update['id'],
+            ]);
         }
-        $finalStmt = $pdo->prepare('UPDATE images SET relative_path = ?, relative_path_hash = ?, filename = ?, title = ?, updated_at = ? WHERE id = ?');
+        $finalStmt = $pdo->prepare(
+            'UPDATE images SET relative_path = ?, relative_path_hash = ?, filename = ?, title = ?, updated_at = ? WHERE id = ?',
+        );
         foreach ($updates as $update) {
             $relativePath = (string) $update['relative_path'];
             $finalStmt->execute([
@@ -166,19 +205,26 @@ function media_renamer_model_apply_updates(array $updates, string $now): void
 /**
  * Return ZIP archive rows invalidated by gallery renames.
  *
- * @param array $galleryIds Gallery identifiers.
+ * @param list<int> $galleryIds Gallery identifiers whose ZIP archives may be invalidated.
  * @return array<int,array{id:int,file_path:string}> Archive rows.
  */
 function media_renamer_model_download_archives(array $galleryIds): array
 {
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     $params = [];
     $where = "scope = 'all'";
     if ($galleryIds !== []) {
-        $where .= ' OR gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
+        $where .=
+            ' OR gallery_id IN ('
+            . implode(',', array_fill(0, count($galleryIds), '?'))
+            . ')';
         $params = $galleryIds;
     }
-    $stmt = db()->prepare('SELECT id, file_path FROM zip_archives WHERE ' . $where);
+    $stmt = db()->prepare('SELECT id, file_path FROM zip_archives WHERE '
+        . $where);
     $stmt->execute($params);
     return $stmt->fetchAll() ?: [];
 }
@@ -186,16 +232,23 @@ function media_renamer_model_download_archives(array $galleryIds): array
 /**
  * Delete selected ZIP archive metadata rows.
  *
- * @param array $archiveIds ZIP archive row identifiers.
+ * @param list<int> $archiveIds ZIP archive row identifiers to delete.
  * @return int Number of deleted rows.
  */
 function media_renamer_model_delete_download_archives(array $archiveIds): int
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $archiveIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $archiveIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return 0;
     }
-    $stmt = db()->prepare('DELETE FROM zip_archives WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')');
+    $stmt = db()->prepare(
+        'DELETE FROM zip_archives WHERE id IN ('
+            . implode(',', array_fill(0, count($ids), '?'))
+            . ')',
+    );
     $stmt->execute($ids);
     return (int) $stmt->rowCount();
 }

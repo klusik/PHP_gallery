@@ -47,13 +47,23 @@ namespace Gallery\Services {
      */
     function admin_test_run_mark(string $name, array $context = []): void
     {
-        if ($name === 'session_start_begin' && ($GLOBALS['session_contention_reader_barrier'] ?? '') !== '') {
+        if (
+            $name === 'session_start_begin'
+            && ($GLOBALS['session_contention_reader_barrier'] ?? '') !== ''
+        ) {
             \Gallery\Tests\SessionContention\check(
-                file_put_contents($GLOBALS['session_contention_reader_barrier'], 'ready') !== false,
-                'Fixture reader startup barrier failed.'
+                file_put_contents(
+                    $GLOBALS['session_contention_reader_barrier'],
+                    'ready',
+                ) !== false,
+                'Fixture reader startup barrier failed.',
             );
         }
-        if (in_array($name, ['session_start_begin', 'session_start_end'], true)) {
+        if (in_array(
+            $name,
+            ['session_start_begin', 'session_start_end'],
+            true,
+        )) {
             $GLOBALS['session_contention_marks'][$name] = microtime(true);
         }
     }
@@ -76,16 +86,28 @@ namespace {
     require_once dirname(__DIR__, 2) . '/app/bootstrap/session.php';
     require_once dirname(__DIR__, 2) . '/app/models/galleries.php';
     require_once dirname(__DIR__, 2) . '/app/services/gallery_picker.php';
-    require_once dirname(__DIR__, 2) . '/app/controllers/admin_gallery_title_completion.php';
+    require_once
+        dirname(__DIR__, 2)
+            . '/app/controllers/admin_gallery_title_completion.php';
 
     // Per-request disposable schema is sufficient for the real current_user() and
     // title model SQL. This adapter deliberately does not claim MySQL/login coverage.
-    $database = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-    $database->exec('CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, role TEXT)');
-    $database->exec("INSERT INTO users VALUES (1, 'session-fixture-admin', 'admin')");
-    $database->exec('CREATE TABLE galleries (id INTEGER PRIMARY KEY, parent_id INTEGER, title TEXT, created_at TEXT)');
-    $database->exec("INSERT INTO galleries VALUES (1, 0, 'Flight sample', '2026-09-20 12:00:00')");
+    $database = new PDO('sqlite::memory:', null, null, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+    $database->exec(
+        'CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, role TEXT)',
+    );
+    $database->exec(
+        "INSERT INTO users VALUES (1, 'session-fixture-admin', 'admin')",
+    );
+    $database->exec(
+        'CREATE TABLE galleries (id INTEGER PRIMARY KEY, parent_id INTEGER, title TEXT, created_at TEXT)',
+    );
+    $database->exec(
+        "INSERT INTO galleries VALUES (1, 0, 'Flight sample', '2026-09-20 12:00:00')",
+    );
     $GLOBALS['session_contention_database'] = $database;
     $GLOBALS['session_contention_marks'] = [];
 }

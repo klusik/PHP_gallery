@@ -21,8 +21,11 @@ namespace Gallery\Models {
     }
 
     /** Save one administrator's fixture row. @param int $userId Administrator ID. @param array<string,string> $values Saved fields. @param string $now SQL timestamp. @return void Store one fixture row. */
-    function gallery_creation_preferences_model_save(int $userId, array $values, string $now): void
-    {
+    function gallery_creation_preferences_model_save(
+        int $userId,
+        array $values,
+        string $now,
+    ): void {
         $GLOBALS['gallery_creation_test_rows'][$userId] = $values;
     }
 }
@@ -58,7 +61,11 @@ namespace Gallery\Services {
     function t(string $key, string $fallback = '', array $params = []): string
     {
         foreach ($params as $name => $value) {
-            $fallback = str_replace('{' . $name . '}', (string) $value, $fallback);
+            $fallback = str_replace(
+                '{' . $name . '}',
+                (string) $value,
+                $fallback,
+            );
         }
         return $fallback;
     }
@@ -95,7 +102,8 @@ namespace Gallery\Services {
 }
 
 namespace {
-    require_once dirname(__DIR__) . '/app/services/gallery_creation_preferences.php';
+    require_once
+        dirname(__DIR__) . '/app/services/gallery_creation_preferences.php';
 
     /**
      * Require one expected preference behavior.
@@ -120,13 +128,20 @@ namespace {
         'remember_simbrief_pilot_id' => 1,
         'remember_content_language' => 1,
     ]);
-    creation_pref_assert(\Gallery\Services\gallery_creation_preferences_for_user(11) === [
-        'simbrief_pilot_id' => 'pilot-11',
-        'simbrief_pilot_name' => '',
-        'content_language' => 'cs',
-    ], 'Selected defaults were not saved independently.');
-    creation_pref_assert(\Gallery\Services\gallery_creation_preferences_for_user(12)['simbrief_pilot_id'] === '',
-        'Another administrator inherited personal defaults.');
+    creation_pref_assert(
+        \Gallery\Services\gallery_creation_preferences_for_user(11) === [
+            'simbrief_pilot_id' => 'pilot-11',
+            'simbrief_pilot_name' => '',
+            'content_language' => 'cs',
+        ],
+        'Selected defaults were not saved independently.',
+    );
+    creation_pref_assert(
+        \Gallery\Services\gallery_creation_preferences_for_user(
+            12,
+        )['simbrief_pilot_id'] === '',
+        'Another administrator inherited personal defaults.',
+    );
 
     \Gallery\Services\gallery_creation_preferences_remember(11, [
         'simbrief_pilot_id' => 'one-off',
@@ -136,19 +151,33 @@ namespace {
         'remember_content_language' => 1,
     ]);
     $saved = \Gallery\Services\gallery_creation_preferences_for_user(11);
-    creation_pref_assert($saved['simbrief_pilot_id'] === 'pilot-11' && $saved['simbrief_pilot_name'] === 'Second Pilot'
-        && $saved['content_language'] === '', 'An unselected field changed or an explicit language clear failed.');
+    creation_pref_assert(
+        $saved['simbrief_pilot_id'] === 'pilot-11'
+            && $saved['simbrief_pilot_name'] === 'Second Pilot'
+            && $saved['content_language'] === '',
+        'An unselected field changed or an explicit language clear failed.',
+    );
 
     try {
-        \Gallery\Services\gallery_creation_preferences_validate(['content_language' => 'xx', 'remember_content_language' => 1]);
+        \Gallery\Services\gallery_creation_preferences_validate([
+            'content_language' => 'xx',
+            'remember_content_language' => 1,
+        ]);
         throw new \RuntimeException('Unsupported language was accepted.');
     } catch (\RuntimeException $exception) {
-        creation_pref_assert($exception->getMessage() === 'Select a supported description language.',
-            'Unexpected validation outcome for unsupported language.');
+        creation_pref_assert(
+            $exception->getMessage()
+                === 'Select a supported description language.',
+            'Unexpected validation outcome for unsupported language.',
+        );
     }
     $GLOBALS['gallery_creation_test_schema'] = 'unknown';
-    creation_pref_assert(\Gallery\Services\gallery_creation_preferences_for_user(11)['simbrief_pilot_id'] === '',
-        'Unknown preference storage exposed stale defaults.');
+    creation_pref_assert(
+        \Gallery\Services\gallery_creation_preferences_for_user(
+            11,
+        )['simbrief_pilot_id'] === '',
+        'Unknown preference storage exposed stale defaults.',
+    );
 
     require_once dirname(__DIR__) . '/app/views/admin_gallery_forms.php';
     ob_start();
@@ -160,47 +189,115 @@ namespace {
     preg_match_all('/<input\b[^>]*\bname="([^"]+)"/', $createHtml, $matches);
     $fieldNames = $matches[1];
     sort($fieldNames);
-    creation_pref_assert($fieldNames === ['csrf_token', 'operation_key', 'panel', 'parent_id', 'title']
-        && !str_contains($createHtml, '<textarea') && !str_contains($createHtml, '<select'),
-        'The panel create step must ask only for a gallery name.');
-    creation_pref_assert(str_contains($createHtml, 'data-gallery-title-completion-url="/title-suggestions"')
-        && str_contains($createHtml, 'name="parent_id" value="7"'),
-        'The name-only step lost title completion or its hidden parent.');
+    creation_pref_assert(
+        $fieldNames === [
+            'csrf_token',
+            'operation_key',
+            'panel',
+            'parent_id',
+            'title',
+        ]
+            && !str_contains($createHtml, '<textarea')
+            && !str_contains($createHtml, '<select'),
+        'The panel create step must ask only for a gallery name.',
+    );
+    creation_pref_assert(
+        str_contains(
+            $createHtml,
+            'data-gallery-title-completion-url="/title-suggestions"',
+        )
+            && str_contains($createHtml, 'name="parent_id" value="7"'),
+        'The name-only step lost title completion or its hidden parent.',
+    );
 
     $editorModel = [
-        'creation_preferences' => ['simbrief_pilot_id' => 'pilot-11', 'simbrief_pilot_name' => 'Second Pilot', 'content_language' => 'cs'],
+        'creation_preferences' => [
+            'simbrief_pilot_id' => 'pilot-11',
+            'simbrief_pilot_name' => 'Second Pilot',
+            'content_language' => 'cs',
+        ],
         'creation_preferences_available' => true,
-        'localization' => ['enabled' => true, 'schema_ready' => true, 'languages' => ['en', 'cs'], 'presentation' => [], 'translations' => []],
+        'localization' => [
+            'enabled' => true,
+            'schema_ready' => true,
+            'languages' => ['en', 'cs'],
+            'presentation' => [],
+            'translations' => [],
+        ],
     ];
     ob_start();
-    \Gallery\Views\view_render_content_localization_fields('gallery', ['id' => 7, 'content_language' => ''], $editorModel);
+    \Gallery\Views\view_render_content_localization_fields(
+        'gallery',
+        ['id' => 7, 'content_language' => ''],
+        $editorModel,
+    );
     $languageHtml = (string) ob_get_clean();
-    creation_pref_assert(str_contains($languageHtml, '<option value="cs" data-flag-src="" selected>')
-        && str_contains($languageHtml, 'name="remember_content_language"')
-        && str_contains($languageHtml, 'Pre-filled from your saved defaults.'),
-        'The editor did not show and identify the pre-filled source language.');
+    creation_pref_assert(
+        str_contains(
+            $languageHtml,
+            '<option value="cs" data-flag-src="" selected>',
+        )
+            && str_contains($languageHtml, 'name="remember_content_language"')
+            && str_contains(
+                $languageHtml,
+                'Pre-filled from your saved defaults.',
+            ),
+        'The editor did not show and identify the pre-filled source language.',
+    );
 
     $publicDefaultModel = $editorModel;
     $publicDefaultModel['creation_preferences']['content_language'] = '';
     $publicDefaultModel['localization']['default_source_language'] = 'cs';
     ob_start();
-    \Gallery\Views\view_render_content_localization_fields('gallery', ['id' => 7, 'content_language' => ''], $publicDefaultModel);
+    \Gallery\Views\view_render_content_localization_fields(
+        'gallery',
+        ['id' => 7, 'content_language' => ''],
+        $publicDefaultModel,
+    );
     $publicDefaultHtml = (string) ob_get_clean();
-    creation_pref_assert(str_contains($publicDefaultHtml, '<option value="cs" data-flag-src="" selected>')
-        && !str_contains($publicDefaultHtml, 'Pre-filled from your saved defaults.'),
-        'An unspecified gallery must select the prepared public language without claiming a remembered preference.');
+    creation_pref_assert(
+        str_contains(
+            $publicDefaultHtml,
+            '<option value="cs" data-flag-src="" selected>',
+        )
+            && !str_contains(
+                $publicDefaultHtml,
+                'Pre-filled from your saved defaults.',
+            ),
+        'An unspecified gallery must select the prepared public language without claiming a remembered preference.',
+    );
     ob_start();
-    \Gallery\Views\view_render_content_localization_fields('gallery', ['id' => 7, 'content_language' => 'en'], $publicDefaultModel);
+    \Gallery\Views\view_render_content_localization_fields(
+        'gallery',
+        ['id' => 7, 'content_language' => 'en'],
+        $publicDefaultModel,
+    );
     $explicitLanguageHtml = (string) ob_get_clean();
-    creation_pref_assert(str_contains($explicitLanguageHtml, '<option value="en" data-flag-src="" selected>'),
-        'The public default must preserve an explicitly selected source language.');
+    creation_pref_assert(
+        str_contains(
+            $explicitLanguageHtml,
+            '<option value="en" data-flag-src="" selected>',
+        ),
+        'The public default must preserve an explicitly selected source language.',
+    );
 
     ob_start();
     \Gallery\Views\view_render_admin_simbrief_description_tool(7, $editorModel);
     $simbriefHtml = (string) ob_get_clean();
-    creation_pref_assert(str_contains($simbriefHtml, 'name="simbrief_identifier" value="pilot-11"')
-        && str_contains($simbriefHtml, 'name="remember_simbrief_identifier"')
-        && substr_count($simbriefHtml, 'Pre-filled from your saved defaults.') === 1,
-        'The editor did not expose saved SimBrief defaults and their save controls.');
+    creation_pref_assert(
+        str_contains(
+            $simbriefHtml,
+            'name="simbrief_identifier" value="pilot-11"',
+        )
+            && str_contains(
+                $simbriefHtml,
+                'name="remember_simbrief_identifier"',
+            )
+            && substr_count(
+                $simbriefHtml,
+                'Pre-filled from your saved defaults.',
+            ) === 1,
+        'The editor did not expose saved SimBrief defaults and their save controls.',
+    );
     echo "gallery creation preferences: PASS\n";
 }

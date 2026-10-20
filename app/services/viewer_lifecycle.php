@@ -83,7 +83,7 @@ function viewer_lifecycle_schema_status(): array
 /**
  * Return the aggregate capability required for destructive viewer-account deletion.
  *
- * @return array Aggregate schema inspection result.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate deletion capability state with every inspected schema requirement.
  */
 function viewer_account_deletion_schema_status(): array
 {
@@ -95,7 +95,7 @@ function viewer_account_deletion_schema_status(): array
             schema_inspection_table('viewer_collections'),
             schema_inspection_table('viewer_collection_items'),
             schema_inspection_table('viewer_passkeys'),
-        ]
+        ],
     ));
 }
 
@@ -105,16 +105,23 @@ function viewer_account_deletion_schema_status(): array
  * @param string $eventKey Viewer security event key.
  * @param ?int $viewerAccountId Viewer account id when known.
  * @param string $outcome Outcome category.
- * @param array $context Allowlisted low-risk event context.
+ * @param array<string,int|string|bool|null> $context Allowlisted scalar event metadata; credentials and secrets are not accepted.
+ *
+ * @return void No return value; diagnostic persistence failures do not change lifecycle authority.
  */
 function viewer_lifecycle_security_event_record_best_effort(
     string $eventKey,
     ?int $viewerAccountId,
     string $outcome,
-    array $context = []
+    array $context = [],
 ): void {
     try {
-        viewer_security_event_record($eventKey, $viewerAccountId, $outcome, $context);
+        viewer_security_event_record(
+            $eventKey,
+            $viewerAccountId,
+            $outcome,
+            $context,
+        );
     } catch (Throwable) {
         // Diagnostic storage failure must not change lifecycle authority decisions.
     }
@@ -147,7 +154,10 @@ function viewer_email_change_confirmation_namespace_key(): string
  */
 function viewer_reauthentication_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['viewer_reauthentication_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['viewer_reauthentication_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -161,7 +171,9 @@ function viewer_clear_reauthentication(): void
 /**
  * Establish short-lived recent credential proof for the current concrete viewer session.
  *
- * @param array $viewer Current viewer principal returned by current_viewer().
+ * @param array{id:int,security_version:int,viewer_session_id:int} $viewer Authenticated concrete viewer session to bind the recent credential proof to.
+ *
+ * @return void No return value; binds short-lived proof to the current account, security version and viewer session.
  */
 function viewer_reauthentication_establish(array $viewer): void
 {
@@ -169,7 +181,9 @@ function viewer_reauthentication_establish(array $viewer): void
     $securityVersion = (int) ($viewer['security_version'] ?? 0);
     $viewerSessionId = (int) ($viewer['viewer_session_id'] ?? 0);
     if ($accountId <= 0 || $securityVersion <= 0 || $viewerSessionId <= 0) {
-        throw new InvalidArgumentException('Viewer reauthentication principal is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer reauthentication principal is invalid.',
+        );
     }
 
     $now = time();
@@ -185,11 +199,11 @@ function viewer_reauthentication_establish(array $viewer): void
 /**
  * Return validated recent-reauthentication status bound to the current viewer session.
  *
- * @return array{valid:bool,reason:string,account_id:?int,security_version:?int,viewer_session_id:?int,expires_at:?int}
+ * @return array{valid:bool,reason:string,account_id:?int,security_version:?int,viewer_session_id:?int,expires_at:?int} Whether recent proof is valid, reason, account/security/session identifiers and expiry; invalid status nulls all authority fields.
  */
 function viewer_reauthentication_status(): array
 {
-    $failure = static fn (string $reason): array => [
+    $failure = static fn(string $reason): array => [
         'valid' => false,
         'reason' => $reason,
         'account_id' => null,
@@ -198,7 +212,9 @@ function viewer_reauthentication_status(): array
         'expires_at' => null,
     ];
 
-    $state = viewer_identity_session_get(viewer_reauthentication_namespace_key());
+    $state = viewer_identity_session_get(
+        viewer_reauthentication_namespace_key(),
+    );
     if (!is_array($state)) {
         return $failure('missing');
     }
@@ -207,16 +223,25 @@ function viewer_reauthentication_status(): array
     $securityVersion = (int) ($state['security_version'] ?? 0);
     $viewerSessionId = (int) ($state['viewer_session_id'] ?? 0);
     $expiresAt = (int) ($state['expires_at'] ?? 0);
-    if ($accountId <= 0 || $securityVersion <= 0 || $viewerSessionId <= 0 || $expiresAt <= time()) {
+    if (
+        $accountId <= 0
+        || $securityVersion <= 0
+        || $viewerSessionId <= 0
+        || $expiresAt <= time()
+    ) {
         viewer_clear_reauthentication();
-        return $failure($expiresAt > 0 && $expiresAt <= time() ? 'expired' : 'invalid');
+        return $failure(
+            $expiresAt > 0 && $expiresAt <= time() ? 'expired' : 'invalid',
+        );
     }
 
     $viewer = current_viewer();
-    if ($viewer === null
+    if (
+        $viewer === null
         || (int) $viewer['id'] !== $accountId
         || (int) $viewer['security_version'] !== $securityVersion
-        || (int) $viewer['viewer_session_id'] !== $viewerSessionId) {
+        || (int) $viewer['viewer_session_id'] !== $viewerSessionId
+    ) {
         viewer_clear_reauthentication();
         return $failure('principal_mismatch');
     }
@@ -246,10 +271,12 @@ function viewer_recent_reauthentication_required(): bool
  *
  * @param string $password Current viewer password.
  * @param ?string $clientIp Explicit test/internal client IP, otherwise trusted resolver result.
- * @return array{reauthenticated:bool,reason:string}
+ * @return array{reauthenticated:bool,reason:string} Whether password proof succeeded and the stable result reason.
  */
-function viewer_reauthenticate_password(string $password, ?string $clientIp = null): array
-{
+function viewer_reauthenticate_password(
+    string $password,
+    ?string $clientIp = null,
+): array {
     if (!viewer_accounts_enabled()) {
         return ['reauthenticated' => false, 'reason' => 'viewer_disabled'];
     }
@@ -257,45 +284,84 @@ function viewer_reauthenticate_password(string $password, ?string $clientIp = nu
         return ['reauthenticated' => false, 'reason' => 'storage_unavailable'];
     }
     if (!viewer_security_transport_allowed()) {
-        return ['reauthenticated' => false, 'reason' => 'secure_transport_required'];
+        return [
+            'reauthenticated' => false,
+            'reason' => 'secure_transport_required',
+        ];
     }
 
     $viewer = current_viewer();
     if ($viewer === null || !viewer_password_input_is_safe($password)) {
         viewer_clear_reauthentication();
-        return ['reauthenticated' => false, 'reason' => 'authentication_failed'];
+        return [
+            'reauthenticated' => false,
+            'reason' => 'authentication_failed',
+        ];
     }
 
-    $resolvedIp = $clientIp === null ? request_client_ip() : request_client_ip_normalize($clientIp);
-    if (!function_exists(__NAMESPACE__ . '\\viewer_login_rate_limits_consume')) {
+    $resolvedIp = $clientIp === null
+        ? request_client_ip()
+        : request_client_ip_normalize($clientIp);
+    if (!function_exists(__NAMESPACE__
+        . '\\viewer_login_rate_limits_consume')) {
         viewer_clear_reauthentication();
         return ['reauthenticated' => false, 'reason' => 'limiter_unavailable'];
     }
-    $rateDecision = viewer_login_rate_limits_consume((string) $viewer['normalized_email'], $resolvedIp);
+    $rateDecision = viewer_login_rate_limits_consume(
+        (string) $viewer['normalized_email'],
+        $resolvedIp,
+    );
     if (!$rateDecision['allowed']) {
         viewer_clear_reauthentication();
-        viewer_lifecycle_security_event_record_best_effort('viewer.reauthentication_failure', (int) $viewer['id'], 'denied', [
+        viewer_lifecycle_security_event_record_best_effort(
+            'viewer.reauthentication_failure',
+            (int) $viewer['id'],
+            'denied',
+            [
+                'reason' => (string) $rateDecision['reason'],
+            ],
+        );
+        return [
+            'reauthenticated' => false,
             'reason' => (string) $rateDecision['reason'],
-        ]);
-        return ['reauthenticated' => false, 'reason' => (string) $rateDecision['reason']];
+        ];
     }
 
     $account = viewer_lifecycle_model_account_get((int) $viewer['id']);
-    if (!$account
+    if (
+        !$account
         || !viewer_account_can_authenticate($account)
-        || (int) $account['security_version'] !== (int) $viewer['security_version']
-        || !viewer_password_verify($password, (string) ($account['password_hash'] ?? ''))) {
+        || (int) $account['security_version']
+            !== (int) $viewer['security_version']
+        || !viewer_password_verify(
+            $password,
+            (string) ($account['password_hash'] ?? ''),
+        )
+    ) {
         viewer_clear_reauthentication();
-        viewer_lifecycle_security_event_record_best_effort('viewer.reauthentication_failure', (int) $viewer['id'], 'denied', [
+        viewer_lifecycle_security_event_record_best_effort(
+            'viewer.reauthentication_failure',
+            (int) $viewer['id'],
+            'denied',
+            [
+                'reason' => 'authentication_failed',
+            ],
+        );
+        return [
+            'reauthenticated' => false,
             'reason' => 'authentication_failed',
-        ]);
-        return ['reauthenticated' => false, 'reason' => 'authentication_failed'];
+        ];
     }
 
     viewer_reauthentication_establish($viewer);
-    viewer_lifecycle_security_event_record_best_effort('viewer.reauthentication_success', (int) $viewer['id'], 'success', [
-        'security_version' => (int) $viewer['security_version'],
-    ]);
+    viewer_lifecycle_security_event_record_best_effort(
+        'viewer.reauthentication_success',
+        (int) $viewer['id'],
+        'success',
+        [
+            'security_version' => (int) $viewer['security_version'],
+        ],
+    );
     return ['reauthenticated' => true, 'reason' => 'reauthenticated'];
 }
 
@@ -307,10 +373,12 @@ function viewer_reauthenticate_password(string $password, ?string $clientIp = nu
  *
  * @param string $newPassword New viewer password.
  * @param ?string $currentPassword Optional current password for inline explicit reauthentication.
- * @return array{changed:bool,reason:string}
+ * @return array{changed:bool,reason:string} Whether the password changed and the stable result reason.
  */
-function viewer_change_password(string $newPassword, ?string $currentPassword = null): array
-{
+function viewer_change_password(
+    string $newPassword,
+    ?string $currentPassword = null,
+): array {
     if (!viewer_accounts_enabled()) {
         return ['changed' => false, 'reason' => 'viewer_disabled'];
     }
@@ -325,7 +393,10 @@ function viewer_change_password(string $newPassword, ?string $currentPassword = 
     if ($viewer === null) {
         return ['changed' => false, 'reason' => 'authentication_required'];
     }
-    if (viewer_recent_reauthentication_required() && $currentPassword !== null) {
+    if (
+        viewer_recent_reauthentication_required()
+        && $currentPassword !== null
+    ) {
         viewer_reauthenticate_password($currentPassword);
     }
     if (viewer_recent_reauthentication_required()) {
@@ -335,12 +406,21 @@ function viewer_change_password(string $newPassword, ?string $currentPassword = 
         return ['changed' => false, 'reason' => 'password_policy'];
     }
 
-    $result = viewer_lifecycle_model_transaction(static function () use ($viewer, $newPassword): array {
+    $result = viewer_lifecycle_model_transaction(static function () use (
+        $viewer,
+        $newPassword,
+    ): array {
         $account = viewer_lifecycle_model_account_lock((int) $viewer['id']);
-        if (!$account
+        if (
+            !$account
             || !viewer_account_can_authenticate($account)
-            || (int) $account['security_version'] !== (int) $viewer['security_version']) {
-            return ['changed' => false, 'reason' => 'authentication_state_changed'];
+            || (int) $account['security_version']
+                !== (int) $viewer['security_version']
+        ) {
+            return [
+                'changed' => false,
+                'reason' => 'authentication_state_changed',
+            ];
         }
 
         $now = now_sql();
@@ -350,16 +430,27 @@ function viewer_change_password(string $newPassword, ?string $currentPassword = 
             (int) $account['security_version'],
             $newSecurityVersion,
             viewer_password_hash($newPassword),
-            $now
+            $now,
         );
-        viewer_lifecycle_model_revoke_after_password_change((int) $account['id'], $now);
-        viewer_security_event_record('viewer.password_changed', (int) $account['id'], 'success', [
-            'security_version' => $newSecurityVersion,
-        ]);
+        viewer_lifecycle_model_revoke_after_password_change(
+            (int) $account['id'],
+            $now,
+        );
+        viewer_security_event_record(
+            'viewer.password_changed',
+            (int) $account['id'],
+            'success',
+            [
+                'security_version' => $newSecurityVersion,
+            ],
+        );
         return ['changed' => true, 'reason' => 'password_changed'];
     });
 
-    if ($result['changed'] || $result['reason'] === 'authentication_state_changed') {
+    if (
+        $result['changed']
+        || $result['reason'] === 'authentication_state_changed'
+    ) {
         viewer_session_clear();
     }
     return $result;
@@ -372,7 +463,10 @@ function viewer_change_password(string $newPassword, ?string $currentPassword = 
  */
 function viewer_email_change_request_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['email_change_request_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['email_change_request_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -382,7 +476,10 @@ function viewer_email_change_request_lifetime_seconds(): int
  */
 function viewer_email_change_confirmation_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['email_change_confirmation_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['email_change_confirmation_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -393,30 +490,46 @@ function viewer_email_change_confirmation_lifetime_seconds(): int
  * @param int $securityVersion Security version captured by the request.
  * @param string $expiresAt SQL expiration timestamp.
  * @param string $verificationTokenHash Stored verification-token hash.
- * @return string HMAC-shaped context or an empty string for invalid input.
+ * @return string HMAC-shaped context for the valid request inputs, or an empty string when any required input is invalid.
  */
 function viewer_email_change_confirmation_context(
     int $requestId,
     int $accountId,
     int $securityVersion,
     string $expiresAt,
-    string $verificationTokenHash
+    string $verificationTokenHash,
 ): string {
-    if ($requestId <= 0 || $accountId <= 0 || $securityVersion <= 0 || $expiresAt === '' || $verificationTokenHash === '') {
+    if (
+        $requestId <= 0
+        || $accountId <= 0
+        || $securityVersion <= 0
+        || $expiresAt === ''
+        || $verificationTokenHash === ''
+    ) {
         return '';
     }
     return viewer_security_fingerprint(
         'viewer-email-change-confirmation',
-        implode(':', [$requestId, $accountId, $securityVersion, $expiresAt, $verificationTokenHash])
+        implode(':', [
+            $requestId,
+            $accountId,
+            $securityVersion,
+            $expiresAt,
+            $verificationTokenHash,
+        ]),
     );
 }
 
 /**
  * Clear server-side email-change confirmation authority only.
+ *
+ * @return void No return value; clears only the server-side email-change confirmation grant.
  */
 function viewer_email_change_confirmation_clear(): void
 {
-    viewer_identity_session_unset(viewer_email_change_confirmation_namespace_key());
+    viewer_identity_session_unset(
+        viewer_email_change_confirmation_namespace_key(),
+    );
 }
 
 /**
@@ -427,11 +540,13 @@ function viewer_email_change_confirmation_clear(): void
  *
  * @param string $newEmail Proposed new verified email address.
  * @param ?string $clientIp Explicit test/internal client IP, otherwise trusted resolver result.
- * @return array{requested:bool,reason:string,request_id:?int,selector:?string,verification_token:?string,expires_at:?string}
+ * @return array{requested:bool,reason:string,request_id:?int,selector:?string,verification_token:?string,expires_at:?string} Whether a request was staged, its reason, and the request/selector/plaintext-token/expiry values for the authorized mail caller.
  */
-function viewer_email_change_request_start(string $newEmail, ?string $clientIp = null): array
-{
-    $failure = static fn (string $reason): array => [
+function viewer_email_change_request_start(
+    string $newEmail,
+    ?string $clientIp = null,
+): array {
+    $failure = static fn(string $reason): array => [
         'requested' => false,
         'reason' => $reason,
         'request_id' => null,
@@ -465,31 +580,55 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
     if (hash_equals((string) $viewer['normalized_email'], $normalizedEmail)) {
         return $failure('email_unchanged');
     }
-    if (viewer_lifecycle_model_email_conflict_exists($normalizedEmail, (int) $viewer['id'])) {
+    if (viewer_lifecycle_model_email_conflict_exists(
+        $normalizedEmail,
+        (int) $viewer['id'],
+    )) {
         return $failure('email_unavailable');
     }
 
-    $mailDecision = viewer_mail_authorize_send(VIEWER_MAIL_ACTION_EMAIL_CHANGE, $normalizedEmail, $clientIp);
+    $mailDecision = viewer_mail_authorize_send(
+        VIEWER_MAIL_ACTION_EMAIL_CHANGE,
+        $normalizedEmail,
+        $clientIp,
+    );
     if (!$mailDecision['allowed']) {
         return $failure($mailDecision['reason']);
     }
 
-    return viewer_lifecycle_model_transaction(static function () use ($viewer, $newEmail, $normalizedEmail, $failure): array {
+    return viewer_lifecycle_model_transaction(static function () use (
+        $viewer,
+        $newEmail,
+        $normalizedEmail,
+        $failure,
+    ): array {
         $account = viewer_lifecycle_model_account_lock((int) $viewer['id']);
-        if (!$account
+        if (
+            !$account
             || !viewer_account_can_authenticate($account)
-            || (int) $account['security_version'] !== (int) $viewer['security_version']) {
+            || (int) $account['security_version']
+                !== (int) $viewer['security_version']
+        ) {
             return $failure('authentication_state_changed');
         }
-        if (viewer_lifecycle_model_email_conflict_exists($normalizedEmail, (int) $account['id'])) {
+        if (viewer_lifecycle_model_email_conflict_exists(
+            $normalizedEmail,
+            (int) $account['id'],
+        )) {
             return $failure('email_unavailable');
         }
 
         $now = now_sql();
-        viewer_lifecycle_model_email_change_cancel_active((int) $account['id'], $now);
+        viewer_lifecycle_model_email_change_cancel_active(
+            (int) $account['id'],
+            $now,
+        );
         $selector = security_token_selector_generate(18);
         $verificationToken = security_opaque_token_generate(32);
-        $expiresAt = date('Y-m-d H:i:s', time() + viewer_email_change_request_lifetime_seconds());
+        $expiresAt = date(
+            'Y-m-d H:i:s',
+            time() + viewer_email_change_request_lifetime_seconds(),
+        );
         $requestId = viewer_lifecycle_model_email_change_insert(
             (int) $account['id'],
             trim($newEmail),
@@ -498,13 +637,18 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
             security_authority_token_hash($verificationToken),
             (int) $account['security_version'],
             $now,
-            $expiresAt
+            $expiresAt,
         );
 
         viewer_email_change_confirmation_clear();
-        viewer_security_event_record('viewer.email_change_requested', (int) $account['id'], 'success', [
-            'security_version' => (int) $account['security_version'],
-        ]);
+        viewer_security_event_record(
+            'viewer.email_change_requested',
+            (int) $account['id'],
+            'success',
+            [
+                'security_version' => (int) $account['security_version'],
+            ],
+        );
         return [
             'requested' => true,
             'reason' => 'email_change_requested',
@@ -520,32 +664,40 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
  * Inspect one email-change verification token without consuming it or changing the account.
  *
  * @param string $verificationToken Plaintext verification token from a future link.
- * @return ?array{request_id:int,account_id:int,security_version:int,new_email:string,expires_at:string,context:string}
+ * @return ?array{request_id:int,account_id:int,security_version:int,new_email:string,expires_at:string,context:string} Safe email-change request details for a valid token, or null when it cannot be inspected.
  */
 function viewer_email_change_request_inspect(string $verificationToken): ?array
 {
-    if (!viewer_accounts_enabled()
+    if (
+        !viewer_accounts_enabled()
         || !schema_inspection_is_available(viewer_lifecycle_schema_status())
         || !viewer_security_transport_allowed()
         || $verificationToken === ''
-        || strlen($verificationToken) > 512) {
+        || strlen($verificationToken) > 512
+    ) {
         return null;
     }
 
-    $row = viewer_lifecycle_model_email_change_inspect(security_authority_token_hash($verificationToken));
+    $row = viewer_lifecycle_model_email_change_inspect(security_authority_token_hash(
+        $verificationToken,
+    ));
     $expiry = $row ? strtotime((string) ($row['expires_at'] ?? '')) : false;
-    $account = $row ? [
-        'status' => $row['account_status'] ?? '',
-        'password_hash' => $row['password_hash'] ?? '',
-        'email_verified_at' => $row['email_verified_at'] ?? null,
-    ] : [];
-    if (!$row
+    $account = $row
+        ? [
+            'status' => $row['account_status'] ?? '',
+            'password_hash' => $row['password_hash'] ?? '',
+            'email_verified_at' => $row['email_verified_at'] ?? null,
+        ] : [];
+    if (
+        !$row
         || !viewer_account_can_authenticate($account)
         || !empty($row['consumed_at'])
         || !empty($row['cancelled_at'])
         || $expiry === false
         || $expiry <= time()
-        || (int) $row['security_version'] !== (int) $row['account_security_version']) {
+        || (int) $row['security_version']
+            !== (int) $row['account_security_version']
+    ) {
         return null;
     }
 
@@ -554,7 +706,7 @@ function viewer_email_change_request_inspect(string $verificationToken): ?array
         (int) $row['viewer_account_id'],
         (int) $row['security_version'],
         (string) $row['expires_at'],
-        (string) $row['verification_token_hash']
+        (string) $row['verification_token_hash'],
     );
     if ($context === '') {
         return null;
@@ -582,10 +734,12 @@ function viewer_email_change_authorize(string $verificationToken): bool
 {
     $viewer = current_viewer();
     $inspected = viewer_email_change_request_inspect($verificationToken);
-    if ($viewer === null
+    if (
+        $viewer === null
         || $inspected === null
         || (int) $viewer['id'] !== $inspected['account_id']
-        || (int) $viewer['security_version'] !== $inspected['security_version']) {
+        || (int) $viewer['security_version'] !== $inspected['security_version']
+    ) {
         viewer_email_change_confirmation_clear();
         return false;
     }
@@ -597,14 +751,19 @@ function viewer_email_change_authorize(string $verificationToken): bool
     }
 
     if (!viewer_identity_session_regenerate()) {
-        throw new RuntimeException('Viewer email-change session rotation failed.');
+        throw new RuntimeException(
+            'Viewer email-change session rotation failed.',
+        );
     }
     viewer_identity_session_set(viewer_email_change_confirmation_namespace_key(), [
         'request_id' => $inspected['request_id'],
         'account_id' => $inspected['account_id'],
         'security_version' => $inspected['security_version'],
         'token_expires_at' => $inspected['expires_at'],
-        'expires_at' => min($tokenExpiry, time() + viewer_email_change_confirmation_lifetime_seconds()),
+        'expires_at' => min(
+            $tokenExpiry,
+            time() + viewer_email_change_confirmation_lifetime_seconds(),
+        ),
         'context' => $inspected['context'],
     ]);
     return true;
@@ -613,11 +772,13 @@ function viewer_email_change_authorize(string $verificationToken): bool
 /**
  * Parse current server-side viewer email-change confirmation authority.
  *
- * @return ?array{request_id:int,account_id:int,security_version:int,token_expires_at:string,expires_at:int,context:string}
+ * @return ?array{request_id:int,account_id:int,security_version:int,token_expires_at:string,expires_at:int,context:string} Current confirmation request metadata bound to its account, security version, token and expiry, or null.
  */
 function viewer_email_change_confirmation_state(): ?array
 {
-    $state = viewer_identity_session_get(viewer_email_change_confirmation_namespace_key());
+    $state = viewer_identity_session_get(
+        viewer_email_change_confirmation_namespace_key(),
+    );
     if (!is_array($state)) {
         return null;
     }
@@ -628,12 +789,14 @@ function viewer_email_change_confirmation_state(): ?array
     $tokenExpiresAt = (string) ($state['token_expires_at'] ?? '');
     $expiresAt = (int) ($state['expires_at'] ?? 0);
     $context = (string) ($state['context'] ?? '');
-    if ($requestId <= 0
+    if (
+        $requestId <= 0
         || $accountId <= 0
         || $securityVersion <= 0
         || $tokenExpiresAt === ''
         || $expiresAt <= time()
-        || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1) {
+        || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1
+    ) {
         viewer_email_change_confirmation_clear();
         return null;
     }
@@ -651,7 +814,7 @@ function viewer_email_change_confirmation_state(): ?array
 /**
  * Atomically switch the current viewer to a previously verified staged email address.
  *
- * @return array{changed:bool,reason:string}
+ * @return array{changed:bool,reason:string} Whether the verified email change completed and the stable result reason.
  */
 function viewer_email_change_confirm(): array
 {
@@ -673,43 +836,75 @@ function viewer_email_change_confirm(): array
         return ['changed' => false, 'reason' => 'reauthentication_required'];
     }
     $state = viewer_email_change_confirmation_state();
-    if ($state === null
+    if (
+        $state === null
         || $state['account_id'] !== (int) $viewer['id']
-        || $state['security_version'] !== (int) $viewer['security_version']) {
+        || $state['security_version'] !== (int) $viewer['security_version']
+    ) {
         return ['changed' => false, 'reason' => 'confirmation_state_invalid'];
     }
 
     try {
-        $result = viewer_lifecycle_model_transaction(static function () use ($state): array {
-            $account = viewer_lifecycle_model_account_lock($state['account_id']);
-            if (!$account
+        $result = viewer_lifecycle_model_transaction(static function () use (
+            $state,
+        ): array {
+            $account = viewer_lifecycle_model_account_lock(
+                $state['account_id'],
+            );
+            if (
+                !$account
                 || !viewer_account_can_authenticate($account)
-                || (int) $account['security_version'] !== $state['security_version']) {
-                return ['changed' => false, 'reason' => 'confirmation_state_invalid', 'clear_session' => true];
+                || (int) $account['security_version']
+                    !== $state['security_version']
+            ) {
+                return [
+                    'changed' => false,
+                    'reason' => 'confirmation_state_invalid',
+                    'clear_session' => true,
+                ];
             }
 
-            $request = viewer_lifecycle_model_email_change_lock($state['request_id']);
-            $expiry = $request ? strtotime((string) ($request['expires_at'] ?? '')) : false;
-            $context = $request ? viewer_email_change_confirmation_context(
-                (int) $request['id'],
-                (int) $request['viewer_account_id'],
-                (int) $request['security_version'],
-                (string) $request['expires_at'],
-                (string) $request['verification_token_hash']
-            ) : '';
-            if (!$request
+            $request = viewer_lifecycle_model_email_change_lock(
+                $state['request_id'],
+            );
+            $expiry = $request
+                ? strtotime((string) ($request['expires_at'] ?? ''))
+                : false;
+            $context = $request
+                ? viewer_email_change_confirmation_context(
+                    (int) $request['id'],
+                    (int) $request['viewer_account_id'],
+                    (int) $request['security_version'],
+                    (string) $request['expires_at'],
+                    (string) $request['verification_token_hash'],
+                ) : '';
+            if (
+                !$request
                 || (int) $request['viewer_account_id'] !== $state['account_id']
-                || (int) $request['security_version'] !== $state['security_version']
+                || (int) $request['security_version']
+                    !== $state['security_version']
                 || !empty($request['consumed_at'])
                 || !empty($request['cancelled_at'])
                 || $expiry === false
                 || $expiry <= time()
                 || $context === ''
-                || !hash_equals($context, $state['context'])) {
-                return ['changed' => false, 'reason' => 'confirmation_state_invalid', 'clear_confirmation' => true];
+                || !hash_equals($context, $state['context'])
+            ) {
+                return [
+                    'changed' => false,
+                    'reason' => 'confirmation_state_invalid',
+                    'clear_confirmation' => true,
+                ];
             }
-            if (viewer_lifecycle_model_email_conflict_exists((string) $request['normalized_new_email'], (int) $account['id'])) {
-                return ['changed' => false, 'reason' => 'email_unavailable', 'clear_confirmation' => true];
+            if (viewer_lifecycle_model_email_conflict_exists(
+                (string) $request['normalized_new_email'],
+                (int) $account['id'],
+            )) {
+                return [
+                    'changed' => false,
+                    'reason' => 'email_unavailable',
+                    'clear_confirmation' => true,
+                ];
             }
 
             $now = now_sql();
@@ -720,14 +915,29 @@ function viewer_email_change_confirm(): array
                 $newSecurityVersion,
                 (string) $request['new_email'],
                 (string) $request['normalized_new_email'],
-                $now
+                $now,
             );
-            viewer_lifecycle_model_email_change_consume((int) $request['id'], $now);
-            viewer_lifecycle_model_email_change_cancel_active((int) $account['id'], $now, (int) $request['id']);
-            viewer_lifecycle_model_revoke_after_email_change((int) $account['id'], $now);
-            viewer_security_event_record('viewer.email_change_confirmed', (int) $account['id'], 'success', [
-                'security_version' => $newSecurityVersion,
-            ]);
+            viewer_lifecycle_model_email_change_consume(
+                (int) $request['id'],
+                $now,
+            );
+            viewer_lifecycle_model_email_change_cancel_active(
+                (int) $account['id'],
+                $now,
+                (int) $request['id'],
+            );
+            viewer_lifecycle_model_revoke_after_email_change(
+                (int) $account['id'],
+                $now,
+            );
+            viewer_security_event_record(
+                'viewer.email_change_confirmed',
+                (int) $account['id'],
+                'success',
+                [
+                    'security_version' => $newSecurityVersion,
+                ],
+            );
             return ['changed' => true, 'reason' => 'email_changed'];
         });
     } catch (ViewerLifecycleEmailConflict) {
@@ -753,14 +963,16 @@ function viewer_email_change_confirm(): array
  * by this account for any other collection are explicitly revoked before the creator FK is nulled.
  * Existing viewer security events are retained pseudonymously through ON DELETE SET NULL.
  *
- * @return array{deleted:bool,reason:string}
+ * @return array{deleted:bool,reason:string} Whether the account was deleted and the stable result reason.
  */
 function viewer_account_delete(): array
 {
     if (!viewer_accounts_enabled()) {
         return ['deleted' => false, 'reason' => 'viewer_disabled'];
     }
-    if (!schema_inspection_is_available(viewer_account_deletion_schema_status())) {
+    if (!schema_inspection_is_available(
+        viewer_account_deletion_schema_status(),
+    )) {
         return ['deleted' => false, 'reason' => 'storage_unavailable'];
     }
     if (!viewer_security_transport_allowed()) {
@@ -775,12 +987,20 @@ function viewer_account_delete(): array
         return ['deleted' => false, 'reason' => 'reauthentication_required'];
     }
 
-    $result = viewer_lifecycle_model_transaction(static function () use ($viewer): array {
+    $result = viewer_lifecycle_model_transaction(static function () use (
+        $viewer,
+    ): array {
         $account = viewer_lifecycle_model_account_lock((int) $viewer['id']);
-        if (!$account
+        if (
+            !$account
             || !viewer_account_can_authenticate($account)
-            || (int) $account['security_version'] !== (int) $viewer['security_version']) {
-            return ['deleted' => false, 'reason' => 'authentication_state_changed'];
+            || (int) $account['security_version']
+                !== (int) $viewer['security_version']
+        ) {
+            return [
+                'deleted' => false,
+                'reason' => 'authentication_state_changed',
+            ];
         }
 
         viewer_account_capacity_lock();
@@ -791,18 +1011,29 @@ function viewer_account_delete(): array
             (int) $account['id'],
             (int) $account['security_version'],
             $invalidatedSecurityVersion,
-            $now
+            $now,
         );
-        viewer_lifecycle_model_revoke_created_shares((int) $account['id'], $now);
-        viewer_security_event_record('viewer.account_deleted', (int) $account['id'], 'success', [
-            'security_version' => $invalidatedSecurityVersion,
-        ]);
+        viewer_lifecycle_model_revoke_created_shares(
+            (int) $account['id'],
+            $now,
+        );
+        viewer_security_event_record(
+            'viewer.account_deleted',
+            (int) $account['id'],
+            'success',
+            [
+                'security_version' => $invalidatedSecurityVersion,
+            ],
+        );
         viewer_lifecycle_model_account_delete((int) $account['id']);
         viewer_account_capacity_recount_locked();
         return ['deleted' => true, 'reason' => 'account_deleted'];
     });
 
-    if ($result['deleted'] || $result['reason'] === 'authentication_state_changed') {
+    if (
+        $result['deleted']
+        || $result['reason'] === 'authentication_state_changed'
+    ) {
         viewer_session_clear();
     }
     return $result;

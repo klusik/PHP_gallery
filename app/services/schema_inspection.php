@@ -52,14 +52,19 @@ use function Gallery\Models\schema_inspection_model_query_definition;
 use function Gallery\Models\schema_inspection_model_table_snapshot_rows;
 
 const SCHEMA_INSPECTION_AVAILABLE = 'available';
+
 const SCHEMA_INSPECTION_MISSING = 'missing';
+
 const SCHEMA_INSPECTION_UNKNOWN = 'unknown';
 
 const SCHEMA_INSPECTION_OBJECT_TABLE = 'table';
+
 const SCHEMA_INSPECTION_OBJECT_COLUMN = 'column';
+
 const SCHEMA_INSPECTION_OBJECT_INDEX = 'index';
 
 const SCHEMA_INSPECTION_ERROR_FAILED = 'inspection_failed';
+
 const SCHEMA_INSPECTION_DIAGNOSTIC_FAILED = 'Database schema inspection failed.';
 
 /**
@@ -147,13 +152,23 @@ function schema_inspection_reset_request_cache(): void
  * bulk query itself completed successfully.
  *
  * @param array<int,string> $tables Requested table names.
- * @param array<int,array<string,mixed>> $rows information_schema.COLUMNS rows.
+ * @param array<int,array<string,mixed>> $rows information_schema.COLUMNS rows, using either driver column-name casing.
+ * @return void Replaces request-local snapshots for validated requested tables.
  */
-function schema_inspection_store_table_snapshots(array $tables, array $rows): void
-{
+function schema_inspection_store_table_snapshots(
+    array $tables,
+    array $rows,
+): void {
     $validated = [];
-    foreach (array_slice(array_values(array_unique($tables)), 0, 24) as $table) {
-        $validated[] = schema_inspection_validate_identifier((string) $table, 'table');
+    foreach (array_slice(
+        array_values(array_unique($tables)),
+        0,
+        24,
+    ) as $table) {
+        $validated[] = schema_inspection_validate_identifier(
+            (string) $table,
+            'table',
+        );
     }
     if ($validated === []) {
         return;
@@ -180,8 +195,19 @@ function schema_inspection_store_table_snapshots(array $tables, array $rows): vo
         }
         $built[$table]['exists'] = true;
         $built[$table]['columns'][$column] = [
-            'column_type' => (string) ($row['COLUMN_TYPE'] ?? $row['column_type'] ?? ''),
-            'is_nullable' => strtoupper((string) ($row['IS_NULLABLE'] ?? $row['is_nullable'] ?? 'NO')) === 'YES',
+            'column_type' => (string) (
+                $row['COLUMN_TYPE']
+                ?? $row['column_type']
+                ?? ''
+            ),
+            'is_nullable' =>
+                strtoupper(
+                    (string) (
+                        $row['IS_NULLABLE']
+                        ?? $row['is_nullable']
+                        ?? 'NO'
+                    ),
+                ) === 'YES',
         ];
     }
 
@@ -204,15 +230,25 @@ function schema_inspection_store_table_snapshots(array $tables, array $rows): vo
 function schema_inspection_prime_table_snapshots(array $tables): bool
 {
     $validated = [];
-    foreach (array_slice(array_values(array_unique($tables)), 0, 24) as $table) {
-        $validated[] = schema_inspection_validate_identifier((string) $table, 'table');
+    foreach (array_slice(
+        array_values(array_unique($tables)),
+        0,
+        24,
+    ) as $table) {
+        $validated[] = schema_inspection_validate_identifier(
+            (string) $table,
+            'table',
+        );
     }
     if ($validated === []) {
         return true;
     }
 
     $snapshots = &schema_inspection_table_snapshot_cache();
-    $missing = array_values(array_filter($validated, static fn (string $table): bool => !array_key_exists($table, $snapshots)));
+    $missing = array_values(array_filter(
+        $validated,
+        static fn(string $table): bool => !array_key_exists($table, $snapshots),
+    ));
     if ($missing === []) {
         return true;
     }
@@ -252,9 +288,14 @@ function schema_inspection_snapshot_table_exists(string $table): ?bool
 
 /**
  * Return a snapshotted column existence answer, or null when not primed.
+ * @param string $table Validated table identifier represented in the request snapshot.
+ * @param string $column Validated column identifier to inspect.
+ * @return bool|null True/false for a primed table snapshot, or null when table metadata is not primed.
  */
-function schema_inspection_snapshot_column_exists(string $table, string $column): ?bool
-{
+function schema_inspection_snapshot_column_exists(
+    string $table,
+    string $column,
+): ?bool {
     $metadata = schema_inspection_snapshot_column_metadata($table, $column);
     if ($metadata === null) {
         $tableExists = schema_inspection_snapshot_table_exists($table);
@@ -266,10 +307,14 @@ function schema_inspection_snapshot_column_exists(string $table, string $column)
 /**
  * Return snapshotted column metadata, or null when absent/unprimed.
  *
- * @return ?array{column_type:string,is_nullable:bool}
+ * @param string $table Validated table identifier represented in the request snapshot.
+ * @param string $column Validated column identifier to inspect.
+ * @return array{column_type:string,is_nullable:bool}|null Cached column type and nullability, or null when absent/unprimed.
  */
-function schema_inspection_snapshot_column_metadata(string $table, string $column): ?array
-{
+function schema_inspection_snapshot_column_metadata(
+    string $table,
+    string $column,
+): ?array {
     $table = schema_inspection_validate_identifier($table, 'table');
     $column = schema_inspection_validate_identifier($column, 'column');
     $snapshots = &schema_inspection_table_snapshot_cache();
@@ -290,10 +335,18 @@ function schema_inspection_snapshot_column_metadata(string $table, string $colum
  * @param string $label Human-readable identifier role for exceptions.
  * @return string Validated identifier.
  */
-function schema_inspection_validate_identifier(string $name, string $label): string
-{
-    if ($name === '' || strlen($name) > 64 || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1) {
-        throw new InvalidArgumentException('Invalid schema ' . $label . ' identifier.');
+function schema_inspection_validate_identifier(
+    string $name,
+    string $label,
+): string {
+    if (
+        $name === ''
+        || strlen($name) > 64
+        || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1
+    ) {
+        throw new InvalidArgumentException(
+            'Invalid schema ' . $label . ' identifier.',
+        );
     }
 
     return $name;
@@ -316,7 +369,7 @@ function schema_inspection_result(
     string $table,
     string $object,
     string $errorCode = '',
-    string $diagnostic = ''
+    string $diagnostic = '',
 ): array {
     return [
         'state' => $state,
@@ -341,13 +394,20 @@ function schema_inspection_result(
 function schema_inspection_error_code(Throwable $exception): string
 {
     $candidate = '';
-    if ($exception instanceof PDOException && is_array($exception->errorInfo ?? null)) {
+    if (
+        $exception instanceof PDOException
+        && is_array($exception->errorInfo ?? null)
+    ) {
         $candidate = (string) ($exception->errorInfo[0] ?? '');
     }
     if ($candidate === '') {
         $candidate = (string) $exception->getCode();
     }
-    if ($candidate !== '' && $candidate !== '0' && preg_match('/^[A-Za-z0-9_-]{1,32}$/D', $candidate) === 1) {
+    if (
+        $candidate !== ''
+        && $candidate !== '0'
+        && preg_match('/^[A-Za-z0-9_-]{1,32}$/D', $candidate) === 1
+    ) {
         return $candidate;
     }
 
@@ -366,9 +426,16 @@ function schema_inspection_error_code(Throwable $exception): string
  * @param string $object Validated inspected object name.
  * @return array{sql:string,parameters:array<int,string>} Prepared query definition.
  */
-function schema_inspection_query_definition(string $objectType, string $table, string $object): array
-{
-    return schema_inspection_model_query_definition($objectType, $table, $object);
+function schema_inspection_query_definition(
+    string $objectType,
+    string $table,
+    string $object,
+): array {
+    return schema_inspection_model_query_definition(
+        $objectType,
+        $table,
+        $object,
+    );
 }
 
 /**
@@ -383,8 +450,11 @@ function schema_inspection_query_definition(string $objectType, string $table, s
  * @param string $object Inspected object name.
  * @return bool True when the metadata row exists.
  */
-function schema_inspection_execute_query(string $objectType, string $table, string $object): bool
-{
+function schema_inspection_execute_query(
+    string $objectType,
+    string $table,
+    string $object,
+): bool {
     $override = &schema_inspection_query_executor_override();
     if (is_callable($override)) {
         return (bool) $override($objectType, $table, $object);
@@ -410,12 +480,21 @@ function schema_inspection_execute_query(string $objectType, string $table, stri
  * @param string $token Definition token to locate, such as unpublished.
  * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Inspection result.
  */
-function schema_inspection_column_definition_contains(string $table, string $column, string $token): array
-{
+function schema_inspection_column_definition_contains(
+    string $table,
+    string $column,
+    string $token,
+): array {
     $table = schema_inspection_validate_identifier($table, 'table');
     $column = schema_inspection_validate_identifier($column, 'column');
-    if ($token === '' || strlen($token) > 64 || preg_match('/^[A-Za-z0-9_-]+$/D', $token) !== 1) {
-        throw new InvalidArgumentException('Invalid schema column-definition token.');
+    if (
+        $token === ''
+        || strlen($token) > 64
+        || preg_match('/^[A-Za-z0-9_-]+$/D', $token) !== 1
+    ) {
+        throw new InvalidArgumentException(
+            'Invalid schema column-definition token.',
+        );
     }
 
     // A missing or unknown column is already a complete answer and avoids a second query.
@@ -424,20 +503,27 @@ function schema_inspection_column_definition_contains(string $table, string $col
         return $columnStatus;
     }
 
-    $cacheKey = 'column_definition_contains:' . $table . ':' . $column . ':' . $token;
+    $cacheKey =
+        'column_definition_contains:' . $table . ':' . $column . ':' . $token;
     $cache = &schema_inspection_request_cache();
     if (isset($cache[$cacheKey])) {
         return $cache[$cacheKey];
     }
 
-    $snapshotMetadata = schema_inspection_snapshot_column_metadata($table, $column);
+    $snapshotMetadata = schema_inspection_snapshot_column_metadata(
+        $table,
+        $column,
+    );
     if ($snapshotMetadata !== null) {
-        $exists = str_contains(strtolower((string) $snapshotMetadata['column_type']), strtolower($token));
+        $exists = str_contains(
+            strtolower((string) $snapshotMetadata['column_type']),
+            strtolower($token),
+        );
         $cache[$cacheKey] = schema_inspection_result(
             $exists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
             SCHEMA_INSPECTION_OBJECT_COLUMN,
             $table,
-            $column
+            $column,
         );
         return $cache[$cacheKey];
     }
@@ -447,15 +533,24 @@ function schema_inspection_column_definition_contains(string $table, string $col
         if (is_callable($override)) {
             // Existing three-argument test executors remain compatible because PHP
             // ignores surplus arguments for user-defined callables.
-            $exists = (bool) $override('column_definition_contains', $table, $column, $token);
+            $exists = (bool) $override(
+                'column_definition_contains',
+                $table,
+                $column,
+                $token,
+            );
         } else {
-            $exists = schema_inspection_model_column_definition_contains($table, $column, $token);
+            $exists = schema_inspection_model_column_definition_contains(
+                $table,
+                $column,
+                $token,
+            );
         }
         $cache[$cacheKey] = schema_inspection_result(
             $exists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
             SCHEMA_INSPECTION_OBJECT_COLUMN,
             $table,
-            $column
+            $column,
         );
     } catch (Throwable $exception) {
         $cache[$cacheKey] = schema_inspection_result(
@@ -464,7 +559,7 @@ function schema_inspection_column_definition_contains(string $table, string $col
             $table,
             $column,
             schema_inspection_error_code($exception),
-            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED
+            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
         );
     }
 
@@ -501,13 +596,18 @@ function schema_inspection_column_nullable(string $table, string $column): array
         return $cache[$cacheKey];
     }
 
-    $snapshotMetadata = schema_inspection_snapshot_column_metadata($table, $column);
+    $snapshotMetadata = schema_inspection_snapshot_column_metadata(
+        $table,
+        $column,
+    );
     if ($snapshotMetadata !== null) {
         $cache[$cacheKey] = schema_inspection_result(
-            !empty($snapshotMetadata['is_nullable']) ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            !empty($snapshotMetadata['is_nullable'])
+                ? SCHEMA_INSPECTION_AVAILABLE
+                : SCHEMA_INSPECTION_MISSING,
             SCHEMA_INSPECTION_OBJECT_COLUMN,
             $table,
-            $column
+            $column,
         );
         return $cache[$cacheKey];
     }
@@ -515,15 +615,23 @@ function schema_inspection_column_nullable(string $table, string $column): array
     try {
         $override = &schema_inspection_query_executor_override();
         if (is_callable($override)) {
-            $nullable = (bool) $override('column_nullable', $table, $column, 'YES');
+            $nullable = (bool) $override(
+                'column_nullable',
+                $table,
+                $column,
+                'YES',
+            );
         } else {
-            $nullable = schema_inspection_model_column_nullable($table, $column);
+            $nullable = schema_inspection_model_column_nullable(
+                $table,
+                $column,
+            );
         }
         $cache[$cacheKey] = schema_inspection_result(
             $nullable ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
             SCHEMA_INSPECTION_OBJECT_COLUMN,
             $table,
-            $column
+            $column,
         );
     } catch (Throwable $exception) {
         $cache[$cacheKey] = schema_inspection_result(
@@ -532,7 +640,7 @@ function schema_inspection_column_nullable(string $table, string $column): array
             $table,
             $column,
             schema_inspection_error_code($exception),
-            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED
+            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
         );
     }
 
@@ -547,9 +655,20 @@ function schema_inspection_column_nullable(string $table, string $column): array
  * @param string $object Inspected object name.
  * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Inspection result.
  */
-function schema_inspection_object(string $objectType, string $table, string $object): array
-{
-    if (!in_array($objectType, [SCHEMA_INSPECTION_OBJECT_TABLE, SCHEMA_INSPECTION_OBJECT_COLUMN, SCHEMA_INSPECTION_OBJECT_INDEX], true)) {
+function schema_inspection_object(
+    string $objectType,
+    string $table,
+    string $object,
+): array {
+    if (!in_array(
+        $objectType,
+        [
+            SCHEMA_INSPECTION_OBJECT_TABLE,
+            SCHEMA_INSPECTION_OBJECT_COLUMN,
+            SCHEMA_INSPECTION_OBJECT_INDEX,
+        ],
+        true,
+    )) {
         throw new InvalidArgumentException('Invalid schema object type.');
     }
 
@@ -565,14 +684,19 @@ function schema_inspection_object(string $objectType, string $table, string $obj
     if ($objectType === SCHEMA_INSPECTION_OBJECT_TABLE) {
         $snapshotExists = schema_inspection_snapshot_table_exists($table);
     } elseif ($objectType === SCHEMA_INSPECTION_OBJECT_COLUMN) {
-        $snapshotExists = schema_inspection_snapshot_column_exists($table, $object);
+        $snapshotExists = schema_inspection_snapshot_column_exists(
+            $table,
+            $object,
+        );
     }
     if ($snapshotExists !== null) {
         $cache[$cacheKey] = schema_inspection_result(
-            $snapshotExists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            $snapshotExists
+                ? SCHEMA_INSPECTION_AVAILABLE
+                : SCHEMA_INSPECTION_MISSING,
             $objectType,
             $table,
-            $object
+            $object,
         );
         return $cache[$cacheKey];
     }
@@ -583,7 +707,7 @@ function schema_inspection_object(string $objectType, string $table, string $obj
             $exists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
             $objectType,
             $table,
-            $object
+            $object,
         );
     } catch (Throwable $exception) {
         $cache[$cacheKey] = schema_inspection_result(
@@ -592,7 +716,7 @@ function schema_inspection_object(string $objectType, string $table, string $obj
             $table,
             $object,
             schema_inspection_error_code($exception),
-            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED
+            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
         );
     }
 
@@ -607,7 +731,11 @@ function schema_inspection_object(string $objectType, string $table, string $obj
  */
 function schema_inspection_table(string $table): array
 {
-    return schema_inspection_object(SCHEMA_INSPECTION_OBJECT_TABLE, $table, $table);
+    return schema_inspection_object(
+        SCHEMA_INSPECTION_OBJECT_TABLE,
+        $table,
+        $table,
+    );
 }
 
 /**
@@ -619,7 +747,11 @@ function schema_inspection_table(string $table): array
  */
 function schema_inspection_column(string $table, string $column): array
 {
-    return schema_inspection_object(SCHEMA_INSPECTION_OBJECT_COLUMN, $table, $column);
+    return schema_inspection_object(
+        SCHEMA_INSPECTION_OBJECT_COLUMN,
+        $table,
+        $column,
+    );
 }
 
 /**
@@ -631,7 +763,11 @@ function schema_inspection_column(string $table, string $column): array
  */
 function schema_inspection_index(string $table, string $index): array
 {
-    return schema_inspection_object(SCHEMA_INSPECTION_OBJECT_INDEX, $table, $index);
+    return schema_inspection_object(
+        SCHEMA_INSPECTION_OBJECT_INDEX,
+        $table,
+        $index,
+    );
 }
 
 /**
@@ -676,36 +812,65 @@ function schema_inspection_is_unknown(array $result): bool
  * caller or Admin diagnostic can identify every affected object.
  *
  * @param string $feature Stable feature key used by diagnostics.
- * @param array $requirements List of results returned by this service.
- * @return array{state:string,feature:string,requirements:array} Aggregate result.
+ * @param list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}> $requirements Non-empty inspection results for required schema objects.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state with each inspected object retained.
  */
 function schema_inspection_feature(string $feature, array $requirements): array
 {
-    if ($feature === '' || strlen($feature) > 120 || preg_match('/^[A-Za-z0-9_.-]+$/D', $feature) !== 1) {
-        throw new InvalidArgumentException('Invalid schema feature identifier.');
+    if (
+        $feature === ''
+        || strlen($feature) > 120
+        || preg_match('/^[A-Za-z0-9_.-]+$/D', $feature) !== 1
+    ) {
+        throw new InvalidArgumentException(
+            'Invalid schema feature identifier.',
+        );
     }
     if ($requirements === []) {
-        throw new InvalidArgumentException('Schema feature requirements cannot be empty.');
+        throw new InvalidArgumentException(
+            'Schema feature requirements cannot be empty.',
+        );
     }
 
     $state = SCHEMA_INSPECTION_AVAILABLE;
     foreach ($requirements as $requirement) {
         if (
             !is_array($requirement)
-            || !in_array($requirement['state'] ?? '', [SCHEMA_INSPECTION_AVAILABLE, SCHEMA_INSPECTION_MISSING, SCHEMA_INSPECTION_UNKNOWN], true)
-            || !in_array($requirement['object_type'] ?? '', [SCHEMA_INSPECTION_OBJECT_TABLE, SCHEMA_INSPECTION_OBJECT_COLUMN, SCHEMA_INSPECTION_OBJECT_INDEX], true)
+            || !in_array(
+                $requirement['state'] ?? '',
+                [
+                    SCHEMA_INSPECTION_AVAILABLE,
+                    SCHEMA_INSPECTION_MISSING,
+                    SCHEMA_INSPECTION_UNKNOWN,
+                ],
+                true,
+            )
+            || !in_array(
+                $requirement['object_type'] ?? '',
+                [
+                    SCHEMA_INSPECTION_OBJECT_TABLE,
+                    SCHEMA_INSPECTION_OBJECT_COLUMN,
+                    SCHEMA_INSPECTION_OBJECT_INDEX,
+                ],
+                true,
+            )
             || !is_string($requirement['table'] ?? null)
             || !is_string($requirement['object'] ?? null)
             || !is_string($requirement['error_code'] ?? null)
             || !is_string($requirement['diagnostic'] ?? null)
         ) {
-            throw new InvalidArgumentException('Invalid schema feature requirement.');
+            throw new InvalidArgumentException(
+                'Invalid schema feature requirement.',
+            );
         }
         if (schema_inspection_is_unknown($requirement)) {
             $state = SCHEMA_INSPECTION_UNKNOWN;
             continue;
         }
-        if ($state !== SCHEMA_INSPECTION_UNKNOWN && schema_inspection_is_missing($requirement)) {
+        if (
+            $state !== SCHEMA_INSPECTION_UNKNOWN
+            && schema_inspection_is_missing($requirement)
+        ) {
             $state = SCHEMA_INSPECTION_MISSING;
         }
     }

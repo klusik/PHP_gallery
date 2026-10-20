@@ -36,5 +36,5 @@ declare(strict_types=1);
 
 return [
     "ALTER TABLE galleries ADD COLUMN lightbox_browsing_mode ENUM('single','picture_strip','3d_carousel') NULL AFTER count_badge_visibility",
-    "ALTER TABLE galleries ADD KEY galleries_lightbox_browsing_mode_index (lightbox_browsing_mode)",
+    'ALTER TABLE galleries ADD KEY galleries_lightbox_browsing_mode_index (lightbox_browsing_mode)',
 ];

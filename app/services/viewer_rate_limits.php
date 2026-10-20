@@ -55,45 +55,118 @@ function viewer_rate_limit_policies(): array
     $config = viewer_accounts_config();
 
     return [
-        'viewer_register_ip' => ['max_attempts' => 5, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_register_subnet' => ['max_attempts' => 20, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_register_identifier' => ['max_attempts' => 3, 'window_seconds' => 3600, 'lock_seconds' => 3600],
+        'viewer_register_ip' => [
+            'max_attempts' => 5,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_register_subnet' => [
+            'max_attempts' => 20,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_register_identifier' => [
+            'max_attempts' => 3,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
         'viewer_register_global_day' => [
             'max_attempts' => (int) $config['registration_global_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
-        'viewer_login_ip' => ['max_attempts' => 30, 'window_seconds' => 900, 'lock_seconds' => 900],
-        'viewer_login_subnet' => ['max_attempts' => 100, 'window_seconds' => 900, 'lock_seconds' => 900],
-        'viewer_login_identifier' => ['max_attempts' => 10, 'window_seconds' => 900, 'lock_seconds' => 900],
-        'viewer_login_global' => ['max_attempts' => 300, 'window_seconds' => 60, 'lock_seconds' => 60],
-        'viewer_verify_email_ip' => ['max_attempts' => 20, 'window_seconds' => 1800, 'lock_seconds' => 1800],
-        'viewer_resend_verification_identifier' => ['max_attempts' => 3, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_automation_ip' => ['max_attempts' => 8, 'window_seconds' => 600, 'lock_seconds' => 900],
-        'viewer_automation_subnet' => ['max_attempts' => 48, 'window_seconds' => 600, 'lock_seconds' => 900],
-        'viewer_password_reset_ip' => ['max_attempts' => 10, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_password_reset_subnet' => ['max_attempts' => 30, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_password_reset_identifier' => ['max_attempts' => 3, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_password_reset_global' => ['max_attempts' => 100, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_collection_create_account' => ['max_attempts' => 10, 'window_seconds' => 3600, 'lock_seconds' => 3600],
-        'viewer_share_create_account' => ['max_attempts' => 30, 'window_seconds' => 3600, 'lock_seconds' => 3600],
+        'viewer_login_ip' => [
+            'max_attempts' => 30,
+            'window_seconds' => 900,
+            'lock_seconds' => 900,
+        ],
+        'viewer_login_subnet' => [
+            'max_attempts' => 100,
+            'window_seconds' => 900,
+            'lock_seconds' => 900,
+        ],
+        'viewer_login_identifier' => [
+            'max_attempts' => 10,
+            'window_seconds' => 900,
+            'lock_seconds' => 900,
+        ],
+        'viewer_login_global' => [
+            'max_attempts' => 300,
+            'window_seconds' => 60,
+            'lock_seconds' => 60,
+        ],
+        'viewer_verify_email_ip' => [
+            'max_attempts' => 20,
+            'window_seconds' => 1800,
+            'lock_seconds' => 1800,
+        ],
+        'viewer_resend_verification_identifier' => [
+            'max_attempts' => 3,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_automation_ip' => [
+            'max_attempts' => 8,
+            'window_seconds' => 600,
+            'lock_seconds' => 900,
+        ],
+        'viewer_automation_subnet' => [
+            'max_attempts' => 48,
+            'window_seconds' => 600,
+            'lock_seconds' => 900,
+        ],
+        'viewer_password_reset_ip' => [
+            'max_attempts' => 10,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_password_reset_subnet' => [
+            'max_attempts' => 30,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_password_reset_identifier' => [
+            'max_attempts' => 3,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_password_reset_global' => [
+            'max_attempts' => 100,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_collection_create_account' => [
+            'max_attempts' => 10,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
+        'viewer_share_create_account' => [
+            'max_attempts' => 30,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
         'viewer_verify_mail_email_cooldown' => [
             'max_attempts' => 1,
-            'window_seconds' => (int) $config['verification_mail_email_cooldown_seconds'],
-            'lock_seconds' => (int) $config['verification_mail_email_cooldown_seconds'],
+            'window_seconds' =>
+                (int) $config['verification_mail_email_cooldown_seconds'],
+            'lock_seconds' =>
+                (int) $config['verification_mail_email_cooldown_seconds'],
         ],
         'viewer_verify_mail_email_hour' => [
-            'max_attempts' => (int) $config['verification_mail_email_hourly_limit'],
+            'max_attempts' =>
+                (int) $config['verification_mail_email_hourly_limit'],
             'window_seconds' => 3600,
             'lock_seconds' => 3600,
         ],
         'viewer_verify_mail_email_day' => [
-            'max_attempts' => (int) $config['verification_mail_email_daily_limit'],
+            'max_attempts' =>
+                (int) $config['verification_mail_email_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_verify_mail_ip_hour' => [
-            'max_attempts' => (int) $config['verification_mail_ip_hourly_limit'],
+            'max_attempts' =>
+                (int) $config['verification_mail_ip_hourly_limit'],
             'window_seconds' => 3600,
             'lock_seconds' => 3600,
         ],
@@ -103,73 +176,92 @@ function viewer_rate_limit_policies(): array
             'lock_seconds' => 3600,
         ],
         'viewer_verify_mail_subnet_hour' => [
-            'max_attempts' => (int) $config['verification_mail_subnet_hourly_limit'],
+            'max_attempts' =>
+                (int) $config['verification_mail_subnet_hourly_limit'],
             'window_seconds' => 3600,
             'lock_seconds' => 3600,
         ],
         'viewer_verify_mail_subnet_day' => [
-            'max_attempts' => (int) $config['verification_mail_subnet_daily_limit'],
+            'max_attempts' =>
+                (int) $config['verification_mail_subnet_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_verify_mail_global_day' => [
-            'max_attempts' => (int) $config['verification_mail_global_daily_limit'],
+            'max_attempts' =>
+                (int) $config['verification_mail_global_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_email_cooldown' => [
             'max_attempts' => 1,
-            'window_seconds' => (int) $config['password_reset_mail_email_cooldown_seconds'],
-            'lock_seconds' => (int) $config['password_reset_mail_email_cooldown_seconds'],
+            'window_seconds' =>
+                (int) $config['password_reset_mail_email_cooldown_seconds'],
+            'lock_seconds' =>
+                (int) $config['password_reset_mail_email_cooldown_seconds'],
         ],
         'viewer_reset_mail_email_hour' => [
-            'max_attempts' => (int) $config['password_reset_mail_email_hourly_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_email_hourly_limit'],
             'window_seconds' => 3600,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_email_day' => [
-            'max_attempts' => (int) $config['password_reset_mail_email_daily_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_email_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_ip_hour' => [
-            'max_attempts' => (int) $config['password_reset_mail_ip_hourly_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_ip_hourly_limit'],
             'window_seconds' => 3600,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_ip_day' => [
-            'max_attempts' => (int) $config['password_reset_mail_ip_daily_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_ip_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_subnet_hour' => [
-            'max_attempts' => (int) $config['password_reset_mail_subnet_hourly_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_subnet_hourly_limit'],
             'window_seconds' => 3600,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_subnet_day' => [
-            'max_attempts' => (int) $config['password_reset_mail_subnet_daily_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_subnet_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_reset_mail_global_day' => [
-            'max_attempts' => (int) $config['password_reset_mail_global_daily_limit'],
+            'max_attempts' =>
+                (int) $config['password_reset_mail_global_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_invite_mail_email_day' => [
-            'max_attempts' => (int) $config['invitation_mail_email_daily_limit'],
+            'max_attempts' =>
+                (int) $config['invitation_mail_email_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
         'viewer_invite_mail_global_day' => [
-            'max_attempts' => (int) $config['invitation_mail_global_daily_limit'],
+            'max_attempts' =>
+                (int) $config['invitation_mail_global_daily_limit'],
             'window_seconds' => 86400,
             'lock_seconds' => 3600,
         ],
-        'viewer_global' => ['max_attempts' => 1000, 'window_seconds' => 60, 'lock_seconds' => 60],
+        'viewer_global' => [
+            'max_attempts' => 1000,
+            'window_seconds' => 60,
+            'lock_seconds' => 60,
+        ],
     ];
 }
+
 /**
  * Return one allowlisted rate-limit policy or null for an unknown bucket.
  *
@@ -218,8 +310,10 @@ function viewer_rate_limit_subnet_subject(string $ip): string
  * @param string $subject Raw subject value.
  * @return string Normalized subject or an empty string when invalid.
  */
-function viewer_rate_limit_normalize_subject(string $kind, string $subject): string
-{
+function viewer_rate_limit_normalize_subject(
+    string $kind,
+    string $subject,
+): string {
     $kind = strtolower(trim($kind));
     if ($kind === 'ip') {
         return request_client_ip_normalize($subject);
@@ -229,7 +323,9 @@ function viewer_rate_limit_normalize_subject(string $kind, string $subject): str
     }
     if ($kind === 'identifier') {
         $normalized = strtolower(trim($subject));
-        return strlen($normalized) <= 512 ? $normalized : substr($normalized, 0, 512);
+        return strlen($normalized) <= 512
+            ? $normalized
+            : substr($normalized, 0, 512);
     }
     if ($kind === 'account') {
         $accountId = (int) trim($subject);
@@ -251,7 +347,12 @@ function viewer_rate_limit_normalize_subject(string $kind, string $subject): str
 function viewer_rate_limit_subject_hash(string $kind, string $subject): string
 {
     $normalized = viewer_rate_limit_normalize_subject($kind, $subject);
-    return $normalized === '' ? '' : viewer_security_fingerprint('viewer-rate-' . strtolower(trim($kind)), $normalized);
+    return $normalized === ''
+        ? ''
+        : viewer_security_fingerprint(
+            'viewer-rate-' . strtolower(trim($kind)),
+            $normalized,
+        );
 }
 
 /**
@@ -302,19 +403,34 @@ function viewer_rate_limit_storage_available(): bool
  * @param string $subject Raw subject value.
  * @return array{allowed:bool,retry_after_seconds:int,attempts:int,reason:string} Decision.
  */
-function viewer_rate_limit_consume(string $bucket, string $subjectKind, string $subject): array
-{
+function viewer_rate_limit_consume(
+    string $bucket,
+    string $subjectKind,
+    string $subject,
+): array {
     if (!viewer_accounts_enabled()) {
-        return ['allowed' => false, 'retry_after_seconds' => 0, 'attempts' => 0, 'reason' => 'viewer_disabled'];
+        return [
+            'allowed' => false,
+            'retry_after_seconds' => 0,
+            'attempts' => 0,
+            'reason' => 'viewer_disabled',
+        ];
     }
     if (!viewer_rate_limit_storage_available()) {
-        return ['allowed' => false, 'retry_after_seconds' => 0, 'attempts' => 0, 'reason' => 'storage_unavailable'];
+        return [
+            'allowed' => false,
+            'retry_after_seconds' => 0,
+            'attempts' => 0,
+            'reason' => 'storage_unavailable',
+        ];
     }
 
     $policy = viewer_rate_limit_policy($bucket);
     $subjectHash = viewer_rate_limit_subject_hash($subjectKind, $subject);
     if ($policy === null || $subjectHash === '') {
-        throw new InvalidArgumentException('Viewer rate-limit bucket or subject is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer rate-limit bucket or subject is invalid.',
+        );
     }
 
     $nowTimestamp = time();
@@ -324,7 +440,7 @@ function viewer_rate_limit_consume(string $bucket, string $subjectKind, string $
         $policy,
         viewer_rate_limit_subject_cap(),
         now_sql(),
-        $nowTimestamp
+        $nowTimestamp,
     );
 }
 
@@ -345,7 +461,11 @@ function viewer_rate_limit_cleanup_bucket_locked(string $bucket): int
 
     $nowTimestamp = time();
     $cutoff = date('Y-m-d H:i:s', $nowTimestamp - 86400);
-    return viewer_rate_limit_model_cleanup_bucket_locked($bucket, $cutoff, now_sql());
+    return viewer_rate_limit_model_cleanup_bucket_locked(
+        $bucket,
+        $cutoff,
+        now_sql(),
+    );
 }
 
 /**
@@ -363,7 +483,11 @@ function viewer_rate_limit_cleanup(): array
     $nowTimestamp = time();
     $cutoff = date('Y-m-d H:i:s', $nowTimestamp - 86400);
     foreach (array_keys(viewer_rate_limit_policies()) as $bucket) {
-        $counts[$bucket] = viewer_rate_limit_model_cleanup_bucket($bucket, $cutoff, now_sql());
+        $counts[$bucket] = viewer_rate_limit_model_cleanup_bucket(
+            $bucket,
+            $cutoff,
+            now_sql(),
+        );
     }
     return $counts;
 }

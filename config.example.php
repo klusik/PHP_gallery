@@ -147,7 +147,8 @@ return [
     // OFP coordinates saved with each gallery. The bundled CSV stays available
     // as a small fallback lookup table for manually entered route text.
     'navigation_data' => [
-        'bundled_navdata_path' => __DIR__ . '/data/navdata/local_nav_points.csv',
+        'bundled_navdata_path' =>
+            __DIR__ . '/data/navdata/local_nav_points.csv',
         'cache_ttl_seconds' => 2592000,
     ],
 
@@ -176,4 +177,3 @@ return [
         'log_reset_links' => false,
     ],
 ];
-

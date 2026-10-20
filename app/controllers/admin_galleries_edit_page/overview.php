@@ -53,15 +53,22 @@ use function Gallery\Views\view_render_admin_gallery_editor_notices;
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @return void Consumes one-time notices and renders their presentation.
  */
-function admin_edit_gallery_render_notices(array $gallery, array $capabilities): void
-{
+function admin_edit_gallery_render_notices(
+    array $gallery,
+    array $capabilities,
+): void {
     $messages = [];
     // $galleryError stores an intermediate value used by the surrounding gallery workflow.
-    $galleryError = (string) ($_SESSION['admin_gallery_error_' . (int) $gallery['id']] ?? '');
+    $galleryError = (string) (
+        $_SESSION['admin_gallery_error_' . (int) $gallery['id']] ?? ''
+    );
     unset($_SESSION['admin_gallery_error_' . (int) $gallery['id']]);
     if ($galleryError !== '') {
-        $messages[] = t('admin.gallery_editor.folder_move_failed', ['error' => $galleryError]);
+        $messages[] = t('admin.gallery_editor.folder_move_failed', [
+            'error' => $galleryError,
+        ]);
     }
     // $galleryNotice stores an intermediate value used by the surrounding gallery workflow.
     $galleryNotice = (string) flash_message('admin_notice');
@@ -76,12 +83,30 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
         // $scanFailed stores files that were stored on disk but not imported into image rows.
         $scanFailed = (int) ($_GET['scan_failed'] ?? 0);
         // $uploadNotice stores the upload result message shown after redirect.
-        $uploadNotice = t('admin.gallery_editor.upload_notice', 'Uploaded {uploaded} images, scanned or updated {scanned} image records, and created {thumbnails} thumbnails.', ['uploaded' => (int) $_GET['uploaded'], 'scanned' => (int) ($_GET['scanned'] ?? 0), 'thumbnails' => (int) ($_GET['thumbnails'] ?? 0)]);
+        $uploadNotice = t(
+            'admin.gallery_editor.upload_notice',
+            'Uploaded {uploaded} images, scanned or updated {scanned} image records, and created {thumbnails} thumbnails.',
+            [
+                'uploaded' => (int) $_GET['uploaded'],
+                'scanned' => (int) ($_GET['scanned'] ?? 0),
+                'thumbnails' => (int) ($_GET['thumbnails'] ?? 0),
+            ],
+        );
         if ($scanFailed > 0) {
-            $uploadNotice .= ' ' . t('admin.gallery_editor.upload_scan_warning', 'Warning: {count} uploaded file(s) were stored on disk but could not be imported into image records. Check the admin logs for filenames and decoder diagnostics.', ['count' => $scanFailed]);
+            $uploadNotice .= ' '
+            . t(
+                'admin.gallery_editor.upload_scan_warning',
+                'Warning: {count} uploaded file(s) were stored on disk but could not be imported into image records. Check the admin logs for filenames and decoder diagnostics.',
+                ['count' => $scanFailed],
+            );
         }
         if ($thumbnailFailed > 0) {
-            $uploadNotice .= ' ' . t('admin.gallery_editor.upload_thumbnail_warning', 'Warning: {count} thumbnail or DNG display derivative(s) failed. Use Create gallery thumbnails or check the admin logs for details.', ['count' => $thumbnailFailed]);
+            $uploadNotice .= ' '
+            . t(
+                'admin.gallery_editor.upload_thumbnail_warning',
+                'Warning: {count} thumbnail or DNG display derivative(s) failed. Use Create gallery thumbnails or check the admin logs for details.',
+                ['count' => $thumbnailFailed],
+            );
         }
         $messages[] = $uploadNotice;
     } elseif (isset($_GET['moved'])) {
@@ -91,9 +116,15 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
     }
 
     $migrationNoticeHtml = '';
-    if (!$capabilities['picture_game_ready'] && $capabilities['picture_game_feature_enabled'] && $capabilities['image_voting_feature_enabled']) {
+    if (
+        !$capabilities['picture_game_ready']
+        && $capabilities['picture_game_feature_enabled']
+        && $capabilities['image_voting_feature_enabled']
+    ) {
         ob_start();
-        render_admin_migration_notice(t('admin.gallery_editor.picture_game_migration_hidden'));
+        render_admin_migration_notice(t(
+            'admin.gallery_editor.picture_game_migration_hidden',
+        ));
         $migrationNoticeHtml = (string) ob_get_clean();
     }
 
@@ -121,21 +152,36 @@ function admin_edit_gallery_render_overview(
     int $imageCount,
     string $activeEditTab,
     array $capabilities,
-    bool $deferredImages = false
+    bool $deferredImages = false,
 ): void {
     // Only the heading receives an overlay; the editor still owns source fields.
     $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
     // $activeVisibility stores the normalized gallery visibility label for summary cards.
     $activeVisibility = normalize_gallery_visibility(
-        (string) ($gallery['visibility'] ?? 'unpublished')
+        (string) ($gallery['visibility'] ?? 'unpublished'),
     );
     // $adminTabs stores the edit-gallery sections shown by the shared admin tab controller.
     $adminTabs = [
-        ['id' => 'admin-edit-identity', 'label' => t('admin.gallery_editor.tab_identity')],
-        ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
-        ['id' => 'admin-edit-access', 'label' => t('admin.gallery_editor.tab_access')],
-        ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
-        ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
+        [
+            'id' => 'admin-edit-identity',
+            'label' => t('admin.gallery_editor.tab_identity'),
+        ],
+        [
+            'id' => 'admin-edit-api',
+            'label' => t('admin.gallery_editor.tab_api', 'API'),
+        ],
+        [
+            'id' => 'admin-edit-access',
+            'label' => t('admin.gallery_editor.tab_access'),
+        ],
+        [
+            'id' => 'admin-edit-display',
+            'label' => t('admin.gallery_editor.tab_display'),
+        ],
+        [
+            'id' => 'admin-edit-media',
+            'label' => t('admin.gallery_editor.tab_media'),
+        ],
         [
             'id' => 'admin-edit-images',
             'label' => t('admin.gallery_editor.tab_images'),
@@ -143,9 +189,11 @@ function admin_edit_gallery_render_overview(
             'disabled' => $deferredImages,
         ],
     ];
-    if (feature_capability_effective_enabled('gallery_pdf_documents')
+    if (
+        feature_capability_effective_enabled('gallery_pdf_documents')
         || feature_capability_effective_enabled('gallery_music')
-        || feature_capability_effective_enabled('lightbox_modes')) {
+        || feature_capability_effective_enabled('lightbox_modes')
+    ) {
         $adminTabs[] = [
             'id' => 'admin-edit-documents',
             'label' => t('presentation.media_tab'),
@@ -167,35 +215,47 @@ function admin_edit_gallery_render_overview(
     view_render_admin_gallery_overview([
         'hero' => [
             'title' => (string) $gallery['title'],
-            'actions_aria_label' => t('admin.gallery_editor.hero_actions_label'),
+            'actions_aria_label' => t(
+                'admin.gallery_editor.hero_actions_label',
+            ),
             'actions' => [
                 [
                     'label' => t('admin.gallery_editor.upload_photos_here'),
-                    'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
+                    'url' => url_for('admin_upload', [
+                        'gallery_id' => $gallery['id'],
+                    ]),
                     'class' => 'button',
                     'attributes' => [
                         'data-gallery-side-panel-link' => true,
                         'data-admin-side-panel-workflow' => 'upload',
-                        'data-admin-side-panel-kicker' => t('gallery.upload_workflow'),
-                        'data-admin-side-panel-title' => t('gallery.upload_photos'),
+                        'data-admin-side-panel-kicker' => t(
+                            'gallery.upload_workflow',
+                        ),
+                        'data-admin-side-panel-title' => t(
+                            'gallery.upload_photos',
+                        ),
                         'data-gallery-side-panel-url' => url_for(
                             'admin_upload',
-                            ['gallery_id' => $gallery['id'], 'panel' => 1]
+                            ['gallery_id' => $gallery['id'], 'panel' => 1],
                         ),
                     ],
                 ],
                 [
                     'label' => t('admin.gallery_editor.create_gallery_here'),
-                    'url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id']]),
+                    'url' => url_for('admin_new_gallery', [
+                        'parent_id' => $gallery['id'],
+                    ]),
                     'class' => 'button secondary',
                     'attributes' => [
                         'data-gallery-side-panel-link' => true,
                         'data-admin-side-panel-workflow' => 'create',
                         'data-admin-side-panel-kicker' => t('gallery.workflow'),
-                        'data-admin-side-panel-title' => t('gallery.create_here'),
+                        'data-admin-side-panel-title' => t(
+                            'gallery.create_here',
+                        ),
                         'data-gallery-side-panel-url' => url_for(
                             'admin_new_gallery',
-                            ['parent_id' => $gallery['id'], 'panel' => 1]
+                            ['parent_id' => $gallery['id'], 'panel' => 1],
                         ),
                     ],
                 ],
@@ -227,18 +287,25 @@ function admin_edit_gallery_render_overview(
             ],
             [
                 'label' => t('admin.gallery_editor.metric_folder'),
-                'value' => gallery_folder_name_from_path((string) $gallery['folder_path']),
+                'value' => gallery_folder_name_from_path(
+                    (string) $gallery['folder_path'],
+                ),
                 'help' => t('admin.gallery_editor.metric_folder_help'),
                 'state' => 'neutral',
             ],
             [
                 'label' => t('admin.gallery_editor.metric_parent'),
-                'value' => ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : t('admin.gallery_editor.root_parent')),
+                'value' => (int) ($gallery['parent_id'] ?? 0) > 0
+                    ? '#' . (int) $gallery['parent_id']
+                    : t('admin.gallery_editor.root_parent'),
                 'help' => t('admin.gallery_editor.metric_parent_help'),
                 'state' => 'neutral',
             ],
         ],
-        'summary_label' => t('admin.gallery_editor.summary_aria', 'Gallery summary'),
+        'summary_label' => t(
+            'admin.gallery_editor.summary_aria',
+            'Gallery summary',
+        ),
     ]);
 
     render_admin_tabs($adminTabs, $activeEditTab);

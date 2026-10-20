@@ -49,6 +49,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__ . '/support/php_source.php';
     use function Gallery\Services\tag_page_gallery_description_layout;
     use function Gallery\Services\tag_page_gallery_grid_settings;
 
@@ -57,11 +58,27 @@ namespace {
 
     /**
      * Fail the script when two focused values differ.
+     *
+     * @param bool|int|float|string|null $expected Expected scalar setting or presentation value.
+     * @param bool|int|float|string|null $actual Actual scalar setting or presentation value.
+     * @param string $message Failure diagnostic.
+     * @return void Write the mismatch to STDERR and exit with failure when values differ.
      */
-    function assert_tag_page_same(mixed $expected, mixed $actual, string $message): void
-    {
+    function assert_tag_page_same(
+        mixed $expected,
+        mixed $actual,
+        string $message,
+    ): void {
         if ($expected !== $actual) {
-            fwrite(STDERR, $message . ': expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . PHP_EOL);
+            fwrite(
+                STDERR,
+                $message
+                    . ': expected '
+                    . var_export($expected, true)
+                    . ', got '
+                    . var_export($actual, true)
+                    . PHP_EOL,
+            );
             exit(1);
         }
     }
@@ -73,22 +90,65 @@ namespace {
         'theme_gallery_description_layout' => 'vertical',
     ];
     $inheritedGrid = tag_page_gallery_grid_settings();
-    assert_tag_page_same(3, $inheritedGrid['columns'], 'Unsaved tag grid inherits global columns');
-    assert_tag_page_same(4, $inheritedGrid['rows'], 'Unsaved tag grid inherits global rows');
-    assert_tag_page_same('vertical', tag_page_gallery_description_layout(), 'Unsaved tag cards inherit global design');
+    assert_tag_page_same(
+        3,
+        $inheritedGrid['columns'],
+        'Unsaved tag grid inherits global columns',
+    );
+    assert_tag_page_same(
+        4,
+        $inheritedGrid['rows'],
+        'Unsaved tag grid inherits global rows',
+    );
+    assert_tag_page_same(
+        'vertical',
+        tag_page_gallery_description_layout(),
+        'Unsaved tag cards inherit global design',
+    );
 
     $GLOBALS['tag_page_theme_test_settings']['tag_page_gallery_grid_columns'] = '5';
     $GLOBALS['tag_page_theme_test_settings']['tag_page_gallery_grid_rows'] = '2';
     $GLOBALS['tag_page_theme_test_settings']['tag_page_gallery_description_layout'] = 'horizontal';
     $overriddenGrid = tag_page_gallery_grid_settings();
-    assert_tag_page_same(5, $overriddenGrid['columns'], 'Tag grid overrides global columns');
-    assert_tag_page_same(2, $overriddenGrid['rows'], 'Tag grid overrides global rows');
-    assert_tag_page_same(10, $overriddenGrid['items_per_page'], 'Tag grid derives page capacity');
-    assert_tag_page_same('horizontal', tag_page_gallery_description_layout(), 'Tag cards override global design');
+    assert_tag_page_same(
+        5,
+        $overriddenGrid['columns'],
+        'Tag grid overrides global columns',
+    );
+    assert_tag_page_same(
+        2,
+        $overriddenGrid['rows'],
+        'Tag grid overrides global rows',
+    );
+    assert_tag_page_same(
+        10,
+        $overriddenGrid['items_per_page'],
+        'Tag grid derives page capacity',
+    );
+    assert_tag_page_same(
+        'horizontal',
+        tag_page_gallery_description_layout(),
+        'Tag cards override global design',
+    );
 
-    $publicTagsSource = (string) file_get_contents(__DIR__ . '/../app/controllers/public_tags.php');
-    assert_tag_page_same(true, str_contains($publicTagsSource, 'pagination_grid_columns_class($tagGridSettings)'), 'Tag page applies its grid class');
-    assert_tag_page_same(true, str_contains($publicTagsSource, "['description_layout' => \$tagCardLayout]"), 'Tag page applies its card design');
+    $publicTagsSource = (string) file_get_contents(__DIR__
+        . '/../app/controllers/public_tags.php');
+    assert_tag_page_same(
+        true,
+        php_source_contains(
+            $publicTagsSource,
+            'pagination_grid_columns_class($tagGridSettings)',
+        ),
+        'Tag page applies its grid class',
+    );
+    assert_tag_page_same(
+        true,
+        php_source_contains(
+            $publicTagsSource,
+            "['description_layout' => \$tagCardLayout]",
+        ),
+        'Tag page applies its card design',
+    );
 
     echo "Tag page Theme model tests passed.\n";
 }

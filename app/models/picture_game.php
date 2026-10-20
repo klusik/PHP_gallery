@@ -51,7 +51,7 @@ use function Gallery\Core\db;
 function picture_game_model_sync_voting_state(string $now): int
 {
     $stmt = db()->prepare(
-        'UPDATE galleries SET voting_enabled = 1, updated_at = ?, edit_revision = edit_revision + 1 WHERE picture_game_enabled = 1 AND voting_enabled = 0'
+        'UPDATE galleries SET voting_enabled = 1, updated_at = ?, edit_revision = edit_revision + 1 WHERE picture_game_enabled = 1 AND voting_enabled = 0',
     );
     $stmt->execute([$now]);
     return $stmt->rowCount();
@@ -60,10 +60,14 @@ function picture_game_model_sync_voting_state(string $now): int
 /**
  * Return publicly listable galleries inside one folder-path branch.
  *
- * @return array<int,array<string,mixed>>
+ * @param string $folderPath Normalized root folder path.
+ * @param bool $requireListedAccess Whether galleries must have listed public access.
+ * @return list<array<string,int|string|null>> Public gallery rows in the requested folder branch.
  */
-function picture_game_model_gallery_branch_rows(string $folderPath, bool $requireListedAccess): array
-{
+function picture_game_model_gallery_branch_rows(
+    string $folderPath,
+    bool $requireListedAccess,
+): array {
     $sql = "SELECT g.* FROM galleries g WHERE g.visibility = 'public'";
     if ($requireListedAccess) {
         $sql .= " AND g.access_listing = 'listed'";
@@ -81,13 +85,13 @@ function picture_game_model_gallery_branch_rows(string $folderPath, bool $requir
  * @param bool $includeFilenameSetting Whether g.show_filenames is available.
  * @param bool $excludeNsfw Whether explicit NSFW images must be excluded in SQL.
  * @param ?int $limit Optional bounded result limit.
- * @return array<int,array<string,mixed>>
+ * @return list<array<string,int|string|null>> Public direct image rows enriched with gallery display fields and game scores where selected.
  */
 function picture_game_model_images(
     array $galleryIds,
     bool $includeFilenameSetting,
     bool $excludeNsfw = false,
-    ?int $limit = null
+    ?int $limit = null,
 ): array {
     if ($galleryIds === []) {
         return [];
@@ -96,9 +100,13 @@ function picture_game_model_images(
     $filenameSelect = $includeFilenameSetting
         ? 'g.show_filenames AS gallery_show_filenames'
         : '0 AS gallery_show_filenames';
-    $sql = 'SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, ' . $filenameSelect
+    $sql =
+        'SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, '
+        . $filenameSelect
         . ' FROM images i JOIN galleries g ON g.id = i.gallery_id'
-        . ' WHERE i.gallery_id IN (' . $placeholders . ") AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'";
+        . ' WHERE i.gallery_id IN ('
+        . $placeholders
+        . ") AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'";
     if ($excludeNsfw) {
         $sql .= ' AND COALESCE(i.nsfw_enabled, 0) = 0';
     }
@@ -111,24 +119,39 @@ function picture_game_model_images(
     return $stmt->fetchAll() ?: [];
 }
 
-/** @return array<int,array{image_a_id:int,image_b_id:int}> */
+/**
+ * Return image pairs already shown to one Picture Game voter.
+ * @param int $galleryId Gallery identifier.
+ * @param string $voterHash Stable anonymous voter fingerprint.
+ * @return list<array{image_a_id:int,image_b_id:int}> Previously displayed image pairs.
+ */
 function picture_game_model_seen_pairs(int $galleryId, string $voterHash): array
 {
-    $stmt = db()->prepare('SELECT image_a_id, image_b_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ?');
+    $stmt = db()->prepare(
+        'SELECT image_a_id, image_b_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ?',
+    );
     $stmt->execute([$galleryId, $voterHash]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
 
-/** Persist one displayed pair without overwriting an already recorded winner. */
+/**
+ * Persist one displayed pair without overwriting an already recorded winner.
+ * @param int $galleryId Gallery identifier.
+ * @param int $imageAId First image identifier in the displayed pair.
+ * @param int $imageBId Second image identifier in the displayed pair.
+ * @param string $voterHash Stable anonymous voter fingerprint.
+ * @param string $now SQL timestamp recorded for the displayed pair.
+ * @return void Record the displayed pair if it has not already been recorded.
+ */
 function picture_game_model_record_displayed_pair(
     int $galleryId,
     int $imageAId,
     int $imageBId,
     string $voterHash,
-    string $now
+    string $now,
 ): void {
     $stmt = db()->prepare(
-        'INSERT IGNORE INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) VALUES (?, ?, ?, NULL, ?, ?)'
+        'INSERT IGNORE INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) VALUES (?, ?, ?, NULL, ?, ?)',
     );
     $stmt->execute([$galleryId, $imageAId, $imageBId, $voterHash, $now]);
 }
@@ -136,6 +159,14 @@ function picture_game_model_record_displayed_pair(
 /**
  * Persist a completed Picture Game vote and matching image upvote atomically.
  *
+ * @param int $galleryId Gallery identifier.
+ * @param int $imageAId First image identifier in the voted pair.
+ * @param int $imageBId Second image identifier in the voted pair.
+ * @param int $winnerImageId Identifier of the selected winning image.
+ * @param string $voterHash Stable anonymous voter fingerprint.
+ * @param ?int $userId Authenticated account identifier, or null for an anonymous voter.
+ * @param string $visitorHash Stable visitor fingerprint for an anonymous vote.
+ * @param string $now SQL timestamp recorded for vote rows.
  * @return bool True when a previously unrecorded winner was persisted.
  */
 function picture_game_model_record_vote(
@@ -146,13 +177,13 @@ function picture_game_model_record_vote(
     string $voterHash,
     ?int $userId,
     string $visitorHash,
-    string $now
+    string $now,
 ): bool {
     $pdo = db();
     $pdo->beginTransaction();
     try {
         $existing = $pdo->prepare(
-            'SELECT winner_image_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ? AND image_a_id = ? AND image_b_id = ? FOR UPDATE'
+            'SELECT winner_image_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ? AND image_a_id = ? AND image_b_id = ? FOR UPDATE',
         );
         $existing->execute([$galleryId, $voterHash, $imageAId, $imageBId]);
         $winner = $existing->fetchColumn();
@@ -163,20 +194,27 @@ function picture_game_model_record_vote(
 
         $stmt = $pdo->prepare(
             'INSERT INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) '
-            . 'VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE winner_image_id = VALUES(winner_image_id)'
+                . 'VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE winner_image_id = VALUES(winner_image_id)',
         );
-        $stmt->execute([$galleryId, $imageAId, $imageBId, $winnerImageId, $voterHash, $now]);
+        $stmt->execute([
+            $galleryId,
+            $imageAId,
+            $imageBId,
+            $winnerImageId,
+            $voterHash,
+            $now,
+        ]);
 
         if ($userId !== null && $userId > 0) {
             $vote = $pdo->prepare(
                 'INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) '
-                . 'VALUES (?, ?, NULL, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)'
+                    . 'VALUES (?, ?, NULL, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)',
             );
             $vote->execute([$winnerImageId, $userId, $now, $now]);
         } else {
             $vote = $pdo->prepare(
                 'INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) '
-                . 'VALUES (?, NULL, ?, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)'
+                    . 'VALUES (?, NULL, ?, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)',
             );
             $vote->execute([$winnerImageId, $visitorHash, $now, $now]);
         }
@@ -194,10 +232,15 @@ function picture_game_model_record_vote(
  * Return bounded top Picture Game winners for already-authorized image ids.
  *
  * @param array<int,int> $imageIds Positive image identifiers.
- * @return array<int,array<string,mixed>>
+ * @param bool $includeFilenameSetting Whether gallery filename-display settings are available.
+ * @param int $limit Maximum result rows before the model safety clamp.
+ * @return list<array<string,int|string|null>> Ranked winning image rows with gallery labels, win totals, and scores.
  */
-function picture_game_model_top_images(array $imageIds, bool $includeFilenameSetting, int $limit): array
-{
+function picture_game_model_top_images(
+    array $imageIds,
+    bool $includeFilenameSetting,
+    int $limit,
+): array {
     if ($imageIds === []) {
         return [];
     }
@@ -205,13 +248,19 @@ function picture_game_model_top_images(array $imageIds, bool $includeFilenameSet
     $filenameSelect = $includeFilenameSetting
         ? 'g.show_filenames AS gallery_show_filenames'
         : '0 AS gallery_show_filenames';
-    $sql = 'SELECT i.*, g.title AS gallery_title, ' . $filenameSelect . ', '
+    $sql =
+        'SELECT i.*, g.title AS gallery_title, '
+        . $filenameSelect
+        . ', '
         . '(SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) AS game_wins, '
         . '(SELECT COALESCE(SUM(iv.vote), 0) FROM image_votes iv WHERE iv.image_id = i.id) AS score '
         . 'FROM images i JOIN galleries g ON g.id = i.gallery_id '
-        . 'WHERE i.id IN (' . $placeholders . ') '
+        . 'WHERE i.id IN ('
+        . $placeholders
+        . ') '
         . 'AND (SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) > 0 '
-        . 'ORDER BY game_wins DESC, score DESC, i.sort_order, i.filename LIMIT ' . max(1, $limit);
+        . 'ORDER BY game_wins DESC, score DESC, i.sort_order, i.filename LIMIT '
+        . max(1, $limit);
     $stmt = db()->prepare($sql);
     $stmt->execute($imageIds);
     return $stmt->fetchAll() ?: [];

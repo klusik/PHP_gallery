@@ -28,9 +28,13 @@ if ($python === null) {
     fwrite(STDERR, "BLOCKED: Python is required for readability contracts.\n");
     exit(2);
 }
-$process = \PhpGallery\Audit\run_process(array_merge($python, [
-    __DIR__ . '/readability_report_test.py',
-]), dirname(__DIR__), READABILITY_CONTRACT_CHILD_TIMEOUT_SECONDS);
+$process = \PhpGallery\Audit\run_process(
+    array_merge($python, [
+        __DIR__ . '/readability_report_test.py',
+    ]),
+    dirname(__DIR__),
+    READABILITY_CONTRACT_CHILD_TIMEOUT_SECONDS,
+);
 echo $process['stdout'];
 fwrite(STDERR, $process['stderr']);
 if ($process['timed_out'] || $process['exit_code'] !== 0) {

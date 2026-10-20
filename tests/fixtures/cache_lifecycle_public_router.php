@@ -19,8 +19,12 @@ namespace Gallery\Services {
      */
     function app_setting(string $key, ?string $default = null): ?string
     {
-        return $key === 'feature_flag.automatic_cache_cleanup.enabled' && is_file(CACHE_LIFECYCLE_TEST_ROOT . '/off') ? '0' : $default;
+        return $key === 'feature_flag.automatic_cache_cleanup.enabled'
+        && is_file(CACHE_LIFECYCLE_TEST_ROOT . '/off')
+            ? '0'
+            : $default;
     }
+
     /**
      * Provide the fixture's canonical automatic capability availability.
      * @param string $key Requested capability identity.
@@ -28,26 +32,47 @@ namespace Gallery\Services {
      */
     function feature_capability_effective_enabled(string $key): bool
     {
-        return $key === 'automatic_cache_cleanup' && app_setting('feature_flag.automatic_cache_cleanup.enabled', '1') !== '0';
+        return (
+            $key === 'automatic_cache_cleanup'
+                && app_setting(
+                    'feature_flag.automatic_cache_cleanup.enabled',
+                    '1',
+                ) !== '0'
+        );
     }
 }
+
 namespace Gallery\Models {
     /**
      * Resolve the fixture's absent central maintenance owner.
      * @param bool $requireKnown Whether strict production observation was requested.
      * @return null This fixture owns no central job.
      */
-    function maintenance_center_model_mutation_owner(bool $requireKnown = false): ?array { return null; }
+    function maintenance_center_model_mutation_owner(bool $requireKnown = false): ?array
+    {
+        return null;
+    }
 }
+
 namespace {
     $fixture = getenv('CACHE_VISITOR_HTTP_ROOT');
-    if (!is_string($fixture) || !is_file($fixture . '/.visitor-fixture-owner')) { http_response_code(404); return; }
+    if (
+        !is_string($fixture)
+        || !is_file($fixture . '/.visitor-fixture-owner')
+    ) {
+        http_response_code(404);
+        return;
+    }
     // Reuse the test parent's owned root instead of the real gallery cache.
     // Type: string. Units: absolute path. Scope: this disposable HTTP request.
     // Consumers: cache lifecycle path guards. Rationale: the marker-verified parent fixture owns every test deletion.
     define('CACHE_LIFECYCLE_TEST_ROOT', $fixture);
-    $GLOBALS['cache_lifecycle_test_now'] = (int) file_get_contents($fixture . '/clock');
-    file_put_contents($fixture . '/disk-space-capability', function_exists('disk_free_space') ? '1' : '0');
+    $GLOBALS['cache_lifecycle_test_now'] = (int) file_get_contents($fixture
+        . '/clock');
+    file_put_contents(
+        $fixture . '/disk-space-capability',
+        function_exists('disk_free_space') ? '1' : '0',
+    );
     require_once dirname(__DIR__, 2) . '/app/request_data.php';
     require_once dirname(__DIR__, 2) . '/app/services/cache_lifecycle.php';
     require_once dirname(__DIR__, 2) . '/app/services/site_maintenance.php';

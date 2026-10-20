@@ -47,15 +47,25 @@ namespace Gallery\Services;
 require_once dirname(__DIR__) . '/request_data.php';
 
 const ADMIN_TEST_RUN_COOKIE = 'gallery_admin_test_run';
+
 const ADMIN_TEST_RUN_TTL_SECONDS = 600;
+
 const ADMIN_TEST_RUN_SCHEMA_VERSION = 2;
+
 const ADMIN_TEST_RUN_DIAGNOSTICS_VERSION = '20260821-admin-test-run-v1.1.3';
+
 const ADMIN_TEST_RUN_MAX_DB_EVENTS_PER_REQUEST = 2500;
+
 const ADMIN_TEST_RUN_CACHE_SCAN_ENTRY_CAP = 25000;
+
 const ADMIN_TEST_RUN_CACHE_SCAN_TIME_BUDGET_MS = 250.0;
+
 const ADMIN_TEST_RUN_MAX_REPORTS = 20;
+
 const ADMIN_TEST_RUN_MAX_REPORT_STORAGE_BYTES = 209715200;
+
 const ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP = 2000;
+
 const ADMIN_TEST_RUN_CLEANUP_TIME_BUDGET_MS = 80.0;
 
 // This module is split into focused part files under app/services/admin_test_runs/.

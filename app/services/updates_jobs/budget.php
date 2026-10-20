@@ -54,7 +54,7 @@ use function Gallery\Core\run_migrations_bounded;
  * set_time_limit() as a correctness mechanism.
  *
  * @param float $requestedSeconds Preferred upper wall-clock slice.
- * @return array{started_at: float, deadline: float, seconds: float, php_max_execution_time: int, memory_limit: string}
+ * @return array{started_at:float,deadline:float,seconds:float,php_max_execution_time:int,memory_limit:string} Request start, deadline, bounded slice duration, and PHP runtime limits.
  */
 function application_update_time_budget(float $requestedSeconds = 8.0): array
 {
@@ -64,7 +64,10 @@ function application_update_time_budget(float $requestedSeconds = 8.0): array
 
     // Leave a five-second guard when PHP itself has a finite request limit.
     if ($phpMax > 0) {
-        $requestedSeconds = min($requestedSeconds, max(1.0, (float) $phpMax - 5.0));
+        $requestedSeconds = min($requestedSeconds, max(
+            1.0,
+            (float) $phpMax - 5.0,
+        ));
     }
 
     return [
@@ -79,13 +82,18 @@ function application_update_time_budget(float $requestedSeconds = 8.0): array
 /**
  * Return true when enough time remains to begin another normal checkpoint unit.
  *
- * @param array $budget Budget returned by application_update_time_budget().
+ * @param array{deadline:float} $budget Wall-clock worker budget returned by application_update_time_budget().
  * @param float $reserveSeconds Minimum remaining wall-clock reserve.
  * @return bool True when another bounded unit may start.
  */
-function application_update_budget_allows(array $budget, float $reserveSeconds = 0.75): bool
-{
-    return microtime(true) + max(0.05, $reserveSeconds) < (float) ($budget['deadline'] ?? 0.0);
+function application_update_budget_allows(
+    array $budget,
+    float $reserveSeconds = 0.75,
+): bool {
+    return (
+        (microtime(true) + max(0.05, $reserveSeconds))
+            < (float) ($budget['deadline'] ?? 0.0)
+    );
 }
 
 /**

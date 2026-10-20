@@ -42,18 +42,26 @@ use Throwable;
 
 /**
  * Return a short random request reference suitable for public error correlation.
+ *
+ * @return string Uppercase hexadecimal correlation reference.
  */
 function request_error_reference(): string
 {
     try {
         return strtoupper(bin2hex(random_bytes(8)));
     } catch (Throwable) {
-        return strtoupper(substr(hash('sha256', uniqid('gallery-error-', true)), 0, 16));
+        return strtoupper(substr(
+            hash('sha256', uniqid('gallery-error-', true)),
+            0,
+            16,
+        ));
     }
 }
 
 /**
  * Return whether this request is known to expect a JSON response.
+ *
+ * @return bool True when headers or route parameters identify a JSON request.
  */
 function request_expects_json(): bool
 {
@@ -63,44 +71,79 @@ function request_expects_json(): bool
     }
 
     $page = (string) ($_GET['page'] ?? '');
-    if (in_array($page, [
-        'gallery_lightbox_data',
-        'smart_gallery_lightbox_data',
-        'smart_gallery_map_data',
-        'gallery_map_data',
-        'public_search',
-        'admin_gallery_benchmark_status',
-        'admin_gallery_benchmark_probe',
-        'admin_test_run_probe',
-        'admin_storage_statistics_update',
-        'gallery_migration_manifest',
-        'gallery_migration_receive_manifest',
-        'gallery_migration_receive_asset',
-        'gallery_migration_receive_package',
-        'gallery_migration_receive_complete',
-        'gallery_migration_receive_status',
-        'upload_automation_upload',
-    ], true)) {
+    if (in_array(
+        $page,
+        [
+            'gallery_lightbox_data',
+            'smart_gallery_lightbox_data',
+            'smart_gallery_map_data',
+            'gallery_map_data',
+            'public_search',
+            'admin_gallery_benchmark_status',
+            'admin_gallery_benchmark_probe',
+            'admin_test_run_probe',
+            'admin_storage_statistics_update',
+            'gallery_migration_manifest',
+            'gallery_migration_receive_manifest',
+            'gallery_migration_receive_asset',
+            'gallery_migration_receive_package',
+            'gallery_migration_receive_complete',
+            'gallery_migration_receive_status',
+            'upload_automation_upload',
+        ],
+        true,
+    )) {
         return true;
     }
 
-    return $page === 'admin_update'
-        && ((string) ($_GET['update_async'] ?? $_POST['update_async'] ?? '') === '1'
-            || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest');
+    return (
+        $page === 'admin_update'
+            && (
+                (string) ($_GET['update_async'] ?? $_POST['update_async'] ?? '')
+                === '1'
+                || strtolower(
+                    (string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''),
+                ) === 'xmlhttprequest'
+            )
+    );
 }
 
 /**
  * Log one emergency event without requiring bootstrap, database, or filesystem log services.
+ *
+ * @param string $kind Event kind, such as uncaught or fatal.
+ * @param string $reference Public-safe request correlation reference.
+ * @param string $errorClass Exception or PHP error class label.
+ * @param string $message Error message to sanitize and log.
+ * @param string $file Source file associated with the failure, when known.
+ * @param int $line Source line associated with the failure, when known.
+ * @return void Writes a sanitized emergency entry to PHP's error log.
  */
-function log_emergency(string $kind, string $reference, string $errorClass = '', string $message = '', string $file = '', int $line = 0): void
-{
-    $class = preg_replace('/[^A-Za-z0-9_.-]/', '', str_replace('\\', '.', $errorClass)) ?: 'unknown';
+function log_emergency(
+    string $kind,
+    string $reference,
+    string $errorClass = '',
+    string $message = '',
+    string $file = '',
+    int $line = 0,
+): void {
+    $class = preg_replace(
+        '/[^A-Za-z0-9_.-]/',
+        '',
+        str_replace('\\', '.', $errorClass),
+    ) ?: 'unknown';
     $detail = trim(preg_replace('/[\r\n\x00-\x1F\x7F]+/', ' ', $message) ?? '');
     if (strlen($detail) > 2000) {
         $detail = substr($detail, 0, 2000) . '...';
     }
     $location = $file !== '' ? $file . ($line > 0 ? ':' . $line : '') : '';
-    $entry = '[PHP Gallery] ' . $kind . ' reference=' . $reference . ' type=' . $class;
+    $entry =
+        '[PHP Gallery] '
+        . $kind
+        . ' reference='
+        . $reference
+        . ' type='
+        . $class;
     if ($location !== '') {
         $entry .= ' location=' . $location;
     }
@@ -131,27 +174,45 @@ function emit_server_error(string $reference): void
             'error' => 'Internal server error.',
             'reference' => $reference,
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        echo $json === false ? '{"ok":false,"error":"Internal server error."}' : $json;
+        echo
+            $json === false
+                ? '{"ok":false,"error":"Internal server error."}'
+                : $json;
         return;
     }
 
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Server error</title></head><body><h1>Server error</h1><p>The request could not be completed.</p><p>Reference: ' . $reference . '</p></body></html>';
+    echo
+        '<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Server error</title></head><body><h1>Server error</h1><p>The request could not be completed.</p><p>Reference: '
+            . $reference
+            . '</p></body></html>';
 }
 
 /**
  * Convert one uncaught top-level Throwable to a safe HTTP 500 where headers remain mutable.
+ *
+ * @param Throwable $exception Uncaught exception or error.
+ * @return void Logs the failure and emits a safe response when possible.
  */
 function handle_uncaught(Throwable $exception): void
 {
     $GLOBALS['php_gallery_emergency_handled'] = true;
     $reference = request_error_reference();
-    log_emergency('uncaught', $reference, get_class($exception), $exception->getMessage(), $exception->getFile(), $exception->getLine());
+    log_emergency(
+        'uncaught',
+        $reference,
+        get_class($exception),
+        $exception->getMessage(),
+        $exception->getFile(),
+        $exception->getLine(),
+    );
     emit_server_error($reference);
 }
 
 /**
  * Register fatal shutdown handling before any normal application dependency is required.
+ *
+ * @return void Registers exception and shutdown handlers once per request.
  */
 function register_emergency_handler(): void
 {
@@ -174,30 +235,55 @@ function register_emergency_handler(): void
             return;
         }
 
-        $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+        $fatalTypes = [
+            E_ERROR,
+            E_PARSE,
+            E_CORE_ERROR,
+            E_COMPILE_ERROR,
+            E_USER_ERROR,
+        ];
         if (!in_array((int) ($error['type'] ?? 0), $fatalTypes, true)) {
             return;
         }
 
         $GLOBALS['php_gallery_emergency_handled'] = true;
         $reference = request_error_reference();
-        log_emergency('fatal', $reference, 'php-error-' . (string) ((int) ($error['type'] ?? 0)), (string) ($error['message'] ?? ''), (string) ($error['file'] ?? ''), (int) ($error['line'] ?? 0));
+        log_emergency(
+            'fatal',
+            $reference,
+            'php-error-' . (string) (int) ($error['type'] ?? 0),
+            (string) ($error['message'] ?? ''),
+            (string) ($error['file'] ?? ''),
+            (int) ($error['line'] ?? 0),
+        );
         emit_server_error($reference);
     });
 }
 
 /**
  * Return the updater activation marker path without loading updater services.
+ *
+ * @param string $projectRoot Absolute path to the project root.
+ * @return string Absolute path to the activation marker.
  */
 function activation_gate_path(string $projectRoot): string
 {
-    return rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'updates' . DIRECTORY_SEPARATOR . 'activation.json';
+    return (
+        rtrim($projectRoot, '/\\')
+            . DIRECTORY_SEPARATOR
+            . 'cache'
+            . DIRECTORY_SEPARATOR
+            . 'updates'
+            . DIRECTORY_SEPARATOR
+            . 'activation.json'
+    );
 }
 
 /**
  * Read one JSON file conservatively, returning null for missing or malformed state.
  *
- * @return array<string,mixed>|null
+ * @param string $path Absolute path to the JSON file.
+ * @return array<string,mixed>|null Decoded JSON object, or null when it is unavailable or invalid.
  */
 function read_json_file(string $path): ?array
 {
@@ -214,6 +300,10 @@ function read_json_file(string $path): ?array
 
 /**
  * Return whether the durable job checkpoint proves that activation is already complete.
+ *
+ * @param string $projectRoot Absolute path to the project root.
+ * @param array<string,mixed> $marker Activation marker data read from disk.
+ * @return bool True only when the matching durable job records activation complete.
  */
 function activation_job_is_complete(string $projectRoot, array $marker): bool
 {
@@ -222,14 +312,24 @@ function activation_job_is_complete(string $projectRoot, array $marker): bool
         return false;
     }
 
-    $jobPath = rtrim($projectRoot, '/\\')
-        . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'updates'
-        . DIRECTORY_SEPARATOR . 'jobs' . DIRECTORY_SEPARATOR . $jobId
-        . DIRECTORY_SEPARATOR . 'job.json';
+    $jobPath =
+        rtrim($projectRoot, '/\\')
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'updates'
+        . DIRECTORY_SEPARATOR
+        . 'jobs'
+        . DIRECTORY_SEPARATOR
+        . $jobId
+        . DIRECTORY_SEPARATOR
+        . 'job.json';
     $job = read_json_file($jobPath);
-    return is_array($job)
-        && hash_equals($jobId, (string) ($job['id'] ?? ''))
-        && !empty($job['checkpoints']['activation_complete']);
+    return (
+        is_array($job)
+            && hash_equals($jobId, (string) ($job['id'] ?? ''))
+            && !empty($job['checkpoints']['activation_complete'])
+    );
 }
 
 /**
@@ -247,7 +347,11 @@ function activation_admin_recovery_allowed(array $marker): bool
     }
 
     $sessionName = (string) ($marker['admin_session_name'] ?? '');
-    if ($sessionName === '' || preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) !== 1 || empty($_COOKIE[$sessionName])) {
+    if (
+        $sessionName === ''
+        || preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) !== 1
+        || empty($_COOKIE[$sessionName])
+    ) {
         return false;
     }
 
@@ -291,6 +395,9 @@ function emit_activation_unavailable(): void
  * A marker is cleared here only when the durable job state explicitly records
  * activation_complete. Missing, corrupt, or incomplete job state remains gated so
  * an interrupted mixed-version release cannot silently reopen to public traffic.
+ *
+ * @param string $projectRoot Absolute path to the project root.
+ * @return void Emits the unavailable response and exits when the activation gate blocks the request.
  */
 function enforce_activation_gate(string $projectRoot): void
 {
@@ -304,7 +411,10 @@ function enforce_activation_gate(string $projectRoot): void
     }
 
     $marker = read_json_file($markerPath);
-    if (is_array($marker) && activation_job_is_complete($projectRoot, $marker)) {
+    if (
+        is_array($marker)
+        && activation_job_is_complete($projectRoot, $marker)
+    ) {
         @unlink($markerPath);
         if (!is_file($markerPath)) {
             return;
@@ -316,5 +426,5 @@ function enforce_activation_gate(string $projectRoot): void
     }
 
     emit_activation_unavailable();
-    exit;
+    exit();
 }

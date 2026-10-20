@@ -34,7 +34,6 @@ namespace Gallery\Services;
 
 use function Gallery\Models\image_model_find_by_id;
 use function Gallery\Models\image_model_public_rows_by_ids;
-
 use InvalidArgumentException;
 use Throwable;
 
@@ -50,10 +49,14 @@ function viewer_content_quota_config(): array
 {
     $config = viewer_accounts_config();
     return [
-        'max_viewer_favourites_per_account' => (int) $config['max_viewer_favourites_per_account'],
-        'max_viewer_collections_per_account' => (int) $config['max_viewer_collections_per_account'],
-        'max_viewer_items_per_collection' => (int) $config['max_viewer_items_per_collection'],
-        'max_active_viewer_collection_shares_per_collection' => (int) $config['max_active_viewer_collection_shares_per_collection'],
+        'max_viewer_favourites_per_account' =>
+            (int) $config['max_viewer_favourites_per_account'],
+        'max_viewer_collections_per_account' =>
+            (int) $config['max_viewer_collections_per_account'],
+        'max_viewer_items_per_collection' =>
+            (int) $config['max_viewer_items_per_collection'],
+        'max_active_viewer_collection_shares_per_collection' =>
+            (int) $config['max_active_viewer_collection_shares_per_collection'],
     ];
 }
 
@@ -83,48 +86,99 @@ function viewer_collection_title_policy(): array
  * @param int $maxCharacters Maximum Unicode code points.
  * @param int $maxBytes Maximum UTF-8 bytes.
  * @param bool $allowEmpty Whether an empty string is accepted.
- * @return array{valid:bool,reason:string,characters:int,bytes:int}
+ * @return array{valid:bool,reason:string,characters:int,bytes:int} Validity, stable rejection reason, Unicode code-point count and UTF-8 byte count.
  */
-function viewer_plain_text_validate(string $value, int $maxCharacters, int $maxBytes, bool $allowEmpty = true): array
-{
+function viewer_plain_text_validate(
+    string $value,
+    int $maxCharacters,
+    int $maxBytes,
+    bool $allowEmpty = true,
+): array {
     if ($maxCharacters < 1 || $maxBytes < 1) {
-        throw new InvalidArgumentException('Viewer plain-text limits must be positive.');
+        throw new InvalidArgumentException(
+            'Viewer plain-text limits must be positive.',
+        );
     }
 
     $bytes = strlen($value);
     if ($bytes > $maxBytes) {
-        return ['valid' => false, 'reason' => 'byte_limit', 'characters' => 0, 'bytes' => $bytes];
+        return [
+            'valid' => false,
+            'reason' => 'byte_limit',
+            'characters' => 0,
+            'bytes' => $bytes,
+        ];
     }
     if (preg_match('//u', $value) !== 1) {
-        return ['valid' => false, 'reason' => 'invalid_utf8', 'characters' => 0, 'bytes' => $bytes];
+        return [
+            'valid' => false,
+            'reason' => 'invalid_utf8',
+            'characters' => 0,
+            'bytes' => $bytes,
+        ];
     }
     if (!$allowEmpty && $value === '') {
-        return ['valid' => false, 'reason' => 'empty', 'characters' => 0, 'bytes' => 0];
+        return [
+            'valid' => false,
+            'reason' => 'empty',
+            'characters' => 0,
+            'bytes' => 0,
+        ];
     }
     if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
-        return ['valid' => false, 'reason' => 'ascii_control', 'characters' => 0, 'bytes' => $bytes];
+        return [
+            'valid' => false,
+            'reason' => 'ascii_control',
+            'characters' => 0,
+            'bytes' => $bytes,
+        ];
     }
-    if (preg_match('/[\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', $value) === 1) {
-        return ['valid' => false, 'reason' => 'bidi_control', 'characters' => 0, 'bytes' => $bytes];
+    if (
+        preg_match(
+            '/[\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u',
+            $value,
+        ) === 1
+    ) {
+        return [
+            'valid' => false,
+            'reason' => 'bidi_control',
+            'characters' => 0,
+            'bytes' => $bytes,
+        ];
     }
 
     $matches = preg_match_all('/./us', $value, $unused);
     if ($matches === false) {
-        return ['valid' => false, 'reason' => 'invalid_utf8', 'characters' => 0, 'bytes' => $bytes];
+        return [
+            'valid' => false,
+            'reason' => 'invalid_utf8',
+            'characters' => 0,
+            'bytes' => $bytes,
+        ];
     }
     $characters = (int) $matches;
     if ($characters > $maxCharacters) {
-        return ['valid' => false, 'reason' => 'character_limit', 'characters' => $characters, 'bytes' => $bytes];
+        return [
+            'valid' => false,
+            'reason' => 'character_limit',
+            'characters' => $characters,
+            'bytes' => $bytes,
+        ];
     }
 
-    return ['valid' => true, 'reason' => 'valid', 'characters' => $characters, 'bytes' => $bytes];
+    return [
+        'valid' => true,
+        'reason' => 'valid',
+        'characters' => $characters,
+        'bytes' => $bytes,
+    ];
 }
 
 /**
  * Validate one future viewer collection title under the canonical 120-code-point policy.
  *
  * @param string $title Candidate title exactly as it would be stored.
- * @return array{valid:bool,reason:string,characters:int,bytes:int}
+ * @return array{valid:bool,reason:string,characters:int,bytes:int} Title validity, stable rejection reason, Unicode code-point count and UTF-8 byte count.
  */
 function viewer_collection_title_validate(string $title): array
 {
@@ -133,7 +187,7 @@ function viewer_collection_title_validate(string $title): array
         $title,
         $policy['max_characters'],
         $policy['max_bytes'],
-        $policy['allow_empty']
+        $policy['allow_empty'],
     );
 }
 
@@ -165,10 +219,16 @@ function viewer_source_image_resolve_authorized(int $imageId): ?array
             return null;
         }
         $gallery = find_gallery($galleryId, true);
-        if (!$gallery || !visitor_can_access_gallery_without_admin_bypass($gallery)) {
+        if (
+            !$gallery
+            || !visitor_can_access_gallery_without_admin_bypass($gallery)
+        ) {
             return null;
         }
-        if (image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content_without_admin_bypass()) {
+        if (
+            image_nsfw_restricted($image, $gallery)
+            && !visitor_can_access_nsfw_content_without_admin_bypass()
+        ) {
             return null;
         }
 
@@ -237,7 +297,10 @@ function viewer_source_images_resolve_authorized(array $imageIds): array
                 continue;
             }
             $gallery = find_gallery($galleryId, true);
-            if (!$gallery || !visitor_can_access_gallery_without_admin_bypass($gallery)) {
+            if (
+                !$gallery
+                || !visitor_can_access_gallery_without_admin_bypass($gallery)
+            ) {
                 $galleries[$galleryId] = null;
                 continue;
             }
@@ -255,7 +318,10 @@ function viewer_source_images_resolve_authorized(array $imageIds): array
             if (!is_array($gallery)) {
                 continue;
             }
-            if (image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content_without_admin_bypass()) {
+            if (
+                image_nsfw_restricted($image, $gallery)
+                && !visitor_can_access_nsfw_content_without_admin_bypass()
+            ) {
                 continue;
             }
             $authorized[$imageId] = ['image' => $image, 'gallery' => $gallery];

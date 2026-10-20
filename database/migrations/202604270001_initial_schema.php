@@ -94,7 +94,7 @@ return [
         KEY images_visibility_sort_index (gallery_id, visibility, sort_order, filename),
         CONSTRAINT images_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS image_votes (
+    'CREATE TABLE IF NOT EXISTS image_votes (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         image_id BIGINT UNSIGNED NOT NULL,
         user_id BIGINT UNSIGNED NULL,
@@ -108,8 +108,8 @@ return [
         CONSTRAINT image_votes_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
         CONSTRAINT image_votes_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
         CONSTRAINT image_votes_vote_check CHECK (vote IN (-1, 1))
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS tags (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS tags (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         slug VARCHAR(120) NOT NULL,
@@ -118,28 +118,28 @@ return [
         updated_at DATETIME NOT NULL,
         UNIQUE KEY tags_slug_unique (slug),
         KEY tags_name_index (name)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS gallery_tags (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS gallery_tags (
         gallery_id BIGINT UNSIGNED NOT NULL,
         tag_id BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY (gallery_id, tag_id),
         KEY gallery_tags_tag_gallery_index (tag_id, gallery_id),
         CONSTRAINT gallery_tags_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE,
         CONSTRAINT gallery_tags_tag_id_foreign FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS image_tags (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS image_tags (
         image_id BIGINT UNSIGNED NOT NULL,
         tag_id BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY (image_id, tag_id),
         KEY image_tags_tag_image_index (tag_id, image_id),
         CONSTRAINT image_tags_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
         CONSTRAINT image_tags_tag_id_foreign FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS app_settings (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS app_settings (
         setting_key VARCHAR(100) NOT NULL PRIMARY KEY,
         setting_value TEXT NULL,
         updated_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
     "CREATE TABLE IF NOT EXISTS zip_archives (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         scope ENUM('gallery','all') NOT NULL,
@@ -151,6 +151,6 @@ return [
         KEY zip_archives_lookup_index (scope, gallery_id, content_signature),
         CONSTRAINT zip_archives_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "ALTER TABLE galleries ADD CONSTRAINT galleries_parent_id_foreign FOREIGN KEY (parent_id) REFERENCES galleries(id) ON DELETE SET NULL",
-    "ALTER TABLE galleries ADD CONSTRAINT galleries_cover_image_id_foreign FOREIGN KEY (cover_image_id) REFERENCES images(id) ON DELETE SET NULL",
+    'ALTER TABLE galleries ADD CONSTRAINT galleries_parent_id_foreign FOREIGN KEY (parent_id) REFERENCES galleries(id) ON DELETE SET NULL',
+    'ALTER TABLE galleries ADD CONSTRAINT galleries_cover_image_id_foreign FOREIGN KEY (cover_image_id) REFERENCES images(id) ON DELETE SET NULL',
 ];

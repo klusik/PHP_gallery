@@ -28,7 +28,9 @@ function cooperative_model_identity(string $candidate): string
         ? 'INSERT OR IGNORE INTO cooperative_identity (singleton_id, instance_id) VALUES (1, ?)'
         : 'INSERT INTO cooperative_identity (singleton_id, instance_id) VALUES (1, ?) ON DUPLICATE KEY UPDATE singleton_id = singleton_id';
     $pdo->prepare($sql)->execute([$candidate]);
-    return (string) $pdo->query('SELECT instance_id FROM cooperative_identity WHERE singleton_id = 1')->fetchColumn();
+    return (string) $pdo->query(
+        'SELECT instance_id FROM cooperative_identity WHERE singleton_id = 1',
+    )->fetchColumn();
 }
 
 /** Insert one pending peer; duplicate identities fail without replacing credentials.
@@ -39,8 +41,20 @@ function cooperative_model_identity(string $candidate): string
  */
 function cooperative_model_peer_insert(array $peer, string $now): void
 {
-    db()->prepare('INSERT INTO cooperative_peers (instance_id, base_url, state, revision, incoming_hash, outgoing_cipher, confirmations_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        ->execute([$peer['instance_id'], $peer['base_url'], $peer['state'], $peer['revision'], $peer['incoming_hash'], $peer['outgoing_cipher'], json_encode($peer['confirmations'], JSON_THROW_ON_ERROR), $now]);
+    db()
+        ->prepare(
+            'INSERT INTO cooperative_peers (instance_id, base_url, state, revision, incoming_hash, outgoing_cipher, confirmations_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        ->execute([
+            $peer['instance_id'],
+            $peer['base_url'],
+            $peer['state'],
+            $peer['revision'],
+            $peer['incoming_hash'],
+            $peer['outgoing_cipher'],
+            json_encode($peer['confirmations'], JSON_THROW_ON_ERROR),
+            $now,
+        ]);
 }
 
 /** Read a peer credential record for internal service use only.
@@ -50,14 +64,21 @@ function cooperative_model_peer_insert(array $peer, string $now): void
  */
 function cooperative_model_peer_find(string $id): ?array
 {
-    $statement = db()->prepare('SELECT * FROM cooperative_peers WHERE instance_id = ?');
+    $statement = db()->prepare(
+        'SELECT * FROM cooperative_peers WHERE instance_id = ?',
+    );
     $statement->execute([$id]);
     $row = $statement->fetch(PDO::FETCH_ASSOC);
     if (!$row) {
         return null;
     }
     $row['revision'] = (int) $row['revision'];
-    $row['confirmations'] = json_decode($row['confirmations_json'], true, 16, JSON_THROW_ON_ERROR);
+    $row['confirmations'] = json_decode(
+        $row['confirmations_json'],
+        true,
+        16,
+        JSON_THROW_ON_ERROR,
+    );
     unset($row['confirmations_json'], $row['updated_at']);
     return $row;
 }
@@ -69,10 +90,25 @@ function cooperative_model_peer_find(string $id): ?array
  * @param string $now UTC timestamp formatted as Y-m-d H:i:s for persistence.
  * @return bool Whether the exact validation or authorization contract holds.
  */
-function cooperative_model_peer_save(array $peer, int $expected, string $now): bool
-{
-    $statement = db()->prepare('UPDATE cooperative_peers SET base_url = ?, state = ?, revision = ?, incoming_hash = ?, outgoing_cipher = ?, confirmations_json = ?, updated_at = ? WHERE instance_id = ? AND revision = ?');
-    $statement->execute([$peer['base_url'], $peer['state'], $expected + 1, $peer['incoming_hash'], $peer['outgoing_cipher'], json_encode($peer['confirmations'], JSON_THROW_ON_ERROR), $now, $peer['instance_id'], $expected]);
+function cooperative_model_peer_save(
+    array $peer,
+    int $expected,
+    string $now,
+): bool {
+    $statement = db()->prepare(
+        'UPDATE cooperative_peers SET base_url = ?, state = ?, revision = ?, incoming_hash = ?, outgoing_cipher = ?, confirmations_json = ?, updated_at = ? WHERE instance_id = ? AND revision = ?',
+    );
+    $statement->execute([
+        $peer['base_url'],
+        $peer['state'],
+        $expected + 1,
+        $peer['incoming_hash'],
+        $peer['outgoing_cipher'],
+        json_encode($peer['confirmations'], JSON_THROW_ON_ERROR),
+        $now,
+        $peer['instance_id'],
+        $expected,
+    ]);
     return $statement->rowCount() === 1;
 }
 
@@ -83,7 +119,10 @@ function cooperative_model_peer_save(array $peer, int $expected, string $now): b
  */
 function cooperative_model_peer_revoke(string $id): void
 {
-    db()->prepare("UPDATE cooperative_peers SET state = 'revoked', incoming_hash = NULL, revision = revision + 1 WHERE instance_id = ?")
+    db()
+        ->prepare(
+            "UPDATE cooperative_peers SET state = 'revoked', incoming_hash = NULL, revision = revision + 1 WHERE instance_id = ?",
+        )
         ->execute([$id]);
 }
 
@@ -95,8 +134,15 @@ function cooperative_model_peer_revoke(string $id): void
  */
 function cooperative_model_group_insert(array $group, string $now): void
 {
-    db()->prepare('INSERT INTO cooperative_groups (group_id, storage_revision, state_json, updated_at) VALUES (?, 1, ?, ?)')
-        ->execute([$group['group_id'], json_encode($group, JSON_THROW_ON_ERROR), $now]);
+    db()
+        ->prepare(
+            'INSERT INTO cooperative_groups (group_id, storage_revision, state_json, updated_at) VALUES (?, 1, ?, ?)',
+        )
+        ->execute([
+            $group['group_id'],
+            json_encode($group, JSON_THROW_ON_ERROR),
+            $now,
+        ]);
 }
 
 /** Fetch a group and its independent optimistic storage revision.
@@ -106,10 +152,23 @@ function cooperative_model_group_insert(array $group, string $now): void
  */
 function cooperative_model_group_find(string $id): ?array
 {
-    $statement = db()->prepare('SELECT storage_revision, state_json FROM cooperative_groups WHERE group_id = ?');
+    $statement = db()->prepare(
+        'SELECT storage_revision, state_json FROM cooperative_groups WHERE group_id = ?',
+    );
     $statement->execute([$id]);
     $row = $statement->fetch(PDO::FETCH_ASSOC);
-    return $row ? ['storage_revision' => (int) $row['storage_revision'], 'group' => json_decode($row['state_json'], true, 32, JSON_THROW_ON_ERROR)] : null;
+    return (
+        $row
+            ? [
+                'storage_revision' => (int) $row['storage_revision'],
+                'group' => json_decode(
+                    $row['state_json'],
+                    true,
+                    32,
+                    JSON_THROW_ON_ERROR,
+                ),
+            ] : null
+    );
 }
 
 /** Atomically persist one domain transition; stale callers must reload and revalidate.
@@ -119,26 +178,41 @@ function cooperative_model_group_find(string $id): ?array
  * @param string $now UTC timestamp formatted as Y-m-d H:i:s for persistence.
  * @return bool Whether the exact validation or authorization contract holds.
  */
-function cooperative_model_group_save(array $group, int $expected, string $now): bool
-{
-    $statement = db()->prepare('UPDATE cooperative_groups SET state_json = ?, storage_revision = storage_revision + 1, updated_at = ? WHERE group_id = ? AND storage_revision = ?');
-    $statement->execute([json_encode($group, JSON_THROW_ON_ERROR), $now, $group['group_id'], $expected]);
+function cooperative_model_group_save(
+    array $group,
+    int $expected,
+    string $now,
+): bool {
+    $statement = db()->prepare(
+        'UPDATE cooperative_groups SET state_json = ?, storage_revision = storage_revision + 1, updated_at = ? WHERE group_id = ? AND storage_revision = ?',
+    );
+    $statement->execute([
+        json_encode($group, JSON_THROW_ON_ERROR),
+        $now,
+        $group['group_id'],
+        $expected,
+    ]);
     return $statement->rowCount() === 1;
 }
+
 /** Allocate one public album identity without exposing the local sequential ID.
  *
  * @param int $galleryId Existing local gallery primary key, after ownership authorization.
  * @param string $candidate Fresh opaque identifier used only if no identity exists.
  * @return string Canonical identifier, digest or secret as described above.
  */
-function cooperative_model_album_identity(int $galleryId, string $candidate): string
-{
+function cooperative_model_album_identity(
+    int $galleryId,
+    string $candidate,
+): string {
     $pdo = db();
     $sql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
         ? 'INSERT INTO cooperative_albums (gallery_id, album_id) VALUES (?, ?) ON CONFLICT(gallery_id) DO NOTHING'
         : 'INSERT INTO cooperative_albums (gallery_id, album_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE gallery_id = gallery_id';
     $pdo->prepare($sql)->execute([$galleryId, $candidate]);
-    $statement = $pdo->prepare('SELECT album_id FROM cooperative_albums WHERE gallery_id = ?');
+    $statement = $pdo->prepare(
+        'SELECT album_id FROM cooperative_albums WHERE gallery_id = ?',
+    );
     $statement->execute([$galleryId]);
     return (string) $statement->fetchColumn();
 }
@@ -150,7 +224,9 @@ function cooperative_model_album_identity(int $galleryId, string $candidate): st
  */
 function cooperative_model_album_local_id(string $albumId): ?int
 {
-    $statement = db()->prepare('SELECT gallery_id FROM cooperative_albums WHERE album_id = ?');
+    $statement = db()->prepare(
+        'SELECT gallery_id FROM cooperative_albums WHERE album_id = ?',
+    );
     $statement->execute([$albumId]);
     $id = $statement->fetchColumn();
     return $id === false ? null : (int) $id;
@@ -167,7 +243,11 @@ function cooperative_model_group_insert_once(array $group, string $now): void
     $sql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
         ? 'INSERT INTO cooperative_groups (group_id, storage_revision, state_json, updated_at) VALUES (?, 1, ?, ?) ON CONFLICT(group_id) DO NOTHING'
         : 'INSERT INTO cooperative_groups (group_id, storage_revision, state_json, updated_at) VALUES (?, 1, ?, ?) ON DUPLICATE KEY UPDATE group_id = group_id';
-    $pdo->prepare($sql)->execute([$group['group_id'], json_encode($group, JSON_THROW_ON_ERROR), $now]);
+    $pdo->prepare($sql)->execute([
+        $group['group_id'],
+        json_encode($group, JSON_THROW_ON_ERROR),
+        $now,
+    ]);
 }
 
 /** Fetch one bounded lexical page of locally persisted groups for Admin projection.
@@ -180,11 +260,22 @@ function cooperative_model_groups_page(string $afterId, int $limit): array
     if ($limit < 1) {
         throw new \InvalidArgumentException('Invalid group page limit.');
     }
-    $statement = db()->prepare('SELECT storage_revision, state_json FROM cooperative_groups WHERE group_id > ? ORDER BY group_id LIMIT ' . $limit);
+    $statement = db()->prepare(
+        'SELECT storage_revision, state_json FROM cooperative_groups WHERE group_id > ? ORDER BY group_id LIMIT '
+            . $limit,
+    );
     $statement->execute([$afterId]);
     $result = [];
     foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $result[] = ['storage_revision' => (int) $row['storage_revision'], 'group' => json_decode($row['state_json'], true, 32, JSON_THROW_ON_ERROR)];
+        $result[] = [
+            'storage_revision' => (int) $row['storage_revision'],
+            'group' => json_decode(
+                $row['state_json'],
+                true,
+                32,
+                JSON_THROW_ON_ERROR,
+            ),
+        ];
     }
     return $result;
 }
@@ -195,12 +286,18 @@ function cooperative_model_groups_page(string $afterId, int $limit): array
  * @param int $limit Bounded page size including lookahead.
  * @return list<array<string,mixed>> Source rows for service-level filtering and whitelisting.
  */
-function cooperative_model_photos_page(int $galleryId, int $afterId, int $limit): array
-{
-    if ($limit < 1 || $limit > 9 || $galleryId < 1 || $afterId < 0) { throw new \InvalidArgumentException('Invalid photo page.'); }
+function cooperative_model_photos_page(
+    int $galleryId,
+    int $afterId,
+    int $limit,
+): array {
+    if ($limit < 1 || $limit > 9 || $galleryId < 1 || $afterId < 0) {
+        throw new \InvalidArgumentException('Invalid photo page.');
+    }
     $statement = db()->prepare("SELECT id, gallery_id, filename, relative_path, visibility, nsfw_enabled FROM images
         WHERE gallery_id = ? AND id > ? AND visibility = 'public' AND nsfw_enabled = 0
-        AND relative_path NOT LIKE '%/%' ORDER BY id LIMIT " . $limit);
+        AND relative_path NOT LIKE '%/%' ORDER BY id LIMIT "
+        . $limit);
     $statement->execute([$galleryId, $afterId]);
     return $statement->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -215,7 +312,11 @@ function cooperative_model_gallery_groups(int $galleryId): array
     $extract = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
         ? "json_extract(state_json, '$.exchange.gallery_id')"
         : "CAST(JSON_UNQUOTE(JSON_EXTRACT(state_json, '$.exchange.gallery_id')) AS UNSIGNED)";
-    $statement = $pdo->prepare('SELECT group_id FROM cooperative_groups WHERE ' . $extract . ' = ? ORDER BY group_id LIMIT 32');
+    $statement = $pdo->prepare(
+        'SELECT group_id FROM cooperative_groups WHERE '
+            . $extract
+            . ' = ? ORDER BY group_id LIMIT 32',
+    );
     $statement->execute([$galleryId]);
     return $statement->fetchAll(PDO::FETCH_COLUMN);
 }

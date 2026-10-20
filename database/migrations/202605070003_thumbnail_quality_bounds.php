@@ -33,10 +33,10 @@
  */
 
 return [
-    "ALTER TABLE galleries ADD COLUMN thumbnail_min_size SMALLINT UNSIGNED NULL AFTER grid_use_for_subgalleries",
-    "ALTER TABLE galleries ADD COLUMN thumbnail_max_size SMALLINT UNSIGNED NULL AFTER thumbnail_min_size",
-    "ALTER TABLE images ADD COLUMN thumbnail_min_size SMALLINT UNSIGNED NULL AFTER nsfw_enabled",
-    "ALTER TABLE images ADD COLUMN thumbnail_max_size SMALLINT UNSIGNED NULL AFTER thumbnail_min_size",
-    "ALTER TABLE galleries ADD KEY galleries_thumbnail_bounds_index (thumbnail_min_size, thumbnail_max_size)",
-    "ALTER TABLE images ADD KEY images_thumbnail_bounds_index (gallery_id, thumbnail_min_size, thumbnail_max_size)",
+    'ALTER TABLE galleries ADD COLUMN thumbnail_min_size SMALLINT UNSIGNED NULL AFTER grid_use_for_subgalleries',
+    'ALTER TABLE galleries ADD COLUMN thumbnail_max_size SMALLINT UNSIGNED NULL AFTER thumbnail_min_size',
+    'ALTER TABLE images ADD COLUMN thumbnail_min_size SMALLINT UNSIGNED NULL AFTER nsfw_enabled',
+    'ALTER TABLE images ADD COLUMN thumbnail_max_size SMALLINT UNSIGNED NULL AFTER thumbnail_min_size',
+    'ALTER TABLE galleries ADD KEY galleries_thumbnail_bounds_index (thumbnail_min_size, thumbnail_max_size)',
+    'ALTER TABLE images ADD KEY images_thumbnail_bounds_index (gallery_id, thumbnail_min_size, thumbnail_max_size)',
 ];

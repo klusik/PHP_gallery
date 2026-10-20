@@ -41,7 +41,12 @@ function admin_database_usage_model_current_database_name(): string
     return trim((string) ($row['database_name'] ?? ''));
 }
 
-/** Return raw table-size rows from information_schema.TABLES. */
+/**
+ * Return raw table-size rows from information_schema.TABLES.
+ *
+ * @param string $databaseName Database/schema name to inspect.
+ * @return list<array{table_name:string,table_rows:int|string,data_bytes:int|string,index_bytes:int|string,engine:string}> Table size and engine data ordered by storage size.
+ */
 function admin_database_usage_model_table_rows(string $databaseName): array
 {
     $stmt = db()->prepare(
@@ -52,7 +57,7 @@ function admin_database_usage_model_table_rows(string $databaseName): array
                 COALESCE(ENGINE, "") AS engine
            FROM information_schema.TABLES
           WHERE TABLE_SCHEMA = :database_name
-          ORDER BY (COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0)) DESC, TABLE_NAME ASC'
+          ORDER BY (COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0)) DESC, TABLE_NAME ASC',
     );
     $stmt->execute(['database_name' => $databaseName]);
     return $stmt->fetchAll();

@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-
 /**
  * Return the expected application config path.
  *
@@ -59,11 +58,20 @@ function cms_has_config(): bool
 
 /**
  * Send first-run browser requests to the one-time installer.
+ *
+ * @return void Send the redirect response and terminate the request.
  */
 function cms_redirect_to_installer(): void
 {
     // $base stores an intermediate value used by the surrounding gallery workflow.
-    $base = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
+    $base = rtrim(
+        str_replace(
+            '\\',
+            '/',
+            dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '')),
+        ),
+        '/',
+    );
     if ($base === '/public') {
         // $base stores an intermediate value used by the surrounding gallery workflow.
         $base = '';
@@ -73,8 +81,10 @@ function cms_redirect_to_installer(): void
     }
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = ($base === '' ? '' : $base) . '/install.php';
-    header('Location: ' . ($target === '/install.php' ? 'install.php' : $target));
-    exit;
+    header(
+        'Location: ' . ($target === '/install.php' ? 'install.php' : $target),
+    );
+    exit();
 }
 
 /**
@@ -125,12 +135,20 @@ function cms_config(): array
 function cms_runtime_limit(string $key): int|float
 {
     $config = cms_config();
-    $limits = is_array($config['runtime_limits'] ?? null) ? $config['runtime_limits'] : [];
+    $limits = is_array($config['runtime_limits'] ?? null)
+        ? $config['runtime_limits']
+        : [];
     if (!array_key_exists($key, $limits) || !is_numeric($limits[$key])) {
         $defaults = require dirname(__DIR__) . '/configuration_defaults.php';
-        $defaultLimits = is_array($defaults['runtime_limits'] ?? null) ? $defaults['runtime_limits'] : [];
-        if (!array_key_exists($key, $defaultLimits) || !is_numeric($defaultLimits[$key])) {
-            throw new \InvalidArgumentException('Unknown runtime limit: ' . $key);
+        $defaultLimits = is_array($defaults['runtime_limits'] ?? null)
+            ? $defaults['runtime_limits']
+            : [];
+        if (
+            !array_key_exists($key, $defaultLimits)
+            || !is_numeric($defaultLimits[$key])
+        ) {
+            throw new \InvalidArgumentException('Unknown runtime limit: '
+                . $key);
         }
         return $defaultLimits[$key] + 0;
     }

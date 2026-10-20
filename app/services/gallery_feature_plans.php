@@ -11,6 +11,7 @@
  */
 declare(strict_types=1);
 namespace Gallery\Services;
+
 use function Gallery\Core\now_sql;
 use function Gallery\Models\gallery_feature_plan_model_snapshot;
 use function Gallery\Models\gallery_feature_plan_model_transaction;
@@ -26,16 +27,38 @@ use function Gallery\Models\gallery_model_set_picture_game_enabled;
 function gallery_feature_plan_normalize(array $intents): array
 {
     if ($intents === [] || count($intents) > 256) {
-        throw new \InvalidArgumentException('Stage between one and 256 feature changes.');
+        throw new \InvalidArgumentException(
+            'Stage between one and 256 feature changes.',
+        );
     }
     $normalized = [];
     foreach ($intents as $intent) {
-        if (!is_array($intent) || !isset($intent['root_id'], $intent['feature'], $intent['enabled'])
-            || !is_int($intent['root_id']) || $intent['root_id'] < 1 || !is_string($intent['feature'])
-            || !in_array($intent['feature'], ['maps', 'filenames', 'voting', 'game'], true) || !is_bool($intent['enabled'])) {
-            throw new \InvalidArgumentException('Invalid gallery feature change.');
+        if (
+            !is_array($intent)
+            || !isset(
+                $intent['root_id'],
+                $intent['feature'],
+                $intent['enabled'],
+            )
+            || !is_int($intent['root_id'])
+            || $intent['root_id'] < 1
+            || !is_string($intent['feature'])
+            || !in_array(
+                $intent['feature'],
+                ['maps', 'filenames', 'voting', 'game'],
+                true,
+            )
+            || !is_bool($intent['enabled'])
+        ) {
+            throw new \InvalidArgumentException(
+                'Invalid gallery feature change.',
+            );
         }
-        $normalized[] = ['root_id' => $intent['root_id'], 'feature' => $intent['feature'], 'enabled' => $intent['enabled']];
+        $normalized[] = [
+            'root_id' => $intent['root_id'],
+            'feature' => $intent['feature'],
+            'enabled' => $intent['enabled'],
+        ];
     }
     return $normalized;
 }
@@ -49,36 +72,92 @@ function gallery_feature_plan_preflight(array $intents): array
     $features = [];
     foreach ($intents as $intent) {
         $feature = $intent['feature'];
-        $capability = ['maps' => 'gallery_maps', 'voting' => 'image_voting', 'game' => 'picture_game'][$feature] ?? '';
-        if ($capability !== '' && !feature_capability_effective_enabled($capability)) {
-            throw new \DomainException('A requested gallery feature is disabled.');
+        $capability =
+            [
+                'maps' => 'gallery_maps',
+                'voting' => 'image_voting',
+                'game' => 'picture_game',
+            ][$feature] ?? '';
+        if (
+            $capability !== ''
+            && !feature_capability_effective_enabled($capability)
+        ) {
+            throw new \DomainException(
+                'A requested gallery feature is disabled.',
+            );
         }
-        if ($feature === 'game' && $intent['enabled'] && !feature_capability_effective_enabled('image_voting')) {
-            throw new \DomainException('Picture Game requires image voting availability.');
+        if (
+            $feature === 'game'
+            && $intent['enabled']
+            && !feature_capability_effective_enabled('image_voting')
+        ) {
+            throw new \DomainException(
+                'Picture Game requires image voting availability.',
+            );
         }
         $features[$feature] = true;
-        if (($feature === 'game' && $intent['enabled']) || ($feature === 'voting' && !$intent['enabled'])) {
+        if (
+            (
+                $feature === 'game'
+                && $intent['enabled']
+            )
+            || (
+                $feature === 'voting'
+                && !$intent['enabled']
+            )
+        ) {
             $features['voting'] = true;
             $features['game'] = true;
         }
     }
     $required = array_keys($features);
     sort($required);
-    $columns = ['id', 'parent_id', 'title', 'folder_path', 'sort_order', 'edit_revision'];
-    $mapping = ['maps' => 'gps_map_enabled', 'filenames' => 'show_filenames', 'voting' => 'voting_enabled', 'game' => 'picture_game_enabled'];
+    $columns = [
+        'id',
+        'parent_id',
+        'title',
+        'folder_path',
+        'sort_order',
+        'edit_revision',
+    ];
+    $mapping = [
+        'maps' => 'gps_map_enabled',
+        'filenames' => 'show_filenames',
+        'voting' => 'voting_enabled',
+        'game' => 'picture_game_enabled',
+    ];
     foreach ($required as $feature) {
         $columns[] = $mapping[$feature];
     }
-    mutation_schema_assert_available(mutation_schema_table_columns_status('gallery.features', 'galleries', $columns), 'gallery_features');
+    mutation_schema_assert_available(
+        mutation_schema_table_columns_status(
+            'gallery.features',
+            'galleries',
+            $columns,
+        ),
+        'gallery_features',
+    );
     if (isset($features['maps'])) {
-        mutation_schema_assert_available(presentation_gps_exif_schema_status(), 'gallery_features_maps');
-        mutation_schema_assert_available(presentation_gps_override_schema_status(), 'gallery_features_maps_override');
+        mutation_schema_assert_available(
+            presentation_gps_exif_schema_status(),
+            'gallery_features_maps',
+        );
+        mutation_schema_assert_available(
+            presentation_gps_override_schema_status(),
+            'gallery_features_maps_override',
+        );
     }
     if (isset($features['voting'])) {
-        mutation_schema_assert_available(presentation_voting_schema_status(), 'gallery_features_voting');
+        mutation_schema_assert_available(
+            presentation_voting_schema_status(),
+            'gallery_features_voting',
+        );
     }
     if (isset($features['game'])) {
-        mutation_schema_assert_available(presentation_picture_game_schema_status(), 'gallery_features_game');
+        mutation_schema_assert_available(
+            presentation_picture_game_schema_status(),
+            'gallery_features_game',
+        );
     }
     return $required;
 }
@@ -89,8 +168,11 @@ function gallery_feature_plan_preflight(array $intents): array
  * @param bool $mapsDefault Current inherited GPS preference.
  * @return array<string,mixed> Safe preview plus comparison fingerprint.
  */
-function gallery_feature_plan_build(array $intents, array $snapshot, bool $mapsDefault): array
-{
+function gallery_feature_plan_build(
+    array $intents,
+    array $snapshot,
+    bool $mapsDefault,
+): array {
     $byId = [];
     $children = [];
     foreach ($snapshot as $row) {
@@ -109,15 +191,26 @@ function gallery_feature_plan_build(array $intents, array $snapshot, bool $mapsD
         while ($queue !== []) {
             $id = array_pop($queue);
             if (isset($seen[$id])) {
-                throw new \DomainException('Gallery hierarchy could not be verified.');
+                throw new \DomainException(
+                    'Gallery hierarchy could not be verified.',
+                );
             }
             $seen[$id] = true;
-            $targets[$id][$intent['feature']] = ['next' => $intent['enabled'], 'side_effect' => false];
+            $targets[$id][$intent['feature']] = [
+                'next' => $intent['enabled'],
+                'side_effect' => false,
+            ];
             if ($intent['feature'] === 'game' && $intent['enabled']) {
-                $targets[$id]['voting'] = ['next' => true, 'side_effect' => true];
+                $targets[$id]['voting'] = [
+                    'next' => true,
+                    'side_effect' => true,
+                ];
             }
             if ($intent['feature'] === 'voting' && !$intent['enabled']) {
-                $targets[$id]['game'] = ['next' => false, 'side_effect' => true];
+                $targets[$id]['game'] = [
+                    'next' => false,
+                    'side_effect' => true,
+                ];
             }
             foreach ($children[$id] ?? [] as $child) {
                 $queue[] = $child;
@@ -128,10 +221,19 @@ function gallery_feature_plan_build(array $intents, array $snapshot, bool $mapsD
     $rows = [];
     $scope = [];
     $changeCount = 0;
-    $mapping = ['maps' => 'gps_map_enabled', 'filenames' => 'show_filenames', 'voting' => 'voting_enabled', 'game' => 'picture_game_enabled'];
+    $mapping = [
+        'maps' => 'gps_map_enabled',
+        'filenames' => 'show_filenames',
+        'voting' => 'voting_enabled',
+        'game' => 'picture_game_enabled',
+    ];
     foreach ($targets as $id => $features) {
         $row = $byId[$id];
-        $safe = ['id' => $id, 'title' => (string) $row['title'], 'parent_id' => (int) ($row['parent_id'] ?? 0)];
+        $safe = [
+            'id' => $id,
+            'title' => (string) $row['title'],
+            'parent_id' => (int) ($row['parent_id'] ?? 0),
+        ];
         $scope[] = $safe;
         $changes = [];
         foreach ($features as $feature => $target) {
@@ -139,21 +241,43 @@ function gallery_feature_plan_build(array $intents, array $snapshot, bool $mapsD
             $current = (int) $stored === 1;
             if ($feature === 'maps') {
                 $visited = [$id => true];
-                $current = gallery_effective_gps_map_enabled($row, /** Resolve inheritance from this verified snapshot and refuse cyclic or missing ancestors.
-                 * @param int $parentId Requested ancestor identifier.
-                 * @return array<string,mixed> Verified non-secret ancestor row.
-                 */ static function (int $parentId) use ($byId, &$visited): array {
-                    if (isset($visited[$parentId]) || !isset($byId[$parentId])) {
-                        throw new \DomainException('Gallery hierarchy could not be verified.');
-                    }
-                    $visited[$parentId] = true;
-                    return $byId[$parentId];
-                });
+                $current = gallery_effective_gps_map_enabled(
+                    $row,
+                    /** Resolve inheritance from this verified snapshot and refuse cyclic or missing ancestors.
+                     * @param int $parentId Requested ancestor identifier.
+                     * @return array<string,mixed> Verified non-secret ancestor row.
+                     */ static function (int $parentId) use (
+                        $byId,
+                        &$visited,
+                    ): array {
+                        if (
+                            isset($visited[$parentId])
+                            || !isset($byId[$parentId])
+                        ) {
+                            throw new \DomainException(
+                                'Gallery hierarchy could not be verified.',
+                            );
+                        }
+                        $visited[$parentId] = true;
+                        return $byId[$parentId];
+                    },
+                );
             }
             // An explicit map setting also changes inherited storage when its visible state already matches.
-            if ($current !== $target['next'] || ($feature === 'maps' && $stored === null)) {
-                $changes[] = ['feature' => $feature, 'current' => $current, 'next' => $target['next'],
-                    'side_effect' => $target['side_effect'], 'inherited' => $feature === 'maps' && $stored === null];
+            if (
+                $current !== $target['next']
+                || (
+                    $feature === 'maps'
+                    && $stored === null
+                )
+            ) {
+                $changes[] = [
+                    'feature' => $feature,
+                    'current' => $current,
+                    'next' => $target['next'],
+                    'side_effect' => $target['side_effect'],
+                    'inherited' => $feature === 'maps' && $stored === null,
+                ];
                 $changeCount++;
             }
         }
@@ -161,8 +285,18 @@ function gallery_feature_plan_build(array $intents, array $snapshot, bool $mapsD
             $rows[] = $safe + ['changes' => $changes];
         }
     }
-    return ['intents' => $intents, 'fingerprint' => hash('sha256', json_encode([$intents, $snapshot, $mapsDefault], JSON_THROW_ON_ERROR)),
-        'gallery_count' => count($scope), 'changed_gallery_count' => count($rows), 'change_count' => $changeCount, 'scope' => $scope, 'rows' => $rows];
+    return [
+        'intents' => $intents,
+        'fingerprint' => hash('sha256', json_encode(
+            [$intents, $snapshot, $mapsDefault],
+            JSON_THROW_ON_ERROR,
+        )),
+        'gallery_count' => count($scope),
+        'changed_gallery_count' => count($rows),
+        'change_count' => $changeCount,
+        'scope' => $scope,
+        'rows' => $rows,
+    ];
 }
 
 /** Preview ordered subtree changes without acquiring writer locks or persisting anything.
@@ -173,7 +307,11 @@ function gallery_feature_plan_preview(array $intents): array
 {
     $normalized = gallery_feature_plan_normalize($intents);
     $features = gallery_feature_plan_preflight($normalized);
-    return gallery_feature_plan_build($normalized, gallery_feature_plan_model_snapshot($features), in_array('maps', $features, true) && exif_gps_default_enabled());
+    return gallery_feature_plan_build(
+        $normalized,
+        gallery_feature_plan_model_snapshot($features),
+        in_array('maps', $features, true) && exif_gps_default_enabled(),
+    );
 }
 
 /** Revalidate a reviewed snapshot under locks and apply only its exact final per-row changes.
@@ -186,32 +324,65 @@ function gallery_feature_plan_apply(array $intents, string $fingerprint): array
     $normalized = gallery_feature_plan_normalize($intents);
     $features = gallery_feature_plan_preflight($normalized);
     if (preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1) {
-        throw new \DomainException('Review the gallery changes again before applying them.');
+        throw new \DomainException(
+            'Review the gallery changes again before applying them.',
+        );
     }
-    $plan = gallery_feature_plan_model_transaction(/** Compare and write while catalog locks remain owned by this transaction.
-     * @return array<string,mixed> Revalidated committed plan.
-     */ static function () use ($normalized, $features, $fingerprint): array {
-        $plan = gallery_feature_plan_build($normalized, gallery_feature_plan_model_snapshot($features, true), in_array('maps', $features, true) && exif_gps_default_enabled());
-        if (!hash_equals($plan['fingerprint'], $fingerprint)) {
-            throw new \DomainException('Gallery hierarchy or feature state changed. Review the changes again.');
-        }
-        $now = now_sql();
-        foreach ($plan['rows'] as $row) {
-            foreach ($row['changes'] as $change) {
-                $ids = [$row['id']];
-                match ($change['feature']) {
-                    'maps' => gallery_model_set_gps_map_enabled($ids, $change['next'], $now),
-                    'filenames' => gallery_model_set_show_filenames($ids, $change['next'], $now),
-                    'voting' => gallery_model_set_voting_enabled($ids, $change['next'], $now),
-                    'game' => gallery_model_set_picture_game_enabled($ids, $change['next'], $now),
-                };
+    $plan = gallery_feature_plan_model_transaction(
+        /** Compare and write while catalog locks remain owned by this transaction.
+         * @return array<string,mixed> Revalidated committed plan.
+         */ static function () use (
+            $normalized,
+            $features,
+            $fingerprint,
+        ): array {
+            $plan = gallery_feature_plan_build(
+                $normalized,
+                gallery_feature_plan_model_snapshot($features, true),
+                in_array('maps', $features, true) && exif_gps_default_enabled(),
+            );
+            if (!hash_equals($plan['fingerprint'], $fingerprint)) {
+                throw new \DomainException(
+                    'Gallery hierarchy or feature state changed. Review the changes again.',
+                );
             }
-        }
-        return $plan;
-    });
+            $now = now_sql();
+            foreach ($plan['rows'] as $row) {
+                foreach ($row['changes'] as $change) {
+                    $ids = [$row['id']];
+                    match ($change['feature']) {
+                        'maps' => gallery_model_set_gps_map_enabled(
+                            $ids,
+                            $change['next'],
+                            $now,
+                        ),
+                        'filenames' => gallery_model_set_show_filenames(
+                            $ids,
+                            $change['next'],
+                            $now,
+                        ),
+                        'voting' => gallery_model_set_voting_enabled(
+                            $ids,
+                            $change['next'],
+                            $now,
+                        ),
+                        'game' => gallery_model_set_picture_game_enabled(
+                            $ids,
+                            $change['next'],
+                            $now,
+                        ),
+                    };
+                }
+            }
+            return $plan;
+        },
+    );
     $ids = array_column($plan['rows'], 'id');
     $sidecarFailed = false;
-    if (in_array('maps', $features, true) || in_array('filenames', $features, true)) {
+    if (
+        in_array('maps', $features, true)
+        || in_array('filenames', $features, true)
+    ) {
         try {
             gallery_bulk_refresh_sidecars($ids, true);
         } catch (\Throwable $exception) {

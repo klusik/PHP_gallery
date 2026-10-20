@@ -45,17 +45,25 @@ use Throwable;
  * Return a stale-lock assessment from one non-blocking lock snapshot.
  *
  * @param array<string,mixed> $lock Lock snapshot.
- * @return array<string,mixed>
+ * @param int $staleAfterSeconds Age threshold for a busy lock to be considered possibly stale.
+ * @return array<string,mixed> Lock state, age, staleness assessment, and explanatory diagnostics.
  */
-function admin_test_run_lock_assessment(array $lock, int $staleAfterSeconds): array
-{
+function admin_test_run_lock_assessment(
+    array $lock,
+    int $staleAfterSeconds,
+): array {
     $mtime = max(0, (int) ($lock['mtime'] ?? 0));
     $age = $mtime > 0 ? max(0, time() - $mtime) : null;
     $busy = $lock['busy'] ?? null;
     $metadata = is_array($lock['metadata'] ?? null) ? $lock['metadata'] : [];
     $expiresAt = max(0, (int) ($metadata['expires_at'] ?? 0));
     $expiredMetadata = $expiresAt > 0 && $expiresAt < time();
-    $possibleStale = $busy === true && (($age !== null && $age > max(30, $staleAfterSeconds)) || $expiredMetadata);
+    $possibleStale =
+        $busy === true
+        && (
+            ($age !== null && $age > max(30, $staleAfterSeconds))
+            || $expiredMetadata
+        );
     return [
         'age_seconds' => $age,
         'stale_after_seconds' => max(30, $staleAfterSeconds),
@@ -63,12 +71,19 @@ function admin_test_run_lock_assessment(array $lock, int $staleAfterSeconds): ar
         'possible_stale' => $possibleStale,
         'assessment' => $possibleStale
             ? 'Lock is still kernel-busy beyond the conservative expected budget/lease. Investigate a long-running or stuck worker.'
-            : ($busy === true ? 'Lock is active and not old enough to classify as stale.' : 'No active kernel lock is observed.'),
+            : (
+                $busy === true
+                    ? 'Lock is active and not old enough to classify as stale.'
+                    : 'No active kernel lock is observed.'
+            ),
     ];
 }
 
 /**
  * Parse a SQL/ISO timestamp into epoch seconds without throwing.
+ *
+ * @param string $value Timestamp text, interpreted as UTC when it has no timezone.
+ * @return int Parsed Unix timestamp, or zero for empty/invalid input.
  */
 function admin_test_run_timestamp(string $value): int
 {
@@ -76,7 +91,9 @@ function admin_test_run_timestamp(string $value): int
     if ($value === '') {
         return 0;
     }
-    $parsed = strtotime($value . (preg_match('/[zZ]|[+-]\d\d:?\d\d$/', $value) ? '' : ' UTC'));
+    $parsed = strtotime(
+        $value . (preg_match('/[zZ]|[+-]\d\d:?\d\d$/', $value) ? '' : ' UTC'),
+    );
     return $parsed === false ? 0 : $parsed;
 }
 
@@ -85,7 +102,11 @@ function admin_test_run_timestamp(string $value): int
  *
  * @param array<string,mixed> $schedule Schedule state.
  * @param array<string,mixed> $state Persisted maintenance state.
- * @return array<string,mixed> Diagnostic schedule interpretation.
+ * @param ?bool $enabled Effective maintenance enablement; null represents unknown configuration.
+ * @param string $lastCompletedDate Last completed schedule-cycle date.
+ * @param string $lastCompletedAt Timestamp of the last completed cycle.
+ * @param int $now Current Unix timestamp used for overdue evaluation.
+ * @return array{schedule_cycle_date:string,schedule_due_raw:bool,last_completed_cycle_date:string,already_completed_current_cycle:bool,is_running:bool,currently_due:bool,overdue:bool,next_expected_or_due_time:string,last_completed_epoch:int} Diagnostic schedule interpretation.
  */
 function admin_test_run_site_maintenance_due_analysis(
     array $schedule,
@@ -93,22 +114,31 @@ function admin_test_run_site_maintenance_due_analysis(
     ?bool $enabled,
     string $lastCompletedDate,
     string $lastCompletedAt,
-    int $now
+    int $now,
 ): array {
     $lastCompletedDate = trim($lastCompletedDate);
     $lastCompletedEpoch = admin_test_run_timestamp($lastCompletedAt);
     $scheduleDate = trim((string) ($schedule['date'] ?? ''));
     $scheduleDueRaw = !empty($schedule['due']);
-    $alreadyCompletedCurrentCycle = $scheduleDate !== '' && $lastCompletedDate !== '' && hash_equals($scheduleDate, $lastCompletedDate);
+    $alreadyCompletedCurrentCycle =
+        $scheduleDate !== ''
+        && $lastCompletedDate !== ''
+        && hash_equals($scheduleDate, $lastCompletedDate);
     $isRunning = (string) ($state['status'] ?? '') === 'running';
-    $currentlyDue = $enabled === true && $scheduleDueRaw && !$alreadyCompletedCurrentCycle;
-    $scheduledEpoch = admin_test_run_timestamp((string) ($schedule['scheduled_at'] ?? ''));
+    $currentlyDue =
+        $enabled === true && $scheduleDueRaw && !$alreadyCompletedCurrentCycle;
+    $scheduledEpoch = admin_test_run_timestamp(
+        (string) ($schedule['scheduled_at'] ?? ''),
+    );
     $nextExpected = (string) ($schedule['scheduled_at'] ?? '');
     if ($alreadyCompletedCurrentCycle && $scheduledEpoch > 0) {
         $nextExpected = gmdate('c', $scheduledEpoch + 86400);
     }
-    $overdue = $currentlyDue && empty($schedule['within_window'])
-        && $lastCompletedEpoch > 0 && ($now - $lastCompletedEpoch) > 36 * 3600;
+    $overdue =
+        $currentlyDue
+        && empty($schedule['within_window'])
+        && $lastCompletedEpoch > 0
+        && ($now - $lastCompletedEpoch) > (36 * 3600);
 
     return [
         'schedule_cycle_date' => $scheduleDate,
@@ -125,9 +155,17 @@ function admin_test_run_site_maintenance_due_analysis(
 
 /**
  * Return true when one persisted job/state looks excessively old for its configured budget.
+ *
+ * @param array<string,mixed> $state Persisted job state, including status and update/step timestamps.
+ * @param int $budgetSeconds Configured expected work budget in seconds.
+ * @param int $minimumSeconds Minimum stale age threshold in seconds.
+ * @return bool True when an active-looking state exceeds the derived age threshold.
  */
-function admin_test_run_state_looks_stuck(array $state, int $budgetSeconds, int $minimumSeconds = 300): bool
-{
+function admin_test_run_state_looks_stuck(
+    array $state,
+    int $budgetSeconds,
+    int $minimumSeconds = 300,
+): bool {
     $status = strtolower((string) ($state['status'] ?? ''));
     if (!in_array($status, ['running', 'active', 'processing'], true)) {
         return false;
@@ -135,32 +173,48 @@ function admin_test_run_state_looks_stuck(array $state, int $budgetSeconds, int 
     $updated = max(
         (int) ($state['updated_at'] ?? 0),
         admin_test_run_timestamp((string) ($state['updated_at'] ?? '')),
-        admin_test_run_timestamp((string) ($state['last_step_at'] ?? ''))
+        admin_test_run_timestamp((string) ($state['last_step_at'] ?? '')),
     );
     if ($updated <= 0) {
         return false;
     }
-    return time() - $updated > max($minimumSeconds, max(1, $budgetSeconds) * 5);
+    return (time() - $updated) > max(
+        $minimumSeconds,
+        max(1, $budgetSeconds) * 5,
+    );
 }
 
 /**
  * Read one updater job pointer and durable state without invoking updater pointer cleanup.
  *
- * @return array<string,mixed>|null
+ * @param string $pointerName Pointer filename; only last-job.json is selected explicitly, otherwise active-job.json is read.
+ * @return array<string,mixed>|null Validated durable updater job state, or null when unavailable or invalid.
  */
 function admin_test_run_update_job_pointer_read_only(string $pointerName): ?array
 {
     if (!function_exists(__NAMESPACE__ . '\\application_update_jobs_root')) {
         return null;
     }
-    $pointerName = $pointerName === 'last-job.json' ? 'last-job.json' : 'active-job.json';
+    $pointerName = $pointerName === 'last-job.json'
+        ? 'last-job.json'
+        : 'active-job.json';
     $root = application_update_jobs_root();
-    $pointer = admin_test_run_read_json($root . DIRECTORY_SEPARATOR . $pointerName);
+    $pointer = admin_test_run_read_json(
+        $root . DIRECTORY_SEPARATOR . $pointerName,
+    );
     $jobId = (string) ($pointer['job_id'] ?? '');
     if (preg_match('/^[0-9]{14}-[a-f0-9]{12}$/D', $jobId) !== 1) {
         return null;
     }
-    $job = admin_test_run_read_json($root . DIRECTORY_SEPARATOR . 'jobs' . DIRECTORY_SEPARATOR . $jobId . DIRECTORY_SEPARATOR . 'job.json');
+    $job = admin_test_run_read_json(
+        $root
+            . DIRECTORY_SEPARATOR
+            . 'jobs'
+            . DIRECTORY_SEPARATOR
+            . $jobId
+            . DIRECTORY_SEPARATOR
+            . 'job.json',
+    );
     if (!$job || (string) ($job['id'] ?? '') !== $jobId) {
         return null;
     }
@@ -170,7 +224,8 @@ function admin_test_run_update_job_pointer_read_only(string $pointerName): ?arra
 /**
  * Return whether a maintenance task represents work that is actually active now.
  *
- * @param array<string,mixed> $task Task snapshot.
+ * @param array<string,mixed> $task Task snapshot containing optional lock and active-job state.
+ * @return bool True when an active lock or active-looking job is present.
  */
 function admin_test_run_maintenance_task_active(array $task): bool
 {
@@ -190,7 +245,11 @@ function admin_test_run_maintenance_task_active(array $task): bool
         return false;
     }
     $status = strtolower(trim((string) ($job['status'] ?? '')));
-    if (in_array($status, ['complete', 'completed', 'done', 'failed', 'cancelled', 'canceled'], true)) {
+    if (in_array(
+        $status,
+        ['complete', 'completed', 'done', 'failed', 'cancelled', 'canceled'],
+        true,
+    )) {
         return false;
     }
     return true;
@@ -219,87 +278,142 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
     }
 
     try {
-        $enabled = function_exists(__NAMESPACE__ . '\\site_maintenance_enabled') ? site_maintenance_enabled() : null;
-        $schedule = function_exists(__NAMESPACE__ . '\\site_maintenance_schedule_due_state')
+        $enabled = function_exists(__NAMESPACE__ . '\\site_maintenance_enabled')
+            ? site_maintenance_enabled()
+            : null;
+        $schedule = function_exists(__NAMESPACE__
+            . '\\site_maintenance_schedule_due_state')
             ? site_maintenance_schedule_due_state($now)
             : [];
-        $state = function_exists(__NAMESPACE__ . '\\site_maintenance_state') ? site_maintenance_state() : [];
-        $lastResult = function_exists(__NAMESPACE__ . '\\site_maintenance_last_result') ? site_maintenance_last_result() : [];
-        $budget = function_exists(__NAMESPACE__ . '\\site_maintenance_time_budget_seconds')
+        $state = function_exists(__NAMESPACE__ . '\\site_maintenance_state')
+            ? site_maintenance_state()
+            : [];
+        $lastResult = function_exists(__NAMESPACE__
+            . '\\site_maintenance_last_result')
+            ? site_maintenance_last_result()
+            : [];
+        $budget = function_exists(__NAMESPACE__
+            . '\\site_maintenance_time_budget_seconds')
             ? site_maintenance_time_budget_seconds()
             : null;
-        $batchSize = function_exists(__NAMESPACE__ . '\\site_maintenance_batch_size') ? site_maintenance_batch_size() : null;
-        $triggerEnabled = function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_enabled')
+        $batchSize = function_exists(__NAMESPACE__
+            . '\\site_maintenance_batch_size')
+            ? site_maintenance_batch_size()
+            : null;
+        $triggerEnabled = function_exists(__NAMESPACE__
+            . '\\site_maintenance_request_trigger_enabled')
             ? site_maintenance_request_trigger_enabled()
             : false;
-        $detachSupported = function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_can_detach_response')
+        $detachSupported = function_exists(__NAMESPACE__
+            . '\\site_maintenance_request_trigger_can_detach_response')
             ? site_maintenance_request_trigger_can_detach_response()
             : false;
         $lastCompletedAt = function_exists(__NAMESPACE__ . '\\app_setting')
             ? (string) app_setting('site_maintenance_last_completed_at', '')
             : '';
         $lastCompletedDate = function_exists(__NAMESPACE__ . '\\app_setting')
-            ? trim((string) app_setting('site_maintenance_last_completed_date', ''))
+            ? trim((string) app_setting(
+                'site_maintenance_last_completed_date',
+                '',
+            ))
             : '';
-        $maintenanceDue = admin_test_run_site_maintenance_due_analysis($schedule, $state, $enabled, $lastCompletedDate, $lastCompletedAt, $now);
-        $lastCompletedEpoch = (int) ($maintenanceDue['last_completed_epoch'] ?? 0);
+        $maintenanceDue = admin_test_run_site_maintenance_due_analysis(
+            $schedule,
+            $state,
+            $enabled,
+            $lastCompletedDate,
+            $lastCompletedAt,
+            $now,
+        );
+        $lastCompletedEpoch = (int) (
+            $maintenanceDue['last_completed_epoch'] ?? 0
+        );
         $scheduleDate = (string) ($maintenanceDue['schedule_cycle_date'] ?? '');
         $scheduleDueRaw = !empty($maintenanceDue['schedule_due_raw']);
-        $alreadyCompletedCurrentCycle = !empty($maintenanceDue['already_completed_current_cycle']);
+        $alreadyCompletedCurrentCycle =
+            !empty($maintenanceDue['already_completed_current_cycle']);
         $isRunning = !empty($maintenanceDue['is_running']);
         $currentlyDue = !empty($maintenanceDue['currently_due']);
-        $nextExpected = (string) ($maintenanceDue['next_expected_or_due_time'] ?? '');
+        $nextExpected = (string) (
+            $maintenanceDue['next_expected_or_due_time'] ?? ''
+        );
         $lock = function_exists(__NAMESPACE__ . '\\site_maintenance_lock_path')
             ? admin_test_run_lock_snapshot(site_maintenance_lock_path())
             : [];
-        $lockAssessment = admin_test_run_lock_assessment($lock, is_int($budget) ? max(120, $budget * 5) : 600);
+        $lockAssessment = admin_test_run_lock_assessment(
+            $lock,
+            is_int($budget) ? max(120, $budget * 5) : 600,
+        );
         $overdue = !empty($maintenanceDue['overdue']);
         $tasks['site_maintenance'] = [
             'subsystem' => 'site_maintenance',
             'enabled' => $enabled,
             'configured_schedule_or_cadence' => function_exists(
-                __NAMESPACE__ . '\\site_maintenance_utc_time'
+                __NAMESPACE__ . '\\site_maintenance_utc_time',
             )
-                ? 'daily at ' . site_maintenance_utc_time()
-                    . ' UTC within '
-                    . (
-                        function_exists(
-                            __NAMESPACE__
-                                . '\\site_maintenance_window_minutes'
-                        )
-                            ? site_maintenance_window_minutes()
-                            : 0
+                ? 'daily at '
+                . site_maintenance_utc_time()
+                . ' UTC within '
+                . (
+                    function_exists(
+                        __NAMESPACE__
+                            . '\\site_maintenance_window_minutes',
                     )
-                    . ' minute window'
+                        ? site_maintenance_window_minutes()
+                        : 0
+                )
+                . ' minute window'
                 : 'unknown',
-            'external_cron_or_cli_available' => is_file(dirname(__DIR__, 3) . '/scripts/site_maintenance.php'),
+            'external_cron_or_cli_available' => is_file(
+                dirname(__DIR__, 3) . '/scripts/site_maintenance.php',
+            ),
             'external_cron_configured' => 'not_observable_from_php',
             'next_expected_or_due_time' => $nextExpected,
             'schedule_cycle_date' => $scheduleDate,
             'schedule_due_raw' => $scheduleDueRaw,
             'last_completed_cycle_date' => $lastCompletedDate,
             'already_completed_current_cycle' => $alreadyCompletedCurrentCycle,
-            'last_attempted_time' => (string) ($state['last_step_at'] ?? $state['updated_at'] ?? ''),
+            'last_attempted_time' => (string) (
+                $state['last_step_at']
+                ?? $state['updated_at']
+                ?? ''
+            ),
             'last_successful_time' => $lastCompletedAt,
-            'last_failure' => !empty($lastResult['ok']) ? null : ($lastResult !== [] ? $lastResult : null),
-            'time_since_last_run_seconds' => $lastCompletedEpoch > 0 ? max(0, $now - $lastCompletedEpoch) : null,
+            'last_failure' => !empty($lastResult['ok'])
+                ? null
+                : ($lastResult !== [] ? $lastResult : null),
+            'time_since_last_run_seconds' => $lastCompletedEpoch > 0
+                ? max(0, $now - $lastCompletedEpoch)
+                : null,
             'currently_due' => $currentlyDue,
             'overdue' => $overdue,
-            'trigger_sources' => ['cron_web_endpoint', 'CLI', 'explicit_Admin_action', 'authenticated_Admin_request_trigger'],
+            'trigger_sources' => [
+                'cron_web_endpoint',
+                'CLI',
+                'explicit_Admin_action',
+                'authenticated_Admin_request_trigger',
+            ],
             'active_lock' => $lock,
             'stale_lock_assessment' => $lockAssessment,
             'currently_active_job' => $isRunning ? $state : null,
             'resumable_job_state' => $isRunning,
-            'previous_execution_duration_seconds' => isset($lastResult['elapsed_ms']) ? ((float) $lastResult['elapsed_ms'] / 1000.0) : null,
+            'previous_execution_duration_seconds' => isset(
+                $lastResult['elapsed_ms'],
+            )
+                ? (float) $lastResult['elapsed_ms'] / 1000.0
+                : null,
             'configured_execution_budget_seconds' => $budget,
             'configured_work_or_item_budget' => $batchSize,
             'can_execute_after_response' => $triggerEnabled && $detachSupported,
             'response_detach_primitive_available' => $detachSupported,
-            'php_worker_remains_occupied_after_response' => $triggerEnabled && $detachSupported,
-            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['site_maintenance'] ?? [],
+            'php_worker_remains_occupied_after_response' =>
+                $triggerEnabled && $detachSupported,
+            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['site_maintenance']
+                ?? [],
             'public_anonymous_traffic_can_trigger' => false,
             'authenticated_admin_traffic_can_trigger' => $triggerEnabled,
-            'self_loopback_chain_capable' => function_exists(__NAMESPACE__ . '\\site_maintenance_fire_web_cron_slice'),
+            'self_loopback_chain_capable' => function_exists(__NAMESPACE__
+                . '\\site_maintenance_fire_web_cron_slice'),
             'warnings' => [],
         ];
         if ($lockAssessment['possible_stale']) {
@@ -308,61 +422,135 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         if ($overdue) {
             $tasks['site_maintenance']['warnings'][] = 'Site maintenance appears overdue relative to its daily cadence.';
         }
-        if (admin_test_run_state_looks_stuck($state, is_int($budget) ? $budget : 20)) {
+        if (admin_test_run_state_looks_stuck(
+            $state,
+            is_int($budget) ? $budget : 20,
+        )) {
             $tasks['site_maintenance']['warnings'][] = 'Resumable maintenance state has not advanced within a conservative multiple of its execution budget.';
         }
     } catch (Throwable $exception) {
-        $tasks['site_maintenance'] = ['subsystem' => 'site_maintenance', 'error' => $exception->getMessage(), 'observation_only' => true];
+        $tasks['site_maintenance'] = [
+            'subsystem' => 'site_maintenance',
+            'error' => $exception->getMessage(),
+            'observation_only' => true,
+        ];
     }
 
     try {
-        $status = function_exists(__NAMESPACE__ . '\\application_autoupdate_status') ? application_autoupdate_status() : [];
-        $activeJob = admin_test_run_update_job_pointer_read_only('active-job.json');
+        $status = function_exists(__NAMESPACE__
+            . '\\application_autoupdate_status')
+            ? application_autoupdate_status()
+            : [];
+        $activeJob = admin_test_run_update_job_pointer_read_only(
+            'active-job.json',
+        );
         $lastJob = admin_test_run_update_job_pointer_read_only('last-job.json');
-        $activePublic = is_array($activeJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state')
+        $activePublic = is_array($activeJob)
+        && function_exists(__NAMESPACE__
+            . '\\application_update_job_public_state')
             ? application_update_job_public_state($activeJob)
             : $activeJob;
-        $lastPublic = is_array($lastJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state')
+        $lastPublic = is_array($lastJob)
+        && function_exists(__NAMESPACE__
+            . '\\application_update_job_public_state')
             ? application_update_job_public_state($lastJob)
             : $lastJob;
-        $lastChecked = max(0, (int) ($status['last_checked_at'] ?? 0), (int) app_setting('application_update_check_cached_at', '0'));
+        $lastChecked = max(
+            0,
+            (int) ($status['last_checked_at'] ?? 0),
+            (int) app_setting('application_update_check_cached_at', '0'),
+        );
         $intervalSeconds = (int) ($status['interval_seconds'] ?? 300);
-        $due = !empty($status['effective']) && ($lastChecked <= 0 || $now - $lastChecked >= $intervalSeconds);
-        $jobsRoot = function_exists(__NAMESPACE__ . '\\application_update_jobs_root') ? application_update_jobs_root() : '';
-        $startLock = $jobsRoot !== '' ? admin_test_run_lock_snapshot($jobsRoot . DIRECTORY_SEPARATOR . 'start.lock') : [];
+        $due =
+            !empty($status['effective'])
+            && ($lastChecked <= 0 || ($now - $lastChecked) >= $intervalSeconds);
+        $jobsRoot = function_exists(__NAMESPACE__
+            . '\\application_update_jobs_root')
+            ? application_update_jobs_root()
+            : '';
+        $startLock = $jobsRoot !== ''
+            ? admin_test_run_lock_snapshot(
+                $jobsRoot . DIRECTORY_SEPARATOR . 'start.lock',
+            )
+            : [];
         $workerLock = [];
-        if (is_array($activeJob) && !empty($activeJob['id']) && function_exists(__NAMESPACE__ . '\\application_update_job_dir')) {
-            $workerLock = admin_test_run_lock_snapshot(application_update_job_dir((string) $activeJob['id']) . DIRECTORY_SEPARATOR . 'worker.lock');
+        if (
+            is_array($activeJob)
+            && !empty($activeJob['id'])
+            && function_exists(__NAMESPACE__ . '\\application_update_job_dir')
+        ) {
+            $workerLock = admin_test_run_lock_snapshot(
+                application_update_job_dir((string) $activeJob['id'])
+                    . DIRECTORY_SEPARATOR
+                    . 'worker.lock',
+            );
         }
         $workerAssessment = admin_test_run_lock_assessment($workerLock, 120);
         $tasks['automatic_updater'] = [
             'subsystem' => 'automatic_updater',
             'enabled' => (bool) ($status['enabled'] ?? false),
             'effective' => (bool) ($status['effective'] ?? false),
-            'configured_schedule_or_cadence' => 'request-time/cron stable update check, minimum ' . $intervalSeconds . ' seconds; durable jobs advance in bounded slices',
-            'external_cron_or_cli_available' => is_file(dirname(__DIR__, 3) . '/scripts/application_update.php'),
+            'configured_schedule_or_cadence' =>
+                'request-time/cron stable update check, minimum '
+                    . $intervalSeconds
+                    . ' seconds; durable jobs advance in bounded slices',
+            'external_cron_or_cli_available' => is_file(
+                dirname(__DIR__, 3) . '/scripts/application_update.php',
+            ),
             'external_cron_configured' => 'not_observable_from_php',
-            'next_expected_or_due_time' => $lastChecked > 0 ? gmdate('c', $lastChecked + $intervalSeconds) : null,
-            'last_attempted_time' => $lastChecked > 0 ? gmdate('c', $lastChecked) : null,
-            'last_successful_time' => is_array($lastPublic) && (int) ($lastPublic['finished_at'] ?? 0) > 0 ? gmdate('c', (int) $lastPublic['finished_at']) : null,
-            'last_failure' => is_array($lastPublic) ? ($lastPublic['error'] ?? null) : null,
-            'time_since_last_run_seconds' => $lastChecked > 0 ? max(0, $now - $lastChecked) : null,
+            'next_expected_or_due_time' => $lastChecked > 0
+                ? gmdate('c', $lastChecked + $intervalSeconds)
+                : null,
+            'last_attempted_time' => $lastChecked > 0
+                ? gmdate('c', $lastChecked)
+                : null,
+            'last_successful_time' => is_array($lastPublic)
+            && (int) ($lastPublic['finished_at'] ?? 0) > 0
+                ? gmdate('c', (int) $lastPublic['finished_at'])
+                : null,
+            'last_failure' => is_array($lastPublic)
+                ? $lastPublic['error'] ?? null
+                : null,
+            'time_since_last_run_seconds' => $lastChecked > 0
+                ? max(0, $now - $lastChecked)
+                : null,
             'currently_due' => $due,
-            'overdue' => $due && $lastChecked > 0 && $now - $lastChecked > 6 * $intervalSeconds,
-            'trigger_sources' => ['normal_GET_or_HEAD_request', 'explicit_Admin_check_due', 'CLI_or_cron'],
+            'overdue' =>
+                $due
+                    && $lastChecked > 0
+                    && ($now - $lastChecked) > (6 * $intervalSeconds),
+            'trigger_sources' => [
+                'normal_GET_or_HEAD_request',
+                'explicit_Admin_check_due',
+                'CLI_or_cron',
+            ],
             'active_locks' => ['start' => $startLock, 'worker' => $workerLock],
             'stale_lock_assessment' => $workerAssessment,
             'currently_active_job' => $activePublic,
-            'resumable_job_state' => is_array($activePublic) ? !empty($activePublic['can_resume']) : false,
-            'previous_execution_duration_seconds' => is_array($lastPublic) && (int) ($lastPublic['started_at'] ?? 0) > 0 && (int) ($lastPublic['finished_at'] ?? 0) >= (int) ($lastPublic['started_at'] ?? 0)
-                ? (int) $lastPublic['finished_at'] - (int) $lastPublic['started_at'] : null,
-            'configured_execution_budget_seconds' => ['normal_request_continue' => 3.0, 'admin_continue_or_retry' => 7.0],
-            'configured_work_or_item_budget' => is_array($activePublic) ? ($activePublic['runtime_limits'] ?? []) : [],
+            'resumable_job_state' => is_array($activePublic)
+                ? !empty($activePublic['can_resume'])
+                : false,
+            'previous_execution_duration_seconds' =>
+                is_array($lastPublic)
+                && (int) ($lastPublic['started_at'] ?? 0) > 0
+                && (int) ($lastPublic['finished_at'] ?? 0)
+                    >= (int) ($lastPublic['started_at'] ?? 0)
+                    ? (int) $lastPublic['finished_at']
+                    - (int) $lastPublic['started_at']
+                    : null,
+            'configured_execution_budget_seconds' => [
+                'normal_request_continue' => 3.0,
+                'admin_continue_or_retry' => 7.0,
+            ],
+            'configured_work_or_item_budget' => is_array($activePublic)
+                ? $activePublic['runtime_limits'] ?? []
+                : [],
             'can_execute_after_response' => false,
             'response_detach_primitive_used' => false,
             'php_worker_remains_occupied_after_response' => false,
             'php_worker_can_be_occupied_before_response' => true,
-            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['automatic_updater'] ?? [],
+            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['automatic_updater']
+                ?? [],
             'public_anonymous_traffic_can_trigger' => true,
             'authenticated_admin_traffic_can_trigger' => true,
             'warnings' => [],
@@ -374,54 +562,117 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
             $tasks['automatic_updater']['warnings'][] = 'Active updater worker lock is older than the conservative diagnostic threshold.';
         }
     } catch (Throwable $exception) {
-        $tasks['automatic_updater'] = ['subsystem' => 'automatic_updater', 'error' => $exception->getMessage(), 'observation_only' => true];
+        $tasks['automatic_updater'] = [
+            'subsystem' => 'automatic_updater',
+            'error' => $exception->getMessage(),
+            'observation_only' => true,
+        ];
     }
 
     try {
-        $status = function_exists(__NAMESPACE__ . '\\admin_log_archive_status') ? admin_log_archive_status() : [];
+        $status = function_exists(__NAMESPACE__ . '\\admin_log_archive_status')
+            ? admin_log_archive_status()
+            : [];
         $nextRun = max(0, (int) ($status['next_run_at'] ?? 0));
-        $lastSuccessEpoch = admin_test_run_timestamp((string) ($status['last_success_at'] ?? ''));
-        $lockPath = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'admin-log-archive-maintenance.lock';
+        $lastSuccessEpoch = admin_test_run_timestamp(
+            (string) ($status['last_success_at'] ?? ''),
+        );
+        $lockPath =
+            dirname(__DIR__, 3)
+            . DIRECTORY_SEPARATOR
+            . 'cache'
+            . DIRECTORY_SEPARATOR
+            . 'admin-log-archive-maintenance.lock';
         $lock = admin_test_run_lock_snapshot($lockPath);
         $lockAssessment = admin_test_run_lock_assessment($lock, 600);
         $tasks['admin_log_archive_maintenance'] = [
             'subsystem' => 'admin_log_archive_maintenance',
             'enabled' => !empty($status['enabled']),
             'configured_schedule_or_cadence' => '24-hour counter; short retry while backlog remains',
-            'external_cron_or_cli_available' => is_file(dirname(__DIR__, 3) . '/scripts/telemetry_maintenance.php') || is_file(dirname(__DIR__, 3) . '/scripts/site_maintenance.php'),
+            'external_cron_or_cli_available' =>
+                is_file(
+                    dirname(__DIR__, 3) . '/scripts/telemetry_maintenance.php',
+                )
+                    || is_file(
+                        dirname(__DIR__, 3) . '/scripts/site_maintenance.php',
+                    ),
             'external_cron_configured' => 'not_observable_from_php',
-            'next_expected_or_due_time' => $nextRun > 0 ? gmdate('c', $nextRun) : null,
-            'last_attempted_time' => (string) ($status['last_attempt_at'] ?? ''),
-            'last_successful_time' => (string) ($status['last_success_at'] ?? ''),
-            'last_failure' => is_array($status['last_result'] ?? null) && empty($status['last_result']['ok']) ? $status['last_result'] : null,
-            'time_since_last_run_seconds' => $lastSuccessEpoch > 0 ? max(0, $now - $lastSuccessEpoch) : null,
-            'currently_due' => !empty($status['enabled']) && ($nextRun <= 0 || $nextRun <= $now),
-            'overdue' => !empty($status['enabled']) && $nextRun > 0 && $now - $nextRun > 6 * 3600,
-            'trigger_sources' => ['authenticated_Admin_request', 'explicit_Admin_action', 'maintenance_or_CLI'],
+            'next_expected_or_due_time' => $nextRun > 0
+                ? gmdate('c', $nextRun)
+                : null,
+            'last_attempted_time' => (string) (
+                $status['last_attempt_at'] ?? ''
+            ),
+            'last_successful_time' => (string) (
+                $status['last_success_at'] ?? ''
+            ),
+            'last_failure' => is_array($status['last_result'] ?? null)
+            && empty($status['last_result']['ok'])
+                ? $status['last_result']
+                : null,
+            'time_since_last_run_seconds' => $lastSuccessEpoch > 0
+                ? max(0, $now - $lastSuccessEpoch)
+                : null,
+            'currently_due' =>
+                !empty($status['enabled'])
+                    && ($nextRun <= 0 || $nextRun <= $now),
+            'overdue' =>
+                !empty($status['enabled'])
+                    && $nextRun > 0
+                    && ($now - $nextRun) > (6 * 3600),
+            'trigger_sources' => [
+                'authenticated_Admin_request',
+                'explicit_Admin_action',
+                'maintenance_or_CLI',
+            ],
             'active_lock' => $lock,
             'stale_lock_assessment' => $lockAssessment,
-            'currently_active_job' => is_array($status['last_result'] ?? null) && !empty($status['last_result']['has_more']) ? $status['last_result'] : null,
-            'resumable_job_state' => is_array($status['last_result'] ?? null) && !empty($status['last_result']['has_more']),
-            'previous_execution_duration_seconds' => isset($status['last_result']['elapsed_ms']) ? ((float) $status['last_result']['elapsed_ms'] / 1000.0) : null,
+            'currently_active_job' => is_array($status['last_result'] ?? null)
+            && !empty($status['last_result']['has_more'])
+                ? $status['last_result']
+                : null,
+            'resumable_job_state' =>
+                is_array($status['last_result'] ?? null)
+                    && !empty($status['last_result']['has_more']),
+            'previous_execution_duration_seconds' => isset(
+                $status['last_result']['elapsed_ms'],
+            )
+                ? (float) $status['last_result']['elapsed_ms'] / 1000.0
+                : null,
             'configured_execution_budget_seconds' => 'one historical day per invocation; optional caller deadline',
-            'configured_work_or_item_budget' => ['row_batch' => 200, 'delete_batch' => 2000],
-            'can_execute_after_response' => function_exists(__NAMESPACE__ . '\\admin_log_archive_request_trigger_can_detach_response')
+            'configured_work_or_item_budget' => [
+                'row_batch' => 200,
+                'delete_batch' => 2000,
+            ],
+            'can_execute_after_response' => function_exists(__NAMESPACE__
+                . '\\admin_log_archive_request_trigger_can_detach_response')
                 ? admin_log_archive_request_trigger_can_detach_response()
                 : false,
-            'php_worker_remains_occupied_after_response' => function_exists(__NAMESPACE__ . '\\admin_log_archive_request_trigger_can_detach_response')
-                ? admin_log_archive_request_trigger_can_detach_response()
-                : false,
-            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['admin_log_archive'] ?? [],
+            'php_worker_remains_occupied_after_response' =>
+                function_exists(__NAMESPACE__
+                    . '\\admin_log_archive_request_trigger_can_detach_response')
+                    ? admin_log_archive_request_trigger_can_detach_response()
+                    : false,
+            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['admin_log_archive']
+                ?? [],
             'public_anonymous_traffic_can_trigger' => false,
             'authenticated_admin_traffic_can_trigger' => true,
-            'warnings' => $lockAssessment['possible_stale'] ? ['Possible stale/long-running Admin log archive lock.'] : [],
+            'warnings' => $lockAssessment['possible_stale']
+                ? ['Possible stale/long-running Admin log archive lock.']
+                : [],
         ];
     } catch (Throwable $exception) {
-        $tasks['admin_log_archive_maintenance'] = ['subsystem' => 'admin_log_archive_maintenance', 'error' => $exception->getMessage(), 'observation_only' => true];
+        $tasks['admin_log_archive_maintenance'] = [
+            'subsystem' => 'admin_log_archive_maintenance',
+            'error' => $exception->getMessage(),
+            'observation_only' => true,
+        ];
     }
 
     try {
-        $enabled = function_exists(__NAMESPACE__ . '\\thumbnail_warmup_enabled') ? thumbnail_warmup_enabled() : null;
+        $enabled = function_exists(__NAMESPACE__ . '\\thumbnail_warmup_enabled')
+            ? thumbnail_warmup_enabled()
+            : null;
         $lock = function_exists(__NAMESPACE__ . '\\thumbnail_warmup_lock_path')
             ? admin_test_run_lock_snapshot(thumbnail_warmup_lock_path())
             : [];
@@ -449,14 +700,21 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
             'configured_work_or_item_budget' => ['max_items_per_request' => 24],
             'can_execute_after_response' => false,
             'php_worker_remains_occupied_after_response' => false,
-            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['thumbnail_warmup'] ?? [],
+            'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['thumbnail_warmup']
+                ?? [],
             'public_anonymous_traffic_can_trigger' => true,
             'public_trigger_guard' => 'requires server-rendered HMAC token and visitor authorization; bounded to 24 unique images',
             'authenticated_admin_traffic_can_trigger' => true,
-            'warnings' => $lockAssessment['possible_stale'] ? ['Thumbnail warmup lock appears unexpectedly long-running.'] : [],
+            'warnings' => $lockAssessment['possible_stale']
+                ? ['Thumbnail warmup lock appears unexpectedly long-running.']
+                : [],
         ];
     } catch (Throwable $exception) {
-        $tasks['thumbnail_warmup'] = ['subsystem' => 'thumbnail_warmup', 'error' => $exception->getMessage(), 'observation_only' => true];
+        $tasks['thumbnail_warmup'] = [
+            'subsystem' => 'thumbnail_warmup',
+            'error' => $exception->getMessage(),
+            'observation_only' => true,
+        ];
     }
 
     $tasks['database_maintenance'] = [
@@ -476,7 +734,8 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         'active_lock' => null,
         'stale_lock_assessment' => null,
         'currently_active_job' => null,
-        'resumable_job_state' => function_exists(__NAMESPACE__ . '\\database_maintenance_cleanup_state')
+        'resumable_job_state' => function_exists(__NAMESPACE__
+            . '\\database_maintenance_cleanup_state')
             ? database_maintenance_cleanup_state()
             : [],
         'previous_execution_duration_seconds' => null,
@@ -484,7 +743,8 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         'configured_work_or_item_budget' => 'explicit bounded cleanup step selected by Admin',
         'can_execute_after_response' => false,
         'php_worker_remains_occupied_after_response' => false,
-        'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['database_maintenance'] ?? [],
+        'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['database_maintenance']
+            ?? [],
         'public_anonymous_traffic_can_trigger' => false,
         'authenticated_admin_traffic_can_trigger' => false,
         'warnings' => [],
@@ -499,7 +759,10 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
             $activeBackground++;
         }
         foreach ((array) ($task['warnings'] ?? []) as $warning) {
-            $warnings[] = (string) ($task['subsystem'] ?? 'unknown') . ': ' . (string) $warning;
+            $warnings[] =
+                (string) ($task['subsystem'] ?? 'unknown')
+                . ': '
+                . (string) $warning;
         }
     }
     if ($activeBackground > 1) {

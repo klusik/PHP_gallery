@@ -102,25 +102,35 @@ use function Gallery\Views\view_render_public_seo_tags;
 
 /**
  * Return the canonical admin menu model used by the dashboard and admin shell.
+ *
+ * @return list<array{label:string,items:list<array{label:string,page:string,url:string,icon:string,feature?:string,active?:bool}>}> Ordered menu groups and their navigation items.
  */
 function admin_menu_structure(): array
 {
     if (!function_exists('Gallery\Views\view_admin_menu_structure')) {
-        throw new RuntimeException('Admin menu view model is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin menu view model is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     return view_admin_menu_structure();
 }
+
 /**
  * Return true when one admin menu item should be marked as active.
+ *
+ * @param array{page?:string,url?:string,active?:bool} $item Admin navigation item.
+ * @param string $currentPage Current route name.
+ * @return bool True when the item represents the current route or section.
  */
 function admin_menu_item_is_active(array $item, string $currentPage): bool
 {
     if (!function_exists('Gallery\Views\view_admin_menu_item_is_active')) {
-        throw new RuntimeException('Admin menu presentation helper is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin menu presentation helper is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     return view_admin_menu_item_is_active($item, $currentPage);
 }
-
 
 /**
  * Render a reusable admin tab list.
@@ -136,7 +146,9 @@ function admin_menu_item_is_active(array $item, string $currentPage): bool
 function render_admin_tabs(array $tabs, string $activeId = ''): void
 {
     if (!function_exists('Gallery\Views\view_render_admin_tabs')) {
-        throw new RuntimeException('Admin tab view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin tab view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_admin_tabs($tabs, $activeId);
 }
@@ -153,15 +165,18 @@ function render_admin_tabs(array $tabs, string $activeId = ''): void
  * @param bool $active Whether the panel should start selected.
  * @return void
  */
-function render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
-{
+function render_admin_tab_panel(
+    string $id,
+    string $contentHtml,
+    bool $active = false,
+): void {
     if (!function_exists('Gallery\Views\view_render_admin_tab_panel')) {
-        throw new RuntimeException('Admin tab-panel view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin tab-panel view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_admin_tab_panel($id, $contentHtml, $active);
 }
-
-
 
 /**
  * Render one reusable admin subtab control row.
@@ -175,10 +190,15 @@ function render_admin_tab_panel(string $id, string $contentHtml, bool $active = 
  * @param string $ariaLabel Accessible label for this subtab group.
  * @return void
  */
-function render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
-{
+function render_admin_subtabs(
+    array $tabs,
+    string $activeId = '',
+    string $ariaLabel = '',
+): void {
     if (!function_exists('Gallery\Views\view_render_admin_subtabs')) {
-        throw new RuntimeException('Admin subtab view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin subtab view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_admin_subtabs($tabs, $activeId, $ariaLabel);
 }
@@ -191,33 +211,52 @@ function render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLa
  * @param bool $active Whether the panel should start selected.
  * @return void
  */
-function render_admin_subtab_panel(string $id, string $contentHtml, bool $active = false): void
-{
+function render_admin_subtab_panel(
+    string $id,
+    string $contentHtml,
+    bool $active = false,
+): void {
     if (!function_exists('Gallery\Views\view_render_admin_subtab_panel')) {
-        throw new RuntimeException('Admin subtab-panel view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin subtab-panel view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_admin_subtab_panel($id, $contentHtml, $active);
 }
 
 /**
  * Render the persistent admin sidebar used by all authenticated admin pages.
+ *
+ * @param string $currentPage Current route name.
+ * @return void Renders the sidebar with the shared Admin chrome model.
  */
 function render_admin_sidebar(string $currentPage): void
 {
     if (!function_exists('Gallery\Views\view_render_admin_sidebar')) {
-        throw new RuntimeException('Admin sidebar view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Admin sidebar view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_admin_sidebar($currentPage, shared_layout_admin_chrome_model());
 }
 
-
 /**
  * Render the admin notice that asks existing admins to add a recovery email.
+ *
+ * @param ?array{id?:int|string,email?:string} $user Current admin account, or null when unauthenticated.
+ * @param string $currentPage Current route name used to suppress the notice on account routes.
+ * @return void Renders the notice when the admin account has no recovery email.
  */
-function render_missing_admin_email_notice(?array $user, string $currentPage): void
-{
-    if (!function_exists('Gallery\Views\view_render_missing_admin_email_notice')) {
-        throw new RuntimeException('Admin account-notice view is unavailable. Ensure app/views.php is loaded before rendering.');
+function render_missing_admin_email_notice(
+    ?array $user,
+    string $currentPage,
+): void {
+    if (!function_exists(
+        'Gallery\Views\view_render_missing_admin_email_notice',
+    )) {
+        throw new RuntimeException(
+            'Admin account-notice view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_missing_admin_email_notice($user, $currentPage);
 }

@@ -130,7 +130,11 @@ function settings_test_registry_calls(string $source): array
         if ($depth !== 0) {
             throw new RuntimeException('Unbalanced admin_settings_entry call.');
         }
-        $calls[] = settings_test_split_arguments(substr($source, $open + 1, $index - $open - 1));
+        $calls[] = settings_test_split_arguments(substr(
+            $source,
+            $open + 1,
+            $index - $open - 1,
+        ));
         $offset = $index + 1;
     }
     return $calls;
@@ -151,14 +155,27 @@ function settings_test_literal(string $expression): string
     return '';
 }
 
-$registrySource = file_get_contents(__DIR__ . '/../app/services/admin_settings_registry.php');
-$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
+$registrySource = file_get_contents(__DIR__
+    . '/../app/services/admin_settings_registry.php');
+$bootstrapSource =
+    (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
     . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 if (!is_string($registrySource) || !is_string($bootstrapSource)) {
-    throw new RuntimeException('Unable to read Settings registry or router source.');
+    throw new RuntimeException(
+        'Unable to read Settings registry or router source.',
+    );
 }
 
-$sections = ['general', 'site', 'appearance', 'content', 'media', 'uploads', 'privacy', 'advanced'];
+$sections = [
+    'general',
+    'site',
+    'appearance',
+    'content',
+    'media',
+    'uploads',
+    'privacy',
+    'advanced',
+];
 $calls = settings_test_registry_calls($registrySource);
 $ids = [];
 $entryDefinitions = [];
@@ -179,19 +196,27 @@ foreach ($calls as $arguments) {
     $ids[$id] = true;
     $entryDefinitions[$id] = $arguments;
     if (!in_array($group, $sections, true)) {
-        throw new RuntimeException('Unknown Settings registry group: ' . $group);
+        throw new RuntimeException('Unknown Settings registry group: '
+            . $group);
     }
 
     $keyExpression = trim($arguments[4]);
     $key = settings_test_literal($keyExpression);
-    if ($key === '' && $keyExpression === 'PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY') {
+    if (
+        $key === ''
+        && $keyExpression === 'PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY'
+    ) {
         $key = 'public_thumbnail_rendering_mode';
-    } elseif ($key === '' && $keyExpression === 'exif_gps_default_enabled_setting_key()') {
+    } elseif (
+        $key === ''
+        && $keyExpression === 'exif_gps_default_enabled_setting_key()'
+    ) {
         $key = 'exif_gps_maps_default_enabled';
     }
     if ($key !== '') {
         if (isset($canonicalKeys[$key])) {
-            throw new RuntimeException('Duplicate canonical Settings key: ' . $key);
+            throw new RuntimeException('Duplicate canonical Settings key: '
+                . $key);
         }
         $canonicalKeys[$key] = $id;
     }
@@ -201,61 +226,149 @@ foreach ($calls as $arguments) {
         $routes[$route] = true;
     }
 
-    if (isset($arguments[10]) && settings_test_literal($arguments[10]) === '' && trim($arguments[10]) !== "''" && trim($arguments[10]) !== '""') {
-        throw new RuntimeException('Settings registry specialized fragment must be a string for: ' . $id);
+    if (
+        isset($arguments[10])
+        && settings_test_literal($arguments[10]) === ''
+        && trim($arguments[10]) !== "''"
+        && trim($arguments[10]) !== '""'
+    ) {
+        throw new RuntimeException('Settings registry specialized fragment must be a string for: '
+            . $id);
     }
 }
 
-foreach (['default_resolver', 'current_resolver', 'fallback_behavior', 'owner', 'specialized_route', 'central_editable', 'sensitivity', 'migration_required'] as $field) {
+foreach ([
+    'default_resolver',
+    'current_resolver',
+    'fallback_behavior',
+    'owner',
+    'specialized_route',
+    'central_editable',
+    'sensitivity',
+    'migration_required',
+] as $field) {
     if (!str_contains($registrySource, "'{$field}' =>")) {
-        throw new RuntimeException('Registry metadata field missing: ' . $field);
+        throw new RuntimeException('Registry metadata field missing: '
+            . $field);
     }
 }
 
 foreach ($routes as $route => $_unused) {
     if (!str_contains($bootstrapSource, "'{$route}' =>")) {
-        throw new RuntimeException('Registry specialized route is not registered: ' . $route);
+        throw new RuntimeException('Registry specialized route is not registered: '
+            . $route);
     }
 }
 
-foreach (['password_reset_smtp_password', 'site_maintenance_token', 'account_credentials'] as $sensitiveId) {
+foreach ([
+    'password_reset_smtp_password',
+    'site_maintenance_token',
+    'account_credentials',
+] as $sensitiveId) {
     if (!isset($ids[$sensitiveId])) {
-        throw new RuntimeException('Sensitive registry entry missing: ' . $sensitiveId);
+        throw new RuntimeException('Sensitive registry entry missing: '
+            . $sensitiveId);
     }
 }
-if (!str_contains($registrySource, "admin_settings_sensitive_status('password_reset_smtp_password')") || !str_contains($registrySource, "admin_settings_sensitive_status('site_maintenance_token')")) {
-    throw new RuntimeException('Sensitive Settings values are not summarized through the redaction helper.');
+if (
+    !str_contains(
+        $registrySource,
+        "admin_settings_sensitive_status('password_reset_smtp_password')",
+    )
+    || !str_contains(
+        $registrySource,
+        "admin_settings_sensitive_status('site_maintenance_token')",
+    )
+) {
+    throw new RuntimeException(
+        'Sensitive Settings values are not summarized through the redaction helper.',
+    );
 }
 
-foreach (['site_name', 'public_language', 'public_language_selector_enabled', 'public_language_selector_languages', 'url_rewrite_enabled', 'public_home_search_enabled', 'public_thumbnail_rendering_mode', 'exif_gps_maps_default_enabled', 'dev_mode_enabled'] as $centralId) {
+foreach ([
+    'site_name',
+    'public_language',
+    'public_language_selector_enabled',
+    'public_language_selector_languages',
+    'url_rewrite_enabled',
+    'public_home_search_enabled',
+    'public_thumbnail_rendering_mode',
+    'exif_gps_maps_default_enabled',
+    'dev_mode_enabled',
+] as $centralId) {
     if (!isset($ids[$centralId])) {
-        throw new RuntimeException('Expected centrally editable registry id missing: ' . $centralId);
+        throw new RuntimeException('Expected centrally editable registry id missing: '
+            . $centralId);
     }
 }
 
 // Global upload preferences are ordinary central controls; routes keep their historical contracts.
-foreach (['admin_legacy_upload_navigation_enabled', 'admin_upload_client_format_mode', 'admin_upload_auto_rename_enabled', 'browser_upload_enabled', 'browser_upload_default_worker_count', 'browser_upload_max_worker_count', 'browser_upload_hard_worker_cap', 'browser_upload_batch_size_policy', 'browser_upload_zip_size_threshold_ratio', 'browser_upload_max_items_per_batch', 'browser_upload_max_zip_batch_bytes', 'browser_thumbnail_rebuild_source_chunk_bytes'] as $uploadId) {
+foreach ([
+    'admin_legacy_upload_navigation_enabled',
+    'admin_upload_client_format_mode',
+    'admin_upload_auto_rename_enabled',
+    'browser_upload_enabled',
+    'browser_upload_default_worker_count',
+    'browser_upload_max_worker_count',
+    'browser_upload_hard_worker_cap',
+    'browser_upload_batch_size_policy',
+    'browser_upload_zip_size_threshold_ratio',
+    'browser_upload_max_items_per_batch',
+    'browser_upload_max_zip_batch_bytes',
+    'browser_thumbnail_rebuild_source_chunk_bytes',
+] as $uploadId) {
     $definition = $entryDefinitions[$uploadId] ?? [];
-    if (settings_test_literal($definition[1] ?? '') !== 'uploads'
+    if (
+        settings_test_literal($definition[1] ?? '') !== 'uploads'
         || trim($definition[11] ?? '') !== 'true'
         || settings_test_literal($definition[4] ?? '') !== $uploadId
-        || in_array(settings_test_literal($definition[5] ?? ''), ['summary', 'specialized', ''], true)) {
-        throw new RuntimeException('Upload setting must be centrally editable with its canonical key: ' . $uploadId);
+        || in_array(
+            settings_test_literal($definition[5] ?? ''),
+            ['summary', 'specialized', ''],
+            true,
+        )
+    ) {
+        throw new RuntimeException('Upload setting must be centrally editable with its canonical key: '
+            . $uploadId);
     }
 }
 
-foreach (['theme_accent', 'theme_favicon', 'theme_custom_css_editor', 'telemetry_raw_retention_days', 'thumbnail_exact_scan', 'site_maintenance_time_budget_seconds', 'navigation_data_update', 'database_optimize', 'password_reset_transport', 'google_account_linking', 'openai_model'] as $discoveryId) {
-    $discoveryPattern = '/\\[\\s*\'' . preg_quote($discoveryId, '/') . '\'\\s*,/';
+foreach ([
+    'theme_accent',
+    'theme_favicon',
+    'theme_custom_css_editor',
+    'telemetry_raw_retention_days',
+    'thumbnail_exact_scan',
+    'site_maintenance_time_budget_seconds',
+    'navigation_data_update',
+    'database_optimize',
+    'password_reset_transport',
+    'google_account_linking',
+    'openai_model',
+] as $discoveryId) {
+    $discoveryPattern =
+        '/\\[\\s*\'' . preg_quote($discoveryId, '/') . '\'\\s*,/';
     if (preg_match($discoveryPattern, $registrySource) !== 1) {
-        throw new RuntimeException('Specialized Settings discovery entry missing: ' . $discoveryId);
+        throw new RuntimeException('Specialized Settings discovery entry missing: '
+            . $discoveryId);
     }
 }
-if (substr_count($registrySource, "['") < 100 || !str_contains($registrySource, "['discovery_only'] = true")) {
-    throw new RuntimeException('Specialized Settings discovery catalog is unexpectedly incomplete.');
+if (
+    substr_count($registrySource, "['") < 100
+    || !str_contains($registrySource, "['discovery_only'] = true")
+) {
+    throw new RuntimeException(
+        'Specialized Settings discovery catalog is unexpectedly incomplete.',
+    );
 }
 
-if (!str_contains($registrySource, "'normalization_callback' =>") || !str_contains($registrySource, "'save_callback' =>")) {
-    throw new RuntimeException('Registry does not expose canonical normalization/save callback metadata.');
+if (
+    !str_contains($registrySource, "'normalization_callback' =>")
+    || !str_contains($registrySource, "'save_callback' =>")
+) {
+    throw new RuntimeException(
+        'Registry does not expose canonical normalization/save callback metadata.',
+    );
 }
 
 echo "Admin Settings registry tests passed.\n";

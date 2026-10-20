@@ -39,17 +39,27 @@ namespace Gallery\Views;
 use function Gallery\Core\e;
 
 /**
- * Handle view render meta tag.
+ * Emit an escaped HTML meta tag.
  *
- * Used by server-rendered view helpers.
- *
- * @param string $attributeName Attribute name value.
- * @param string $attributeValue Attribute value value.
- * @param string $content Content value.
+ * @param string $attributeName Meta attribute name, such as `name` or `property`.
+ * @param string $attributeValue Value for the selected meta attribute.
+ * @param string $content Escaped content value for the tag.
+ * @return void Writes one meta element to the response.
  */
-function view_render_meta_tag(string $attributeName, string $attributeValue, string $content): void
-{
-    echo '<meta ' . $attributeName . '="' . e($attributeValue) . '" content="' . e($content) . '">' . "\n";
+function view_render_meta_tag(
+    string $attributeName,
+    string $attributeValue,
+    string $content,
+): void {
+    echo
+        '<meta '
+            . $attributeName
+            . '="'
+            . e($attributeValue)
+            . '" content="'
+            . e($content)
+            . '">'
+            . "\n";
 }
 
 /**
@@ -66,19 +76,19 @@ function view_render_link_tag(string $rel, string $href): void
 }
 
 /**
- * Handle view render public seo tags.
+ * Emit SEO and social-sharing tags from a prepared public page model.
  *
- * Used by server-rendered view helpers.
- *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
+ * @param array{title?:string,description?:string,canonical?:string,preview_image?:array{url?:string,secure_url?:string,type?:string,width?:int|string,height?:int|string,alt?:string}|null,site_name?:string,og_locale?:string} $model Prepared title, description, canonical URL, preview image, site name, and locale.
+ * @return void Writes meta and canonical link elements.
  */
 function view_render_public_seo_tags(array $model): void
 {
     $title = (string) ($model['title'] ?? '');
     $description = (string) ($model['description'] ?? '');
     $canonical = (string) ($model['canonical'] ?? '');
-    $previewImage = is_array($model['preview_image'] ?? null) ? $model['preview_image'] : null;
+    $previewImage = is_array($model['preview_image'] ?? null)
+        ? $model['preview_image']
+        : null;
     $ogImage = (string) ($previewImage['url'] ?? '');
 
     if ($canonical !== '') {
@@ -91,55 +101,120 @@ function view_render_public_seo_tags(array $model): void
     if ($canonical !== '') {
         view_render_meta_tag('property', 'og:url', $canonical);
     }
-    view_render_meta_tag('property', 'og:site_name', (string) ($model['site_name'] ?? ''));
-    view_render_meta_tag('property', 'og:locale', (string) ($model['og_locale'] ?? 'en_US'));
+    view_render_meta_tag(
+        'property',
+        'og:site_name',
+        (string) ($model['site_name'] ?? ''),
+    );
+    view_render_meta_tag(
+        'property',
+        'og:locale',
+        (string) ($model['og_locale'] ?? 'en_US'),
+    );
     if ($previewImage !== null) {
-        view_render_meta_tag('property', 'og:image', (string) ($previewImage['url'] ?? ''));
-        view_render_meta_tag('property', 'og:image:url', (string) ($previewImage['url'] ?? ''));
-        if (str_starts_with((string) ($previewImage['secure_url'] ?? ''), 'https://')) {
-            view_render_meta_tag('property', 'og:image:secure_url', (string) $previewImage['secure_url']);
+        view_render_meta_tag(
+            'property',
+            'og:image',
+            (string) ($previewImage['url'] ?? ''),
+        );
+        view_render_meta_tag(
+            'property',
+            'og:image:url',
+            (string) ($previewImage['url'] ?? ''),
+        );
+        if (str_starts_with(
+            (string) ($previewImage['secure_url'] ?? ''),
+            'https://',
+        )) {
+            view_render_meta_tag(
+                'property',
+                'og:image:secure_url',
+                (string) $previewImage['secure_url'],
+            );
         }
-        view_render_meta_tag('property', 'og:image:type', (string) ($previewImage['type'] ?? ''));
-        view_render_meta_tag('property', 'og:image:width', (string) ($previewImage['width'] ?? ''));
-        view_render_meta_tag('property', 'og:image:height', (string) ($previewImage['height'] ?? ''));
-        view_render_meta_tag('property', 'og:image:alt', (string) ($previewImage['alt'] ?? ''));
-        view_render_meta_tag('name', 'image', (string) ($previewImage['url'] ?? ''));
-        view_render_meta_tag('itemprop', 'image', (string) ($previewImage['url'] ?? ''));
+        view_render_meta_tag(
+            'property',
+            'og:image:type',
+            (string) ($previewImage['type'] ?? ''),
+        );
+        view_render_meta_tag(
+            'property',
+            'og:image:width',
+            (string) ($previewImage['width'] ?? ''),
+        );
+        view_render_meta_tag(
+            'property',
+            'og:image:height',
+            (string) ($previewImage['height'] ?? ''),
+        );
+        view_render_meta_tag(
+            'property',
+            'og:image:alt',
+            (string) ($previewImage['alt'] ?? ''),
+        );
+        view_render_meta_tag(
+            'name',
+            'image',
+            (string) ($previewImage['url'] ?? ''),
+        );
+        view_render_meta_tag(
+            'itemprop',
+            'image',
+            (string) ($previewImage['url'] ?? ''),
+        );
     }
-    view_render_meta_tag('name', 'twitter:card', $ogImage !== '' ? 'summary_large_image' : 'summary');
+    view_render_meta_tag(
+        'name',
+        'twitter:card',
+        $ogImage !== '' ? 'summary_large_image' : 'summary',
+    );
     view_render_meta_tag('name', 'twitter:title', $title);
     view_render_meta_tag('name', 'twitter:description', $description);
     if ($canonical !== '') {
         view_render_meta_tag('name', 'twitter:url', $canonical);
     }
     if ($previewImage !== null) {
-        view_render_meta_tag('name', 'twitter:image', (string) ($previewImage['url'] ?? ''));
-        view_render_meta_tag('name', 'twitter:image:src', (string) ($previewImage['url'] ?? ''));
-        view_render_meta_tag('name', 'twitter:image:alt', (string) ($previewImage['alt'] ?? ''));
+        view_render_meta_tag(
+            'name',
+            'twitter:image',
+            (string) ($previewImage['url'] ?? ''),
+        );
+        view_render_meta_tag(
+            'name',
+            'twitter:image:src',
+            (string) ($previewImage['url'] ?? ''),
+        );
+        view_render_meta_tag(
+            'name',
+            'twitter:image:alt',
+            (string) ($previewImage['alt'] ?? ''),
+        );
     }
 }
 
 /**
- * Handle view render gallery json ld.
+ * Emit the prepared gallery JSON-LD script when it can be encoded.
  *
- * Used by server-rendered view helpers.
- *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
- * @param array $publicMediaManifest Request-local media manifest keyed by image id.
+ * @param array<string,mixed> $jsonLd Prepared JSON-LD object fields.
+ * @return void Writes a script element when the payload is non-empty and encodable.
  */
 function view_render_gallery_json_ld(array $jsonLd): void
 {
     if ($jsonLd === []) {
         return;
     }
-    $json = json_encode($jsonLd, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode(
+        $jsonLd,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if ($json === false) {
         return;
     }
-    echo '<script type="application/ld+json">' . str_replace('</', '<\/', $json) . '</script>';
+    echo
+        '<script type="application/ld+json">'
+            . str_replace('</', '<\/', $json)
+            . '</script>';
 }
-
 
 /**
  * Render the public sitemap XML body from controller-prepared entries.
@@ -149,7 +224,8 @@ function view_render_gallery_json_ld(array $jsonLd): void
 function view_render_sitemap_xml(array $entries): void
 {
     echo '<?xml version="1.0" encoding="UTF-8"?>';
-    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">';
+    echo
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">';
     foreach ($entries as $entry) {
         $loc = trim((string) ($entry['loc'] ?? ''));
         if ($loc === '') {
@@ -171,10 +247,16 @@ function view_render_sitemap_xml(array $entries): void
             echo '<image:image>';
             echo '<image:loc>' . e($imageLoc) . '</image:loc>';
             if (!empty($image['title'])) {
-                echo '<image:title>' . e((string) $image['title']) . '</image:title>';
+                echo
+                    '<image:title>'
+                        . e((string) $image['title'])
+                        . '</image:title>';
             }
             if (!empty($image['caption'])) {
-                echo '<image:caption>' . e((string) $image['caption']) . '</image:caption>';
+                echo
+                    '<image:caption>'
+                        . e((string) $image['caption'])
+                        . '</image:caption>';
             }
             echo '</image:image>';
         }

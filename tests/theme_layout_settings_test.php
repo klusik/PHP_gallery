@@ -31,8 +31,11 @@ namespace Gallery\Services {
     use InvalidArgumentException;
 
     const CMS_PAGINATION_DEFAULT_COLUMNS = 4;
+
     const CMS_PAGINATION_DEFAULT_ROWS = 5;
+
     const CMS_PAGINATION_MAX_COLUMNS = 12;
+
     const CMS_PAGINATION_MAX_ROWS = 50;
 
     /** Return deterministic Theme settings for the owner fixture. @return array<string,string> Fixture Theme values. */
@@ -79,7 +82,10 @@ namespace Gallery\Services {
     /** Return the current global gallery-card layout. @return string Fixture layout. */
     function theme_gallery_description_layout(): string
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_gallery_description_layout'] ?? 'vertical');
+        return (string) (
+            $GLOBALS['theme_layout_test_values']['theme_gallery_description_layout']
+            ?? 'vertical'
+        );
     }
 
     /** Return the shared stable breadcrumb style metadata for the isolated Theme test.
@@ -88,15 +94,30 @@ namespace Gallery\Services {
     function breadcrumb_style_registry(): array
     {
         return [
-            'minimal' => ['label' => 'Minimal', 'class' => 'breadcrumbs--minimal'],
-            'chevron' => ['label' => 'Chevron', 'class' => 'breadcrumbs--chevron'],
+            'minimal' => [
+                'label' => 'Minimal',
+                'class' => 'breadcrumbs--minimal',
+            ],
+            'chevron' => [
+                'label' => 'Chevron',
+                'class' => 'breadcrumbs--chevron',
+            ],
             'pills' => ['label' => 'Pills', 'class' => 'breadcrumbs--pills'],
-            'surface' => ['label' => 'Surface', 'class' => 'breadcrumbs--surface'],
+            'surface' => [
+                'label' => 'Surface',
+                'class' => 'breadcrumbs--surface',
+            ],
             'ribbon' => ['label' => 'Ribbon', 'class' => 'breadcrumbs--ribbon'],
-            'nodes' => ['label' => 'Connected nodes', 'class' => 'breadcrumbs--nodes'],
+            'nodes' => [
+                'label' => 'Connected nodes',
+                'class' => 'breadcrumbs--nodes',
+            ],
             'tabs' => ['label' => 'Tabs', 'class' => 'breadcrumbs--tabs'],
             'tiles' => ['label' => 'Tiles', 'class' => 'breadcrumbs--tiles'],
-            'gradient' => ['label' => 'Gradient', 'class' => 'breadcrumbs--gradient'],
+            'gradient' => [
+                'label' => 'Gradient',
+                'class' => 'breadcrumbs--gradient',
+            ],
         ];
     }
 
@@ -105,8 +126,10 @@ namespace Gallery\Services {
      * @param bool $allowInherit Whether the gallery inheritance sentinel is accepted.
      * @return string Registered style or safe inheritance/default fallback.
      */
-    function breadcrumb_style_normalize(mixed $value, bool $allowInherit = false): string
-    {
+    function breadcrumb_style_normalize(
+        mixed $value,
+        bool $allowInherit = false,
+    ): string {
         if (!is_string($value) && !is_int($value)) {
             return $allowInherit ? 'inherit' : 'chevron';
         }
@@ -114,9 +137,11 @@ namespace Gallery\Services {
         if ($allowInherit && $style === 'inherit') {
             return 'inherit';
         }
-        return array_key_exists($style, breadcrumb_style_registry())
-            ? $style
-            : ($allowInherit ? 'inherit' : 'chevron');
+        return (
+            array_key_exists($style, breadcrumb_style_registry())
+                ? $style
+                : ($allowInherit ? 'inherit' : 'chevron')
+        );
     }
 
     /** Return the current safe global breadcrumb style for the isolated Theme test.
@@ -124,7 +149,10 @@ namespace Gallery\Services {
      */
     function theme_breadcrumb_style(): string
     {
-        return breadcrumb_style_normalize($GLOBALS['theme_layout_test_values']['theme_breadcrumb_style'] ?? 'chevron');
+        return breadcrumb_style_normalize(
+            $GLOBALS['theme_layout_test_values']['theme_breadcrumb_style']
+                ?? 'chevron',
+        );
     }
 
     /** Return whether gallery count badges are enabled. @return bool Fixture badge state. */
@@ -136,13 +164,21 @@ namespace Gallery\Services {
     /** Return the persisted counter mode for the isolated fixture. @return string Safe count mode. */
     function theme_gallery_count_badge_mode(): string
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_mode'] ?? 'both');
+        return (string) (
+            $GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_mode']
+            ?? 'both'
+        );
     }
 
     /** Return whether counter icons are enabled in this fixture. @return bool Icon setting. */
     function theme_gallery_count_badge_icons_enabled(): bool
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_icons_enabled'] ?? '1') !== '0';
+        return (
+            (string) (
+                $GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_icons_enabled']
+                ?? '1'
+            ) !== '0'
+        );
     }
 
     /** Return the current tag-page gallery-card layout. @return string Fixture tag layout. */
@@ -154,37 +190,59 @@ namespace Gallery\Services {
     /** Return the current hero-tag visible limit. @return int Fixture limit. */
     function theme_hero_tag_visible_limit(): int
     {
-        return (int) ($GLOBALS['theme_layout_test_values']['theme_hero_tag_visible_limit'] ?? 20);
+        return (int) (
+            $GLOBALS['theme_layout_test_values']['theme_hero_tag_visible_limit']
+            ?? 20
+        );
     }
 
     /** Return whether every hero tag is shown. @return bool Fixture state. */
     function theme_hero_tag_display_all_enabled(): bool
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_hero_tag_display_all'] ?? '0') === '1';
+        return (
+            (string) (
+                $GLOBALS['theme_layout_test_values']['theme_hero_tag_display_all']
+                ?? '0'
+            ) === '1'
+        );
     }
 
     /** Return whether hero-tag scrolling is enabled. @return bool Fixture state. */
     function theme_hero_tag_scrollbar_enabled(): bool
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_hero_tag_scrollbar_enabled'] ?? '1') !== '0';
+        return (
+            (string) (
+                $GLOBALS['theme_layout_test_values']['theme_hero_tag_scrollbar_enabled']
+                ?? '1'
+            ) !== '0'
+        );
     }
 
     /** Return the hero-tag scrollbar row threshold. @return int Fixture row count. */
     function theme_hero_tag_scrollbar_rows(): int
     {
-        return (int) ($GLOBALS['theme_layout_test_values']['theme_hero_tag_scrollbar_rows'] ?? 5);
+        return (int) (
+            $GLOBALS['theme_layout_test_values']['theme_hero_tag_scrollbar_rows']
+            ?? 5
+        );
     }
 
     /** Return the current hero-tag sort mode. @return string Fixture mode. */
     function theme_hero_tag_sort_mode(): string
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_hero_tag_sort_mode'] ?? 'usage');
+        return (string) (
+            $GLOBALS['theme_layout_test_values']['theme_hero_tag_sort_mode']
+            ?? 'usage'
+        );
     }
 
     /** Return the current global lightbox mode. @return string Fixture lightbox mode. */
     function theme_lightbox_browsing_mode(): string
     {
-        return (string) ($GLOBALS['theme_layout_test_values']['theme_lightbox_browsing_mode'] ?? 'single');
+        return (string) (
+            $GLOBALS['theme_layout_test_values']['theme_lightbox_browsing_mode']
+            ?? 'single'
+        );
     }
 
     /** Return the supported gallery-card layouts. @return list<string> Supported layouts. */
@@ -200,8 +258,10 @@ namespace Gallery\Services {
     }
 
     /** Return one fixture feature-capability state. @param string $key Capability key. @param array<int,string> $resolving Unused dependency stack. @return bool Effective state. */
-    function feature_capability_effective_enabled(string $key, array $resolving = []): bool
-    {
+    function feature_capability_effective_enabled(
+        string $key,
+        array $resolving = [],
+    ): bool {
         return !empty($GLOBALS['theme_layout_test_capabilities'][$key]);
     }
 
@@ -239,92 +299,271 @@ namespace Gallery\Tests\ThemeLayoutSettings {
         } catch (InvalidArgumentException) {
             return;
         }
-        throw new \RuntimeException('Expected invalid Theme layout value was accepted.');
+        throw new \RuntimeException(
+            'Expected invalid Theme layout value was accepted.',
+        );
     }
 
-    $GLOBALS['theme_layout_test_capabilities'] = ['gallery_maps' => true, 'lightbox_modes' => true];
+    $GLOBALS['theme_layout_test_capabilities'] = [
+        'gallery_maps' => true,
+        'lightbox_modes' => true,
+    ];
     $GLOBALS['theme_layout_test_values'] = [];
     $GLOBALS['theme_layout_test_writes'] = [];
 
     $settings = theme_layout_safe_settings();
-    assert_true($settings['theme_gps_pin_size'] === '30', 'GPS pin size did not use the canonical normalized value.');
-    assert_true($settings['pagination_columns'] === '6' && $settings['home_gallery_grid_columns'] === '5', 'Grid settings did not preserve owner values.');
-    assert_true($settings['tag_page_gallery_description_layout'] === 'horizontal', 'Tag card layout did not preserve owner value.');
-    assert_true($settings['theme_hero_tag_visible_limit'] === '20' && $settings['theme_hero_tag_sort_mode'] === 'usage', 'Hero-tag settings did not preserve owner values.');
-    assert_true($settings['theme_breadcrumb_style'] === 'chevron', 'Breadcrumb style did not use its safe Theme default.');
-    assert_true($settings['theme_gallery_count_badge_mode'] === 'both'
-        && $settings['theme_gallery_count_badge_icons_enabled'] === '1', 'Photo counter defaults must be Both with icons ON.');
-    assert_true(theme_layout_safe_setting_available('theme_gps_pin_enabled'), 'Enabled GPS capability was treated as unavailable.');
-    assert_true(theme_layout_safe_setting_available('theme_lightbox_browsing_mode'), 'Enabled lightbox capability was treated as unavailable.');
+    assert_true(
+        $settings['theme_gps_pin_size'] === '30',
+        'GPS pin size did not use the canonical normalized value.',
+    );
+    assert_true(
+        $settings['pagination_columns'] === '6'
+            && $settings['home_gallery_grid_columns'] === '5',
+        'Grid settings did not preserve owner values.',
+    );
+    assert_true(
+        $settings['tag_page_gallery_description_layout'] === 'horizontal',
+        'Tag card layout did not preserve owner value.',
+    );
+    assert_true(
+        $settings['theme_hero_tag_visible_limit'] === '20'
+            && $settings['theme_hero_tag_sort_mode'] === 'usage',
+        'Hero-tag settings did not preserve owner values.',
+    );
+    assert_true(
+        $settings['theme_breadcrumb_style'] === 'chevron',
+        'Breadcrumb style did not use its safe Theme default.',
+    );
+    assert_true(
+        $settings['theme_gallery_count_badge_mode'] === 'both'
+            && $settings['theme_gallery_count_badge_icons_enabled'] === '1',
+        'Photo counter defaults must be Both with icons ON.',
+    );
+    assert_true(
+        theme_layout_safe_setting_available('theme_gps_pin_enabled'),
+        'Enabled GPS capability was treated as unavailable.',
+    );
+    assert_true(
+        theme_layout_safe_setting_available('theme_lightbox_browsing_mode'),
+        'Enabled lightbox capability was treated as unavailable.',
+    );
 
-    assert_true(theme_layout_safe_normalize('pagination_columns', '12') === '12', 'Maximum grid columns were not accepted.');
-    assert_true(theme_layout_safe_normalize('theme_gps_pin_background_size', '0') === '0', 'Zero GPS background size was not accepted.');
-    assert_true(theme_layout_safe_normalize('theme_gallery_description_layout', 'horizontal') === 'horizontal', 'Supported card layout was not accepted.');
+    assert_true(
+        theme_layout_safe_normalize('pagination_columns', '12') === '12',
+        'Maximum grid columns were not accepted.',
+    );
+    assert_true(
+        theme_layout_safe_normalize('theme_gps_pin_background_size', '0')
+            === '0',
+        'Zero GPS background size was not accepted.',
+    );
+    assert_true(
+        theme_layout_safe_normalize(
+            'theme_gallery_description_layout',
+            'horizontal',
+        ) === 'horizontal',
+        'Supported card layout was not accepted.',
+    );
     foreach (array_keys(breadcrumb_style_registry()) as $styleId) {
-        assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', $styleId) === $styleId, 'Registered breadcrumb style was not accepted: ' . $styleId);
+        assert_true(
+            theme_layout_safe_normalize('theme_breadcrumb_style', $styleId)
+                === $styleId,
+            'Registered breadcrumb style was not accepted: ' . $styleId,
+        );
     }
-    assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', []) === 'chevron', 'Malformed breadcrumb style did not fall back safely.');
-    assert_true(theme_layout_safe_normalize('theme_hero_tag_visible_limit', '200') === '200', 'Maximum hero-tag visible limit was not accepted.');
-    assert_true(theme_layout_safe_normalize('theme_hero_tag_sort_mode', 'alphabetical') === 'alphabetical', 'Supported hero-tag sort mode was not accepted.');
+    assert_true(
+        theme_layout_safe_normalize('theme_breadcrumb_style', []) === 'chevron',
+        'Malformed breadcrumb style did not fall back safely.',
+    );
+    assert_true(
+        theme_layout_safe_normalize('theme_hero_tag_visible_limit', '200')
+            === '200',
+        'Maximum hero-tag visible limit was not accepted.',
+    );
+    assert_true(
+        theme_layout_safe_normalize('theme_hero_tag_sort_mode', 'alphabetical')
+            === 'alphabetical',
+        'Supported hero-tag sort mode was not accepted.',
+    );
     foreach (['public', 'all', 'both', 'hidden'] as $countMode) {
-        assert_true(theme_layout_safe_normalize('theme_gallery_count_badge_mode', $countMode) === $countMode,
-            'Photo counter mode rejected a supported value: ' . $countMode);
+        assert_true(
+            theme_layout_safe_normalize(
+                'theme_gallery_count_badge_mode',
+                $countMode,
+            ) === $countMode,
+            'Photo counter mode rejected a supported value: ' . $countMode,
+        );
     }
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_gallery_count_badge_mode', 'private'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('pagination_columns', '13'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_gps_pin_size', '49'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_gallery_description_layout', 'diagonal'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_hero_tag_visible_limit', '201'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_hero_tag_scrollbar_rows', '13'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_hero_tag_sort_mode', 'random'));
-    expect_invalid(static fn (): string => theme_layout_safe_normalize('theme_header_branding', 'x'));
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_gallery_count_badge_mode',
+            'private',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'pagination_columns',
+            '13',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_gps_pin_size',
+            '49',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_gallery_description_layout',
+            'diagonal',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_hero_tag_visible_limit',
+            '201',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_hero_tag_scrollbar_rows',
+            '13',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_hero_tag_sort_mode',
+            'random',
+        ),
+    );
+    expect_invalid(
+        static fn(): string => theme_layout_safe_normalize(
+            'theme_header_branding',
+            'x',
+        ),
+    );
 
     $GLOBALS['theme_layout_test_capabilities']['gallery_maps'] = false;
-    assert_true(!theme_layout_safe_setting_available('theme_gps_pin_enabled'), 'Disabled GPS capability remained wizard-editable.');
-    expect_invalid(static fn (): mixed => theme_layout_safe_save('theme_gps_pin_enabled', '1'));
+    assert_true(
+        !theme_layout_safe_setting_available('theme_gps_pin_enabled'),
+        'Disabled GPS capability remained wizard-editable.',
+    );
+    expect_invalid(
+        static fn(): mixed => theme_layout_safe_save(
+            'theme_gps_pin_enabled',
+            '1',
+        ),
+    );
     $GLOBALS['theme_layout_test_capabilities']['gallery_maps'] = true;
 
     theme_layout_safe_save('theme_gallery_description_layout', 'horizontal');
-    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_gallery_description_layout', 'horizontal'], 'Card layout did not persist through app settings.');
-    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Card layout change did not bump the public-content revision.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'][0] === [
+            'theme_gallery_description_layout',
+            'horizontal',
+        ],
+        'Card layout did not persist through app settings.',
+    );
+    assert_true(
+        ($GLOBALS['theme_layout_test_writes'][1][0] ?? '')
+            === 'theme_public_content_revision',
+        'Card layout change did not bump the public-content revision.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('theme_lightbox_browsing_mode', 'continuous');
-    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_lightbox_browsing_mode', 'continuous'], 'Lightbox mode did not persist through app settings.');
-    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Lightbox mode change did not bump the public-content revision.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'][0] === [
+            'theme_lightbox_browsing_mode',
+            'continuous',
+        ],
+        'Lightbox mode did not persist through app settings.',
+    );
+    assert_true(
+        ($GLOBALS['theme_layout_test_writes'][1][0] ?? '')
+            === 'theme_public_content_revision',
+        'Lightbox mode change did not bump the public-content revision.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('theme_hero_tag_sort_mode', 'alphabetical');
-    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_hero_tag_sort_mode', 'alphabetical'], 'Hero-tag sort mode did not persist through app settings.');
-    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Hero-tag changes did not bump the public-content revision.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'][0] === [
+            'theme_hero_tag_sort_mode',
+            'alphabetical',
+        ],
+        'Hero-tag sort mode did not persist through app settings.',
+    );
+    assert_true(
+        ($GLOBALS['theme_layout_test_writes'][1][0] ?? '')
+            === 'theme_public_content_revision',
+        'Hero-tag changes did not bump the public-content revision.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('theme_breadcrumb_style', 'surface');
-    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_breadcrumb_style', 'surface'], 'Breadcrumb style did not persist through app settings.');
-    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'Breadcrumb style change did not bump the public-content revision.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'][0] === [
+            'theme_breadcrumb_style',
+            'surface',
+        ],
+        'Breadcrumb style did not persist through app settings.',
+    );
+    assert_true(
+        ($GLOBALS['theme_layout_test_writes'][1][0] ?? '')
+            === 'theme_public_content_revision',
+        'Breadcrumb style change did not bump the public-content revision.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('theme_gallery_count_badge_mode', 'hidden');
-    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_gallery_count_badge_mode', 'hidden'],
-        'Count display mode did not persist.');
-    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision',
-        'Count display changes must invalidate visitor-facing content.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'][0] === [
+            'theme_gallery_count_badge_mode',
+            'hidden',
+        ],
+        'Count display mode did not persist.',
+    );
+    assert_true(
+        ($GLOBALS['theme_layout_test_writes'][1][0] ?? '')
+            === 'theme_public_content_revision',
+        'Count display changes must invalidate visitor-facing content.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('theme_gallery_count_badge_icons_enabled', '0');
-    assert_true($GLOBALS['theme_layout_test_writes'][0] === ['theme_gallery_count_badge_icons_enabled', '0'],
-        'Independent icon preference did not persist.');
-    assert_true(($GLOBALS['theme_layout_test_writes'][1][0] ?? '') === 'theme_public_content_revision',
-        'Icon preference changes must invalidate count presentation.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'][0] === [
+            'theme_gallery_count_badge_icons_enabled',
+            '0',
+        ],
+        'Independent icon preference did not persist.',
+    );
+    assert_true(
+        ($GLOBALS['theme_layout_test_writes'][1][0] ?? '')
+            === 'theme_public_content_revision',
+        'Icon preference changes must invalidate count presentation.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('theme_gallery_count_badge_mode', 'both');
-    assert_true(($GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_icons_enabled'] ?? '') === '0',
-        'Changing display mode unexpectedly changed icon preference.');
+    assert_true(
+        (
+            $GLOBALS['theme_layout_test_values']['theme_gallery_count_badge_icons_enabled']
+            ?? ''
+        ) === '0',
+        'Changing display mode unexpectedly changed icon preference.',
+    );
 
     $GLOBALS['theme_layout_test_writes'] = [];
     theme_layout_safe_save('home_gallery_grid_rows', '9');
-    assert_true($GLOBALS['theme_layout_test_writes'] === [['home_gallery_grid_rows', '9']], 'Plain grid persistence must not create unrelated revision writes.');
+    assert_true(
+        $GLOBALS['theme_layout_test_writes'] === [[
+            'home_gallery_grid_rows',
+            '9',
+        ]],
+        'Plain grid persistence must not create unrelated revision writes.',
+    );
 
     echo "theme_layout_settings_test: PASS\n";
 }

@@ -81,15 +81,29 @@ function cms_admin_diagnostics(): void
 
     if (request_method() === 'POST') {
         verify_csrf();
-        $sourcePolicy = dng_normalize_conversion_source_policy((string) ($_POST['dng_conversion_source_policy'] ?? 'auto_fallback'));
-        $colorPolicy = dng_normalize_conversion_color_policy((string) ($_POST['dng_conversion_color_policy'] ?? 'force_srgb'));
+        $sourcePolicy = dng_normalize_conversion_source_policy(
+            (string) (
+                $_POST['dng_conversion_source_policy'] ?? 'auto_fallback'
+            ),
+        );
+        $colorPolicy = dng_normalize_conversion_color_policy(
+            (string) ($_POST['dng_conversion_color_policy'] ?? 'force_srgb'),
+        );
         set_app_setting('dng_conversion_source_policy', $sourcePolicy);
         set_app_setting('dng_conversion_color_policy', $colorPolicy);
-        admin_log_event('info', 'diagnostics.dng_policy_updated', 'Admin updated DNG conversion policy.', [
-            'source_policy' => $sourcePolicy,
-            'color_policy' => $colorPolicy,
-        ]);
-        flash_message('admin_notice', t('admin.diagnostics.dng_policy_saved', 'DNG conversion policy saved.'));
+        admin_log_event(
+            'info',
+            'diagnostics.dng_policy_updated',
+            'Admin updated DNG conversion policy.',
+            [
+                'source_policy' => $sourcePolicy,
+                'color_policy' => $colorPolicy,
+            ],
+        );
+        flash_message('admin_notice', t(
+            'admin.diagnostics.dng_policy_saved',
+            'DNG conversion policy saved.',
+        ));
         redirect_to(url_for('admin_diagnostics', ['saved' => 1]));
     }
 
@@ -97,10 +111,24 @@ function cms_admin_diagnostics(): void
     $imagickLoaded = class_exists('Imagick');
     $imagickFormats = [];
     if ($imagickLoaded) {
-        foreach (['HEIC', 'HEIF', 'DNG', 'WEBP', 'JPEG', 'JPG', 'PNG', 'TIFF'] as $format) {
+        foreach ([
+            'HEIC',
+            'HEIF',
+            'DNG',
+            'WEBP',
+            'JPEG',
+            'JPG',
+            'PNG',
+            'TIFF',
+        ] as $format) {
             try {
                 $formats = Imagick::queryFormats($format);
-                $imagickFormats[$format] = is_array($formats) ? array_values(array_unique(array_map('strtoupper', $formats))) : [];
+                $imagickFormats[$format] = is_array($formats)
+                    ? array_values(array_unique(array_map(
+                        'strtoupper',
+                        $formats,
+                    )))
+                    : [];
             } catch (Throwable) {
                 $imagickFormats[$format] = [];
             }
@@ -111,32 +139,63 @@ function cms_admin_diagnostics(): void
     $diagnostics = [
         ['label' => 'PHP version', 'value' => phpversion() ?: PHP_VERSION],
         ['label' => 'SAPI', 'value' => PHP_SAPI],
-        ['label' => 'Loaded extensions', 'value' => implode(', ', get_loaded_extensions())],
+        [
+            'label' => 'Loaded extensions',
+            'value' => implode(', ', get_loaded_extensions()),
+        ],
         ['label' => 'Imagick loaded', 'value' => $imagickLoaded ? 'yes' : 'no'],
-        ['label' => 'GD loaded', 'value' => function_exists('imagecreatetruecolor') ? 'yes' : 'no'],
-        ['label' => 'WebP function', 'value' => function_exists('imagewebp') ? 'yes' : 'no'],
-        ['label' => 'EXIF function', 'value' => function_exists('exif_read_data') ? 'yes' : 'no'],
-        ['label' => 'Shell exec', 'value' => function_exists('shell_exec') ? 'yes' : 'no'],
-        ['label' => 'upload_max_filesize', 'value' => (string) ini_get('upload_max_filesize')],
-        ['label' => 'post_max_size', 'value' => (string) ini_get('post_max_size')],
-        ['label' => 'memory_limit', 'value' => (string) ini_get('memory_limit')],
+        [
+            'label' => 'GD loaded',
+            'value' => function_exists('imagecreatetruecolor') ? 'yes' : 'no',
+        ],
+        [
+            'label' => 'WebP function',
+            'value' => function_exists('imagewebp') ? 'yes' : 'no',
+        ],
+        [
+            'label' => 'EXIF function',
+            'value' => function_exists('exif_read_data') ? 'yes' : 'no',
+        ],
+        [
+            'label' => 'Shell exec',
+            'value' => function_exists('shell_exec') ? 'yes' : 'no',
+        ],
+        [
+            'label' => 'upload_max_filesize',
+            'value' => (string) ini_get('upload_max_filesize'),
+        ],
+        [
+            'label' => 'post_max_size',
+            'value' => (string) ini_get('post_max_size'),
+        ],
+        [
+            'label' => 'memory_limit',
+            'value' => (string) ini_get('memory_limit'),
+        ],
     ];
     $dngPolicy = [
         'source' => dng_conversion_source_policy(),
         'color' => dng_conversion_color_policy(),
         'status' => dng_derivative_generation_status(),
         'capabilities' => dng_conversion_runtime_capabilities(),
-        'attempts' => dng_conversion_attempt_order(dng_conversion_source_policy(), dng_conversion_runtime_capabilities()),
+        'attempts' => dng_conversion_attempt_order(
+            dng_conversion_source_policy(),
+            dng_conversion_runtime_capabilities(),
+        ),
     ];
     // $securitySchemaHealth stores the same bounded models rendered by Admin System Health.
     $securitySchemaHealth = admin_security_schema_health_statuses();
     // $mutationSchemaHealth stores Phase 10 destructive/ingestion readiness using the same bounded models.
     $mutationSchemaHealth = admin_mutation_schema_health_statuses();
-    $imageMovePending = admin_image_move_pending_health_status($mutationSchemaHealth['mutation_gallery_move'] ?? [], true);
+    $imageMovePending = admin_image_move_pending_health_status(
+        $mutationSchemaHealth['mutation_gallery_move'] ?? [],
+        true,
+    );
     // $presentationSchemaHealth stores Phase 11 optional presentation/reporting readiness.
     $presentationSchemaHealth = admin_presentation_schema_health_statuses();
     // Preserve the established NSFW variable for compatibility with diagnostics tests and extensions.
-    $nsfwSchemaHealth = $securitySchemaHealth['nsfw_guard'] ?? admin_nsfw_schema_health_status();
+    $nsfwSchemaHealth =
+        $securitySchemaHealth['nsfw_guard'] ?? admin_nsfw_schema_health_status();
     // $schemaFeatureLabels maps bounded capability identifiers to operator-readable report labels.
     $schemaFeatureLabels = [
         'gallery_access' => 'Gallery password and access policy',
@@ -162,16 +221,46 @@ function cms_admin_diagnostics(): void
         'presentation_navigation_account' => 'Navigation account storage',
         'presentation_telemetry_reporting' => 'Telemetry reporting',
         'presentation_admin_gallery_report' => 'Complete Admin gallery report',
-        'mutation_gallery_delete' => t('admin.dashboard.mutation_schema_feature_gallery_delete', 'Gallery and image deletion'),
-        'mutation_gallery_move' => t('admin.dashboard.mutation_schema_feature_gallery_move', 'Gallery and image move/copy'),
-        'mutation_duplicate_photo_ledger' => t('admin.dashboard.mutation_schema_feature_duplicate_ledger', 'Duplicate Photo Detector ledger'),
-        'mutation_upload_ingestion' => t('admin.dashboard.mutation_schema_feature_upload_ingestion', 'Gallery upload ingestion'),
-        'mutation_upload_automation' => t('admin.dashboard.mutation_schema_feature_upload_automation', 'Upload automation tokens'),
-        'mutation_gallery_migration' => t('admin.dashboard.mutation_schema_feature_gallery_migration', 'Gallery migration'),
-        'mutation_mobile_webdav' => t('admin.dashboard.mutation_schema_feature_mobile_webdav', 'Mobile WebDAV uploads'),
-        'mutation_thumbnail_metadata' => t('admin.dashboard.mutation_schema_feature_thumbnail_metadata', 'Thumbnail metadata maintenance'),
-        'mutation_database_maintenance' => t('admin.dashboard.mutation_schema_feature_database_maintenance', 'Database cleanup and repair'),
-        'mutation_application_update' => t('admin.dashboard.mutation_schema_feature_application_update', 'Application update activation'),
+        'mutation_gallery_delete' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_delete',
+            'Gallery and image deletion',
+        ),
+        'mutation_gallery_move' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_move',
+            'Gallery and image move/copy',
+        ),
+        'mutation_duplicate_photo_ledger' => t(
+            'admin.dashboard.mutation_schema_feature_duplicate_ledger',
+            'Duplicate Photo Detector ledger',
+        ),
+        'mutation_upload_ingestion' => t(
+            'admin.dashboard.mutation_schema_feature_upload_ingestion',
+            'Gallery upload ingestion',
+        ),
+        'mutation_upload_automation' => t(
+            'admin.dashboard.mutation_schema_feature_upload_automation',
+            'Upload automation tokens',
+        ),
+        'mutation_gallery_migration' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_migration',
+            'Gallery migration',
+        ),
+        'mutation_mobile_webdav' => t(
+            'admin.dashboard.mutation_schema_feature_mobile_webdav',
+            'Mobile WebDAV uploads',
+        ),
+        'mutation_thumbnail_metadata' => t(
+            'admin.dashboard.mutation_schema_feature_thumbnail_metadata',
+            'Thumbnail metadata maintenance',
+        ),
+        'mutation_database_maintenance' => t(
+            'admin.dashboard.mutation_schema_feature_database_maintenance',
+            'Database cleanup and repair',
+        ),
+        'mutation_application_update' => t(
+            'admin.dashboard.mutation_schema_feature_application_update',
+            'Application update activation',
+        ),
     ];
     // $schemaSuggestedCheckLabels turns bounded model identifiers into copy-report guidance.
     $schemaSuggestedCheckLabels = [
@@ -201,14 +290,29 @@ function cms_admin_diagnostics(): void
             continue;
         }
         $suggestedChecks = array_values(array_map(
-            static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
-            array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
+            static fn(string $check): string => (
+                $schemaSuggestedCheckLabels[$check] ?? $check
+            ),
+            array_map(
+                'strval',
+                (array) ($schemaHealth['suggested_checks'] ?? []),
+            ),
         ));
-        $reportLines[] = ($schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
-        $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
-        $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
+        $reportLines[] =
+            ($schemaFeatureLabels[$feature] ?? $feature)
+            . ': '
+            . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] =
+            '  Affected objects: '
+            . implode(', ', array_map(
+                'strval',
+                (array) ($schemaHealth['affected_objects'] ?? []),
+            ));
+        $reportLines[] =
+            '  Suggested checks: ' . implode(', ', $suggestedChecks);
         if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
-            $reportLines[] = '  Request reference: ' . (string) $schemaHealth['request_id'];
+            $reportLines[] =
+                '  Request reference: ' . (string) $schemaHealth['request_id'];
         }
     }
     $reportLines[] = '';
@@ -218,17 +322,36 @@ function cms_admin_diagnostics(): void
             continue;
         }
         $suggestedChecks = array_values(array_map(
-            static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
-            array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
+            static fn(string $check): string => (
+                $schemaSuggestedCheckLabels[$check] ?? $check
+            ),
+            array_map(
+                'strval',
+                (array) ($schemaHealth['suggested_checks'] ?? []),
+            ),
         ));
-        $reportLines[] = ($schemaHealth['title'] ?? $schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] =
+            (
+                $schemaHealth['title']
+                ?? $schemaFeatureLabels[$feature]
+                ?? $feature
+            )
+            . ': '
+            . (string) ($schemaHealth['state'] ?? 'unknown');
         if (isset($schemaHealth['message'])) {
             $reportLines[] = '  ' . $schemaHealth['message'];
         }
-        $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
-        $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
+        $reportLines[] =
+            '  Affected objects: '
+            . implode(', ', array_map(
+                'strval',
+                (array) ($schemaHealth['affected_objects'] ?? []),
+            ));
+        $reportLines[] =
+            '  Suggested checks: ' . implode(', ', $suggestedChecks);
         if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
-            $reportLines[] = '  Request reference: ' . (string) $schemaHealth['request_id'];
+            $reportLines[] =
+                '  Request reference: ' . (string) $schemaHealth['request_id'];
         }
     }
     $reportLines[] = '';
@@ -238,14 +361,29 @@ function cms_admin_diagnostics(): void
             continue;
         }
         $suggestedChecks = array_values(array_map(
-            static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
-            array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
+            static fn(string $check): string => (
+                $schemaSuggestedCheckLabels[$check] ?? $check
+            ),
+            array_map(
+                'strval',
+                (array) ($schemaHealth['suggested_checks'] ?? []),
+            ),
         ));
-        $reportLines[] = ($schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
-        $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
-        $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
+        $reportLines[] =
+            ($schemaFeatureLabels[$feature] ?? $feature)
+            . ': '
+            . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] =
+            '  Affected objects: '
+            . implode(', ', array_map(
+                'strval',
+                (array) ($schemaHealth['affected_objects'] ?? []),
+            ));
+        $reportLines[] =
+            '  Suggested checks: ' . implode(', ', $suggestedChecks);
         if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
-            $reportLines[] = '  Request reference: ' . (string) $schemaHealth['request_id'];
+            $reportLines[] =
+                '  Request reference: ' . (string) $schemaHealth['request_id'];
         }
     }
     $reportLines = array_merge($reportLines, [
@@ -262,7 +400,14 @@ function cms_admin_diagnostics(): void
         $reportLines[] = 'Imagick: not loaded';
     } else {
         foreach ($imagickFormats as $format => $formats) {
-            $reportLines[] = $format . ': ' . (!empty($formats) ? 'yes (' . implode(', ', $formats) . ')' : 'no');
+            $reportLines[] =
+                $format
+                . ': '
+                . (
+                    !empty($formats)
+                        ? 'yes (' . implode(', ', $formats) . ')'
+                        : 'no'
+                );
         }
     }
     $reportLines[] = '';
@@ -272,13 +417,24 @@ function cms_admin_diagnostics(): void
     } else {
         foreach ($gdInfo as $label => $value) {
             if (is_array($value)) {
-                $value = implode(', ', array_map(static fn ($item): string => (string) $item, $value));
+                $value = implode(', ', array_map(
+                    static fn($item): string => (string) $item,
+                    $value,
+                ));
             }
             $reportLines[] = (string) $label . ': ' . (string) $value;
         }
     }
-    $reportLines = array_merge($reportLines, [''], $runtimeSupport['report_lines']);
-    $reportLines = array_merge($reportLines, [''], $imageMovePending['report_lines']);
+    $reportLines = array_merge(
+        $reportLines,
+        [''],
+        $runtimeSupport['report_lines'],
+    );
+    $reportLines = array_merge(
+        $reportLines,
+        [''],
+        $imageMovePending['report_lines'],
+    );
     $reportText = implode("\n", $reportLines);
 
     $viewModel = [

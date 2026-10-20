@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/php_source.php';
     /**
      * Translate through a real in-memory catalog without loading application configuration.
      * @param string $key Maintained catalog key.
@@ -23,8 +24,11 @@ namespace Gallery\Services {
      * @param array<string,mixed> $parameters Prepared interpolation values.
      * @return string Plain localized text.
      */
-    function t(string $key, string $fallback = '', array $parameters = []): string
-    {
+    function t(
+        string $key,
+        string $fallback = '',
+        array $parameters = [],
+    ): string {
         $text = $GLOBALS['maintenance_catalog'][$key] ?? $fallback;
         foreach ($parameters as $name => $value) {
             $text = str_replace('{' . $name . '}', (string) $value, $text);
@@ -149,7 +153,8 @@ namespace Gallery\Core {
      */
     function url_for(string $page, array $parameters = []): string
     {
-        return '/index.php?' . http_build_query(['page' => $page] + $parameters);
+        return '/index.php?' . http_build_query(['page' => $page]
+            + $parameters);
     }
 
     /**
@@ -168,9 +173,7 @@ namespace Gallery\Views {
      * @param array<string,mixed> $model Prepared presentation data, unused here.
      * @return void
      */
-    function view_render_admin_tab_intro(array $model): void
-    {
-    }
+    function view_render_admin_tab_intro(array $model): void {}
 
     /**
      * Record developer-control delegation without consulting host configuration.
@@ -178,8 +181,10 @@ namespace Gallery\Views {
      * @param array<string,mixed> $model Unused prepared developer settings.
      * @return void
      */
-    function view_render_admin_devmode_card(string $className, array $model = []): void
-    {
+    function view_render_admin_devmode_card(
+        string $className,
+        array $model = [],
+    ): void {
         $GLOBALS['maintenance_devmode_delegated'] = $className;
     }
 }
@@ -196,8 +201,10 @@ namespace {
      * @param string $description Static failure explanation.
      * @return void
      */
-    function maintenance_health_assert(bool $condition, string $description): void
-    {
+    function maintenance_health_assert(
+        bool $condition,
+        string $description,
+    ): void {
         $GLOBALS['maintenance_assertions']++;
         if (!$condition) {
             throw new RuntimeException($description);
@@ -212,21 +219,31 @@ namespace {
      * @param array<string,mixed> $dashboardState Additional already prepared dashboard state.
      * @return string Captured production HTML without host/database access.
      */
-    function maintenance_health_render(string $surface, array $statuses, array $pending, array $dashboardState = []): string
-    {
+    function maintenance_health_render(
+        string $surface,
+        array $statuses,
+        array $pending,
+        array $dashboardState = [],
+    ): string {
         ob_start();
         try {
             if ($surface === 'dashboard') {
-                Gallery\Views\view_render_admin_dashboard_system_tools(array_replace([
-                    'mutation_schema_statuses' => $statuses,
-                    'image_move_pending_status' => $pending,
-                    'feature_enabled' => [],
-                ], $dashboardState));
+                Gallery\Views\view_render_admin_dashboard_system_tools(array_replace(
+                    [
+                        'mutation_schema_statuses' => $statuses,
+                        'image_move_pending_status' => $pending,
+                        'feature_enabled' => [],
+                    ],
+                    $dashboardState,
+                ));
             } else {
                 Gallery\Views\view_render_admin_diagnostics_page([
                     'mutation_schema_health' => $statuses,
                     'image_move_pending_status' => $pending,
-                    'report_text' => implode("\n", $pending['report_lines'] ?? []),
+                    'report_text' => implode(
+                        "\n",
+                        $pending['report_lines'] ?? [],
+                    ),
                 ]);
             }
             return (string) ob_get_contents();
@@ -243,7 +260,9 @@ namespace {
     function maintenance_health_source(string $relative): string
     {
         $result = '';
-        foreach (token_get_all(module_source(dirname(__DIR__) . '/' . $relative)) as $token) {
+        foreach (token_get_all(module_source(
+            dirname(__DIR__) . '/' . $relative,
+        )) as $token) {
             if (!is_array($token)) {
                 $result .= $token;
             } elseif (!in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
@@ -262,108 +281,276 @@ namespace {
     $GLOBALS['maintenance_edit_state'] = 'available';
     $GLOBALS['maintenance_catalog'] = [];
 
-    maintenance_health_assert(Gallery\Services\admin_image_move_pending_health_status(['state' => 'available']) === [], 'Lazy health is omitted.');
-    maintenance_health_assert($GLOBALS['maintenance_pending_calls'] === 0, 'Lazy health never invokes the journal reader.');
+    maintenance_health_assert(
+        Gallery\Services\admin_image_move_pending_health_status([
+            'state' => 'available',
+        ]) === [],
+        'Lazy health is omitted.',
+    );
+    maintenance_health_assert(
+        $GLOBALS['maintenance_pending_calls'] === 0,
+        'Lazy health never invokes the journal reader.',
+    );
     foreach (['missing', 'unknown'] as $state) {
-        $health = Gallery\Services\admin_image_move_pending_health_status(['state' => $state], true);
-        maintenance_health_assert($health['state'] === $state && $health['action_required'], 'Unverified storage requires action without claiming an empty queue.');
+        $health = Gallery\Services\admin_image_move_pending_health_status([
+            'state' => $state,
+        ], true);
+        maintenance_health_assert(
+            $health['state'] === $state && $health['action_required'],
+            'Unverified storage requires action without claiming an empty queue.',
+        );
     }
-    maintenance_health_assert($GLOBALS['maintenance_pending_calls'] === 0, 'Unverified storage never queries journal rows.');
+    maintenance_health_assert(
+        $GLOBALS['maintenance_pending_calls'] === 0,
+        'Unverified storage never queries journal rows.',
+    );
 
     $GLOBALS['maintenance_rows'] = array_fill(0, 31, [
-        'operation_id' => str_repeat('a', 32), 'source_gallery_id' => 10,
-        'destination_gallery_id' => 20, 'state' => 'needs_reconciliation',
+        'operation_id' => str_repeat('a', 32),
+        'source_gallery_id' => 10,
+        'destination_gallery_id' => 20,
+        'state' => 'needs_reconciliation',
         'last_error_code' => 'identity_or_storage_unverified',
-        'manifest_json' => 'PRIVATE_MANIFEST', 'folder_path' => 'PRIVATE_PATH',
+        'manifest_json' => 'PRIVATE_MANIFEST',
+        'folder_path' => 'PRIVATE_PATH',
         'hash' => 'PRIVATE_CREDENTIAL',
     ]);
-    $bounded = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
-    maintenance_health_assert(count($bounded['entries']) === Gallery\Core\IMAGE_MOVE_DIAGNOSTIC_LIMIT, 'Independent presentation cap reuses the central journal limit.');
-    maintenance_health_assert($bounded['state'] === 'pending' && $bounded['action_required'], 'Unfinished records are visibly actionable.');
-    maintenance_health_assert(str_contains($bounded['entries'][0], 'identity_or_storage_unverified'), 'Approved safe recovery category remains discoverable.');
-    maintenance_health_assert(!str_contains(json_encode($bounded, JSON_THROW_ON_ERROR), 'PRIVATE_'), 'No manifests, paths, hashes or extra row fields escape.');
+    $bounded = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'available',
+    ], true);
+    maintenance_health_assert(
+        count($bounded['entries']) === Gallery\Core\IMAGE_MOVE_DIAGNOSTIC_LIMIT,
+        'Independent presentation cap reuses the central journal limit.',
+    );
+    maintenance_health_assert(
+        $bounded['state'] === 'pending' && $bounded['action_required'],
+        'Unfinished records are visibly actionable.',
+    );
+    maintenance_health_assert(
+        str_contains($bounded['entries'][0], 'identity_or_storage_unverified'),
+        'Approved safe recovery category remains discoverable.',
+    );
+    maintenance_health_assert(
+        !str_contains(json_encode($bounded, JSON_THROW_ON_ERROR), 'PRIVATE_'),
+        'No manifests, paths, hashes or extra row fields escape.',
+    );
 
     $GLOBALS['maintenance_rows'][0]['last_error_code'] = 'destination_directory_unavailable';
-    $classified = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
-    maintenance_health_assert(str_contains($classified['entries'][0], 'destination_directory_unavailable'), 'New safe recovery reason remains visible.');
+    $classified = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'available',
+    ], true);
+    maintenance_health_assert(
+        str_contains(
+            $classified['entries'][0],
+            'destination_directory_unavailable',
+        ),
+        'New safe recovery reason remains visible.',
+    );
     $GLOBALS['maintenance_rows'][0]['last_error_code'] = 'gallery_ancestry_changed';
-    $classified = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
-    maintenance_health_assert(str_contains($classified['entries'][0], 'gallery_ancestry_changed'), 'Gallery ancestry failure remains visible without a path.');
+    $classified = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'available',
+    ], true);
+    maintenance_health_assert(
+        str_contains($classified['entries'][0], 'gallery_ancestry_changed'),
+        'Gallery ancestry failure remains visible without a path.',
+    );
 
     $GLOBALS['maintenance_rows'][0]['last_error_code'] = 'PRIVATE_STORED_ERROR';
     $GLOBALS['maintenance_rows'][1]['state'] = 'PRIVATE_STORED_STATE';
     $GLOBALS['maintenance_rows'][2]['operation_id'] = 'PRIVATE_OPERATION_PATH';
-    $redacted = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
-    maintenance_health_assert(!str_contains(json_encode($redacted, JSON_THROW_ON_ERROR), 'PRIVATE_'), 'Malformed identifiers and arbitrary stored status/error strings never escape.');
-    maintenance_health_assert($redacted['state'] === 'unknown' && $redacted['action_required'], 'Malformed observations cannot become a healthy empty queue.');
+    $redacted = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'available',
+    ], true);
+    maintenance_health_assert(
+        !str_contains(json_encode($redacted, JSON_THROW_ON_ERROR), 'PRIVATE_'),
+        'Malformed identifiers and arbitrary stored status/error strings never escape.',
+    );
+    maintenance_health_assert(
+        $redacted['state'] === 'unknown' && $redacted['action_required'],
+        'Malformed observations cannot become a healthy empty queue.',
+    );
 
     $GLOBALS['maintenance_pending_throw'] = true;
-    $failed = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
-    maintenance_health_assert($failed['state'] === 'unknown' && $failed['entries'] === [], 'Read failure has no partial success claim.');
-    maintenance_health_assert($failed['request_id'] === 'maintenance-fixture-reference', 'Failed row observation has safe request correlation.');
-    maintenance_health_assert(!str_contains(json_encode($failed, JSON_THROW_ON_ERROR), 'PRIVATE_'), 'Database exception text is excluded.');
+    $failed = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'available',
+    ], true);
+    maintenance_health_assert(
+        $failed['state'] === 'unknown' && $failed['entries'] === [],
+        'Read failure has no partial success claim.',
+    );
+    maintenance_health_assert(
+        $failed['request_id'] === 'maintenance-fixture-reference',
+        'Failed row observation has safe request correlation.',
+    );
+    maintenance_health_assert(
+        !str_contains(json_encode($failed, JSON_THROW_ON_ERROR), 'PRIVATE_'),
+        'Database exception text is excluded.',
+    );
     $GLOBALS['maintenance_pending_throw'] = false;
 
     $renderCount = 0;
     $requiredKeys = [];
     foreach (['en', 'cs', 'de', 'sv'] as $locale) {
-        $source = (string) file_get_contents(dirname(__DIR__) . '/app/lang/' . $locale . '.json');
+        $source = (string) file_get_contents(
+            dirname(__DIR__) . '/app/lang/' . $locale . '.json',
+        );
         $catalog = json_decode($source, true, 512, JSON_THROW_ON_ERROR);
         $GLOBALS['maintenance_catalog'] = $catalog;
         if ($locale === 'en') {
-            $requiredKeys = array_values(array_filter(array_keys($catalog),
+            $requiredKeys = array_values(array_filter(
+                array_keys($catalog),
                 /**
                  * Select only this fixture's gallery-protection and move-discovery labels.
                  * @param string $key Flat maintained-catalog key, never a translated value.
                  * @return bool Whether this test owns the key's translation contract.
                  */
-                static fn (string $key): bool =>
-                str_starts_with($key, 'admin.health_gallery_edit.') || str_starts_with($key, 'admin.health_image_moves.')));
-            maintenance_health_assert(count($requiredKeys) === 11, 'The new health namespace has exactly eleven catalog keys.');
+                static fn(string $key): bool => (
+                    str_starts_with($key, 'admin.health_gallery_edit.')
+                    || str_starts_with($key, 'admin.health_image_moves.')
+                ),
+            ));
+            maintenance_health_assert(
+                count($requiredKeys) === 11,
+                'The new health namespace has exactly eleven catalog keys.',
+            );
         }
         foreach ($requiredKeys as $key) {
-            maintenance_health_assert(is_string($catalog[$key] ?? null) && $catalog[$key] !== '', 'Each maintained catalog has every health label.');
-            maintenance_health_assert(substr_count($source, '"' . $key . '":') === 1, 'New catalog keys are unique.');
+            maintenance_health_assert(
+                is_string($catalog[$key] ?? null) && $catalog[$key] !== '',
+                'Each maintained catalog has every health label.',
+            );
+            maintenance_health_assert(
+                substr_count($source, '"' . $key . '":') === 1,
+                'New catalog keys are unique.',
+            );
             preg_match_all('/\{[a-z_]+\}/', $catalog[$key], $actualParameters);
-            $english = json_decode((string) file_get_contents(dirname(__DIR__) . '/app/lang/en.json'), true, 512, JSON_THROW_ON_ERROR);
-            preg_match_all('/\{[a-z_]+\}/', $english[$key], $expectedParameters);
+            $english = json_decode(
+                (string) file_get_contents(
+                    dirname(__DIR__) . '/app/lang/en.json',
+                ),
+                true,
+                512,
+                JSON_THROW_ON_ERROR,
+            );
+            preg_match_all(
+                '/\{[a-z_]+\}/',
+                $english[$key],
+                $expectedParameters,
+            );
             sort($actualParameters[0]);
             sort($expectedParameters[0]);
-            maintenance_health_assert($actualParameters[0] === $expectedParameters[0], 'Localized interpolation matches its English owner.');
+            maintenance_health_assert(
+                $actualParameters[0] === $expectedParameters[0],
+                'Localized interpolation matches its English owner.',
+            );
         }
         if (in_array($locale, ['en', 'cs'], true)) {
-            $fallback = require dirname(__DIR__) . '/app/lang/' . $locale . '.php';
+            $fallback = require
+                dirname(__DIR__) . '/app/lang/' . $locale . '.php';
             foreach ($requiredKeys as $key) {
-                maintenance_health_assert(($fallback[$key] ?? null) === $catalog[$key], 'Used PHP fallbacks agree with JSON catalogs.');
+                maintenance_health_assert(
+                    ($fallback[$key] ?? null) === $catalog[$key],
+                    'Used PHP fallbacks agree with JSON catalogs.',
+                );
             }
         }
         foreach (['available', 'missing', 'unknown'] as $state) {
             $GLOBALS['maintenance_edit_state'] = $state;
             $before = $GLOBALS['maintenance_edit_calls'];
-            $statuses = Gallery\Services\admin_mutation_schema_health_statuses();
+            $statuses =
+                Gallery\Services\admin_mutation_schema_health_statuses();
             $edit = $statuses['mutation_gallery_edit'];
-            maintenance_health_assert($GLOBALS['maintenance_edit_calls'] === $before + 1 && $edit['state'] === $state, 'Shared registration delegates exactly once to the domain verifier.');
-            maintenance_health_assert($edit['affected_objects'] === ($state === 'available' ? [] : ['galleries.edit_revision']), 'Trigger refusal exposes only the fixed revision identity.');
-            maintenance_health_assert($statuses['mutation_gallery_move']['state'] === 'available', 'Parent journal-specific resolver remains in use.');
-            maintenance_health_assert($statuses['mutation_upload_automation']['state'] === 'disabled', 'Optional capability OFF does not invoke an undefined resolver.');
-            foreach (['clear', 'pending', 'missing', 'unknown'] as $pendingState) {
-                $GLOBALS['maintenance_rows'] = $pendingState === 'pending' ? [[
-                    'operation_id' => str_repeat('b', 32), 'source_gallery_id' => 1,
-                    'destination_gallery_id' => 2, 'state' => 'prepared', 'last_error_code' => null,
-                ]] : [];
-                $pending = Gallery\Services\admin_image_move_pending_health_status([
-                    'state' => in_array($pendingState, ['missing', 'unknown'], true) ? $pendingState : 'available',
-                ], true);
+            maintenance_health_assert(
+                $GLOBALS['maintenance_edit_calls'] === ($before + 1)
+                    && $edit['state'] === $state,
+                'Shared registration delegates exactly once to the domain verifier.',
+            );
+            maintenance_health_assert(
+                $edit['affected_objects']
+                    === (
+                        $state === 'available'
+                            ? []
+                            : ['galleries.edit_revision']
+                    ),
+                'Trigger refusal exposes only the fixed revision identity.',
+            );
+            maintenance_health_assert(
+                $statuses['mutation_gallery_move']['state'] === 'available',
+                'Parent journal-specific resolver remains in use.',
+            );
+            maintenance_health_assert(
+                $statuses['mutation_upload_automation']['state'] === 'disabled',
+                'Optional capability OFF does not invoke an undefined resolver.',
+            );
+            foreach ([
+                'clear',
+                'pending',
+                'missing',
+                'unknown',
+            ] as $pendingState) {
+                $GLOBALS['maintenance_rows'] = $pendingState === 'pending'
+                    ? [[
+                        'operation_id' => str_repeat('b', 32),
+                        'source_gallery_id' => 1,
+                        'destination_gallery_id' => 2,
+                        'state' => 'prepared',
+                        'last_error_code' => null,
+                    ]] : [];
+                $pending = Gallery\Services\admin_image_move_pending_health_status(
+                    [
+                        'state' => in_array(
+                            $pendingState,
+                            ['missing', 'unknown'],
+                            true,
+                        )
+                            ? $pendingState
+                            : 'available',
+                    ],
+                    true,
+                );
                 foreach (['dashboard', 'diagnostics'] as $surface) {
-                    $html = maintenance_health_render($surface, ['mutation_gallery_edit' => $edit], $pending);
+                    $html = maintenance_health_render(
+                        $surface,
+                        ['mutation_gallery_edit' => $edit],
+                        $pending,
+                    );
                     $renderCount++;
-                    maintenance_health_assert(str_contains($html, Gallery\Core\e($edit['title'])) && str_contains($html, Gallery\Core\e($edit['message'])), 'Both surfaces use the same localized trigger-verification model.');
-                    maintenance_health_assert(str_contains($html, 'data-pending-state="' . $pendingState . '"') && str_contains($html, Gallery\Core\e($pending['labels']['summary'])), 'Both surfaces use the same localized pending snapshot.');
+                    maintenance_health_assert(
+                        str_contains($html, Gallery\Core\e($edit['title']))
+                            && str_contains(
+                                $html,
+                                Gallery\Core\e($edit['message']),
+                            ),
+                        'Both surfaces use the same localized trigger-verification model.',
+                    );
+                    maintenance_health_assert(
+                        str_contains(
+                            $html,
+                            'data-pending-state="' . $pendingState . '"',
+                        )
+                            && str_contains(
+                                $html,
+                                Gallery\Core\e($pending['labels']['summary']),
+                            ),
+                        'Both surfaces use the same localized pending snapshot.',
+                    );
                     if ($state !== 'available' || $pendingState !== 'clear') {
-                        maintenance_health_assert(str_contains($html, 'admin-tab-badge'), 'Action-required states have a visible badge.');
+                        maintenance_health_assert(
+                            str_contains($html, 'admin-tab-badge'),
+                            'Action-required states have a visible badge.',
+                        );
                     }
                     if ($surface === 'dashboard' && $pendingState !== 'clear') {
-                        maintenance_health_assert(!str_contains($html, Gallery\Core\e($catalog['admin.dashboard.system_ready_title'] ?? 'System ready')), 'Pending or unverifiable work suppresses the System ready card.');
+                        maintenance_health_assert(
+                            !str_contains(
+                                $html,
+                                Gallery\Core\e(
+                                    $catalog['admin.dashboard.system_ready_title']
+                                        ?? 'System ready',
+                                ),
+                            ),
+                            'Pending or unverifiable work suppresses the System ready card.',
+                        );
                     }
                 }
             }
@@ -372,10 +559,22 @@ namespace {
 
     $escapeHealth = $bounded;
     $escapeHealth['entries'] = ['<script>PRIVATE_SCRIPT</script>'];
-    $escapeEdit = ['state' => 'unknown', 'title' => '<b>protected</b>', 'message' => '<script>PRIVATE_MESSAGE</script>'];
+    $escapeEdit = [
+        'state' => 'unknown',
+        'title' => '<b>protected</b>',
+        'message' => '<script>PRIVATE_MESSAGE</script>',
+    ];
     foreach (['dashboard', 'diagnostics'] as $surface) {
-        $html = maintenance_health_render($surface, ['mutation_gallery_edit' => $escapeEdit], $escapeHealth);
-        maintenance_health_assert(!str_contains($html, '<script>PRIVATE_') && str_contains($html, '&lt;script&gt;PRIVATE_'), 'Shared views escape every prepared dynamic line.');
+        $html = maintenance_health_render(
+            $surface,
+            ['mutation_gallery_edit' => $escapeEdit],
+            $escapeHealth,
+        );
+        maintenance_health_assert(
+            !str_contains($html, '<script>PRIVATE_')
+                && str_contains($html, '&lt;script&gt;PRIVATE_'),
+            'Shared views escape every prepared dynamic line.',
+        );
     }
 
     // Exercise the compact production surface with every established capability state.
@@ -386,73 +585,251 @@ namespace {
             'state' => $state,
             'request_id' => $state === 'unknown' ? 'compact-reference' : '',
             'affected_objects' => $attention ? ['galleries.edit_revision'] : [],
-            'suggested_checks' => $state === 'unknown' ? ['database_connection', 'schema_inspection_permissions'] : [],
+            'suggested_checks' => $state === 'unknown'
+                ? ['database_connection', 'schema_inspection_permissions']
+                : [],
         ];
-        $mutation = $status + ['title' => '<b>Compact protection</b>', 'message' => '<script>Compact guidance</script>'];
-        $html = maintenance_health_render('dashboard', ['mutation_gallery_edit' => $mutation], [], [
-            'security_schema_statuses' => ['gallery_access' => $status],
-            'presentation_schema_statuses' => ['presentation_image_voting' => $status],
-        ]);
-        maintenance_health_assert(substr_count($html, 'admin-system-health-row is-state-' . $state) >= 3, 'All health families preserve their explicit compact state.');
-        maintenance_health_assert(str_contains($html, '&lt;b&gt;Compact protection&lt;/b&gt;') && str_contains($html, '&lt;script&gt;Compact guidance&lt;/script&gt;'), 'Compact titles and guidance remain escaped in every state.');
-        maintenance_health_assert(!str_contains($html, '<script>Compact guidance') && !str_contains($html, '<b>Compact protection'), 'Compact diagnostics cannot inject active markup.');
-        maintenance_health_assert(str_contains($html, 'System ready') === !$attention, 'Only confirmed healthy or intentionally disabled capabilities permit System ready.');
-        maintenance_health_assert(str_contains($html, 'admin-tab-badge') === $attention, 'Warnings remain actionable while disabled integrations remain quiet.');
-        maintenance_health_assert(substr_count($html, 'is-attention') === ($attention ? 3 : 0), 'Each compact warning row remains visibly actionable.');
+        $mutation = $status
+        + [
+            'title' => '<b>Compact protection</b>',
+            'message' => '<script>Compact guidance</script>',
+        ];
+        $html = maintenance_health_render(
+            'dashboard',
+            ['mutation_gallery_edit' => $mutation],
+            [],
+            [
+                'security_schema_statuses' => ['gallery_access' => $status],
+                'presentation_schema_statuses' => [
+                    'presentation_image_voting' => $status,
+                ],
+            ],
+        );
+        maintenance_health_assert(
+            substr_count($html, 'admin-system-health-row is-state-' . $state)
+                >= 3,
+            'All health families preserve their explicit compact state.',
+        );
+        maintenance_health_assert(
+            str_contains($html, '&lt;b&gt;Compact protection&lt;/b&gt;')
+                && str_contains(
+                    $html,
+                    '&lt;script&gt;Compact guidance&lt;/script&gt;',
+                ),
+            'Compact titles and guidance remain escaped in every state.',
+        );
+        maintenance_health_assert(
+            !str_contains($html, '<script>Compact guidance')
+                && !str_contains($html, '<b>Compact protection'),
+            'Compact diagnostics cannot inject active markup.',
+        );
+        maintenance_health_assert(
+            str_contains($html, 'System ready') === !$attention,
+            'Only confirmed healthy or intentionally disabled capabilities permit System ready.',
+        );
+        maintenance_health_assert(
+            str_contains($html, 'admin-tab-badge') === $attention,
+            'Warnings remain actionable while disabled integrations remain quiet.',
+        );
+        maintenance_health_assert(
+            substr_count($html, 'is-attention') === ($attention ? 3 : 0),
+            'Each compact warning row remains visibly actionable.',
+        );
         if ($state === 'unknown') {
-            maintenance_health_assert(substr_count($html, 'compact-reference') === 3, 'Each unknown health family preserves request correlation.');
+            maintenance_health_assert(
+                substr_count($html, 'compact-reference') === 3,
+                'Each unknown health family preserves request correlation.',
+            );
         }
         if ($attention) {
-            maintenance_health_assert(substr_count($html, 'galleries.edit_revision') === 3, 'Compact warning rows preserve safe affected-object guidance.');
+            maintenance_health_assert(
+                substr_count($html, 'galleries.edit_revision') === 3,
+                'Compact warning rows preserve safe affected-object guidance.',
+            );
         }
     }
 
     // Presentation-only warnings must still prevent a misleading ready summary.
     foreach (['missing', 'unknown'] as $state) {
-        $html = maintenance_health_render('dashboard', [], [], [
-            'presentation_schema_statuses' => ['presentation_image_voting' => ['state' => $state]],
-        ]);
-        maintenance_health_assert(!str_contains($html, 'System ready') && str_contains($html, 'is-attention'), 'Presentation-only warnings suppress System ready and keep their attention state.');
+        $html = maintenance_health_render(
+            'dashboard',
+            [],
+            [],
+            [
+                'presentation_schema_statuses' =>
+                    ['presentation_image_voting' => ['state' => $state]],
+            ],
+        );
+        maintenance_health_assert(
+            !str_contains($html, 'System ready')
+                && str_contains($html, 'is-attention'),
+            'Presentation-only warnings suppress System ready and keep their attention state.',
+        );
     }
 
     $runtime = [
-        'policy' => ['state' => 'supported', 'action_required' => false, 'reference_url' => 'https://example.invalid/runtime'],
-        'labels' => ['title' => 'Runtime fixture', 'action' => 'Action', 'summary' => 'Runtime summary', 'deadline' => 'Deadline fixture', 'baseline' => 'Baseline fixture', 'guidance' => 'Runtime guidance', 'reviewed' => 'Reviewed fixture', 'reference' => 'Runtime reference'],
+        'policy' => [
+            'state' => 'supported',
+            'action_required' => false,
+            'reference_url' => 'https://example.invalid/runtime',
+        ],
+        'labels' => [
+            'title' => 'Runtime fixture',
+            'action' => 'Action',
+            'summary' => 'Runtime summary',
+            'deadline' => 'Deadline fixture',
+            'baseline' => 'Baseline fixture',
+            'guidance' => 'Runtime guidance',
+            'reviewed' => 'Reviewed fixture',
+            'reference' => 'Runtime reference',
+        ],
     ];
-    $clear = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
-    $healthyHtml = maintenance_health_render('dashboard', [], $clear, ['runtime_support_status' => $runtime]);
-    maintenance_health_assert(substr_count($healthyHtml, '<details class="admin-system-health-details">') === 2, 'Healthy runtime and move guidance uses native compact disclosures.');
-    maintenance_health_assert(str_contains($healthyHtml, 'Runtime summary') && str_contains($healthyHtml, 'Runtime guidance') && str_contains($healthyHtml, 'https://example.invalid/runtime'), 'Runtime summary, guidance and reference survive compact rendering.');
-    $runtime['policy']['action_required'] = true;
-    $pending = Gallery\Services\admin_image_move_pending_health_status(['state' => 'unknown'], true);
-    $warningHtml = maintenance_health_render('dashboard', [], $pending, ['runtime_support_status' => $runtime]);
-    $firstDisclosure = strpos($warningHtml, '<details');
-    maintenance_health_assert($firstDisclosure !== false && strpos($warningHtml, 'Runtime guidance') < $firstDisclosure, 'Actionable runtime guidance remains outside collapsed detail.');
-    maintenance_health_assert(str_contains($warningHtml, Gallery\Core\e($pending['labels']['guidance'])) && str_contains($warningHtml, 'maintenance-fixture-reference'), 'Unknown pending-work guidance and correlation are preserved.');
-    maintenance_health_assert(!str_contains($warningHtml, 'System ready'), 'Runtime or pending warnings never display System ready.');
-
-    $toolsHtml = maintenance_health_render('dashboard', [], [], [
-        'migration_pending' => true,
-        'feature_enabled' => ['telemetry' => true, 'complete_gallery_report' => true],
+    $clear = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'available',
+    ], true);
+    $healthyHtml = maintenance_health_render('dashboard', [], $clear, [
+        'runtime_support_status' => $runtime,
     ]);
-    foreach (['admin_logs', 'admin_telemetry', 'admin_integrity', 'admin_search_diagnostics', 'admin_gallery_report', 'admin_update', 'admin_features'] as $route) {
-        maintenance_health_assert(str_contains($toolsHtml, 'href="/index.php?page=' . $route . '"'), 'Compact operational tools retain their existing destination: ' . $route);
+    maintenance_health_assert(
+        substr_count(
+            $healthyHtml,
+            '<details class="admin-system-health-details">',
+        ) === 2,
+        'Healthy runtime and move guidance uses native compact disclosures.',
+    );
+    maintenance_health_assert(
+        str_contains($healthyHtml, 'Runtime summary')
+            && str_contains($healthyHtml, 'Runtime guidance')
+            && str_contains($healthyHtml, 'https://example.invalid/runtime'),
+        'Runtime summary, guidance and reference survive compact rendering.',
+    );
+    $runtime['policy']['action_required'] = true;
+    $pending = Gallery\Services\admin_image_move_pending_health_status([
+        'state' => 'unknown',
+    ], true);
+    $warningHtml = maintenance_health_render('dashboard', [], $pending, [
+        'runtime_support_status' => $runtime,
+    ]);
+    $firstDisclosure = strpos($warningHtml, '<details');
+    maintenance_health_assert(
+        $firstDisclosure !== false
+            && strpos($warningHtml, 'Runtime guidance') < $firstDisclosure,
+        'Actionable runtime guidance remains outside collapsed detail.',
+    );
+    maintenance_health_assert(
+        str_contains(
+            $warningHtml,
+            Gallery\Core\e($pending['labels']['guidance']),
+        )
+            && str_contains($warningHtml, 'maintenance-fixture-reference'),
+        'Unknown pending-work guidance and correlation are preserved.',
+    );
+    maintenance_health_assert(
+        !str_contains($warningHtml, 'System ready'),
+        'Runtime or pending warnings never display System ready.',
+    );
+
+    $toolsHtml = maintenance_health_render(
+        'dashboard',
+        [],
+        [],
+        [
+            'migration_pending' => true,
+            'feature_enabled' => [
+                'telemetry' => true,
+                'complete_gallery_report' => true,
+            ],
+        ],
+    );
+    foreach ([
+        'admin_logs',
+        'admin_telemetry',
+        'admin_integrity',
+        'admin_search_diagnostics',
+        'admin_gallery_report',
+        'admin_update',
+        'admin_features',
+    ] as $route) {
+        maintenance_health_assert(
+            str_contains($toolsHtml, 'href="/index.php?page=' . $route . '"'),
+            'Compact operational tools retain their existing destination: '
+                . $route,
+        );
     }
-    maintenance_health_assert(str_contains($toolsHtml, '<form method="post" action="/index.php?page=admin_run_migrations"') && str_contains($toolsHtml, 'type="submit"'), 'Pending migration retains its existing POST action and submit control.');
-    maintenance_health_assert(($GLOBALS['maintenance_devmode_delegated'] ?? '') === 'admin-maintenance-card', 'Compact health still delegates developer controls to their existing form owner.');
+    maintenance_health_assert(
+        str_contains(
+            $toolsHtml,
+            '<form method="post" action="/index.php?page=admin_run_migrations"',
+        )
+            && str_contains($toolsHtml, 'type="submit"'),
+        'Pending migration retains its existing POST action and submit control.',
+    );
+    maintenance_health_assert(
+        ($GLOBALS['maintenance_devmode_delegated'] ?? '')
+            === 'admin-maintenance-card',
+        'Compact health still delegates developer controls to their existing form owner.',
+    );
 
     $dashboard = maintenance_health_source('app/services/admin_dashboard.php');
-    $diagnostics = maintenance_health_source('app/controllers/admin_diagnostics.php');
-    $part = maintenance_health_source('app/services/admin_dashboard/maintenance_health.php');
-    maintenance_health_assert(str_contains($dashboard, "admin_image_move_pending_health_status(\$mutationSchemaStatuses['mutation_gallery_move'] ?? [], \$includeMaintenance)"), 'The dashboard gates journal discovery on explicit maintenance loading.');
-    maintenance_health_assert(str_contains($diagnostics, "admin_image_move_pending_health_status(\$mutationSchemaHealth['mutation_gallery_move'] ?? [], true)"), 'Diagnostics opts into the same read-only owner.');
-    maintenance_health_assert(strpos($diagnostics, 'require_admin();') < strpos($diagnostics, '$imageMovePending ='), 'Authentication precedes pending discovery.');
-    maintenance_health_assert(str_contains($diagnostics, "\$imageMovePending['report_lines']") && str_contains($diagnostics, "\$schemaHealth['message']"), 'The copy report includes pending evidence and the prepared trigger message.');
-    maintenance_health_assert(!preg_match('/gallery_image_move_reconcile|gallery_image_move_execute|scandir|glob\\(|RecursiveDirectoryIterator|file_get_contents|db\\(|->(?:query|prepare|exec)\\(/', $part), 'The health adapter has no recovery, filesystem walk or direct SQL.');
-    foreach (['app/views/admin_dashboard.php', 'app/views/admin_dashboard_sections.php', 'app/views/admin_diagnostics.php'] as $path) {
+    $diagnostics = maintenance_health_source(
+        'app/controllers/admin_diagnostics.php',
+    );
+    $part = maintenance_health_source(
+        'app/services/admin_dashboard/maintenance_health.php',
+    );
+    maintenance_health_assert(
+        php_source_contains(
+            $dashboard,
+            "admin_image_move_pending_health_status(\$mutationSchemaStatuses['mutation_gallery_move'] ?? [], \$includeMaintenance)",
+        ),
+        'The dashboard gates journal discovery on explicit maintenance loading.',
+    );
+    maintenance_health_assert(
+        php_source_contains(
+            $diagnostics,
+            "admin_image_move_pending_health_status(\$mutationSchemaHealth['mutation_gallery_move'] ?? [], true)",
+        ),
+        'Diagnostics opts into the same read-only owner.',
+    );
+    maintenance_health_assert(
+        strpos($diagnostics, 'require_admin();') < strpos(
+            $diagnostics,
+            '$imageMovePending =',
+        ),
+        'Authentication precedes pending discovery.',
+    );
+    maintenance_health_assert(
+        php_source_contains($diagnostics, "\$imageMovePending['report_lines']")
+            && php_source_contains($diagnostics, "\$schemaHealth['message']"),
+        'The copy report includes pending evidence and the prepared trigger message.',
+    );
+    maintenance_health_assert(
+        !preg_match(
+            '/gallery_image_move_reconcile|gallery_image_move_execute|scandir|glob\\(|RecursiveDirectoryIterator|file_get_contents|db\\(|->(?:query|prepare|exec)\\(/',
+            $part,
+        ),
+        'The health adapter has no recovery, filesystem walk or direct SQL.',
+    );
+    foreach ([
+        'app/views/admin_dashboard.php',
+        'app/views/admin_dashboard_sections.php',
+        'app/views/admin_diagnostics.php',
+    ] as $path) {
         $view = maintenance_health_source($path);
-        maintenance_health_assert(!str_contains($view, 'gallery_edit_schema_state(') && !str_contains($view, 'gallery_image_move_pending(') && !str_contains($view, 'admin_image_move_pending_health_status('), 'Views never call schema/discovery policy services.');
+        maintenance_health_assert(
+            !php_source_contains($view, 'gallery_edit_schema_state(')
+                && !php_source_contains($view, 'gallery_image_move_pending(')
+                && !php_source_contains(
+                    $view,
+                    'admin_image_move_pending_health_status(',
+                ),
+            'Views never call schema/discovery policy services.',
+        );
     }
-    echo 'PASS admin maintenance health: ' . $GLOBALS['maintenance_assertions'] . ' assertions, '
-        . $renderCount . " localized renders plus 2 escaping renders; no live database, filesystem recovery or central audit.\n";
+    echo
+        'PASS admin maintenance health: '
+            . $GLOBALS['maintenance_assertions']
+            . ' assertions, '
+            . $renderCount
+            . " localized renders plus 2 escaping renders; no live database, filesystem recovery or central audit.\n";
 }

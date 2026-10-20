@@ -63,7 +63,11 @@ function ensure_gallery_cover(int $galleryId): void
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
-    if (!$gallery || !empty($gallery['cover_image_id']) || ($gallery['cover_image_ids'] ?? null) !== null) {
+    if (
+        !$gallery
+        || !empty($gallery['cover_image_id'])
+        || ($gallery['cover_image_ids'] ?? null) !== null
+    ) {
         return;
     }
     $cover = image_model_first_direct_cover_candidate($galleryId, false);
@@ -111,7 +115,10 @@ function gallery_cover_asset_abs_path(array $gallery): ?string
     }
 
     $galleryRoot = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
-    $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $path =
+        $galleryRoot
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (!is_file($path) || !path_inside($galleryRoot, $path)) {
         return null;
     }
@@ -126,14 +133,18 @@ function gallery_cover_asset_abs_path(array $gallery): ?string
 function gallery_cover_asset_schema_ready(): bool
 {
     // Reuse the canonical request snapshot and its migration invalidation.
-    return schema_inspection_is_available(schema_inspection_column('galleries', 'cover_image_path'));
+    return schema_inspection_is_available(schema_inspection_column(
+        'galleries',
+        'cover_image_path',
+    ));
 }
 
 /**
- * Handles set gallery cover path logic for the gallery application.
+ * Store or clear the relative path to a gallery's custom cover image.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $relativePath Input used by this operation.
+ * @param int $galleryId Gallery whose cover path is updated.
+ * @param ?string $relativePath Relative path to the cover image, or null/blank to clear it.
+ * @return void Persists the path when cover-path storage is available; otherwise makes no change.
  */
 function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
 {
@@ -143,7 +154,7 @@ function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
     gallery_model_set_cover_image_path(
         $galleryId,
         $relativePath !== null && $relativePath !== '' ? $relativePath : null,
-        now_sql()
+        now_sql(),
     );
 }
 
@@ -186,7 +197,10 @@ function gallery_cover_selection_ids(array $gallery): array
  */
 function gallery_cover_selection_storage_valid(array $gallery): bool
 {
-    if (!array_key_exists('cover_image_ids', $gallery) || $gallery['cover_image_ids'] === null) {
+    if (
+        !array_key_exists('cover_image_ids', $gallery)
+        || $gallery['cover_image_ids'] === null
+    ) {
         return true;
     }
     if (!is_string($gallery['cover_image_ids'])) {
@@ -214,8 +228,13 @@ function gallery_cover_selection_storage_valid(array $gallery): bool
  */
 function gallery_cover_selection_mode(array $gallery): string
 {
-    if (!array_key_exists('cover_image_ids', $gallery) || $gallery['cover_image_ids'] === null) {
-        return (int) ($gallery['cover_image_id'] ?? 0) > 0 ? 'single' : 'legacy';
+    if (
+        !array_key_exists('cover_image_ids', $gallery)
+        || $gallery['cover_image_ids'] === null
+    ) {
+        return (int) ($gallery['cover_image_id'] ?? 0) > 0
+            ? 'single'
+            : 'legacy';
     }
     return gallery_cover_selection_ids($gallery) === [] ? 'automatic' : 'multi';
 }
@@ -275,7 +294,14 @@ function gallery_cover_selection_schema_state(): string
 function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
 {
     $gallery = find_gallery($galleryId);
-    if ($gallery && in_array(gallery_cover_selection_mode($gallery), ['automatic', 'multi'], true)) {
+    if (
+        $gallery
+        && in_array(
+            gallery_cover_selection_mode($gallery),
+            ['automatic', 'multi'],
+            true,
+        )
+    ) {
         return null;
     }
     return gallery_direct_cover_image($galleryId, $publicOnly);
@@ -304,15 +330,34 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
     if (!empty($gallery['cover_image_id'])) {
         // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id']);
-        if ($cover && (int) ($cover['gallery_id'] ?? 0) === $galleryId
+        if (
+            $cover
+            && (int) ($cover['gallery_id'] ?? 0) === $galleryId
             && !str_contains((string) $cover['relative_path'], '/')
-            && (!$publicOnly || public_image_visible_to_current_visitor_without_admin_bypass($cover, $gallery))) {
+            && (
+                !$publicOnly
+                || public_image_visible_to_current_visitor_without_admin_bypass(
+                    $cover,
+                    $gallery,
+                )
+            )
+        ) {
             return $cache[$cacheKey] = $cover;
         }
     }
-    $candidates = image_model_direct_cover_candidates($galleryId, $publicOnly, $publicOnly ? 4 : 1);
+    $candidates = image_model_direct_cover_candidates(
+        $galleryId,
+        $publicOnly,
+        $publicOnly ? 4 : 1,
+    );
     foreach ($candidates as $candidate) {
-        if (!$publicOnly || public_image_visible_to_current_visitor_without_admin_bypass($candidate, $gallery)) {
+        if (
+            !$publicOnly
+            || public_image_visible_to_current_visitor_without_admin_bypass(
+                $candidate,
+                $gallery,
+            )
+        ) {
             return $cache[$cacheKey] = $candidate;
         }
     }
@@ -352,8 +397,11 @@ function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
  * @param int $limit Remaining collage slots available to this recursion.
  * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,visibility:string}> Ordered collage candidates.
  */
-function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
-{
+function gallery_cover_collage_images(
+    int $galleryId,
+    bool $publicOnly,
+    int $limit = 4,
+): array {
     static $cache = [];
     $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . $limit;
     if (array_key_exists($cacheKey, $cache)) {
@@ -371,9 +419,18 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
     if ($mode === 'multi' && $gallery) {
         foreach (gallery_cover_selection_ids($gallery) as $imageId) {
             $cover = find_image($imageId);
-            if (!$cover || (int) ($cover['gallery_id'] ?? 0) !== $galleryId
+            if (
+                !$cover
+                || (int) ($cover['gallery_id'] ?? 0) !== $galleryId
                 || str_contains((string) ($cover['relative_path'] ?? ''), '/')
-                || ($publicOnly && !public_image_visible_to_current_visitor_without_admin_bypass($cover, $gallery))) {
+                || (
+                    $publicOnly
+                    && !public_image_visible_to_current_visitor_without_admin_bypass(
+                        $cover,
+                        $gallery,
+                    )
+                )
+            ) {
                 continue;
             }
             $images[$imageId] = $cover;
@@ -389,8 +446,18 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
         $effectiveLimit = min(2, $effectiveLimit);
     }
     if ($mode === 'automatic' || $mode === 'multi') {
-        foreach (image_model_direct_cover_candidates($galleryId, $publicOnly, max(4, $effectiveLimit)) as $cover) {
-            if ($publicOnly && !public_image_visible_to_current_visitor_without_admin_bypass($cover, $gallery)) {
+        foreach (image_model_direct_cover_candidates(
+            $galleryId,
+            $publicOnly,
+            max(4, $effectiveLimit),
+        ) as $cover) {
+            if (
+                $publicOnly
+                && !public_image_visible_to_current_visitor_without_admin_bypass(
+                    $cover,
+                    $gallery,
+                )
+            ) {
                 continue;
             }
             $images[(int) $cover['id']] = $cover;
@@ -409,13 +476,26 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
             continue;
         }
         $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
-        if ($cover && (!$publicOnly || public_image_visible_to_current_visitor_without_admin_bypass($cover, $child))) {
+        if (
+            $cover
+            && (
+                !$publicOnly
+                || public_image_visible_to_current_visitor_without_admin_bypass(
+                    $cover,
+                    $child,
+                )
+            )
+        ) {
             $images[(int) $cover['id']] = $cover;
         }
         if (count($images) >= $effectiveLimit) {
             break;
         }
-        foreach (gallery_cover_collage_images((int) $child['id'], $publicOnly, $effectiveLimit - count($images)) as $descendantCover) {
+        foreach (gallery_cover_collage_images(
+            (int) $child['id'],
+            $publicOnly,
+            $effectiveLimit - count($images),
+        ) as $descendantCover) {
             $images[(int) $descendantCover['id']] = $descendantCover;
             if (count($images) >= $effectiveLimit) {
                 break 2;
@@ -475,12 +555,19 @@ function gallery_cover_choices(int $galleryId, bool $publicOnly): array
 function apply_gallery_cover_from_sidecar(array $gallery): void
 {
     // Variable $metadata stores this steps working value.
-    $metadata = read_gallery_sidecar(gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json');
+    $metadata = read_gallery_sidecar(
+        gallery_abs_path((string) $gallery['folder_path'])
+            . DIRECTORY_SEPARATOR
+            . 'gallery.json',
+    );
     if (array_key_exists('cover_images', $metadata)) {
-        if (!array_key_exists('cover_image_ids', $gallery)
+        if (
+            !array_key_exists('cover_image_ids', $gallery)
             || !gallery_cover_selection_schema_ready()
-            || !is_array($metadata['cover_images']) || !array_is_list($metadata['cover_images'])
-            || count($metadata['cover_images']) > 4) {
+            || !is_array($metadata['cover_images'])
+            || !array_is_list($metadata['cover_images'])
+            || count($metadata['cover_images']) > 4
+        ) {
             return;
         }
         $ids = [];
@@ -510,8 +597,12 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
         if ($valid) {
             $encoded = json_encode($ids, JSON_THROW_ON_ERROR);
             $primaryId = $ids[0] ?? null;
-            if (($gallery['cover_image_ids'] ?? null) !== $encoded || (int) ($gallery['cover_image_id'] ?? 0) !== (int) ($primaryId ?? 0)
-                || !empty($gallery['cover_image_path'])) {
+            if (
+                ($gallery['cover_image_ids'] ?? null) !== $encoded
+                || (int) ($gallery['cover_image_id'] ?? 0)
+                    !== (int) ($primaryId ?? 0)
+                || !empty($gallery['cover_image_path'])
+            ) {
                 $fields = [
                     'cover_image_id' => $primaryId,
                     'cover_image_ids' => $encoded,
@@ -521,7 +612,11 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
                 if (array_key_exists('cover_image_path', $gallery)) {
                     $fields['cover_image_path'] = null;
                 }
-                gallery_model_update_fields((int) $gallery['id'], $fields, now_sql());
+                gallery_model_update_fields(
+                    (int) $gallery['id'],
+                    $fields,
+                    now_sql(),
+                );
             }
             return;
         }
@@ -545,9 +640,11 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
         return;
     }
     $fields = ['cover_image_id' => (int) $image['id']];
-    if (array_key_exists('cover_image_ids', $gallery) && gallery_cover_selection_schema_ready()) {
+    if (
+        array_key_exists('cover_image_ids', $gallery)
+        && gallery_cover_selection_schema_ready()
+    ) {
         $fields['cover_image_ids'] = null;
     }
     gallery_model_update_fields((int) $gallery['id'], $fields, now_sql());
 }
-

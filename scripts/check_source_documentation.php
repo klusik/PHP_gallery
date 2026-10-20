@@ -48,7 +48,12 @@ function documentation_report(string $root, array $paths = []): array
     $declarations = [];
     $rules = [];
     $filesWithIssues = [];
-    $selected = $paths === [] ? $inventory['files'] : array_intersect_key($inventory['files'], array_fill_keys($paths, true));
+    $selected = $paths === []
+        ? $inventory['files']
+        : array_intersect_key($inventory['files'], array_fill_keys(
+            $paths,
+            true,
+        ));
     if (array_diff($paths, array_keys($selected)) !== []) {
         throw new \RuntimeException('Selected source is absent or excluded.');
     }
@@ -57,7 +62,9 @@ function documentation_report(string $root, array $paths = []): array
         if (in_array($extension, ['py', 'pyw'], true)) {
             $source = file_get_contents($root . '/' . $path);
             if (!is_string($source)) {
-                throw new \RuntimeException('Unable to read an inventoried Python source.');
+                throw new \RuntimeException(
+                    'Unable to read an inventoried Python source.',
+                );
             }
             $pythonSources[] = $source;
         }
@@ -68,25 +75,45 @@ function documentation_report(string $root, array $paths = []): array
     foreach ($selected as $path => $extension) {
         $source = file_get_contents($root . '/' . $path);
         if (!is_string($source)) {
-            throw new \RuntimeException('Unable to read an inventoried source.');
+            throw new \RuntimeException(
+                'Unable to read an inventoried source.',
+            );
         }
         $languages[$extension] = ($languages[$extension] ?? 0) + 1;
         $issues = [];
         foreach (header_issues($source, $path) as $rule) {
-            $issues[] = ['path' => $path, 'line' => 1, 'kind' => 'header', 'name' => '', 'rule' => $rule];
+            $issues[] = [
+                'path' => $path,
+                'line' => 1,
+                'kind' => 'header',
+                'name' => '',
+                'rule' => $rule,
+            ];
         }
         $records = match ($extension) {
             'php' => php_declarations($source),
             'js', 'mjs', 'cjs' => javascript_declarations($source),
-            'py', 'pyw' => array_column(python_declaration_snapshots($source), 'record'),
-            'html', 'htm' => array_column(source_declaration_snapshots($source, $path), 'record'),
+            'py', 'pyw' => array_column(
+                python_declaration_snapshots($source),
+                'record',
+            ),
+            'html', 'htm' => array_column(
+                source_declaration_snapshots($source, $path),
+                'record',
+            ),
             default => [],
         };
         foreach ($records as $record) {
             $key = $extension . '.' . $record['kind'];
             $declarations[$key] = ($declarations[$key] ?? 0) + 1;
             foreach (declaration_issues($record) as $rule) {
-                $issues[] = ['path' => $path, 'line' => $record['line'], 'kind' => $record['kind'], 'name' => $record['name'], 'rule' => $rule];
+                $issues[] = [
+                    'path' => $path,
+                    'line' => $record['line'],
+                    'kind' => $record['kind'],
+                    'name' => $record['name'],
+                    'rule' => $rule,
+                ];
             }
         }
         foreach ($issues as $issue) {
@@ -101,8 +128,14 @@ function documentation_report(string $root, array $paths = []): array
     ksort($rules);
     return [
         'inventory' => $inventory,
-        'summary' => ['source_files' => count($selected), 'languages' => $languages, 'declarations' => $declarations,
-            'finding_count' => count($findings), 'files_with_findings' => count($filesWithIssues), 'rules' => $rules],
+        'summary' => [
+            'source_files' => count($selected),
+            'languages' => $languages,
+            'declarations' => $declarations,
+            'finding_count' => count($findings),
+            'files_with_findings' => count($filesWithIssues),
+            'rules' => $rules,
+        ],
         'findings' => $findings,
         'coverage' => [
             'headers' => 'Leading native comments: identity, purpose, responsibilities, exact author; all inventoried source extensions.',
@@ -128,20 +161,48 @@ function documentation_report(string $root, array $paths = []): array
 function print_report(array $report, bool $json, string $label): void
 {
     if ($json) {
-        echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+        echo
+            json_encode(
+                $report,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_THROW_ON_ERROR,
+            ),
+            "\n";
         return;
     }
-    echo $label, ' | ', json_encode($report['summary'], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
-    foreach (array_slice($report['findings'], 0, CONSOLE_FINDING_LIMIT) as $finding) {
-        echo $finding['path'], ':', $finding['line'], ' ', $finding['rule'], ' ', $finding['name'] ?? '', "\n";
+    echo
+        $label,
+        ' | ',
+        json_encode(
+            $report['summary'],
+            JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        ),
+        "\n";
+    foreach (array_slice(
+        $report['findings'],
+        0,
+        CONSOLE_FINDING_LIMIT,
+    ) as $finding) {
+        echo
+            $finding['path'],
+            ':',
+            $finding['line'],
+            ' ',
+            $finding['rule'],
+            ' ',
+            $finding['name'] ?? '',
+            "\n";
     }
     if (isset($report['status'])) {
         foreach ($report['blocked'] as $blocked) {
             echo 'BLOCKED ', $blocked['path'], ': ', $blocked['reason'], "\n";
         }
-        echo "Changed-source gate only; whole-tree legacy and semantic review remain separate.\n";
+        echo
+            "Changed-source gate only; whole-tree legacy and semantic review remain separate.\n";
     } else {
-        echo "Inventory only unless --strict is selected. Complete findings: --json. Semantic review remains required.\n";
+        echo
+            "Inventory only unless --strict is selected. Complete findings: --json. Semantic review remains required.\n";
     }
 }
 
@@ -152,8 +213,14 @@ function print_report(array $report, bool $json, string $label): void
  */
 function report_options(array $argv): array
 {
-    $options = ['root' => dirname(__DIR__), 'json' => false, 'strict' => false, 'changed' => false,
-        'base' => trim((string) getenv('PHP_GALLERY_SOURCE_BASE')) ?: 'HEAD', 'paths' => []];
+    $options = [
+        'root' => dirname(__DIR__),
+        'json' => false,
+        'strict' => false,
+        'changed' => false,
+        'base' => trim((string) getenv('PHP_GALLERY_SOURCE_BASE')) ?: 'HEAD',
+        'paths' => [],
+    ];
     foreach (array_slice($argv, 1) as $argument) {
         if ($argument === '--json') {
             $options['json'] = true;
@@ -164,11 +231,17 @@ function report_options(array $argv): array
         } elseif (str_starts_with($argument, '--root=')) {
             $options['root'] = substr($argument, strlen('--root='));
         } elseif (str_starts_with($argument, '--path=')) {
-            $options['paths'][] = str_replace('\\', '/', substr($argument, strlen('--path=')));
+            $options['paths'][] = str_replace(
+                '\\',
+                '/',
+                substr($argument, strlen('--path=')),
+            );
         } elseif (str_starts_with($argument, '--base=')) {
             $options['base'] = substr($argument, strlen('--base='));
         } else {
-            throw new \InvalidArgumentException('Expected --json, --strict, --changed, --base=REF, --root=PATH, or repeated --path=RELATIVE.');
+            throw new \InvalidArgumentException(
+                'Expected --json, --strict, --changed, --base=REF, --root=PATH, or repeated --path=RELATIVE.',
+            );
         }
     }
     return $options;
@@ -184,8 +257,17 @@ function documentation_main(array $argv): int
     try {
         $options = report_options($argv);
         if ($options['changed']) {
-            $report = changed_documentation_report($options['root'], $options['paths'], null, $options['base']);
-            print_report($report, $options['json'], 'Changed declaration gate ' . $report['status']);
+            $report = changed_documentation_report(
+                $options['root'],
+                $options['paths'],
+                null,
+                $options['base'],
+            );
+            print_report(
+                $report,
+                $options['json'],
+                'Changed declaration gate ' . $report['status'],
+            );
             return match ($report['status']) {
                 'PASS' => 0,
                 'FAIL' => 1,
@@ -193,10 +275,17 @@ function documentation_main(array $argv): int
             };
         }
         $report = documentation_report($options['root'], $options['paths']);
-        print_report($report, $options['json'], 'Source documentation inventory');
+        print_report(
+            $report,
+            $options['json'],
+            'Source documentation inventory',
+        );
         return $options['strict'] && $report['findings'] !== [] ? 1 : 0;
     } catch (\Throwable $error) {
-        fwrite(STDERR, "Source documentation inventory could not complete; check options and source readability.\n");
+        fwrite(
+            STDERR,
+            "Source documentation inventory could not complete; check options and source readability.\n",
+        );
         return 2;
     }
 }

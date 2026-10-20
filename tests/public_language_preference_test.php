@@ -36,10 +36,17 @@ declare(strict_types=1);
 namespace Gallery\Core {
     /**
      * Return the language configuration fixture used by this test.
+     *
+     * @return array{language:array{default:string,available:list<string>}} Default and maintained language codes.
      */
     function cms_config(): array
     {
-        return ['language' => ['default' => 'en', 'available' => ['en', 'cs', 'de', 'sv']]];
+        return [
+            'language' => [
+                'default' => 'en',
+                'available' => ['en', 'cs', 'de', 'sv'],
+            ],
+        ];
     }
 
     /**
@@ -90,131 +97,360 @@ namespace {
     use function Gallery\Services\translation_language_presentation;
     use function Gallery\Services\translation_public_language_override_active;
     use function Gallery\Services\translation_public_language_selector_enabled;
-    use function Gallery\Services\translation_public_language_selector_languages;
+    use function Gallery\Services\translation_public_language_selector_languages
+    ;
     use function Gallery\Services\translation_public_language_selector_design;
-    use function Gallery\Services\translation_public_language_selector_design_defaults;
-    use function Gallery\Services\translation_public_language_selector_design_normalize;
-    use function Gallery\Services\translation_save_public_language_selector_design;
+    use function Gallery\Services\translation_public_language_selector_design_defaults
+    ;
+    use function Gallery\Services\translation_public_language_selector_design_normalize
+    ;
+    use function Gallery\Services\translation_save_public_language_selector_design
+    ;
     use function Gallery\Services\translation_public_language_url;
-    use function Gallery\Services\translation_save_public_language_selector_settings;
+    use function Gallery\Services\translation_save_public_language_selector_settings
+    ;
     use function Gallery\Services\translation_supported_languages;
 
     /**
      * Fail with a focused diagnostic when an expectation differs.
+     *
+     * @template TExpected
+     * @template TActual
+     * @param TExpected $expected Expected value, including its collection shape when applicable.
+     * @param TActual $actual Actual value, including its collection shape when applicable.
+     * @param string $label Failure context.
+     * @return void Throws when strict comparison fails.
      */
-    function public_language_assert_same(mixed $expected, mixed $actual, string $label): void
-    {
+    function public_language_assert_same(
+        mixed $expected,
+        mixed $actual,
+        string $label,
+    ): void {
         if ($expected !== $actual) {
-            throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+            throw new RuntimeException(
+                $label . ' expected ' . var_export($expected, true) . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
     $_SESSION = [];
     $_COOKIE = [];
-    $_GET = ['page' => 'gallery', 'id' => '42', 'sort' => 'newest', 'lang' => 'de'];
+    $_GET = [
+        'page' => 'gallery',
+        'id' => '42',
+        'sort' => 'newest',
+        'lang' => 'de',
+    ];
     $_SERVER['REQUEST_URI'] = '/index.php?page=gallery&id=42&sort=newest&lang=de';
     $_SERVER['SCRIPT_NAME'] = '/index.php';
 
-    public_language_assert_same(['en', 'cs', 'de', 'sv'], translation_supported_languages(), 'Maintained selector order');
-    public_language_assert_same(true, translation_public_language_selector_enabled(), 'Viewer selector defaults enabled');
-    public_language_assert_same(['en', 'cs', 'de', 'sv'], translation_public_language_selector_languages(), 'All viewer languages default enabled');
+    public_language_assert_same(
+        ['en', 'cs', 'de', 'sv'],
+        translation_supported_languages(),
+        'Maintained selector order',
+    );
+    public_language_assert_same(
+        true,
+        translation_public_language_selector_enabled(),
+        'Viewer selector defaults enabled',
+    );
+    public_language_assert_same(
+        ['en', 'cs', 'de', 'sv'],
+        translation_public_language_selector_languages(),
+        'All viewer languages default enabled',
+    );
     $designDefaults = translation_public_language_selector_design_defaults();
-    public_language_assert_same('classic', $designDefaults['preset'], 'Classic selector design defaults selected');
-    public_language_assert_same(true, $designDefaults['show_flags'], 'Viewer flags default visible');
-    public_language_assert_same(['classic', 'solid_pills', 'outline', 'soft_cards', 'minimal'], array_keys($designDefaults['presets']), 'Five stable selector presets');
+    public_language_assert_same(
+        'classic',
+        $designDefaults['preset'],
+        'Classic selector design defaults selected',
+    );
+    public_language_assert_same(
+        true,
+        $designDefaults['show_flags'],
+        'Viewer flags default visible',
+    );
+    public_language_assert_same(
+        ['classic', 'solid_pills', 'outline', 'soft_cards', 'minimal'],
+        array_keys($designDefaults['presets']),
+        'Five stable selector presets',
+    );
     foreach ($designDefaults['presets'] as $presetId => $presetDefaults) {
-        public_language_assert_same(true, array_key_exists('use_theme_colors', $presetDefaults), 'Complete theme-color default for ' . $presetId);
-        public_language_assert_same(array_keys($designDefaults['presets']['classic']), array_keys($presetDefaults), 'Complete preset shape for ' . $presetId);
+        public_language_assert_same(
+            true,
+            array_key_exists('use_theme_colors', $presetDefaults),
+            'Complete theme-color default for ' . $presetId,
+        );
+        public_language_assert_same(
+            array_keys($designDefaults['presets']['classic']),
+            array_keys($presetDefaults),
+            'Complete preset shape for ' . $presetId,
+        );
     }
     $normalizedDesign = translation_public_language_selector_design_normalize([
-        'preset' => 'unknown', 'show_flags' => '0', 'orientation' => 'unsafe',
-        'presets' => ['classic' => ['container_bg' => 'url(javascript:bad)', 'gap' => 999, 'border_style' => 'expression']],
+        'preset' => 'unknown',
+        'show_flags' => '0',
+        'orientation' => 'unsafe',
+        'presets' => ['classic' => [
+            'container_bg' => 'url(javascript:bad)',
+            'gap' => 999,
+            'border_style' => 'expression',
+        ]],
     ]);
-    public_language_assert_same('classic', $normalizedDesign['preset'], 'Invalid selector preset falls back');
-    public_language_assert_same(false, $normalizedDesign['show_flags'], 'Flag visibility normalizes');
-    public_language_assert_same('wrap', $normalizedDesign['orientation'], 'Invalid orientation falls back');
-    public_language_assert_same('#fffaf0', $normalizedDesign['presets']['classic']['container_bg'], 'Unsafe color falls back');
-    public_language_assert_same(32, $normalizedDesign['presets']['classic']['gap'], 'Spacing is clamped');
-    public_language_assert_same('solid', $normalizedDesign['presets']['classic']['border_style'], 'Unsafe border style falls back');
+    public_language_assert_same(
+        'classic',
+        $normalizedDesign['preset'],
+        'Invalid selector preset falls back',
+    );
+    public_language_assert_same(
+        false,
+        $normalizedDesign['show_flags'],
+        'Flag visibility normalizes',
+    );
+    public_language_assert_same(
+        'wrap',
+        $normalizedDesign['orientation'],
+        'Invalid orientation falls back',
+    );
+    public_language_assert_same(
+        '#fffaf0',
+        $normalizedDesign['presets']['classic']['container_bg'],
+        'Unsafe color falls back',
+    );
+    public_language_assert_same(
+        32,
+        $normalizedDesign['presets']['classic']['gap'],
+        'Spacing is clamped',
+    );
+    public_language_assert_same(
+        'solid',
+        $normalizedDesign['presets']['classic']['border_style'],
+        'Unsafe border style falls back',
+    );
     $transparentDesign = translation_public_language_selector_design_normalize([
         'preset' => 'outline',
-        'presets' => ['outline' => ['container_bg' => '#123456', 'container_bg_transparent' => '1']],
+        'presets' => ['outline' => [
+            'container_bg' => '#123456',
+            'container_bg_transparent' => '1',
+        ]],
     ]);
-    public_language_assert_same('transparent', $transparentDesign['presets']['outline']['container_bg'], 'Explicit transparent color mode');
-    translation_save_public_language_selector_design($transparentDesign);
-    public_language_assert_same('transparent', translation_public_language_selector_design()['presets']['outline']['container_bg'], 'Transparent color survives persistence and reload normalization');
-    translation_save_public_language_selector_design(['preset' => 'outline', 'show_flags' => false]);
-    public_language_assert_same('outline', translation_public_language_selector_design()['preset'], 'Selector design persists canonically');
-    public_language_assert_same(false, translation_public_language_selector_design()['show_flags'], 'Hidden flags persist canonically');
-    $languagePresentation = translation_language_presentation();
-    public_language_assert_same(['en', 'cs', 'de', 'sv'], array_keys($languagePresentation), 'Presentation metadata coverage');
     public_language_assert_same(
-        ['assets/flags/gb.svg', 'assets/flags/cz.svg', 'assets/flags/de.svg', 'assets/flags/se.svg'],
+        'transparent',
+        $transparentDesign['presets']['outline']['container_bg'],
+        'Explicit transparent color mode',
+    );
+    translation_save_public_language_selector_design($transparentDesign);
+    public_language_assert_same(
+        'transparent',
+        translation_public_language_selector_design()['presets']['outline']['container_bg'],
+        'Transparent color survives persistence and reload normalization',
+    );
+    translation_save_public_language_selector_design([
+        'preset' => 'outline',
+        'show_flags' => false,
+    ]);
+    public_language_assert_same(
+        'outline',
+        translation_public_language_selector_design()['preset'],
+        'Selector design persists canonically',
+    );
+    public_language_assert_same(
+        false,
+        translation_public_language_selector_design()['show_flags'],
+        'Hidden flags persist canonically',
+    );
+    $languagePresentation = translation_language_presentation();
+    public_language_assert_same(
+        ['en', 'cs', 'de', 'sv'],
+        array_keys($languagePresentation),
+        'Presentation metadata coverage',
+    );
+    public_language_assert_same(
+        [
+            'assets/flags/gb.svg',
+            'assets/flags/cz.svg',
+            'assets/flags/de.svg',
+            'assets/flags/se.svg',
+        ],
         array_column($languagePresentation, 'flag_asset'),
-        'Bundled flag asset mapping'
+        'Bundled flag asset mapping',
     );
     foreach ($languagePresentation as $presentation) {
-        $flagPath = dirname(__DIR__) . '/public/' . (string) ($presentation['flag_asset'] ?? '');
-        public_language_assert_same(true, is_file($flagPath) && str_starts_with(trim((string) file_get_contents($flagPath)), '<svg'), 'Bundled SVG flag exists');
+        $flagPath =
+            dirname(__DIR__)
+            . '/public/'
+            . (string) ($presentation['flag_asset'] ?? '');
+        public_language_assert_same(
+            true,
+            is_file($flagPath)
+                && str_starts_with(
+                    trim((string) file_get_contents($flagPath)),
+                    '<svg',
+                ),
+            'Bundled SVG flag exists',
+        );
     }
 
     $cookieIntents = translation_bootstrap_request('gallery', [
         'query' => $_GET,
-        'public_cookie' => (string) ($_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''),
+        'public_cookie' => (string) (
+            $_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+        ),
     ]);
-    public_language_assert_same('de', translation_active_language(), 'Query selection');
-    public_language_assert_same('de', $_SESSION['cms_public_language_override'] ?? null, 'Session persistence');
-    public_language_assert_same(true, translation_public_language_override_active((string) ($_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? '')), 'Override active after selection');
-    public_language_assert_same(\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE, $cookieIntents[0]['name'] ?? null, 'Query selection emits public language cookie intent');
-    public_language_assert_same('de', $cookieIntents[0]['value'] ?? null, 'Query selection cookie intent value');
+    public_language_assert_same(
+        'de',
+        translation_active_language(),
+        'Query selection',
+    );
+    public_language_assert_same(
+        'de',
+        $_SESSION['cms_public_language_override'] ?? null,
+        'Session persistence',
+    );
+    public_language_assert_same(
+        true,
+        translation_public_language_override_active(
+            (string) (
+                $_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+            ),
+        ),
+        'Override active after selection',
+    );
+    public_language_assert_same(
+        \Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE,
+        $cookieIntents[0]['name'] ?? null,
+        'Query selection emits public language cookie intent',
+    );
+    public_language_assert_same(
+        'de',
+        $cookieIntents[0]['value'] ?? null,
+        'Query selection cookie intent value',
+    );
 
-    $swedishUrl = translation_public_language_url('sv', (string) $_SERVER['REQUEST_URI'], (string) $_SERVER['SCRIPT_NAME']);
-    public_language_assert_same('/index.php?page=gallery&id=42&sort=newest&lang=sv', $swedishUrl, 'Same-page language URL');
+    $swedishUrl = translation_public_language_url(
+        'sv',
+        (string) $_SERVER['REQUEST_URI'],
+        (string) $_SERVER['SCRIPT_NAME'],
+    );
+    public_language_assert_same(
+        '/index.php?page=gallery&id=42&sort=newest&lang=sv',
+        $swedishUrl,
+        'Same-page language URL',
+    );
 
     $_COOKIE['cms_public_language'] = 'de';
     $_GET['lang'] = 'default';
     $cookieIntents = translation_bootstrap_request('gallery', [
         'query' => $_GET,
-        'public_cookie' => (string) ($_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''),
+        'public_cookie' => (string) (
+            $_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+        ),
     ]);
-    public_language_assert_same('en', translation_active_language(), 'Site default after reset');
-    public_language_assert_same(false, isset($_SESSION['cms_public_language_override']), 'Session override cleared');
-    public_language_assert_same('', $cookieIntents[0]['value'] ?? null, 'Reset emits public cookie-clear intent');
-    public_language_assert_same(true, (int) ($cookieIntents[0]['expires'] ?? PHP_INT_MAX) < time(), 'Reset cookie intent is expired');
-    public_language_assert_same(false, translation_public_language_override_active(''), 'Override inactive after reset');
+    public_language_assert_same(
+        'en',
+        translation_active_language(),
+        'Site default after reset',
+    );
+    public_language_assert_same(
+        false,
+        isset($_SESSION['cms_public_language_override']),
+        'Session override cleared',
+    );
+    public_language_assert_same(
+        '',
+        $cookieIntents[0]['value'] ?? null,
+        'Reset emits public cookie-clear intent',
+    );
+    public_language_assert_same(
+        true,
+        (int) ($cookieIntents[0]['expires'] ?? PHP_INT_MAX) < time(),
+        'Reset cookie intent is expired',
+    );
+    public_language_assert_same(
+        false,
+        translation_public_language_override_active(''),
+        'Override inactive after reset',
+    );
 
     $_GET = ['page' => 'gallery'];
     $_SESSION = [];
     $_COOKIE = ['cms_public_language' => 'sv'];
     translation_bootstrap_request('gallery', [
         'query' => $_GET,
-        'public_cookie' => (string) ($_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''),
+        'public_cookie' => (string) (
+            $_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+        ),
     ]);
-    public_language_assert_same('sv', translation_active_language(), 'Cookie selection');
+    public_language_assert_same(
+        'sv',
+        translation_active_language(),
+        'Cookie selection',
+    );
 
     $_GET = ['page' => 'gallery', 'lang' => 'fr'];
     $_SESSION = [];
     $_COOKIE = [];
-    translation_bootstrap_request('gallery', ['query' => $_GET, 'public_cookie' => '']);
-    public_language_assert_same('en', translation_active_language(), 'Unsupported language fallback');
+    translation_bootstrap_request('gallery', [
+        'query' => $_GET,
+        'public_cookie' => '',
+    ]);
+    public_language_assert_same(
+        'en',
+        translation_active_language(),
+        'Unsupported language fallback',
+    );
 
     $_GET = ['page' => 'browser_i18n', 'lang' => 'de'];
     $_SESSION = [];
     $_COOKIE = [];
-    translation_bootstrap_request('browser_i18n', ['query' => $_GET, 'public_cookie' => '']);
-    public_language_assert_same('en', translation_active_language(), 'Browser i18n asset does not mutate viewer preference');
-    public_language_assert_same(false, translation_public_language_override_active(''), 'Browser i18n asset leaves override inactive');
+    translation_bootstrap_request('browser_i18n', [
+        'query' => $_GET,
+        'public_cookie' => '',
+    ]);
+    public_language_assert_same(
+        'en',
+        translation_active_language(),
+        'Browser i18n asset does not mutate viewer preference',
+    );
+    public_language_assert_same(
+        false,
+        translation_public_language_override_active(''),
+        'Browser i18n asset leaves override inactive',
+    );
 
-    translation_save_public_language_selector_settings(true, ['de', 'en', 'de']);
-    public_language_assert_same(['en', 'de'], translation_public_language_selector_languages(), 'Viewer language subset is normalized in maintained order');
+    translation_save_public_language_selector_settings(true, [
+        'de',
+        'en',
+        'de',
+    ]);
+    public_language_assert_same(
+        ['en', 'de'],
+        translation_public_language_selector_languages(),
+        'Viewer language subset is normalized in maintained order',
+    );
     $_GET = ['page' => 'gallery', 'lang' => 'sv'];
     $_SESSION = [];
     $_COOKIE = [];
-    translation_bootstrap_request('gallery', ['query' => $_GET, 'public_cookie' => '']);
-    public_language_assert_same('en', translation_active_language(), 'Disabled viewer language cannot override public default');
+    translation_bootstrap_request('gallery', [
+        'query' => $_GET,
+        'public_cookie' => '',
+    ]);
+    public_language_assert_same(
+        'en',
+        translation_active_language(),
+        'Disabled viewer language cannot override public default',
+    );
     $_GET['lang'] = 'de';
-    translation_bootstrap_request('gallery', ['query' => $_GET, 'public_cookie' => '']);
-    public_language_assert_same('de', translation_active_language(), 'Enabled viewer language remains selectable');
+    translation_bootstrap_request('gallery', [
+        'query' => $_GET,
+        'public_cookie' => '',
+    ]);
+    public_language_assert_same(
+        'de',
+        translation_active_language(),
+        'Enabled viewer language remains selectable',
+    );
 
     translation_save_public_language_selector_settings(false, ['en', 'de']);
     $_GET = ['page' => 'gallery', 'lang' => 'de'];
@@ -222,30 +458,123 @@ namespace {
     $_COOKIE = [\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE => 'de'];
     translation_bootstrap_request('gallery', [
         'query' => $_GET,
-        'public_cookie' => (string) ($_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''),
+        'public_cookie' => (string) (
+            $_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+        ),
     ]);
-    public_language_assert_same(false, translation_public_language_selector_enabled(), 'Viewer selector persists disabled');
-    public_language_assert_same('en', translation_active_language(), 'Disabled viewer selector ignores query and cookie overrides');
-    public_language_assert_same(false, translation_public_language_override_active((string) ($_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? '')), 'Disabled viewer selector reports no active override');
+    public_language_assert_same(
+        false,
+        translation_public_language_selector_enabled(),
+        'Viewer selector persists disabled',
+    );
+    public_language_assert_same(
+        'en',
+        translation_active_language(),
+        'Disabled viewer selector ignores query and cookie overrides',
+    );
+    public_language_assert_same(
+        false,
+        translation_public_language_override_active(
+            (string) (
+                $_COOKIE[\Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+            ),
+        ),
+        'Disabled viewer selector reports no active override',
+    );
 
     try {
         translation_save_public_language_selector_settings(true, []);
-        throw new RuntimeException('Empty viewer-language selection was accepted.');
+        throw new RuntimeException(
+            'Empty viewer-language selection was accepted.',
+        );
     } catch (InvalidArgumentException) {
     }
 
-    $layoutSource = (string) file_get_contents(dirname(__DIR__) . '/app/views/layout.php');
-    $layoutControllerSource = (string) file_get_contents(dirname(__DIR__) . '/app/controllers/shared_layout.php');
-    $languageSettingsViewSource = (string) file_get_contents(dirname(__DIR__) . '/app/views/admin_language_settings.php');
-    $settingsViewSource = (string) file_get_contents(dirname(__DIR__) . '/app/views/admin_settings.php');
-    $publicCssSource = (string) file_get_contents(dirname(__DIR__) . '/public/assets/styles/public.css');
-    public_language_assert_same(true, str_contains($layoutSource, 'view_render_public_language_selector(') && str_contains($layoutSource, "\$model['language_selector']"), 'Public header selector registration');
-    public_language_assert_same(true, str_contains($layoutSource, 'public-language-button') && str_contains($layoutSource, '<img class="public-language-flag"'), 'SVG flag-button control rendering');
-    public_language_assert_same(true, str_contains($layoutControllerSource, 'translation_public_language_selector_enabled()') && str_contains($layoutControllerSource, 'translation_public_language_selector_languages()'), 'Public selector honors persisted viewer settings through the controller-prepared model');
-    public_language_assert_same(true, str_contains($languageSettingsViewSource, 'function view_render_public_language_selector_settings_panel') && str_contains($settingsViewSource, 'view_render_public_language_selector_settings_panel(['), 'Theme and centralized Settings share the language-selector panel module');
-    public_language_assert_same(true, str_contains($publicCssSource, '.public-language-switcher') && str_contains($publicCssSource, '.public-language-button'), 'Public selector styling');
-    public_language_assert_same(true, str_contains($languageSettingsViewSource, 'data-language-design-reset-all') && str_contains($languageSettingsViewSource, 'data-language-design-reset-preset') && str_contains($languageSettingsViewSource, 'data-language-design-reset-field'), 'Three selector design reset levels');
-    public_language_assert_same(true, str_contains($languageSettingsViewSource, 'data-language-design-transparent') && str_contains($settingsViewSource, "'detailed_design' => false"), 'Transparent colors and basic central Settings mode');
+    $layoutSource = (string) file_get_contents(
+        dirname(__DIR__) . '/app/views/layout.php',
+    );
+    $layoutControllerSource = (string) file_get_contents(
+        dirname(__DIR__) . '/app/controllers/shared_layout.php',
+    );
+    $languageSettingsViewSource = (string) file_get_contents(
+        dirname(__DIR__) . '/app/views/admin_language_settings.php',
+    );
+    $settingsViewSource = (string) file_get_contents(
+        dirname(__DIR__) . '/app/views/admin_settings.php',
+    );
+    $publicCssSource = (string) file_get_contents(
+        dirname(__DIR__) . '/public/assets/styles/public.css',
+    );
+    public_language_assert_same(
+        true,
+        str_contains($layoutSource, 'view_render_public_language_selector(')
+            && str_contains($layoutSource, "\$model['language_selector']"),
+        'Public header selector registration',
+    );
+    public_language_assert_same(
+        true,
+        str_contains($layoutSource, 'public-language-button')
+            && str_contains($layoutSource, '<img class="public-language-flag"'),
+        'SVG flag-button control rendering',
+    );
+    public_language_assert_same(
+        true,
+        str_contains(
+            $layoutControllerSource,
+            'translation_public_language_selector_enabled()',
+        )
+            && str_contains(
+                $layoutControllerSource,
+                'translation_public_language_selector_languages()',
+            ),
+        'Public selector honors persisted viewer settings through the controller-prepared model',
+    );
+    public_language_assert_same(
+        true,
+        str_contains(
+            $languageSettingsViewSource,
+            'function view_render_public_language_selector_settings_panel',
+        )
+            && str_contains(
+                $settingsViewSource,
+                'view_render_public_language_selector_settings_panel([',
+            ),
+        'Theme and centralized Settings share the language-selector panel module',
+    );
+    public_language_assert_same(
+        true,
+        str_contains($publicCssSource, '.public-language-switcher')
+            && str_contains($publicCssSource, '.public-language-button'),
+        'Public selector styling',
+    );
+    public_language_assert_same(
+        true,
+        str_contains(
+            $languageSettingsViewSource,
+            'data-language-design-reset-all',
+        )
+            && str_contains(
+                $languageSettingsViewSource,
+                'data-language-design-reset-preset',
+            )
+            && str_contains(
+                $languageSettingsViewSource,
+                'data-language-design-reset-field',
+            ),
+        'Three selector design reset levels',
+    );
+    public_language_assert_same(
+        true,
+        str_contains(
+            $languageSettingsViewSource,
+            'data-language-design-transparent',
+        )
+            && str_contains($settingsViewSource, "'detailed_design' => false"),
+        'Transparent colors and basic central Settings mode',
+    );
 
-    fwrite(STDOUT, "Public language preference query, cookie, reset, metadata, URL, and header behavior passed.\n");
+    fwrite(
+        STDOUT,
+        "Public language preference query, cookie, reset, metadata, URL, and header behavior passed.\n",
+    );
 }

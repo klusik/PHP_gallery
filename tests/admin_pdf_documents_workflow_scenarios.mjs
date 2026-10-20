@@ -442,26 +442,26 @@ assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\
     'The gallery editor must load the Documents tab controller.');
 assert.match(editActionsSource, /'admin-edit-documents'/,
     'The server must recognize Documents as a valid redirect/selected tab.');
-assert.match(documentsSource, /'documents_html' => admin_gallery_pdf_documents_html\(\$gallery\)/,
+assert.match(documentsSource, /'documents_html'\s*=>\s*admin_gallery_pdf_documents_html\(\s*\$gallery\s*,?\s*\)/,
     'The document manager must belong to the Documents tab.');
-assert.match(documentsSource, /'simbrief_html' => admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
+assert.match(documentsSource, /'simbrief_html'\s*=>\s*admin_edit_gallery_simbrief_legacy_panel_html\(\s*\$gallery\s*,?\s*\)/,
     'The historical SimBrief PDF attachment must also belong to Documents.');
 assert.match(documentsSource, /view_render_admin_gallery_media_tab\(/,
     'The prepared media fragments must use the presentation-owned tab wrapper.');
 const mediaView = await readFile(new URL(
     '../app/views/admin_gallery_edit_tabs.php', import.meta.url
 ), 'utf8');
-assert.match(mediaView, /view_render_admin_tab_panel\('admin-edit-documents'/,
+assert.match(mediaView, /view_render_admin_tab_panel\(\s*'admin-edit-documents'/,
     'The media view must retain its existing native tab identity.');
 assert.doesNotMatch(apiSource, /admin_gallery_pdf_documents_html|admin_edit_gallery_simbrief_legacy_panel_html/,
     'The API tab must not render PDF or SimBrief document forms.');
-const closeSettingsFormAt = editorSource.indexOf('    view_render_admin_gallery_editor_form_close([');
-const renderDocumentsAt = editorSource.indexOf('    admin_edit_gallery_render_documents_tab($gallery, $activeEditTab);');
+const closeSettingsFormAt = editorSource.search(/\bview_render_admin_gallery_editor_form_close\(\s*\[/);
+const renderDocumentsAt = editorSource.search(/\badmin_edit_gallery_render_documents_tab\(\s*\$gallery,\s*\$activeEditTab\s*,?\s*\);/);
 assert.ok(closeSettingsFormAt >= 0 && renderDocumentsAt > closeSettingsFormAt,
     'Independent PDF upload/conversion forms must render after the shared settings form closes.');
 assert.match(pdfPostSource, /'tab' => 'admin-edit-documents'/,
     'PDF mutation redirect/panel metadata must return to the Documents tab.');
-assert.match(ofpPostSource, /redirect_to\(admin_edit_gallery_tab_url\(\$galleryId, 'admin-edit-documents'\)\)/,
+assert.match(ofpPostSource, /redirect_to\(\s*admin_edit_gallery_tab_url\(\s*\$galleryId,\s*'admin-edit-documents'\s*,?\s*\)\s*,?\s*\)/,
     'Legacy OFP non-JavaScript upload fallback must return to Documents.');
 
 // Exercise the actual shared metadata queue independently of upload adapters.

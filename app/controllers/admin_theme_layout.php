@@ -82,7 +82,8 @@ use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode;
-use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision
+;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
@@ -156,103 +157,81 @@ use function Gallery\Views\view_render_admin_theme_layout_tab;
  * Send validators for a streamed file and stop on a matching browser cache entry.
  */
 
-
-
 /**
  * Render the public scroll helper next to a listing without joining the listing grid.
  */
-
 
 /**
  * Public homepage showing top-level public galleries.
  */
 
-
 /**
  * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
  */
-
 
 /**
  * Render gallery ancestor links for public navigation.
  */
 
-
 /**
  * Render the password prompt for a protected public gallery.
  */
-
 
 /**
  * Process a public protected-gallery password unlock.
  */
 
-
 /**
  * Resolve a share token and redirect to its protected gallery.
  */
-
 
 /**
  * Build the canonical copyable share URL for one gallery/token pair.
  */
 
-
 /**
  * Render one gallery card, including direct cover or child-cover collage.
  */
-
 
 /**
  * Render logged-in admin metadata controls directly on public gallery pages.
  */
 
-
 /**
  * Render logged-in admin metadata controls for a public image card.
  */
-
 
 /**
  * Render the lightbox shell used by public gallery JavaScript.
  */
 
-
 /**
  * Stream a generated thumbnail after the same visibility checks as originals.
  */
-
-
 
 /**
  * Stream a generated thumbnail addressed through the clean public image URL.
  */
 
-
 /**
  * Stream an original image addressed through the clean public image URL.
  */
-
 
 /**
  * Stream an uploaded gallery thumbnail asset.
  */
 
-
 /**
  * Stream a protected image file after checking gallery/image visibility.
  */
-
 
 /**
  * Serve robots.txt for search engines.
  */
 
-
 /**
  * Serve sitemap.xml for public gallery pages.
  */
-
 
 /**
  * Render and process the admin login form.
@@ -268,50 +247,95 @@ use function Gallery\Views\view_render_admin_theme_layout_tab;
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
  * @return void Sends prepared Layout controls and labels to their presentation renderer.
  */
-function render_admin_theme_layout_tab(array $theme, array $paginationSettings, array $homeGridSettings, string $publicThumbnailRenderingMode, bool $lightboxModesFeatureEnabled): void
-{
+function render_admin_theme_layout_tab(
+    array $theme,
+    array $paginationSettings,
+    array $homeGridSettings,
+    string $publicThumbnailRenderingMode,
+    bool $lightboxModesFeatureEnabled,
+): void {
     // $favoriteGalleryIds stores configured Theme header shortcuts.
-    $favoriteGalleryIds = function_exists('Gallery\\Services\\theme_favorite_gallery_ids') ? theme_favorite_gallery_ids() : [];
+    $favoriteGalleryIds = function_exists(
+        'Gallery\\Services\\theme_favorite_gallery_ids',
+    )
+        ? theme_favorite_gallery_ids()
+        : [];
     // $favoriteShortcuts stores presentation-only shortcut rows for the view.
     $favoriteShortcuts = [];
-    for ($favoriteIndex = 0; $favoriteIndex < THEME_FAVORITE_GALLERIES_MAX; $favoriteIndex++) {
+    for (
+        $favoriteIndex = 0;
+        $favoriteIndex < THEME_FAVORITE_GALLERIES_MAX;
+        $favoriteIndex++
+    ) {
         // $selectedFavoriteShortcut stores the configured shortcut for one visible slot.
         $selectedFavoriteShortcut = $favoriteGalleryIds[$favoriteIndex] ?? '';
         // $selectedFavoriteType stores whether this slot targets nothing, the main page, or a gallery.
-        $selectedFavoriteType = $selectedFavoriteShortcut === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? THEME_FAVORITE_GALLERIES_HOME_TOKEN : ((int) $selectedFavoriteShortcut > 0 ? 'gallery' : '');
+        $selectedFavoriteType = $selectedFavoriteShortcut
+        === THEME_FAVORITE_GALLERIES_HOME_TOKEN
+            ? THEME_FAVORITE_GALLERIES_HOME_TOKEN
+            : ((int) $selectedFavoriteShortcut > 0 ? 'gallery' : '');
         // $selectedFavoriteGalleryId stores the configured gallery ID when this slot targets a gallery.
-        $selectedFavoriteGalleryId = $selectedFavoriteType === 'gallery' ? (int) $selectedFavoriteShortcut : 0;
+        $selectedFavoriteGalleryId = $selectedFavoriteType === 'gallery'
+            ? (int) $selectedFavoriteShortcut
+            : 0;
         $pickerHtml = '';
         $fallbackOptionsHtml = '';
-        if (function_exists('Gallery\\Controllers\\render_gallery_search_picker')) {
-            $pickerHtml = render_gallery_search_picker('theme_favorite_gallery_ids[]', $selectedFavoriteGalleryId, 0, [
-                'id' => 'theme-favorite-gallery-' . ($favoriteIndex + 1),
-                'placeholder' => t('admin.theme.layout.favorite_gallery_placeholder', 'Search gallery by name or path'),
-                'disable_prefill' => true,
-            ]);
+        if (function_exists(
+            'Gallery\\Controllers\\render_gallery_search_picker',
+        )) {
+            $pickerHtml = render_gallery_search_picker(
+                'theme_favorite_gallery_ids[]',
+                $selectedFavoriteGalleryId,
+                0,
+                [
+                    'id' => 'theme-favorite-gallery-' . ($favoriteIndex + 1),
+                    'placeholder' => t(
+                        'admin.theme.layout.favorite_gallery_placeholder',
+                        'Search gallery by name or path',
+                    ),
+                    'disable_prefill' => true,
+                ],
+            );
         } else {
-            $fallbackOptionsHtml = gallery_options_for_select($selectedFavoriteGalleryId);
+            $fallbackOptionsHtml = gallery_options_for_select(
+                $selectedFavoriteGalleryId,
+            );
         }
         $favoriteShortcuts[] = [
             'selected_type' => $selectedFavoriteType,
-            'slot_label' => t('admin.theme.layout.favorite_gallery_slot', 'Shortcut {number}', ['number' => $favoriteIndex + 1]),
+            'slot_label' => t(
+                'admin.theme.layout.favorite_gallery_slot',
+                'Shortcut {number}',
+                ['number' => $favoriteIndex + 1],
+            ),
             'picker_html' => $pickerHtml,
             'fallback_options_html' => $fallbackOptionsHtml,
         ];
     }
 
     // $currentDescriptionLayout stores the normalized Theme gallery description layout.
-    $currentDescriptionLayout = gallery_description_layout_normalize((string) ($theme['gallery_description_layout'] ?? 'vertical'));
+    $currentDescriptionLayout = gallery_description_layout_normalize(
+        (string) ($theme['gallery_description_layout'] ?? 'vertical'),
+    );
     // $descriptionLayouts stores presentation-only layout options and preview text.
     $descriptionLayouts = [];
     foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
         $descriptionLayouts[] = [
             'value' => $descriptionLayoutOption,
-            'label' => gallery_description_layout_label($descriptionLayoutOption),
-            'selected' => $currentDescriptionLayout === $descriptionLayoutOption,
+            'label' => gallery_description_layout_label(
+                $descriptionLayoutOption,
+            ),
+            'selected' =>
+                $currentDescriptionLayout === $descriptionLayoutOption,
             'summary' => $descriptionLayoutOption === 'horizontal'
-                ? t('admin.theme.layout.description_layout_horizontal_summary', 'Photo beside the description.')
-                : t('admin.theme.layout.description_layout_vertical_summary', 'Photo above the description.'),
+                ? t(
+                    'admin.theme.layout.description_layout_horizontal_summary',
+                    'Photo beside the description.',
+                )
+                : t(
+                    'admin.theme.layout.description_layout_vertical_summary',
+                    'Photo above the description.',
+                ),
         ];
     }
 
@@ -319,7 +343,10 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
     $currentBreadcrumbStyle = theme_breadcrumb_style();
     $breadcrumbStylePicker = [
         'field_name' => 'theme_breadcrumb_style',
-        'label' => t('admin.theme.layout.breadcrumb_style_label', 'Default breadcrumb style'),
+        'label' => t(
+            'admin.theme.layout.breadcrumb_style_label',
+            'Default breadcrumb style',
+        ),
         'current' => $currentBreadcrumbStyle,
         'options' => breadcrumb_style_picker_options(),
     ];
@@ -330,8 +357,11 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
             $lightboxOptions[] = [
                 'value' => $lightboxModeOption,
-                'label' => gallery_lightbox_browsing_mode_label($lightboxModeOption),
-                'selected' => ($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption,
+                'label' =>
+                    gallery_lightbox_browsing_mode_label($lightboxModeOption),
+                'selected' =>
+                    ($theme['lightbox_browsing_mode'] ?? 'single')
+                        === $lightboxModeOption,
             ];
         }
     }
@@ -341,25 +371,39 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         'home_token' => THEME_FAVORITE_GALLERIES_HOME_TOKEN,
         'description_layouts' => $descriptionLayouts,
         'breadcrumb_style_picker' => $breadcrumbStylePicker,
-        'gallery_count_badge_mode' => (string) ($theme['gallery_count_badge_mode'] ?? 'both'),
-        'gallery_count_badge_icons_enabled' => ((string) ($theme['gallery_count_badge_icons_enabled'] ?? '1')) === '1',
+        'gallery_count_badge_mode' => (string) (
+            $theme['gallery_count_badge_mode'] ?? 'both'
+        ),
+        'gallery_count_badge_icons_enabled' =>
+            (string) ($theme['gallery_count_badge_icons_enabled'] ?? '1')
+                === '1',
         'gallery_count_badge_modes' => array_map(
-            static fn (string $mode): array => [
+            static fn(string $mode): array => [
                 'value' => $mode,
                 'label' => gallery_count_badge_mode_label($mode),
             ],
-            ['public', 'all', 'both', 'hidden']
+            ['public', 'all', 'both', 'hidden'],
         ),
         'thumbnail_modes' => [
             [
                 'value' => PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
-                'selected' => $publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
-                'label' => t('admin.theme.layout.thumbnail_rendering_progressive_label', 'Progressive thumbnail sharpening - Default'),
+                'selected' =>
+                    $publicThumbnailRenderingMode
+                        === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
+                'label' => t(
+                    'admin.theme.layout.thumbnail_rendering_progressive_label',
+                    'Progressive thumbnail sharpening - Default',
+                ),
             ],
             [
                 'value' => PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
-                'selected' => $publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
-                'label' => t('admin.theme.layout.thumbnail_rendering_responsive_label', 'Responsive browser selection - Legacy'),
+                'selected' =>
+                    $publicThumbnailRenderingMode
+                        === PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
+                'label' => t(
+                    'admin.theme.layout.thumbnail_rendering_responsive_label',
+                    'Responsive browser selection - Legacy',
+                ),
             ],
         ],
         'pagination' => $paginationSettings,
@@ -369,66 +413,240 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         'lightbox_modes_enabled' => $lightboxModesFeatureEnabled,
         'lightbox_options' => $lightboxOptions,
         'labels' => [
-            'compact_hint' => t('admin.theme.layout.compact_hint', 'Set header shortcuts, card details and default grids.'),
-            'shortcuts_compact_hint' => t('admin.theme.layout.shortcuts_compact_hint', 'Choose up to three header shortcuts. Gallery targets use the picker.'),
-            'home_grid_compact_hint' => t('admin.theme.layout.home_grid_compact_hint', 'Only the main page; gallery-page grids are configured separately.'),
-            'lightbox_compact_hint' => t('admin.theme.layout.lightbox_compact_hint', 'Default for the photo viewer; individual galleries may override it.'),
-            'reset_grid_details' => t('admin.theme.layout.reset_grid_details', 'Reset individual gallery grids'),
-            'renderer_details' => t('admin.theme.layout.renderer_details', 'Rendering details'),
+            'compact_hint' => t(
+                'admin.theme.layout.compact_hint',
+                'Set header shortcuts, card details and default grids.',
+            ),
+            'shortcuts_compact_hint' => t(
+                'admin.theme.layout.shortcuts_compact_hint',
+                'Choose up to three header shortcuts. Gallery targets use the picker.',
+            ),
+            'home_grid_compact_hint' => t(
+                'admin.theme.layout.home_grid_compact_hint',
+                'Only the main page; gallery-page grids are configured separately.',
+            ),
+            'lightbox_compact_hint' => t(
+                'admin.theme.layout.lightbox_compact_hint',
+                'Default for the photo viewer; individual galleries may override it.',
+            ),
+            'reset_grid_details' => t(
+                'admin.theme.layout.reset_grid_details',
+                'Reset individual gallery grids',
+            ),
+            'renderer_details' => t(
+                'admin.theme.layout.renderer_details',
+                'Rendering details',
+            ),
             'compact_title' => t('admin.theme.layout.compact_title', 'Layout'),
             'kicker' => t('admin.theme.layout.kicker', 'Layout'),
-            'title' => t('admin.theme.layout.title', 'Pagination and gallery grids'),
-            'description' => t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.'),
-            'subtab_shortcuts' => t('admin.theme.subtab_shortcuts', 'Header shortcuts'),
-            'subtab_cards' => t('admin.theme.subtab_cards_badges', 'Cards & badges'),
-            'subtab_grids' => t('admin.theme.subtab_grids_lightbox', 'Grids & lightbox'),
-            'subtabs_label' => t('admin.theme.layout.subtabs_label', 'Layout subsections'),
-            'favorite_galleries_legend' => t('admin.theme.layout.favorite_galleries_legend', 'Favorite gallery shortcuts'),
-            'favorite_galleries_hint' => t('admin.theme.layout.favorite_galleries_hint', 'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.'),
-            'favorite_gallery_type' => t('admin.theme.layout.favorite_gallery_type', 'Shortcut target'),
-            'favorite_gallery_empty' => t('admin.theme.layout.favorite_gallery_empty', 'No shortcut'),
-            'favorite_gallery_home' => t('admin.theme.layout.favorite_gallery_home', 'Main page'),
-            'favorite_gallery_gallery' => t('admin.theme.layout.favorite_gallery_gallery', 'Gallery'),
-            'favorite_gallery_gallery_hint' => t('admin.theme.layout.favorite_gallery_gallery_hint', 'Gallery picker is used only when the shortcut target is Gallery.'),
-            'favorite_galleries_visibility_hint' => t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.'),
-            'description_layout_legend' => t('admin.theme.layout.description_layout_legend', 'Gallery description format'),
-            'description_layout_hint' => t('admin.theme.layout.description_layout_hint', 'Vertical places the gallery photo above the description. Horizontal places it beside the description. Cards include the title, tags, and a shortened Markdown-capable description.'),
-            'breadcrumb_style_legend' => t('admin.theme.layout.breadcrumb_style_legend', 'Breadcrumb style'),
-            'breadcrumb_style_label' => t('admin.theme.layout.breadcrumb_style_label', 'Default breadcrumb style'),
-            'breadcrumb_style_hint' => t('admin.theme.layout.breadcrumb_style_hint', 'Used by galleries that inherit the site default.'),
-            'description_layout_label' => t('admin.theme.layout.description_layout_label', 'Default gallery-card layout'),
-            'description_preview_title' => t('admin.theme.layout.description_preview_title', 'Summer gallery'),
-            'description_preview_meta' => t('admin.theme.layout.description_preview_meta', '12 photos'),
-            'description_preview_tag_travel' => t('admin.theme.layout.description_preview_tag_travel', 'travel'),
-            'description_preview_tag_family' => t('admin.theme.layout.description_preview_tag_family', 'family'),
-            'count_badge_legend' => t('admin.theme.layout.count_badge_legend', 'Contained-picture badge'),
-            'count_badge_mode_label' => t('admin.theme.layout.count_badge_mode_label', 'Display'),
-            'count_badge_icons_label' => t('admin.theme.layout.count_badge_icons_label', 'Show icons'),
-            'count_badge_hint' => t('admin.theme.layout.count_badge_compact_hint', 'Default for cards and gallery heroes. Full counts are admin-only; visitors always see their public count.'),
-            'thumbnail_rendering_legend' => t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering'),
-            'thumbnail_rendering_label' => t('admin.theme.layout.thumbnail_rendering_label', 'Selected-gallery photo cards'),
-            'thumbnail_rendering_responsive_title' => t('admin.theme.layout.thumbnail_rendering_responsive_title', 'Responsive browser selection:'),
-            'thumbnail_rendering_responsive_help' => t('admin.theme.layout.thumbnail_rendering_responsive_help', 'The complete responsive candidate set is exposed immediately and the browser selects the most appropriate available thumbnail.'),
-            'thumbnail_rendering_progressive_title' => t('admin.theme.layout.thumbnail_rendering_progressive_title', 'Progressive thumbnail sharpening:'),
-            'thumbnail_rendering_progressive_help' => t('admin.theme.layout.thumbnail_rendering_progressive_help', 'A small thumbnail is presented first. Larger thumbnails are activated later for relevant visible or near-visible cards, prioritizing initial page responsiveness over earliest full sharpness.'),
-            'thumbnail_rendering_transfer_note' => t('admin.theme.layout.thumbnail_rendering_transfer_note', 'Progressive rendering can transfer both the small thumbnail and a larger replacement, potentially increasing total transferred bytes while improving perceived initial responsiveness.'),
-            'thumbnail_rendering_scope_note' => t('admin.theme.layout.thumbnail_rendering_scope_note', 'This setting applies to photo cards in a selected gallery. Gallery cover and collage thumbnails keep responsive browser selection.'),
-            'pagination_legend' => t('admin.theme.layout.pagination_legend', 'Pagination'),
-            'enable_pagination' => t('admin.theme.layout.enable_pagination', 'Enable pagination'),
-            'columns_per_page' => t('admin.theme.layout.columns_per_page', 'Columns per page'),
-            'rows_per_page' => t('admin.theme.layout.rows_per_page', 'Rows per page'),
-            'items_per_page_preview' => t('admin.theme.layout.items_per_page_preview', 'Items per page preview:'),
-            'pagination_hint' => t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.'),
-            'lightbox_mode_legend' => t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode'),
-            'lightbox_mode_label' => t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode'),
-            'lightbox_mode_hint' => t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.'),
-            'main_page_grid_legend' => t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid'),
-            'main_page_columns' => t('admin.theme.layout.main_page_columns', 'Main page columns'),
-            'main_page_rows' => t('admin.theme.layout.main_page_rows', 'Main page rows'),
-            'main_page_grid_hint' => t('admin.theme.layout.main_page_grid_hint', 'This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.'),
-            'reset_gallery_grids_confirm' => t('admin.theme.layout.reset_gallery_grids_confirm', 'Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.'),
-            'reset_all_gallery_grids' => t('admin.theme.layout.reset_all_gallery_grids', 'Reset all custom gallery grids'),
-            'reset_gallery_grids_hint' => t('admin.theme.layout.reset_gallery_grids_hint', 'This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.'),
+            'title' => t(
+                'admin.theme.layout.title',
+                'Pagination and gallery grids',
+            ),
+            'description' => t(
+                'admin.theme.layout.description',
+                'Tune the default public grid while keeping per-gallery overrides available from gallery editing.',
+            ),
+            'subtab_shortcuts' => t(
+                'admin.theme.subtab_shortcuts',
+                'Header shortcuts',
+            ),
+            'subtab_cards' => t(
+                'admin.theme.subtab_cards_badges',
+                'Cards & badges',
+            ),
+            'subtab_grids' => t(
+                'admin.theme.subtab_grids_lightbox',
+                'Grids & lightbox',
+            ),
+            'subtabs_label' => t(
+                'admin.theme.layout.subtabs_label',
+                'Layout subsections',
+            ),
+            'favorite_galleries_legend' => t(
+                'admin.theme.layout.favorite_galleries_legend',
+                'Favorite gallery shortcuts',
+            ),
+            'favorite_galleries_hint' => t(
+                'admin.theme.layout.favorite_galleries_hint',
+                'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.',
+            ),
+            'favorite_gallery_type' => t(
+                'admin.theme.layout.favorite_gallery_type',
+                'Shortcut target',
+            ),
+            'favorite_gallery_empty' => t(
+                'admin.theme.layout.favorite_gallery_empty',
+                'No shortcut',
+            ),
+            'favorite_gallery_home' => t(
+                'admin.theme.layout.favorite_gallery_home',
+                'Main page',
+            ),
+            'favorite_gallery_gallery' => t(
+                'admin.theme.layout.favorite_gallery_gallery',
+                'Gallery',
+            ),
+            'favorite_gallery_gallery_hint' => t(
+                'admin.theme.layout.favorite_gallery_gallery_hint',
+                'Gallery picker is used only when the shortcut target is Gallery.',
+            ),
+            'favorite_galleries_visibility_hint' => t(
+                'admin.theme.layout.favorite_galleries_visibility_hint',
+                'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.',
+            ),
+            'description_layout_legend' => t(
+                'admin.theme.layout.description_layout_legend',
+                'Gallery description format',
+            ),
+            'description_layout_hint' => t(
+                'admin.theme.layout.description_layout_hint',
+                'Vertical places the gallery photo above the description. Horizontal places it beside the description. Cards include the title, tags, and a shortened Markdown-capable description.',
+            ),
+            'breadcrumb_style_legend' => t(
+                'admin.theme.layout.breadcrumb_style_legend',
+                'Breadcrumb style',
+            ),
+            'breadcrumb_style_label' => t(
+                'admin.theme.layout.breadcrumb_style_label',
+                'Default breadcrumb style',
+            ),
+            'breadcrumb_style_hint' => t(
+                'admin.theme.layout.breadcrumb_style_hint',
+                'Used by galleries that inherit the site default.',
+            ),
+            'description_layout_label' => t(
+                'admin.theme.layout.description_layout_label',
+                'Default gallery-card layout',
+            ),
+            'description_preview_title' => t(
+                'admin.theme.layout.description_preview_title',
+                'Summer gallery',
+            ),
+            'description_preview_meta' => t(
+                'admin.theme.layout.description_preview_meta',
+                '12 photos',
+            ),
+            'description_preview_tag_travel' => t(
+                'admin.theme.layout.description_preview_tag_travel',
+                'travel',
+            ),
+            'description_preview_tag_family' => t(
+                'admin.theme.layout.description_preview_tag_family',
+                'family',
+            ),
+            'count_badge_legend' => t(
+                'admin.theme.layout.count_badge_legend',
+                'Contained-picture badge',
+            ),
+            'count_badge_mode_label' => t(
+                'admin.theme.layout.count_badge_mode_label',
+                'Display',
+            ),
+            'count_badge_icons_label' => t(
+                'admin.theme.layout.count_badge_icons_label',
+                'Show icons',
+            ),
+            'count_badge_hint' => t(
+                'admin.theme.layout.count_badge_compact_hint',
+                'Default for cards and gallery heroes. Full counts are admin-only; visitors always see their public count.',
+            ),
+            'thumbnail_rendering_legend' => t(
+                'admin.theme.layout.thumbnail_rendering_legend',
+                'Public thumbnail rendering',
+            ),
+            'thumbnail_rendering_label' => t(
+                'admin.theme.layout.thumbnail_rendering_label',
+                'Selected-gallery photo cards',
+            ),
+            'thumbnail_rendering_responsive_title' => t(
+                'admin.theme.layout.thumbnail_rendering_responsive_title',
+                'Responsive browser selection:',
+            ),
+            'thumbnail_rendering_responsive_help' => t(
+                'admin.theme.layout.thumbnail_rendering_responsive_help',
+                'The complete responsive candidate set is exposed immediately and the browser selects the most appropriate available thumbnail.',
+            ),
+            'thumbnail_rendering_progressive_title' => t(
+                'admin.theme.layout.thumbnail_rendering_progressive_title',
+                'Progressive thumbnail sharpening:',
+            ),
+            'thumbnail_rendering_progressive_help' => t(
+                'admin.theme.layout.thumbnail_rendering_progressive_help',
+                'A small thumbnail is presented first. Larger thumbnails are activated later for relevant visible or near-visible cards, prioritizing initial page responsiveness over earliest full sharpness.',
+            ),
+            'thumbnail_rendering_transfer_note' => t(
+                'admin.theme.layout.thumbnail_rendering_transfer_note',
+                'Progressive rendering can transfer both the small thumbnail and a larger replacement, potentially increasing total transferred bytes while improving perceived initial responsiveness.',
+            ),
+            'thumbnail_rendering_scope_note' => t(
+                'admin.theme.layout.thumbnail_rendering_scope_note',
+                'This setting applies to photo cards in a selected gallery. Gallery cover and collage thumbnails keep responsive browser selection.',
+            ),
+            'pagination_legend' => t(
+                'admin.theme.layout.pagination_legend',
+                'Pagination',
+            ),
+            'enable_pagination' => t(
+                'admin.theme.layout.enable_pagination',
+                'Enable pagination',
+            ),
+            'columns_per_page' => t(
+                'admin.theme.layout.columns_per_page',
+                'Columns per page',
+            ),
+            'rows_per_page' => t(
+                'admin.theme.layout.rows_per_page',
+                'Rows per page',
+            ),
+            'items_per_page_preview' => t(
+                'admin.theme.layout.items_per_page_preview',
+                'Items per page preview:',
+            ),
+            'pagination_hint' => t(
+                'admin.theme.layout.pagination_hint',
+                'These values remain the fallback for galleries that do not define or inherit a custom grid.',
+            ),
+            'lightbox_mode_legend' => t(
+                'admin.theme.layout.lightbox_mode_legend',
+                'Public lightbox browsing mode',
+            ),
+            'lightbox_mode_label' => t(
+                'admin.theme.layout.lightbox_mode_label',
+                'Default browsing mode',
+            ),
+            'lightbox_mode_hint' => t(
+                'admin.theme.layout.lightbox_mode_hint',
+                'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.',
+            ),
+            'main_page_grid_legend' => t(
+                'admin.theme.layout.main_page_grid_legend',
+                'Main page gallery grid',
+            ),
+            'main_page_columns' => t(
+                'admin.theme.layout.main_page_columns',
+                'Main page columns',
+            ),
+            'main_page_rows' => t(
+                'admin.theme.layout.main_page_rows',
+                'Main page rows',
+            ),
+            'main_page_grid_hint' => t(
+                'admin.theme.layout.main_page_grid_hint',
+                'This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.',
+            ),
+            'reset_gallery_grids_confirm' => t(
+                'admin.theme.layout.reset_gallery_grids_confirm',
+                'Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.',
+            ),
+            'reset_all_gallery_grids' => t(
+                'admin.theme.layout.reset_all_gallery_grids',
+                'Reset all custom gallery grids',
+            ),
+            'reset_gallery_grids_hint' => t(
+                'admin.theme.layout.reset_gallery_grids_hint',
+                'This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.',
+            ),
         ],
     ]);
 }

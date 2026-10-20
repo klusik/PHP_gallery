@@ -68,7 +68,10 @@ use function Gallery\Models\exif_model_reset_gallery_gps_overrides;
  */
 function exif_gps_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_gps_exif_schema_status(), 'gps_exif_render');
+    return presentation_schema_render_available(
+        presentation_gps_exif_schema_status(),
+        'gps_exif_render',
+    );
 }
 
 /**
@@ -82,7 +85,10 @@ function exif_gps_schema_ready(): bool
  */
 function exif_gps_override_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_gps_override_schema_status(), 'gps_override_render');
+    return presentation_schema_render_available(
+        presentation_gps_override_schema_status(),
+        'gps_override_render',
+    );
 }
 
 /**
@@ -109,10 +115,14 @@ function exif_gps_default_enabled(): bool
  * Persist the global EXIF/GPS display default used by galleries without overrides.
  *
  * @param bool $enabled Enabled flag.
+ * @return void
  */
 function set_exif_gps_default_enabled(bool $enabled): void
 {
-    set_app_setting(exif_gps_default_enabled_setting_key(), $enabled ? '1' : '0');
+    set_app_setting(
+        exif_gps_default_enabled_setting_key(),
+        $enabled ? '1' : '0',
+    );
 }
 
 /**
@@ -121,8 +131,8 @@ function set_exif_gps_default_enabled(bool $enabled): void
  * Returns null for inherited/default behavior, 1 for explicit enabled, and 0 for
  * explicit disabled.
  *
- * @param mixed $value Value to process.
- * @return ?int Integer result for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Database or form value cast to text; recognized empty/default values inherit, and recognized boolean spellings map to 1 or 0.
+ * @return int|null Explicit enabled (1) or disabled (0), or null for inherited/default input.
  */
 function gallery_gps_map_storage_value(mixed $value): ?int
 {
@@ -132,13 +142,26 @@ function gallery_gps_map_storage_value(mixed $value): ?int
 
     // $text stores a normalized representation of the submitted value.
     $text = strtolower(trim((string) $value));
-    if ($text === '' || $text === 'inherit' || $text === 'default' || $text === 'null') {
+    if (
+        $text === ''
+        || $text === 'inherit'
+        || $text === 'default'
+        || $text === 'null'
+    ) {
         return null;
     }
-    if (in_array($text, ['1', 'on', 'enabled', 'enable', 'yes', 'true'], true)) {
+    if (in_array(
+        $text,
+        ['1', 'on', 'enabled', 'enable', 'yes', 'true'],
+        true,
+    )) {
         return 1;
     }
-    if (in_array($text, ['0', 'off', 'disabled', 'disable', 'no', 'false'], true)) {
+    if (in_array(
+        $text,
+        ['0', 'off', 'disabled', 'disable', 'no', 'false'],
+        true,
+    )) {
         return 0;
     }
 
@@ -148,12 +171,14 @@ function gallery_gps_map_storage_value(mixed $value): ?int
 /**
  * Return the legacy recursive GPS map behavior used before inherited overrides existed.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param ?callable $galleryLookup Optional preloaded gallery lookup keyed by numeric id.
+ * @param array{gps_map_enabled?:mixed,parent_id?:int|string|null} $gallery Gallery override and parent fields.
+ * @param (callable(int):?array{gps_map_enabled?:mixed,parent_id?:int|string|null})|null $galleryLookup Optional parent lookup keyed by numeric id.
  * @return bool True when the condition matches.
  */
-function gallery_legacy_allows_gps_maps(array $gallery, ?callable $galleryLookup = null): bool
-{
+function gallery_legacy_allows_gps_maps(
+    array $gallery,
+    ?callable $galleryLookup = null,
+): bool {
     // Variable $current stores this steps working value.
     $current = $gallery;
     while ($current) {
@@ -165,7 +190,9 @@ function gallery_legacy_allows_gps_maps(array $gallery, ?callable $galleryLookup
         }
         // Variable $current stores this steps working value.
         $parentId = (int) $current['parent_id'];
-        $current = $galleryLookup !== null ? $galleryLookup($parentId) : find_gallery($parentId);
+        $current = $galleryLookup !== null
+            ? $galleryLookup($parentId)
+            : find_gallery($parentId);
     }
     return false;
 }
@@ -177,13 +204,20 @@ function gallery_legacy_allows_gps_maps(array $gallery, ?callable $galleryLookup
  * default controls display. Before the nullable-column migration is applied, the
  * legacy boolean branch behavior is preserved to avoid unsafe NULL writes.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param ?callable $galleryLookup Optional preloaded gallery lookup keyed by numeric id.
+ * @param array{gps_map_enabled?:mixed,parent_id?:int|string|null} $gallery Gallery override and parent fields.
+ * @param (callable(int):?array{gps_map_enabled?:mixed,parent_id?:int|string|null})|null $galleryLookup Optional parent lookup keyed by numeric id.
  * @return bool True when the condition matches.
  */
-function gallery_effective_gps_map_enabled(array $gallery, ?callable $galleryLookup = null): bool
-{
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('gallery_maps')) {
+function gallery_effective_gps_map_enabled(
+    array $gallery,
+    ?callable $galleryLookup = null,
+): bool {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('gallery_maps')
+    ) {
         return false;
     }
     if (!exif_gps_schema_ready()) {
@@ -197,7 +231,9 @@ function gallery_effective_gps_map_enabled(array $gallery, ?callable $galleryLoo
     $current = $gallery;
     while ($current) {
         // $override stores an inherited GPS display override read from the gallery row.
-        $override = gallery_gps_map_storage_value($current['gps_map_enabled'] ?? null);
+        $override = gallery_gps_map_storage_value(
+            $current['gps_map_enabled'] ?? null,
+        );
         if ($override !== null) {
             return $override === 1;
         }
@@ -206,7 +242,9 @@ function gallery_effective_gps_map_enabled(array $gallery, ?callable $galleryLoo
         }
         // Variable $current stores this steps working value.
         $parentId = (int) $current['parent_id'];
-        $current = $galleryLookup !== null ? $galleryLookup($parentId) : find_gallery($parentId);
+        $current = $galleryLookup !== null
+            ? $galleryLookup($parentId)
+            : find_gallery($parentId);
     }
 
     return exif_gps_default_enabled();
@@ -217,12 +255,14 @@ function gallery_effective_gps_map_enabled(array $gallery, ?callable $galleryLoo
  *
  * This wrapper preserves the public function name used by routes and renderers.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param ?callable $galleryLookup Optional preloaded gallery lookup keyed by numeric id.
+ * @param array{gps_map_enabled?:mixed,parent_id?:int|string|null} $gallery Gallery override and parent fields.
+ * @param (callable(int):?array{gps_map_enabled?:mixed,parent_id?:int|string|null})|null $galleryLookup Optional parent lookup keyed by numeric id.
  * @return bool True when the condition matches.
  */
-function gallery_allows_gps_maps(array $gallery, ?callable $galleryLookup = null): bool
-{
+function gallery_allows_gps_maps(
+    array $gallery,
+    ?callable $galleryLookup = null,
+): bool {
     return gallery_effective_gps_map_enabled($gallery, $galleryLookup);
 }
 
@@ -305,12 +345,14 @@ function exif_rational_to_float(mixed $value): ?float
 /**
  * Convert EXIF GPS degree/minute/second triplets into signed decimal degrees.
  *
- * @param mixed $coordinate Coordinate value.
- * @param mixed $reference Reference value.
- * @return ?float Numeric result for the caller.
+ * @param array<array-key,mixed>|scalar|object{}|resource|null $coordinate EXIF array whose indexes 0, 1, and 2 contain rational degree, minute, and second values; later values are ignored, and non-arrays are rejected.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $reference Hemisphere reference cast to text, normally N, S, E, or W.
+ * @return float|null Signed decimal degrees rounded to seven decimal places, or null when the coordinate is not a three-value EXIF sequence.
  */
-function exif_gps_coordinate_to_decimal(mixed $coordinate, mixed $reference): ?float
-{
+function exif_gps_coordinate_to_decimal(
+    mixed $coordinate,
+    mixed $reference,
+): ?float {
     if (!is_array($coordinate) || count($coordinate) < 3) {
         return null;
     }
@@ -374,7 +416,6 @@ function exif_format_rational(mixed $value, string $suffix = ''): ?string
     return $text . $suffix;
 }
 
-
 /**
  * Read one TIFF/DNG field value list for EXIF extraction.
  *
@@ -384,10 +425,16 @@ function exif_format_rational(mixed $value, string $suffix = ''): ?string
  * @param int $type Type value.
  * @param int $count Count value.
  * @param int $valueOffset Value offset value.
- * @return array<int mixed>.
+ * @return list<int|string> Parsed TIFF values; rational values use `numerator/denominator` text.
  */
-function exif_dng_tiff_entry_values(string $data, int $entryOffset, string $endian, int $type, int $count, int $valueOffset): array
-{
+function exif_dng_tiff_entry_values(
+    string $data,
+    int $entryOffset,
+    string $endian,
+    int $type,
+    int $count,
+    int $valueOffset,
+): array {
     // $typeSize stores the byte length of one TIFF field item.
     $typeSize = dng_tiff_type_size($type);
     if ($typeSize <= 0 || $count <= 0 || $count > 64) {
@@ -397,11 +444,11 @@ function exif_dng_tiff_entry_values(string $data, int $entryOffset, string $endi
     $totalSize = $typeSize * $count;
     // $dataOffset stores either the inline value area or the referenced value area.
     $dataOffset = $totalSize <= 4 ? $entryOffset + 8 : $valueOffset;
-    if ($dataOffset < 0 || $dataOffset + $totalSize > strlen($data)) {
+    if ($dataOffset < 0 || ($dataOffset + $totalSize) > strlen($data)) {
         return [];
     }
     if ($type === 2) {
-        return [rtrim(substr($data, $dataOffset, $count), " ")];
+        return [rtrim(substr($data, $dataOffset, $count), ' ')];
     }
 
     // $values stores parsed TIFF values as PHP scalars.
@@ -424,7 +471,11 @@ function exif_dng_tiff_entry_values(string $data, int $entryOffset, string $endi
         } elseif ($type === 5) {
             $numerator = dng_tiff_uint32($data, $offset, $endian);
             $denominator = dng_tiff_uint32($data, $offset + 4, $endian);
-            if ($numerator !== null && $denominator !== null && $denominator !== 0) {
+            if (
+                $numerator !== null
+                && $denominator !== null
+                && $denominator !== 0
+            ) {
                 $values[] = $numerator . '/' . $denominator;
             }
         }
@@ -438,11 +489,14 @@ function exif_dng_tiff_entry_values(string $data, int $entryOffset, string $endi
  * @param string $data Input data.
  * @param int $ifdOffset Ifd offset value.
  * @param string $endian Endian value.
- * @return array<int array<int, mixed>>.
+ * @return array<int, list<int|string>> Parsed TIFF field values keyed by tag identifier.
  */
-function exif_dng_tiff_ifd_entries(string $data, int $ifdOffset, string $endian): array
-{
-    if ($ifdOffset <= 0 || $ifdOffset + 2 > strlen($data)) {
+function exif_dng_tiff_ifd_entries(
+    string $data,
+    int $ifdOffset,
+    string $endian,
+): array {
+    if ($ifdOffset <= 0 || ($ifdOffset + 2) > strlen($data)) {
         return [];
     }
     // $entryCount stores how many TIFF entries the directory contains.
@@ -455,17 +509,29 @@ function exif_dng_tiff_ifd_entries(string $data, int $ifdOffset, string $endian)
     for ($index = 0; $index < $entryCount; $index++) {
         // $entryOffset stores the byte offset of this 12-byte TIFF entry.
         $entryOffset = $ifdOffset + 2 + ($index * 12);
-        if ($entryOffset + 12 > strlen($data)) {
+        if (($entryOffset + 12) > strlen($data)) {
             break;
         }
         $tag = dng_tiff_uint16($data, $entryOffset, $endian);
         $type = dng_tiff_uint16($data, $entryOffset + 2, $endian);
         $count = dng_tiff_uint32($data, $entryOffset + 4, $endian);
         $valueOffset = dng_tiff_uint32($data, $entryOffset + 8, $endian);
-        if ($tag === null || $type === null || $count === null || $valueOffset === null) {
+        if (
+            $tag === null
+            || $type === null
+            || $count === null
+            || $valueOffset === null
+        ) {
             continue;
         }
-        $entries[$tag] = exif_dng_tiff_entry_values($data, $entryOffset, $endian, $type, $count, $valueOffset);
+        $entries[$tag] = exif_dng_tiff_entry_values(
+            $data,
+            $entryOffset,
+            $endian,
+            $type,
+            $count,
+            $valueOffset,
+        );
     }
     return $entries;
 }
@@ -478,8 +544,17 @@ function exif_dng_tiff_ifd_entries(string $data, int $ifdOffset, string $endian)
  */
 function extract_dng_gps_metadata(string $path): array
 {
-    $empty = ['gps_lat' => null, 'gps_lng' => null, 'gps_altitude' => null, 'gps_extracted_at' => null];
-    if (!is_file($path) || filesize($path) === false || (int) filesize($path) > 220 * 1024 * 1024) {
+    $empty = [
+        'gps_lat' => null,
+        'gps_lng' => null,
+        'gps_altitude' => null,
+        'gps_extracted_at' => null,
+    ];
+    if (
+        !is_file($path)
+        || filesize($path) === false
+        || (int) filesize($path) > (220 * 1024 * 1024)
+    ) {
         return $empty;
     }
     $data = @file_get_contents($path);
@@ -487,7 +562,10 @@ function extract_dng_gps_metadata(string $path): array
         return $empty;
     }
     $endian = substr($data, 0, 2);
-    if (!in_array($endian, ['II', 'MM'], true) || dng_tiff_uint16($data, 2, $endian) !== 42) {
+    if (
+        !in_array($endian, ['II', 'MM'], true)
+        || dng_tiff_uint16($data, 2, $endian) !== 42
+    ) {
         return $empty;
     }
     $firstIfdOffset = dng_tiff_uint32($data, 4, $endian);
@@ -500,8 +578,14 @@ function extract_dng_gps_metadata(string $path): array
         return $empty;
     }
     $gps = exif_dng_tiff_ifd_entries($data, $gpsIfdOffset, $endian);
-    $latitude = exif_gps_coordinate_to_decimal($gps[2] ?? null, $gps[1][0] ?? null);
-    $longitude = exif_gps_coordinate_to_decimal($gps[4] ?? null, $gps[3][0] ?? null);
+    $latitude = exif_gps_coordinate_to_decimal(
+        $gps[2] ?? null,
+        $gps[1][0] ?? null,
+    );
+    $longitude = exif_gps_coordinate_to_decimal(
+        $gps[4] ?? null,
+        $gps[3][0] ?? null,
+    );
     $altitude = exif_rational_to_float($gps[6][0] ?? null);
     if ((int) ($gps[5][0] ?? 0) === 1 && $altitude !== null) {
         $altitude *= -1;
@@ -510,7 +594,8 @@ function extract_dng_gps_metadata(string $path): array
         'gps_lat' => $latitude,
         'gps_lng' => $longitude,
         'gps_altitude' => $altitude === null ? null : round($altitude, 2),
-        'gps_extracted_at' => ($latitude !== null && $longitude !== null) ? now_sql() : null,
+        'gps_extracted_at' =>
+            $latitude !== null && $longitude !== null ? now_sql() : null,
     ];
 }
 
@@ -521,7 +606,7 @@ function extract_dng_gps_metadata(string $path): array
  * fields all return nullable values instead of failing the scan.
  *
  * @param string $path Filesystem path.
- * @return array Structured result data for the caller.
+ * @return array{exif_taken_at:?string,exif_camera_make:?string,exif_camera_model:?string,exif_lens_model:?string,exif_focal_length:?string,exif_aperture:?string,exif_exposure_time:?string,exif_iso:?int,gps_lat:?float,gps_lng:?float,gps_altitude:?float,gps_extracted_at:?string} Nullable capture, camera, lens, exposure, ISO and GPS metadata.
  */
 function extract_image_exif_metadata(string $path): array
 {
@@ -567,52 +652,95 @@ function extract_image_exif_metadata(string $path): array
     // Variable $gpsData stores this steps working value.
     $gpsData = is_array($exif['GPS'] ?? null) ? $exif['GPS'] : [];
     // Variable $latitude stores this steps working value.
-    $latitude = exif_gps_coordinate_to_decimal($gpsData['GPSLatitude'] ?? null, $gpsData['GPSLatitudeRef'] ?? null);
+    $latitude = exif_gps_coordinate_to_decimal(
+        $gpsData['GPSLatitude'] ?? null,
+        $gpsData['GPSLatitudeRef'] ?? null,
+    );
     // Variable $longitude stores this steps working value.
-    $longitude = exif_gps_coordinate_to_decimal($gpsData['GPSLongitude'] ?? null, $gpsData['GPSLongitudeRef'] ?? null);
+    $longitude = exif_gps_coordinate_to_decimal(
+        $gpsData['GPSLongitude'] ?? null,
+        $gpsData['GPSLongitudeRef'] ?? null,
+    );
     // Variable $altitude stores this steps working value.
     $altitude = exif_rational_to_float($gpsData['GPSAltitude'] ?? null);
-    if ((string) ($gpsData['GPSAltitudeRef'] ?? '') === '1' && $altitude !== null) {
+    if (
+        (string) ($gpsData['GPSAltitudeRef'] ?? '') === '1'
+        && $altitude !== null
+    ) {
         $altitude *= -1;
     }
     return [
-        'exif_taken_at' => exif_datetime_to_sql($exifData['DateTimeOriginal'] ?? $exifData['DateTimeDigitized'] ?? $ifd0['DateTime'] ?? null),
-        'exif_camera_make' => isset($ifd0['Make']) ? substr(trim((string) $ifd0['Make']), 0, 128) : null,
-        'exif_camera_model' => isset($ifd0['Model']) ? substr(trim((string) $ifd0['Model']), 0, 128) : null,
-        'exif_lens_model' => isset($exifData['LensModel']) ? substr(trim((string) $exifData['LensModel']), 0, 128) : null,
-        'exif_focal_length' => exif_format_rational($exifData['FocalLength'] ?? null, ' mm'),
-        'exif_aperture' => exif_format_rational($exifData['FNumber'] ?? null, ''),
-        'exif_exposure_time' => isset($exifData['ExposureTime']) ? substr(trim((string) $exifData['ExposureTime']), 0, 64) : null,
-        'exif_iso' => isset($exifData['ISOSpeedRatings']) ? (int) (is_array($exifData['ISOSpeedRatings']) ? reset($exifData['ISOSpeedRatings']) : $exifData['ISOSpeedRatings']) : null,
+        'exif_taken_at' => exif_datetime_to_sql(
+            $exifData['DateTimeOriginal']
+            ?? $exifData['DateTimeDigitized']
+            ?? $ifd0['DateTime']
+            ?? null,
+        ),
+        'exif_camera_make' => isset($ifd0['Make'])
+            ? substr(trim((string) $ifd0['Make']), 0, 128)
+            : null,
+        'exif_camera_model' => isset($ifd0['Model'])
+            ? substr(trim((string) $ifd0['Model']), 0, 128)
+            : null,
+        'exif_lens_model' => isset($exifData['LensModel'])
+            ? substr(trim((string) $exifData['LensModel']), 0, 128)
+            : null,
+        'exif_focal_length' => exif_format_rational(
+            $exifData['FocalLength'] ?? null,
+            ' mm',
+        ),
+        'exif_aperture' => exif_format_rational(
+            $exifData['FNumber'] ?? null,
+            '',
+        ),
+        'exif_exposure_time' => isset($exifData['ExposureTime'])
+            ? substr(trim((string) $exifData['ExposureTime']), 0, 64)
+            : null,
+        'exif_iso' => isset($exifData['ISOSpeedRatings'])
+            ? (int) (
+                is_array($exifData['ISOSpeedRatings'])
+                    ? reset($exifData['ISOSpeedRatings'])
+                    : $exifData['ISOSpeedRatings']
+            )
+            : null,
         'gps_lat' => $latitude,
         'gps_lng' => $longitude,
         'gps_altitude' => $altitude === null ? null : round($altitude, 2),
-        'gps_extracted_at' => ($latitude !== null && $longitude !== null) ? now_sql() : null,
+        'gps_extracted_at' =>
+            $latitude !== null && $longitude !== null ? now_sql() : null,
     ];
 }
 
 /**
  * Return true when an image record contains usable GPS coordinates.
  *
- * @param array $image Image row or image data.
+ * @param array{gps_lat?:mixed,gps_lng?:mixed} $image Image GPS coordinate fields.
  * @return bool True when the condition matches.
  */
 function image_has_gps(array $image): bool
 {
-    return isset($image['gps_lat'], $image['gps_lng']) && $image['gps_lat'] !== null && $image['gps_lng'] !== null;
+    return (
+        isset($image['gps_lat'], $image['gps_lng'])
+            && $image['gps_lat'] !== null
+            && $image['gps_lng'] !== null
+    );
 }
 
 /**
  * Convert one image record into the map marker shape consumed by JavaScript.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,gps_lat:int|float|string,gps_lng:int|float|string,filename?:string,description?:string} $image Image identity, GPS coordinates, and optional popup text.
+ * @param array{id:int|string,title?:string} $gallery Gallery identity and optional display title.
  * @param bool $includeThumb Include thumb value.
- * @param ?array $thumbnailBundle Thumbnail bundle value.
- * @return array Structured result data for the caller.
+ * @param array<string, mixed>|null $thumbnailBundle Precomputed thumbnail bundle, or null to resolve one.
+ * @return array{id:int,lat:float,lng:float,title:string,description:string,image:string,page_url:string,gallery_id:int,gallery:string,type:string,point_type:string,source_type:string,map_source_type:string,thumb?:string} Browser map marker with optional thumbnail URL.
  */
-function image_map_point(array $image, array $gallery, bool $includeThumb = true, ?array $thumbnailBundle = null): array
-{
+function image_map_point(
+    array $image,
+    array $gallery,
+    bool $includeThumb = true,
+    ?array $thumbnailBundle = null,
+): array {
     // $displayTitle stores the public-facing label used by map popups and dialogs.
     $displayTitle = trim(public_image_display_title($image, $gallery));
     // $filename stores the raw uploaded filename so public maps can avoid showing it as a title.
@@ -646,8 +774,14 @@ function image_map_point(array $image, array $gallery, bool $includeThumb = true
         'map_source_type' => GALLERY_MAP_SOURCE_EXIF_POINT,
     ];
     if ($includeThumb) {
-        $thumbnailBundle = $thumbnailBundle ?: public_render_profile_with_thumbnail_purpose('map point bundle discovery', static fn (): array => thumbnail_bundle($image));
-        $point['thumb'] = public_render_profile_with_thumbnail_purpose('map point thumb 300', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 300));
+        $thumbnailBundle =
+            $thumbnailBundle ?: public_render_profile_with_thumbnail_purpose('map point bundle discovery', static fn(): array => thumbnail_bundle(
+                $image,
+            ));
+        $point['thumb'] = public_render_profile_with_thumbnail_purpose('map point thumb 300', static fn(): string => thumbnail_bundle_url(
+            $thumbnailBundle,
+            300,
+        ));
     }
     return $point;
 }
@@ -660,7 +794,12 @@ function image_map_point(array $image, array $gallery, bool $includeThumb = true
 function gallery_map_cache_dir(): string
 {
     // $basePath stores the writable application cache directory used by generated map metadata.
-    $basePath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'gallery-maps';
+    $basePath =
+        dirname(__DIR__, 2)
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'gallery-maps';
     if (!is_dir($basePath)) {
         @mkdir($basePath, 0775, true);
     }
@@ -670,20 +809,25 @@ function gallery_map_cache_dir(): string
 /**
  * Build the SQL WHERE parts and parameters shared by map availability and map payload generation.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,folder_path:string} $gallery Gallery identifier and canonical folder path.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
- * @return array Structured result data for the caller.
+ * @return array{gallery_id:int,folder_path:string,public_only:bool,recursive:bool,require_listed_access:bool} Query scope and bound policy flags shared by map queries.
  */
-function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursive): array
-{
+function gallery_map_query_parts(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive,
+): array {
     if ($publicOnly) {
         gallery_visibility_assert_public_policy_available();
         gallery_access_assert_public_policy_available();
     }
     return [
         'gallery_id' => (int) $gallery['id'],
-        'folder_path' => normalize_relative_path((string) $gallery['folder_path']),
+        'folder_path' => normalize_relative_path(
+            (string) $gallery['folder_path'],
+        ),
         'public_only' => $publicOnly,
         'recursive' => $recursive,
         'require_listed_access' => $publicOnly && gallery_access_schema_ready(),
@@ -702,69 +846,111 @@ function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursi
  * @param bool $recursive Recursive value.
  * @return string Text result for the caller.
  */
-function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $recursive): string
-{
+function gallery_map_cache_fingerprint(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive,
+): string {
     if (!gallery_allows_gps_maps($gallery)) {
         return 'disabled';
     }
     $scope = gallery_map_query_parts($gallery, $publicOnly, $recursive);
-    $row = public_render_profile_db('gallery_map_fingerprint', static function () use ($scope): array {
+    $row = public_render_profile_db('gallery_map_fingerprint', static function () use (
+        $scope,
+    ): array {
         return exif_model_map_fingerprint_row(
             $scope['gallery_id'],
             $scope['folder_path'],
             $scope['public_only'],
             $scope['recursive'],
-            $scope['require_listed_access']
+            $scope['require_listed_access'],
         );
     });
-    return hash('sha256', json_encode([
-        'gallery_id' => (int) $gallery['id'],
-        // Version 3 adds canonical photo-page URLs and gallery IDs to marker payloads.
-        'payload_version' => 3,
-        // Translated marker text belongs to one effective request language and
-        // must not survive an authored-content OFF or unavailable-schema state.
-        'content_language' => translation_active_language(),
-        'gallery_localization' => content_localization_enabled() && content_localization_schema_ready('gallery'),
-        'image_localization' => content_localization_enabled() && content_localization_schema_ready('image'),
-        'public_only' => $publicOnly,
-        'recursive' => $recursive,
-        'point_count' => (int) ($row['point_count'] ?? 0),
-        'image_updated_at' => (string) ($row['image_updated_at'] ?? ''),
-        'gps_extracted_at' => (string) ($row['gps_extracted_at'] ?? ''),
-        'gallery_updated_at' => (string) ($row['gallery_updated_at'] ?? ''),
-    ], JSON_UNESCAPED_SLASHES));
+    return hash('sha256', json_encode(
+        [
+            'gallery_id' => (int) $gallery['id'],
+            // Version 3 adds canonical photo-page URLs and gallery IDs to marker payloads.
+            'payload_version' => 3,
+            // Translated marker text belongs to one effective request language and
+            // must not survive an authored-content OFF or unavailable-schema state.
+            'content_language' => translation_active_language(),
+            'gallery_localization' =>
+                content_localization_enabled()
+                    && content_localization_schema_ready('gallery'),
+            'image_localization' =>
+                content_localization_enabled()
+                    && content_localization_schema_ready('image'),
+            'public_only' => $publicOnly,
+            'recursive' => $recursive,
+            'point_count' => (int) ($row['point_count'] ?? 0),
+            'image_updated_at' => (string) ($row['image_updated_at'] ?? ''),
+            'gps_extracted_at' => (string) ($row['gps_extracted_at'] ?? ''),
+            'gallery_updated_at' => (string) ($row['gallery_updated_at'] ?? ''),
+        ],
+        JSON_UNESCAPED_SLASHES,
+    ));
 }
 
 /**
  * Return the cache file path for one gallery map point payload.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery identifier.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
  * @param string $fingerprint Fingerprint value.
- * @return string Text result for the caller.
+ * @return string Absolute JSON cache file path for the selected gallery, visibility mode, recursion mode and fingerprint.
  */
-function gallery_map_cache_file(array $gallery, bool $publicOnly, bool $recursive, string $fingerprint): string
-{
+function gallery_map_cache_file(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive,
+    string $fingerprint,
+): string {
     // $mode stores whether the payload uses anonymous or logged-in access rules.
     $mode = $publicOnly ? 'public' : 'admin';
-    return gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . (int) $gallery['id'] . '-' . $mode . '-' . ($recursive ? 'recursive' : 'direct') . '-' . $fingerprint . '.json';
+    return (
+        gallery_map_cache_dir()
+            . DIRECTORY_SEPARATOR
+            . 'gallery-'
+            . (int) $gallery['id']
+            . '-'
+            . $mode
+            . '-'
+            . ($recursive ? 'recursive' : 'direct')
+            . '-'
+            . $fingerprint
+            . '.json'
+    );
 }
 
 /**
  * Remove older cache files for one gallery map payload family after writing a fresh payload.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery identifier.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
  * @param string $keepFile Keep file value.
+ * @return void Removes older cache files for the same gallery/mode/scope while preserving the selected file.
  */
-function gallery_map_cache_prune(array $gallery, bool $publicOnly, bool $recursive, string $keepFile): void
-{
+function gallery_map_cache_prune(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive,
+    string $keepFile,
+): void {
     // $mode stores whether the payload uses anonymous or logged-in access rules.
     $mode = $publicOnly ? 'public' : 'admin';
     // $pattern stores all previous fingerprints for this gallery and access mode.
-    $pattern = gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . (int) $gallery['id'] . '-' . $mode . '-' . ($recursive ? 'recursive' : 'direct') . '-*.json';
+    $pattern =
+        gallery_map_cache_dir()
+        . DIRECTORY_SEPARATOR
+        . 'gallery-'
+        . (int) $gallery['id']
+        . '-'
+        . $mode
+        . '-'
+        . ($recursive ? 'recursive' : 'direct')
+        . '-*.json';
     foreach (glob($pattern) ?: [] as $filePath) {
         if ($filePath !== $keepFile && is_file($filePath)) {
             @unlink($filePath);
@@ -777,10 +963,14 @@ function gallery_map_cache_prune(array $gallery, bool $publicOnly, bool $recursi
  *
  * Thumbnail maintenance calls this because cached marker popup thumbnails can
  * otherwise keep pointing at a fallback URL after thumbnails are regenerated.
+ *
+ * @return void Deletes generated gallery-map JSON cache files.
  */
 function gallery_map_cache_clear_all(): void
 {
-    foreach (glob(gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-*.json') ?: [] as $filePath) {
+    foreach (glob(
+        gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-*.json',
+    ) ?: [] as $filePath) {
         if (is_file($filePath)) {
             @unlink($filePath);
         }
@@ -790,25 +980,34 @@ function gallery_map_cache_clear_all(): void
 /**
  * Return true when a gallery branch has at least one map point without building the full marker payload.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,folder_path:string,gps_map_enabled?:mixed,parent_id?:int|string|null} $gallery Gallery identity, scope path and map policy fields.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
  * @return bool True when the condition matches.
  */
-function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursive = true): bool
-{
+function gallery_has_map_points(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive = true,
+): bool {
     if (!gallery_allows_gps_maps($gallery)) {
         return false;
     }
-    return public_render_profile_span('gallery_map_availability', static function () use ($gallery, $publicOnly, $recursive): bool {
+    return public_render_profile_span('gallery_map_availability', static function () use (
+        $gallery,
+        $publicOnly,
+        $recursive,
+    ): bool {
         $scope = gallery_map_query_parts($gallery, $publicOnly, $recursive);
-        return public_render_profile_db('gallery_map_availability_db', static function () use ($scope): bool {
+        return public_render_profile_db('gallery_map_availability_db', static function () use (
+            $scope,
+        ): bool {
             return exif_model_has_map_points(
                 $scope['gallery_id'],
                 $scope['folder_path'],
                 $scope['public_only'],
                 $scope['recursive'],
-                $scope['require_listed_access']
+                $scope['require_listed_access'],
             );
         });
     });
@@ -820,14 +1019,24 @@ function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursiv
  * EXIF GPS keeps the existing photo-point behavior. A stored flight path belongs
  * to the gallery container itself and is already resolved before display.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,folder_path:string,gps_map_enabled?:mixed,parent_id?:int|string|null} $gallery Gallery identity, scope path and map policy fields.
  * @param bool $publicOnly Public only value.
  * @param bool $recursive Recursive value.
  * @return bool True when the condition matches.
  */
-function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): bool
-{
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && feature_capability_effective_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
+function gallery_has_map_payload(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive = true,
+): bool {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && feature_capability_effective_enabled('flight_maps')
+        && function_exists('Gallery\\Services\\gallery_has_flight_path_map')
+        && gallery_has_flight_path_map($gallery)
+    ) {
         return true;
     }
 
@@ -846,17 +1055,35 @@ function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursi
  * @param bool $recursive Recursive value.
  * @return array<string,mixed> Localized gallery title, authorized map points and optional route geometry.
  */
-function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
-{
+function gallery_map_payload(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive = true,
+): array {
     $gallery = content_localize_entity('gallery', $gallery);
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && feature_capability_effective_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_flight_map_payload')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && feature_capability_effective_enabled('flight_maps')
+        && function_exists('Gallery\\Services\\gallery_flight_map_payload')
+    ) {
         $flightPayload = gallery_flight_map_payload($gallery);
         if (is_array($flightPayload) && !empty($flightPayload['points'])) {
-            $photoPoints = gallery_map_points($gallery, $publicOnly, $recursive);
+            $photoPoints = gallery_map_points(
+                $gallery,
+                $publicOnly,
+                $recursive,
+            );
             if ($photoPoints) {
-                $flightPayload['route_points'] = $flightPayload['geometry']['points'] ?? $flightPayload['points'];
+                $flightPayload['route_points'] =
+                    $flightPayload['geometry']['points']
+                    ?? $flightPayload['points'];
                 $flightPayload['photo_points'] = $photoPoints;
-                $flightPayload['points'] = array_merge($flightPayload['points'], $photoPoints);
+                $flightPayload['points'] = array_merge(
+                    $flightPayload['points'],
+                    $photoPoints,
+                );
                 $flightPayload['map_source_type'] = 'mixed';
             }
             return $flightPayload;
@@ -882,17 +1109,33 @@ function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive =
  * @param bool $recursive Recursive value.
  * @return list<array<string,mixed>> Authorized localized photo markers in canonical map order.
  */
-function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = true): array
-{
+function gallery_map_points(
+    array $gallery,
+    bool $publicOnly,
+    bool $recursive = true,
+): array {
     if (!gallery_allows_gps_maps($gallery)) {
         return [];
     }
 
-    return public_render_profile_span('gallery_map_points', static function () use ($gallery, $publicOnly, $recursive): array {
+    return public_render_profile_span('gallery_map_points', static function () use (
+        $gallery,
+        $publicOnly,
+        $recursive,
+    ): array {
         // $fingerprint stores the cache identity derived from current image and gallery metadata.
-        $fingerprint = gallery_map_cache_fingerprint($gallery, $publicOnly, $recursive);
+        $fingerprint = gallery_map_cache_fingerprint(
+            $gallery,
+            $publicOnly,
+            $recursive,
+        );
         // $cacheFile stores the concrete JSON payload path for this gallery map.
-        $cacheFile = gallery_map_cache_file($gallery, $publicOnly, $recursive, $fingerprint);
+        $cacheFile = gallery_map_cache_file(
+            $gallery,
+            $publicOnly,
+            $recursive,
+            $fingerprint,
+        );
         if (is_file($cacheFile)) {
             public_render_profile_count('gallery_map_cache_hits');
             $cached = json_decode((string) file_get_contents($cacheFile), true);
@@ -903,13 +1146,15 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
 
         public_render_profile_count('gallery_map_cache_misses');
         $scope = gallery_map_query_parts($gallery, $publicOnly, $recursive);
-        $rows = public_render_profile_db('gallery_map_points_db', static function () use ($scope): array {
+        $rows = public_render_profile_db('gallery_map_points_db', static function () use (
+            $scope,
+        ): array {
             return exif_model_map_point_rows(
                 $scope['gallery_id'],
                 $scope['folder_path'],
                 $scope['public_only'],
                 $scope['recursive'],
-                $scope['require_listed_access']
+                $scope['require_listed_access'],
             );
         });
 
@@ -919,10 +1164,20 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
         foreach ($rows as $image) {
             $imageGalleryId = (int) $image['gallery_id'];
             if (!array_key_exists($imageGalleryId, $galleryCache)) {
-                $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+                $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId)
+                ?: $gallery;
             }
             $imageGallery = $galleryCache[$imageGalleryId];
-            if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !public_image_visible_to_current_visitor($image, $imageGallery))) {
+            if (
+                !gallery_allows_gps_maps($imageGallery)
+                || (
+                    $publicOnly
+                    && !public_image_visible_to_current_visitor(
+                        $image,
+                        $imageGallery,
+                    )
+                )
+            ) {
                 continue;
             }
             $visibleImages[] = $image;
@@ -930,15 +1185,31 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
 
         // Resolve both metadata owners in batches only after map/access policy
         // has selected the visible rows; source lookup caches remain untouched.
-        $localizedGalleries = array_column(content_localize_entities('gallery', array_values($galleryCache)), null, 'id');
+        $localizedGalleries = array_column(
+            content_localize_entities('gallery', array_values($galleryCache)),
+            null,
+            'id',
+        );
         $points = [];
         foreach (content_localize_entities('image', $visibleImages) as $image) {
-            $points[] = image_map_point($image, $localizedGalleries[(int) $image['gallery_id']], true);
+            $points[] = image_map_point(
+                $image,
+                $localizedGalleries[(int) $image['gallery_id']],
+                true,
+            );
         }
 
         if (is_dir(gallery_map_cache_dir())) {
-            @file_put_contents($cacheFile, json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            gallery_map_cache_prune($gallery, $publicOnly, $recursive, $cacheFile);
+            @file_put_contents($cacheFile, json_encode(
+                $points,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            ));
+            gallery_map_cache_prune(
+                $gallery,
+                $publicOnly,
+                $recursive,
+                $cacheFile,
+            );
         }
         return $points;
     });

@@ -173,13 +173,22 @@ use function Gallery\Services\admin_log_event;
  * polls the gallery API again.
  *
  * @param array<string,mixed> $gallery Gallery currently being edited.
+ * @return void Render the AI metadata reset control for the gallery.
  */
 function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 {
-    $enabled = !function_exists('Gallery\Services\feature_capability_effective_enabled') || feature_capability_effective_enabled('ai_image_metadata');
+    $enabled =
+        !function_exists(
+            'Gallery\Services\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('ai_image_metadata');
     $galleryId = (int) ($gallery['id'] ?? 0);
-    $schemaReady = function_exists('Gallery\Services\ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
-    $confirmMessage = t('admin.gallery_editor.ai_reprocess_confirm', 'Forget generated AI metadata for this gallery branch and let the Windows worker process these photos again?');
+    $schemaReady =
+        function_exists('Gallery\Services\ai_image_analysis_schema_ready')
+        && ai_image_analysis_schema_ready();
+    $confirmMessage = t(
+        'admin.gallery_editor.ai_reprocess_confirm',
+        'Forget generated AI metadata for this gallery branch and let the Windows worker process these photos again?',
+    );
     \Gallery\Views\view_render_admin_gallery_ai_reprocess_panel([
         'enabled' => $enabled,
         'schema_ready' => $schemaReady,
@@ -187,7 +196,10 @@ function render_admin_gallery_ai_reprocess_panel(array $gallery): void
         'action_url' => url_for('admin_edit_gallery', ['id' => $galleryId]),
         'csrf_html' => csrf_field(),
         'confirm_message' => $confirmMessage,
-        'confirm_json' => (string) json_encode($confirmMessage, JSON_UNESCAPED_UNICODE),
+        'confirm_json' => (string) json_encode(
+            $confirmMessage,
+            JSON_UNESCAPED_UNICODE,
+        ),
     ]);
 }
 
@@ -204,17 +216,37 @@ function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 function render_admin_image_bulk_toolbar(array $gallery): void
 {
     $galleryId = (int) $gallery['id'];
-    $suggestedDestinationId = function_exists('Gallery\Services\likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
+    $suggestedDestinationId = function_exists(
+        'Gallery\Services\likely_gallery_destination_id',
+    )
+        ? likely_gallery_destination_id($galleryId)
+        : 0;
     \Gallery\Views\view_render_admin_image_bulk_toolbar([
         'gallery_id' => $galleryId,
         'thumbnail_url' => url_for('admin_create_thumbnails'),
-        'browser_thumbnail_rebuild_config' => function_exists('Gallery\\Services\\browser_thumbnail_rebuild_browser_config') ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false],
-        'destination_picker_html' => render_gallery_search_picker('destination_gallery_id', 0, $galleryId, [
-            'id' => 'admin-image-move-destination-' . $galleryId,
-            'placeholder' => t('admin.gallery_editor.search_destination_gallery', 'Search destination gallery'),
-            'prefill_gallery_id' => $suggestedDestinationId,
-        ]),
-        'parent_picker_html' => render_gallery_parent_picker($galleryId, 0, 'new_gallery_parent_id'),
+        'browser_thumbnail_rebuild_config' => function_exists(
+            'Gallery\\Services\\browser_thumbnail_rebuild_browser_config',
+        )
+            ? browser_thumbnail_rebuild_browser_config()
+            : ['enabled' => false],
+        'destination_picker_html' => render_gallery_search_picker(
+            'destination_gallery_id',
+            0,
+            $galleryId,
+            [
+                'id' => 'admin-image-move-destination-' . $galleryId,
+                'placeholder' => t(
+                    'admin.gallery_editor.search_destination_gallery',
+                    'Search destination gallery',
+                ),
+                'prefill_gallery_id' => $suggestedDestinationId,
+            ],
+        ),
+        'parent_picker_html' => render_gallery_parent_picker(
+            $galleryId,
+            0,
+            'new_gallery_parent_id',
+        ),
     ]);
 }
 
@@ -224,7 +256,9 @@ function render_admin_image_bulk_toolbar(array $gallery): void
  * Banner replaces the visible public title text, logo is supplementary, and the
  * separator acts as a visual divider below the public title area.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string, mixed> $gallery Gallery row containing the fields
+ *     consumed by gallery_branding_asset_url().
+ * @return void Render the branding asset controls and their schema state.
  */
 function render_admin_gallery_branding_fields(array $gallery): void
 {
@@ -236,7 +270,11 @@ function render_admin_gallery_branding_fields(array $gallery): void
                 'kind' => (string) $kind,
                 'label' => (string) $definition['label'],
                 'description' => (string) $definition['description'],
-                'url' => gallery_branding_asset_url($gallery, (string) $kind, false),
+                'url' => gallery_branding_asset_url(
+                    $gallery,
+                    (string) $kind,
+                    false,
+                ),
             ];
         }
     }

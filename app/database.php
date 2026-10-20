@@ -40,28 +40,71 @@ use PDO;
 use PDOStatement;
 use Throwable;
 
-
 /**
  * Dispatch one executed SQL observation to the anonymous database telemetry observer.
  *
  * The observer is loaded later in the service bootstrap, so this core boundary
  * deliberately uses a dynamic function check instead of introducing a reverse
  * dependency from Core to Services.
+ *
+ * @param string $sql SQL statement text without bound values.
+ * @param float $elapsedMs Execution duration in milliseconds.
+ * @param bool $ok Whether execution completed successfully.
+ * @param int $rowCount Number of affected or returned rows.
+ * @param ?string $error Failure message, when execution failed.
+ * @return void Dispatches the observation when the telemetry service is loaded.
  */
-function database_dispatch_telemetry_query_observation(string $sql, float $elapsedMs, bool $ok, int $rowCount = 0, ?string $error = null): void
-{
+function database_dispatch_telemetry_query_observation(
+    string $sql,
+    float $elapsedMs,
+    bool $ok,
+    int $rowCount = 0,
+    ?string $error = null,
+): void {
     if (function_exists('Gallery\\Services\\telemetry_observe_db_query')) {
-        \Gallery\Services\telemetry_observe_db_query($sql, $elapsedMs, $ok, $rowCount, $error);
+        \Gallery\Services\telemetry_observe_db_query(
+            $sql,
+            $elapsedMs,
+            $ok,
+            $rowCount,
+            $error,
+        );
     }
 }
 
-/** Dispatch one executed SQL observation to every active request-local observer. */
-function database_dispatch_query_observation(string $sql, float $elapsedMs, bool $ok, int $rowCount = 0, ?string $error = null): void
-{
+/**
+ * Dispatch one executed SQL observation to every active request-local observer.
+ *
+ * @param string $sql SQL statement text without bound values.
+ * @param float $elapsedMs Execution duration in milliseconds.
+ * @param bool $ok Whether execution completed successfully.
+ * @param int $rowCount Number of affected or returned rows.
+ * @param ?string $error Failure message, when execution failed.
+ * @return void Dispatches observations to active request-local observers.
+ */
+function database_dispatch_query_observation(
+    string $sql,
+    float $elapsedMs,
+    bool $ok,
+    int $rowCount = 0,
+    ?string $error = null,
+): void {
     if (function_exists('Gallery\\Services\\admin_test_run_record_db_query')) {
-        \Gallery\Services\admin_test_run_record_db_query($sql, $elapsedMs, $ok, $rowCount, $error);
+        \Gallery\Services\admin_test_run_record_db_query(
+            $sql,
+            $elapsedMs,
+            $ok,
+            $rowCount,
+            $error,
+        );
     }
-    database_dispatch_telemetry_query_observation($sql, $elapsedMs, $ok, $rowCount, $error);
+    database_dispatch_telemetry_query_observation(
+        $sql,
+        $elapsedMs,
+        $ok,
+        $rowCount,
+        $error,
+    );
 }
 
 /**
@@ -73,11 +116,14 @@ function database_dispatch_query_observation(string $sql, float $elapsedMs, bool
 class TelemetryPDOStatement extends PDOStatement
 {
     /** PDO constructs statement subclasses internally. */
-    protected function __construct()
-    {
-    }
+    protected function __construct() {}
 
-    /** Execute the prepared statement and dispatch its privacy-safe observation. */
+    /**
+     * Execute the prepared statement and dispatch its privacy-safe observation.
+     *
+     * @param ?array<array-key,mixed> $params Bound values keyed by parameter name or position.
+     * @return bool True when the statement executes successfully.
+     */
     public function execute(?array $params = null): bool
     {
         $startedAt = microtime(true);
@@ -88,7 +134,7 @@ class TelemetryPDOStatement extends PDOStatement
                 (microtime(true) - $startedAt) * 1000,
                 $result,
                 $result ? (int) $this->rowCount() : 0,
-                null
+                null,
             );
             return $result;
         } catch (Throwable $exception) {
@@ -97,7 +143,7 @@ class TelemetryPDOStatement extends PDOStatement
                 (microtime(true) - $startedAt) * 1000,
                 false,
                 0,
-                $exception->getMessage()
+                $exception->getMessage(),
             );
             throw $exception;
         }
@@ -112,9 +158,19 @@ class TelemetryPDOStatement extends PDOStatement
  */
 class TelemetryPDO extends PDO
 {
-    /** Record one direct SQL query. */
-    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
-    {
+    /**
+     * Record one direct SQL query.
+     *
+     * @param string $query SQL query text without bound values.
+     * @param ?int $fetchMode PDO fetch mode, when explicitly selected.
+     * @param list<mixed> $fetchModeArgs Additional arguments accepted by the selected fetch mode.
+     * @return PDOStatement|false The result statement, or false on failure.
+     */
+    public function query(
+        string $query,
+        ?int $fetchMode = null,
+        mixed ...$fetchModeArgs,
+    ): PDOStatement|false {
         $startedAt = microtime(true);
         try {
             $result = $fetchMode === null
@@ -125,16 +181,27 @@ class TelemetryPDO extends PDO
                 (microtime(true) - $startedAt) * 1000,
                 $result !== false,
                 $result instanceof PDOStatement ? (int) $result->rowCount() : 0,
-                null
+                null,
             );
             return $result;
         } catch (Throwable $exception) {
-            database_dispatch_telemetry_query_observation($query, (microtime(true) - $startedAt) * 1000, false, 0, $exception->getMessage());
+            database_dispatch_telemetry_query_observation(
+                $query,
+                (microtime(true) - $startedAt) * 1000,
+                false,
+                0,
+                $exception->getMessage(),
+            );
             throw $exception;
         }
     }
 
-    /** Record one direct SQL exec operation. */
+    /**
+     * Record one direct SQL exec operation.
+     *
+     * @param string $statement SQL statement text without bound values.
+     * @return int|false Number of affected rows, or false on failure.
+     */
     public function exec(string $statement): int|false
     {
         $startedAt = microtime(true);
@@ -145,34 +212,57 @@ class TelemetryPDO extends PDO
                 (microtime(true) - $startedAt) * 1000,
                 $result !== false,
                 $result === false ? 0 : (int) $result,
-                null
+                null,
             );
             return $result;
         } catch (Throwable $exception) {
-            database_dispatch_telemetry_query_observation($statement, (microtime(true) - $startedAt) * 1000, false, 0, $exception->getMessage());
+            database_dispatch_telemetry_query_observation(
+                $statement,
+                (microtime(true) - $startedAt) * 1000,
+                false,
+                0,
+                $exception->getMessage(),
+            );
             throw $exception;
         }
     }
 
-    /** Record transaction start latency and outcome for telemetry only. */
+    /**
+     * Record transaction start latency and outcome for telemetry only.
+     *
+     * @return bool True when the transaction starts successfully.
+     */
     public function beginTransaction(): bool
     {
         return $this->recordTelemetryTransactionOperation('begin');
     }
 
-    /** Record transaction commit latency and outcome for telemetry only. */
+    /**
+     * Record transaction commit latency and outcome for telemetry only.
+     *
+     * @return bool True when the transaction commits successfully.
+     */
     public function commit(): bool
     {
         return $this->recordTelemetryTransactionOperation('commit');
     }
 
-    /** Record transaction rollback latency and outcome for telemetry only. */
+    /**
+     * Record transaction rollback latency and outcome for telemetry only.
+     *
+     * @return bool True when the transaction rolls back successfully.
+     */
     public function rollBack(): bool
     {
         return $this->recordTelemetryTransactionOperation('rollback');
     }
 
-    /** Execute one concrete parent transaction operation without virtual recursion. */
+    /**
+     * Execute one concrete parent transaction operation without virtual recursion.
+     *
+     * @param string $name Transaction operation name: begin, commit, or rollback.
+     * @return bool Whether the parent PDO operation succeeded.
+     */
     private function recordTelemetryTransactionOperation(string $name): bool
     {
         $startedAt = microtime(true);
@@ -183,10 +273,22 @@ class TelemetryPDO extends PDO
                 'rollback' => parent::rollBack(),
                 default => false,
             };
-            database_dispatch_telemetry_query_observation(strtoupper($name), (microtime(true) - $startedAt) * 1000, $result, 0, null);
+            database_dispatch_telemetry_query_observation(
+                strtoupper($name),
+                (microtime(true) - $startedAt) * 1000,
+                $result,
+                0,
+                null,
+            );
             return $result;
         } catch (Throwable $exception) {
-            database_dispatch_telemetry_query_observation(strtoupper($name), (microtime(true) - $startedAt) * 1000, false, 0, $exception->getMessage());
+            database_dispatch_telemetry_query_observation(
+                strtoupper($name),
+                (microtime(true) - $startedAt) * 1000,
+                false,
+                0,
+                $exception->getMessage(),
+            );
             throw $exception;
         }
     }
@@ -202,14 +304,13 @@ class TelemetryPDO extends PDO
 class AdminTestRunPDOStatement extends PDOStatement
 {
     /** PDO constructs statement subclasses internally. */
-    protected function __construct()
-    {
-    }
+    protected function __construct() {}
 
     /**
      * Execute the prepared statement and report its privacy-safe query shape.
      *
      * @param ?array $params Bound parameters supplied by the caller.
+     * @return bool True when the statement executes successfully.
      */
     public function execute(?array $params = null): bool
     {
@@ -221,7 +322,7 @@ class AdminTestRunPDOStatement extends PDOStatement
                 (microtime(true) - $startedAt) * 1000,
                 $result,
                 $result ? (int) $this->rowCount() : 0,
-                null
+                null,
             );
             return $result;
         } catch (Throwable $exception) {
@@ -230,7 +331,7 @@ class AdminTestRunPDOStatement extends PDOStatement
                 (microtime(true) - $startedAt) * 1000,
                 false,
                 0,
-                $exception->getMessage()
+                $exception->getMessage(),
             );
             throw $exception;
         }
@@ -244,37 +345,71 @@ class AdminTestRunPDOStatement extends PDOStatement
  */
 class AdminTestRunPDO extends PDO
 {
-    /** Record one prepared-statement creation before its later execute() timing. */
-    public function prepare(string $query, array $options = []): PDOStatement|false
-    {
+    /**
+     * Record one prepared-statement creation before its later execute() timing.
+     *
+     * @param string $query SQL query text without bound values.
+     * @param array<string|int,mixed> $options PDO driver options for the statement.
+     * @return PDOStatement|false Prepared statement, or false on failure.
+     */
+    public function prepare(
+        string $query,
+        array $options = [],
+    ): PDOStatement|false {
         $startedAt = microtime(true);
         try {
             $result = parent::prepare($query, $options);
-            if (function_exists('Gallery\Services\admin_test_run_record_db_prepare')) {
-                \Gallery\Services\admin_test_run_record_db_prepare($query, (microtime(true) - $startedAt) * 1000, $result !== false, null);
+            if (function_exists(
+                'Gallery\Services\admin_test_run_record_db_prepare',
+            )) {
+                \Gallery\Services\admin_test_run_record_db_prepare(
+                    $query,
+                    (microtime(true) - $startedAt) * 1000,
+                    $result !== false,
+                    null,
+                );
             }
             return $result;
         } catch (Throwable $exception) {
-            if (function_exists('Gallery\Services\admin_test_run_record_db_prepare')) {
-                \Gallery\Services\admin_test_run_record_db_prepare($query, (microtime(true) - $startedAt) * 1000, false, $exception->getMessage());
+            if (function_exists(
+                'Gallery\Services\admin_test_run_record_db_prepare',
+            )) {
+                \Gallery\Services\admin_test_run_record_db_prepare(
+                    $query,
+                    (microtime(true) - $startedAt) * 1000,
+                    false,
+                    $exception->getMessage(),
+                );
             }
             throw $exception;
         }
     }
 
-    /** Record transaction start latency and outcome. */
+    /**
+     * Record transaction start latency and outcome.
+     *
+     * @return bool True when the transaction starts successfully.
+     */
     public function beginTransaction(): bool
     {
         return $this->recordTransactionOperation('begin');
     }
 
-    /** Record transaction commit latency and outcome. */
+    /**
+     * Record transaction commit latency and outcome.
+     *
+     * @return bool True when the transaction commits successfully.
+     */
     public function commit(): bool
     {
         return $this->recordTransactionOperation('commit');
     }
 
-    /** Record transaction rollback latency and outcome. */
+    /**
+     * Record transaction rollback latency and outcome.
+     *
+     * @return bool True when the transaction rolls back successfully.
+     */
     public function rollBack(): bool
     {
         return $this->recordTransactionOperation('rollback');
@@ -283,6 +418,8 @@ class AdminTestRunPDO extends PDO
     /**
      * Execute one parent PDO transaction operation without recursively calling this subclass override.
      *
+     * @param string $name Transaction operation name: begin, commit, or rollback.
+     * @return bool Whether the parent PDO operation succeeded.
      */
     private function recordTransactionOperation(string $name): bool
     {
@@ -296,24 +433,60 @@ class AdminTestRunPDO extends PDO
                 default => false,
             };
             $elapsedMs = (microtime(true) - $startedAt) * 1000;
-            if (function_exists('Gallery\Services\admin_test_run_record_db_transaction')) {
-                \Gallery\Services\admin_test_run_record_db_transaction($name, $elapsedMs, $result, null);
+            if (function_exists(
+                'Gallery\Services\admin_test_run_record_db_transaction',
+            )) {
+                \Gallery\Services\admin_test_run_record_db_transaction(
+                    $name,
+                    $elapsedMs,
+                    $result,
+                    null,
+                );
             }
-            database_dispatch_telemetry_query_observation(strtoupper($name), $elapsedMs, $result, 0, null);
+            database_dispatch_telemetry_query_observation(
+                strtoupper($name),
+                $elapsedMs,
+                $result,
+                0,
+                null,
+            );
             return $result;
         } catch (Throwable $exception) {
             $elapsedMs = (microtime(true) - $startedAt) * 1000;
-            if (function_exists('Gallery\Services\admin_test_run_record_db_transaction')) {
-                \Gallery\Services\admin_test_run_record_db_transaction($name, $elapsedMs, false, $exception->getMessage());
+            if (function_exists(
+                'Gallery\Services\admin_test_run_record_db_transaction',
+            )) {
+                \Gallery\Services\admin_test_run_record_db_transaction(
+                    $name,
+                    $elapsedMs,
+                    false,
+                    $exception->getMessage(),
+                );
             }
-            database_dispatch_telemetry_query_observation(strtoupper($name), $elapsedMs, false, 0, $exception->getMessage());
+            database_dispatch_telemetry_query_observation(
+                strtoupper($name),
+                $elapsedMs,
+                false,
+                0,
+                $exception->getMessage(),
+            );
             throw $exception;
         }
     }
 
-    /** Record one direct SQL query. */
-    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
-    {
+    /**
+     * Record one direct SQL query.
+     *
+     * @param string $query SQL query text without bound values.
+     * @param ?int $fetchMode PDO fetch mode, when explicitly selected.
+     * @param list<mixed> $fetchModeArgs Additional arguments accepted by the selected fetch mode.
+     * @return PDOStatement|false The result statement, or false on failure.
+     */
+    public function query(
+        string $query,
+        ?int $fetchMode = null,
+        mixed ...$fetchModeArgs,
+    ): PDOStatement|false {
         $startedAt = microtime(true);
         try {
             $result = $fetchMode === null
@@ -324,25 +497,48 @@ class AdminTestRunPDO extends PDO
                 (microtime(true) - $startedAt) * 1000,
                 $result !== false,
                 $result instanceof PDOStatement ? (int) $result->rowCount() : 0,
-                null
+                null,
             );
             return $result;
         } catch (Throwable $exception) {
-            database_dispatch_query_observation($query, (microtime(true) - $startedAt) * 1000, false, 0, $exception->getMessage());
+            database_dispatch_query_observation(
+                $query,
+                (microtime(true) - $startedAt) * 1000,
+                false,
+                0,
+                $exception->getMessage(),
+            );
             throw $exception;
         }
     }
 
-    /** Record one direct SQL exec operation. */
+    /**
+     * Record one direct SQL exec operation.
+     *
+     * @param string $statement SQL statement text without bound values.
+     * @return int|false Number of affected rows, or false on failure.
+     */
     public function exec(string $statement): int|false
     {
         $startedAt = microtime(true);
         try {
             $result = parent::exec($statement);
-            database_dispatch_query_observation($statement, (microtime(true) - $startedAt) * 1000, $result !== false, $result === false ? 0 : (int) $result, null);
+            database_dispatch_query_observation(
+                $statement,
+                (microtime(true) - $startedAt) * 1000,
+                $result !== false,
+                $result === false ? 0 : (int) $result,
+                null,
+            );
             return $result;
         } catch (Throwable $exception) {
-            database_dispatch_query_observation($statement, (microtime(true) - $startedAt) * 1000, false, 0, $exception->getMessage());
+            database_dispatch_query_observation(
+                $statement,
+                (microtime(true) - $startedAt) * 1000,
+                false,
+                0,
+                $exception->getMessage(),
+            );
             throw $exception;
         }
     }
@@ -367,12 +563,19 @@ function db(): PDO
     // Variable $database stores this steps working value.
     $database = cms_config()['database'];
     // Variable $dsn stores this steps working value.
-    $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $database['host'], $database['name'], $database['charset'] ?? 'utf8mb4');
+    $dsn = sprintf(
+        'mysql:host=%s;dbname=%s;charset=%s',
+        $database['host'],
+        $database['name'],
+        $database['charset'] ?? 'utf8mb4',
+    );
     if (!empty($database['port'])) {
         $dsn .= ';port=' . (int) $database['port'];
     }
     // Variable $pdo stores this steps working value.
-    $traceActive = function_exists('Gallery\Services\admin_test_run_active') && \Gallery\Services\admin_test_run_active();
+    $traceActive =
+        function_exists('Gallery\Services\admin_test_run_active')
+        && \Gallery\Services\admin_test_run_active();
     $pdoClass = $traceActive ? AdminTestRunPDO::class : TelemetryPDO::class;
     $connectStartedAt = microtime(true);
     try {
@@ -380,17 +583,32 @@ function db(): PDO
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
-        $statementClass = $traceActive ? AdminTestRunPDOStatement::class : TelemetryPDOStatement::class;
+        $statementClass = $traceActive
+            ? AdminTestRunPDOStatement::class
+            : TelemetryPDOStatement::class;
         $pdo->setAttribute(PDO::ATTR_STATEMENT_CLASS, [$statementClass, []]);
-        if (function_exists('Gallery\Services\admin_test_run_record_db_connection')) {
-            \Gallery\Services\admin_test_run_record_db_connection((microtime(true) - $connectStartedAt) * 1000, true, 'mysql', null);
+        if (function_exists(
+            'Gallery\Services\admin_test_run_record_db_connection',
+        )) {
+            \Gallery\Services\admin_test_run_record_db_connection(
+                (microtime(true) - $connectStartedAt) * 1000,
+                true,
+                'mysql',
+                null,
+            );
         }
     } catch (Throwable $exception) {
-        if (function_exists('Gallery\Services\admin_test_run_record_db_connection')) {
-            \Gallery\Services\admin_test_run_record_db_connection((microtime(true) - $connectStartedAt) * 1000, false, 'mysql', $exception->getMessage());
+        if (function_exists(
+            'Gallery\Services\admin_test_run_record_db_connection',
+        )) {
+            \Gallery\Services\admin_test_run_record_db_connection(
+                (microtime(true) - $connectStartedAt) * 1000,
+                false,
+                'mysql',
+                $exception->getMessage(),
+            );
         }
         throw $exception;
     }
     return $pdo;
 }
-

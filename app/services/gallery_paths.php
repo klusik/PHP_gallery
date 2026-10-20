@@ -44,7 +44,7 @@ use function Gallery\Core\path_inside;
 use function Gallery\Core\slugify;
 
 /**
-Gallery path service helpers.
+ * Gallery path service helpers.
  *
  * This module contains only path normalization and filesystem boundary checks.
  * It deliberately does not create, update, or delete galleries, which keeps the
@@ -72,9 +72,15 @@ function gallery_abs_path(string $relativePath): string
     // Variable $relativePath stores this steps working value.
     $relativePath = normalize_relative_path($relativePath);
     // Variable $path stores this steps working value.
-    $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $path =
+        galleries_root()
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (!gallery_filesystem_path_inside_root($path)) {
-        throw new RuntimeException(gallery_path_boundary_error_message('Gallery path is outside the configured root.', $path));
+        throw new RuntimeException(gallery_path_boundary_error_message(
+            'Gallery path is outside the configured root.',
+            $path,
+        ));
     }
     return $path;
 }
@@ -82,7 +88,6 @@ function gallery_abs_path(string $relativePath): string
 /**
  * Resolve a future gallery path whose final directory may not exist yet.
  */
-
 
 /**
  * Build detailed path diagnostics for admin logs.
@@ -94,10 +99,12 @@ function gallery_abs_path(string $relativePath): string
  *
  * @param string $relativePath Relative path filesystem path.
  * @param string $label Label value.
- * @return array Structured result data for the caller.
+ * @return array{label:string,relative_path_raw:string,gallery_root_configured:string,gallery_root_realpath:?string,gallery_root_exists:bool,gallery_root_is_dir:bool,relative_path_normalized?:string,absolute_path?:string,absolute_parent?:string,absolute_path_realpath?:?string,absolute_parent_realpath?:?string,absolute_path_exists?:bool,absolute_path_is_dir?:bool,absolute_parent_exists?:bool,absolute_parent_is_dir?:bool,inside_root_by_realpath?:?bool,parent_inside_root_by_realpath?:?bool,realpath_available_for_target?:bool,realpath_available_for_parent?:bool,normalization_error?:string} Filesystem diagnostics including resolved values, availability flags, or a normalization error.
  */
-function gallery_path_diagnostics(string $relativePath, string $label = 'gallery'): array
-{
+function gallery_path_diagnostics(
+    string $relativePath,
+    string $label = 'gallery',
+): array {
     // $root stores the configured gallery storage directory exactly as the application sees it.
     $root = galleries_root();
     // $rootReal stores the filesystem-resolved gallery storage directory when it exists.
@@ -116,7 +123,10 @@ function gallery_path_diagnostics(string $relativePath, string $label = 'gallery
         // $normalized stores the relative gallery path after traversal cleanup.
         $normalized = normalize_relative_path($relativePath);
         // $absolute stores the absolute path built from the configured gallery root and normalized relative path.
-        $absolute = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $normalized);
+        $absolute =
+            $root
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $normalized);
         // $parent stores the absolute parent directory, which is important when the target directory does not exist yet.
         $parent = dirname($absolute);
         // $pathReal stores the resolved target path when it already exists.
@@ -129,13 +139,21 @@ function gallery_path_diagnostics(string $relativePath, string $label = 'gallery
             'absolute_path' => $absolute,
             'absolute_parent' => $parent,
             'absolute_path_realpath' => $pathReal !== false ? $pathReal : null,
-            'absolute_parent_realpath' => $parentReal !== false ? $parentReal : null,
+            'absolute_parent_realpath' => $parentReal !== false
+                ? $parentReal
+                : null,
             'absolute_path_exists' => file_exists($absolute),
             'absolute_path_is_dir' => is_dir($absolute),
             'absolute_parent_exists' => file_exists($parent),
             'absolute_parent_is_dir' => is_dir($parent),
-            'inside_root_by_realpath' => $rootReal !== false && $pathReal !== false ? path_inside($root, $absolute) : null,
-            'parent_inside_root_by_realpath' => $rootReal !== false && $parentReal !== false ? path_inside($root, $parent) : null,
+            'inside_root_by_realpath' =>
+                $rootReal !== false && $pathReal !== false
+                    ? path_inside($root, $absolute)
+                    : null,
+            'parent_inside_root_by_realpath' =>
+                $rootReal !== false && $parentReal !== false
+                    ? path_inside($root, $parent)
+                    : null,
             'realpath_available_for_target' => $pathReal !== false,
             'realpath_available_for_parent' => $parentReal !== false,
         ];
@@ -162,18 +180,26 @@ function gallery_target_abs_path(string $relativePath): string
         throw new RuntimeException('Gallery folder path cannot be empty.');
     }
     // $path stores an intermediate value used by the surrounding gallery workflow.
-    $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $path =
+        galleries_root()
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     // $parent stores an intermediate value used by the surrounding gallery workflow.
     $parent = dirname($path);
     if (!is_dir($parent) || !gallery_filesystem_path_inside_root($parent)) {
-        throw new RuntimeException(gallery_path_boundary_error_message('Gallery target parent is outside the configured root or does not exist.', $parent));
+        throw new RuntimeException(gallery_path_boundary_error_message(
+            'Gallery target parent is outside the configured root or does not exist.',
+            $parent,
+        ));
     }
     if (!gallery_filesystem_path_inside_root($path)) {
-        throw new RuntimeException(gallery_path_boundary_error_message('Gallery target path is outside the configured root.', $path));
+        throw new RuntimeException(gallery_path_boundary_error_message(
+            'Gallery target path is outside the configured root.',
+            $path,
+        ));
     }
     return $path;
 }
-
 
 /**
  * Check a gallery filesystem path against the configured root, even if the
@@ -234,7 +260,11 @@ function gallery_normalized_path_inside_root(string $root, string $path): bool
         $normalizedPath = strtolower($normalizedPath);
     }
 
-    return $normalizedPath === $normalizedRoot || str_starts_with($normalizedPath, rtrim($normalizedRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR);
+    return $normalizedPath === $normalizedRoot
+        || str_starts_with(
+            $normalizedPath,
+            rtrim($normalizedRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+        );
 }
 
 /**
@@ -250,7 +280,8 @@ function gallery_normalize_filesystem_path(string $path): string
     // $isWindowsDrive records whether the path starts with a Windows drive prefix.
     $isWindowsDrive = preg_match('~^[A-Za-z]:\\\\~', $path) === 1;
     // $isAbsolute records whether the normalized result must keep an absolute root prefix.
-    $isAbsolute = str_starts_with($path, DIRECTORY_SEPARATOR) || $isWindowsDrive;
+    $isAbsolute =
+        str_starts_with($path, DIRECTORY_SEPARATOR) || $isWindowsDrive;
     // $prefix stores the leading root portion for Unix paths or Windows drive paths.
     $prefix = '';
 
@@ -292,21 +323,35 @@ function gallery_normalize_filesystem_path(string $path): string
  * @param string $path Filesystem path.
  * @return string Text result for the caller.
  */
-function gallery_path_boundary_error_message(string $summary, string $path): string
-{
+function gallery_path_boundary_error_message(
+    string $summary,
+    string $path,
+): string {
     // $root stores the configured gallery storage root before realpath() normalization.
     $root = galleries_root();
     // $parent stores the target parent used to diagnose future paths.
     $parent = dirname($path);
 
-    return $summary . ' Root: ' . $root
-        . '; root realpath: ' . (realpath($root) ?: 'unavailable')
-        . '; path: ' . $path
-        . '; path realpath: ' . (realpath($path) ?: 'unavailable')
-        . '; path exists: ' . (file_exists($path) ? 'yes' : 'no')
-        . '; parent: ' . $parent
-        . '; parent realpath: ' . (realpath($parent) ?: 'unavailable')
-        . '; parent exists: ' . (file_exists($parent) ? 'yes' : 'no') . '.';
+    return (
+        $summary
+            . ' Root: '
+            . $root
+            . '; root realpath: '
+            . (realpath($root) ?: 'unavailable')
+            . '; path: '
+            . $path
+            . '; path realpath: '
+            . (realpath($path) ?: 'unavailable')
+            . '; path exists: '
+            . (file_exists($path) ? 'yes' : 'no')
+            . '; parent: '
+            . $parent
+            . '; parent realpath: '
+            . (realpath($parent) ?: 'unavailable')
+            . '; parent exists: '
+            . (file_exists($parent) ? 'yes' : 'no')
+            . '.'
+    );
 }
 
 /**
@@ -350,7 +395,9 @@ function gallery_child_folder_path(?array $parent, string $folderName): string
     if (!$parent) {
         return $segment;
     }
-    return normalize_relative_path((string) $parent['folder_path'] . '/' . $segment);
+    return normalize_relative_path(
+        (string) $parent['folder_path'] . '/' . $segment,
+    );
 }
 
 /**
@@ -360,17 +407,25 @@ function gallery_child_folder_path(?array $parent, string $folderName): string
  * @param string $folderName Folder name value.
  * @return string Text result for the caller.
  */
-function unique_gallery_child_folder_path(?array $parent, string $folderName): string
-{
+function unique_gallery_child_folder_path(
+    ?array $parent,
+    string $folderName,
+): string {
     // $segment stores an intermediate value used by the surrounding gallery workflow.
     $segment = gallery_folder_segment($folderName);
     // $candidate stores an intermediate value used by the surrounding gallery workflow.
     $candidate = gallery_child_folder_path($parent, $segment);
     // $counter stores an intermediate value used by the surrounding gallery workflow.
     $counter = 2;
-    while (is_dir(gallery_target_abs_path($candidate)) || find_gallery_by_folder_path($candidate, true)) {
+    while (
+        is_dir(gallery_target_abs_path($candidate))
+        || find_gallery_by_folder_path($candidate, true)
+    ) {
         // $candidate stores an intermediate value used by the surrounding gallery workflow.
-        $candidate = gallery_child_folder_path($parent, $segment . '-' . $counter);
+        $candidate = gallery_child_folder_path(
+            $parent,
+            $segment . '-' . $counter,
+        );
         $counter++;
     }
     return $candidate;
@@ -388,7 +443,14 @@ function image_abs_path(array $image, array $gallery): string
     // Variable $galleryRoot stores this steps working value.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     // Variable $path stores this steps working value.
-    $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, normalize_relative_path((string) $image['relative_path']));
+    $path =
+        $galleryRoot
+        . DIRECTORY_SEPARATOR
+        . str_replace(
+            '/',
+            DIRECTORY_SEPARATOR,
+            normalize_relative_path((string) $image['relative_path']),
+        );
     // The destination's parent must be in this gallery even before an upload exists.
     $parent = dirname($path);
     if (!path_inside($galleryRoot, $parent)) {
@@ -396,7 +458,13 @@ function image_abs_path(array $image, array $gallery): string
     }
     // An existing image may be a symbolic link even when its parent is trusted.
     // Validate the canonical final target while retaining safe missing upload paths.
-    if ((file_exists($path) || is_link($path)) && !path_inside($galleryRoot, $path)) {
+    if (
+        (
+            file_exists($path)
+            || is_link($path)
+        )
+        && !path_inside($galleryRoot, $path)
+    ) {
         throw new RuntimeException('Image path is outside its gallery.');
     }
     return $path;

@@ -39,8 +39,11 @@ namespace Gallery\Services {
      */
     function gallery_abs_path(string $relative): string
     {
-        return $GLOBALS['flight_report_test_root']
-            . DIRECTORY_SEPARATOR . $relative;
+        return (
+            $GLOBALS['flight_report_test_root']
+                . DIRECTORY_SEPARATOR
+                . $relative
+        );
     }
 
     /**
@@ -93,14 +96,20 @@ namespace {
     {
         $handle = fopen($path, 'wb');
         if ($handle === false) {
-            throw new RuntimeException('Could not create the oversized report fixture.');
+            throw new RuntimeException(
+                'Could not create the oversized report fixture.',
+            );
         }
         try {
-            if (fwrite($handle, "%PDF-1.4\n") === false
+            if (
+                fwrite($handle, "%PDF-1.4\n") === false
                 || !ftruncate($handle, FLIGHT_REPORT_TEST_OVERSIZE_BYTES)
                 || fseek($handle, FLIGHT_REPORT_TEST_OVERSIZE_BYTES - 8) !== 0
-                || fwrite($handle, "%%EOF\n") === false) {
-                throw new RuntimeException('Could not size the oversized report fixture.');
+                || fwrite($handle, "%%EOF\n") === false
+            ) {
+                throw new RuntimeException(
+                    'Could not size the oversized report fixture.',
+                );
             }
         } finally {
             fclose($handle);
@@ -121,9 +130,9 @@ namespace {
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator(
                 $root,
-                FilesystemIterator::SKIP_DOTS
+                FilesystemIterator::SKIP_DOTS,
             ),
-            RecursiveIteratorIterator::CHILD_FIRST
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($iterator as $entry) {
             if ($entry->isDir() && !$entry->isLink()) {
@@ -135,13 +144,20 @@ namespace {
         rmdir($root);
     }
 
-    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR
-        . 'gallery-flight-report-' . bin2hex(random_bytes(8));
+    $root =
+        sys_get_temp_dir()
+        . DIRECTORY_SEPARATOR
+        . 'gallery-flight-report-'
+        . bin2hex(random_bytes(8));
     $galleryAPath = $root . DIRECTORY_SEPARATOR . 'gallery-a';
     $galleryBPath = $root . DIRECTORY_SEPARATOR . 'gallery-b';
-    if (!mkdir($galleryAPath, 0700, true)
-        || !mkdir($galleryBPath, 0700, true)) {
-        throw new RuntimeException('Could not create isolated report galleries.');
+    if (
+        !mkdir($galleryAPath, 0700, true)
+        || !mkdir($galleryBPath, 0700, true)
+    ) {
+        throw new RuntimeException(
+            'Could not create isolated report galleries.',
+        );
     }
     $GLOBALS['flight_report_test_root'] = $root;
 
@@ -164,7 +180,7 @@ namespace {
             'report-01',
             'session-01',
             'en',
-            $digest
+            $digest,
         );
         $retry = \Gallery\Services\upload_flight_report_attach(
             $galleryA,
@@ -172,58 +188,62 @@ namespace {
             'report-01',
             'session-01',
             'en',
-            $digest
+            $digest,
         );
         flight_report_test_assert(
-            $first['found'] && $retry['found']
+            $first['found']
+                && $retry['found']
                 && $first['report']['id'] === $retry['report']['id']
-                && count(\Gallery\Services\gallery_pdf_documents_list($galleryA)) === 1,
-            'An exact retry must return one durable attachment receipt.'
+                && count(\Gallery\Services\gallery_pdf_documents_list(
+                    $galleryA,
+                )) === 1,
+            'An exact retry must return one durable attachment receipt.',
         );
 
         $status = \Gallery\Services\upload_flight_report_status(
             $galleryA,
             'report-01',
             'en',
-            $digest
+            $digest,
         );
         flight_report_test_assert(
-            $status['found'] && !$status['conflict']
+            $status['found']
+                && !$status['conflict']
                 && $status['report']['sha256'] === $digest,
-            'Status must reconcile the stored report by identity and checksum.'
+            'Status must reconcile the stored report by identity and checksum.',
         );
 
         $changedStatus = \Gallery\Services\upload_flight_report_status(
             $galleryA,
             'report-01',
             'en',
-            str_repeat('0', 64)
+            str_repeat('0', 64),
         );
         flight_report_test_assert(
             $changedStatus['conflict'] && !$changedStatus['found'],
-            'A changed checksum must conflict instead of replacing the report.'
+            'A changed checksum must conflict instead of replacing the report.',
         );
 
         $verifiedReport = \Gallery\Services\gallery_pdf_documents_read(
             $galleryA,
-            $first['report']['id']
+            $first['report']['id'],
         );
         flight_report_test_assert(
             is_array($verifiedReport),
-            'The persisted receipt must resolve to a confined, verified PDF.'
+            'The persisted receipt must resolve to a confined, verified PDF.',
         );
         unlink($verifiedReport['path']);
         $deletedStatus = \Gallery\Services\upload_flight_report_status(
             $galleryA,
             'report-01',
             'en',
-            $digest
+            $digest,
         );
         flight_report_test_assert(
             $deletedStatus['found'] === false
                 && $deletedStatus['conflict'] === false
                 && $deletedStatus['report'] === null,
-            'Status must not return a receipt for a deleted indexed PDF.'
+            'Status must not return a receipt for a deleted indexed PDF.',
         );
 
         $recoveredReport = \Gallery\Services\upload_flight_report_attach(
@@ -232,12 +252,13 @@ namespace {
             'report-01',
             'session-01',
             'en',
-            $digest
+            $digest,
         );
-        $visibleReports = \Gallery\Services\gallery_pdf_documents_list($galleryA);
+        $visibleReports =
+            \Gallery\Services\gallery_pdf_documents_list($galleryA);
         $recoveredRead = \Gallery\Services\gallery_pdf_documents_read(
             $galleryA,
-            $recoveredReport['report']['id']
+            $recoveredReport['report']['id'],
         );
         flight_report_test_assert(
             $recoveredReport['found']
@@ -247,16 +268,16 @@ namespace {
                 && is_array($recoveredRead)
                 && hash_equals(
                     $digest,
-                    (string) hash_file('sha256', $recoveredRead['path'])
+                    (string) hash_file('sha256', $recoveredRead['path']),
                 )
                 && hash_equals($digest, $recoveredRead['metadata']['sha256']),
-            'Same-identity retry must restore one fresh confined, checksum-valid report.'
+            'Same-identity retry must restore one fresh confined, checksum-valid report.',
         );
         $recoveredStatus = \Gallery\Services\upload_flight_report_status(
             $galleryA,
             'report-01',
             'en',
-            $digest
+            $digest,
         );
         flight_report_test_assert(
             $recoveredStatus['found']
@@ -264,7 +285,7 @@ namespace {
                 && $recoveredStatus['report']['id']
                     === $recoveredReport['report']['id']
                 && $recoveredStatus['report']['sha256'] === $digest,
-            'Status must reconcile the recovered report after an exact retry.'
+            'Status must reconcile the recovered report after an exact retry.',
         );
 
         // Keep the byte length fixed so integrity rejection exercises SHA-256,
@@ -273,32 +294,34 @@ namespace {
         flight_report_test_assert(
             strlen($corruptPdfBytes) === strlen($pdfBytes)
                 && hash('sha256', $corruptPdfBytes) !== $digest,
-            'The corrupt PDF vector must retain its size and change its checksum.'
+            'The corrupt PDF vector must retain its size and change its checksum.',
         );
         file_put_contents($recoveredRead['path'], $corruptPdfBytes);
         $corruptStatus = \Gallery\Services\upload_flight_report_status(
             $galleryA,
             'report-01',
             'en',
-            $digest
+            $digest,
         );
         flight_report_test_assert(
             $corruptStatus['found'] === false
                 && $corruptStatus['conflict'] === false
                 && $corruptStatus['report'] === null,
-            'Status must return no receipt for PDF bytes that fail checksum validation.'
+            'Status must return no receipt for PDF bytes that fail checksum validation.',
         );
 
         $otherGallery = \Gallery\Services\upload_flight_report_status(
             $galleryB,
             'report-01',
             'en',
-            $digest
+            $digest,
         );
         flight_report_test_assert(
-            !$otherGallery['found'] && !$otherGallery['conflict']
-                && \Gallery\Services\gallery_pdf_documents_list($galleryB) === [],
-            'A report in one gallery must not appear in another gallery.'
+            !$otherGallery['found']
+                && !$otherGallery['conflict']
+                && \Gallery\Services\gallery_pdf_documents_list($galleryB)
+                    === [],
+            'A report in one gallery must not appear in another gallery.',
         );
 
         $invalidRejected = false;
@@ -309,14 +332,14 @@ namespace {
                 'report-invalid',
                 'session-01',
                 'cs',
-                hash_file('sha256', $invalidSource)
+                hash_file('sha256', $invalidSource),
             );
         } catch (RuntimeException) {
             $invalidRejected = true;
         }
         flight_report_test_assert(
             $invalidRejected,
-            'A PDF without a complete trailer must be rejected.'
+            'A PDF without a complete trailer must be rejected.',
         );
 
         $wrongMimeRejected = false;
@@ -327,14 +350,14 @@ namespace {
                 'report-wrong-mime',
                 'session-01',
                 'de',
-                hash_file('sha256', $wrongMimeSource)
+                hash_file('sha256', $wrongMimeSource),
             );
         } catch (RuntimeException) {
             $wrongMimeRejected = true;
         }
         flight_report_test_assert(
             $wrongMimeRejected,
-            'Image bytes named as a PDF report must be rejected by content validation.'
+            'Image bytes named as a PDF report must be rejected by content validation.',
         );
 
         flight_report_test_create_oversized_pdf($oversizedSource);
@@ -346,17 +369,18 @@ namespace {
                 'report-large',
                 'session-01',
                 'de',
-                str_repeat('0', 64)
+                str_repeat('0', 64),
             );
         } catch (RuntimeException) {
             $oversizedRejected = true;
         }
         flight_report_test_assert(
             $oversizedRejected,
-            'A report above the existing PDF byte ceiling must be rejected.'
+            'A report above the existing PDF byte ceiling must be rejected.',
         );
 
-        $controllerPath = dirname(__DIR__)
+        $controllerPath =
+            dirname(__DIR__)
             . '/app/controllers/upload_automation.php';
         $controller = file_get_contents($controllerPath);
         flight_report_test_assert(
@@ -364,32 +388,32 @@ namespace {
                 && str_contains($controller, "'flight_reports_v1' => true")
                 && str_contains(
                     $controller,
-                    '$galleryId = (int) ($tokenRow[\'gallery_id\'] ?? 0);'
+                    '$galleryId = (int) ($tokenRow[\'gallery_id\'] ?? 0);',
                 )
                 && str_contains(
                     $controller,
-                    "upload_flight_report_attach("
+                    'upload_flight_report_attach(',
                 ),
-            'The API must advertise and dispatch reports within token gallery scope.'
+            'The API must advertise and dispatch reports within token gallery scope.',
         );
         $handlerStart = strpos(
             $controller,
-            'function upload_automation_handle_flight_report_action'
+            'function upload_automation_handle_flight_report_action',
         );
         $handlerEnd = strpos(
             $controller,
-            'function cms_upload_automation_upload'
+            'function cms_upload_automation_upload',
         );
         $handlers = is_int($handlerStart) && is_int($handlerEnd)
             ? substr($controller, $handlerStart, $handlerEnd - $handlerStart)
             : '';
         flight_report_test_assert(
             $handlers !== '' && !str_contains($handlers, 'require_admin('),
-            'Report delivery must use the upload key without Admin escalation.'
+            'Report delivery must use the upload key without Admin escalation.',
         );
         flight_report_test_assert(
             str_contains($handlers, 'upload_automation_with_gallery_lock('),
-            'Concurrent report uploads must serialize through the gallery upload lock.'
+            'Concurrent report uploads must serialize through the gallery upload lock.',
         );
     } finally {
         flight_report_test_remove_tree($root);

@@ -15,7 +15,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS admin_operation_keys (
+    'CREATE TABLE IF NOT EXISTS admin_operation_keys (
         actor_id BIGINT UNSIGNED NOT NULL,
         key_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
         operation_name VARCHAR(40) NOT NULL,
@@ -27,5 +27,5 @@ return [
         updated_at DATETIME NOT NULL,
         PRIMARY KEY (actor_id, key_hash),
         KEY admin_operation_keys_pending (state, updated_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

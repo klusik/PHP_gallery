@@ -25,7 +25,10 @@ function cms_admin_cooperative_albums(): void
 {
     Core\require_admin();
     if (Core\request_method() !== 'GET') {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     try {
@@ -33,10 +36,19 @@ function cms_admin_cooperative_albums(): void
         if ($cursor === false || $cursor < 0) {
             throw new CooperativeException('invalid_cursor');
         }
-        cooperative_pairing_json(['ok' => true, 'state' => Service\cooperative_album_sources_state($cursor)]);
+        cooperative_pairing_json([
+            'ok' => true,
+            'state' => Service\cooperative_album_sources_state($cursor),
+        ]);
     } catch (CooperativeException $error) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => $error->reason], cooperative_pairing_error_status($error->reason));
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => $error->reason,
+        ], cooperative_pairing_error_status($error->reason));
     } catch (\Throwable) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'source_unavailable'], 503);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'source_unavailable',
+        ], 503);
     }
 }

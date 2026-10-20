@@ -61,24 +61,31 @@ function application_update_activation_gate_path(): string
  * release without proving that the earlier job reached activation_complete.
  *
  * @param array<string,mixed> $job Durable update job state.
+ * @return void Persists or verifies the activation ownership marker for this job.
  */
 function application_update_activation_gate_begin(array $job): void
 {
     $jobId = (string) ($job['id'] ?? '');
     if ($jobId === '') {
-        throw new RuntimeException('Update activation job identifier is missing.');
+        throw new RuntimeException(
+            'Update activation job identifier is missing.',
+        );
     }
 
     $path = application_update_activation_gate_path();
     $markerExists = is_file($path);
     $existing = application_update_read_json($path);
     if ($markerExists && $existing === []) {
-        throw new RuntimeException('Existing update activation gate state is unreadable.');
+        throw new RuntimeException(
+            'Existing update activation gate state is unreadable.',
+        );
     }
     if ($existing !== []) {
         $existingJobId = (string) ($existing['job_id'] ?? '');
         if ($existingJobId === '' || !hash_equals($existingJobId, $jobId)) {
-            throw new RuntimeException('Another update activation gate is already active.');
+            throw new RuntimeException(
+                'Another update activation gate is already active.',
+            );
         }
     }
 
@@ -95,11 +102,15 @@ function application_update_activation_gate_begin(array $job): void
     // update was initiated by an anonymous request. The session id itself is never stored.
     if (session_status() === PHP_SESSION_ACTIVE) {
         $sessionName = session_name();
-        if ($sessionName !== '' && preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) === 1) {
+        if (
+            $sessionName !== ''
+            && preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) === 1
+        ) {
             $payload['admin_session_name'] = $sessionName;
         }
     } elseif (isset($existing['admin_session_name'])) {
-        $payload['admin_session_name'] = (string) $existing['admin_session_name'];
+        $payload['admin_session_name'] =
+            (string) $existing['admin_session_name'];
     }
 
     application_update_write_json_atomic($path, $payload);
@@ -116,7 +127,10 @@ function application_update_activation_gate_clear(string $jobId): void
 {
     $path = application_update_activation_gate_path();
     $marker = application_update_read_json($path);
-    if ($marker === [] || !hash_equals((string) ($marker['job_id'] ?? ''), $jobId)) {
+    if (
+        $marker === []
+        || !hash_equals((string) ($marker['job_id'] ?? ''), $jobId)
+    ) {
         return;
     }
     @unlink($path);
@@ -137,16 +151,25 @@ function application_update_job_assert_ready(array $job): void
     if (!is_file($jobDir . '/rollback/metadata.json')) {
         throw new RuntimeException('Rollback metadata is missing.');
     }
-    foreach ((array) ($job['checkpoints']['activation_files'] ?? []) as $relative) {
+    foreach ((array) (
+        $job['checkpoints']['activation_files'] ?? []
+    ) as $relative) {
         $relative = (string) $relative;
         application_update_assert_safe_target($jobDir, 'ready/' . $relative);
-        $ready = $jobDir . '/ready/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $ready =
+            $jobDir
+            . '/ready/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (!is_file($ready)) {
             throw new RuntimeException('Prepared activation file is missing.');
         }
     }
-    application_update_assert_activation_schema_known('application_update.job_activation_ready');
-    application_update_assert_gallery_edit_enforcement((string) ($job['checkpoints']['source_root'] ?? ''));
+    application_update_assert_activation_schema_known(
+        'application_update.job_activation_ready',
+    );
+    application_update_assert_gallery_edit_enforcement(
+        (string) ($job['checkpoints']['source_root'] ?? ''),
+    );
 }
 
 /**
@@ -189,9 +212,13 @@ function application_update_job_activate(array &$job): void
     application_update_activation_gate_begin($job);
     $jobDir = application_update_job_dir((string) $job['id']);
     $root = application_update_project_root();
-    $files = array_values((array) ($job['checkpoints']['activation_files'] ?? []));
+    $files = array_values(
+        (array) ($job['checkpoints']['activation_files'] ?? []),
+    );
     usort($files, static function (string $left, string $right): int {
-        $comparison = application_update_activation_priority($left) <=> application_update_activation_priority($right);
+        $comparison = application_update_activation_priority(
+            $left,
+        ) <=> application_update_activation_priority($right);
         return $comparison !== 0 ? $comparison : strcmp($left, $right);
     });
 
@@ -199,46 +226,82 @@ function application_update_job_activate(array &$job): void
     foreach ($files as $relative) {
         application_update_assert_safe_target($jobDir, 'ready/' . $relative);
         application_update_assert_safe_target($root, $relative, true);
-        $ready = $jobDir . '/ready/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        $destination = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $ready =
+            $jobDir
+            . '/ready/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $readyHash = hash_file('sha256', $ready);
         if ($readyHash === false) {
-            throw new RuntimeException('Could not verify prepared activation file.');
+            throw new RuntimeException(
+                'Could not verify prepared activation file.',
+            );
         }
         if (is_file($destination)) {
             $destinationHash = hash_file('sha256', $destination);
-            if ($destinationHash !== false && hash_equals($readyHash, $destinationHash)) {
+            if (
+                $destinationHash !== false
+                && hash_equals($readyHash, $destinationHash)
+            ) {
                 $activated++;
                 continue;
             }
         } elseif (is_dir($destination)) {
-            throw new RuntimeException('Cannot replace an active directory with a file.');
+            throw new RuntimeException(
+                'Cannot replace an active directory with a file.',
+            );
         }
 
         application_update_ensure_dir(dirname($destination));
-        $temporary = dirname($destination) . '/.php-gallery-activate-' . bin2hex(random_bytes(6)) . '.tmp';
-        $temporaryRelative = dirname(str_replace('/', DIRECTORY_SEPARATOR, $relative));
-        $temporaryRelative = ($temporaryRelative === '.' ? '' : str_replace(DIRECTORY_SEPARATOR, '/', $temporaryRelative) . '/')
+        $temporary =
+            dirname($destination)
+            . '/.php-gallery-activate-'
+            . bin2hex(random_bytes(6))
+            . '.tmp';
+        $temporaryRelative = dirname(str_replace(
+            '/',
+            DIRECTORY_SEPARATOR,
+            $relative,
+        ));
+        $temporaryRelative =
+            (
+                $temporaryRelative === '.'
+                    ? ''
+                    : str_replace(DIRECTORY_SEPARATOR, '/', $temporaryRelative)
+                    . '/'
+            )
             . basename($temporary);
         application_update_assert_safe_target($root, $temporaryRelative, true);
         if (!copy($ready, $temporary)) {
-            throw new RuntimeException('Could not prepare active file replacement.');
+            throw new RuntimeException(
+                'Could not prepare active file replacement.',
+            );
         }
-        if (!hash_equals($readyHash, (string) hash_file('sha256', $temporary))) {
+        if (!hash_equals(
+            $readyHash,
+            (string) hash_file('sha256', $temporary),
+        )) {
             @unlink($temporary);
-            throw new RuntimeException('Active file replacement failed integrity verification.');
+            throw new RuntimeException(
+                'Active file replacement failed integrity verification.',
+            );
         }
         application_update_assert_safe_target($root, $relative, true);
         application_update_assert_safe_target($root, $temporaryRelative);
         if (!rename($temporary, $destination)) {
             @unlink($temporary);
-            throw new RuntimeException('Could not atomically replace an active application file.');
+            throw new RuntimeException(
+                'Could not atomically replace an active application file.',
+            );
         }
         application_update_invalidate_opcache_for_path($destination);
         $activated++;
     }
 
-    foreach ((array) ($job['checkpoints']['obsolete_paths'] ?? []) as $relative) {
+    foreach ((array) (
+        $job['checkpoints']['obsolete_paths'] ?? []
+    ) as $relative) {
         $relative = (string) $relative;
         application_update_assert_safe_target($root, $relative, true);
         $path = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
@@ -250,7 +313,12 @@ function application_update_job_activate(array &$job): void
 
     $job['checkpoints']['activation_complete'] = true;
     $job['checkpoints']['activated_files'] = $activated;
-    $job['progress'] = ['current' => $activated, 'total' => count($files), 'message' => 'Prepared release activated.', 'unit' => 'files'];
+    $job['progress'] = [
+        'current' => $activated,
+        'total' => count($files),
+        'message' => 'Prepared release activated.',
+        'unit' => 'files',
+    ];
     application_update_save_job($job);
     application_update_activation_gate_clear((string) $job['id']);
 }
@@ -262,23 +330,33 @@ function application_update_job_activate(array &$job): void
  * that migration may replay on the next request. Migration definitions therefore
  * remain required to tolerate replay, while completed migration files never rerun.
  *
- * @param array $job Job state, updated by reference.
+ * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
  * @return bool True when no migrations remain.
  */
 function application_update_job_migrate_slice(array &$job): bool
 {
     if ((string) ($job['operation'] ?? '') === 'rollback') {
-        $job['progress'] = ['current' => 1, 'total' => 1, 'message' => 'Rollback does not reverse database migrations.', 'unit' => 'migration policy'];
+        $job['progress'] = [
+            'current' => 1,
+            'total' => 1,
+            'message' => 'Rollback does not reverse database migrations.',
+            'unit' => 'migration policy',
+        ];
         application_update_save_job($job);
         return true;
     }
     $result = run_migrations_bounded(1);
     $ran = array_values((array) ($result['ran'] ?? []));
-    $allRan = array_values(array_merge((array) ($job['result']['migrations'] ?? []), $ran));
+    $allRan = array_values(array_merge(
+        (array) ($job['result']['migrations'] ?? []),
+        $ran,
+    ));
     $job['result']['migrations'] = array_values(array_unique($allRan));
     $job['progress'] = [
         'current' => count($job['result']['migrations']),
-        'total' => count($job['result']['migrations']) + (int) ($result['remaining'] ?? 0),
+        'total' =>
+            count($job['result']['migrations'])
+                + (int) ($result['remaining'] ?? 0),
         'message' => 'Applying database migrations.',
         'unit' => 'migrations',
     ];
@@ -319,13 +397,23 @@ function application_update_job_finalize(array &$job): void
 
     application_update_invalidate_opcache($root, $sourceRoot);
     application_patch_notes_clear_cache();
-    $installedVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? (string) ($job['checkpoints']['validated_version'] ?? '');
+    $installedVersion =
+        application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? (string) (
+            $job['checkpoints']['validated_version'] ?? ''
+        );
 
     // Finalization must never repeat remote discovery. The verified package tells
     // us what was installed; reconcile the already known release locally.
     try {
-        $freshUpdateStatus = application_update_installed_status($installedVersion, (string) ($job['parameters']['branch'] ?? ''));
-        delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
+        $freshUpdateStatus = application_update_installed_status(
+            $installedVersion,
+            (string) ($job['parameters']['branch'] ?? ''),
+        );
+        delete_app_settings([
+            'application_update_check_cache',
+            'application_update_check_status_json',
+            'application_update_check_cached_at',
+        ]);
         cache_application_update_check($freshUpdateStatus);
     } catch (Throwable $exception) {
         // Non-fatal: the update itself already succeeded. Worst case, the admin
@@ -335,42 +423,72 @@ function application_update_job_finalize(array &$job): void
 
     if ($operation === 'rollback') {
         $sourceJobId = (string) ($job['parameters']['source_job_id'] ?? '');
-        $metadata = application_update_read_json(application_update_job_dir($sourceJobId) . '/rollback/metadata.json');
+        $metadata = application_update_read_json(
+            application_update_job_dir($sourceJobId)
+                . '/rollback/metadata.json',
+        );
         $settings = (array) ($metadata['settings_before'] ?? []);
         $channel = (string) ($settings['channel'] ?? 'stable');
         $commit = (string) ($settings['beta_commit'] ?? '');
         if ($channel === 'beta' && $commit !== '') {
             set_app_setting('application_update_channel', 'beta');
             set_app_setting('application_update_beta_commit', $commit);
-            set_app_setting('application_update_beta_backup_path', (string) ($settings['beta_backup_path'] ?? ''));
+            set_app_setting(
+                'application_update_beta_backup_path',
+                (string) ($settings['beta_backup_path'] ?? ''),
+            );
         } else {
-            delete_app_settings(['application_update_channel', 'application_update_beta_commit', 'application_update_beta_backup_path']);
+            delete_app_settings([
+                'application_update_channel',
+                'application_update_beta_commit',
+                'application_update_beta_backup_path',
+            ]);
         }
     } elseif ($operation === 'beta_install') {
         $commit = (string) ($job['parameters']['commit'] ?? '');
         set_app_setting('application_update_channel', 'beta');
         set_app_setting('application_update_beta_commit', $commit);
-        set_app_setting('application_update_beta_backup_path', 'cache/updates/jobs/' . (string) $job['id'] . '/rollback');
+        set_app_setting(
+            'application_update_beta_backup_path',
+            'cache/updates/jobs/' . (string) $job['id'] . '/rollback',
+        );
     } else {
-        delete_app_settings(['application_update_channel', 'application_update_beta_commit', 'application_update_beta_backup_path']);
+        delete_app_settings([
+            'application_update_channel',
+            'application_update_beta_commit',
+            'application_update_beta_backup_path',
+        ]);
     }
 
-    $version = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? (string) ($job['checkpoints']['validated_version'] ?? '');
-    $reportedVersion = $operation === 'beta_install' ? (string) ($job['parameters']['commit'] ?? $version) : $version;
+    $version =
+        application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? (string) (
+            $job['checkpoints']['validated_version'] ?? ''
+        );
+    $reportedVersion = $operation === 'beta_install'
+        ? (string) ($job['parameters']['commit'] ?? $version)
+        : $version;
 
     // Request-local metadata caches are cheap to invalidate immediately. Persistent
     // version-sensitive cache directories are atomically moved out of their canonical
     // locations and physically deleted later by the bounded cleanup stage.
     $runtimeCacheActions = [];
     foreach ([
-        'translation_runtime' => __NAMESPACE__ . '\\translation_clear_runtime_cache',
-        'content_localization_request' => __NAMESPACE__ . '\\content_localization_reset_request_cache',
-        'schema_inspection_request' => __NAMESPACE__ . '\\schema_inspection_reset_request_cache',
-        'legacy_schema_request' => __NAMESPACE__ . '\\db_schema_helper_reset_request_cache',
-        'smart_gallery_graph_request' => __NAMESPACE__ . '\\smart_gallery_graph_cache_clear',
-        'thumbnail_maintenance_summary' => __NAMESPACE__ . '\\thumbnail_maintenance_summary_cache_clear',
-        'admin_storage_statistics' => __NAMESPACE__ . '\\admin_storage_statistics_cache_clear',
-        'gallery_map_runtime' => __NAMESPACE__ . '\\gallery_map_cache_clear_all',
+        'translation_runtime' =>
+            __NAMESPACE__ . '\\translation_clear_runtime_cache',
+        'content_localization_request' =>
+            __NAMESPACE__ . '\\content_localization_reset_request_cache',
+        'schema_inspection_request' =>
+            __NAMESPACE__ . '\\schema_inspection_reset_request_cache',
+        'legacy_schema_request' =>
+            __NAMESPACE__ . '\\db_schema_helper_reset_request_cache',
+        'smart_gallery_graph_request' =>
+            __NAMESPACE__ . '\\smart_gallery_graph_cache_clear',
+        'thumbnail_maintenance_summary' =>
+            __NAMESPACE__ . '\\thumbnail_maintenance_summary_cache_clear',
+        'admin_storage_statistics' =>
+            __NAMESPACE__ . '\\admin_storage_statistics_cache_clear',
+        'gallery_map_runtime' =>
+            __NAMESPACE__ . '\\gallery_map_cache_clear_all',
     ] as $cacheName => $callback) {
         if (!function_exists($callback)) {
             $runtimeCacheActions[$cacheName] = 'unavailable';
@@ -384,17 +502,35 @@ function application_update_job_finalize(array &$job): void
         }
     }
     clearstatcache(true);
-    $persistentCacheInvalidation = application_update_invalidate_persistent_caches($root, (string) $job['id'], $reportedVersion);
+    $persistentCacheInvalidation = application_update_invalidate_persistent_caches(
+        $root,
+        (string) $job['id'],
+        $reportedVersion,
+    );
 
     $job['result'] = array_merge((array) ($job['result'] ?? []), [
         'version' => $reportedVersion,
-        'branch' => $operation === 'beta_install' ? 'beta' : ($operation === 'rollback' ? 'rollback' : (string) ($job['parameters']['branch'] ?? 'stable')),
-        'rollback_of' => $operation === 'rollback' ? (string) ($job['parameters']['source_job_id'] ?? '') : '',
+        'branch' => $operation === 'beta_install'
+            ? 'beta'
+            : (
+                $operation === 'rollback'
+                    ? 'rollback'
+                    : (string) ($job['parameters']['branch'] ?? 'stable')
+            ),
+        'rollback_of' => $operation === 'rollback'
+            ? (string) ($job['parameters']['source_job_id'] ?? '')
+            : '',
         'files_copied' => (int) ($job['checkpoints']['activated_files'] ?? 0),
-        'removed_paths' => array_values((array) ($job['checkpoints']['obsolete_paths'] ?? [])),
-        'removed_count' => count((array) ($job['checkpoints']['obsolete_paths'] ?? [])),
+        'removed_paths' => array_values(
+            (array) ($job['checkpoints']['obsolete_paths'] ?? []),
+        ),
+        'removed_count' => count(
+            (array) ($job['checkpoints']['obsolete_paths'] ?? []),
+        ),
         'backup' => 'cache/updates/jobs/' . (string) $job['id'] . '/rollback',
-        'migrations' => array_values((array) ($job['result']['migrations'] ?? [])),
+        'migrations' => array_values(
+            (array) ($job['result']['migrations'] ?? []),
+        ),
         'server_policy_reconciliation' => $serverPolicyReconciliation,
         'cache_invalidation' => [
             'runtime' => $runtimeCacheActions,

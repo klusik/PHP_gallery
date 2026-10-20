@@ -80,11 +80,11 @@ namespace Gallery\Services;
 require_once __DIR__ . '/../runtime/storage_observer.php';
 
 use function Gallery\Core\storage_observer_call;
-
 use function Gallery\Models\admin_storage_statistics_model_fingerprint_rows;
 use function Gallery\Models\admin_storage_statistics_model_image_rows;
 use function Gallery\Models\admin_storage_statistics_model_image_rows_after_id;
-use function Gallery\Models\admin_storage_statistics_model_thumbnail_summary_rows;
+use function Gallery\Models\admin_storage_statistics_model_thumbnail_summary_rows
+;
 use Throwable;
 
 /**
@@ -95,6 +95,7 @@ use Throwable;
  *     require a new manual snapshot without rewriting original media.
  */
 const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v3';
+
 /**
  * Version resumable jobs to require durable attachment-import progress.
  * Type: string. Units: app_settings key. Scope: one manual statistics job.
@@ -103,6 +104,7 @@ const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v3';
  *     cannot safely resume with the new database-only repeat-update semantics.
  */
 const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v3';
+
 /**
  * Keep ordinary derivative work responsive without changing its default.
  * Type: int. Units: images per request. Scope: manual statistics photo phase.
@@ -110,6 +112,7 @@ const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v3';
  * Rationale: The established 20-row batch balances progress and shared-host I/O.
  */
 const ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE = 20;
+
 /**
  * Retain the existing ceiling for administrator-selected photo batch sizes.
  * Type: int. Units: images per request. Scope: manual statistics photo phase.
@@ -183,7 +186,10 @@ function admin_storage_statistics_cached_snapshot(bool $allowStale = true): ?arr
 
     $fingerprint = admin_storage_statistics_fingerprint();
     $cachedFingerprint = (string) ($decoded['fingerprint'] ?? '');
-    $isStale = $fingerprint !== '' && $cachedFingerprint !== '' && !hash_equals($cachedFingerprint, $fingerprint);
+    $isStale =
+        $fingerprint !== ''
+        && $cachedFingerprint !== ''
+        && !hash_equals($cachedFingerprint, $fingerprint);
     if ($isStale && !$allowStale) {
         return null;
     }
@@ -224,7 +230,10 @@ function admin_storage_statistics_fingerprint(): string
  */
 function admin_storage_statistics_cache_read(string $fingerprint): ?array
 {
-    if ($fingerprint === '' || !function_exists('Gallery\\Services\\app_setting')) {
+    if (
+        $fingerprint === ''
+        || !function_exists('Gallery\\Services\\app_setting')
+    ) {
         return null;
     }
 
@@ -249,7 +258,8 @@ function admin_storage_statistics_cache_read(string $fingerprint): ?array
 /**
  * Store cached statistics and ignore cache-write failures.
  *
- * @param array $statistics Statistics value.
+ * @param array<string,mixed> $statistics Completed storage statistics snapshot to encode.
+ * @return void Writes the encoded snapshot when settings storage and JSON encoding are available; cache failures are ignored.
  */
 function admin_storage_statistics_cache_write(array $statistics): void
 {
@@ -257,7 +267,10 @@ function admin_storage_statistics_cache_write(array $statistics): void
         return;
     }
 
-    $encoded = json_encode($statistics, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $encoded = json_encode(
+        $statistics,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($encoded)) {
         return;
     }
@@ -269,16 +282,20 @@ function admin_storage_statistics_cache_write(array $statistics): void
     }
 }
 
-
 /**
  * Clear cached storage statistics after generated media files change.
+ *
+ * @return void Deletes the snapshot and active-job settings when settings storage is available.
  */
 function admin_storage_statistics_cache_clear(): void
 {
     if (!function_exists('Gallery\\Services\\delete_app_settings')) {
         return;
     }
-    delete_app_settings([ADMIN_STORAGE_STATISTICS_CACHE_KEY, ADMIN_STORAGE_STATISTICS_JOB_KEY]);
+    delete_app_settings([
+        ADMIN_STORAGE_STATISTICS_CACHE_KEY,
+        ADMIN_STORAGE_STATISTICS_JOB_KEY,
+    ]);
 }
 
 /**
@@ -289,7 +306,8 @@ function admin_storage_statistics_cache_clear(): void
  */
 function admin_storage_statistics_image_rows(): array
 {
-    $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
+    $hasDerivativeVersion =
+        function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('images', 'thumbnail_derivative_version');
     return admin_storage_statistics_model_image_rows($hasDerivativeVersion);
 }
@@ -307,14 +325,18 @@ function admin_storage_statistics_image_rows(): array
 function admin_storage_statistics_image_rows_after_id(
     int $lastImageId,
     int $limit,
-    bool $displayMastersOnly = false
+    bool $displayMastersOnly = false,
 ): array {
     $lastImageId = max(0, $lastImageId);
     $limit = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $limit));
-    $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
+    $hasDerivativeVersion =
+        function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('images', 'thumbnail_derivative_version');
     return admin_storage_statistics_model_image_rows_after_id(
-        $lastImageId, $limit, $hasDerivativeVersion, $displayMastersOnly
+        $lastImageId,
+        $limit,
+        $hasDerivativeVersion,
+        $displayMastersOnly,
     );
 }
 
@@ -325,7 +347,10 @@ function admin_storage_statistics_image_rows_after_id(
  */
 function admin_storage_statistics_image_derivative_version_select(): string
 {
-    if (function_exists('Gallery\Services\db_column_exists') && db_column_exists('images', 'thumbnail_derivative_version')) {
+    if (
+        function_exists('Gallery\Services\db_column_exists')
+        && db_column_exists('images', 'thumbnail_derivative_version')
+    ) {
         return 'COALESCE(i.thumbnail_derivative_version, 1)';
     }
     return '1';
@@ -347,7 +372,8 @@ function admin_storage_statistics_source_summary(array $rows): array
         'largest_original_bytes' => 0,
         'largest_original_name' => '',
         'type_groups' => [],
-        'size_bucket_groups' => admin_storage_statistics_empty_size_bucket_groups(),
+        'size_bucket_groups' =>
+            admin_storage_statistics_empty_size_bucket_groups(),
         'gallery_groups' => [],
     ];
 
@@ -356,101 +382,177 @@ function admin_storage_statistics_source_summary(array $rows): array
     }
 
     $knownSourceSizeCount = (int) ($summary['known_source_size_count'] ?? 0);
-    $summary['average_original_bytes'] = $knownSourceSizeCount > 0 ? (int) floor((int) $summary['original_bytes'] / $knownSourceSizeCount) : 0;
+    $summary['average_original_bytes'] = $knownSourceSizeCount > 0
+        ? (int) floor((int) $summary['original_bytes'] / $knownSourceSizeCount)
+        : 0;
     return $summary;
 }
 
 /**
  * Add one image row to the source-photo statistics accumulator.
  *
- * @param array $summary Summary value.
- * @param array $row Row data.
+ * @param array<string,mixed> $summary Source-statistics accumulator, updated in place with counts, bytes, and grouping maps.
+ * @param array<string,mixed> $row Image row with file_size, filename/path, MIME type, gallery id/title, and folder path fields.
+ * @return void Accumulates source image totals and grouped type, size, and gallery values.
  */
-function admin_storage_statistics_accumulate_source_row(array &$summary, array $row): void
-{
+function admin_storage_statistics_accumulate_source_row(
+    array &$summary,
+    array $row,
+): void {
     $bytes = max(0, (int) ($row['file_size'] ?? 0));
     $summary['image_count'] = (int) ($summary['image_count'] ?? 0) + 1;
-    $summary['original_bytes'] = (int) ($summary['original_bytes'] ?? 0) + $bytes;
+    $summary['original_bytes'] =
+        (int) ($summary['original_bytes'] ?? 0) + $bytes;
     if ($bytes > 0) {
-        $summary['known_source_size_count'] = (int) ($summary['known_source_size_count'] ?? 0) + 1;
+        $summary['known_source_size_count'] =
+            (int) ($summary['known_source_size_count'] ?? 0) + 1;
     } else {
-        $summary['unknown_source_size_count'] = (int) ($summary['unknown_source_size_count'] ?? 0) + 1;
+        $summary['unknown_source_size_count'] =
+            (int) ($summary['unknown_source_size_count'] ?? 0) + 1;
     }
     if ($bytes > (int) ($summary['largest_original_bytes'] ?? 0)) {
         $summary['largest_original_bytes'] = $bytes;
-        $summary['largest_original_name'] = (string) ($row['relative_path'] ?? $row['filename'] ?? '');
+        $summary['largest_original_name'] = (string) (
+            $row['relative_path']
+            ?? $row['filename']
+            ?? ''
+        );
     }
 
-    $extension = admin_storage_statistics_normalize_file_extension((string) ($row['filename'] ?? $row['relative_path'] ?? ''));
+    $extension = admin_storage_statistics_normalize_file_extension(
+        (string) ($row['filename'] ?? $row['relative_path'] ?? ''),
+    );
     $typeLabel = strtoupper($extension);
-    $typeGroups = is_array($summary['type_groups'] ?? null) ? $summary['type_groups'] : [];
-    admin_storage_statistics_add_group_value($typeGroups, 'source-type-' . $extension, $typeLabel, 1, $bytes, [
-        'extension' => $extension,
-        'mime_type' => (string) ($row['mime_type'] ?? ''),
-    ]);
+    $typeGroups = is_array($summary['type_groups'] ?? null)
+        ? $summary['type_groups']
+        : [];
+    admin_storage_statistics_add_group_value(
+        $typeGroups,
+        'source-type-' . $extension,
+        $typeLabel,
+        1,
+        $bytes,
+        [
+            'extension' => $extension,
+            'mime_type' => (string) ($row['mime_type'] ?? ''),
+        ],
+    );
     $summary['type_groups'] = $typeGroups;
 
-    $sizeBucketGroups = is_array($summary['size_bucket_groups'] ?? null) ? $summary['size_bucket_groups'] : admin_storage_statistics_empty_size_bucket_groups();
+    $sizeBucketGroups = is_array($summary['size_bucket_groups'] ?? null)
+        ? $summary['size_bucket_groups']
+        : admin_storage_statistics_empty_size_bucket_groups();
     $bucketKey = admin_storage_statistics_size_bucket_key($bytes);
-    admin_storage_statistics_add_group_value($sizeBucketGroups, $bucketKey, admin_storage_statistics_size_bucket_fallback($bucketKey), 1, $bytes, [
-        'bucket_key' => $bucketKey,
-        'label_key' => admin_storage_statistics_size_bucket_translation_key($bucketKey),
-    ]);
+    admin_storage_statistics_add_group_value(
+        $sizeBucketGroups,
+        $bucketKey,
+        admin_storage_statistics_size_bucket_fallback($bucketKey),
+        1,
+        $bytes,
+        [
+            'bucket_key' => $bucketKey,
+            'label_key' =>
+                admin_storage_statistics_size_bucket_translation_key(
+                    $bucketKey,
+                ),
+        ],
+    );
     $summary['size_bucket_groups'] = $sizeBucketGroups;
 
-    $galleryGroups = is_array($summary['gallery_groups'] ?? null) ? $summary['gallery_groups'] : [];
+    $galleryGroups = is_array($summary['gallery_groups'] ?? null)
+        ? $summary['gallery_groups']
+        : [];
     $galleryId = (int) ($row['gallery_id'] ?? $row['image_gallery_id'] ?? 0);
     $galleryTitle = trim((string) ($row['gallery_title'] ?? ''));
     $galleryPath = trim((string) ($row['gallery_folder_path'] ?? ''));
-    $galleryLabel = $galleryTitle !== '' ? $galleryTitle : ($galleryPath !== '' ? $galleryPath : ('#' . $galleryId));
-    admin_storage_statistics_add_group_value($galleryGroups, 'gallery-' . $galleryId, $galleryLabel, 1, $bytes, [
-        'gallery_id' => $galleryId,
-        'folder_path' => $galleryPath,
-    ]);
+    $galleryLabel = $galleryTitle !== ''
+        ? $galleryTitle
+        : ($galleryPath !== '' ? $galleryPath : '#' . $galleryId);
+    admin_storage_statistics_add_group_value(
+        $galleryGroups,
+        'gallery-' . $galleryId,
+        $galleryLabel,
+        1,
+        $bytes,
+        [
+            'gallery_id' => $galleryId,
+            'folder_path' => $galleryPath,
+        ],
+    );
     $summary['gallery_groups'] = $galleryGroups;
 }
 
 /**
  * Return compact source statistics suitable for a cache record or job state.
  *
- * @param array $source Source value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $source Source accumulator containing source totals and optional grouping maps.
+ * @return array{image_count:int,known_source_size_count:int,unknown_source_size_count:int,original_bytes:int,average_original_bytes:int,largest_original_bytes:int,largest_original_name:string,type_rows:list<array<string,mixed>>,size_bucket_rows:list<array<string,mixed>>,largest_gallery_rows:list<array<string,mixed>>} Compact source totals and finalized display groups.
  */
 function admin_storage_statistics_compact_source_summary(array $source): array
 {
     $knownSourceSizeCount = (int) ($source['known_source_size_count'] ?? 0);
     $originalBytes = (int) ($source['original_bytes'] ?? 0);
-    $averageOriginalBytes = $knownSourceSizeCount > 0 ? (int) floor($originalBytes / $knownSourceSizeCount) : 0;
+    $averageOriginalBytes = $knownSourceSizeCount > 0
+        ? (int) floor($originalBytes / $knownSourceSizeCount)
+        : 0;
 
     return [
         'image_count' => (int) ($source['image_count'] ?? 0),
         'known_source_size_count' => $knownSourceSizeCount,
-        'unknown_source_size_count' => (int) ($source['unknown_source_size_count'] ?? 0),
+        'unknown_source_size_count' => (int) (
+            $source['unknown_source_size_count'] ?? 0
+        ),
         'original_bytes' => $originalBytes,
         'average_original_bytes' => $averageOriginalBytes,
-        'largest_original_bytes' => (int) ($source['largest_original_bytes'] ?? 0),
-        'largest_original_name' => (string) ($source['largest_original_name'] ?? ''),
-        'type_rows' => admin_storage_statistics_finalize_group_rows(is_array($source['type_groups'] ?? null) ? $source['type_groups'] : [], 'bytes'),
-        'size_bucket_rows' => admin_storage_statistics_finalize_group_rows(is_array($source['size_bucket_groups'] ?? null) ? $source['size_bucket_groups'] : [], 'bytes'),
-        'largest_gallery_rows' => admin_storage_statistics_finalize_group_rows(is_array($source['gallery_groups'] ?? null) ? $source['gallery_groups'] : [], 'bytes'),
+        'largest_original_bytes' => (int) (
+            $source['largest_original_bytes'] ?? 0
+        ),
+        'largest_original_name' => (string) (
+            $source['largest_original_name'] ?? ''
+        ),
+        'type_rows' => admin_storage_statistics_finalize_group_rows(
+            is_array($source['type_groups'] ?? null)
+                ? $source['type_groups']
+                : [],
+            'bytes',
+        ),
+        'size_bucket_rows' => admin_storage_statistics_finalize_group_rows(
+            is_array($source['size_bucket_groups'] ?? null)
+                ? $source['size_bucket_groups']
+                : [],
+            'bytes',
+        ),
+        'largest_gallery_rows' => admin_storage_statistics_finalize_group_rows(
+            is_array($source['gallery_groups'] ?? null)
+                ? $source['gallery_groups']
+                : [],
+            'bytes',
+        ),
     ];
 }
 
 /**
  * Aggregate generated thumbnail and display-master statistics from expected paths.
  *
- * @param array $rows Rows to process.
- * @return array<string mixed>.
+ * @param array<int,array<string,mixed>> $rows Image rows used to locate generated thumbnails and DNG display masters.
+ * @return array<string,mixed> Generated-media byte/count totals, scan errors, and type groups.
  */
 function admin_storage_statistics_generated_media_summary(array $rows): array
 {
     $summary = admin_storage_statistics_initial_generated_summary();
-    $thumbnailMetadataUsed = admin_storage_statistics_thumbnail_metadata_available();
+    $thumbnailMetadataUsed =
+        admin_storage_statistics_thumbnail_metadata_available();
     foreach ($rows as $row) {
         if ($thumbnailMetadataUsed) {
-            admin_storage_statistics_accumulate_display_master_media_row($summary, $row);
+            admin_storage_statistics_accumulate_display_master_media_row(
+                $summary,
+                $row,
+            );
         } else {
-            admin_storage_statistics_accumulate_generated_media_row($summary, $row);
+            admin_storage_statistics_accumulate_generated_media_row(
+                $summary,
+                $row,
+            );
         }
     }
     return $summary;
@@ -473,9 +575,7 @@ function admin_storage_statistics_initial_generated_summary(): array
         return $summary;
     }
 
-    return admin_storage_statistics_merge_generated_summaries($summary,
-        storage_observer_call('db.thumbnail_metadata_summary',
-            static fn(): array => admin_storage_statistics_thumbnail_metadata_summary()));
+    return admin_storage_statistics_merge_generated_summaries($summary, storage_observer_call('db.thumbnail_metadata_summary', static fn(): array => admin_storage_statistics_thumbnail_metadata_summary()));
 }
 
 /**
@@ -485,13 +585,22 @@ function admin_storage_statistics_initial_generated_summary(): array
  */
 function admin_storage_statistics_thumbnail_metadata_available(): bool
 {
-    if (!function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') || !thumbnail_metadata_schema_ready()) {
+    if (
+        !function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready')
+        || !thumbnail_metadata_schema_ready()
+    ) {
         return false;
     }
-    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
+    if (
+        !function_exists('Gallery\\Services\\db_table_exists')
+        || !db_table_exists('image_thumbnail_variants')
+    ) {
         return false;
     }
-    if (function_exists('Gallery\\Services\\db_column_exists') && !db_column_exists('image_thumbnail_variants', 'file_size')) {
+    if (
+        function_exists('Gallery\\Services\\db_column_exists')
+        && !db_column_exists('image_thumbnail_variants', 'file_size')
+    ) {
         return false;
     }
     return true;
@@ -511,17 +620,22 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
         return $summary;
     }
 
-    $sizes = array_values(array_unique(array_filter(array_map('intval', thumbnail_sizes()), static fn (int $size): bool => $size > 0)));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', thumbnail_sizes()),
+        static fn(int $size): bool => $size > 0,
+    )));
     if ($sizes === []) {
         return $summary;
     }
-    $matchDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
+    $matchDerivativeVersion =
+        function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('image_thumbnail_variants', 'derivative_version')
         && db_column_exists('images', 'thumbnail_derivative_version');
     // Once this schema is available its aggregate is required accounting.
     // A failed query cannot safely authorize skipping thumbnail measurements.
     $rows = admin_storage_statistics_model_thumbnail_summary_rows(
-        $sizes, $matchDerivativeVersion
+        $sizes,
+        $matchDerivativeVersion,
     );
 
     foreach ($rows as $row) {
@@ -534,14 +648,28 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
         if ($count <= 0 && $bytes <= 0) {
             continue;
         }
-        $summary['thumbnail_bytes'] = (int) $summary['thumbnail_bytes'] + $bytes;
-        $summary['thumbnail_count'] = (int) $summary['thumbnail_count'] + $count;
-        $generatedTypeGroups = is_array($summary['generated_type_groups'] ?? null) ? $summary['generated_type_groups'] : [];
-        admin_storage_statistics_add_group_value($generatedTypeGroups, 'thumbnail-' . $format, strtoupper($format) . ' thumbnails', $count, $bytes, [
-            'kind' => 'thumbnail',
-            'format' => $format,
-            'label_key' => 'admin.storage.generated_' . $format . '_thumbnails',
-        ]);
+        $summary['thumbnail_bytes'] =
+            (int) $summary['thumbnail_bytes'] + $bytes;
+        $summary['thumbnail_count'] =
+            (int) $summary['thumbnail_count'] + $count;
+        $generatedTypeGroups = is_array(
+            $summary['generated_type_groups'] ?? null,
+        )
+            ? $summary['generated_type_groups']
+            : [];
+        admin_storage_statistics_add_group_value(
+            $generatedTypeGroups,
+            'thumbnail-' . $format,
+            strtoupper($format) . ' thumbnails',
+            $count,
+            $bytes,
+            [
+                'kind' => 'thumbnail',
+                'format' => $format,
+                'label_key' =>
+                    'admin.storage.generated_' . $format . '_thumbnails',
+            ],
+        );
         $summary['generated_type_groups'] = $generatedTypeGroups;
     }
     return $summary;
@@ -550,36 +678,57 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
 /**
  * Merge two generated-media accumulators.
  *
- * @param array $left Left summary.
- * @param array $right Right summary.
- * @return array<string mixed>.
+ * @param array<string,mixed> $left Left generated-media accumulator.
+ * @param array<string,mixed> $right Right generated-media accumulator.
+ * @return array{thumbnail_bytes:int,thumbnail_count:int,display_master_bytes:int,display_master_count:int,generated_bytes:int,scan_errors:int,generated_type_groups:array<string,array<string,mixed>>} Normalized sums and merged generated-type groups.
  */
-function admin_storage_statistics_merge_generated_summaries(array $left, array $right): array
-{
+function admin_storage_statistics_merge_generated_summaries(
+    array $left,
+    array $right,
+): array {
     $left = admin_storage_statistics_normalize_generated_summary($left);
     $right = admin_storage_statistics_normalize_generated_summary($right);
     $merged = $left;
-    foreach (['thumbnail_bytes', 'thumbnail_count', 'display_master_bytes', 'display_master_count', 'scan_errors'] as $key) {
+    foreach ([
+        'thumbnail_bytes',
+        'thumbnail_count',
+        'display_master_bytes',
+        'display_master_count',
+        'scan_errors',
+    ] as $key) {
         $merged[$key] = (int) ($left[$key] ?? 0) + (int) ($right[$key] ?? 0);
     }
 
-    $groups = is_array($left['generated_type_groups'] ?? null) ? $left['generated_type_groups'] : [];
+    $groups = is_array($left['generated_type_groups'] ?? null)
+        ? $left['generated_type_groups']
+        : [];
     $metadataKeys = array_flip(['key', 'label', 'count', 'bytes', 'percent']);
-    foreach (is_array($right['generated_type_groups'] ?? null) ? $right['generated_type_groups'] : [] as $key => $row) {
+    foreach (is_array($right['generated_type_groups'] ?? null)
+        ? $right['generated_type_groups']
+        : [] as $key => $row) {
         if (!is_array($row)) {
             continue;
         }
-        admin_storage_statistics_add_group_value($groups, (string) ($row['key'] ?? $key), (string) ($row['label'] ?? $key), (int) ($row['count'] ?? 0), (int) ($row['bytes'] ?? 0), array_diff_key($row, $metadataKeys));
+        admin_storage_statistics_add_group_value(
+            $groups,
+            (string) ($row['key'] ?? $key),
+            (string) ($row['label'] ?? $key),
+            (int) ($row['count'] ?? 0),
+            (int) ($row['bytes'] ?? 0),
+            array_diff_key($row, $metadataKeys),
+        );
     }
     $merged['generated_type_groups'] = $groups;
-    $merged['generated_bytes'] = (int) $merged['thumbnail_bytes'] + (int) $merged['display_master_bytes'];
+    $merged['generated_bytes'] =
+        (int) $merged['thumbnail_bytes']
+        + (int) $merged['display_master_bytes'];
     return $merged;
 }
 
 /**
  * Return an empty generated-media statistics accumulator.
  *
- * @return array<string mixed>.
+ * @return array{thumbnail_bytes:int,thumbnail_count:int,display_master_bytes:int,display_master_count:int,generated_bytes:int,scan_errors:int,generated_type_groups:array<string,array<string,mixed>>} Empty generated-media totals and group map.
  */
 function admin_storage_statistics_empty_generated_summary(): array
 {
@@ -597,44 +746,68 @@ function admin_storage_statistics_empty_generated_summary(): array
 /**
  * Normalize a generated-media statistics accumulator read from JSON.
  *
- * @param array $summary Summary value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $summary Possibly partial generated-media summary, such as one decoded from JSON.
+ * @return array{thumbnail_bytes:int,thumbnail_count:int,display_master_bytes:int,display_master_count:int,generated_bytes:int,scan_errors:int,generated_type_groups:array<string,array<string,mixed>>} Non-negative totals and a valid group map.
  */
 function admin_storage_statistics_normalize_generated_summary(array $summary): array
 {
     return [
         'thumbnail_bytes' => max(0, (int) ($summary['thumbnail_bytes'] ?? 0)),
         'thumbnail_count' => max(0, (int) ($summary['thumbnail_count'] ?? 0)),
-        'display_master_bytes' => max(0, (int) ($summary['display_master_bytes'] ?? 0)),
-        'display_master_count' => max(0, (int) ($summary['display_master_count'] ?? 0)),
+        'display_master_bytes' => max(
+            0,
+            (int) ($summary['display_master_bytes'] ?? 0),
+        ),
+        'display_master_count' => max(
+            0,
+            (int) ($summary['display_master_count'] ?? 0),
+        ),
         'generated_bytes' => max(0, (int) ($summary['generated_bytes'] ?? 0)),
         'scan_errors' => max(0, (int) ($summary['scan_errors'] ?? 0)),
-        'generated_type_groups' => is_array($summary['generated_type_groups'] ?? null) ? $summary['generated_type_groups'] : [],
+        'generated_type_groups' => is_array(
+            $summary['generated_type_groups'] ?? null,
+        )
+            ? $summary['generated_type_groups']
+            : [],
     ];
 }
 
 /**
  * Add one image row to the generated-media statistics accumulator.
  *
- * @param array $summary Summary value.
- * @param array $row Row data.
+ * @param array<string,mixed> $summary Generated-media accumulator, updated in place.
+ * @param array<string,mixed> $row Image row used to identify and locate derivatives.
+ * @return void Accumulates thumbnail and display-master media statistics.
  */
-function admin_storage_statistics_accumulate_generated_media_row(array &$summary, array $row): void
-{
-    admin_storage_statistics_accumulate_thumbnail_filesystem_row($summary, $row);
-    admin_storage_statistics_accumulate_display_master_media_row($summary, $row);
+function admin_storage_statistics_accumulate_generated_media_row(
+    array &$summary,
+    array $row,
+): void {
+    admin_storage_statistics_accumulate_thumbnail_filesystem_row(
+        $summary,
+        $row,
+    );
+    admin_storage_statistics_accumulate_display_master_media_row(
+        $summary,
+        $row,
+    );
 }
 
 /**
  * Add generated thumbnail files from the filesystem for one image row.
  *
- * @param array $summary Summary value.
- * @param array $row Row data.
+ * @param array<string,mixed> $summary Generated-media accumulator, updated in place.
+ * @param array<string,mixed> $row Image row used to locate expected thumbnail files.
+ * @return void Adds existing thumbnail file sizes and increments scan errors for failed probes.
  */
-function admin_storage_statistics_accumulate_thumbnail_filesystem_row(array &$summary, array $row): void
-{
+function admin_storage_statistics_accumulate_thumbnail_filesystem_row(
+    array &$summary,
+    array $row,
+): void {
     $summary = admin_storage_statistics_normalize_generated_summary($summary);
-    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
+    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes')
+        ? thumbnail_sizes()
+        : [300, 600, 800, 960, 1280, 1600];
     $formats = ['jpg', 'webp'];
     $gallery = admin_storage_statistics_gallery_shape($row);
     $image = admin_storage_statistics_image_shape($row);
@@ -642,7 +815,9 @@ function admin_storage_statistics_accumulate_thumbnail_filesystem_row(array &$su
     foreach ($sizes as $size) {
         foreach ($formats as $format) {
             try {
-                $path = function_exists('Gallery\\Services\\thumbnail_abs_path') ? thumbnail_abs_path($image, $gallery, (int) $size, $format) : '';
+                $path = function_exists('Gallery\\Services\\thumbnail_abs_path')
+                    ? thumbnail_abs_path($image, $gallery, (int) $size, $format)
+                    : '';
             } catch (Throwable) {
                 $summary['scan_errors'] = (int) $summary['scan_errors'] + 1;
                 continue;
@@ -651,63 +826,107 @@ function admin_storage_statistics_accumulate_thumbnail_filesystem_row(array &$su
             if ($bytes <= 0) {
                 continue;
             }
-            $summary['thumbnail_bytes'] = (int) $summary['thumbnail_bytes'] + $bytes;
+            $summary['thumbnail_bytes'] =
+                (int) $summary['thumbnail_bytes'] + $bytes;
             $summary['thumbnail_count'] = (int) $summary['thumbnail_count'] + 1;
-            $generatedTypeGroups = is_array($summary['generated_type_groups'] ?? null) ? $summary['generated_type_groups'] : [];
-            admin_storage_statistics_add_group_value($generatedTypeGroups, 'thumbnail-' . $format, strtoupper($format) . ' thumbnails', 1, $bytes, [
-                'kind' => 'thumbnail',
-                'format' => $format,
-                'label_key' => 'admin.storage.generated_' . $format . '_thumbnails',
-            ]);
+            $generatedTypeGroups = is_array(
+                $summary['generated_type_groups'] ?? null,
+            )
+                ? $summary['generated_type_groups']
+                : [];
+            admin_storage_statistics_add_group_value(
+                $generatedTypeGroups,
+                'thumbnail-' . $format,
+                strtoupper($format) . ' thumbnails',
+                1,
+                $bytes,
+                [
+                    'kind' => 'thumbnail',
+                    'format' => $format,
+                    'label_key' =>
+                        'admin.storage.generated_' . $format . '_thumbnails',
+                ],
+            );
             $summary['generated_type_groups'] = $generatedTypeGroups;
         }
     }
 
-    $summary['generated_bytes'] = (int) $summary['thumbnail_bytes'] + (int) $summary['display_master_bytes'];
+    $summary['generated_bytes'] =
+        (int) $summary['thumbnail_bytes']
+        + (int) $summary['display_master_bytes'];
 }
 
 /**
  * Add DNG display-master bytes from the filesystem for one image row.
  *
- * @param array $summary Summary value.
- * @param array $row Row data.
+ * @param array<string,mixed> $summary Generated-media accumulator, updated in place.
+ * @param array<string,mixed> $row Image row used to identify a DNG display derivative.
+ * @return void Adds existing display-master bytes or records a scan error.
  */
-function admin_storage_statistics_accumulate_display_master_media_row(array &$summary, array $row): void
-{
+function admin_storage_statistics_accumulate_display_master_media_row(
+    array &$summary,
+    array $row,
+): void {
     $summary = admin_storage_statistics_normalize_generated_summary($summary);
     $gallery = admin_storage_statistics_gallery_shape($row);
     $image = admin_storage_statistics_image_shape($row);
 
-    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && function_exists('Gallery\\Services\\dng_display_master_abs_path') && image_uses_dng_display_derivatives($image)) {
+    if (
+        function_exists('Gallery\\Services\\image_uses_dng_display_derivatives')
+        && function_exists('Gallery\\Services\\dng_display_master_abs_path')
+        && image_uses_dng_display_derivatives($image)
+    ) {
         try {
-            $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
+            $displayMasterPath = dng_display_master_abs_path(
+                $image,
+                $gallery,
+                false,
+            );
         } catch (Throwable) {
             $summary['scan_errors'] = (int) $summary['scan_errors'] + 1;
-            $summary['generated_bytes'] = (int) $summary['thumbnail_bytes'] + (int) $summary['display_master_bytes'];
+            $summary['generated_bytes'] =
+                (int) $summary['thumbnail_bytes']
+                + (int) $summary['display_master_bytes'];
             return;
         }
-        $bytes = admin_storage_statistics_existing_file_size($displayMasterPath);
+        $bytes =
+            admin_storage_statistics_existing_file_size($displayMasterPath);
         if ($bytes > 0) {
-            $summary['display_master_bytes'] = (int) $summary['display_master_bytes'] + $bytes;
-            $summary['display_master_count'] = (int) $summary['display_master_count'] + 1;
-            $generatedTypeGroups = is_array($summary['generated_type_groups'] ?? null) ? $summary['generated_type_groups'] : [];
-            admin_storage_statistics_add_group_value($generatedTypeGroups, 'display-master-webp', 'WEBP display masters', 1, $bytes, [
-                'kind' => 'display_master',
-                'format' => 'webp',
-                'label_key' => 'admin.storage.generated_webp_display_masters',
-            ]);
+            $summary['display_master_bytes'] =
+                (int) $summary['display_master_bytes'] + $bytes;
+            $summary['display_master_count'] =
+                (int) $summary['display_master_count'] + 1;
+            $generatedTypeGroups = is_array(
+                $summary['generated_type_groups'] ?? null,
+            )
+                ? $summary['generated_type_groups']
+                : [];
+            admin_storage_statistics_add_group_value(
+                $generatedTypeGroups,
+                'display-master-webp',
+                'WEBP display masters',
+                1,
+                $bytes,
+                [
+                    'kind' => 'display_master',
+                    'format' => 'webp',
+                    'label_key' => 'admin.storage.generated_webp_display_masters',
+                ],
+            );
             $summary['generated_type_groups'] = $generatedTypeGroups;
         }
     }
 
-    $summary['generated_bytes'] = (int) $summary['thumbnail_bytes'] + (int) $summary['display_master_bytes'];
+    $summary['generated_bytes'] =
+        (int) $summary['thumbnail_bytes']
+        + (int) $summary['display_master_bytes'];
 }
 
 /**
  * Return the gallery shape needed by generated-media path helpers.
  *
- * @param array $row Row data.
- * @return array<string mixed>.
+ * @param array<string,mixed> $row Image row with gallery identity and display fields.
+ * @return array{id:int,folder_path:string,title:string} Gallery identity and path helper fields.
  */
 function admin_storage_statistics_gallery_shape(array $row): array
 {
@@ -721,31 +940,41 @@ function admin_storage_statistics_gallery_shape(array $row): array
 /**
  * Return the image shape needed by generated-media path helpers.
  *
- * @param array $row Row data.
- * @return array<string mixed>.
+ * @param array<string,mixed> $row Source image row with optional derivative metadata.
+ * @return array{id:int,gallery_id:int,relative_path:string,filename:string,mime_type:string,thumbnail_derivative_version:int} Normalized image fields for derivative path helpers.
  */
 function admin_storage_statistics_image_shape(array $row): array
 {
     return [
         'id' => (int) ($row['image_id'] ?? 0),
-        'gallery_id' => (int) ($row['image_gallery_id'] ?? $row['gallery_id'] ?? 0),
+        'gallery_id' => (int) (
+            $row['image_gallery_id']
+            ?? $row['gallery_id']
+            ?? 0
+        ),
         'relative_path' => (string) ($row['relative_path'] ?? ''),
         'filename' => (string) ($row['filename'] ?? ''),
         'mime_type' => (string) ($row['mime_type'] ?? ''),
-        'thumbnail_derivative_version' => max(1, (int) ($row['thumbnail_derivative_version'] ?? 1)),
+        'thumbnail_derivative_version' => max(
+            1,
+            (int) ($row['thumbnail_derivative_version'] ?? 1),
+        ),
     ];
 }
 
 /**
  * Return a compact public state for a manual storage statistics job.
  *
- * @param array $job Job value.
- * @param ?array $snapshot Snapshot value.
+ * @param array<string,mixed> $job Manual storage statistics job state.
+ * @param ?array<string,mixed> $snapshot Optional completed statistics snapshot.
  * @param string $message Message value.
- * @return array<string mixed>.
+ * @return array{ok:bool,job_id:string,status:string,total:int,processed:int,percent:float,message:string,snapshot:?array<string,mixed>} JSON-safe job progress and optional result snapshot.
  */
-function admin_storage_statistics_job_public_state(array $job, ?array $snapshot = null, string $message = ''): array
-{
+function admin_storage_statistics_job_public_state(
+    array $job,
+    ?array $snapshot = null,
+    string $message = '',
+): array {
     $total = max(0, (int) ($job['total'] ?? 0));
     $processed = max(0, min($total, (int) ($job['processed'] ?? 0)));
     $status = (string) ($job['status'] ?? 'running');
@@ -782,14 +1011,18 @@ function admin_storage_statistics_job_read(): ?array
 /**
  * Store a manual storage statistics job state.
  *
- * @param array $job Job value.
+ * @param array<string,mixed> $job Job state to encode and store.
+ * @return void Writes the encoded job when settings storage and JSON encoding are available.
  */
 function admin_storage_statistics_job_write(array $job): void
 {
     if (!function_exists('Gallery\\Services\\set_app_setting')) {
         return;
     }
-    $encoded = json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $encoded = json_encode(
+        $job,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($encoded)) {
         return;
     }
@@ -818,11 +1051,19 @@ function admin_storage_statistics_job_id(): string
  */
 function admin_storage_statistics_existing_file_size(string $path): int
 {
-    if ($path === '' || !storage_observer_call('fs.derivative.is_file', static fn(): bool => is_file($path))) {
+    if (
+        $path === ''
+        || !storage_observer_call('fs.derivative.is_file', static fn(): bool => is_file(
+            $path,
+        ))
+    ) {
         return 0;
     }
 
-    $bytes = storage_observer_call('fs.derivative.filesize', static fn(): int|false => @filesize($path));
+    $bytes = storage_observer_call(
+        'fs.derivative.filesize',
+        static fn(): int|false => @filesize($path),
+    );
     return $bytes === false ? 0 : max(0, (int) $bytes);
 }
 
@@ -844,13 +1085,15 @@ function admin_storage_statistics_normalize_file_extension(string $path): string
     if ($extension === 'tif') {
         return 'tiff';
     }
-    return preg_match('/^[a-z0-9]{1,12}$/', $extension) === 1 ? $extension : 'other';
+    return preg_match('/^[a-z0-9]{1,12}$/', $extension) === 1
+        ? $extension
+        : 'other';
 }
 
 /**
  * Return preseeded source-size bucket groups in dashboard order.
  *
- * @return array<string array<string, mixed>>.
+ * @return array<string,array{key:string,label:string,count:int,bytes:int,bucket_key:string,label_key:string}> Preseeded source-size groups keyed in dashboard display order.
  */
 function admin_storage_statistics_empty_size_bucket_groups(): array
 {
@@ -858,11 +1101,15 @@ function admin_storage_statistics_empty_size_bucket_groups(): array
     foreach (admin_storage_statistics_size_bucket_order() as $bucketKey) {
         $groups[$bucketKey] = [
             'key' => $bucketKey,
-            'label' => admin_storage_statistics_size_bucket_fallback($bucketKey),
+            'label' =>
+                admin_storage_statistics_size_bucket_fallback($bucketKey),
             'count' => 0,
             'bytes' => 0,
             'bucket_key' => $bucketKey,
-            'label_key' => admin_storage_statistics_size_bucket_translation_key($bucketKey),
+            'label_key' =>
+                admin_storage_statistics_size_bucket_translation_key(
+                    $bucketKey,
+                ),
         ];
     }
     return $groups;
@@ -871,11 +1118,19 @@ function admin_storage_statistics_empty_size_bucket_groups(): array
 /**
  * Return source-size bucket keys in display order.
  *
- * @return array<int string>.
+ * @return list<string> Source-size bucket identifiers in dashboard display order.
  */
 function admin_storage_statistics_size_bucket_order(): array
 {
-    return ['unknown', 'under_1mb', '1_3mb', '3_8mb', '8_20mb', '20_50mb', 'over_50mb'];
+    return [
+        'unknown',
+        'under_1mb',
+        '1_3mb',
+        '3_8mb',
+        '8_20mb',
+        '20_50mb',
+        'over_50mb',
+    ];
 }
 
 /**
@@ -889,19 +1144,19 @@ function admin_storage_statistics_size_bucket_key(int $bytes): string
     if ($bytes <= 0) {
         return 'unknown';
     }
-    if ($bytes < 1024 * 1024) {
+    if ($bytes < (1024 * 1024)) {
         return 'under_1mb';
     }
-    if ($bytes < 3 * 1024 * 1024) {
+    if ($bytes < (3 * 1024 * 1024)) {
         return '1_3mb';
     }
-    if ($bytes < 8 * 1024 * 1024) {
+    if ($bytes < (8 * 1024 * 1024)) {
         return '3_8mb';
     }
-    if ($bytes < 20 * 1024 * 1024) {
+    if ($bytes < (20 * 1024 * 1024)) {
         return '8_20mb';
     }
-    if ($bytes < 50 * 1024 * 1024) {
+    if ($bytes < (50 * 1024 * 1024)) {
         return '20_50mb';
     }
     return 'over_50mb';
@@ -940,15 +1195,22 @@ function admin_storage_statistics_size_bucket_fallback(string $bucketKey): strin
 /**
  * Add count and byte values to a grouped statistics row.
  *
- * @param array $groups Groups value.
+ * @param array<string,array<string,mixed>> $groups Group accumulator updated at the selected key.
  * @param string $key Lookup key.
  * @param string $label Label value.
  * @param int $count Count value.
  * @param int $bytes Bytes value.
- * @param array $metadata Metadata value.
+ * @param array<string,mixed> $metadata Additional stable fields stored on a newly created group.
+ * @return void Adds non-negative count and byte values to the selected group.
  */
-function admin_storage_statistics_add_group_value(array &$groups, string $key, string $label, int $count, int $bytes, array $metadata = []): void
-{
+function admin_storage_statistics_add_group_value(
+    array &$groups,
+    string $key,
+    string $label,
+    int $count,
+    int $bytes,
+    array $metadata = [],
+): void {
     if (!isset($groups[$key])) {
         $groups[$key] = array_merge([
             'key' => $key,
@@ -958,32 +1220,43 @@ function admin_storage_statistics_add_group_value(array &$groups, string $key, s
         ], $metadata);
     }
 
-    $groups[$key]['count'] = (int) ($groups[$key]['count'] ?? 0) + max(0, $count);
-    $groups[$key]['bytes'] = (int) ($groups[$key]['bytes'] ?? 0) + max(0, $bytes);
+    $groups[$key]['count'] =
+        (int) ($groups[$key]['count'] ?? 0) + max(0, $count);
+    $groups[$key]['bytes'] =
+        (int) ($groups[$key]['bytes'] ?? 0) + max(0, $bytes);
 }
 
 /**
  * Sort grouped rows and add percentage values for chart rendering.
  *
- * @param array $groups Groups value.
+ * @param array<string,array<string,mixed>> $groups Group rows keyed by their stable group key.
  * @param string $valueKey Value key value.
  * @param int $limit Maximum number of items.
- * @return array<int array<string, mixed>>.
+ * @return list<array<string,mixed>> Group rows sorted by descending selected value, limited when requested, and annotated with percent.
  */
-function admin_storage_statistics_finalize_group_rows(array $groups, string $valueKey, int $limit = 8): array
-{
+function admin_storage_statistics_finalize_group_rows(
+    array $groups,
+    string $valueKey,
+    int $limit = 8,
+): array {
     $rows = array_values($groups);
     $total = 0;
     foreach ($rows as $row) {
         $total += max(0, (int) ($row[$valueKey] ?? 0));
     }
 
-    usort($rows, static function (array $left, array $right) use ($valueKey): int {
-        $valueCompare = (int) ($right[$valueKey] ?? 0) <=> (int) ($left[$valueKey] ?? 0);
+    usort($rows, static function (array $left, array $right) use (
+        $valueKey,
+    ): int {
+        $valueCompare =
+            (int) ($right[$valueKey] ?? 0) <=> (int) ($left[$valueKey] ?? 0);
         if ($valueCompare !== 0) {
             return $valueCompare;
         }
-        return strnatcasecmp((string) ($left['label'] ?? ''), (string) ($right['label'] ?? ''));
+        return strnatcasecmp(
+            (string) ($left['label'] ?? ''),
+            (string) ($right['label'] ?? ''),
+        );
     });
 
     if ($limit > 0 && count($rows) > $limit) {
@@ -992,7 +1265,9 @@ function admin_storage_statistics_finalize_group_rows(array $groups, string $val
 
     foreach ($rows as $index => $row) {
         $value = max(0, (int) ($row[$valueKey] ?? 0));
-        $rows[$index]['percent'] = $total > 0 ? round(($value / $total) * 100, 1) : 0.0;
+        $rows[$index]['percent'] = $total > 0
+            ? round(($value / $total) * 100, 1)
+            : 0.0;
     }
 
     return $rows;

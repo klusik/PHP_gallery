@@ -62,23 +62,38 @@ function gallery_migration_normalize_instance_base(string $url): string
 {
     $url = trim($url);
     if ($url === '') {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.url_required', 'Enter the source or target PHP Gallery URL.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.url_required',
+            'Enter the source or target PHP Gallery URL.',
+        ));
     }
     if (!preg_match('~^https?://~i', $url)) {
-        $url = preg_match('~^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:/|$)~i', $url) === 1
+        $url = preg_match(
+            '~^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:/|$)~i',
+            $url,
+        ) === 1
             ? 'http://' . $url
             : 'https://' . $url;
     }
     $parts = parse_url($url);
     if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.url_invalid', 'Enter a valid HTTP or HTTPS PHP Gallery URL.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.url_invalid',
+            'Enter a valid HTTP or HTTPS PHP Gallery URL.',
+        ));
     }
     $scheme = strtolower((string) $parts['scheme']);
     if (!in_array($scheme, ['http', 'https'], true)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.url_scheme', 'Only HTTP and HTTPS migration URLs are supported.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.url_scheme',
+            'Only HTTP and HTTPS migration URLs are supported.',
+        ));
     }
     if (!empty($parts['user']) || !empty($parts['pass'])) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.url_credentials', 'Do not include credentials in the migration URL.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.url_credentials',
+            'Do not include credentials in the migration URL.',
+        ));
     }
 
     $host = (string) $parts['host'];
@@ -94,14 +109,19 @@ function gallery_migration_normalize_instance_base(string $url): string
  *
  * @param string $instanceUrl Instance url URL.
  * @param string $page Page number or page data.
- * @param array $params Params value.
- * @return string Text result for the caller.
+ * @param array<string,string|int|float|bool|null> $params Additional RFC 3986 encoded query parameters.
+ * @return string RFC 3986 encoded front-controller endpoint URL.
  */
-function gallery_migration_endpoint_url(string $instanceUrl, string $page, array $params = []): string
-{
+function gallery_migration_endpoint_url(
+    string $instanceUrl,
+    string $page,
+    array $params = [],
+): string {
     $base = gallery_migration_normalize_instance_base($instanceUrl);
     $query = array_merge(['page' => $page], $params);
-    return $base . '/index.php?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    return $base
+        . '/index.php?'
+        . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
 }
 
 /**
@@ -110,21 +130,33 @@ function gallery_migration_endpoint_url(string $instanceUrl, string $page, array
  * @param string $url URL used by this workflow.
  * @param string $apiKey Api key value.
  * @param ?int $timeoutSeconds Timeout seconds value.
- * @return array Structured result data for the caller.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> Decoded associative JSON response from the authenticated migration endpoint.
  */
-function gallery_migration_http_get_json(string $url, string $apiKey, ?int $timeoutSeconds = null): array
-{
+function gallery_migration_http_get_json(
+    string $url,
+    string $apiKey,
+    ?int $timeoutSeconds = null,
+): array {
     $timeout = gallery_migration_timeout_seconds($timeoutSeconds);
-    $response = http_fetch_response_with_headers($url, $timeout, [
-        'Accept: application/json',
-        'X-Gallery-API-Key: ' . $apiKey,
-    ]);
+    $response = http_fetch_response_with_headers(
+        $url,
+        $timeout,
+        [
+            'Accept: application/json',
+            'X-Gallery-API-Key: ' . $apiKey,
+        ],
+    );
     $decoded = json_decode((string) ($response['body'] ?? ''), true);
     if (!is_array($decoded)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.remote_json_invalid', 'Remote migration endpoint did not return valid JSON.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.remote_json_invalid',
+            'Remote migration endpoint did not return valid JSON.',
+        ));
     }
     if (isset($decoded['ok']) && !$decoded['ok']) {
-        throw new RuntimeException((string) ($decoded['error'] ?? 'Remote migration request failed.'));
+        throw new RuntimeException(
+            (string) ($decoded['error'] ?? 'Remote migration request failed.'),
+        );
     }
 
     return $decoded;
@@ -134,13 +166,17 @@ function gallery_migration_http_get_json(string $url, string $apiKey, ?int $time
  * POST form fields to a remote migration endpoint and decode JSON.
  *
  * @param string $url URL used by this workflow.
- * @param array $fields Fields value.
+ * @param array<string,string|int|float|bool|null> $fields Form values sent to the remote migration endpoint.
  * @param string $apiKey Api key value.
  * @param ?int $timeoutSeconds Timeout seconds value.
- * @return array Structured result data for the caller.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> Decoded associative JSON response from the authenticated form request.
  */
-function gallery_migration_http_post_form_json(string $url, array $fields, string $apiKey, ?int $timeoutSeconds = null): array
-{
+function gallery_migration_http_post_form_json(
+    string $url,
+    array $fields,
+    string $apiKey,
+    ?int $timeoutSeconds = null,
+): array {
     $timeout = gallery_migration_timeout_seconds($timeoutSeconds);
     $headers = [
         'Accept: application/json',
@@ -152,7 +188,10 @@ function gallery_migration_http_post_form_json(string $url, array $fields, strin
     if (function_exists('curl_init')) {
         $handle = curl_init($url);
         if ($handle === false) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_init_failed', 'Could not initialize HTTP client.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.http_init_failed',
+                'Could not initialize HTTP client.',
+            ));
         }
         curl_setopt_array($handle, [
             CURLOPT_POST => true,
@@ -163,7 +202,8 @@ function gallery_migration_http_post_form_json(string $url, array $fields, strin
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => 15,
             CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_USERAGENT => 'PHP-Gallery-Migration/' . gallery_migration_current_version(),
+            CURLOPT_USERAGENT =>
+                'PHP-Gallery-Migration/' . gallery_migration_current_version(),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -172,7 +212,13 @@ function gallery_migration_http_post_form_json(string $url, array $fields, strin
         $error = curl_error($handle);
         curl_close($handle);
         if ($responseBody === false || $status >= 400) {
-            throw new RuntimeException($error !== '' ? $error : 'Remote migration request failed with status ' . $status . '.');
+            throw new RuntimeException(
+                $error !== ''
+                    ? $error
+                    : 'Remote migration request failed with status '
+                    . $status
+                    . '.',
+            );
         }
     } else {
         $context = stream_context_create([
@@ -186,16 +232,24 @@ function gallery_migration_http_post_form_json(string $url, array $fields, strin
         ]);
         $responseBody = @file_get_contents($url, false, $context);
         if ($responseBody === false) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_failed', 'Remote migration request failed.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.http_failed',
+                'Remote migration request failed.',
+            ));
         }
     }
 
     $decoded = json_decode((string) $responseBody, true);
     if (!is_array($decoded)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.remote_json_invalid', 'Remote migration endpoint did not return valid JSON.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.remote_json_invalid',
+            'Remote migration endpoint did not return valid JSON.',
+        ));
     }
     if (isset($decoded['ok']) && !$decoded['ok']) {
-        throw new RuntimeException((string) ($decoded['error'] ?? 'Remote migration request failed.'));
+        throw new RuntimeException(
+            (string) ($decoded['error'] ?? 'Remote migration request failed.'),
+        );
     }
 
     return $decoded;
@@ -205,29 +259,46 @@ function gallery_migration_http_post_form_json(string $url, array $fields, strin
  * POST one local file to a remote target migration endpoint.
  *
  * @param string $url URL used by this workflow.
- * @param array $fields Fields value.
+ * @param array<string,string|int|float|bool|null|CURLFile> $fields Multipart form fields and optional CURLFile values.
  * @param string $filePath File path filesystem path.
  * @param string $fileName File name value.
  * @param string $mimeType Mime type value.
  * @param string $apiKey Api key value.
  * @param ?int $timeoutSeconds Timeout seconds value.
  * @param string $fileField Multipart file field name.
- * @return array Structured result data for the caller.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> Decoded associative JSON response from the authenticated file upload.
  */
-function gallery_migration_http_post_file_json(string $url, array $fields, string $filePath, string $fileName, string $mimeType, string $apiKey, ?int $timeoutSeconds = null, string $fileField = 'asset'): array
-{
+function gallery_migration_http_post_file_json(
+    string $url,
+    array $fields,
+    string $filePath,
+    string $fileName,
+    string $mimeType,
+    string $apiKey,
+    ?int $timeoutSeconds = null,
+    string $fileField = 'asset',
+): array {
     $timeout = gallery_migration_timeout_seconds($timeoutSeconds);
     if (!function_exists('curl_init') || !class_exists(CURLFile::class)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.curl_required', 'PHP cURL is required for source-push asset transfer.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.curl_required',
+            'PHP cURL is required for source-push asset transfer.',
+        ));
     }
     if (!is_file($filePath)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_missing', 'Requested migration asset is not available.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.asset_missing',
+            'Requested migration asset is not available.',
+        ));
     }
 
     $fields[$fileField] = new CURLFile($filePath, $mimeType, $fileName);
     $handle = curl_init($url);
     if ($handle === false) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_init_failed', 'Could not initialize HTTP client.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.http_init_failed',
+            'Could not initialize HTTP client.',
+        ));
     }
     curl_setopt_array($handle, [
         CURLOPT_POST => true,
@@ -241,7 +312,8 @@ function gallery_migration_http_post_file_json(string $url, array $fields, strin
         CURLOPT_MAXREDIRS => 3,
         CURLOPT_CONNECTTIMEOUT => 15,
         CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_USERAGENT => 'PHP-Gallery-Migration/' . gallery_migration_current_version(),
+        CURLOPT_USERAGENT =>
+            'PHP-Gallery-Migration/' . gallery_migration_current_version(),
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
     ]);
@@ -250,15 +322,28 @@ function gallery_migration_http_post_file_json(string $url, array $fields, strin
     $error = curl_error($handle);
     curl_close($handle);
     if ($responseBody === false || $status >= 400) {
-        throw new RuntimeException($error !== '' ? $error : 'Remote migration asset upload failed with status ' . $status . '.');
+        throw new RuntimeException(
+            $error !== ''
+                ? $error
+                : 'Remote migration asset upload failed with status '
+                . $status
+                . '.',
+        );
     }
 
     $decoded = json_decode((string) $responseBody, true);
     if (!is_array($decoded)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.remote_json_invalid', 'Remote migration endpoint did not return valid JSON.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.remote_json_invalid',
+            'Remote migration endpoint did not return valid JSON.',
+        ));
     }
     if (isset($decoded['ok']) && !$decoded['ok']) {
-        throw new RuntimeException((string) ($decoded['error'] ?? 'Remote migration asset upload failed.'));
+        throw new RuntimeException(
+            (string) (
+                $decoded['error'] ?? 'Remote migration asset upload failed.'
+            ),
+        );
     }
 
     return $decoded;
@@ -273,23 +358,36 @@ function gallery_migration_http_post_file_json(string $url, array $fields, strin
  * @param ?int $timeoutSeconds Requested timeout in seconds, normalized by the migration policy.
  * @return string Request-owned binary transfer path; release after installation through this module.
  */
-function gallery_migration_http_post_form_to_file(string $url, array $fields, string $apiKey, ?int $timeoutSeconds = null): string
-{
+function gallery_migration_http_post_form_to_file(
+    string $url,
+    array $fields,
+    string $apiKey,
+    ?int $timeoutSeconds = null,
+): string {
     $timeout = gallery_migration_timeout_seconds($timeoutSeconds);
     if (!function_exists('curl_init')) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.curl_required', 'PHP cURL is required for gallery migration ZIP transfer.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.curl_required',
+            'PHP cURL is required for gallery migration ZIP transfer.',
+        ));
     }
     $tmp = gallery_migration_allocate_temporary_file('package');
     $out = fopen($tmp, 'wb');
     if ($out === false) {
         gallery_migration_release_temporary_file($tmp);
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.temp_failed',
+            'Could not create a temporary migration file.',
+        ));
     }
     $handle = curl_init($url);
     if ($handle === false) {
         fclose($out);
         gallery_migration_release_temporary_file($tmp);
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_init_failed', 'Could not initialize HTTP client.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.http_init_failed',
+            'Could not initialize HTTP client.',
+        ));
     }
     curl_setopt_array($handle, [
         CURLOPT_POST => true,
@@ -299,7 +397,8 @@ function gallery_migration_http_post_form_to_file(string $url, array $fields, st
         CURLOPT_MAXREDIRS => 3,
         CURLOPT_CONNECTTIMEOUT => 15,
         CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_USERAGENT => 'PHP-Gallery-Migration/' . gallery_migration_current_version(),
+        CURLOPT_USERAGENT =>
+            'PHP-Gallery-Migration/' . gallery_migration_current_version(),
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_HTTPHEADER => [
@@ -309,18 +408,42 @@ function gallery_migration_http_post_form_to_file(string $url, array $fields, st
     ]);
     $ok = curl_exec($handle);
     $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-    $contentType = strtolower((string) curl_getinfo($handle, CURLINFO_CONTENT_TYPE));
+    $contentType = strtolower((string) curl_getinfo(
+        $handle,
+        CURLINFO_CONTENT_TYPE,
+    ));
     $error = curl_error($handle);
     curl_close($handle);
     fclose($out);
-    if ($ok === false || $status >= 400 || ($contentType !== '' && str_contains($contentType, 'application/json'))) {
+    if (
+        $ok === false
+        || $status >= 400
+        || (
+            $contentType !== ''
+            && str_contains($contentType, 'application/json')
+        )
+    ) {
         $remoteMessage = '';
         $decoded = json_decode((string) @file_get_contents($tmp), true);
         if (is_array($decoded)) {
-            $remoteMessage = (string) ($decoded['error'] ?? $decoded['message'] ?? '');
+            $remoteMessage = (string) (
+                $decoded['error']
+                ?? $decoded['message']
+                ?? ''
+            );
         }
         gallery_migration_release_temporary_file($tmp);
-        throw new RuntimeException($remoteMessage !== '' ? $remoteMessage : ($error !== '' ? $error : 'Remote migration ZIP download failed with status ' . $status . '.'));
+        throw new RuntimeException(
+            $remoteMessage !== ''
+                ? $remoteMessage
+                : (
+                    $error !== ''
+                        ? $error
+                        : 'Remote migration ZIP download failed with status '
+                            . $status
+                            . '.'
+                ),
+        );
     }
     return $tmp;
 }
@@ -333,8 +456,11 @@ function gallery_migration_http_post_form_to_file(string $url, array $fields, st
  * @param ?int $timeoutSeconds Timeout seconds value.
  * @return string Text result for the caller.
  */
-function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $timeoutSeconds = null): string
-{
+function gallery_migration_http_get_to_file(
+    string $url,
+    string $apiKey,
+    ?int $timeoutSeconds = null,
+): string {
     $timeout = gallery_migration_timeout_seconds($timeoutSeconds);
     $tmp = gallery_migration_allocate_temporary_file('asset');
 
@@ -342,13 +468,19 @@ function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $t
         $out = fopen($tmp, 'wb');
         if ($out === false) {
             gallery_migration_release_temporary_file($tmp);
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.temp_failed',
+                'Could not create a temporary migration file.',
+            ));
         }
         $handle = curl_init($url);
         if ($handle === false) {
             fclose($out);
             gallery_migration_release_temporary_file($tmp);
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_init_failed', 'Could not initialize HTTP client.'));
+            throw new RuntimeException(gallery_migration_t(
+                'gallery_migration.error.http_init_failed',
+                'Could not initialize HTTP client.',
+            ));
         }
         curl_setopt_array($handle, [
             CURLOPT_FILE => $out,
@@ -356,7 +488,8 @@ function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $t
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => 15,
             CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_USERAGENT => 'PHP-Gallery-Migration/' . gallery_migration_current_version(),
+            CURLOPT_USERAGENT =>
+                'PHP-Gallery-Migration/' . gallery_migration_current_version(),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => [
@@ -371,16 +504,26 @@ function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $t
         fclose($out);
         if ($ok === false || $status >= 400) {
             gallery_migration_release_temporary_file($tmp);
-            throw new RuntimeException($error !== '' ? $error : 'Remote migration asset download failed with status ' . $status . '.');
+            throw new RuntimeException(
+                $error !== ''
+                    ? $error
+                    : 'Remote migration asset download failed with status '
+                    . $status
+                    . '.',
+            );
         }
         return $tmp;
     }
 
     try {
-        $body = http_fetch_with_headers($url, $timeout, [
-            'Accept: application/octet-stream',
-            'X-Gallery-API-Key: ' . $apiKey,
-        ]);
+        $body = http_fetch_with_headers(
+            $url,
+            $timeout,
+            [
+                'Accept: application/octet-stream',
+                'X-Gallery-API-Key: ' . $apiKey,
+            ],
+        );
         file_put_contents($tmp, $body);
         return $tmp;
     } catch (Throwable $exception) {

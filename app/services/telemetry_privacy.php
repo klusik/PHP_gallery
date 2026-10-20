@@ -58,13 +58,20 @@ function telemetry_session_hash(?string $clientSessionId): ?string
     if ($clientSessionId === null || $clientSessionId === '') {
         return null;
     }
-    if (strlen($clientSessionId) > 80 || preg_match('/^[A-Za-z0-9._:-]{8,80}$/', $clientSessionId) !== 1) {
+    if (
+        strlen($clientSessionId) > 80
+        || preg_match('/^[A-Za-z0-9._:-]{8,80}$/', $clientSessionId) !== 1
+    ) {
         return null;
     }
     // $config stores application configuration used to derive a local hashing secret.
     $config = cms_config();
     // $secret stores a local secret. The raw browser session id is never persisted.
-    $secret = (string) ($config['telemetry_secret'] ?? $config['admin_session_name'] ?? 'php-gallery');
+    $secret = (string) (
+        $config['telemetry_secret']
+        ?? $config['admin_session_name']
+        ?? 'php-gallery'
+    );
     return substr(hash_hmac('sha256', $clientSessionId, $secret, true), 0, 16);
 }
 
@@ -91,12 +98,26 @@ function telemetry_referrer_category(?string $referrer): string
     }
     // $lowerHost stores a lowercase host used only for category matching.
     $lowerHost = strtolower($host);
-    foreach (['google.', 'bing.', 'duckduckgo.', 'seznam.', 'yahoo.'] as $searchHost) {
+    foreach ([
+        'google.',
+        'bing.',
+        'duckduckgo.',
+        'seznam.',
+        'yahoo.',
+    ] as $searchHost) {
         if (str_contains($lowerHost, $searchHost)) {
             return 'search';
         }
     }
-    foreach (['facebook.', 'instagram.', 'x.com', 'twitter.', 'reddit.', 'pinterest.', 'linkedin.'] as $socialHost) {
+    foreach ([
+        'facebook.',
+        'instagram.',
+        'x.com',
+        'twitter.',
+        'reddit.',
+        'pinterest.',
+        'linkedin.',
+    ] as $socialHost) {
         if (str_contains($lowerHost, $socialHost)) {
             return 'social';
         }
@@ -155,16 +176,22 @@ function telemetry_locale_bucket(?string $locale): ?string
 /**
  * Return a safe enum value from an allowlist.
  *
- * @param mixed $value Value to process.
- * @param array $allowedValues Allowed values value.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Scalar candidates are string-cast and checked against the allowlist; arrays, objects, resources, and null produce the empty candidate and therefore use the default unless the allowlist contains an empty string.
+ * @param list<string> $allowedValues Canonical enum values accepted for the
+ *     normalized scalar candidate.
  * @param string $default Default value when no explicit value is available.
  * @return string Text result for the caller.
  */
-function telemetry_enum(mixed $value, array $allowedValues, string $default): string
-{
+function telemetry_enum(
+    mixed $value,
+    array $allowedValues,
+    string $default,
+): string {
     // $stringValue stores the scalar candidate used for allowlist matching.
     $stringValue = is_scalar($value) ? (string) $value : '';
-    return in_array($stringValue, $allowedValues, true) ? $stringValue : $default;
+    return in_array($stringValue, $allowedValues, true)
+        ? $stringValue
+        : $default;
 }
 
 /**
@@ -246,7 +273,7 @@ function telemetry_sample_rate(mixed $value): float
  * Return a SQL datetime derived from an event timestamp or now if invalid.
  *
  * @param mixed $value Value to process.
- * @return string Text result for the caller.
+ * @return string The candidate value when it exactly matches an allowed value, otherwise the supplied default.
  */
 function telemetry_datetime_from_event(mixed $value): string
 {
@@ -282,8 +309,14 @@ function telemetry_context_json(string $eventName, mixed $context): ?string
     $allowedKeys = [
         'public.photo.visible_time' => ['lightbox_mode'],
         'public.photo.opened' => ['lightbox_mode', 'trigger'],
-        'client.performance.image_decode' => ['display_width_bucket', 'natural_width_bucket'],
-        'client.performance.image_display' => ['display_width_bucket', 'natural_width_bucket'],
+        'client.performance.image_decode' => [
+            'display_width_bucket',
+            'natural_width_bucket',
+        ],
+        'client.performance.image_display' => [
+            'display_width_bucket',
+            'natural_width_bucket',
+        ],
         'client.error.javascript' => ['component'],
         'cache.lightbox.hit' => ['source_kind', 'lookup_phase'],
         'cache.lightbox.miss' => ['source_kind', 'lookup_phase'],
@@ -291,33 +324,59 @@ function telemetry_context_json(string $eventName, mixed $context): ?string
     ];
     // $safeContext stores only allowlisted scalar context values.
     $safeContext = [];
-    foreach (($allowedKeys[$eventName] ?? []) as $key) {
+    foreach ($allowedKeys[$eventName] ?? [] as $key) {
         if (!array_key_exists($key, $context) || !is_scalar($context[$key])) {
             continue;
         }
         if ($key === 'source_kind') {
-            $safeContext[$key] = telemetry_enum($context[$key], ['decoded_lightbox', 'unknown'], 'unknown');
+            $safeContext[$key] = telemetry_enum(
+                $context[$key],
+                ['decoded_lightbox', 'unknown'],
+                'unknown',
+            );
             continue;
         }
         if ($key === 'lookup_phase') {
-            $safeContext[$key] = telemetry_enum($context[$key], ['current_preview', 'current_full', 'eviction', 'unknown'], 'unknown');
+            $safeContext[$key] = telemetry_enum(
+                $context[$key],
+                ['current_preview', 'current_full', 'eviction', 'unknown'],
+                'unknown',
+            );
             continue;
         }
         if ($key === 'trigger') {
             $safeContext[$key] = telemetry_enum(
                 $context[$key],
-                ['click', 'keyboard', 'swipe', 'slideshow', 'history', 'direct', 'fallback', 'unknown'],
-                'unknown'
+                [
+                    'click',
+                    'keyboard',
+                    'swipe',
+                    'slideshow',
+                    'history',
+                    'direct',
+                    'fallback',
+                    'unknown',
+                ],
+                'unknown',
             );
             continue;
         }
         if ($key === 'lightbox_mode') {
-            $safeContext[$key] = telemetry_enum($context[$key], ['normal', 'fullscreen'], 'normal');
+            $safeContext[$key] = telemetry_enum(
+                $context[$key],
+                ['normal', 'fullscreen'],
+                'normal',
+            );
             continue;
         }
         $safeContext[$key] = substr((string) $context[$key], 0, 80);
     }
-    return $safeContext ? json_encode($safeContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+    return $safeContext
+        ? json_encode(
+            $safeContext,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        )
+        : null;
 }
 
 /**
@@ -342,19 +401,34 @@ function telemetry_user_agent_buckets(string $userAgent): array
     };
     $os = match (true) {
         str_contains($ua, 'android') => 'android',
-        str_contains($ua, 'iphone') || str_contains($ua, 'ipad') || str_contains($ua, 'ipod') => 'ios',
+        str_contains($ua, 'iphone')
+            || str_contains($ua, 'ipad')
+            || str_contains($ua, 'ipod')
+            => 'ios',
         str_contains($ua, 'windows') => 'windows',
-        str_contains($ua, 'macintosh') || str_contains($ua, 'mac os') => 'macos',
+        str_contains($ua, 'macintosh') || str_contains($ua, 'mac os')
+            => 'macos',
         str_contains($ua, 'linux') => 'linux',
         default => 'unknown',
     };
     $device = match (true) {
-        preg_match('/bot|crawler|spider|slurp|headlesschrome|phantomjs/i', $ua) === 1 => 'bot',
-        str_contains($ua, 'ipad') || str_contains($ua, 'tablet')
-            || (str_contains($ua, 'android') && !str_contains($ua, 'mobile')) => 'tablet',
-        str_contains($ua, 'mobile') || str_contains($ua, 'iphone') || str_contains($ua, 'ipod') => 'phone',
+        preg_match('/bot|crawler|spider|slurp|headlesschrome|phantomjs/i', $ua)
+            === 1
+            => 'bot',
+        str_contains($ua, 'ipad')
+            || str_contains($ua, 'tablet')
+            || (str_contains($ua, 'android') && !str_contains($ua, 'mobile'))
+            => 'tablet',
+        str_contains($ua, 'mobile')
+            || str_contains($ua, 'iphone')
+            || str_contains($ua, 'ipod')
+            => 'phone',
         $browser !== 'unknown' => 'desktop',
         default => 'unknown',
     };
-    return ['device_type' => $device, 'browser_family' => $browser, 'os_family' => $os];
+    return [
+        'device_type' => $device,
+        'browser_family' => $browser,
+        'os_family' => $os,
+    ];
 }

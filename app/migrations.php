@@ -52,23 +52,33 @@ use function Gallery\Services\thumbnail_metadata_storage_snapshot;
  * after services are registered. When the three-state inspection service is
  * available, successful DDL and schema-repair callbacks must invalidate cached
  * capability answers before any same-request validation can reuse them.
+ *
+ * @return void Clears available request-local schema caches.
  */
 function migration_reset_schema_inspection_cache(): void
 {
-    if (function_exists('Gallery\\Services\\schema_inspection_reset_request_cache')) {
+    if (function_exists(
+        'Gallery\\Services\\schema_inspection_reset_request_cache',
+    )) {
         \Gallery\Services\schema_inspection_reset_request_cache();
     }
-    if (function_exists('Gallery\\Services\\db_schema_helper_reset_request_cache')) {
+    if (function_exists(
+        'Gallery\\Services\\db_schema_helper_reset_request_cache',
+    )) {
         \Gallery\Services\db_schema_helper_reset_request_cache();
     }
 }
 
 /**
  * Invalidate request-local application settings after same-request settings DML.
+ *
+ * @return void Clears the request-local application-settings cache when available.
  */
 function migration_reset_app_settings_cache(): void
 {
-    if (function_exists('Gallery\\Services\\app_settings_reset_request_cache')) {
+    if (function_exists(
+        'Gallery\\Services\\app_settings_reset_request_cache',
+    )) {
         \Gallery\Services\app_settings_reset_request_cache();
     }
 }
@@ -87,18 +97,22 @@ function run_migrations(): array
 {
     // Variable $pdo stores this steps working value.
     $pdo = db();
-    $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS schema_migrations (
         version VARCHAR(64) NOT NULL PRIMARY KEY,
         applied_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    );
     migration_reset_schema_inspection_cache();
 
     // $appliedVersions stores the immutable audit rows already recorded by this database.
-    $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    $appliedVersions = $pdo->query(
+        'SELECT version FROM schema_migrations',
+    )->fetchAll(PDO::FETCH_COLUMN);
     // $files stores only current migration files that have not yet been applied.
     $files = pending_migration_files(
         discover_migration_files(dirname(__DIR__) . '/database/migrations'),
-        $appliedVersions
+        $appliedVersions,
     );
     // $definitionsByFile validates the complete pending set before any database change is applied.
     $definitionsByFile = load_migration_definitions($files);
@@ -109,7 +123,11 @@ function run_migrations(): array
     // $migrationStartedAt stores the full migration batch start timestamp.
     $migrationStartedAt = microtime(true);
     // $thumbnailMetadataSnapshotBefore stores a pre-migration storage snapshot when thumbnail metadata helpers are loaded.
-    $thumbnailMetadataSnapshotBefore = function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
+    $thumbnailMetadataSnapshotBefore = function_exists(
+        'Gallery\\Services\\thumbnail_metadata_storage_snapshot',
+    )
+        ? thumbnail_metadata_storage_snapshot()
+        : [];
 
     foreach ($files as $file) {
         // Variable $version stores this steps working value.
@@ -128,8 +146,12 @@ function run_migrations(): array
         $afterDiagnostic = null;
         try {
             foreach ($statements as $statementIndex => $statement) {
-                $statementDiagnostic = apply_migration_statement($pdo, $statement);
-                $statementDiagnostic['statement_number'] = (int) $statementIndex + 1;
+                $statementDiagnostic = apply_migration_statement(
+                    $pdo,
+                    $statement,
+                );
+                $statementDiagnostic['statement_number'] =
+                    (int) $statementIndex + 1;
                 $statementDiagnostics[] = $statementDiagnostic;
             }
             if ($after !== null) {
@@ -139,17 +161,25 @@ function run_migrations(): array
                 migration_reset_app_settings_cache();
                 $afterDiagnostic = [
                     'status' => 'applied',
-                    'duration_seconds' => round(microtime(true) - $afterStartedAt, 4),
+                    'duration_seconds' => round(
+                        microtime(true) - $afterStartedAt,
+                        4,
+                    ),
                 ];
             }
             // Variable $stmt stores this steps working value.
-            $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
+            $stmt = $pdo->prepare(
+                'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+            );
             $stmt->execute([$version, now_sql()]);
             $ran[] = $version;
             $migrationDiagnostics[] = [
                 'version' => $version,
                 'statement_count' => count($statements),
-                'duration_seconds' => round(microtime(true) - $singleMigrationStartedAt, 4),
+                'duration_seconds' => round(
+                    microtime(true) - $singleMigrationStartedAt,
+                    4,
+                ),
                 'statements' => $statementDiagnostics,
                 'after' => $afterDiagnostic,
             ];
@@ -162,24 +192,36 @@ function run_migrations(): array
     }
 
     if ($ran && function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event('info', 'migrations.ran_detailed', 'Database migrations completed with timing diagnostics.', [
-            'versions' => $ran,
-            'migration_count' => count($ran),
-            'started_at_utc' => gmdate('c', (int) $migrationStartedAt),
-            'finished_at_utc' => gmdate('c'),
-            'php_max_execution_time' => ini_get('max_execution_time'),
-            'php_memory_limit' => ini_get('memory_limit'),
-            'total_duration_seconds' => round(microtime(true) - $migrationStartedAt, 4),
-            'migrations' => $migrationDiagnostics,
-            'thumbnail_metadata_snapshot_before' => $thumbnailMetadataSnapshotBefore,
-            'thumbnail_metadata_snapshot_after' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
-        ], ['category' => 'database', 'severity' => 'notice']);
+        admin_log_event(
+            'info',
+            'migrations.ran_detailed',
+            'Database migrations completed with timing diagnostics.',
+            [
+                'versions' => $ran,
+                'migration_count' => count($ran),
+                'started_at_utc' => gmdate('c', (int) $migrationStartedAt),
+                'finished_at_utc' => gmdate('c'),
+                'php_max_execution_time' => ini_get('max_execution_time'),
+                'php_memory_limit' => ini_get('memory_limit'),
+                'total_duration_seconds' => round(
+                    microtime(true) - $migrationStartedAt,
+                    4,
+                ),
+                'migrations' => $migrationDiagnostics,
+                'thumbnail_metadata_snapshot_before' =>
+                    $thumbnailMetadataSnapshotBefore,
+                'thumbnail_metadata_snapshot_after' => function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_storage_snapshot',
+                )
+                    ? thumbnail_metadata_storage_snapshot()
+                    : [],
+            ],
+            ['category' => 'database', 'severity' => 'notice'],
+        );
     }
 
     return $ran;
 }
-
-
 
 /**
  * Apply a bounded number of pending migration files and report remaining work.
@@ -196,16 +238,20 @@ function run_migrations_bounded(int $maxMigrations = 1): array
 {
     $maxMigrations = max(1, $maxMigrations);
     $pdo = db();
-    $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS schema_migrations (
         version VARCHAR(64) NOT NULL PRIMARY KEY,
         applied_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    );
     migration_reset_schema_inspection_cache();
 
-    $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    $appliedVersions = $pdo->query(
+        'SELECT version FROM schema_migrations',
+    )->fetchAll(PDO::FETCH_COLUMN);
     $pendingFiles = pending_migration_files(
         discover_migration_files(dirname(__DIR__) . '/database/migrations'),
-        $appliedVersions
+        $appliedVersions,
     );
     if ($pendingFiles === []) {
         return ['ran' => [], 'remaining' => 0];
@@ -226,7 +272,9 @@ function run_migrations_bounded(int $maxMigrations = 1): array
                 migration_reset_schema_inspection_cache();
                 migration_reset_app_settings_cache();
             }
-            $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
+            $stmt = $pdo->prepare(
+                'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+            );
             $stmt->execute([$version, now_sql()]);
             $ran[] = $version;
         } catch (Throwable $exception) {
@@ -239,11 +287,17 @@ function run_migrations_bounded(int $maxMigrations = 1): array
 
     $remaining = max(0, count($pendingFiles) - count($ran));
     if ($ran && function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event('info', 'migrations.ran_bounded', 'Database migration checkpoint completed.', [
-            'versions' => $ran,
-            'migration_count' => count($ran),
-            'remaining' => $remaining,
-        ], ['category' => 'database', 'severity' => 'notice']);
+        admin_log_event(
+            'info',
+            'migrations.ran_bounded',
+            'Database migration checkpoint completed.',
+            [
+                'versions' => $ran,
+                'migration_count' => count($ran),
+                'remaining' => $remaining,
+            ],
+            ['category' => 'database', 'severity' => 'notice'],
+        );
     }
 
     return ['ran' => $ran, 'remaining' => $remaining];
@@ -271,20 +325,37 @@ function apply_migration_statement(PDO $pdo, string $statement): array
     } catch (PDOException $exception) {
         if (!migration_duplicate_ddl_error($exception)) {
             $diagnostic['status'] = 'failed';
-            $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
-            $diagnostic['duration_seconds'] = round(microtime(true) - $startedAt, 4);
+            $diagnostic['error_code'] = (int) (
+                $exception->errorInfo[1] ?? $exception->getCode()
+            );
+            $diagnostic['duration_seconds'] = round(
+                microtime(true) - $startedAt,
+                4,
+            );
             throw $exception;
         }
 
         $diagnostic['status'] = 'duplicate_ddl_replayed';
-        $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
+        $diagnostic['error_code'] = (int) (
+            $exception->errorInfo[1] ?? $exception->getCode()
+        );
     }
 
-    if (in_array((string) ($diagnostic['operation'] ?? ''), ['ALTER', 'CREATE', 'DROP', 'RENAME'], true)) {
+    if (in_array(
+        (string) ($diagnostic['operation'] ?? ''),
+        ['ALTER', 'CREATE', 'DROP', 'RENAME'],
+        true,
+    )) {
         migration_reset_schema_inspection_cache();
     }
-    if ((string) ($diagnostic['object'] ?? '') === 'app_settings'
-        && in_array((string) ($diagnostic['operation'] ?? ''), ['INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'TRUNCATE'], true)) {
+    if (
+        (string) ($diagnostic['object'] ?? '') === 'app_settings'
+        && in_array(
+            (string) ($diagnostic['operation'] ?? ''),
+            ['INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'TRUNCATE'],
+            true,
+        )
+    ) {
         migration_reset_app_settings_cache();
     }
 
@@ -307,7 +378,13 @@ function migration_statement_diagnostic(string $statement): array
     }
 
     $object = '';
-    if (preg_match('/\b(?:TABLE|INTO|FROM|JOIN)\s+`?([a-zA-Z0-9_]+)`?/i', $normalized, $match) === 1) {
+    if (
+        preg_match(
+            '/\b(?:TABLE|INTO|FROM|JOIN)\s+`?([a-zA-Z0-9_]+)`?/i',
+            $normalized,
+            $match,
+        ) === 1
+    ) {
         $object = (string) $match[1];
     }
 
@@ -335,11 +412,13 @@ function migration_duplicate_ddl_error(PDOException $exception): bool
 
     // $message stores an intermediate value used by the surrounding gallery workflow.
     $message = $exception->getMessage();
-    return str_contains($message, 'already exists')
-        || str_contains($message, 'Duplicate column name')
-        || str_contains($message, 'Duplicate key name')
-        || str_contains($message, 'Duplicate foreign key constraint name')
-        || str_contains($message, 'errno: 121');
+    return (
+        str_contains($message, 'already exists')
+            || str_contains($message, 'Duplicate column name')
+            || str_contains($message, 'Duplicate key name')
+            || str_contains($message, 'Duplicate foreign key constraint name')
+            || str_contains($message, 'errno: 121')
+    );
 }
 
 /**
@@ -355,14 +434,19 @@ function pending_migrations_exist(): bool
 {
     try {
         // $appliedVersions stores the immutable audit rows already recorded by this database.
-        $appliedVersions = db()->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+        $appliedVersions = db()
+            ->query('SELECT version FROM schema_migrations')
+            ->fetchAll(PDO::FETCH_COLUMN);
         // Extra historical audit rows are harmless when their obsolete files no longer ship.
-        return pending_migration_files(
-            discover_migration_files(dirname(__DIR__) . '/database/migrations'),
-            $appliedVersions
-        ) !== [];
+        return (
+            pending_migration_files(
+                discover_migration_files(
+                    dirname(__DIR__) . '/database/migrations',
+                ),
+                $appliedVersions,
+            ) !== []
+        );
     } catch (Throwable) {
         return true;
     }
 }
-

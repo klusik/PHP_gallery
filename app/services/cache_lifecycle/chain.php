@@ -35,13 +35,19 @@ function cache_lifecycle_chain_lock(): mixed
 function cache_lifecycle_chain_deliver(string $ticket): bool
 {
     try {
-        if (function_exists(__NAMESPACE__ . '\\site_maintenance_fire_cache_chain') && site_maintenance_fire_cache_chain($ticket)) return true;
+        if (
+            function_exists(__NAMESPACE__
+                . '\\site_maintenance_fire_cache_chain')
+            && site_maintenance_fire_cache_chain($ticket)
+        )
+            return true;
     } catch (\Throwable) {
         // Arbitrary transport diagnostics may contain URLs or credentials.
     }
     $lock = cache_lifecycle_chain_lock();
     try {
-        if (!is_resource($lock) || !flock($lock, LOCK_EX | LOCK_NB)) return false;
+        if (!is_resource($lock) || !flock($lock, LOCK_EX | LOCK_NB))
+            return false;
         $path = cache_lifecycle_path('cache-lifecycle/chain.json');
         $record = cache_lifecycle_read_json($path);
         if (hash_equals((string) ($record['ticket'] ?? ''), $ticket)) {
@@ -52,7 +58,10 @@ function cache_lifecycle_chain_deliver(string $ticket): bool
             cache_lifecycle_write_json($path, $record);
         }
     } finally {
-        if (is_resource($lock)) { flock($lock, LOCK_UN); fclose($lock); }
+        if (is_resource($lock)) {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
     return false;
 }
@@ -63,12 +72,27 @@ function cache_lifecycle_chain_deliver(string $ticket): bool
  */
 function cache_lifecycle_chain_start(): array
 {
-    if (!feature_capability_effective_enabled('automatic_cache_cleanup')) return ['ok'=>true,'queued'=>false,'reason'=>'automatic_cache_cleanup_disabled'];
+    if (!feature_capability_effective_enabled('automatic_cache_cleanup'))
+        return [
+            'ok' => true,
+            'queued' => false,
+            'reason' => 'automatic_cache_cleanup_disabled',
+        ];
     $lock = cache_lifecycle_chain_lock();
     $ticket = '';
     try {
-        if (!is_resource($lock)) return ['ok'=>false,'queued'=>false,'reason'=>'cache_chain_lock_unavailable'];
-        if (!flock($lock, LOCK_EX | LOCK_NB)) return ['ok'=>true,'queued'=>false,'reason'=>'cache_chain_active'];
+        if (!is_resource($lock))
+            return [
+                'ok' => false,
+                'queued' => false,
+                'reason' => 'cache_chain_lock_unavailable',
+            ];
+        if (!flock($lock, LOCK_EX | LOCK_NB))
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'cache_chain_active',
+            ];
         $path = cache_lifecycle_path('cache-lifecycle/chain.json');
         $record = cache_lifecycle_read_json($path);
         $now = cache_lifecycle_now();
@@ -78,13 +102,31 @@ function cache_lifecycle_chain_start(): array
             $record['running'] = false;
             $record['last_error'] = 'cache_chain_single_worker_runtime';
             cache_lifecycle_write_json($path, $record);
-            return ['ok'=>true,'queued'=>false,'reason'=>$record['last_error']];
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => $record['last_error'],
+            ];
         }
-        if ((string) ($record['ticket'] ?? '') !== '' && (int) ($record['queued_until'] ?? 0) > $now) {
-            return ['ok'=>true,'queued'=>false,'reason'=>'cache_chain_already_queued'];
+        if (
+            (string) ($record['ticket'] ?? '') !== ''
+            && (int) ($record['queued_until'] ?? 0) > $now
+        ) {
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'cache_chain_already_queued',
+            ];
         }
-        if ($now - (int) ($record['last_dispatch_at'] ?? 0) < CACHE_LIFECYCLE_REFRESH_SECONDS) {
-            return ['ok'=>true,'queued'=>false,'reason'=>'cache_chain_dispatch_throttled'];
+        if (
+            ($now - (int) ($record['last_dispatch_at'] ?? 0))
+            < CACHE_LIFECYCLE_REFRESH_SECONDS
+        ) {
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'cache_chain_dispatch_throttled',
+            ];
         }
         $ticket = bin2hex(random_bytes(32));
         $record['ticket'] = $ticket;
@@ -96,10 +138,19 @@ function cache_lifecycle_chain_start(): array
         $record['last_error'] = '';
         cache_lifecycle_write_json($path, $record);
     } finally {
-        if (is_resource($lock)) { flock($lock, LOCK_UN); fclose($lock); }
+        if (is_resource($lock)) {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
     $queued = cache_lifecycle_chain_deliver($ticket);
-    return ['ok'=>$queued,'queued'=>$queued,'reason'=>$queued ? 'cache_chain_queued' : 'cache_chain_dispatch_unavailable'];
+    return [
+        'ok' => $queued,
+        'queued' => $queued,
+        'reason' => $queued
+            ? 'cache_chain_queued'
+            : 'cache_chain_dispatch_unavailable',
+    ];
 }
 
 /**
@@ -109,20 +160,42 @@ function cache_lifecycle_chain_start(): array
  */
 function cache_lifecycle_chain_run(string $ticket): array
 {
-    $refused = ['ok'=>false,'queued'=>false,'reason'=>'cache_chain_ticket_refused','worked'=>false];
-    if (preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1) return $refused;
+    $refused = [
+        'ok' => false,
+        'queued' => false,
+        'reason' => 'cache_chain_ticket_refused',
+        'worked' => false,
+    ];
+    if (preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1)
+        return $refused;
     $lock = cache_lifecycle_chain_lock();
     $nextTicket = '';
     $worked = false;
     $ok = true;
     $reason = 'cache_chain_wait';
     try {
-        if (!is_resource($lock)) return ['ok'=>false,'queued'=>false,'reason'=>'cache_chain_lock_unavailable','worked'=>false];
-        if (!flock($lock, LOCK_EX | LOCK_NB)) return ['ok'=>true,'queued'=>false,'reason'=>'cache_chain_active','worked'=>false];
+        if (!is_resource($lock))
+            return [
+                'ok' => false,
+                'queued' => false,
+                'reason' => 'cache_chain_lock_unavailable',
+                'worked' => false,
+            ];
+        if (!flock($lock, LOCK_EX | LOCK_NB))
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'cache_chain_active',
+                'worked' => false,
+            ];
         $path = cache_lifecycle_path('cache-lifecycle/chain.json');
         $record = cache_lifecycle_read_json($path);
         $now = cache_lifecycle_now();
-        if (!hash_equals((string) ($record['ticket'] ?? ''), $ticket) || (int) ($record['queued_until'] ?? 0) < $now) return $refused;
+        if (
+            !hash_equals((string) ($record['ticket'] ?? ''), $ticket)
+            || (int) ($record['queued_until'] ?? 0) < $now
+        )
+            return $refused;
         $record['ticket'] = '';
         $record['running'] = true;
         $record['last_arrival_at'] = $now;
@@ -134,35 +207,61 @@ function cache_lifecycle_chain_run(string $ticket): array
             $record['queued_until'] = 0;
             $record['last_error'] = 'cache_chain_single_worker_runtime';
             cache_lifecycle_write_json($path, $record);
-            return ['ok'=>true,'queued'=>false,'reason'=>$record['last_error'],'worked'=>false];
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => $record['last_error'],
+                'worked' => false,
+            ];
         }
         if (!feature_capability_effective_enabled('automatic_cache_cleanup')) {
             $record['running'] = false;
             $record['queued_until'] = 0;
             $record['last_error'] = 'automatic_cache_cleanup_disabled';
             cache_lifecycle_write_json($path, $record);
-            return ['ok'=>true,'queued'=>false,'reason'=>'automatic_cache_cleanup_disabled','worked'=>false];
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'automatic_cache_cleanup_disabled',
+                'worked' => false,
+            ];
         }
         // Leave eight seconds for bounded work, connection dispatch and cleanup.
         // Type: int. Units: seconds. Scope: this independent HTTP timer request.
         // Consumers: wait admission. Rationale: the worker does not extend a hosting execution limit; shorter limits split the timer into additional bounded hops.
         $limit = max(0, (int) ini_get('max_execution_time'));
-        $waitRoom = $limit === 0 ? CACHE_LIFECYCLE_CHAIN_WAIT_SECONDS : min(CACHE_LIFECYCLE_CHAIN_WAIT_SECONDS, $limit - 8);
+        $waitRoom = $limit === 0
+            ? CACHE_LIFECYCLE_CHAIN_WAIT_SECONDS
+            : min(CACHE_LIFECYCLE_CHAIN_WAIT_SECONDS, $limit - 8);
         if ($waitRoom < 1) {
             $record['running'] = false;
             $record['queued_until'] = 0;
             $record['last_error'] = 'cache_chain_runtime_budget_unavailable';
             cache_lifecycle_write_json($path, $record);
-            return ['ok'=>false,'queued'=>false,'reason'=>$record['last_error'],'worked'=>false];
+            return [
+                'ok' => false,
+                'queued' => false,
+                'reason' => $record['last_error'],
+                'worked' => false,
+            ];
         }
-        $wait = min($waitRoom, max(0, (int) ($record['next_start_at'] ?? 0) - $now));
-        if ($wait > 0) sleep($wait);
+        $wait = min($waitRoom, max(
+            0,
+            (int) ($record['next_start_at'] ?? 0) - $now,
+        ));
+        if ($wait > 0)
+            sleep($wait);
         if (!feature_capability_effective_enabled('automatic_cache_cleanup')) {
             $record['running'] = false;
             $record['queued_until'] = 0;
             $record['last_error'] = 'automatic_cache_cleanup_disabled';
             cache_lifecycle_write_json($path, $record);
-            return ['ok'=>true,'queued'=>false,'reason'=>'automatic_cache_cleanup_disabled','worked'=>false];
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'automatic_cache_cleanup_disabled',
+                'worked' => false,
+            ];
         }
         $started = cache_lifecycle_now();
         if ($started >= (int) ($record['next_start_at'] ?? 0)) {
@@ -171,14 +270,18 @@ function cache_lifecycle_chain_run(string $ticket): array
             $ok = !empty($work['ok']);
             $reason = (string) ($work['reason'] ?? 'cache_chain_work');
             $record['last_work_at'] = $started;
-            $record['next_start_at'] = max(cache_lifecycle_now(), $started + CACHE_LIFECYCLE_REFRESH_SECONDS);
+            $record['next_start_at'] = max(
+                cache_lifecycle_now(),
+                $started + CACHE_LIFECYCLE_REFRESH_SECONDS,
+            );
             $record['last_error'] = $ok ? '' : $reason;
         }
         $nextTicket = bin2hex(random_bytes(32));
         $record['ticket'] = $nextTicket;
         $record['running'] = false;
         $record['last_dispatch_at'] = cache_lifecycle_now();
-        $record['queued_until'] = cache_lifecycle_now() + CACHE_LIFECYCLE_CHAIN_LEASE_SECONDS;
+        $record['queued_until'] =
+            cache_lifecycle_now() + CACHE_LIFECYCLE_CHAIN_LEASE_SECONDS;
         cache_lifecycle_write_json($path, $record);
     } catch (\Throwable) {
         try {
@@ -189,12 +292,28 @@ function cache_lifecycle_chain_run(string $ticket): array
                 $record['last_error'] = 'cache_chain_exception';
                 cache_lifecycle_write_json($path, $record);
             }
-        } catch (\Throwable) { /* Failed storage leaves the original bounded lease recoverable. */ }
-        return ['ok'=>false,'queued'=>false,'reason'=>'cache_chain_exception','worked'=>$worked];
+        } catch (
+            \Throwable
+        ) { /* Failed storage leaves the original bounded lease recoverable. */
+        }
+        return [
+            'ok' => false,
+            'queued' => false,
+            'reason' => 'cache_chain_exception',
+            'worked' => $worked,
+        ];
     } finally {
-        if (is_resource($lock)) { flock($lock, LOCK_UN); fclose($lock); }
+        if (is_resource($lock)) {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
     // The parent relinquishes its live chain lock before the child can arrive.
     $queued = cache_lifecycle_chain_deliver($nextTicket);
-    return ['ok'=>$ok && $queued,'queued'=>$queued,'reason'=>$queued ? $reason : 'cache_chain_dispatch_unavailable','worked'=>$worked];
+    return [
+        'ok' => $ok && $queued,
+        'queued' => $queued,
+        'reason' => $queued ? $reason : 'cache_chain_dispatch_unavailable',
+        'worked' => $worked,
+    ];
 }

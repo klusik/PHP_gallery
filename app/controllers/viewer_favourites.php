@@ -64,8 +64,11 @@ use function Gallery\Services\viewer_source_image_can_render_reference;
  * @param string $className Optional additional presentation class.
  * @return string HTML form markup.
  */
-function render_viewer_favourite_form_html(int $imageId, bool $isFavourite, string $className = ''): string
-{
+function render_viewer_favourite_form_html(
+    int $imageId,
+    bool $isFavourite,
+    string $className = '',
+): string {
     if ($imageId <= 0 || !viewer_favourites_storage_available()) {
         return '';
     }
@@ -79,7 +82,11 @@ function render_viewer_favourite_form_html(int $imageId, bool $isFavourite, stri
         'is_favourite' => $isFavourite,
         'action' => $action,
         'label' => $label,
-        'classes' => trim('viewer-favourite-form ' . $className . ($isFavourite ? ' is-favourite' : '')),
+        'classes' => trim(
+            'viewer-favourite-form '
+                . $className
+                . ($isFavourite ? ' is-favourite' : ''),
+        ),
         'url' => url_for('viewer_favourite'),
         'csrf_token' => viewer_csrf_token(),
     ]);
@@ -123,23 +130,39 @@ function viewer_favourite_json_response(array $payload, int $status = 200): void
 
 /**
  * Return whether the favourite mutation should use the asynchronous JSON response shape.
+ *
+ * @return bool True when the request expects a JSON response.
  */
 function viewer_favourite_wants_json(): bool
 {
-    return strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-        || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
-        || (string) ($_POST['ajax'] ?? '') === '1';
+    return (
+        strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''))
+        === 'xmlhttprequest'
+            || str_contains(
+                strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')),
+                'application/json',
+            )
+            || (string) ($_POST['ajax'] ?? '') === '1'
+    );
 }
 
 /**
  * Add or remove one favourite through the current viewer principal.
+ *
+ * @return void Processes the mutation and emits JSON or redirects.
  */
 function cms_viewer_favourite(): void
 {
     viewer_http_no_store();
     if (request_method() !== 'POST') {
         if (viewer_favourite_wants_json()) {
-            viewer_favourite_json_response(['ok' => false, 'error' => t('viewer.favourites.method_error', 'Favourite changes require a POST request.')], 405);
+            viewer_favourite_json_response([
+                'ok' => false,
+                'error' => t(
+                    'viewer.favourites.method_error',
+                    'Favourite changes require a POST request.',
+                ),
+            ], 405);
             return;
         }
         cms_not_found();
@@ -148,7 +171,13 @@ function cms_viewer_favourite(): void
 
     if (!viewer_http_auth_available()) {
         if (viewer_favourite_wants_json()) {
-            viewer_favourite_json_response(['ok' => false, 'error' => t('viewer.favourites.unavailable', 'Favourites are temporarily unavailable.')], 503);
+            viewer_favourite_json_response([
+                'ok' => false,
+                'error' => t(
+                    'viewer.favourites.unavailable',
+                    'Favourites are temporarily unavailable.',
+                ),
+            ], 503);
             return;
         }
         viewer_render_unavailable();
@@ -160,7 +189,10 @@ function cms_viewer_favourite(): void
         if (viewer_favourite_wants_json()) {
             viewer_favourite_json_response([
                 'ok' => false,
-                'error' => t('viewer.favourites.login_required', 'Sign in as a viewer to use favourites.'),
+                'error' => t(
+                    'viewer.favourites.login_required',
+                    'Sign in as a viewer to use favourites.',
+                ),
                 'login_url' => url_for('viewer_login'),
             ], 401);
             return;
@@ -170,13 +202,22 @@ function cms_viewer_favourite(): void
 
     if (!viewer_csrf_verify((string) ($_POST['viewer_csrf_token'] ?? ''))) {
         if (viewer_favourite_wants_json()) {
-            viewer_favourite_json_response(['ok' => false, 'error' => t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.')], 403);
+            viewer_favourite_json_response([
+                'ok' => false,
+                'error' => t(
+                    'viewer.common.invalid_request_message',
+                    'The request could not be verified. Please reopen the page and try again.',
+                ),
+            ], 403);
             return;
         }
         http_response_code(403);
         \Gallery\Views\view_render_viewer_favourites_error([
             'title' => t('viewer.favourites.title', 'Favourites'),
-            'message' => t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'),
+            'message' => t(
+                'viewer.common.invalid_request_message',
+                'The request could not be verified. Please reopen the page and try again.',
+            ),
             'back_url' => '',
             'back_label' => '',
         ]);
@@ -186,7 +227,12 @@ function cms_viewer_favourite(): void
     $imageId = (int) ($_POST['image_id'] ?? 0);
     $action = (string) ($_POST['action'] ?? '');
     if (!in_array($action, ['add', 'remove'], true) || $imageId <= 0) {
-        $result = ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'invalid'];
+        $result = [
+            'ok' => false,
+            'favourite' => false,
+            'changed' => false,
+            'reason' => 'invalid',
+        ];
     } else {
         $result = viewer_favourite_set($viewer, $imageId, $action === 'add');
     }
@@ -205,10 +251,22 @@ function cms_viewer_favourite(): void
 
     $reason = (string) ($result['reason'] ?? 'unavailable');
     $message = match ($reason) {
-        'invalid' => t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'),
-        'quota' => t('viewer.favourites.quota_reached', 'Your favourites limit has been reached.'),
-        'source_forbidden' => t('viewer.favourites.source_unavailable', 'This photo is not currently available to your viewer session.'),
-        default => t('viewer.favourites.unavailable', 'Favourites are temporarily unavailable.'),
+        'invalid' => t(
+            'viewer.common.invalid_request_message',
+            'The request could not be verified. Please reopen the page and try again.',
+        ),
+        'quota' => t(
+            'viewer.favourites.quota_reached',
+            'Your favourites limit has been reached.',
+        ),
+        'source_forbidden' => t(
+            'viewer.favourites.source_unavailable',
+            'This photo is not currently available to your viewer session.',
+        ),
+        default => t(
+            'viewer.favourites.unavailable',
+            'Favourites are temporarily unavailable.',
+        ),
     };
     $status = match ($reason) {
         'invalid' => 400,
@@ -217,7 +275,10 @@ function cms_viewer_favourite(): void
         default => 503,
     };
     if (viewer_favourite_wants_json()) {
-        viewer_favourite_json_response(['ok' => false, 'error' => $message], $status);
+        viewer_favourite_json_response([
+            'ok' => false,
+            'error' => $message,
+        ], $status);
         return;
     }
 
@@ -232,6 +293,8 @@ function cms_viewer_favourite(): void
 
 /**
  * Render the private viewer favourites page.
+ *
+ * @return void Renders the favourites page or redirects when unavailable.
  */
 function cms_viewer_favourites(): void
 {
@@ -248,15 +311,24 @@ function cms_viewer_favourites(): void
     $title = t('viewer.favourites.title', 'Favourites');
     $viewModel = [
         'title' => $title,
-        'help' => t('viewer.favourites.help', 'Only photos you can currently access are shown. A favourite never preserves access to a protected gallery.'),
+        'help' => t(
+            'viewer.favourites.help',
+            'Only photos you can currently access are shown. A favourite never preserves access to a protected gallery.',
+        ),
         'account_url' => url_for('viewer_account'),
         'account_label' => t('viewer.favourites.back_to_account', 'Account'),
         'storage_available' => viewer_favourites_storage_available(),
-        'unavailable_message' => t('viewer.favourites.unavailable', 'Favourites are temporarily unavailable.'),
+        'unavailable_message' => t(
+            'viewer.favourites.unavailable',
+            'Favourites are temporarily unavailable.',
+        ),
         'cards' => [],
         'empty_message' => '',
         'hidden_unavailable' => false,
-        'hidden_message' => t('viewer.favourites.hidden_unavailable', 'Some saved favourites are hidden because their source gallery is not currently authorized.'),
+        'hidden_message' => t(
+            'viewer.favourites.hidden_unavailable',
+            'Some saved favourites are hidden because their source gallery is not currently authorized.',
+        ),
         'pagination' => ['visible' => false],
     ];
     if (!$viewModel['storage_available']) {
@@ -264,9 +336,15 @@ function cms_viewer_favourites(): void
         return;
     }
 
-    $pageData = viewer_favourites_page((int) $viewer['id'], max(1, (int) ($_GET['favourites_page'] ?? 1)), 48);
+    $pageData = viewer_favourites_page(
+        (int) $viewer['id'],
+        max(1, (int) ($_GET['favourites_page'] ?? 1)),
+        48,
+    );
     $viewerCollectionsAvailable = viewer_collections_storage_available();
-    $viewerCollections = $viewerCollectionsAvailable ? viewer_collections_for_owner((int) $viewer['id']) : [];
+    $viewerCollections = $viewerCollectionsAvailable
+        ? viewer_collections_for_owner((int) $viewer['id'])
+        : [];
     $authorized = [];
     $hiddenUnavailable = false;
     foreach ($pageData['rows'] as $row) {
@@ -283,7 +361,10 @@ function cms_viewer_favourites(): void
         $authorized[] = $resolved;
     }
 
-    $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
+    $candidateSizes = array_values(array_filter(
+        thumbnail_sizes(),
+        static fn(int $size): bool => $size <= 960,
+    ));
     if ($candidateSizes === []) {
         $candidateSizes = [300];
     }
@@ -303,11 +384,19 @@ function cms_viewer_favourites(): void
                 '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw',
                 image_alt_text($image, $gallery, $index + 1),
                 $index,
-                $bundle
+                $bundle,
             ),
-            'favourite_control_html' => render_viewer_favourite_form_html($imageId, true, 'viewer-favourite-card-overlay'),
+            'favourite_control_html' => render_viewer_favourite_form_html(
+                $imageId,
+                true,
+                'viewer-favourite-card-overlay',
+            ),
             'collection_control_html' => $viewerCollectionsAvailable
-                ? render_viewer_collection_add_control_html($imageId, $viewerCollections, 'viewer-collection-card-overlay')
+                ? render_viewer_collection_add_control_html(
+                    $imageId,
+                    $viewerCollections,
+                    'viewer-collection-card-overlay',
+                )
                 : '',
             'title' => public_image_display_title($image, $gallery),
         ];
@@ -315,8 +404,14 @@ function cms_viewer_favourites(): void
 
     $viewModel['cards'] = $cards;
     $viewModel['empty_message'] = (int) $pageData['total'] > 0
-        ? t('viewer.favourites.none_accessible', 'No favourites on this page are currently accessible.')
-        : t('viewer.favourites.empty', 'You have not added any favourites yet.');
+        ? t(
+            'viewer.favourites.none_accessible',
+            'No favourites on this page are currently accessible.',
+        )
+        : t(
+            'viewer.favourites.empty',
+            'You have not added any favourites yet.',
+        );
     $viewModel['hidden_unavailable'] = $hiddenUnavailable;
 
     $total = (int) $pageData['total'];
@@ -326,10 +421,19 @@ function cms_viewer_favourites(): void
     $viewModel['pagination'] = [
         'visible' => $pageCount > 1,
         'aria_label' => t('viewer.favourites.pages', 'Favourite pages'),
-        'previous_url' => $currentPage > 1 ? url_for('viewer_favourites', ['favourites_page' => $currentPage - 1]) : '',
+        'previous_url' => $currentPage > 1
+            ? url_for('viewer_favourites', [
+                'favourites_page' => $currentPage - 1,
+            ]) : '',
         'previous_label' => t('pagination.previous', 'Previous'),
-        'page_label' => t('pagination.page_of', 'Page {page} of {pages}', ['page' => $currentPage, 'pages' => $pageCount]),
-        'next_url' => $currentPage < $pageCount ? url_for('viewer_favourites', ['favourites_page' => $currentPage + 1]) : '',
+        'page_label' => t('pagination.page_of', 'Page {page} of {pages}', [
+            'page' => $currentPage,
+            'pages' => $pageCount,
+        ]),
+        'next_url' => $currentPage < $pageCount
+            ? url_for('viewer_favourites', [
+                'favourites_page' => $currentPage + 1,
+            ]) : '',
         'next_label' => t('pagination.next', 'Next'),
     ];
 

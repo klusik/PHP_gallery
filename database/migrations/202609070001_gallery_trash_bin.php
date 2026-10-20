@@ -67,7 +67,7 @@ return [
         KEY gallery_trash_entries_deleted_by_index (deleted_by_user_id),
         KEY gallery_trash_entries_original_path_index (original_folder_path(191))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "ALTER TABLE gallery_trash_entries
+    'ALTER TABLE gallery_trash_entries
         ADD CONSTRAINT gallery_trash_entries_user_foreign
-        FOREIGN KEY (deleted_by_user_id) REFERENCES users(id) ON DELETE SET NULL",
+        FOREIGN KEY (deleted_by_user_id) REFERENCES users(id) ON DELETE SET NULL',
 ];

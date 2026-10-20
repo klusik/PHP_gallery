@@ -36,7 +36,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS duplicate_photo_ledger_pairs (
+    'CREATE TABLE IF NOT EXISTS duplicate_photo_ledger_pairs (
         user_id BIGINT UNSIGNED NOT NULL,
         image_id_low BIGINT UNSIGNED NOT NULL,
         image_id_high BIGINT UNSIGNED NOT NULL,
@@ -47,8 +47,8 @@ return [
         CONSTRAINT duplicate_photo_ledger_pairs_user_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         CONSTRAINT duplicate_photo_ledger_pairs_low_foreign FOREIGN KEY (image_id_low) REFERENCES images(id) ON DELETE CASCADE,
         CONSTRAINT duplicate_photo_ledger_pairs_high_foreign FOREIGN KEY (image_id_high) REFERENCES images(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS duplicate_photo_ledger_galleries (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS duplicate_photo_ledger_galleries (
         user_id BIGINT UNSIGNED NOT NULL,
         gallery_id BIGINT UNSIGNED NOT NULL,
         created_at DATETIME NOT NULL,
@@ -56,5 +56,5 @@ return [
         KEY duplicate_photo_ledger_galleries_gallery_index (gallery_id),
         CONSTRAINT duplicate_photo_ledger_galleries_user_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         CONSTRAINT duplicate_photo_ledger_galleries_gallery_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

@@ -50,11 +50,11 @@ use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 
 /**
- * Admin integrity controller model.
+ * Render the Admin integrity summary for the integrity status record.
  *
- * This module renders integrity summaries and path lists, and handles the admin integrity screen. It is separated from visual theme customization.
  *
- * @param array $integrityStatus Integrity status value.
+ * @param array{status?:string,modified?:array,missing?:array,unknown?:array,checked_at_iso?:string,manifest_error?:string} $integrityStatus Integrity status fields prepared by the integrity service.
+ * @return void Renders the prepared summary through the integrity view.
  */
 function render_admin_integrity_summary(array $integrityStatus): void
 {
@@ -83,7 +83,9 @@ function render_admin_integrity_path_list(string $title, array $paths): void
 }
 
 /**
- * Handles cms admin integrity logic for the gallery application.
+ * Handle the Admin integrity page and its authenticated integrity-check action.
+ *
+ * @return void Redirects after a POST check or renders the integrity page.
  */
 function cms_admin_integrity(): void
 {
@@ -93,12 +95,17 @@ function cms_admin_integrity(): void
         verify_csrf();
         // $status stores an intermediate value used by the surrounding gallery workflow.
         $status = integrity_status(true);
-        admin_log_event('info', 'integrity.checked', 'Admin ran the system integrity check.', [
-            'status' => (string) ($status['status'] ?? 'unknown'),
-            'modified' => count((array) ($status['modified'] ?? [])),
-            'missing' => count((array) ($status['missing'] ?? [])),
-            'unknown' => count((array) ($status['unknown'] ?? [])),
-        ]);
+        admin_log_event(
+            'info',
+            'integrity.checked',
+            'Admin ran the system integrity check.',
+            [
+                'status' => (string) ($status['status'] ?? 'unknown'),
+                'modified' => count((array) ($status['modified'] ?? [])),
+                'missing' => count((array) ($status['missing'] ?? [])),
+                'unknown' => count((array) ($status['unknown'] ?? [])),
+            ],
+        );
         redirect_to(url_for('admin_integrity', ['checked' => 1]));
     }
 
@@ -106,11 +113,12 @@ function cms_admin_integrity(): void
     $status = integrity_status(false);
     \Gallery\Views\view_render_admin_integrity_page([
         'status' => $status,
-        'status_label' => integrity_status_label((string) ($status['status'] ?? 'error')),
+        'status_label' => integrity_status_label(
+            (string) ($status['status'] ?? 'error'),
+        ),
         'checked' => isset($_GET['checked']),
         'dashboard_url' => url_for('admin'),
         'check_url' => url_for('admin_integrity'),
         'csrf_html' => csrf_field(),
     ]);
 }
-

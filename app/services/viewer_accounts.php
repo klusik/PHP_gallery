@@ -65,14 +65,23 @@ use function Gallery\Models\viewer_account_model_update_status;
 use function Gallery\Models\viewer_account_model_revoke_transition_authority;
 
 const VIEWER_ACCOUNT_STATUS_PENDING_VERIFICATION = 'pending_verification';
+
 const VIEWER_ACCOUNT_STATUS_ACTIVE = 'active';
+
 const VIEWER_ACCOUNT_STATUS_SUSPENDED = 'suspended';
+
 const VIEWER_ACCOUNT_STATUS_DISABLED = 'disabled';
+
 const VIEWER_SESSION_NAMESPACE = 'viewer_auth';
+
 const VIEWER_CSRF_NAMESPACE = 'viewer_csrf_token';
+
 const VIEWER_REAUTHENTICATION_NAMESPACE = 'viewer_reauthentication';
+
 const VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE = 'viewer_email_change_confirmation';
+
 const VIEWER_ACCOUNT_CAPACITY_STATE_KEY = 'accounts';
+
 const VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY = 'viewer_accounts_admin_mode';
 
 /**
@@ -81,16 +90,22 @@ const VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY = 'viewer_accounts_admin_mode';
  * Non-integer values fall back to the supplied default. Integer values outside the
  * security boundary are clamped rather than creating an unlimited sentinel.
  *
- * @param mixed $value Raw configuration value.
+ * @param int|string $value Raw integer or decimal-string configuration value.
  * @param int $default Safe default value.
  * @param int $minimum Hard lower bound.
  * @param int $maximum Hard upper bound.
  * @return int Strictly parsed bounded value.
  */
-function viewer_config_bounded_int($value, int $default, int $minimum, int $maximum): int
-{
+function viewer_config_bounded_int(
+    mixed $value,
+    int $default,
+    int $minimum,
+    int $maximum,
+): int {
     if ($minimum > $maximum || $default < $minimum || $default > $maximum) {
-        throw new InvalidArgumentException('Viewer bounded configuration contract is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer bounded configuration contract is invalid.',
+        );
     }
 
     if (is_int($value)) {
@@ -120,7 +135,9 @@ function viewer_config_bounded_int($value, int $default, int $minimum, int $maxi
 function viewer_registration_mode_normalize($value): string
 {
     $mode = strtolower(trim((string) $value));
-    return in_array($mode, ['disabled', 'invite_only', 'open'], true) ? $mode : 'disabled';
+    return in_array($mode, ['disabled', 'invite_only', 'open'], true)
+        ? $mode
+        : 'disabled';
 }
 
 /**
@@ -131,62 +148,245 @@ function viewer_registration_mode_normalize($value): string
 function viewer_accounts_config(): array
 {
     $config = cms_config();
-    $viewer = is_array($config['viewer_accounts'] ?? null) ? $config['viewer_accounts'] : [];
-    $registrationMode = viewer_registration_mode_normalize($viewer['registration_mode'] ?? 'disabled');
+    $viewer = is_array($config['viewer_accounts'] ?? null)
+        ? $config['viewer_accounts']
+        : [];
+    $registrationMode = viewer_registration_mode_normalize(
+        $viewer['registration_mode'] ?? 'disabled',
+    );
 
     return [
-        'enabled' => array_key_exists('enabled', $viewer) && $viewer['enabled'] === true,
+        'enabled' =>
+            array_key_exists('enabled', $viewer) && $viewer['enabled'] === true,
         'registration_mode' => $registrationMode,
-        'require_https' => !array_key_exists('require_https', $viewer) || $viewer['require_https'] === true,
-        'session_lifetime_seconds' => max(900, min(2592000, (int) ($viewer['session_lifetime_seconds'] ?? 86400))),
-        'remember_lifetime_days' => max(1, min(365, (int) ($viewer['remember_lifetime_days'] ?? 30))),
-        'security_event_retention_days' => max(7, min(730, (int) ($viewer['security_event_retention_days'] ?? 180))),
-        'rate_limit_max_subjects_per_bucket' => max(100, min(50000, (int) ($viewer['rate_limit_max_subjects_per_bucket'] ?? 5000))),
-        'anti_automation_enabled' => !array_key_exists('anti_automation_enabled', $viewer) || $viewer['anti_automation_enabled'] === true,
-        'anti_automation_min_form_age_seconds' => viewer_config_bounded_int($viewer['anti_automation_min_form_age_seconds'] ?? 2, 2, 1, 10),
-        'anti_automation_form_lifetime_seconds' => viewer_config_bounded_int($viewer['anti_automation_form_lifetime_seconds'] ?? 600, 600, 120, 1800),
-        'anti_automation_pow_min_bits' => viewer_config_bounded_int($viewer['anti_automation_pow_min_bits'] ?? 12, 12, 10, 16),
-        'anti_automation_pow_max_bits' => max(
-            viewer_config_bounded_int($viewer['anti_automation_pow_min_bits'] ?? 12, 12, 10, 16),
-            viewer_config_bounded_int($viewer['anti_automation_pow_max_bits'] ?? 15, 15, 10, 16)
+        'require_https' =>
+            !array_key_exists('require_https', $viewer)
+                || $viewer['require_https'] === true,
+        'session_lifetime_seconds' => max(900, min(
+            2592000,
+            (int) ($viewer['session_lifetime_seconds'] ?? 86400),
+        )),
+        'remember_lifetime_days' => max(1, min(
+            365,
+            (int) ($viewer['remember_lifetime_days'] ?? 30),
+        )),
+        'security_event_retention_days' => max(7, min(
+            730,
+            (int) ($viewer['security_event_retention_days'] ?? 180),
+        )),
+        'rate_limit_max_subjects_per_bucket' => max(100, min(
+            50000,
+            (int) ($viewer['rate_limit_max_subjects_per_bucket'] ?? 5000),
+        )),
+        'anti_automation_enabled' =>
+            !array_key_exists('anti_automation_enabled', $viewer)
+                || $viewer['anti_automation_enabled'] === true,
+        'anti_automation_min_form_age_seconds' => viewer_config_bounded_int(
+            $viewer['anti_automation_min_form_age_seconds'] ?? 2,
+            2,
+            1,
+            10,
         ),
-        'max_viewer_accounts' => max(1, min(100000, (int) ($viewer['max_viewer_accounts'] ?? 250))),
-        'max_active_viewer_sessions_per_account' => max(1, min(100, (int) ($viewer['max_active_viewer_sessions_per_account'] ?? 10))),
-        'max_active_viewer_remember_tokens_per_account' => max(1, min(100, (int) ($viewer['max_active_viewer_remember_tokens_per_account'] ?? 10))),
-        'max_pending_registration_requests' => max(10, min(10000, (int) ($viewer['max_pending_registration_requests'] ?? 250))),
-        'registration_request_lifetime_minutes' => max(30, min(10080, (int) ($viewer['registration_request_lifetime_minutes'] ?? 1440))),
-        'verified_registration_lifetime_minutes' => max(15, min(1440, (int) ($viewer['verified_registration_lifetime_minutes'] ?? 60))),
-        'registration_activation_lifetime_minutes' => max(5, min(60, (int) ($viewer['registration_activation_lifetime_minutes'] ?? 20))),
-        'verification_token_lifetime_minutes' => max(15, min(1440, (int) ($viewer['verification_token_lifetime_minutes'] ?? 60))),
-        'password_reset_authorization_lifetime_minutes' => max(5, min(60, (int) ($viewer['password_reset_authorization_lifetime_minutes'] ?? 15))),
-        'password_reset_token_lifetime_minutes' => max(15, min(1440, (int) ($viewer['password_reset_token_lifetime_minutes'] ?? 60))),
-        'viewer_reauthentication_lifetime_minutes' => viewer_config_bounded_int($viewer['viewer_reauthentication_lifetime_minutes'] ?? 15, 15, 5, 30),
-        'email_change_request_lifetime_minutes' => viewer_config_bounded_int($viewer['email_change_request_lifetime_minutes'] ?? 60, 60, 15, 1440),
-        'email_change_confirmation_lifetime_minutes' => viewer_config_bounded_int($viewer['email_change_confirmation_lifetime_minutes'] ?? 15, 15, 5, 30),
-        'invitation_lifetime_days' => max(1, min(90, (int) ($viewer['invitation_lifetime_days'] ?? 7))),
-        'registration_global_daily_limit' => max(1, min(10000, (int) ($viewer['registration_global_daily_limit'] ?? 50))),
-        'verification_mail_email_cooldown_seconds' => max(60, min(86400, (int) ($viewer['verification_mail_email_cooldown_seconds'] ?? 600))),
-        'verification_mail_email_hourly_limit' => max(1, min(100, (int) ($viewer['verification_mail_email_hourly_limit'] ?? 3))),
-        'verification_mail_email_daily_limit' => max(1, min(500, (int) ($viewer['verification_mail_email_daily_limit'] ?? 5))),
-        'verification_mail_ip_hourly_limit' => max(1, min(500, (int) ($viewer['verification_mail_ip_hourly_limit'] ?? 10))),
-        'verification_mail_ip_daily_limit' => max(1, min(5000, (int) ($viewer['verification_mail_ip_daily_limit'] ?? 25))),
-        'verification_mail_subnet_hourly_limit' => max(1, min(5000, (int) ($viewer['verification_mail_subnet_hourly_limit'] ?? 25))),
-        'verification_mail_subnet_daily_limit' => max(1, min(10000, (int) ($viewer['verification_mail_subnet_daily_limit'] ?? 60))),
-        'verification_mail_global_daily_limit' => max(1, min(10000, (int) ($viewer['verification_mail_global_daily_limit'] ?? 50))),
-        'password_reset_mail_email_cooldown_seconds' => max(60, min(86400, (int) ($viewer['password_reset_mail_email_cooldown_seconds'] ?? 600))),
-        'password_reset_mail_email_hourly_limit' => max(1, min(100, (int) ($viewer['password_reset_mail_email_hourly_limit'] ?? 3))),
-        'password_reset_mail_email_daily_limit' => max(1, min(500, (int) ($viewer['password_reset_mail_email_daily_limit'] ?? 5))),
-        'password_reset_mail_ip_hourly_limit' => max(1, min(500, (int) ($viewer['password_reset_mail_ip_hourly_limit'] ?? 5))),
-        'password_reset_mail_ip_daily_limit' => max(1, min(5000, (int) ($viewer['password_reset_mail_ip_daily_limit'] ?? 20))),
-        'password_reset_mail_subnet_hourly_limit' => max(1, min(5000, (int) ($viewer['password_reset_mail_subnet_hourly_limit'] ?? 15))),
-        'password_reset_mail_subnet_daily_limit' => max(1, min(10000, (int) ($viewer['password_reset_mail_subnet_daily_limit'] ?? 40))),
-        'password_reset_mail_global_daily_limit' => max(1, min(10000, (int) ($viewer['password_reset_mail_global_daily_limit'] ?? 50))),
-        'invitation_mail_email_daily_limit' => max(1, min(100, (int) ($viewer['invitation_mail_email_daily_limit'] ?? 3))),
-        'invitation_mail_global_daily_limit' => max(1, min(10000, (int) ($viewer['invitation_mail_global_daily_limit'] ?? 50))),
-        'max_viewer_favourites_per_account' => viewer_config_bounded_int($viewer['max_viewer_favourites_per_account'] ?? $viewer['max_favourites_per_account'] ?? 5000, 5000, 1, 100000),
-        'max_viewer_collections_per_account' => viewer_config_bounded_int($viewer['max_viewer_collections_per_account'] ?? $viewer['max_collections_per_account'] ?? 25, 25, 1, 1000),
-        'max_viewer_items_per_collection' => viewer_config_bounded_int($viewer['max_viewer_items_per_collection'] ?? $viewer['max_items_per_collection'] ?? 500, 500, 1, 10000),
-        'max_active_viewer_collection_shares_per_collection' => viewer_config_bounded_int($viewer['max_active_viewer_collection_shares_per_collection'] ?? 1, 1, 1, 100),
+        'anti_automation_form_lifetime_seconds' => viewer_config_bounded_int(
+            $viewer['anti_automation_form_lifetime_seconds'] ?? 600,
+            600,
+            120,
+            1800,
+        ),
+        'anti_automation_pow_min_bits' => viewer_config_bounded_int(
+            $viewer['anti_automation_pow_min_bits'] ?? 12,
+            12,
+            10,
+            16,
+        ),
+        'anti_automation_pow_max_bits' => max(
+            viewer_config_bounded_int(
+                $viewer['anti_automation_pow_min_bits'] ?? 12,
+                12,
+                10,
+                16,
+            ),
+            viewer_config_bounded_int(
+                $viewer['anti_automation_pow_max_bits'] ?? 15,
+                15,
+                10,
+                16,
+            ),
+        ),
+        'max_viewer_accounts' => max(1, min(
+            100000,
+            (int) ($viewer['max_viewer_accounts'] ?? 250),
+        )),
+        'max_active_viewer_sessions_per_account' => max(1, min(
+            100,
+            (int) ($viewer['max_active_viewer_sessions_per_account'] ?? 10),
+        )),
+        'max_active_viewer_remember_tokens_per_account' => max(1, min(
+            100,
+            (int) (
+                $viewer['max_active_viewer_remember_tokens_per_account'] ?? 10
+            ),
+        )),
+        'max_pending_registration_requests' => max(10, min(
+            10000,
+            (int) ($viewer['max_pending_registration_requests'] ?? 250),
+        )),
+        'registration_request_lifetime_minutes' => max(30, min(
+            10080,
+            (int) ($viewer['registration_request_lifetime_minutes'] ?? 1440),
+        )),
+        'verified_registration_lifetime_minutes' => max(15, min(
+            1440,
+            (int) ($viewer['verified_registration_lifetime_minutes'] ?? 60),
+        )),
+        'registration_activation_lifetime_minutes' => max(5, min(
+            60,
+            (int) ($viewer['registration_activation_lifetime_minutes'] ?? 20),
+        )),
+        'verification_token_lifetime_minutes' => max(15, min(
+            1440,
+            (int) ($viewer['verification_token_lifetime_minutes'] ?? 60),
+        )),
+        'password_reset_authorization_lifetime_minutes' => max(5, min(
+            60,
+            (int) (
+                $viewer['password_reset_authorization_lifetime_minutes'] ?? 15
+            ),
+        )),
+        'password_reset_token_lifetime_minutes' => max(15, min(
+            1440,
+            (int) ($viewer['password_reset_token_lifetime_minutes'] ?? 60),
+        )),
+        'viewer_reauthentication_lifetime_minutes' => viewer_config_bounded_int(
+            $viewer['viewer_reauthentication_lifetime_minutes'] ?? 15,
+            15,
+            5,
+            30,
+        ),
+        'email_change_request_lifetime_minutes' => viewer_config_bounded_int(
+            $viewer['email_change_request_lifetime_minutes'] ?? 60,
+            60,
+            15,
+            1440,
+        ),
+        'email_change_confirmation_lifetime_minutes' => viewer_config_bounded_int(
+            $viewer['email_change_confirmation_lifetime_minutes'] ?? 15,
+            15,
+            5,
+            30,
+        ),
+        'invitation_lifetime_days' => max(1, min(
+            90,
+            (int) ($viewer['invitation_lifetime_days'] ?? 7),
+        )),
+        'registration_global_daily_limit' => max(1, min(
+            10000,
+            (int) ($viewer['registration_global_daily_limit'] ?? 50),
+        )),
+        'verification_mail_email_cooldown_seconds' => max(60, min(
+            86400,
+            (int) ($viewer['verification_mail_email_cooldown_seconds'] ?? 600),
+        )),
+        'verification_mail_email_hourly_limit' => max(1, min(
+            100,
+            (int) ($viewer['verification_mail_email_hourly_limit'] ?? 3),
+        )),
+        'verification_mail_email_daily_limit' => max(1, min(
+            500,
+            (int) ($viewer['verification_mail_email_daily_limit'] ?? 5),
+        )),
+        'verification_mail_ip_hourly_limit' => max(1, min(
+            500,
+            (int) ($viewer['verification_mail_ip_hourly_limit'] ?? 10),
+        )),
+        'verification_mail_ip_daily_limit' => max(1, min(
+            5000,
+            (int) ($viewer['verification_mail_ip_daily_limit'] ?? 25),
+        )),
+        'verification_mail_subnet_hourly_limit' => max(1, min(
+            5000,
+            (int) ($viewer['verification_mail_subnet_hourly_limit'] ?? 25),
+        )),
+        'verification_mail_subnet_daily_limit' => max(1, min(
+            10000,
+            (int) ($viewer['verification_mail_subnet_daily_limit'] ?? 60),
+        )),
+        'verification_mail_global_daily_limit' => max(1, min(
+            10000,
+            (int) ($viewer['verification_mail_global_daily_limit'] ?? 50),
+        )),
+        'password_reset_mail_email_cooldown_seconds' => max(60, min(
+            86400,
+            (int) (
+                $viewer['password_reset_mail_email_cooldown_seconds'] ?? 600
+            ),
+        )),
+        'password_reset_mail_email_hourly_limit' => max(1, min(
+            100,
+            (int) ($viewer['password_reset_mail_email_hourly_limit'] ?? 3),
+        )),
+        'password_reset_mail_email_daily_limit' => max(1, min(
+            500,
+            (int) ($viewer['password_reset_mail_email_daily_limit'] ?? 5),
+        )),
+        'password_reset_mail_ip_hourly_limit' => max(1, min(
+            500,
+            (int) ($viewer['password_reset_mail_ip_hourly_limit'] ?? 5),
+        )),
+        'password_reset_mail_ip_daily_limit' => max(1, min(
+            5000,
+            (int) ($viewer['password_reset_mail_ip_daily_limit'] ?? 20),
+        )),
+        'password_reset_mail_subnet_hourly_limit' => max(1, min(
+            5000,
+            (int) ($viewer['password_reset_mail_subnet_hourly_limit'] ?? 15),
+        )),
+        'password_reset_mail_subnet_daily_limit' => max(1, min(
+            10000,
+            (int) ($viewer['password_reset_mail_subnet_daily_limit'] ?? 40),
+        )),
+        'password_reset_mail_global_daily_limit' => max(1, min(
+            10000,
+            (int) ($viewer['password_reset_mail_global_daily_limit'] ?? 50),
+        )),
+        'invitation_mail_email_daily_limit' => max(1, min(
+            100,
+            (int) ($viewer['invitation_mail_email_daily_limit'] ?? 3),
+        )),
+        'invitation_mail_global_daily_limit' => max(1, min(
+            10000,
+            (int) ($viewer['invitation_mail_global_daily_limit'] ?? 50),
+        )),
+        'max_viewer_favourites_per_account' => viewer_config_bounded_int(
+            $viewer['max_viewer_favourites_per_account']
+            ?? $viewer['max_favourites_per_account']
+            ?? 5000,
+            5000,
+            1,
+            100000,
+        ),
+        'max_viewer_collections_per_account' => viewer_config_bounded_int(
+            $viewer['max_viewer_collections_per_account']
+            ?? $viewer['max_collections_per_account']
+            ?? 25,
+            25,
+            1,
+            1000,
+        ),
+        'max_viewer_items_per_collection' => viewer_config_bounded_int(
+            $viewer['max_viewer_items_per_collection']
+            ?? $viewer['max_items_per_collection']
+            ?? 500,
+            500,
+            1,
+            10000,
+        ),
+        'max_active_viewer_collection_shares_per_collection' => viewer_config_bounded_int(
+            $viewer['max_active_viewer_collection_shares_per_collection'] ?? 1,
+            1,
+            1,
+            100,
+        ),
     ];
 }
 
@@ -201,7 +401,8 @@ function viewer_accounts_config(): array
  */
 function viewer_accounts_master_feature_enabled(): bool
 {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')) {
+    if (function_exists(__NAMESPACE__
+        . '\\feature_capability_effective_enabled')) {
         return feature_capability_effective_enabled('viewer_accounts');
     }
     if (function_exists(__NAMESPACE__ . '\\feature_flag_enabled')) {
@@ -225,7 +426,10 @@ function viewer_accounts_admin_mode_override(): ?string
     if (!function_exists(__NAMESPACE__ . '\\app_setting')) {
         return null;
     }
-    $rawMode = trim((string) app_setting(VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY, ''));
+    $rawMode = trim((string) app_setting(
+        VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY,
+        '',
+    ));
     if ($rawMode === '') {
         return null;
     }
@@ -247,7 +451,9 @@ function viewer_accounts_admin_mode_override(): ?string
 function viewer_accounts_set_admin_registration_mode(string $mode): int
 {
     if (!function_exists(__NAMESPACE__ . '\\set_app_setting')) {
-        throw new RuntimeException('Application settings storage is unavailable.');
+        throw new RuntimeException(
+            'Application settings storage is unavailable.',
+        );
     }
 
     $normalized = viewer_registration_mode_normalize($mode);
@@ -262,9 +468,14 @@ function viewer_accounts_set_admin_registration_mode(string $mode): int
         set_app_setting(VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY, $normalized);
         return 0;
     }
-    if (!function_exists(__NAMESPACE__ . '\\viewer_registration_capacity_lock')
-        || !function_exists(__NAMESPACE__ . '\\viewer_registration_cancel_open_origin_staging')) {
-        throw new RuntimeException('Viewer registration lifecycle service is unavailable.');
+    if (
+        !function_exists(__NAMESPACE__ . '\\viewer_registration_capacity_lock')
+        || !function_exists(__NAMESPACE__
+            . '\\viewer_registration_cancel_open_origin_staging')
+    ) {
+        throw new RuntimeException(
+            'Viewer registration lifecycle service is unavailable.',
+        );
     }
 
     if ($normalized === 'open') {
@@ -283,13 +494,20 @@ function viewer_accounts_set_admin_registration_mode(string $mode): int
     // Once this transaction commits, every later holder of the registration lock sees
     // the restrictive mode before it can create staging or a durable viewer account.
     try {
-        viewer_account_model_transaction(static function () use ($normalized): void {
+        viewer_account_model_transaction(static function () use (
+            $normalized,
+        ): void {
             viewer_registration_capacity_lock();
             set_app_setting(VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY, $normalized);
         });
     } catch (Throwable $exception) {
-        if (isset($GLOBALS['cms_app_settings_cache']) && is_array($GLOBALS['cms_app_settings_cache'])) {
-            unset($GLOBALS['cms_app_settings_cache'][VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY]);
+        if (
+            isset($GLOBALS['cms_app_settings_cache'])
+            && is_array($GLOBALS['cms_app_settings_cache'])
+        ) {
+            unset(
+                $GLOBALS['cms_app_settings_cache'][VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY],
+            );
         }
         throw $exception;
     }
@@ -306,10 +524,15 @@ function viewer_accounts_set_admin_registration_mode(string $mode): int
  * Phase 4.1 uses viewer_accounts_set_admin_registration_mode() directly for the visible
  * three-state selector. This compatibility helper still maps true to invite_only and false
  * to disabled for older callers without creating another setting.
+ *
+ * @param bool $enabled Whether viewer registration is enabled.
+ * @return void
  */
 function viewer_accounts_set_admin_enabled(bool $enabled): void
 {
-    viewer_accounts_set_admin_registration_mode($enabled ? 'invite_only' : 'disabled');
+    viewer_accounts_set_admin_registration_mode(
+        $enabled ? 'invite_only' : 'disabled',
+    );
 }
 
 /**
@@ -425,7 +648,10 @@ function viewer_account_cap(): int
  */
 function viewer_account_capacity_lock(): int
 {
-    return viewer_account_model_capacity_lock(VIEWER_ACCOUNT_CAPACITY_STATE_KEY, now_sql());
+    return viewer_account_model_capacity_lock(
+        VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
+        now_sql(),
+    );
 }
 
 /**
@@ -435,7 +661,10 @@ function viewer_account_capacity_lock(): int
  */
 function viewer_account_capacity_recount_locked(): int
 {
-    return viewer_account_model_capacity_recount_locked(VIEWER_ACCOUNT_CAPACITY_STATE_KEY, now_sql());
+    return viewer_account_model_capacity_recount_locked(
+        VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
+        now_sql(),
+    );
 }
 
 /**
@@ -446,7 +675,9 @@ function viewer_account_capacity_recount_locked(): int
 function viewer_account_capacity_reconcile(): int
 {
     if (!viewer_auth_storage_available()) {
-        throw new RuntimeException('Viewer authentication storage is unavailable.');
+        throw new RuntimeException(
+            'Viewer authentication storage is unavailable.',
+        );
     }
 
     return viewer_account_model_transaction(static function (): int {
@@ -463,9 +694,15 @@ function viewer_account_capacity_reconcile(): int
 function viewer_security_secret(): string
 {
     $config = cms_config();
-    $secret = (string) ($config['visitor_vote_secret'] ?? $config['setup_key'] ?? '');
+    $secret = (string) (
+        $config['visitor_vote_secret']
+        ?? $config['setup_key']
+        ?? ''
+    );
     if ($secret === '') {
-        throw new RuntimeException('Viewer security primitives require an installation secret.');
+        throw new RuntimeException(
+            'Viewer security primitives require an installation secret.',
+        );
     }
     return $secret;
 }
@@ -482,7 +719,11 @@ function viewer_security_fingerprint(string $scope, string $value): string
     if ($scope === '' || $value === '') {
         return '';
     }
-    return hash_hmac('sha256', $scope . "\0" . $value, viewer_security_secret());
+    return hash_hmac(
+        'sha256',
+        $scope . "\0" . $value,
+        viewer_security_secret(),
+    );
 }
 
 /**
@@ -499,12 +740,21 @@ function viewer_security_fingerprint(string $scope, string $value): string
 function viewer_email_normalize(string $email): ?string
 {
     $email = trim($email);
-    if ($email === '' || strlen($email) > 190 || str_contains($email, "\0") || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+    if (
+        $email === ''
+        || strlen($email) > 190
+        || str_contains($email, "\0")
+        || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+    ) {
         return null;
     }
 
     $separator = strrpos($email, '@');
-    if ($separator === false || $separator === 0 || $separator === strlen($email) - 1) {
+    if (
+        $separator === false
+        || $separator === 0
+        || $separator === (strlen($email) - 1)
+    ) {
         return null;
     }
 
@@ -523,7 +773,9 @@ function viewer_email_normalize(string $email): ?string
 function viewer_email_fingerprint(string $email): string
 {
     $normalized = viewer_email_normalize($email);
-    return $normalized === null ? '' : viewer_security_fingerprint('viewer-email', $normalized);
+    return $normalized === null
+        ? ''
+        : viewer_security_fingerprint('viewer-email', $normalized);
 }
 
 /**
@@ -537,7 +789,10 @@ function viewer_email_fingerprint(string $email): string
  */
 function viewer_password_algorithm()
 {
-    if (defined('PASSWORD_ARGON2ID') && in_array('argon2id', password_algos(), true)) {
+    if (
+        defined('PASSWORD_ARGON2ID')
+        && in_array('argon2id', password_algos(), true)
+    ) {
         return constant('PASSWORD_ARGON2ID');
     }
     return PASSWORD_DEFAULT;
@@ -565,10 +820,12 @@ function viewer_password_max_bytes(): int
 function viewer_password_input_is_safe(string $password): bool
 {
     $length = strlen($password);
-    return $length > 0
-        && $length <= viewer_password_max_bytes()
-        && !str_contains($password, "\0")
-        && preg_match('//u', $password) === 1;
+    return (
+        $length > 0
+            && $length <= viewer_password_max_bytes()
+            && !str_contains($password, "\0")
+            && preg_match('//u', $password) === 1
+    );
 }
 
 /**
@@ -594,7 +851,10 @@ function viewer_password_character_length(string $password): int
  */
 function viewer_password_input_is_acceptable(string $password): bool
 {
-    return viewer_password_input_is_safe($password) && viewer_password_character_length($password) >= 15;
+    return (
+        viewer_password_input_is_safe($password)
+            && viewer_password_character_length($password) >= 15
+    );
 }
 
 /**
@@ -606,7 +866,9 @@ function viewer_password_input_is_acceptable(string $password): bool
 function viewer_password_hash(string $password): string
 {
     if (!viewer_password_input_is_acceptable($password)) {
-        throw new InvalidArgumentException('Viewer password length is invalid for the active password hashing algorithm.');
+        throw new InvalidArgumentException(
+            'Viewer password length is invalid for the active password hashing algorithm.',
+        );
     }
 
     $hash = password_hash($password, viewer_password_algorithm());
@@ -639,7 +901,8 @@ function viewer_password_verify(string $password, string $passwordHash): bool
  */
 function viewer_password_needs_rehash(string $passwordHash): bool
 {
-    return $passwordHash !== '' && password_needs_rehash($passwordHash, viewer_password_algorithm());
+    return $passwordHash !== ''
+        && password_needs_rehash($passwordHash, viewer_password_algorithm());
 }
 
 /**
@@ -660,14 +923,16 @@ function viewer_account_statuses(): array
 /**
  * Return true when an account state may establish or retain a normal viewer session.
  *
- * @param array $account Viewer account row or equivalent data.
+ * @param array{status?:mixed,email_verified_at?:mixed,password_hash?:mixed,must_change_password?:mixed} $account Viewer account fields used to establish authentication eligibility.
  * @return bool True only for active accounts.
  */
 function viewer_account_can_authenticate(array $account): bool
 {
-    return (string) ($account['status'] ?? '') === VIEWER_ACCOUNT_STATUS_ACTIVE
-        && !empty($account['email_verified_at'])
-        && (string) ($account['password_hash'] ?? '') !== '';
+    return (
+        (string) ($account['status'] ?? '') === VIEWER_ACCOUNT_STATUS_ACTIVE
+            && !empty($account['email_verified_at'])
+            && (string) ($account['password_hash'] ?? '') !== ''
+    );
 }
 
 /**
@@ -676,7 +941,7 @@ function viewer_account_can_authenticate(array $account): bool
  * This flag deliberately does not make the account inactive because the temporary password still needs to be
  * verified once. Normal viewer session establishment separately refuses flagged accounts.
  *
- * @param array $account Viewer account row or equivalent data.
+ * @param array{must_change_password?:mixed} $account Viewer account flag used by the first-login replacement flow.
  * @return bool True only while first-login password replacement is required.
  */
 function viewer_account_requires_password_change(array $account): bool
@@ -687,13 +952,15 @@ function viewer_account_requires_password_change(array $account): bool
 /**
  * Return true when a viewer account may mutate favourites/collections in later phases.
  *
- * @param array $account Viewer account row or equivalent data.
+ * @param array{status?:mixed,email_verified_at?:mixed,must_change_password?:mixed} $account Viewer account fields used to authorize content mutation.
  * @return bool True only for active accounts.
  */
 function viewer_account_can_mutate_content(array $account): bool
 {
-    return viewer_account_can_authenticate($account)
-        && !viewer_account_requires_password_change($account);
+    return (
+        viewer_account_can_authenticate($account)
+            && !viewer_account_requires_password_change($account)
+    );
 }
 
 /**
@@ -741,7 +1008,12 @@ function viewer_csrf_token(): string
 function viewer_csrf_verify(string $token): bool
 {
     $stored = viewer_identity_session_get(viewer_csrf_namespace_key());
-    return is_string($stored) && $stored !== '' && $token !== '' && hash_equals($stored, $token);
+    return (
+        is_string($stored)
+            && $stored !== ''
+            && $token !== ''
+            && hash_equals($stored, $token)
+    );
 }
 
 /**
@@ -772,13 +1044,15 @@ function viewer_session_state(): ?array
 
 /**
  * Clear only viewer authentication state, preserving existing administrator/session data.
+ *
+ * @return void
  */
 function viewer_session_clear(): void
 {
     viewer_identity_session_unset(
         viewer_session_namespace_key(),
         VIEWER_REAUTHENTICATION_NAMESPACE,
-        VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE
+        VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE,
     );
 }
 
@@ -790,8 +1064,11 @@ function viewer_session_clear(): void
  * @param int $limit Maximum inactive rows removed.
  * @return int Number of deleted rows.
  */
-function viewer_session_cleanup_account_locked(int $viewerAccountId, string $now, int $limit = 100): int
-{
+function viewer_session_cleanup_account_locked(
+    int $viewerAccountId,
+    string $now,
+    int $limit = 100,
+): int {
     return viewer_account_model_session_cleanup($viewerAccountId, $now, $limit);
 }
 
@@ -802,13 +1079,16 @@ function viewer_session_cleanup_account_locked(int $viewerAccountId, string $now
  *
  * @param int $viewerAccountId Locked viewer account identifier.
  * @param string $now Current SQL timestamp.
+ * @return void
  */
-function viewer_session_enforce_limit_locked(int $viewerAccountId, string $now): void
-{
+function viewer_session_enforce_limit_locked(
+    int $viewerAccountId,
+    string $now,
+): void {
     viewer_account_model_session_enforce_limit(
         $viewerAccountId,
         $now,
-        (int) viewer_accounts_config()['max_active_viewer_sessions_per_account']
+        (int) viewer_accounts_config()['max_active_viewer_sessions_per_account'],
     );
 }
 
@@ -819,57 +1099,106 @@ function viewer_session_enforce_limit_locked(int $viewerAccountId, string $now):
  * authenticate credentials first, then call this boundary. The PHP session id is
  * rotated to prevent fixation, while existing admin session variables are kept.
  *
- * @param array $account Verified viewer account row.
+ * @param array{id:int|string,security_version:int|string} $account Verified viewer account identifiers and security version.
  * @return string Plaintext viewer session token retained only in PHP session storage.
  */
 function viewer_session_establish(array $account): string
 {
-    viewer_identity_session_unset(VIEWER_REAUTHENTICATION_NAMESPACE, VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE);
+    viewer_identity_session_unset(
+        VIEWER_REAUTHENTICATION_NAMESPACE,
+        VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE,
+    );
     if (!viewer_accounts_enabled() || !viewer_auth_storage_available()) {
-        throw new RuntimeException('Viewer session establishment is unavailable.');
+        throw new RuntimeException(
+            'Viewer session establishment is unavailable.',
+        );
     }
-    if (function_exists(__NAMESPACE__ . '\\viewer_security_transport_allowed') && !viewer_security_transport_allowed()) {
-        throw new RuntimeException('Viewer authentication requires a trusted secure transport.');
+    if (
+        function_exists(__NAMESPACE__ . '\\viewer_security_transport_allowed')
+        && !viewer_security_transport_allowed()
+    ) {
+        throw new RuntimeException(
+            'Viewer authentication requires a trusted secure transport.',
+        );
     }
 
     $accountId = (int) ($account['id'] ?? 0);
     $expectedSecurityVersion = (int) ($account['security_version'] ?? 0);
     if ($accountId <= 0 || $expectedSecurityVersion <= 0) {
-        throw new InvalidArgumentException('Viewer account identity/security version is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer account identity/security version is invalid.',
+        );
     }
 
     $token = security_opaque_token_generate(32);
     $sessionHash = security_authority_token_hash($token);
     $config = viewer_accounts_config();
     $now = now_sql();
-    $expiresAt = date('Y-m-d H:i:s', time() + (int) $config['session_lifetime_seconds']);
+    $expiresAt = date(
+        'Y-m-d H:i:s',
+        time() + (int) $config['session_lifetime_seconds'],
+    );
     $clientIp = request_client_ip();
-    $ipHash = $clientIp === '' ? null : viewer_security_fingerprint('viewer-session-ip', $clientIp);
+    $ipHash = $clientIp === ''
+        ? null
+        : viewer_security_fingerprint('viewer-session-ip', $clientIp);
     $userAgent = viewer_identity_request_user_agent();
-    $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-session-ua', $userAgent);
+    $userAgentHash = $userAgent === ''
+        ? null
+        : viewer_security_fingerprint('viewer-session-ua', $userAgent);
 
     try {
-        viewer_account_model_transaction(static function () use ($accountId, $expectedSecurityVersion, $sessionHash, $ipHash, $userAgentHash, $now, $expiresAt, $token): void {
+        viewer_account_model_transaction(static function () use (
+            $accountId,
+            $expectedSecurityVersion,
+            $sessionHash,
+            $ipHash,
+            $userAgentHash,
+            $now,
+            $expiresAt,
+            $token,
+        ): void {
             $lockedAccount = viewer_account_model_lock_auth($accountId);
-            if (!$lockedAccount
+            if (
+                !$lockedAccount
                 || !viewer_account_can_authenticate($lockedAccount)
                 || viewer_account_requires_password_change($lockedAccount)
-                || (int) ($lockedAccount['security_version'] ?? 0) !== $expectedSecurityVersion) {
-                throw new RuntimeException('Viewer session establishment is unavailable.');
+                || (int) ($lockedAccount['security_version'] ?? 0)
+                    !== $expectedSecurityVersion
+            ) {
+                throw new RuntimeException(
+                    'Viewer session establishment is unavailable.',
+                );
             }
 
             viewer_session_cleanup_account_locked($accountId, $now);
             viewer_session_enforce_limit_locked($accountId, $now);
-            viewer_account_model_session_insert($accountId, $sessionHash, $expectedSecurityVersion, $ipHash, $userAgentHash, $now, $expiresAt);
+            viewer_account_model_session_insert(
+                $accountId,
+                $sessionHash,
+                $expectedSecurityVersion,
+                $ipHash,
+                $userAgentHash,
+                $now,
+                $expiresAt,
+            );
 
-            if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
-                viewer_security_event_record('viewer.session_created', $accountId, 'success', [
-                    'security_version' => $expectedSecurityVersion,
-                ]);
+            if (function_exists(__NAMESPACE__
+                . '\\viewer_security_event_record')) {
+                viewer_security_event_record(
+                    'viewer.session_created',
+                    $accountId,
+                    'success',
+                    [
+                        'security_version' => $expectedSecurityVersion,
+                    ],
+                );
             }
 
             if (!viewer_identity_session_regenerate()) {
-                throw new RuntimeException('Viewer session id rotation failed.');
+                throw new RuntimeException(
+                    'Viewer session id rotation failed.',
+                );
             }
             viewer_identity_session_set(viewer_session_namespace_key(), [
                 'account_id' => $accountId,
@@ -912,15 +1241,19 @@ function current_viewer(): ?array
     try {
         $row = viewer_account_model_session_principal(
             $state['account_id'],
-            security_authority_token_hash($state['token'])
+            security_authority_token_hash($state['token']),
         );
-        if (!$row
+        if (
+            !$row
             || !viewer_account_can_authenticate($row)
             || viewer_account_requires_password_change($row)
             || !empty($row['revoked_at'])
             || strtotime((string) ($row['expires_at'] ?? '')) < time()
-            || (int) ($row['security_version'] ?? 0) !== $state['security_version']
-            || (int) ($row['session_security_version'] ?? 0) !== $state['security_version']) {
+            || (int) ($row['security_version'] ?? 0)
+                !== $state['security_version']
+            || (int) ($row['session_security_version'] ?? 0)
+                !== $state['security_version']
+        ) {
             viewer_session_clear();
             return null;
         }
@@ -953,6 +1286,8 @@ function viewer_is_authenticated(): bool
 
 /**
  * Revoke the current viewer session without logging out an administrator in the same PHP session.
+ *
+ * @return void
  */
 function viewer_session_revoke_current(): void
 {
@@ -971,10 +1306,14 @@ function viewer_session_revoke_current(): void
         viewer_account_model_session_revoke(
             $state['account_id'],
             security_authority_token_hash($state['token']),
-            now_sql()
+            now_sql(),
         );
         if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
-            viewer_security_event_record('viewer.session_revoked', $state['account_id'], 'success');
+            viewer_security_event_record(
+                'viewer.session_revoked',
+                $state['account_id'],
+                'success',
+            );
         }
     } catch (Throwable) {
         // Local authority is always removed even if persistent revocation storage is unavailable.
@@ -1016,13 +1355,20 @@ function viewer_session_revoke_all(int $viewerAccountId): int
 function viewer_account_invalidate_authentication(int $viewerAccountId): int
 {
     if ($viewerAccountId <= 0) {
-        throw new InvalidArgumentException('Viewer account id must be positive.');
+        throw new InvalidArgumentException(
+            'Viewer account id must be positive.',
+        );
     }
     if (!viewer_auth_storage_available()) {
-        throw new RuntimeException('Viewer authentication storage is unavailable.');
+        throw new RuntimeException(
+            'Viewer authentication storage is unavailable.',
+        );
     }
 
-    return viewer_account_model_invalidate_authentication($viewerAccountId, now_sql());
+    return viewer_account_model_invalidate_authentication(
+        $viewerAccountId,
+        now_sql(),
+    );
 }
 
 /**
@@ -1036,32 +1382,65 @@ function viewer_account_invalidate_authentication(int $viewerAccountId): int
  * @param string $targetStatus One supported durable account status.
  * @return bool True when the requested state exists after the transaction.
  */
-function viewer_account_transition_status(int $viewerAccountId, string $targetStatus): bool
-{
-    if ($viewerAccountId <= 0 || !in_array($targetStatus, [
-        VIEWER_ACCOUNT_STATUS_ACTIVE,
-        VIEWER_ACCOUNT_STATUS_SUSPENDED,
-        VIEWER_ACCOUNT_STATUS_DISABLED,
-    ], true)) {
-        throw new InvalidArgumentException('Viewer account transition parameters are invalid.');
+function viewer_account_transition_status(
+    int $viewerAccountId,
+    string $targetStatus,
+): bool {
+    if (
+        $viewerAccountId <= 0
+        || !in_array(
+            $targetStatus,
+            [
+                VIEWER_ACCOUNT_STATUS_ACTIVE,
+                VIEWER_ACCOUNT_STATUS_SUSPENDED,
+                VIEWER_ACCOUNT_STATUS_DISABLED,
+            ],
+            true,
+        )
+    ) {
+        throw new InvalidArgumentException(
+            'Viewer account transition parameters are invalid.',
+        );
     }
-    if (!schema_inspection_is_available(viewer_account_security_transition_schema_status())) {
-        throw new RuntimeException('Viewer account security transition storage is unavailable.');
+    if (!schema_inspection_is_available(
+        viewer_account_security_transition_schema_status(),
+    )) {
+        throw new RuntimeException(
+            'Viewer account security transition storage is unavailable.',
+        );
     }
 
-    $transition = viewer_account_model_transaction(static function () use ($viewerAccountId, $targetStatus): array {
+    $transition = viewer_account_model_transaction(static function () use (
+        $viewerAccountId,
+        $targetStatus,
+    ): array {
         $account = viewer_account_model_lock($viewerAccountId);
         if (!$account) {
-            return ['exists' => false, 'changed' => false, 'previous_status' => ''];
+            return [
+                'exists' => false,
+                'changed' => false,
+                'previous_status' => '',
+            ];
         }
 
         $currentStatus = (string) ($account['status'] ?? '');
         if ($currentStatus === $targetStatus) {
-            return ['exists' => true, 'changed' => false, 'previous_status' => $currentStatus];
+            return [
+                'exists' => true,
+                'changed' => false,
+                'previous_status' => $currentStatus,
+            ];
         }
-        if ($targetStatus === VIEWER_ACCOUNT_STATUS_ACTIVE
-            && (empty($account['email_verified_at']) || (string) ($account['password_hash'] ?? '') === '')) {
-            throw new RuntimeException('Viewer account cannot be activated without verified email and password authority.');
+        if (
+            $targetStatus === VIEWER_ACCOUNT_STATUS_ACTIVE
+            && (
+                empty($account['email_verified_at'])
+                || (string) ($account['password_hash'] ?? '') === ''
+            )
+        ) {
+            throw new RuntimeException(
+                'Viewer account cannot be activated without verified email and password authority.',
+            );
         }
 
         $now = now_sql();
@@ -1070,32 +1449,50 @@ function viewer_account_transition_status(int $viewerAccountId, string $targetSt
             $targetStatus,
             $targetStatus === VIEWER_ACCOUNT_STATUS_SUSPENDED ? $now : null,
             $targetStatus === VIEWER_ACCOUNT_STATUS_DISABLED ? $now : null,
-            $now
+            $now,
         );
-        viewer_account_model_revoke_transition_authority($viewerAccountId, $now);
+        viewer_account_model_revoke_transition_authority(
+            $viewerAccountId,
+            $now,
+        );
 
         if ($targetStatus === VIEWER_ACCOUNT_STATUS_SUSPENDED) {
             $eventKey = 'viewer.account_suspended';
         } elseif ($targetStatus === VIEWER_ACCOUNT_STATUS_DISABLED) {
             $eventKey = 'viewer.account_disabled';
-        } elseif ($currentStatus === VIEWER_ACCOUNT_STATUS_PENDING_VERIFICATION) {
+        } elseif (
+            $currentStatus === VIEWER_ACCOUNT_STATUS_PENDING_VERIFICATION
+        ) {
             $eventKey = 'viewer.account_activated';
         } else {
             $eventKey = 'viewer.account_restored';
         }
         if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
-            viewer_security_event_record($eventKey, $viewerAccountId, 'success', [
-                'account_state' => $targetStatus,
-            ]);
+            viewer_security_event_record(
+                $eventKey,
+                $viewerAccountId,
+                'success',
+                [
+                    'account_state' => $targetStatus,
+                ],
+            );
         }
-        return ['exists' => true, 'changed' => true, 'previous_status' => $currentStatus];
+        return [
+            'exists' => true,
+            'changed' => true,
+            'previous_status' => $currentStatus,
+        ];
     });
 
     if (empty($transition['exists'])) {
         return false;
     }
     $localState = viewer_session_state();
-    if ($localState !== null && (int) $localState['account_id'] === $viewerAccountId && !empty($transition['changed'])) {
+    if (
+        $localState !== null
+        && (int) $localState['account_id'] === $viewerAccountId
+        && !empty($transition['changed'])
+    ) {
         viewer_session_clear();
     }
     return true;
@@ -1109,7 +1506,10 @@ function viewer_account_transition_status(int $viewerAccountId, string $targetSt
  */
 function viewer_account_suspend(int $viewerAccountId): bool
 {
-    return viewer_account_transition_status($viewerAccountId, VIEWER_ACCOUNT_STATUS_SUSPENDED);
+    return viewer_account_transition_status(
+        $viewerAccountId,
+        VIEWER_ACCOUNT_STATUS_SUSPENDED,
+    );
 }
 
 /**
@@ -1120,7 +1520,10 @@ function viewer_account_suspend(int $viewerAccountId): bool
  */
 function viewer_account_disable(int $viewerAccountId): bool
 {
-    return viewer_account_transition_status($viewerAccountId, VIEWER_ACCOUNT_STATUS_DISABLED);
+    return viewer_account_transition_status(
+        $viewerAccountId,
+        VIEWER_ACCOUNT_STATUS_DISABLED,
+    );
 }
 
 /**
@@ -1131,5 +1534,8 @@ function viewer_account_disable(int $viewerAccountId): bool
  */
 function viewer_account_restore(int $viewerAccountId): bool
 {
-    return viewer_account_transition_status($viewerAccountId, VIEWER_ACCOUNT_STATUS_ACTIVE);
+    return viewer_account_transition_status(
+        $viewerAccountId,
+        VIEWER_ACCOUNT_STATUS_ACTIVE,
+    );
 }

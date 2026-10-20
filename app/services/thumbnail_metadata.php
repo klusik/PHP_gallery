@@ -58,7 +58,9 @@ use function Gallery\Models\thumbnail_metadata_model_upsert_variant;
  */
 function thumbnail_metadata_schema_ready(): bool
 {
-    return schema_inspection_is_available(thumbnail_metadata_mutation_schema_status());
+    return schema_inspection_is_available(
+        thumbnail_metadata_mutation_schema_status(),
+    );
 }
 
 /**
@@ -69,6 +71,7 @@ function thumbnail_metadata_schema_ready(): bool
  * generating a derivative because the database cannot prove which write shape is safe.
  *
  * @param string $operation Stable operation identifier used by bounded diagnostics.
+ * @return void Returns when writes are safe; otherwise raises the schema refusal exception.
  */
 function thumbnail_metadata_preflight_write_schema(string $operation): void
 {
@@ -79,27 +82,35 @@ function thumbnail_metadata_preflight_write_schema(string $operation): void
     mutation_schema_assert_known(
         $schemaStatus,
         $operation,
-        'Thumbnail metadata mutation is temporarily unavailable because its database schema could not be verified.'
+        'Thumbnail metadata mutation is temporarily unavailable because its database schema could not be verified.',
     );
 
-    foreach (['derivative_version', 'gallery_id', 'thumbnail_rel_path'] as $column) {
+    foreach ([
+        'derivative_version',
+        'gallery_id',
+        'thumbnail_rel_path',
+    ] as $column) {
         mutation_schema_optional_column_available(
             'mutation.thumbnail_metadata_optional',
             'image_thumbnail_variants',
             $column,
-            $operation
+            $operation,
         );
     }
-    foreach (['display_width', 'display_height', 'exif_orientation', 'thumbnail_metadata_refreshed_at'] as $column) {
+    foreach ([
+        'display_width',
+        'display_height',
+        'exif_orientation',
+        'thumbnail_metadata_refreshed_at',
+    ] as $column) {
         mutation_schema_optional_column_available(
             'mutation.thumbnail_metadata_image_source',
             'images',
             $column,
-            $operation
+            $operation,
         );
     }
 }
-
 
 /**
  * Return the request-local cache used by renderable thumbnail metadata lookups.
@@ -126,15 +137,22 @@ function &thumbnail_metadata_image_has_rows_request_cache(): array
 /**
  * Return the cache key for a thumbnail metadata size set.
  *
- * @param array $sizes Sizes value.
- * @return string Text result for the caller.
+ * @param list<int> $sizes Thumbnail sides used to scope the request cache entry.
+ * @return string Stable key combining normalized sides and requested formats.
  */
 function thumbnail_metadata_size_cache_key(array $sizes): string
 {
     // $sizes stores normalized thumbnail sizes represented by this cache key.
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => in_array($size, thumbnail_sizes(), true),
+    )));
     sort($sizes);
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     return implode(',', $sizes) . '|' . implode(',', $formats);
 }
 
@@ -149,15 +167,20 @@ function thumbnail_metadata_size_cache_key(array $sizes): string
  * @param array<int,int> $sizes Configured derivative sizes to preload.
  * @return void Primes bounded ownership and renderable metadata observations.
  */
-function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes): void
-{
+function thumbnail_metadata_preload_renderable_rows(
+    array $images,
+    array $sizes,
+): void {
     thumbnail_source_identity_preload($images);
     if (!thumbnail_metadata_schema_ready()) {
         return;
     }
 
     // $sizes stores normalized thumbnail sizes represented by this preload.
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => in_array($size, thumbnail_sizes(), true),
+    )));
     sort($sizes);
     if (!$sizes) {
         return;
@@ -170,7 +193,9 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
     // $hasRowsCache stores metadata existence flags already discovered during this request.
     $hasRowsCache = &thumbnail_metadata_image_has_rows_request_cache();
     // $canCacheExistence stores whether the preload covers every configured thumbnail size.
-    $canCacheExistence = $sizeKey === thumbnail_metadata_size_cache_key(thumbnail_sizes());
+    $canCacheExistence = $sizeKey === thumbnail_metadata_size_cache_key(
+        thumbnail_sizes(),
+    );
     // $imageById stores source image rows keyed by image id.
     $imageById = [];
     foreach ($images as $image) {
@@ -203,13 +228,21 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
     }
 
     // $formats stores generated formats permitted in public metadata bundles.
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     $formats = array_values(array_intersect(['jpg', 'webp'], $formats));
     if (!$formats) {
         return;
     }
     try {
-        $metadataRows = thumbnail_metadata_model_renderable_rows($missingImageIds, $sizes, $formats);
+        $metadataRows = thumbnail_metadata_model_renderable_rows(
+            $missingImageIds,
+            $sizes,
+            $formats,
+        );
     } catch (Throwable) {
         return;
     }
@@ -227,7 +260,10 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
         $format = (string) ($row['format'] ?? '');
         // $size stores the thumbnail size for this metadata row.
         $size = (int) ($row['size_px'] ?? 0);
-        if (!in_array($format, $formats, true) || !in_array($size, $sizes, true)) {
+        if (
+            !in_array($format, $formats, true)
+            || !in_array($size, $sizes, true)
+        ) {
             continue;
         }
         if (!thumbnail_metadata_row_is_renderable($row, $imageById[$imageId])) {
@@ -249,16 +285,25 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
  * @param bool $refresh Refresh cached schema metadata.
  * @return array<string,bool> Known columns keyed by column name.
  */
-function thumbnail_metadata_table_columns(string $table, bool $refresh = false): array
-{
+function thumbnail_metadata_table_columns(
+    string $table,
+    bool $refresh = false,
+): array {
     static $cache = [];
     if (!in_array($table, ['image_thumbnail_variants', 'images'], true)) {
         return [];
     }
-    if (!$refresh && function_exists(__NAMESPACE__ . '\\schema_inspection_table_snapshot_cache')) {
+    if (
+        !$refresh
+        && function_exists(__NAMESPACE__
+            . '\\schema_inspection_table_snapshot_cache')
+    ) {
         $snapshots = schema_inspection_table_snapshot_cache();
         if (array_key_exists($table, $snapshots)) {
-            return array_fill_keys(array_keys($snapshots[$table]['columns']), true);
+            return array_fill_keys(
+                array_keys($snapshots[$table]['columns']),
+                true,
+            );
         }
     }
     if ($refresh) {
@@ -285,7 +330,9 @@ function thumbnail_metadata_table_columns(string $table, bool $refresh = false):
  */
 function thumbnail_metadata_variant_column_exists(string $column): bool
 {
-    return isset(thumbnail_metadata_table_columns('image_thumbnail_variants')[$column]);
+    return isset(
+        thumbnail_metadata_table_columns('image_thumbnail_variants')[$column],
+    );
 }
 
 /**
@@ -328,20 +375,23 @@ function thumbnail_metadata_image_modified_at(array $image): string
  * interrupted deployments can still write old NOT NULL columns before the
  * compaction migration has run.
  *
- * @param array $image Image row or image data.
+ * @param array<string,mixed> $image Persisted image row used to derive its legacy thumbnail filename.
  * @param int $size Size value.
  * @param string $format Format value.
  * @return string Text result for the caller.
  */
-function thumbnail_metadata_relative_path(array $image, int $size, string $format): string
-{
+function thumbnail_metadata_relative_path(
+    array $image,
+    int $size,
+    string $format,
+): string {
     return 'thumbs/' . thumbnail_filename($image, $size, $format);
 }
 
 /**
  * Return a compact source EXIF and GPS summary already stored on the image row.
  *
- * @param array $image Image row or image data.
+ * @param array<string,mixed> $image Image row containing the compact stored EXIF and GPS fields.
  * @return ?string Text result for the caller.
  */
 function thumbnail_metadata_source_exif_json(array $image): ?string
@@ -363,7 +413,11 @@ function thumbnail_metadata_source_exif_json(array $image): ?string
 
     $summary = [];
     foreach ($keys as $key) {
-        if (array_key_exists($key, $image) && $image[$key] !== null && $image[$key] !== '') {
+        if (
+            array_key_exists($key, $image)
+            && $image[$key] !== null
+            && $image[$key] !== ''
+        ) {
             $summary[$key] = $image[$key];
         }
     }
@@ -372,38 +426,57 @@ function thumbnail_metadata_source_exif_json(array $image): ?string
         return null;
     }
 
-    $json = json_encode($summary, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $summary,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     return is_string($json) ? $json : null;
 }
 
 /**
  * Return source metadata used for validating durable thumbnail rows.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Persisted image row with source dimensions and EXIF fields.
+ * @param array<string,mixed> $gallery Owning gallery row used to resolve the source file.
  * @param ?string $sourcePath Source filesystem path.
- * @return array<string mixed>.
+ * @return array{width:int,height:int,mime_type:?string,file_size:int,modified_at:?string,checksum_sha256:?string,exif_orientation:int} Current source dimensions, file metadata, identity evidence and EXIF orientation.
  */
-function thumbnail_metadata_source_payload(array $image, array $gallery, ?string $sourcePath = null): array
-{
+function thumbnail_metadata_source_payload(
+    array $image,
+    array $gallery,
+    ?string $sourcePath = null,
+): array {
     $sourcePath = $sourcePath ?: image_abs_path($image, $gallery);
     $sourceExists = is_file($sourcePath);
     $sourceInfo = $sourceExists ? @getimagesize($sourcePath) : false;
-    $mime = is_array($sourceInfo) ? (string) ($sourceInfo['mime'] ?? ($image['mime_type'] ?? '')) : (string) ($image['mime_type'] ?? '');
-    $sourceGeometry = $sourceExists && function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')
+    $mime = is_array($sourceInfo)
+        ? (string) ($sourceInfo['mime'] ?? $image['mime_type'] ?? '')
+        : (string) ($image['mime_type'] ?? '');
+    $sourceGeometry = $sourceExists
+    && function_exists(
+        'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+    )
         ? thumbnail_source_geometry_dimensions($sourcePath, $image)
         : null;
 
     if (!is_array($sourceGeometry)) {
         $width = (int) ($image['width'] ?? 0);
         $height = (int) ($image['height'] ?? 0);
-        $sourceGeometry = $width > 0 && $height > 0 ? ['width' => $width, 'height' => $height] : ['width' => 0, 'height' => 0];
+        $sourceGeometry =
+            $width > 0 && $height > 0
+                ? ['width' => $width, 'height' => $height]
+                : ['width' => 0, 'height' => 0];
     }
 
     $sourceMtime = $sourceExists ? (int) (filemtime($sourcePath) ?: 0) : 0;
-    $sourceModifiedAt = $sourceMtime > 0 ? thumbnail_metadata_datetime_from_timestamp($sourceMtime) : thumbnail_metadata_image_modified_at($image);
+    $sourceModifiedAt = $sourceMtime > 0
+        ? thumbnail_metadata_datetime_from_timestamp($sourceMtime)
+        : thumbnail_metadata_image_modified_at($image);
     $orientation = 1;
-    if ($sourceExists && function_exists('Gallery\\Services\\thumbnail_jpeg_exif_orientation')) {
+    if (
+        $sourceExists
+        && function_exists('Gallery\\Services\\thumbnail_jpeg_exif_orientation')
+    ) {
         $orientation = thumbnail_jpeg_exif_orientation($sourcePath, $mime);
     }
 
@@ -411,10 +484,16 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
         'width' => (int) ($sourceGeometry['width'] ?? 0),
         'height' => (int) ($sourceGeometry['height'] ?? 0),
         'mime_type' => $mime !== '' ? $mime : null,
-        'file_size' => $sourceExists ? (int) (filesize($sourcePath) ?: 0) : (int) ($image['file_size'] ?? 0),
+        'file_size' => $sourceExists
+            ? (int) (filesize($sourcePath) ?: 0)
+            : (int) ($image['file_size'] ?? 0),
         'modified_at' => $sourceModifiedAt !== '' ? $sourceModifiedAt : null,
-        'checksum_sha256' => trim((string) ($image['checksum_sha256'] ?? '')) !== '' ? trim((string) $image['checksum_sha256']) : null,
-        'exif_orientation' => $orientation >= 1 && $orientation <= 8 ? $orientation : 1,
+        'checksum_sha256' => trim((string) ($image['checksum_sha256'] ?? ''))
+        !== ''
+            ? trim((string) $image['checksum_sha256'])
+            : null,
+        'exif_orientation' =>
+            $orientation >= 1 && $orientation <= 8 ? $orientation : 1,
     ];
 }
 
@@ -427,12 +506,14 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
  * public rendering. Naming ownership is checked separately, preserving safe
  * existing derivatives without global invalidation.
  *
- * @param array $row Row data.
- * @param array $image Image row or image data.
+ * @param array{derivative_version?:int|string} $row Durable variant row with its source derivative version.
+ * @param array{thumbnail_derivative_version?:int|string} $image Master image row with its current derivative version.
  * @return bool True when the condition matches.
  */
-function thumbnail_metadata_row_matches_image_source(array $row, array $image): bool
-{
+function thumbnail_metadata_row_matches_image_source(
+    array $row,
+    array $image,
+): bool {
     $imageVersion = (int) ($image['thumbnail_derivative_version'] ?? 0);
     $rowVersion = (int) ($row['derivative_version'] ?? 0);
     if ($imageVersion > 0 && $rowVersion > 0) {
@@ -467,32 +548,55 @@ function thumbnail_metadata_image_display_dimensions(array $image): ?array
 /**
  * Return true when a stored thumbnail row preserves the master image aspect ratio.
  *
- * @param array $row Row data.
- * @param array $image Image row or image data.
+ * @param array{width?:int|string,height?:int|string,size_px?:int|string} $row Stored variant geometry.
+ * @param array<string,mixed> $image Master image row supplying display dimensions.
  * @return bool True when the condition matches.
  */
-function thumbnail_metadata_row_has_valid_geometry(array $row, array $image): bool
-{
+function thumbnail_metadata_row_has_valid_geometry(
+    array $row,
+    array $image,
+): bool {
     $sourceGeometry = thumbnail_metadata_image_display_dimensions($image);
-    $sourceWidth = is_array($sourceGeometry) ? (int) $sourceGeometry['width'] : 0;
-    $sourceHeight = is_array($sourceGeometry) ? (int) $sourceGeometry['height'] : 0;
+    $sourceWidth = is_array($sourceGeometry)
+        ? (int) $sourceGeometry['width']
+        : 0;
+    $sourceHeight = is_array($sourceGeometry)
+        ? (int) $sourceGeometry['height']
+        : 0;
     $actualWidth = (int) ($row['width'] ?? 0);
     $actualHeight = (int) ($row['height'] ?? 0);
     $size = (int) ($row['size_px'] ?? 0);
 
-    if ($sourceWidth <= 0 || $sourceHeight <= 0 || $actualWidth <= 0 || $actualHeight <= 0 || $size <= 0) {
+    if (
+        $sourceWidth <= 0
+        || $sourceHeight <= 0
+        || $actualWidth <= 0
+        || $actualHeight <= 0
+        || $size <= 0
+    ) {
         return false;
     }
 
-    $expected = thumbnail_expected_dimensions($sourceWidth, $sourceHeight, $size);
+    $expected = thumbnail_expected_dimensions(
+        $sourceWidth,
+        $sourceHeight,
+        $size,
+    );
     $pixelTolerance = 2;
-    if (abs($actualWidth - (int) $expected['width']) <= $pixelTolerance && abs($actualHeight - (int) $expected['height']) <= $pixelTolerance) {
+    if (
+        abs($actualWidth - (int) $expected['width']) <= $pixelTolerance
+        && abs($actualHeight - (int) $expected['height']) <= $pixelTolerance
+    ) {
         return true;
     }
 
-    $expectedRatio = (float) $expected['width'] / max(1, (int) $expected['height']);
+    $expectedRatio =
+        (float) $expected['width'] / max(1, (int) $expected['height']);
     $actualRatio = $actualWidth / max(1, $actualHeight);
-    return abs($actualRatio - $expectedRatio) <= 0.015 && max($actualWidth, $actualHeight) <= $size;
+    return (
+        abs($actualRatio - $expectedRatio) <= 0.015
+            && max($actualWidth, $actualHeight) <= $size
+    );
 }
 
 /**
@@ -521,9 +625,9 @@ function thumbnail_metadata_row_is_renderable(array $row, array $image): bool
 /**
  * Return renderable thumbnail metadata rows grouped by format and size.
  *
- * @param array $image Image row or image data.
- * @param array $sizes Sizes value.
- * @return array<string array<int, array<string, mixed>>>.
+ * @param array<string,mixed> $image Persisted image row used to look up variant rows.
+ * @param list<int> $sizes Requested configured derivative sizes.
+ * @return array{jpg:array<int,array<string,mixed>>,webp:array<int,array<string,mixed>>} Validated rows grouped by format and size.
  */
 function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
 {
@@ -531,7 +635,10 @@ function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
         return ['jpg' => [], 'webp' => []];
     }
 
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => in_array($size, thumbnail_sizes(), true),
+    )));
     sort($sizes);
     if (!$sizes) {
         return ['jpg' => [], 'webp' => []];
@@ -565,15 +672,20 @@ function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
  * requested size and format, then falls back to the nearest DB-known renderable
  * variant. The caller can still decide whether to accept alternate formats.
  *
- * @param array $image Image row or image data.
- * @param array $sizes Candidate sizes value.
+ * @param array<string,mixed> $image Persisted image row whose variants are selected.
+ * @param list<int> $sizes Allowed candidate derivative sizes.
  * @param int $preferredSize Preferred size value.
  * @param string $preferredFormat Preferred format value.
  * @param bool $allowAlternateFormats Allow alternate image formats value.
  * @return array{size:int,format:string,width:int,height:int,row:array<string,mixed>,is_exact:bool}|null Structured result data for the caller.
  */
-function thumbnail_metadata_select_renderable_variant(array $image, array $sizes, int $preferredSize, string $preferredFormat = 'jpg', bool $allowAlternateFormats = true): ?array
-{
+function thumbnail_metadata_select_renderable_variant(
+    array $image,
+    array $sizes,
+    int $preferredSize,
+    string $preferredFormat = 'jpg',
+    bool $allowAlternateFormats = true,
+): ?array {
     if (!thumbnail_metadata_schema_ready()) {
         return null;
     }
@@ -581,18 +693,32 @@ function thumbnail_metadata_select_renderable_variant(array $image, array $sizes
     // $preferredFormat stores the normalized caller preference used for DB row selection.
     $preferredFormat = $preferredFormat === 'webp' ? 'webp' : 'jpg';
     // $sizes stores the normalized configured sizes this lookup is allowed to return.
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => in_array($size, thumbnail_sizes(), true),
+    )));
     if (!$sizes) {
         return null;
     }
 
-    usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
+    usort($sizes, static function (int $left, int $right) use (
+        $preferredSize,
+    ): int {
         return abs($left - $preferredSize) <=> abs($right - $preferredSize);
     });
 
     // $formats stores the fallback format order, but never leaves DB metadata.
-    $allowedFormats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
-    $formats = $allowAlternateFormats ? array_values(array_unique(array_merge([$preferredFormat], $allowedFormats))) : [$preferredFormat];
+    $allowedFormats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
+    $formats = $allowAlternateFormats
+        ? array_values(array_unique(array_merge(
+            [$preferredFormat],
+            $allowedFormats,
+        )))
+        : [$preferredFormat];
     $formats = array_values(array_intersect($formats, $allowedFormats));
     // $metadataRows stores renderable variants already validated by metadata rules.
     $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
@@ -614,7 +740,9 @@ function thumbnail_metadata_select_renderable_variant(array $image, array $sizes
                 'width' => (int) ($row['width'] ?? 0),
                 'height' => (int) ($row['height'] ?? 0),
                 'row' => $row,
-                'is_exact' => (int) $size === (int) $preferredSize && $format === $preferredFormat,
+                'is_exact' =>
+                    (int) $size === (int) $preferredSize
+                        && $format === $preferredFormat,
             ];
         }
     }
@@ -647,7 +775,8 @@ function thumbnail_metadata_image_has_rows(array $image): bool
     }
 
     try {
-        return $cache[$imageId] = thumbnail_metadata_model_image_has_rows($imageId);
+        return $cache[$imageId] =
+            thumbnail_metadata_model_image_has_rows($imageId);
     } catch (Throwable) {
         return $cache[$imageId] = false;
     }
@@ -656,12 +785,16 @@ function thumbnail_metadata_image_has_rows(array $image): bool
 /**
  * Remove one thumbnail metadata row.
  *
- * @param array|int $image Image row or image data.
+ * @param array<string,mixed>|int $image Image row or persisted image ID.
  * @param int $size Size value.
- * @param string $format Format value.
+ * @param string $format Supported derivative format, jpg or webp.
+ * @return void Deletes the row when schema and variant identity are valid.
  */
-function thumbnail_metadata_delete_variant(array|int $image, int $size, string $format): void
-{
+function thumbnail_metadata_delete_variant(
+    array|int $image,
+    int $size,
+    string $format,
+): void {
     $schemaStatus = thumbnail_metadata_mutation_schema_status();
     if (schema_inspection_is_missing($schemaStatus)) {
         return;
@@ -669,9 +802,12 @@ function thumbnail_metadata_delete_variant(array|int $image, int $size, string $
     mutation_schema_assert_known(
         $schemaStatus,
         'thumbnail_metadata.delete_variant',
-        'Thumbnail metadata could not be modified because its database schema could not be verified.'
+        'Thumbnail metadata could not be modified because its database schema could not be verified.',
     );
-    if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
+    if (
+        !in_array($format, ['jpg', 'webp'], true)
+        || !in_array($size, thumbnail_sizes(), true)
+    ) {
         return;
     }
 
@@ -689,7 +825,8 @@ function thumbnail_metadata_delete_variant(array|int $image, int $size, string $
 /**
  * Remove every thumbnail metadata row for one image.
  *
- * @param array|int $image Image row or image data.
+ * @param array<string,mixed>|int $image Image row or persisted image ID.
+ * @return void Deletes all variant rows when schema and image identity are valid.
  */
 function thumbnail_metadata_delete_image_variants(array|int $image): void
 {
@@ -700,7 +837,7 @@ function thumbnail_metadata_delete_image_variants(array|int $image): void
     mutation_schema_assert_known(
         $schemaStatus,
         'thumbnail_metadata.delete_image_variants',
-        'Thumbnail metadata could not be modified because its database schema could not be verified.'
+        'Thumbnail metadata could not be modified because its database schema could not be verified.',
     );
 
     $imageId = is_array($image) ? (int) ($image['id'] ?? 0) : (int) $image;
@@ -717,14 +854,21 @@ function thumbnail_metadata_delete_image_variants(array|int $image): void
 /**
  * Return true when one renderable metadata row exists for a concrete thumbnail variant.
  *
- * @param array $image Image row or image data.
+ * @param array<string,mixed> $image Persisted image row whose variant is checked.
  * @param int $size Size value.
  * @param string $format Format value.
  * @return bool True when the condition matches.
  */
-function thumbnail_metadata_has_renderable_variant(array $image, int $size, string $format): bool
-{
-    if (!thumbnail_metadata_schema_ready() || !in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
+function thumbnail_metadata_has_renderable_variant(
+    array $image,
+    int $size,
+    string $format,
+): bool {
+    if (
+        !thumbnail_metadata_schema_ready()
+        || !in_array($format, ['jpg', 'webp'], true)
+        || !in_array($size, thumbnail_sizes(), true)
+    ) {
         return false;
     }
 
@@ -739,12 +883,14 @@ function thumbnail_metadata_has_renderable_variant(array $image, int $size, stri
  * or mtimes. This helper keeps the master image row authoritative and updates
  * it only when the compact source payload has changed.
  *
- * @param array $image Image row or image data.
- * @param array $source Source payload from thumbnail_metadata_source_payload().
+ * @param array<string,mixed> $image Master image row whose source metadata may be synchronized.
+ * @param array{width:int,height:int,mime_type:?string,file_size:int,modified_at:?string,checksum_sha256:?string,exif_orientation:int} $source Source metadata generated from the current image file.
  * @return bool True when the master row was updated.
  */
-function thumbnail_metadata_sync_image_source_payload(array $image, array $source): bool
-{
+function thumbnail_metadata_sync_image_source_payload(
+    array $image,
+    array $source,
+): bool {
     static $synced = [];
     $imageId = (int) ($image['id'] ?? 0);
     if ($imageId <= 0) {
@@ -752,15 +898,24 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
     }
 
     $wanted = [
-        'display_width' => (int) ($source['width'] ?? 0) > 0 ? (int) $source['width'] : null,
-        'display_height' => (int) ($source['height'] ?? 0) > 0 ? (int) $source['height'] : null,
+        'display_width' => (int) ($source['width'] ?? 0) > 0
+            ? (int) $source['width']
+            : null,
+        'display_height' => (int) ($source['height'] ?? 0) > 0
+            ? (int) $source['height']
+            : null,
         'exif_orientation' => (int) ($source['exif_orientation'] ?? 1),
         'thumbnail_metadata_refreshed_at' => now_sql(),
     ];
 
     $available = [];
     foreach ($wanted as $column => $value) {
-        if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_image_source', 'images', $column, 'thumbnail_metadata.sync_image_source')) {
+        if (mutation_schema_optional_column_available(
+            'mutation.thumbnail_metadata_image_source',
+            'images',
+            $column,
+            'thumbnail_metadata.sync_image_source',
+        )) {
             $available[$column] = $value;
         }
     }
@@ -770,7 +925,13 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
 
     $stableAvailable = $available;
     unset($stableAvailable['thumbnail_metadata_refreshed_at']);
-    $signature = hash('sha256', json_encode($stableAvailable, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '');
+    $signature = hash(
+        'sha256',
+        json_encode(
+            $stableAvailable,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        ) ?: '',
+    );
     if (($synced[$imageId] ?? '') === $signature) {
         return false;
     }
@@ -809,33 +970,80 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
  * @param bool $deleteInvalid deleteInvalid input for this operation.
  * @return array<string,mixed> Result produced by this operation.
  */
-function thumbnail_metadata_record_file(array $image, array $gallery, int $size, string $format, string $thumbnailPath, ?string $sourcePath = null, bool $deleteInvalid = false): array
-{
+function thumbnail_metadata_record_file(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format,
+    string $thumbnailPath,
+    ?string $sourcePath = null,
+    bool $deleteInvalid = false,
+): array {
     $schemaStatus = thumbnail_metadata_mutation_schema_status();
     if (schema_inspection_is_missing($schemaStatus)) {
-        return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+        return [
+            'status' => 'metadata_unavailable',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
     mutation_schema_assert_known(
         $schemaStatus,
         'thumbnail_metadata.record_file',
-        'Thumbnail metadata could not be written because its database schema could not be verified.'
+        'Thumbnail metadata could not be written because its database schema could not be verified.',
     );
     thumbnail_metadata_preflight_write_schema('thumbnail_metadata.record_file');
     thumbnail_assert_source_identity_owned($image);
-    if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
-        return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    if (
+        !in_array($format, ['jpg', 'webp'], true)
+        || !in_array($size, thumbnail_sizes(), true)
+    ) {
+        return [
+            'status' => 'unsupported_variant',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
-    if (normalize_filesystem_path($thumbnailPath) !== normalize_filesystem_path(thumbnail_abs_path($image, $gallery, $size, $format))) {
-        return ['status' => 'source_identity_mismatch', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    if (
+        normalize_filesystem_path(
+            $thumbnailPath,
+        ) !== normalize_filesystem_path(thumbnail_abs_path(
+            $image,
+            $gallery,
+            $size,
+            $format,
+        ))
+    ) {
+        return [
+            'status' => 'source_identity_mismatch',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
-    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+    if (
+        function_exists('Gallery\\Services\\thumbnail_policy_format_allowed')
+        && !thumbnail_policy_format_allowed($format)
+    ) {
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'format_disallowed', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+        return [
+            'status' => 'format_disallowed',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
 
     if (!is_file($thumbnailPath)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'missing', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+        return [
+            'status' => 'missing',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
 
     $actualInfo = @getimagesize($thumbnailPath);
@@ -845,7 +1053,10 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     $sourceSynced = false;
     $metadataError = null;
     try {
-        $sourceSynced = thumbnail_metadata_sync_image_source_payload($image, $source);
+        $sourceSynced = thumbnail_metadata_sync_image_source_payload(
+            $image,
+            $source,
+        );
     } catch (MutationSchemaUnavailableException $exception) {
         throw $exception;
     } catch (Throwable $exception) {
@@ -853,27 +1064,54 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         $metadataError = $exception->getMessage();
     }
 
-    if ((int) $source['width'] > 0 && (int) $source['height'] > 0 && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
-        $geometryStatus = thumbnail_file_geometry_status($thumbnailPath, (int) $source['width'], (int) $source['height'], $size);
+    if (
+        (int) $source['width'] > 0
+        && (int) $source['height'] > 0
+        && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')
+    ) {
+        $geometryStatus = thumbnail_file_geometry_status(
+            $thumbnailPath,
+            (int) $source['width'],
+            (int) $source['height'],
+            $size,
+        );
     } else {
         $geometryStatus = [
             'valid' => $actualWidth > 0 && $actualHeight > 0,
-            'reason' => $actualWidth > 0 && $actualHeight > 0 ? 'source_geometry_unavailable' : 'thumbnail_unreadable',
+            'reason' =>
+                $actualWidth > 0 && $actualHeight > 0
+                    ? 'source_geometry_unavailable'
+                    : 'thumbnail_unreadable',
         ];
     }
 
     $valid = !empty($geometryStatus['valid']);
     $status = $valid ? 'valid' : 'invalid';
-    $reason = substr((string) ($geometryStatus['reason'] ?? ($valid ? 'ok' : 'invalid_geometry')), 0, 100);
+    $reason = substr(
+        (string) (
+            $geometryStatus['reason'] ?? ($valid ? 'ok' : 'invalid_geometry')
+        ),
+        0,
+        100,
+    );
 
     if (!$valid && $deleteInvalid) {
-        if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_delete_invalid_geometry_file',
+        )) {
             thumbnail_delete_invalid_geometry_file($thumbnailPath);
         } elseif (is_file($thumbnailPath)) {
             @unlink($thumbnailPath);
         }
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'invalid', 'valid' => false, 'deleted' => true, 'reason' => $reason, 'metadata_written' => false, 'source_synced' => $sourceSynced];
+        return [
+            'status' => 'invalid',
+            'valid' => false,
+            'deleted' => true,
+            'reason' => $reason,
+            'metadata_written' => false,
+            'source_synced' => $sourceSynced,
+        ];
     }
 
     $now = now_sql();
@@ -884,7 +1122,9 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         'width' => $actualWidth > 0 ? $actualWidth : null,
         'height' => $actualHeight > 0 ? $actualHeight : null,
         'file_size' => (int) (filesize($thumbnailPath) ?: 0),
-        'modified_at' => thumbnail_metadata_datetime_from_timestamp((int) (filemtime($thumbnailPath) ?: time())),
+        'modified_at' => thumbnail_metadata_datetime_from_timestamp(
+            (int) (filemtime($thumbnailPath) ?: time()),
+        ),
         'status' => $status,
         'status_reason' => $reason,
         'checked_at' => $now,
@@ -892,26 +1132,54 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         'updated_at' => $now,
     ];
 
-    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'derivative_version', 'thumbnail_metadata.record_variant')) {
+    if (mutation_schema_optional_column_available(
+        'mutation.thumbnail_metadata_optional',
+        'image_thumbnail_variants',
+        'derivative_version',
+        'thumbnail_metadata.record_variant',
+    )) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 3, true),
-            ['derivative_version' => max(1, (int) ($image['thumbnail_derivative_version'] ?? 1))],
-            array_slice($variantColumns, 3, null, true)
+            ['derivative_version' => max(
+                1,
+                (int) ($image['thumbnail_derivative_version'] ?? 1),
+            )],
+            array_slice($variantColumns, 3, null, true),
         );
     }
 
-    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'gallery_id', 'thumbnail_metadata.record_variant')) {
+    if (mutation_schema_optional_column_available(
+        'mutation.thumbnail_metadata_optional',
+        'image_thumbnail_variants',
+        'gallery_id',
+        'thumbnail_metadata.record_variant',
+    )) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 1, true),
-            ['gallery_id' => (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0))],
-            array_slice($variantColumns, 1, null, true)
+            [
+                'gallery_id' => (int) (
+                    $gallery['id']
+                    ?? $image['gallery_id']
+                    ?? 0
+                ),
+            ],
+            array_slice($variantColumns, 1, null, true),
         );
     }
-    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'thumbnail_rel_path', 'thumbnail_metadata.record_variant')) {
+    if (mutation_schema_optional_column_available(
+        'mutation.thumbnail_metadata_optional',
+        'image_thumbnail_variants',
+        'thumbnail_rel_path',
+        'thumbnail_metadata.record_variant',
+    )) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 5, true),
-            ['thumbnail_rel_path' => thumbnail_metadata_relative_path($image, $size, $format)],
-            array_slice($variantColumns, 5, null, true)
+            ['thumbnail_rel_path' => thumbnail_metadata_relative_path(
+                $image,
+                $size,
+                $format,
+            )],
+            array_slice($variantColumns, 5, null, true),
         );
     }
 
@@ -929,7 +1197,14 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         ];
     }
 
-    $result = ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason, 'metadata_written' => true, 'source_synced' => $sourceSynced];
+    $result = [
+        'status' => $status,
+        'valid' => $valid,
+        'deleted' => false,
+        'reason' => $reason,
+        'metadata_written' => true,
+        'source_synced' => $sourceSynced,
+    ];
     if ($metadataError !== null) {
         $result['metadata_error'] = $metadataError;
     }
@@ -953,32 +1228,81 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
  * @param int $height height input for this operation.
  * @return array<string,mixed> Result produced by this operation.
  */
-function thumbnail_metadata_record_prepared_variant(array $image, array $gallery, int $size, string $format, string $thumbnailPath, int $width, int $height): array
-{
+function thumbnail_metadata_record_prepared_variant(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format,
+    string $thumbnailPath,
+    int $width,
+    int $height,
+): array {
     $schemaStatus = thumbnail_metadata_mutation_schema_status();
     if (schema_inspection_is_missing($schemaStatus)) {
-        return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+        return [
+            'status' => 'metadata_unavailable',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
     mutation_schema_assert_known(
         $schemaStatus,
         'thumbnail_metadata.record_prepared',
-        'Thumbnail metadata could not be written because its database schema could not be verified.'
+        'Thumbnail metadata could not be written because its database schema could not be verified.',
     );
-    thumbnail_metadata_preflight_write_schema('thumbnail_metadata.record_prepared');
+    thumbnail_metadata_preflight_write_schema(
+        'thumbnail_metadata.record_prepared',
+    );
     thumbnail_assert_source_identity_owned($image);
-    if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
-        return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    if (
+        !in_array($format, ['jpg', 'webp'], true)
+        || !in_array($size, thumbnail_sizes(), true)
+    ) {
+        return [
+            'status' => 'unsupported_variant',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
-    if (normalize_filesystem_path($thumbnailPath) !== normalize_filesystem_path(thumbnail_abs_path($image, $gallery, $size, $format))) {
-        return ['status' => 'source_identity_mismatch', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    if (
+        normalize_filesystem_path(
+            $thumbnailPath,
+        ) !== normalize_filesystem_path(thumbnail_abs_path(
+            $image,
+            $gallery,
+            $size,
+            $format,
+        ))
+    ) {
+        return [
+            'status' => 'source_identity_mismatch',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
-    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+    if (
+        function_exists('Gallery\\Services\\thumbnail_policy_format_allowed')
+        && !thumbnail_policy_format_allowed($format)
+    ) {
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'format_disallowed', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+        return [
+            'status' => 'format_disallowed',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
     if (!is_file($thumbnailPath)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'missing', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+        return [
+            'status' => 'missing',
+            'valid' => false,
+            'deleted' => false,
+            'metadata_written' => false,
+        ];
     }
 
     $width = max(1, $width);
@@ -996,7 +1320,9 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         'width' => $width,
         'height' => $height,
         'file_size' => (int) (filesize($thumbnailPath) ?: 0),
-        'modified_at' => thumbnail_metadata_datetime_from_timestamp((int) (filemtime($thumbnailPath) ?: time())),
+        'modified_at' => thumbnail_metadata_datetime_from_timestamp(
+            (int) (filemtime($thumbnailPath) ?: time()),
+        ),
         'status' => $status,
         'status_reason' => $reason,
         'checked_at' => $now,
@@ -1004,26 +1330,54 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         'updated_at' => $now,
     ];
 
-    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'derivative_version', 'thumbnail_metadata.record_variant')) {
+    if (mutation_schema_optional_column_available(
+        'mutation.thumbnail_metadata_optional',
+        'image_thumbnail_variants',
+        'derivative_version',
+        'thumbnail_metadata.record_variant',
+    )) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 3, true),
-            ['derivative_version' => max(1, (int) ($image['thumbnail_derivative_version'] ?? 1))],
-            array_slice($variantColumns, 3, null, true)
+            ['derivative_version' => max(
+                1,
+                (int) ($image['thumbnail_derivative_version'] ?? 1),
+            )],
+            array_slice($variantColumns, 3, null, true),
         );
     }
 
-    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'gallery_id', 'thumbnail_metadata.record_variant')) {
+    if (mutation_schema_optional_column_available(
+        'mutation.thumbnail_metadata_optional',
+        'image_thumbnail_variants',
+        'gallery_id',
+        'thumbnail_metadata.record_variant',
+    )) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 1, true),
-            ['gallery_id' => (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0))],
-            array_slice($variantColumns, 1, null, true)
+            [
+                'gallery_id' => (int) (
+                    $gallery['id']
+                    ?? $image['gallery_id']
+                    ?? 0
+                ),
+            ],
+            array_slice($variantColumns, 1, null, true),
         );
     }
-    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'thumbnail_rel_path', 'thumbnail_metadata.record_variant')) {
+    if (mutation_schema_optional_column_available(
+        'mutation.thumbnail_metadata_optional',
+        'image_thumbnail_variants',
+        'thumbnail_rel_path',
+        'thumbnail_metadata.record_variant',
+    )) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 5, true),
-            ['thumbnail_rel_path' => thumbnail_metadata_relative_path($image, $size, $format)],
-            array_slice($variantColumns, 5, null, true)
+            ['thumbnail_rel_path' => thumbnail_metadata_relative_path(
+                $image,
+                $size,
+                $format,
+            )],
+            array_slice($variantColumns, 5, null, true),
         );
     }
 
@@ -1040,23 +1394,41 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         ];
     }
 
-    return ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason, 'metadata_written' => true, 'source_synced' => false];
+    return [
+        'status' => $status,
+        'valid' => $valid,
+        'deleted' => false,
+        'reason' => $reason,
+        'metadata_written' => true,
+        'source_synced' => false,
+    ];
 }
 
 /**
  * Refresh metadata for all existing thumbnail files belonging to one image.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param ?array $sizes Sizes value.
+ * @param array<string,mixed> $image Persisted image row whose files are inspected.
+ * @param array<string,mixed> $gallery Owning gallery row used to constrain thumbnail paths.
+ * @param ?list<int> $sizes Requested configured sides, or null for all supported sizes.
  * @param bool $deleteInvalid Delete invalid value.
- * @return array<string mixed>.
+ * @return array{checked:int,valid:int,missing:int,invalid_deleted:int,invalid_files:list<string>,metadata_rows_written?:int,metadata_source_syncs?:int} Refresh counts and invalid paths encountered.
  */
-function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $sizes = null, bool $deleteInvalid = true): array
-{
+function thumbnail_metadata_refresh_image(
+    array $image,
+    array $gallery,
+    ?array $sizes = null,
+    bool $deleteInvalid = true,
+): array {
     $sizes = $sizes === null
         ? thumbnail_sizes()
-        : array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+        : array_values(array_unique(array_filter(
+            array_map('intval', $sizes),
+            static fn(int $size): bool => in_array(
+                $size,
+                thumbnail_sizes(),
+                true,
+            ),
+        )));
 
     $checked = 0;
     $valid = 0;
@@ -1065,20 +1437,35 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
     $invalidFiles = [];
     $metadataRowsWritten = 0;
     $metadataSourceSyncs = 0;
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
 
     try {
         $sourcePath = image_abs_path($image, $gallery);
     } catch (Throwable) {
         thumbnail_metadata_delete_image_variants($image);
-        return ['checked' => 0, 'valid' => 0, 'missing' => count($sizes) * count($formats), 'invalid_deleted' => 0, 'invalid_files' => []];
+        return [
+            'checked' => 0,
+            'valid' => 0,
+            'missing' => count($sizes) * count($formats),
+            'invalid_deleted' => 0,
+            'invalid_files' => [],
+        ];
     }
 
     foreach ($sizes as $size) {
         foreach ($formats as $format) {
             $checked++;
             try {
-                $thumbnailPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+                $thumbnailPath = thumbnail_abs_path(
+                    $image,
+                    $gallery,
+                    (int) $size,
+                    $format,
+                );
             } catch (RuntimeException) {
                 $missing++;
                 thumbnail_metadata_delete_variant($image, (int) $size, $format);
@@ -1091,7 +1478,15 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
                 continue;
             }
 
-            $result = thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $thumbnailPath, $sourcePath, $deleteInvalid);
+            $result = thumbnail_metadata_record_file(
+                $image,
+                $gallery,
+                (int) $size,
+                $format,
+                $thumbnailPath,
+                $sourcePath,
+                $deleteInvalid,
+            );
             if (!empty($result['metadata_written'])) {
                 $metadataRowsWritten++;
             }
@@ -1128,26 +1523,48 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
  * @param array<int,int> $sizes Sizes value.
  * @return array{variants:array<string,array<int,string>>,warmup_sizes:array<int,int>,known_from_db:bool} Structured result data for the caller.
  */
-function thumbnail_metadata_bundle_data(array $image, array $gallery, array $sizes): array
-{
+function thumbnail_metadata_bundle_data(
+    array $image,
+    array $gallery,
+    array $sizes,
+): array {
     $variants = ['jpg' => [], 'webp' => []];
     $warmupSizes = [];
 
-    if (!thumbnail_legacy_identity_owned($image) || !thumbnail_metadata_schema_ready()) {
-        return ['variants' => $variants, 'warmup_sizes' => [], 'known_from_db' => false];
+    if (
+        !thumbnail_legacy_identity_owned($image)
+        || !thumbnail_metadata_schema_ready()
+    ) {
+        return [
+            'variants' => $variants,
+            'warmup_sizes' => [],
+            'known_from_db' => false,
+        ];
     }
 
     $rows = thumbnail_metadata_renderable_rows($image, $sizes);
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     foreach ($formats as $format) {
         foreach ($rows[$format] as $size => $row) {
-            $variants[$format][(int) $size] = thumbnail_serving_url($image, $gallery, (int) $size, $format);
+            $variants[$format][(int) $size] = thumbnail_serving_url(
+                $image,
+                $gallery,
+                (int) $size,
+                $format,
+            );
         }
     }
 
     foreach ($sizes as $size) {
         $size = (int) $size;
-        if (!isset($variants['jpg'][$size]) && !isset($variants['webp'][$size])) {
+        if (
+            !isset($variants['jpg'][$size])
+            && !isset($variants['webp'][$size])
+        ) {
             $warmupSizes[$size] = $size;
         }
     }
@@ -1171,26 +1588,36 @@ function thumbnail_metadata_bundle_data(array $image, array $gallery, array $siz
 function thumbnail_metadata_storage_snapshot(): array
 {
     if (!thumbnail_metadata_schema_ready()) {
-        return ['available' => false, 'reason' => 'image_thumbnail_variants_missing'];
+        return [
+            'available' => false,
+            'reason' => 'image_thumbnail_variants_missing',
+        ];
     }
 
-    $columns = thumbnail_metadata_table_columns('image_thumbnail_variants', true);
-    $legacyColumns = array_values(array_filter([
-        'gallery_id',
-        'thumbnail_rel_path',
-        'source_width',
-        'source_height',
-        'source_mime_type',
-        'source_file_size',
-        'source_modified_at',
-        'source_checksum_sha256',
-        'source_exif_orientation',
-        'source_exif_json',
-    ], static fn (string $column): bool => isset($columns[$column])));
+    $columns = thumbnail_metadata_table_columns(
+        'image_thumbnail_variants',
+        true,
+    );
+    $legacyColumns = array_values(array_filter(
+        [
+            'gallery_id',
+            'thumbnail_rel_path',
+            'source_width',
+            'source_height',
+            'source_mime_type',
+            'source_file_size',
+            'source_modified_at',
+            'source_checksum_sha256',
+            'source_exif_orientation',
+            'source_exif_json',
+        ],
+        static fn(string $column): bool => isset($columns[$column]),
+    ));
 
     $snapshot = [
         'available' => true,
-        'compact_schema' => $legacyColumns === [] && isset($columns['derivative_version']),
+        'compact_schema' =>
+            $legacyColumns === [] && isset($columns['derivative_version']),
         'legacy_columns_present' => $legacyColumns,
         'variant_columns' => array_keys($columns),
         'row_count' => null,

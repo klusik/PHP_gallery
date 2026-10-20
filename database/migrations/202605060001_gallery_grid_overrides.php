@@ -33,8 +33,8 @@
  */
 
 return [
-    "ALTER TABLE galleries ADD COLUMN grid_columns TINYINT UNSIGNED NULL AFTER show_filenames",
-    "ALTER TABLE galleries ADD COLUMN grid_rows SMALLINT UNSIGNED NULL AFTER grid_columns",
-    "ALTER TABLE galleries ADD COLUMN grid_use_for_subgalleries TINYINT(1) NOT NULL DEFAULT 1 AFTER grid_rows",
-    "ALTER TABLE galleries ADD KEY galleries_grid_inheritance_index (parent_id, grid_use_for_subgalleries)",
+    'ALTER TABLE galleries ADD COLUMN grid_columns TINYINT UNSIGNED NULL AFTER show_filenames',
+    'ALTER TABLE galleries ADD COLUMN grid_rows SMALLINT UNSIGNED NULL AFTER grid_columns',
+    'ALTER TABLE galleries ADD COLUMN grid_use_for_subgalleries TINYINT(1) NOT NULL DEFAULT 1 AFTER grid_rows',
+    'ALTER TABLE galleries ADD KEY galleries_grid_inheritance_index (parent_id, grid_use_for_subgalleries)',
 ];

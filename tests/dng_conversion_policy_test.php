@@ -69,7 +69,9 @@ function t(string $key, ?string $fallback = null, array $params = []): string
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
-    return array_key_exists($key, $GLOBALS['dng_policy_test_settings']) ? (string) $GLOBALS['dng_policy_test_settings'][$key] : $default;
+    return array_key_exists($key, $GLOBALS['dng_policy_test_settings'])
+        ? (string) $GLOBALS['dng_policy_test_settings'][$key]
+        : $default;
 }
 
 require_once __DIR__ . '/support/dng_policy_shims.php';
@@ -78,43 +80,112 @@ require_once __DIR__ . '/../app/services/dng_derivatives.php';
 /**
  * Throw when an expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Expected value, including its collection shape when applicable.
+ * @param TActual $actual Actual value, including its collection shape when applicable.
  * @param string $label Label value.
+ * @return void Throws when strict comparison fails.
  */
-function assert_dng_policy_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_dng_policy_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
 $GLOBALS['dng_policy_test_settings'] = [];
-assert_dng_policy_same('auto_fallback', dng_conversion_source_policy(), 'default source policy');
-assert_dng_policy_same('force_srgb', dng_conversion_color_policy(), 'default color policy');
+assert_dng_policy_same(
+    'auto_fallback',
+    dng_conversion_source_policy(),
+    'default source policy',
+);
+assert_dng_policy_same(
+    'force_srgb',
+    dng_conversion_color_policy(),
+    'default color policy',
+);
 
-assert_dng_policy_same('auto_fallback', dng_normalize_conversion_source_policy('broken'), 'invalid source policy fallback');
-assert_dng_policy_same('force_srgb', dng_normalize_conversion_color_policy('broken'), 'invalid color policy fallback');
+assert_dng_policy_same(
+    'auto_fallback',
+    dng_normalize_conversion_source_policy('broken'),
+    'invalid source policy fallback',
+);
+assert_dng_policy_same(
+    'force_srgb',
+    dng_normalize_conversion_color_policy('broken'),
+    'invalid color policy fallback',
+);
 
 $GLOBALS['dng_policy_test_settings'] = [
     'dng_conversion_source_policy' => 'prefer_preview',
     'dng_conversion_color_policy' => 'preserve_look',
 ];
-assert_dng_policy_same('prefer_preview', dng_conversion_source_policy(), 'stored preview source policy');
-assert_dng_policy_same('preserve_look', dng_conversion_color_policy(), 'stored preserve color policy');
+assert_dng_policy_same(
+    'prefer_preview',
+    dng_conversion_source_policy(),
+    'stored preview source policy',
+);
+assert_dng_policy_same(
+    'preserve_look',
+    dng_conversion_color_policy(),
+    'stored preserve color policy',
+);
 
-$allAvailable = ['raw' => true, 'preview_imagick' => true, 'preview_gd' => true];
-assert_dng_policy_same(['raw', 'preview_imagick', 'preview_gd'], dng_conversion_attempt_order('auto_fallback', $allAvailable), 'default order keeps legacy raw first behavior');
-assert_dng_policy_same(['raw', 'preview_imagick', 'preview_gd'], dng_conversion_attempt_order('prefer_raw', $allAvailable), 'raw policy order');
-assert_dng_policy_same(['preview_imagick', 'preview_gd', 'raw'], dng_conversion_attempt_order('prefer_preview', $allAvailable), 'preview policy order');
+$allAvailable = [
+    'raw' => true,
+    'preview_imagick' => true,
+    'preview_gd' => true,
+];
+assert_dng_policy_same(
+    ['raw', 'preview_imagick', 'preview_gd'],
+    dng_conversion_attempt_order('auto_fallback', $allAvailable),
+    'default order keeps legacy raw first behavior',
+);
+assert_dng_policy_same(
+    ['raw', 'preview_imagick', 'preview_gd'],
+    dng_conversion_attempt_order('prefer_raw', $allAvailable),
+    'raw policy order',
+);
+assert_dng_policy_same(
+    ['preview_imagick', 'preview_gd', 'raw'],
+    dng_conversion_attempt_order('prefer_preview', $allAvailable),
+    'preview policy order',
+);
 
-$previewOnly = ['raw' => false, 'preview_imagick' => false, 'preview_gd' => true];
-assert_dng_policy_same(['preview_gd'], dng_conversion_attempt_order('auto_fallback', $previewOnly), 'GD preview fallback when raw and Imagick preview are unavailable');
+$previewOnly = [
+    'raw' => false,
+    'preview_imagick' => false,
+    'preview_gd' => true,
+];
+assert_dng_policy_same(
+    ['preview_gd'],
+    dng_conversion_attempt_order('auto_fallback', $previewOnly),
+    'GD preview fallback when raw and Imagick preview are unavailable',
+);
 
 $rawOnly = ['raw' => true, 'preview_imagick' => false, 'preview_gd' => false];
-assert_dng_policy_same(['raw'], dng_conversion_attempt_order('prefer_preview', $rawOnly), 'preview policy still falls back to raw when preview is unavailable');
+assert_dng_policy_same(
+    ['raw'],
+    dng_conversion_attempt_order('prefer_preview', $rawOnly),
+    'preview policy still falls back to raw when preview is unavailable',
+);
 
-$noneAvailable = ['raw' => false, 'preview_imagick' => false, 'preview_gd' => false];
-assert_dng_policy_same([], dng_conversion_attempt_order('auto_fallback', $noneAvailable), 'no conversion path');
+$noneAvailable = [
+    'raw' => false,
+    'preview_imagick' => false,
+    'preview_gd' => false,
+];
+assert_dng_policy_same(
+    [],
+    dng_conversion_attempt_order('auto_fallback', $noneAvailable),
+    'no conversion path',
+);
 
 echo "DNG conversion policy tests passed.\n";

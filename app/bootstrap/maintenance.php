@@ -50,16 +50,25 @@ use function Gallery\Services\site_maintenance_register_request_trigger;
  */
 function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
 {
-    $cacheAction = is_string($_POST['site_maintenance_action'] ?? null) ? $_POST['site_maintenance_action'] : '';
+    $cacheAction = is_string($_POST['site_maintenance_action'] ?? null)
+        ? $_POST['site_maintenance_action']
+        : '';
     // These explicit Admin transports own their work. A passive checkpoint read
     // or stop request must never advance an updater before the controller runs.
     // Route authentication and POST CSRF checks remain in the dispatcher/controllers.
-    if (cms_request_owns_cache_transport($page, request_method(), isset($_GET['update_job_status']), $cacheAction)) {
+    if (cms_request_owns_cache_transport(
+        $page,
+        request_method(),
+        isset($_GET['update_job_status']),
+        $cacheAction,
+    )) {
         return;
     }
     if (cms_route_is_read_only_media_asset($page)) {
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.skipped_read_only_media_asset', ['page' => $page]);
+            \Gallery\Services\admin_test_run_mark('maintenance.skipped_read_only_media_asset', [
+                'page' => $page,
+            ]);
         }
         return;
     }
@@ -73,31 +82,57 @@ function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
             'background_continue_budget_seconds' => 3.0,
         ]);
     }
-    application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel !== null
-        ? static fn(string $module): mixed => $kernel->load($module) : null);
+    application_autoupdate_maybe_run(
+        $intervalSeconds,
+        request_method(),
+        $kernel !== null
+            ? static fn(string $module): mixed => $kernel->load($module) : null,
+    );
     if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
         \Gallery\Services\admin_test_run_mark('maintenance.autoupdate.end');
     }
     $kernel?->load('archive-request-trigger');
-    if (function_exists('Gallery\\Services\\admin_log_archive_register_request_trigger')) {
+    if (function_exists(
+        'Gallery\\Services\\admin_log_archive_register_request_trigger',
+    )) {
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.admin_log_archive_trigger.begin', ['page' => $page]);
+            \Gallery\Services\admin_test_run_mark('maintenance.admin_log_archive_trigger.begin', [
+                'page' => $page,
+            ]);
         }
-        admin_log_archive_register_request_trigger($page, $kernel !== null
-            ? static fn(string $module): mixed => $kernel->load($module) : null);
+        admin_log_archive_register_request_trigger(
+            $page,
+            $kernel !== null
+                ? static fn(string $module): mixed => $kernel->load(
+                    $module,
+                ) : null,
+        );
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.admin_log_archive_trigger.end', ['page' => $page]);
+            \Gallery\Services\admin_test_run_mark('maintenance.admin_log_archive_trigger.end', [
+                'page' => $page,
+            ]);
         }
     }
     $kernel?->load('site-request-trigger');
-    if (function_exists('Gallery\\Services\\site_maintenance_register_request_trigger')) {
+    if (function_exists(
+        'Gallery\\Services\\site_maintenance_register_request_trigger',
+    )) {
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.begin', ['page' => $page]);
+            \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.begin', [
+                'page' => $page,
+            ]);
         }
-        site_maintenance_register_request_trigger($page, $kernel !== null
-            ? static fn(string $module): mixed => $kernel->load($module) : null);
+        site_maintenance_register_request_trigger(
+            $page,
+            $kernel !== null
+                ? static fn(string $module): mixed => $kernel->load(
+                    $module,
+                ) : null,
+        );
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.end', ['page' => $page]);
+            \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.end', [
+                'page' => $page,
+            ]);
         }
     }
     cms_register_update_background_continuation($kernel);
@@ -114,17 +149,29 @@ function cms_register_update_background_continuation(?Kernel $kernel = null): vo
         return;
     }
     $job = \Gallery\Services\application_update_active_job();
-    if ($job === null || ($job['trigger'] ?? '') !== 'background'
+    if (
+        $job === null
+        || ($job['trigger'] ?? '') !== 'background'
         || ($job['operation'] ?? '') !== 'stable_update'
         || ($job['status'] ?? '') !== 'running'
-        || \Gallery\Services\application_update_background_chain_pending((string) $job['id'])) {
+        || \Gallery\Services\application_update_background_chain_pending(
+            (string) $job['id'],
+        )
+    ) {
         return;
     }
     register_shutdown_function(static function () use ($kernel): void {
         $error = error_get_last();
-        if (response_status_code() < 200 || response_status_code() >= 400
-            || $error !== null && in_array($error['type'],
-                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        if (
+            response_status_code() < 200
+            || response_status_code() >= 400
+            || $error !== null
+            && in_array(
+                $error['type'],
+                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR],
+                true,
+            )
+        ) {
             return;
         }
         try {
@@ -135,8 +182,11 @@ function cms_register_update_background_continuation(?Kernel $kernel = null): vo
             \Gallery\Services\site_maintenance_finish_response_before_background_work();
             $kernel?->load('updater-work');
             \Gallery\Services\application_update_background_chain_start(
-                static fn(string $ticket): bool =>
-                    \Gallery\Services\site_maintenance_fire_background_worker(false, '', $ticket)
+                static fn(string $ticket): bool => \Gallery\Services\site_maintenance_fire_background_worker(
+                    false,
+                    '',
+                    $ticket,
+                ),
             );
         } catch (\Throwable) {
             // Preserve the visitor response and durable job. Another admitted
@@ -153,10 +203,31 @@ function cms_register_update_background_continuation(?Kernel $kernel = null): vo
  * @param string $cacheAction Scalar site-maintenance action, empty for unrelated requests.
  * @return bool True for private maintenance workers, GET updater checkpoint reads or explicit POST cache transports; security checks still run at dispatch.
  */
-function cms_request_owns_cache_transport(string $page, string $method, bool $jobStatusRead, string $cacheAction): bool
-{
-    return $page === 'site_maintenance_cron'
-        || ($page === 'admin_update' && $method === 'GET' && $jobStatusRead)
-        || ($page === 'admin_site_maintenance_settings' && $method === 'POST'
-            && in_array($cacheAction, ['cache_cleanup', 'cache_diagnostic', 'cache_job_stop', 'cache_inventory_start', 'cache_inventory_step', 'cache_cleanup_start', 'cache_cleanup_step'], true));
+function cms_request_owns_cache_transport(
+    string $page,
+    string $method,
+    bool $jobStatusRead,
+    string $cacheAction,
+): bool {
+    return (
+        $page === 'site_maintenance_cron'
+            || ($page === 'admin_update' && $method === 'GET' && $jobStatusRead)
+            || (
+                $page === 'admin_site_maintenance_settings'
+                && $method === 'POST'
+                && in_array(
+                    $cacheAction,
+                    [
+                        'cache_cleanup',
+                        'cache_diagnostic',
+                        'cache_job_stop',
+                        'cache_inventory_start',
+                        'cache_inventory_step',
+                        'cache_cleanup_start',
+                        'cache_cleanup_step',
+                    ],
+                    true,
+                )
+            )
+    );
 }

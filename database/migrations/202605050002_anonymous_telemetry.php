@@ -33,11 +33,11 @@
  */
 
 return [
-    "CREATE TABLE IF NOT EXISTS telemetry_settings (
+    'CREATE TABLE IF NOT EXISTS telemetry_settings (
         setting_key VARCHAR(100) NOT NULL PRIMARY KEY,
         setting_value TEXT NULL,
         updated_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
     "CREATE TABLE IF NOT EXISTS telemetry_sessions (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         session_hash BINARY(16) NOT NULL,
@@ -228,5 +228,5 @@ return [
         ('telemetry_slow_query_threshold_ms', '250', NOW()),
         ('telemetry_respect_dnt', '1', NOW()),
         ('telemetry_admin_excluded', '1', NOW())
-    ON DUPLICATE KEY UPDATE setting_value = setting_value"
+    ON DUPLICATE KEY UPDATE setting_value = setting_value",
 ];

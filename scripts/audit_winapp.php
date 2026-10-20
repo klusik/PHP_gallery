@@ -46,7 +46,9 @@ function audit_validate_winapp_report(array $report): array
     $invalid = static fn(string $reason): array => [
         'valid' => false,
         'reason' => $reason,
-        'successful' => is_bool($report['successful'] ?? null) ? $report['successful'] : null,
+        'successful' => is_bool($report['successful'] ?? null)
+            ? $report['successful']
+            : null,
         'runtime' => null,
         'counts' => $emptyCounts,
         'tests' => [],
@@ -54,11 +56,22 @@ function audit_validate_winapp_report(array $report): array
         'fixture_skips' => [],
         'gaps' => [],
     ];
-    $expectedTopKeys = ['schema_version', 'successful', 'runtime', 'counts', 'tests', 'fixture_errors', 'fixture_skips'];
+    $expectedTopKeys = [
+        'schema_version',
+        'successful',
+        'runtime',
+        'counts',
+        'tests',
+        'fixture_errors',
+        'fixture_skips',
+    ];
     $actualTopKeys = array_keys($report);
     sort($expectedTopKeys, SORT_STRING);
     sort($actualTopKeys, SORT_STRING);
-    if ($actualTopKeys !== $expectedTopKeys || ($report['schema_version'] ?? null) !== 1) {
+    if (
+        $actualTopKeys !== $expectedTopKeys
+        || ($report['schema_version'] ?? null) !== 1
+    ) {
         return $invalid('missing-or-unsupported-report-schema');
     }
     if (!is_bool($report['successful'])) {
@@ -66,7 +79,13 @@ function audit_validate_winapp_report(array $report): array
     }
 
     $runtime = $report['runtime'];
-    $runtimeKeys = ['python_version', 'python_implementation', 'platform', 'executable', 'suite_settings'];
+    $runtimeKeys = [
+        'python_version',
+        'python_implementation',
+        'platform',
+        'executable',
+        'suite_settings',
+    ];
     if (!is_array($runtime) || array_is_list($runtime)) {
         return $invalid('invalid-runtime-metadata');
     }
@@ -76,8 +95,17 @@ function audit_validate_winapp_report(array $report): array
     if ($actualRuntimeKeys !== $runtimeKeys) {
         return $invalid('incomplete-runtime-metadata');
     }
-    foreach (['python_version', 'python_implementation', 'platform', 'executable'] as $key) {
-        if (!is_string($runtime[$key]) || trim($runtime[$key]) === '' || strlen($runtime[$key]) > 4096) {
+    foreach ([
+        'python_version',
+        'python_implementation',
+        'platform',
+        'executable',
+    ] as $key) {
+        if (
+            !is_string($runtime[$key])
+            || trim($runtime[$key]) === ''
+            || strlen($runtime[$key]) > 4096
+        ) {
             return $invalid('invalid-runtime-metadata');
         }
     }
@@ -89,11 +117,16 @@ function audit_validate_winapp_report(array $report): array
         'verbosity' => 1,
     ];
     $suiteSettingKeys = array_keys($expectedSuiteSettings);
-    $actualSuiteSettingKeys = is_array($suiteSettings) ? array_keys($suiteSettings) : [];
+    $actualSuiteSettingKeys = is_array($suiteSettings)
+        ? array_keys($suiteSettings)
+        : [];
     sort($suiteSettingKeys, SORT_STRING);
     sort($actualSuiteSettingKeys, SORT_STRING);
-    if (!is_array($suiteSettings) || array_is_list($suiteSettings)
-        || $actualSuiteSettingKeys !== $suiteSettingKeys) {
+    if (
+        !is_array($suiteSettings)
+        || array_is_list($suiteSettings)
+        || $actualSuiteSettingKeys !== $suiteSettingKeys
+    ) {
         return $invalid('unexpected-unittest-suite-settings');
     }
     foreach ($expectedSuiteSettings as $key => $expectedValue) {
@@ -131,17 +164,34 @@ function audit_validate_winapp_report(array $report): array
     if (!is_array($rawFixtureSkips) || !array_is_list($rawFixtureSkips)) {
         return $invalid('invalid-fixture-skips');
     }
-    if ($rawTests === [] && $rawFixtureErrors === [] && $rawFixtureSkips === []) {
+    if (
+        $rawTests === []
+        && $rawFixtureErrors === []
+        && $rawFixtureSkips === []
+    ) {
         return $invalid('missing-or-empty-test-results');
     }
 
-    $allowedStatuses = ['PASS', 'FAIL', 'ERROR', 'SKIP', 'EXPECTED_FAILURE', 'UNEXPECTED_SUCCESS'];
+    $allowedStatuses = [
+        'PASS',
+        'FAIL',
+        'ERROR',
+        'SKIP',
+        'EXPECTED_FAILURE',
+        'UNEXPECTED_SUCCESS',
+    ];
     $computed = $emptyCounts;
     $tests = [];
     $gaps = [];
     $seenTestIds = [];
     foreach ($rawTests as $test) {
-        $expectedTestKeys = ['id', 'status', 'duration_seconds', 'reason', 'subtests'];
+        $expectedTestKeys = [
+            'id',
+            'status',
+            'duration_seconds',
+            'reason',
+            'subtests',
+        ];
         if (!is_array($test) || array_is_list($test)) {
             return $invalid('invalid-test-result');
         }
@@ -156,24 +206,51 @@ function audit_validate_winapp_report(array $report): array
         $duration = $test['duration_seconds'];
         $reason = $test['reason'];
         $subtests = $test['subtests'];
-        if (!is_string($id) || trim($id) === '' || strlen($id) > 4096
-            || preg_match('/[\x00-\x1F\x7F]/', $id) === 1 || isset($seenTestIds[$id])) {
+        if (
+            !is_string($id)
+            || trim($id) === ''
+            || strlen($id) > 4096
+            || preg_match('/[\x00-\x1F\x7F]/', $id) === 1
+            || isset($seenTestIds[$id])
+        ) {
             return $invalid('invalid-or-duplicate-test-id');
         }
         if (!is_string($status) || !in_array($status, $allowedStatuses, true)) {
             return $invalid('unknown-test-status');
         }
-        if ((!is_int($duration) && !is_float($duration)) || !is_finite((float) $duration) || $duration < 0) {
+        if (
+            (
+                !is_int($duration)
+                && !is_float($duration)
+            )
+            || !is_finite((float) $duration)
+            || $duration < 0
+        ) {
             return $invalid('invalid-test-duration');
         }
-        if ($reason !== null && (!is_string($reason) || strlen($reason) > 16384)) {
+        if (
+            $reason !== null
+            && (
+                !is_string($reason)
+                || strlen($reason) > 16384
+            )
+        ) {
             return $invalid('invalid-test-reason');
         }
         if ($status === 'PASS' && $reason !== null) {
             return $invalid('passing-test-has-reason');
         }
-        if (in_array($status, ['FAIL', 'ERROR', 'SKIP', 'EXPECTED_FAILURE'], true)
-            && (!is_string($reason) || trim($reason) === '')) {
+        if (
+            in_array(
+                $status,
+                ['FAIL', 'ERROR', 'SKIP', 'EXPECTED_FAILURE'],
+                true,
+            )
+            && (
+                !is_string($reason)
+                || trim($reason) === ''
+            )
+        ) {
             return $invalid('test-outcome-missing-reason');
         }
         if (!is_array($subtests) || !array_is_list($subtests)) {
@@ -197,18 +274,34 @@ function audit_validate_winapp_report(array $report): array
             $subtestId = $subtest['id'];
             $subtestStatus = $subtest['status'];
             $subtestReason = $subtest['reason'];
-            if (!is_string($subtestId) || trim($subtestId) === '' || strlen($subtestId) > 4096
-                || preg_match('/[\x00-\x1F\x7F]/', $subtestId) === 1 || isset($seenSubtestIds[$subtestId])) {
+            if (
+                !is_string($subtestId)
+                || trim($subtestId) === ''
+                || strlen($subtestId) > 4096
+                || preg_match('/[\x00-\x1F\x7F]/', $subtestId) === 1
+                || isset($seenSubtestIds[$subtestId])
+            ) {
                 return $invalid('invalid-or-duplicate-subtest-id');
             }
-            if (!is_string($subtestStatus) || !in_array($subtestStatus, ['FAIL', 'ERROR', 'SKIP'], true)) {
+            if (
+                !is_string($subtestStatus)
+                || !in_array($subtestStatus, ['FAIL', 'ERROR', 'SKIP'], true)
+            ) {
                 return $invalid('unknown-subtest-status');
             }
-            if (!is_string($subtestReason) || trim($subtestReason) === '' || strlen($subtestReason) > 16384) {
+            if (
+                !is_string($subtestReason)
+                || trim($subtestReason) === ''
+                || strlen($subtestReason) > 16384
+            ) {
                 return $invalid('invalid-subtest-reason');
             }
             $seenSubtestIds[$subtestId] = true;
-            $normalizedSubtests[] = ['id' => $subtestId, 'status' => $subtestStatus, 'reason' => $subtestReason];
+            $normalizedSubtests[] = [
+                'id' => $subtestId,
+                'status' => $subtestStatus,
+                'reason' => $subtestReason,
+            ];
             $subtestCounter = match ($subtestStatus) {
                 'FAIL' => 'subtest_failures',
                 'ERROR' => 'subtest_errors',
@@ -217,14 +310,30 @@ function audit_validate_winapp_report(array $report): array
             $computed[$subtestCounter]++;
             if (in_array($subtestStatus, ['FAIL', 'ERROR'], true)) {
                 $hasFailingSubtest = true;
-                $gaps[] = $id . ' subtest ' . $subtestId . ' ' . $subtestStatus . ': ' . $subtestReason;
+                $gaps[] =
+                    $id
+                    . ' subtest '
+                    . $subtestId
+                    . ' '
+                    . $subtestStatus
+                    . ': '
+                    . $subtestReason;
             } elseif ($subtestStatus === 'SKIP') {
                 $hasSkippedSubtest = true;
-                $gaps[] = $id . ' subtest ' . $subtestId . ' SKIP: ' . $subtestReason;
+                $gaps[] =
+                    $id . ' subtest ' . $subtestId . ' SKIP: ' . $subtestReason;
             }
         }
-        if (($hasFailingSubtest && !in_array($status, ['FAIL', 'ERROR'], true))
-            || ($hasSkippedSubtest && $status === 'PASS')) {
+        if (
+            (
+                $hasFailingSubtest
+                && !in_array($status, ['FAIL', 'ERROR'], true)
+            )
+            || (
+                $hasSkippedSubtest
+                && $status === 'PASS'
+            )
+        ) {
             return $invalid('parent-outcome-inconsistent-with-subtest');
         }
         $seenTestIds[$id] = true;
@@ -259,7 +368,12 @@ function audit_validate_winapp_report(array $report): array
     $fixtureErrors = [];
     $fixtureSkips = [];
     $seenFixtureIds = [];
-    $allowedFixturePhases = ['setUpClass', 'tearDownClass', 'setUpModule', 'tearDownModule'];
+    $allowedFixturePhases = [
+        'setUpClass',
+        'tearDownClass',
+        'setUpModule',
+        'tearDownModule',
+    ];
     foreach ($rawFixtureErrors as $fixtureError) {
         $expectedFixtureKeys = ['phase', 'id', 'reason'];
         if (!is_array($fixtureError) || array_is_list($fixtureError)) {
@@ -268,14 +382,19 @@ function audit_validate_winapp_report(array $report): array
         $actualFixtureKeys = array_keys($fixtureError);
         sort($expectedFixtureKeys, SORT_STRING);
         sort($actualFixtureKeys, SORT_STRING);
-        if ($actualFixtureKeys !== $expectedFixtureKeys
-            || !is_string($fixtureError['phase']) || trim($fixtureError['phase']) === ''
+        if (
+            $actualFixtureKeys !== $expectedFixtureKeys
+            || !is_string($fixtureError['phase'])
+            || trim($fixtureError['phase']) === ''
             || !in_array($fixtureError['phase'], $allowedFixturePhases, true)
             || strlen($fixtureError['phase']) > 256
-            || !is_string($fixtureError['id']) || trim($fixtureError['id']) === ''
+            || !is_string($fixtureError['id'])
+            || trim($fixtureError['id']) === ''
             || strlen($fixtureError['id']) > 4096
-            || !is_string($fixtureError['reason']) || trim($fixtureError['reason']) === ''
-            || strlen($fixtureError['reason']) > 16384) {
+            || !is_string($fixtureError['reason'])
+            || trim($fixtureError['reason']) === ''
+            || strlen($fixtureError['reason']) > 16384
+        ) {
             return $invalid('invalid-fixture-error');
         }
         $fixtureIdentity = $fixtureError['id'];
@@ -288,7 +407,12 @@ function audit_validate_winapp_report(array $report): array
             'id' => $fixtureError['id'],
             'reason' => $fixtureError['reason'],
         ];
-        $gaps[] = $fixtureError['id'] . ' fixture ' . $fixtureError['phase'] . ': ' . $fixtureError['reason'];
+        $gaps[] =
+            $fixtureError['id']
+            . ' fixture '
+            . $fixtureError['phase']
+            . ': '
+            . $fixtureError['reason'];
     }
     foreach ($rawFixtureSkips as $fixtureSkip) {
         $expectedFixtureKeys = ['phase', 'id', 'reason'];
@@ -298,14 +422,19 @@ function audit_validate_winapp_report(array $report): array
         $actualFixtureKeys = array_keys($fixtureSkip);
         sort($expectedFixtureKeys, SORT_STRING);
         sort($actualFixtureKeys, SORT_STRING);
-        if ($actualFixtureKeys !== $expectedFixtureKeys
-            || !is_string($fixtureSkip['phase']) || trim($fixtureSkip['phase']) === ''
+        if (
+            $actualFixtureKeys !== $expectedFixtureKeys
+            || !is_string($fixtureSkip['phase'])
+            || trim($fixtureSkip['phase']) === ''
             || !in_array($fixtureSkip['phase'], $allowedFixturePhases, true)
             || strlen($fixtureSkip['phase']) > 256
-            || !is_string($fixtureSkip['id']) || trim($fixtureSkip['id']) === ''
+            || !is_string($fixtureSkip['id'])
+            || trim($fixtureSkip['id']) === ''
             || strlen($fixtureSkip['id']) > 4096
-            || !is_string($fixtureSkip['reason']) || trim($fixtureSkip['reason']) === ''
-            || strlen($fixtureSkip['reason']) > 16384) {
+            || !is_string($fixtureSkip['reason'])
+            || trim($fixtureSkip['reason']) === ''
+            || strlen($fixtureSkip['reason']) > 16384
+        ) {
             return $invalid('invalid-fixture-skip');
         }
         $fixtureIdentity = $fixtureSkip['id'];
@@ -318,7 +447,12 @@ function audit_validate_winapp_report(array $report): array
             'id' => $fixtureSkip['id'],
             'reason' => $fixtureSkip['reason'],
         ];
-        $gaps[] = $fixtureSkip['id'] . ' fixture ' . $fixtureSkip['phase'] . ' SKIP: ' . $fixtureSkip['reason'];
+        $gaps[] =
+            $fixtureSkip['id']
+            . ' fixture '
+            . $fixtureSkip['phase']
+            . ' SKIP: '
+            . $fixtureSkip['reason'];
     }
     $computed['fixture_errors'] = count($fixtureErrors);
     $computed['errors'] += count($fixtureErrors);
@@ -329,9 +463,13 @@ function audit_validate_winapp_report(array $report): array
         }
     }
 
-    $hasFailure = $computed['failed'] > 0 || $computed['errors'] > 0
-        || $computed['unexpected_successes'] > 0 || $computed['subtest_failures'] > 0
-        || $computed['subtest_errors'] > 0 || $computed['fixture_errors'] > 0;
+    $hasFailure =
+        $computed['failed'] > 0
+        || $computed['errors'] > 0
+        || $computed['unexpected_successes'] > 0
+        || $computed['subtest_failures'] > 0
+        || $computed['subtest_errors'] > 0
+        || $computed['fixture_errors'] > 0;
     if ($report['successful'] === $hasFailure) {
         return $invalid('successful-flag-disagrees-with-outcomes');
     }
@@ -376,14 +514,24 @@ function audit_evaluate_winapp_report(?string $contents, array $process): array
     if (!$validation['valid']) {
         $validation['reason'] = $contents === null
             ? 'missing-report-file'
-            : (json_last_error() === JSON_ERROR_NONE ? $validation['reason'] : 'malformed-report-json');
+            : (
+                json_last_error() === JSON_ERROR_NONE
+                    ? $validation['reason']
+                    : 'malformed-report-json'
+            );
     }
 
-    $exitCode = is_int($process['exit_code'] ?? null) ? $process['exit_code'] : null;
-    $timedOut = is_bool($process['timed_out'] ?? null) ? $process['timed_out'] : true;
+    $exitCode = is_int($process['exit_code'] ?? null)
+        ? $process['exit_code']
+        : null;
+    $timedOut = is_bool($process['timed_out'] ?? null)
+        ? $process['timed_out']
+        : true;
     $duration = $process['duration_seconds'] ?? null;
-    $validDuration = (is_int($duration) || is_float($duration))
-        && is_finite((float) $duration) && $duration >= 0;
+    $validDuration =
+        (is_int($duration) || is_float($duration))
+        && is_finite((float) $duration)
+        && $duration >= 0;
     $normalizedProcess = [
         'exit_code' => $exitCode,
         'timed_out' => $timedOut,
@@ -391,13 +539,19 @@ function audit_evaluate_winapp_report(?string $contents, array $process): array
     ];
     $problems = [];
     if (!$validation['valid']) {
-        $problems[] = 'WinApp structured report is unavailable or invalid: ' . ($validation['reason'] ?? 'unknown reason') . '.';
+        $problems[] =
+            'WinApp structured report is unavailable or invalid: '
+            . ($validation['reason'] ?? 'unknown reason')
+            . '.';
     }
     if ($timedOut) {
         $problems[] = 'Python WinApp unittest discovery timed out.';
     }
     if ($exitCode !== 0) {
-        $problems[] = 'Python WinApp reporting adapter exited with code ' . ($exitCode ?? 'unavailable') . '.';
+        $problems[] =
+            'Python WinApp reporting adapter exited with code '
+            . ($exitCode ?? 'unavailable')
+            . '.';
     }
     if (!$validDuration) {
         $problems[] = 'Python WinApp process duration is unavailable or invalid.';
@@ -407,9 +561,13 @@ function audit_evaluate_winapp_report(?string $contents, array $process): array
     }
 
     $processFailed = $timedOut || $exitCode !== 0 || !$validDuration;
-    $status = $processFailed ? STATUS_FAIL
-        : (!$validation['valid'] ? STATUS_BLOCKED
-            : (!$validation['successful'] ? STATUS_FAIL : STATUS_PASS));
+    $status = $processFailed
+        ? STATUS_FAIL
+        : (
+            !$validation['valid']
+                ? STATUS_BLOCKED
+                : (!$validation['successful'] ? STATUS_FAIL : STATUS_PASS)
+        );
     return [
         'status' => $status,
         'valid' => $validation['valid'],

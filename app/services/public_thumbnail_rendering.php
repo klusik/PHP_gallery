@@ -84,9 +84,13 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 const PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY = 'public_thumbnail_rendering_mode';
+
 const PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE = 'responsive';
+
 const PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE = 'progressive';
-const PUBLIC_THUMBNAIL_RENDERING_DEFAULT = PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE;
+
+const PUBLIC_THUMBNAIL_RENDERING_DEFAULT =
+    PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE;
 
 /**
  * Return the permanent machine values accepted for public thumbnail rendering.
@@ -130,7 +134,10 @@ function public_thumbnail_rendering_mode_normalize(mixed $value): string
 function public_thumbnail_rendering_mode(): string
 {
     return public_thumbnail_rendering_mode_normalize(
-        app_setting(PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY, PUBLIC_THUMBNAIL_RENDERING_DEFAULT)
+        app_setting(
+            PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY,
+            PUBLIC_THUMBNAIL_RENDERING_DEFAULT,
+        ),
     );
 }
 
@@ -213,15 +220,15 @@ function public_progressive_thumbnail_loading_attributes(int $index): string
  * This is intentionally a narrow renderer boundary. The caller still owns all card semantics and access-sensitive
  * metadata; this function chooses only the picture markup strategy and its mode-specific loading attributes.
  *
- * @param array $image Image row or image data.
+ * @param array{id:int|string,filename:string,title?:string,visibility?:string,sort_order?:int|string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $image Image row passed to the selected thumbnail picture renderer; extra model fields are preserved.
  * @param int $fallbackSize Preferred initial thumbnail size in pixels.
  * @param array<int,int> $srcsetSizes Available responsive candidate sizes requested by the card.
  * @param string $sizes Responsive sizes hint used by the server-rendered picture.
  * @param string $alt Alternative text for the image.
  * @param int $cardIndex Zero-based selected-gallery photo-card index.
- * @param ?array $thumbnailBundle Request-local preloaded thumbnail bundle.
- * @param mixed $mode Optional pre-resolved rendering mode; unsupported values normalize to responsive.
- * @return string Server-rendered picture/img markup.
+ * @param ?array{image:array<string,mixed>,gallery:array<string,mixed>|null,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:list<int>} $thumbnailBundle Optional request-local bundle of authorized thumbnail variants and source fallback.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $mode Optional pre-resolved rendering mode; null selects the configured mode, recognized strings select that mode, and unsupported cast values normalize to responsive.
+ * @return string Server-rendered picture markup using the effective thumbnail loading mode.
  */
 function public_thumbnail_render_picture_html(
     array $image,
@@ -231,7 +238,7 @@ function public_thumbnail_render_picture_html(
     string $alt,
     int $cardIndex,
     ?array $thumbnailBundle = null,
-    mixed $mode = null
+    mixed $mode = null,
 ): string {
     $effectiveMode = $mode === null
         ? public_thumbnail_rendering_mode()
@@ -239,7 +246,12 @@ function public_thumbnail_render_picture_html(
 
     // $rendererMarkerAttributes identify selected-gallery photo thumbnails for admin-only browser diagnostics.
     // The marker is permanent renderer metadata, not a behavior hook, and does not expose any additional media URL.
-    $rendererMarkerAttributes = 'data-public-thumbnail-rendering-mode="' . $effectiveMode . '" data-public-thumbnail-card-index="' . max(0, $cardIndex) . '"';
+    $rendererMarkerAttributes =
+        'data-public-thumbnail-rendering-mode="'
+        . $effectiveMode
+        . '" data-public-thumbnail-card-index="'
+        . max(0, $cardIndex)
+        . '"';
 
     if ($effectiveMode === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE) {
         // $progressiveSrcsetSizes exposes every already-generated derivative to the aspect-aware client selector.
@@ -247,10 +259,14 @@ function public_thumbnail_render_picture_html(
         // The full application provides thumbnail_sizes() from the thumbnail service. The focused standalone
         // renderer contract may load this file without that service, so keep the canonical production sizes as a
         // bounded fallback instead of allowing diagnostics/tests to fail with an undefined helper.
-        $availableThumbnailSizes = function_exists(__NAMESPACE__ . '\\thumbnail_sizes')
+        $availableThumbnailSizes = function_exists(__NAMESPACE__
+            . '\\thumbnail_sizes')
             ? thumbnail_sizes()
             : [300, 600, 800, 960, 1280, 1600];
-        $progressiveSrcsetSizes = array_values(array_unique(array_merge($srcsetSizes, $availableThumbnailSizes)));
+        $progressiveSrcsetSizes = array_values(array_unique(array_merge(
+            $srcsetSizes,
+            $availableThumbnailSizes,
+        )));
         sort($progressiveSrcsetSizes, SORT_NUMERIC);
 
         return thumbnail_progressive_picture_html(
@@ -260,8 +276,9 @@ function public_thumbnail_render_picture_html(
             $sizes,
             $sizes,
             $alt,
-            $rendererMarkerAttributes . ' ' . public_progressive_thumbnail_loading_attributes($cardIndex),
-            $thumbnailBundle
+            $rendererMarkerAttributes . ' '
+                . public_progressive_thumbnail_loading_attributes($cardIndex),
+            $thumbnailBundle,
         );
     }
 
@@ -271,7 +288,8 @@ function public_thumbnail_render_picture_html(
         $srcsetSizes,
         $sizes,
         $alt,
-        $rendererMarkerAttributes . ' ' . public_responsive_thumbnail_loading_attributes($cardIndex),
-        $thumbnailBundle
+        $rendererMarkerAttributes . ' '
+            . public_responsive_thumbnail_loading_attributes($cardIndex),
+        $thumbnailBundle,
     );
 }

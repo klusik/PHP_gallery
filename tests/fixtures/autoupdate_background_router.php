@@ -41,7 +41,9 @@ namespace Gallery\Core {
      */
     function cms_config(): array
     {
-        return ['base_url' => (string) getenv('GALLERY_UPDATE_CHAIN_FIXTURE_URL')];
+        return [
+            'base_url' => (string) getenv('GALLERY_UPDATE_CHAIN_FIXTURE_URL'),
+        ];
     }
 
     /**
@@ -65,7 +67,8 @@ namespace Gallery\Services {
     {
         return $key === 'site_maintenance_token'
             // The production token grammar requires exactly 64 hex characters.
-            ? str_repeat('a', 64) : $default;
+            ? str_repeat('a', 64)
+            : $default;
     }
 
     /**
@@ -92,9 +95,13 @@ namespace Gallery\Services {
 
 namespace {
     $root = (string) getenv('GALLERY_UPDATE_CHAIN_FIXTURE_ROOT');
-    if (PHP_SAPI !== 'cli-server' || $root === '' || !is_file($root . '/owned-fixture')) {
+    if (
+        PHP_SAPI !== 'cli-server'
+        || $root === ''
+        || !is_file($root . '/owned-fixture')
+    ) {
         http_response_code(503);
-        exit;
+        exit();
     }
     // Type: string. Units: absolute path. Scope: this owned HTTP request.
     // Consumers: production updater filesystem and background job workers.
@@ -108,14 +115,22 @@ namespace {
 
     $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
     if ($path === '/visit' || $path === '/blocked') {
-        file_put_contents($root . '/arrivals.log', "visit\n", FILE_APPEND | LOCK_EX);
+        file_put_contents(
+            $root . '/arrivals.log',
+            "visit\n",
+            FILE_APPEND | LOCK_EX,
+        );
         http_response_code($path === '/blocked' ? 503 : 200);
         \Gallery\Core\cms_register_update_background_continuation();
         echo 'ordinary anonymous gallery fixture';
         return;
     }
     if (($_GET['page'] ?? '') === 'site_maintenance_cron') {
-        file_put_contents($root . '/arrivals.log', "worker\n", FILE_APPEND | LOCK_EX);
+        file_put_contents(
+            $root . '/arrivals.log',
+            "worker\n",
+            FILE_APPEND | LOCK_EX,
+        );
         \Gallery\Controllers\cms_site_maintenance_cron();
         return;
     }

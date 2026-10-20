@@ -22,7 +22,11 @@ namespace PhpGallery\SourceContracts;
  */
 function policy_runtime_path(string $path): bool
 {
-    return str_starts_with($path, 'app/') || str_starts_with($path, 'public/') || $path === 'index.php';
+    return (
+        str_starts_with($path, 'app/')
+            || str_starts_with($path, 'public/')
+            || $path === 'index.php'
+    );
 }
 
 /**
@@ -32,27 +36,59 @@ function policy_runtime_path(string $path): bool
  */
 function policy_missing_explanation(string $doc): array
 {
-    $clean = trim(preg_replace('~^\s*(?:/\*+|\*+/|//|\*)\s?~m', '', $doc) ?? $doc);
-    $clean = preg_replace('/\bScope\/consumers\s*:\s*([^\r\n]+)/i', 'Scope: $1 Consumers: $1', $clean) ?? $clean;
-    $clean = preg_replace('/\bCompatibility\s*:/i', 'Rationale:', $clean) ?? $clean;
+    $clean = trim(
+        preg_replace('~^\s*(?:/\*+|\*+/|//|\*)\s?~m', '', $doc) ?? $doc,
+    );
+    $clean =
+        preg_replace(
+            '/\bScope\/consumers\s*:\s*([^\r\n]+)/i',
+            'Scope: $1 Consumers: $1',
+            $clean,
+        ) ?? $clean;
+    $clean =
+        preg_replace('/\bCompatibility\s*:/i', 'Rationale:', $clean) ?? $clean;
     $labels = 'type|units?|scope|consumers?|rationale';
-    $summary = trim(preg_split('/@|(?:\b(?:' . $labels . ')\s*:)/i', $clean, 2)[0] ?? '');
+    $summary = trim(
+        preg_split('/@|(?:\b(?:' . $labels . ')\s*:)/i', $clean, 2)[0] ?? '',
+    );
     $missing = [];
-    if (strlen($summary) < 12 || preg_match('/^(?:TODO|FIXME)\b|^Handles .+ logic for the gallery application\./i', $summary) === 1) {
+    if (
+        strlen($summary) < 12
+        || preg_match(
+            '/^(?:TODO|FIXME)\b|^Handles .+ logic for the gallery application\./i',
+            $summary,
+        ) === 1
+    ) {
         $missing[] = 'purpose';
     }
     $fields = [];
-    preg_match_all('/\b(' . $labels . ')\s*:\s*(.*?)(?=\b(?:' . $labels . ')\s*:|\s+@\w|$)/si', $clean, $matches, PREG_SET_ORDER);
+    preg_match_all(
+        '/\b('
+            . $labels
+            . ')\s*:\s*(.*?)(?=\b(?:'
+            . $labels
+            . ')\s*:|\s+@\w|$)/si',
+        $clean,
+        $matches,
+        PREG_SET_ORDER,
+    );
     foreach ($matches as $match) {
         $field = strtolower($match[1]);
-        $field = $field === 'unit' ? 'units' : ($field === 'consumer' ? 'consumers' : $field);
+        $field = $field === 'unit'
+            ? 'units'
+            : ($field === 'consumer' ? 'consumers' : $field);
         $value = trim($match[2], " \t\r\n*/");
-        if ($value !== '' && preg_match('/^(?:TODO|FIXME|TBD|[-?]+)[.!]?$/i', $value) !== 1) {
+        if (
+            $value !== ''
+            && preg_match('/^(?:TODO|FIXME|TBD|[-?]+)[.!]?$/i', $value) !== 1
+        ) {
             $fields[$field] = true;
         }
     }
-    if (preg_match('/@(?:var|type)\s+(\{[^}]+\}|[^\s@]+)/', $clean, $type) === 1
-        && !str_ends_with($type[1], ':')) {
+    if (
+        preg_match('/@(?:var|type)\s+(\{[^}]+\}|[^\s@]+)/', $clean, $type) === 1
+        && !str_ends_with($type[1], ':')
+    ) {
         $fields['type'] = true;
     }
     foreach (['type', 'units', 'scope', 'consumers', 'rationale'] as $field) {
@@ -70,16 +106,28 @@ function policy_missing_explanation(string $doc): array
  * @param array<int,int> $pairs Original delimiter index.
  * @return string Attached documentation; file headers and intervening code are rejected.
  */
-function policy_site_documentation(array $tokens, int $start, array $pairs): string
-{
+function policy_site_documentation(
+    array $tokens,
+    int $start,
+    array $pairs,
+): string {
     $start = declaration_start($tokens, $start, $pairs);
     $comments = [];
     for ($index = $start - 1; $index >= 0; $index--) {
-        if (!in_array($tokens[$index]['id'], [T_COMMENT, T_DOC_COMMENT], true)) {
+        if (!in_array(
+            $tokens[$index]['id'],
+            [T_COMMENT, T_DOC_COMMENT],
+            true,
+        )) {
             break;
         }
-        if (str_contains($tokens[$index]['text'], 'Project: PHP Gallery')
-            && (str_contains($tokens[$index]['text'], 'File:') || str_contains($tokens[$index]['text'], 'Repository:'))) {
+        if (
+            str_contains($tokens[$index]['text'], 'Project: PHP Gallery')
+            && (
+                str_contains($tokens[$index]['text'], 'File:')
+                || str_contains($tokens[$index]['text'], 'Repository:')
+            )
+        ) {
             break;
         }
         $comments[] = $tokens[$index]['text'];
@@ -99,17 +147,48 @@ function policy_site_documentation(array $tokens, int $start, array $pairs): str
  * @param bool $php Whether PHP rather than JavaScript syntax applies.
  * @return int Inclusive expression end, excluding separators.
  */
-function policy_expression_end(array $tokens, int $start, array $pairs, bool $php): int
-{
+function policy_expression_end(
+    array $tokens,
+    int $start,
+    array $pairs,
+    bool $php,
+): int {
     for ($index = $start; $index < count($tokens); $index++) {
-        if (!$php && $tokens[$index]['id'] === 0 && in_array($tokens[$index]['text'], ['(', '[', '{'], true) && !isset($pairs[$index])) {
-            throw new \RuntimeException('Unbalanced JavaScript policy initializer.');
+        if (
+            !$php
+            && $tokens[$index]['id'] === 0
+            && in_array($tokens[$index]['text'], ['(', '[', '{'], true)
+            && !isset($pairs[$index])
+        ) {
+            throw new \RuntimeException(
+                'Unbalanced JavaScript policy initializer.',
+            );
         }
-        if (in_array($tokens[$index]['text'], [';', ',', ')', ']', '}'], true)) {
+        if (in_array(
+            $tokens[$index]['text'],
+            [';', ',', ')', ']', '}'],
+            true,
+        )) {
             return $index - 1;
         }
-        if (!$php && $index > $start && $tokens[$index]['line'] > $tokens[$index - 1]['line']
-            && in_array($tokens[$index]['text'], ['const', 'let', 'var', 'export', 'import', 'function', 'return'], true)) {
+        if (
+            !$php
+            && $index > $start
+            && $tokens[$index]['line'] > $tokens[$index - 1]['line']
+            && in_array(
+                $tokens[$index]['text'],
+                [
+                    'const',
+                    'let',
+                    'var',
+                    'export',
+                    'import',
+                    'function',
+                    'return',
+                ],
+                true,
+            )
+        ) {
             return $index - 1;
         }
         if (isset($pairs[$index]) && $pairs[$index] > $index) {
@@ -130,7 +209,11 @@ function policy_numeric_expression(array $tokens): bool
     foreach ($tokens as $token) {
         if (in_array($token['id'], [T_LNUMBER, T_DNUMBER], true)) {
             $number = true;
-        } elseif (!in_array($token['text'], ['+', '-', '*', '/', '%', '**', '<<', '>>', '(', ')'], true)) {
+        } elseif (!in_array(
+            $token['text'],
+            ['+', '-', '*', '/', '%', '**', '<<', '>>', '(', ')'],
+            true,
+        )) {
             return false;
         }
     }
@@ -145,14 +228,21 @@ function policy_numeric_expression(array $tokens): bool
  * @param bool $php Whether PHP namespaces apply.
  * @return string Namespace/containing declaration identity without source values.
  */
-function policy_site_owner(array $original, int $index, array $declarations, bool $php): string
-{
+function policy_site_owner(
+    array $original,
+    int $index,
+    array $declarations,
+    bool $php,
+): string {
     $owner = '';
     if ($php) {
         for ($cursor = 0; $cursor < $index; $cursor++) {
             if ($original[$cursor]['id'] === T_NAMESPACE) {
                 $owner = '';
-                while (++$cursor < $index && !in_array($original[$cursor]['text'], [';', '{'], true)) {
+                while (
+                    ++$cursor < $index
+                    && !in_array($original[$cursor]['text'], [';', '{'], true)
+                ) {
                     $owner .= $original[$cursor]['text'];
                 }
             }
@@ -161,8 +251,12 @@ function policy_site_owner(array $original, int $index, array $declarations, boo
     $nearest = -1;
     foreach ($declarations as $declaration) {
         $record = $declaration['record'];
-        if ($record['start_token'] < $index && $record['end_token'] >= $index
-            && $record['start_token'] > $nearest && $record['kind'] !== 'property') {
+        if (
+            $record['start_token'] < $index
+            && $record['end_token'] >= $index
+            && $record['start_token'] > $nearest
+            && $record['kind'] !== 'property'
+        ) {
             $owner = $declaration['identity'];
             $nearest = $record['start_token'];
         }
@@ -200,24 +294,61 @@ function policy_site_snapshots(string $source, string $path): array
     $review = [];
     foreach ($tokens as $index => $token) {
         $previous = $tokens[$index - 1]['text'] ?? '';
-        $keyword = ($php && $token['id'] === T_CONST && $previous !== 'use')
-            || (!$php && $token['id'] === T_STRING && in_array($token['text'], ['const', 'let', 'var'], true));
+        $keyword =
+            ($php && $token['id'] === T_CONST && $previous !== 'use')
+            || (
+                !$php
+                && $token['id'] === T_STRING
+                && in_array($token['text'], ['const', 'let', 'var'], true)
+            );
         if ($keyword) {
             $flavor = $token['text'];
-            $prefixStart = declaration_start($original, $token['source_index'], $originalPairs);
-            for ($prefix = $prefixStart; $prefix < $token['source_index']; $prefix++) {
-                if (!in_array($original[$prefix]['id'], [T_COMMENT, T_DOC_COMMENT], true)) {
+            $prefixStart = declaration_start(
+                $original,
+                $token['source_index'],
+                $originalPairs,
+            );
+            for (
+                $prefix = $prefixStart;
+                $prefix < $token['source_index'];
+                $prefix++
+            ) {
+                if (!in_array(
+                    $original[$prefix]['id'],
+                    [T_COMMENT, T_DOC_COMMENT],
+                    true,
+                )) {
                     $flavor .= ':' . $original[$prefix]['text'];
                 }
             }
             $nameIndex = $index + 1;
-            while (($tokens[$nameIndex]['id'] ?? 0) === T_STRING && ($tokens[$nameIndex + 1]['text'] ?? '') === '=') {
-                $end = policy_expression_end($tokens, $nameIndex + 2, $pairs, $php);
-                if (preg_match('/^[A-Z_][A-Z0-9_]*$/D', $tokens[$nameIndex]['text']) === 1) {
+            while (
+                ($tokens[$nameIndex]['id'] ?? 0) === T_STRING
+                && ($tokens[$nameIndex + 1]['text'] ?? '') === '='
+            ) {
+                $end = policy_expression_end(
+                    $tokens,
+                    $nameIndex + 2,
+                    $pairs,
+                    $php,
+                );
+                if (
+                    preg_match(
+                        '/^[A-Z_][A-Z0-9_]*$/D',
+                        $tokens[$nameIndex]['text'],
+                    ) === 1
+                ) {
                     $definitions[$nameIndex] = true;
-                    $sites[] = ['kind' => 'definition', 'name' => $tokens[$nameIndex]['text'], 'start' => $nameIndex,
-                        'end' => $end, 'doc_start' => $nameIndex === $index + 1 ? $index : $nameIndex,
-                        'flavor' => $flavor];
+                    $sites[] = [
+                        'kind' => 'definition',
+                        'name' => $tokens[$nameIndex]['text'],
+                        'start' => $nameIndex,
+                        'end' => $end,
+                        'doc_start' => $nameIndex === ($index + 1)
+                            ? $index
+                            : $nameIndex,
+                        'flavor' => $flavor,
+                    ];
                 }
                 if (($tokens[$end + 1]['text'] ?? '') !== ',') {
                     break;
@@ -225,91 +356,221 @@ function policy_site_snapshots(string $source, string $path): array
                 $nameIndex = $end + 2;
             }
         }
-        if ($php && in_array($token['id'], [T_STRING, T_NAME_FULLY_QUALIFIED], true)
+        if (
+            $php
+            && in_array($token['id'], [T_STRING, T_NAME_FULLY_QUALIFIED], true)
             && strtolower(ltrim($token['text'], '\\')) === 'define'
             && ($tokens[$index + 1]['text'] ?? '') === '('
-            && !in_array($previous, ['->', '?->', '::', 'function'], true)) {
+            && !in_array($previous, ['->', '?->', '::', 'function'], true)
+        ) {
             $segments = parameter_segments($tokens, $index + 1, $pairs);
             $literal = $segments[0] ?? [];
-            $name = count($literal) === 1 && $literal[0]['id'] === T_CONSTANT_ENCAPSED_STRING
-                ? trim($literal[0]['text'], "'" . chr(34)) : '';
+            $name =
+                count($literal) === 1
+                && $literal[0]['id'] === T_CONSTANT_ENCAPSED_STRING
+                    ? trim($literal[0]['text'], "'" . chr(34))
+                    : '';
             if (preg_match('/^[A-Z_][A-Z0-9_]*$/D', $name) === 1) {
-                $sites[] = ['kind' => 'definition', 'name' => $name, 'start' => $index,
-                    'end' => $pairs[$index + 1], 'doc_start' => $index, 'flavor' => 'define'];
+                $sites[] = [
+                    'kind' => 'definition',
+                    'name' => $name,
+                    'start' => $index,
+                    'end' => $pairs[$index + 1],
+                    'doc_start' => $index,
+                    'flavor' => 'define',
+                ];
             } else {
-                $review['dynamic_or_qualified_define'] = ($review['dynamic_or_qualified_define'] ?? 0) + 1;
+                $review['dynamic_or_qualified_define'] =
+                    ($review['dynamic_or_qualified_define'] ?? 0) + 1;
             }
         }
     }
     foreach ($tokens as $index => $token) {
-        if (in_array($token['id'], [T_VARIABLE, T_STRING], true) && policy_name($token['text'])
-            && ($tokens[$index + 1]['text'] ?? '') === '=' && !isset($definitions[$index])) {
+        if (
+            in_array($token['id'], [T_VARIABLE, T_STRING], true)
+            && policy_name($token['text'])
+            && ($tokens[$index + 1]['text'] ?? '') === '='
+            && !isset($definitions[$index])
+        ) {
             $end = policy_expression_end($tokens, $index + 2, $pairs, $php);
-            $expression = array_slice($tokens, $index + 2, max(0, $end - $index - 1));
+            $expression = array_slice(
+                $tokens,
+                $index + 2,
+                max(0, $end - $index - 1),
+            );
             $single = count($expression) === 1 ? $expression[0]['text'] : '';
-            if (policy_numeric_expression($expression) && !in_array($single, ['0', '1', '0.0', '1.0'], true)) {
+            if (
+                policy_numeric_expression($expression)
+                && !in_array($single, ['0', '1', '0.0', '1.0'], true)
+            ) {
                 $start = $index;
-                while ($start >= 2 && in_array($tokens[$start - 1]['text'], ['.', '->', '::'], true)
-                    && in_array($tokens[$start - 2]['id'], [T_STRING, T_VARIABLE], true)) {
+                while (
+                    $start >= 2
+                    && in_array(
+                        $tokens[$start - 1]['text'],
+                        ['.', '->', '::'],
+                        true,
+                    )
+                    && in_array(
+                        $tokens[$start - 2]['id'],
+                        [T_STRING, T_VARIABLE],
+                        true,
+                    )
+                ) {
                     $start -= 2;
                 }
-                $docStart = !$php && in_array($tokens[$start - 1]['text'] ?? '', ['const', 'let', 'var'], true) ? $start - 1 : $start;
-                $sites[] = ['kind' => 'assignment', 'name' => $token['text'], 'start' => $start,
-                    'end' => $end, 'doc_start' => $docStart, 'flavor' => 'assignment'];
+                $docStart = !$php
+                && in_array(
+                    $tokens[$start - 1]['text'] ?? '',
+                    ['const', 'let', 'var'],
+                    true,
+                )
+                    ? $start - 1
+                    : $start;
+                $sites[] = [
+                    'kind' => 'assignment',
+                    'name' => $token['text'],
+                    'start' => $start,
+                    'end' => $end,
+                    'doc_start' => $docStart,
+                    'flavor' => 'assignment',
+                ];
             }
         }
         // Configurable maps and object properties are disclosed, not digit-scanned as violations.
-        if (in_array($token['id'], [T_CONSTANT_ENCAPSED_STRING, T_STRING], true)
+        if (
+            in_array($token['id'], [T_CONSTANT_ENCAPSED_STRING, T_STRING], true)
             && policy_name(trim($token['text'], "'" . chr(34)))
             && in_array($tokens[$index + 1]['text'] ?? '', ['=>', ':'], true)
-            && in_array($tokens[$index + 2]['id'] ?? 0, [T_LNUMBER, T_DNUMBER], true)) {
-            $review['numeric_policy_map_entry'] = ($review['numeric_policy_map_entry'] ?? 0) + 1;
+            && in_array(
+                $tokens[$index + 2]['id'] ?? 0,
+                [T_LNUMBER, T_DNUMBER],
+                true,
+            )
+        ) {
+            $review['numeric_policy_map_entry'] =
+                ($review['numeric_policy_map_entry'] ?? 0) + 1;
         }
-        if (!in_array($token['id'], [T_STRING, T_NAME_FULLY_QUALIFIED], true)
-            || ($tokens[$index + 1]['text'] ?? '') !== '(') {
+        if (
+            !in_array($token['id'], [T_STRING, T_NAME_FULLY_QUALIFIED], true)
+            || ($tokens[$index + 1]['text'] ?? '') !== '('
+        ) {
             continue;
         }
         $name = strtolower(ltrim($token['text'], '\\'));
-        $parameter = $php ? (in_array($name, ['sleep', 'usleep', 'set_time_limit'], true) ? 0 : null)
+        $parameter = $php
+            ? (
+                in_array($name, ['sleep', 'usleep', 'set_time_limit'], true)
+                    ? 0
+                    : null
+            )
             : (in_array($name, ['settimeout', 'setinterval'], true) ? 1 : null);
         $previous = $tokens[$index - 1]['text'] ?? '';
-        if ($parameter === null || in_array($previous, ['function', '->', '?->', '::'], true)
-            || (!$php && $previous === '.' && (!in_array($tokens[$index - 2]['text'] ?? '', ['window', 'globalThis', 'self'], true)
-                || in_array($tokens[$index - 3]['text'] ?? '', ['.', '?.'], true)))) {
+        if (
+            $parameter === null
+            || in_array($previous, ['function', '->', '?->', '::'], true)
+            || (
+                !$php
+                && $previous === '.'
+                && (
+                    !in_array(
+                        $tokens[$index - 2]['text'] ?? '',
+                        ['window', 'globalThis', 'self'],
+                        true,
+                    )
+                    || in_array(
+                        $tokens[$index - 3]['text'] ?? '',
+                        ['.', '?.'],
+                        true,
+                    )
+                )
+            )
+        ) {
             continue;
         }
         if (!isset($pairs[$index + 1])) {
-            throw new \RuntimeException('Unbalanced runtime timer policy call.');
+            throw new \RuntimeException(
+                'Unbalanced runtime timer policy call.',
+            );
         }
         $segments = parameter_segments($tokens, $index + 1, $pairs);
         if (policy_numeric_expression($segments[$parameter] ?? [])) {
             $start = !$php && $previous === '.' ? $index - 2 : $index;
             $docStart = $start;
-            if (($tokens[$start - 1]['text'] ?? '') === '='
-                && in_array($tokens[$start - 2]['id'] ?? 0, [T_STRING, T_VARIABLE], true)) {
+            if (
+                ($tokens[$start - 1]['text'] ?? '') === '='
+                && in_array(
+                    $tokens[$start - 2]['id'] ?? 0,
+                    [T_STRING, T_VARIABLE],
+                    true,
+                )
+            ) {
                 $docStart = $start - 2;
-                if (!$php && in_array($tokens[$docStart - 1]['text'] ?? '', ['const', 'let', 'var'], true)) {
+                if (
+                    !$php
+                    && in_array(
+                        $tokens[$docStart - 1]['text'] ?? '',
+                        ['const', 'let', 'var'],
+                        true,
+                    )
+                ) {
                     $docStart--;
                 }
             }
-            $sites[] = ['kind' => 'timer', 'name' => $name, 'start' => $start,
-                'end' => $pairs[$index + 1], 'doc_start' => $docStart, 'flavor' => 'timer'];
+            $sites[] = [
+                'kind' => 'timer',
+                'name' => $name,
+                'start' => $start,
+                'end' => $pairs[$index + 1],
+                'doc_start' => $docStart,
+                'flavor' => 'timer',
+            ];
         }
     }
     $snapshots = [];
     foreach ($sites as $site) {
         $originalIndex = $tokens[$site['start']]['source_index'];
-        $owner = policy_site_owner($original, $originalIndex, $declarations, $php);
-        $identity = ($php ? 'php:' : 'js:') . $owner . '/' . $site['kind'] . ':' . $site['name'];
-        $doc = policy_site_documentation($original, $tokens[$site['doc_start']]['source_index'], $originalPairs);
+        $owner = policy_site_owner(
+            $original,
+            $originalIndex,
+            $declarations,
+            $php,
+        );
+        $identity =
+            ($php ? 'php:' : 'js:')
+            . $owner
+            . '/'
+            . $site['kind']
+            . ':'
+            . $site['name'];
+        $doc = policy_site_documentation(
+            $original,
+            $tokens[$site['doc_start']]['source_index'],
+            $originalPairs,
+        );
         $executable = [$site['flavor']];
-        foreach (array_slice($tokens, $site['start'], $site['end'] - $site['start'] + 1) as $part) {
+        foreach (array_slice(
+            $tokens,
+            $site['start'],
+            $site['end'] - $site['start'] + 1,
+        ) as $part) {
             $executable[] = [$part['id'], $part['text']];
         }
-        $snapshots[] = ['path' => $path, 'identity' => $identity,
-            'fingerprint' => hash('sha256', json_encode($executable, JSON_THROW_ON_ERROR)), 'uncertain' => false,
-            'record' => ['kind' => $site['kind'], 'name' => $site['name'], 'line' => $tokens[$site['start']]['line'],
-                'missing' => policy_missing_explanation($doc)]];
+        $snapshots[] = [
+            'path' => $path,
+            'identity' => $identity,
+            'fingerprint' => hash('sha256', json_encode(
+                $executable,
+                JSON_THROW_ON_ERROR,
+            )),
+            'uncertain' => false,
+            'record' => [
+                'kind' => $site['kind'],
+                'name' => $site['name'],
+                'line' => $tokens[$site['start']]['line'],
+                'missing' => policy_missing_explanation($doc),
+            ],
+        ];
     }
     return ['snapshots' => $snapshots, 'review' => $review];
 }

@@ -228,15 +228,26 @@ namespace Gallery\Tests\AdminSetupWizardModel {
      *
      * @return string Successful operation value.
      */
-    $successfulOperation = static fn (): string => 'done';
+    $successfulOperation = static fn(): string => 'done';
     $result = admin_setup_wizard_model_transaction(
         ['zeta', 'alpha', 'zeta', ''],
-        $successfulOperation
+        $successfulOperation,
     );
     assert_true($result === 'done', 'Successful transaction lost its result.');
-    assert_true($pdo->beginCalls === 1 && $pdo->commitCalls === 1 && $pdo->rollbackCalls === 0, 'Successful transaction lifecycle is incorrect.');
-    assert_true($pdo->statement->executed === ['alpha', 'zeta'], 'Lock keys were not unique and sorted.');
-    assert_true(str_contains($pdo->preparedSql, 'FOR UPDATE'), 'Model did not issue a row lock.');
+    assert_true(
+        $pdo->beginCalls === 1
+            && $pdo->commitCalls === 1
+            && $pdo->rollbackCalls === 0,
+        'Successful transaction lifecycle is incorrect.',
+    );
+    assert_true(
+        $pdo->statement->executed === ['alpha', 'zeta'],
+        'Lock keys were not unique and sorted.',
+    );
+    assert_true(
+        str_contains($pdo->preparedSql, 'FOR UPDATE'),
+        'Model did not issue a row lock.',
+    );
 
     $pdo = new FakePdo();
     use_pdo($pdo);
@@ -244,14 +255,39 @@ namespace Gallery\Tests\AdminSetupWizardModel {
         ['zeta', 'alpha'],
         $successfulOperation,
         null,
-        ['telemetry_public_usage_enabled', 'telemetry_enabled', 'telemetry_enabled']
+        [
+            'telemetry_public_usage_enabled',
+            'telemetry_enabled',
+            'telemetry_enabled',
+        ],
     );
-    assert_true($result === 'done', 'Mixed settings transaction lost its result.');
-    assert_true(count($pdo->preparedSqlLog) === 2, 'Mixed settings transaction did not lock both storage domains.');
-    assert_true(str_contains($pdo->preparedSqlLog[0], 'FROM app_settings'), 'First lock did not target app_settings.');
-    assert_true(str_contains($pdo->preparedSqlLog[1], 'FROM telemetry_settings'), 'Second lock did not target telemetry_settings.');
-    assert_true(($pdo->statements[0]->executed ?? []) === ['alpha', 'zeta'], 'App settings lock ordering changed.');
-    assert_true(($pdo->statements[1]->executed ?? []) === ['telemetry_enabled', 'telemetry_public_usage_enabled'], 'Telemetry settings lock ordering is not deterministic.');
+    assert_true(
+        $result === 'done',
+        'Mixed settings transaction lost its result.',
+    );
+    assert_true(
+        count($pdo->preparedSqlLog) === 2,
+        'Mixed settings transaction did not lock both storage domains.',
+    );
+    assert_true(
+        str_contains($pdo->preparedSqlLog[0], 'FROM app_settings'),
+        'First lock did not target app_settings.',
+    );
+    assert_true(
+        str_contains($pdo->preparedSqlLog[1], 'FROM telemetry_settings'),
+        'Second lock did not target telemetry_settings.',
+    );
+    assert_true(
+        ($pdo->statements[0]->executed ?? []) === ['alpha', 'zeta'],
+        'App settings lock ordering changed.',
+    );
+    assert_true(
+        ($pdo->statements[1]->executed ?? []) === [
+            'telemetry_enabled',
+            'telemetry_public_usage_enabled',
+        ],
+        'Telemetry settings lock ordering is not deterministic.',
+    );
 
     $pdo = new FakePdo();
     $pdo->beginResult = false;
@@ -275,12 +311,22 @@ namespace Gallery\Tests\AdminSetupWizardModel {
         $compensationCalled = true;
     };
     try {
-        admin_setup_wizard_model_transaction([], $beginOperation, $beginCompensate);
+        admin_setup_wizard_model_transaction(
+            [],
+            $beginOperation,
+            $beginCompensate,
+        );
         throw new RuntimeException('Failed begin was accepted.');
     } catch (RuntimeException $exception) {
-        assert_true(str_contains($exception->getMessage(), 'could not start'), 'Unexpected begin failure.');
+        assert_true(
+            str_contains($exception->getMessage(), 'could not start'),
+            'Unexpected begin failure.',
+        );
     }
-    assert_true(!$operationCalled && !$compensationCalled, 'Failed begin executed work or compensation.');
+    assert_true(
+        !$operationCalled && !$compensationCalled,
+        'Failed begin executed work or compensation.',
+    );
 
     $pdo = new FakePdo();
     use_pdo($pdo);
@@ -302,12 +348,22 @@ namespace Gallery\Tests\AdminSetupWizardModel {
         $compensationCalled = true;
     };
     try {
-        admin_setup_wizard_model_transaction([], $failingOperation, $operationCompensate);
+        admin_setup_wizard_model_transaction(
+            [],
+            $failingOperation,
+            $operationCompensate,
+        );
         throw new RuntimeException('Operation failure was accepted.');
     } catch (RuntimeException $exception) {
-        assert_true($exception->getMessage() === 'operation failed', 'Operation failure identity was not retained.');
+        assert_true(
+            $exception->getMessage() === 'operation failed',
+            'Operation failure identity was not retained.',
+        );
     }
-    assert_true($pdo->rollbackCalls === 1 && $compensationCalled, 'Operation failure did not roll back and compensate.');
+    assert_true(
+        $pdo->rollbackCalls === 1 && $compensationCalled,
+        'Operation failure did not roll back and compensate.',
+    );
 
     $pdo = new FakePdo();
     $pdo->commitResult = false;
@@ -327,18 +383,31 @@ namespace Gallery\Tests\AdminSetupWizardModel {
      *
      * @return void
      */
-    $commitCompensate = static function () use (&$configChanged, &$restored): void {
+    $commitCompensate = static function () use (
+        &$configChanged,
+        &$restored,
+    ): void {
         if ($configChanged) {
             $restored = true;
         }
     };
     try {
-        admin_setup_wizard_model_transaction([], $commitOperation, $commitCompensate);
+        admin_setup_wizard_model_transaction(
+            [],
+            $commitOperation,
+            $commitCompensate,
+        );
         throw new RuntimeException('Failed commit was accepted.');
     } catch (RuntimeException $exception) {
-        assert_true(str_contains($exception->getMessage(), 'could not commit'), 'Unexpected commit failure.');
+        assert_true(
+            str_contains($exception->getMessage(), 'could not commit'),
+            'Unexpected commit failure.',
+        );
     }
-    assert_true($pdo->rollbackCalls === 1 && $restored, 'Failed commit did not roll back and compensate changed config.');
+    assert_true(
+        $pdo->rollbackCalls === 1 && $restored,
+        'Failed commit did not roll back and compensate changed config.',
+    );
 
     $pdo = new FakePdo();
     $pdo->rollbackResult = false;
@@ -361,12 +430,22 @@ namespace Gallery\Tests\AdminSetupWizardModel {
         $compensationCalled = true;
     };
     try {
-        admin_setup_wizard_model_transaction([], $rollbackOperation, $rollbackCompensate);
+        admin_setup_wizard_model_transaction(
+            [],
+            $rollbackOperation,
+            $rollbackCompensate,
+        );
         throw new RuntimeException('Failed rollback was accepted.');
     } catch (RuntimeException $exception) {
-        assert_true(str_contains($exception->getMessage(), 'could not roll back'), 'Rollback failure was not bounded.');
+        assert_true(
+            str_contains($exception->getMessage(), 'could not roll back'),
+            'Rollback failure was not bounded.',
+        );
     }
-    assert_true($compensationCalled, 'Rollback failure skipped file compensation.');
+    assert_true(
+        $compensationCalled,
+        'Rollback failure skipped file compensation.',
+    );
 
     echo "admin_setup_wizard_model_test: PASS\n";
 }

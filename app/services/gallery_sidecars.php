@@ -58,7 +58,7 @@ require_once __DIR__ . '/gallery_creation_safety.php';
 require_once __DIR__ . '/gallery_edit_concurrency.php';
 
 /**
-Gallery discovery and sidecar metadata helpers.
+ * Gallery discovery and sidecar metadata helpers.
  *
  * These functions keep the filesystem-first model intact. The database remains
  * an index, while gallery.json sidecars provide optional metadata next to the
@@ -69,20 +69,26 @@ Gallery discovery and sidecar metadata helpers.
  * Write gallery metadata into a sidecar before or after a DB row exists.
  *
  * @param string $folderPath Folder path filesystem path.
- * @param array $data Input data.
+ * @param array<string,string|int|float|bool|null|list<string>|array<string,string>> $data Sidecar metadata fields to encode as JSON.
  * @return bool True when the condition matches.
  */
 function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
 {
     // $path stores an intermediate value used by the surrounding gallery workflow.
-    $path = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
+    $path =
+        gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
     // $directory stores the destination folder where gallery.json should be written.
     $directory = dirname($path);
     if (!is_dir($directory)) {
         return false;
     }
 
-    return @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
+    return (
+        @file_put_contents($path, json_encode(
+            $data,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        )) !== false
+    );
 }
 
 /**
@@ -92,7 +98,7 @@ function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
  * a gallery.json sidecar. Descendant images allow empty parent folders to become
  * top-level galleries that contain subgalleries.
  *
- * @return array Structured result data for the caller.
+ * @return list<array{folder_path:string,title:mixed,description:mixed,visibility:string,access_mode:mixed,access_listing:mixed,banner_image_path:mixed,logo_image_path:mixed,separator_image_path:mixed,sort_order:int}> Candidate gallery metadata derived from folders and sidecars.
  */
 function discover_gallery_candidates(): array
 {
@@ -109,21 +115,35 @@ function discover_gallery_candidates(): array
     // Variable $candidates stores this steps working value.
     $candidates = [];
     // Variable $ignoreNames stores this steps working value.
-    $ignoreNames = ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews', '_php-gallery-internal'];
+    $ignoreNames = [
+        'cache',
+        'thumbs',
+        'thumbnail',
+        'thumbnails',
+        'preview',
+        'previews',
+        '_php-gallery-internal',
+    ];
     // Variable $iterator stores this steps working value.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveCallbackFilterIterator(
-            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            new RecursiveDirectoryIterator(
+                $root,
+                FilesystemIterator::SKIP_DOTS,
+            ),
             function (SplFileInfo $file) use ($ignoreNames): bool {
                 if (!$file->isDir()) {
                     return true;
                 }
                 // Variable $name stores this steps working value.
                 $name = $file->getFilename();
-                return !str_starts_with($name, '.') && !in_array(strtolower($name), $ignoreNames, true);
-            }
+                return (
+                    !str_starts_with($name, '.')
+                        && !in_array(strtolower($name), $ignoreNames, true)
+                );
+            },
         ),
-        RecursiveIteratorIterator::SELF_FIRST
+        RecursiveIteratorIterator::SELF_FIRST,
     );
 
     foreach ($iterator as $item) {
@@ -131,14 +151,20 @@ function discover_gallery_candidates(): array
             continue;
         }
         // Variable $relative stores this steps working value.
-        $relative = normalize_relative_path(substr($item->getPathname(), strlen($root)));
+        $relative = normalize_relative_path(substr(
+            $item->getPathname(),
+            strlen($root),
+        ));
         if ($relative === '' || isset($known[$relative])) {
             continue;
         }
         // Variable $hasImages stores this steps working value.
         $hasImages = false;
         foreach (new DirectoryIterator($item->getPathname()) as $child) {
-            if ($child->isFile() && is_supported_image_path($child->getFilename())) {
+            if (
+                $child->isFile()
+                && is_supported_image_path($child->getFilename())
+            ) {
                 // Variable $hasImages stores this steps working value.
                 $hasImages = true;
                 break;
@@ -148,9 +174,17 @@ function discover_gallery_candidates(): array
         $hasDescendantImages = false;
         if (!$hasImages) {
             // Variable $descendants stores this steps working value.
-            $descendants = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($item->getPathname(), FilesystemIterator::SKIP_DOTS));
+            $descendants = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator(
+                    $item->getPathname(),
+                    FilesystemIterator::SKIP_DOTS,
+                ),
+            );
             foreach ($descendants as $descendant) {
-                if ($descendant->isFile() && is_supported_image_path($descendant->getFilename())) {
+                if (
+                    $descendant->isFile()
+                    && is_supported_image_path($descendant->getFilename())
+                ) {
                     // Variable $hasDescendantImages stores this steps working value.
                     $hasDescendantImages = true;
                     break;
@@ -166,12 +200,15 @@ function discover_gallery_candidates(): array
                 'folder_path' => $relative,
                 'title' => $metadata['title'] ?? basename($relative),
                 'description' => $metadata['description'] ?? '',
-                'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
+                'visibility' => gallery_visibility_storage_value(
+                    (string) ($metadata['visibility'] ?? 'unpublished'),
+                ),
                 'access_mode' => $metadata['access_mode'] ?? 'normal',
                 'access_listing' => $metadata['access_listing'] ?? 'listed',
                 'banner_image_path' => $metadata['banner_image_path'] ?? null,
                 'logo_image_path' => $metadata['logo_image_path'] ?? null,
-                'separator_image_path' => $metadata['separator_image_path'] ?? null,
+                'separator_image_path' =>
+                    $metadata['separator_image_path'] ?? null,
                 'sort_order' => (int) ($metadata['sort_order'] ?? 0),
             ];
         }
@@ -179,7 +216,6 @@ function discover_gallery_candidates(): array
 
     return $candidates;
 }
-
 
 /**
  * Normalize tag values inside every gallery.json sidecar under the configured gallery root.
@@ -207,7 +243,10 @@ function normalize_gallery_sidecar_tags_recursive(): void
  */
 function normalize_gallery_sidecar_tags_recursive_owned(): void
 {
-    if (!function_exists('Gallery\\Services\\galleries_root') || !function_exists('normalize_tag_name')) {
+    if (
+        !function_exists('Gallery\\Services\\galleries_root')
+        || !function_exists('normalize_tag_name')
+    ) {
         return;
     }
     // Variable $root stores this steps working value.
@@ -219,7 +258,10 @@ function normalize_gallery_sidecar_tags_recursive_owned(): void
         // Variable $iterator stores this steps working value.
         $iterator = new RecursiveIteratorIterator(
             new RecursiveCallbackFilterIterator(
-                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                new RecursiveDirectoryIterator(
+                    $root,
+                    FilesystemIterator::SKIP_DOTS,
+                ),
                 /**
                  * Traverse source galleries while excluding hidden/internal and derivative directories.
                  * @param SplFileInfo $file Candidate file or directory below the gallery root.
@@ -232,9 +274,24 @@ function normalize_gallery_sidecar_tags_recursive_owned(): void
                     }
                     // Variable $name stores this steps working value.
                     $name = strtolower($file->getFilename());
-                    return !str_starts_with($name, '.') && !in_array($name, ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews', '_php-gallery-internal'], true);
-                }
-            )
+                    return (
+                        !str_starts_with($name, '.')
+                            && !in_array(
+                                $name,
+                                [
+                                    'cache',
+                                    'thumbs',
+                                    'thumbnail',
+                                    'thumbnails',
+                                    'preview',
+                                    'previews',
+                                    '_php-gallery-internal',
+                                ],
+                                true,
+                            )
+                    );
+                },
+            ),
         );
         foreach ($iterator as $item) {
             if (!$item->isFile() || $item->getFilename() !== 'gallery.json') {
@@ -248,7 +305,9 @@ function normalize_gallery_sidecar_tags_recursive_owned(): void
                 continue;
             }
             // Variable $rawTags stores this steps working value.
-            $rawTags = is_array($data['tags']) ? $data['tags'] : (preg_split('/[,;\n]+/', (string) $data['tags']) ?: []);
+            $rawTags = is_array($data['tags'])
+                ? $data['tags']
+                : (preg_split('/[,;\n]+/', (string) $data['tags']) ?: []);
             // Variable $tags stores this steps working value.
             $tags = [];
             foreach ($rawTags as $tag) {
@@ -264,7 +323,12 @@ function normalize_gallery_sidecar_tags_recursive_owned(): void
                 continue;
             }
             $data['tags'] = $normalizedTags;
-            @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            @file_put_contents($path, json_encode(
+                $data,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES,
+            ));
         }
     } catch (Throwable) {
         return;
@@ -290,26 +354,36 @@ function read_gallery_sidecar(string $path): array
 /**
  * Return public SEO metadata for one gallery, combining gallery.json and DB values.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array{folder_path?:string,title?:string,description?:string,_content_localization?:array{title?:string,description?:string}} $gallery Gallery row fields used to resolve public metadata.
+ * @return array{title:string,description:string,tags:list<string>} Resolved public title, description, and normalized tags.
  */
 function public_gallery_metadata(array $gallery): array
 {
     // Variable $folderPath stores this steps working value.
-    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($gallery['folder_path'] ?? ''),
+    );
     // Variable $sidecar stores this steps working value.
     $sidecar = [];
     try {
         // $sidecar stores an intermediate value used by the surrounding gallery workflow.
-        $sidecar = read_gallery_sidecar(gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json');
+        $sidecar = read_gallery_sidecar(
+            gallery_abs_path($folderPath)
+                . DIRECTORY_SEPARATOR
+                . 'gallery.json',
+        );
     } catch (Throwable) {
         // $sidecar stores an intermediate value used by the surrounding gallery workflow.
         $sidecar = [];
     }
 
     // Variable $title stores this steps working value.
-    $localized = isset($gallery['_content_localization']) && is_array($gallery['_content_localization']);
-    $title = $localized ? trim((string) ($gallery['title'] ?? '')) : trim((string) ($sidecar['title'] ?? ''));
+    $localized =
+        isset($gallery['_content_localization'])
+        && is_array($gallery['_content_localization']);
+    $title = $localized
+        ? trim((string) ($gallery['title'] ?? ''))
+        : trim((string) ($sidecar['title'] ?? ''));
     if ($title === '') {
         // $title stores an intermediate value used by the surrounding gallery workflow.
         $title = trim((string) ($gallery['title'] ?? ''));
@@ -320,7 +394,9 @@ function public_gallery_metadata(array $gallery): array
     }
 
     // Variable $description stores this steps working value.
-    $description = $localized ? trim((string) ($gallery['description'] ?? '')) : trim((string) ($sidecar['description'] ?? ''));
+    $description = $localized
+        ? trim((string) ($gallery['description'] ?? ''))
+        : trim((string) ($sidecar['description'] ?? ''));
     if ($description === '') {
         // $description stores an intermediate value used by the surrounding gallery workflow.
         $description = trim((string) ($gallery['description'] ?? ''));
@@ -335,10 +411,14 @@ function public_gallery_metadata(array $gallery): array
     // $rawTags stores an intermediate value used by the surrounding gallery workflow.
     $rawTags = $sidecar['tags'] ?? '';
     // $tagValues stores an intermediate value used by the surrounding gallery workflow.
-    $tagValues = is_array($rawTags) ? $rawTags : (preg_split('/[,;\n]+/', (string) $rawTags) ?: []);
+    $tagValues = is_array($rawTags)
+        ? $rawTags
+        : (preg_split('/[,;\n]+/', (string) $rawTags) ?: []);
     foreach ($tagValues as $tag) {
         // $tag stores an intermediate value used by the surrounding gallery workflow.
-        $tag = function_exists('normalize_tag_name') ? normalize_tag_name((string) $tag) : strtolower(trim((string) $tag));
+        $tag = function_exists('normalize_tag_name')
+            ? normalize_tag_name((string) $tag)
+            : strtolower(trim((string) $tag));
         if ($tag !== '') {
             $tags[] = $tag;
         }
@@ -363,43 +443,64 @@ function write_gallery_sidecar(array $gallery): bool
 {
     // Variable $data stores this steps working value.
     $data = [
-        'description_layout_semantics_version' => GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
+        'description_layout_semantics_version' =>
+            GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
         'title' => $gallery['title'],
         'description' => $gallery['description'],
-        'tags' => implode(', ', array_column(tags_for_entity('gallery', (int) $gallery['id']), 'name')),
+        'tags' => implode(', ', array_column(
+            tags_for_entity('gallery', (int) $gallery['id']),
+            'name',
+        )),
         'visibility' => $gallery['visibility'],
         'sort_order' => (int) $gallery['sort_order'],
         'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($gallery['show_filenames'] ?? 0),
     ];
     if (content_localization_schema_ready('gallery')) {
-        $data['content_language'] = content_language_normalize($gallery['content_language'] ?? null);
-        $translationRows = content_translation_rows('gallery', [(int) $gallery['id']]);
+        $data['content_language'] = content_language_normalize(
+            $gallery['content_language'] ?? null,
+        );
+        $translationRows = content_translation_rows('gallery', [
+            (int) $gallery['id'],
+        ]);
         $data['translations'] = $translationRows[(int) $gallery['id']] ?? [];
     }
     if (gallery_date_schema_ready() && !empty($gallery['gallery_date'])) {
-        $data['gallery_date'] = gallery_date_storage_value($gallery['gallery_date']);
+        $data['gallery_date'] = gallery_date_storage_value(
+            $gallery['gallery_date'],
+        );
     }
-    if (gallery_date_range_schema_ready() && !empty($gallery['gallery_date_end'])) {
-        $data['gallery_date_end'] = gallery_date_storage_value($gallery['gallery_date_end']);
+    if (
+        gallery_date_range_schema_ready()
+        && !empty($gallery['gallery_date_end'])
+    ) {
+        $data['gallery_date_end'] = gallery_date_storage_value(
+            $gallery['gallery_date_end'],
+        );
     }
     if (gallery_description_layout_schema_ready()) {
         // $descriptionLayout stores a per-gallery card layout override, when this gallery has one.
-        $descriptionLayout = gallery_description_layout_storage_value($gallery['description_layout'] ?? null);
+        $descriptionLayout = gallery_description_layout_storage_value(
+            $gallery['description_layout'] ?? null,
+        );
         if ($descriptionLayout !== null) {
             $data['description_layout'] = $descriptionLayout;
         }
     }
     if (gallery_count_badge_schema_ready()) {
         // $countBadgeVisibility stores a per-gallery count badge override, when this gallery has one.
-        $countBadgeVisibility = gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null);
+        $countBadgeVisibility = gallery_count_badge_storage_value(
+            $gallery['count_badge_visibility'] ?? null,
+        );
         if ($countBadgeVisibility !== null) {
             $data['count_badge_visibility'] = $countBadgeVisibility;
         }
     }
     if (gallery_lightbox_browsing_mode_schema_ready()) {
         // $lightboxBrowsingMode stores a per-gallery lightbox mode override, when this gallery has one.
-        $lightboxBrowsingMode = gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null);
+        $lightboxBrowsingMode = gallery_lightbox_browsing_mode_storage_value(
+            $gallery['lightbox_browsing_mode'] ?? null,
+        );
         if ($lightboxBrowsingMode !== null) {
             $data['lightbox_browsing_mode'] = $lightboxBrowsingMode;
         }
@@ -411,16 +512,27 @@ function write_gallery_sidecar(array $gallery): bool
     if ($breadcrumbStyle !== BREADCRUMB_STYLE_INHERIT) {
         $data['breadcrumb_style'] = $breadcrumbStyle;
     }
-    if (gallery_grid_schema_ready() && gallery_grid_has_explicit_override($gallery)) {
+    if (
+        gallery_grid_schema_ready()
+        && gallery_grid_has_explicit_override($gallery)
+    ) {
         $data['grid_columns'] = (int) $gallery['grid_columns'];
         $data['grid_rows'] = (int) $gallery['grid_rows'];
-        $data['grid_use_for_subgalleries'] = (int) ($gallery['grid_use_for_subgalleries'] ?? 1);
+        $data['grid_use_for_subgalleries'] = (int) (
+            $gallery['grid_use_for_subgalleries'] ?? 1
+        );
     }
     if (thumbnail_bounds_schema_ready()) {
-        if (isset($gallery['thumbnail_min_size']) && $gallery['thumbnail_min_size'] !== null) {
+        if (
+            isset($gallery['thumbnail_min_size'])
+            && $gallery['thumbnail_min_size'] !== null
+        ) {
             $data['thumbnail_min_size'] = (int) $gallery['thumbnail_min_size'];
         }
-        if (isset($gallery['thumbnail_max_size']) && $gallery['thumbnail_max_size'] !== null) {
+        if (
+            isset($gallery['thumbnail_max_size'])
+            && $gallery['thumbnail_max_size'] !== null
+        ) {
             $data['thumbnail_max_size'] = (int) $gallery['thumbnail_max_size'];
         }
     }
@@ -432,29 +544,49 @@ function write_gallery_sidecar(array $gallery): bool
     if (!empty($gallery['cover_image_id'])) {
         // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id'], true);
-        if ($cover && (int) ($cover['gallery_id'] ?? 0) === (int) $gallery['id']
-            && !str_contains((string) ($cover['relative_path'] ?? ''), '/')) {
+        if (
+            $cover
+            && (int) ($cover['gallery_id'] ?? 0) === (int) $gallery['id']
+            && !str_contains((string) ($cover['relative_path'] ?? ''), '/')
+        ) {
             $data['cover'] = $cover['relative_path'];
         }
     }
-    if (array_key_exists('cover_image_ids', $gallery) && $gallery['cover_image_ids'] !== null) {
-        if (!gallery_cover_selection_schema_ready() || !gallery_cover_selection_storage_valid($gallery)) {
+    if (
+        array_key_exists('cover_image_ids', $gallery)
+        && $gallery['cover_image_ids'] !== null
+    ) {
+        if (
+            !gallery_cover_selection_schema_ready()
+            || !gallery_cover_selection_storage_valid($gallery)
+        ) {
             return false;
         }
         // Paths survive backups/imports where database image IDs change.
         $data['cover_images'] = [];
         foreach (gallery_cover_selection_ids($gallery) as $coverId) {
             $selectedCover = find_image($coverId, true);
-            if ($selectedCover && (int) ($selectedCover['gallery_id'] ?? 0) === (int) $gallery['id']
-                && !str_contains((string) ($selectedCover['relative_path'] ?? ''), '/')) {
-                $data['cover_images'][] = (string) $selectedCover['relative_path'];
+            if (
+                $selectedCover
+                && (int) ($selectedCover['gallery_id'] ?? 0)
+                    === (int) $gallery['id']
+                && !str_contains(
+                    (string) ($selectedCover['relative_path'] ?? ''),
+                    '/',
+                )
+            ) {
+                $data['cover_images'][] =
+                    (string) $selectedCover['relative_path'];
             }
         }
     }
     if (!empty($gallery['cover_image_path'])) {
         $data['cover_image_path'] = (string) $gallery['cover_image_path'];
     }
-    if (function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (
+        function_exists('Gallery\\Services\\gallery_branding_schema_ready')
+        && gallery_branding_schema_ready()
+    ) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
@@ -463,7 +595,10 @@ function write_gallery_sidecar(array $gallery): bool
             }
         }
     }
-    return write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
+    return write_gallery_sidecar_for_path(
+        (string) $gallery['folder_path'],
+        $data,
+    );
 }
 
 /**
@@ -491,7 +626,8 @@ function gallery_folder_candidate_metadata(string $folderPath): array
     // Variable $folderPath stores this steps working value.
     $folderPath = normalize_relative_path($folderPath);
     // Variable $jsonPath stores this steps working value.
-    $jsonPath = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
+    $jsonPath =
+        gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
     // Variable $metadata stores this steps working value.
     $metadata = read_gallery_sidecar($jsonPath);
 
@@ -499,25 +635,63 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'folder_path' => $folderPath,
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
-        'content_language' => content_language_normalize($metadata['content_language'] ?? null),
-        'translations' => is_array($metadata['translations'] ?? null) ? $metadata['translations'] : [],
-        'gallery_date' => gallery_date_schema_ready() ? gallery_date_sidecar_value($metadata['gallery_date'] ?? '') : null,
-        'gallery_date_end' => gallery_date_range_schema_ready() ? gallery_date_sidecar_range_values($metadata['gallery_date'] ?? '', $metadata['gallery_date_end'] ?? '')['end'] : null,
-        'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
+        'content_language' => content_language_normalize(
+            $metadata['content_language'] ?? null,
+        ),
+        'translations' => is_array($metadata['translations'] ?? null)
+            ? $metadata['translations']
+            : [],
+        'gallery_date' => gallery_date_schema_ready()
+            ? gallery_date_sidecar_value($metadata['gallery_date'] ?? '')
+            : null,
+        'gallery_date_end' => gallery_date_range_schema_ready()
+            ? gallery_date_sidecar_range_values(
+                $metadata['gallery_date'] ?? '',
+                $metadata['gallery_date_end'] ?? '',
+            )['end']
+            : null,
+        'visibility' => gallery_visibility_storage_value(
+            (string) ($metadata['visibility'] ?? 'unpublished'),
+        ),
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
-        'description_layout' => gallery_description_layout_storage_value($metadata['description_layout'] ?? null),
-        'count_badge_visibility' => gallery_count_badge_storage_value($metadata['count_badge_visibility'] ?? null),
-        'lightbox_browsing_mode' => gallery_lightbox_browsing_mode_storage_value($metadata['lightbox_browsing_mode'] ?? null),
+        'description_layout' => gallery_description_layout_storage_value(
+            $metadata['description_layout'] ?? null,
+        ),
+        'count_badge_visibility' => gallery_count_badge_storage_value(
+            $metadata['count_badge_visibility'] ?? null,
+        ),
+        'lightbox_browsing_mode' => gallery_lightbox_browsing_mode_storage_value(
+            $metadata['lightbox_browsing_mode'] ?? null,
+        ),
         'presentation_json' => is_array($metadata['presentation'] ?? null)
-            ? json_encode(gallery_presentation_normalize($metadata['presentation']),
-                JSON_THROW_ON_ERROR) : null,
-        'breadcrumb_style' => breadcrumb_style_normalize($metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true),
-        'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
-        'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
-        'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
-        'thumbnail_min_size' => isset($metadata['thumbnail_min_size']) ? (int) $metadata['thumbnail_min_size'] : null,
-        'thumbnail_max_size' => isset($metadata['thumbnail_max_size']) ? (int) $metadata['thumbnail_max_size'] : null,
+            ? json_encode(
+                gallery_presentation_normalize($metadata['presentation']),
+                JSON_THROW_ON_ERROR,
+            )
+            : null,
+        'breadcrumb_style' => breadcrumb_style_normalize(
+            $metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT,
+            true,
+        ),
+        'grid_columns' => isset($metadata['grid_columns'])
+            ? (int) $metadata['grid_columns']
+            : null,
+        'grid_rows' => isset($metadata['grid_rows'])
+            ? (int) $metadata['grid_rows']
+            : null,
+        'grid_use_for_subgalleries' => array_key_exists(
+            'grid_use_for_subgalleries',
+            $metadata,
+        )
+            ? (int) $metadata['grid_use_for_subgalleries']
+            : 1,
+        'thumbnail_min_size' => isset($metadata['thumbnail_min_size'])
+            ? (int) $metadata['thumbnail_min_size']
+            : null,
+        'thumbnail_max_size' => isset($metadata['thumbnail_max_size'])
+            ? (int) $metadata['thumbnail_max_size']
+            : null,
         'banner_image_path' => $metadata['banner_image_path'] ?? null,
         'logo_image_path' => $metadata['logo_image_path'] ?? null,
         'separator_image_path' => $metadata['separator_image_path'] ?? null,
@@ -573,35 +747,59 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     // Variable $candidate stores this steps working value.
     $candidate = gallery_folder_candidate_metadata($folderPath);
     if (($candidate['presentation_json'] ?? null) !== null) {
-        gallery_presentation_assert_writable('gallery_sidecar_import.presentation');
+        gallery_presentation_assert_writable(
+            'gallery_sidecar_import.presentation',
+        );
     }
     if ((int) ($candidate['voting_enabled'] ?? 0) === 1) {
         presentation_schema_assert_write_available(
             presentation_voting_schema_status(),
             'gallery_sidecar_import.voting_enabled',
-            'Image voting requires the current database migration before it can be enabled for an imported gallery.'
+            'Image voting requires the current database migration before it can be enabled for an imported gallery.',
         );
     }
     if (($candidate['lightbox_browsing_mode'] ?? null) !== null) {
         presentation_schema_assert_known(
             presentation_lightbox_override_schema_status(),
-            'gallery_sidecar_import.lightbox_override'
+            'gallery_sidecar_import.lightbox_override',
         );
     }
     // Variable $visibility stores this steps working value.
-    $visibility = gallery_visibility_storage_value((string) ($candidate['visibility'] ?? 'unpublished'));
+    $visibility = gallery_visibility_storage_value(
+        (string) ($candidate['visibility'] ?? 'unpublished'),
+    );
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = (int) ($candidate['voting_enabled'] ?? 0) === 1 ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
-    $showFilenames = gallery_filename_display_schema_ready() && (int) ($candidate['show_filenames'] ?? 0) === 1 ? 1 : 0;
+    $showFilenames = gallery_filename_display_schema_ready()
+    && (int) ($candidate['show_filenames'] ?? 0) === 1
+        ? 1
+        : 0;
     // $descriptionLayout stores a per-gallery card layout override read from gallery.json.
-    $descriptionLayout = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($candidate['description_layout'] ?? null) : null;
+    $descriptionLayout = gallery_description_layout_schema_ready()
+        ? gallery_description_layout_storage_value(
+            $candidate['description_layout'] ?? null,
+        )
+        : null;
     // $countBadgeVisibility stores a per-gallery count badge override read from gallery.json.
-    $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($candidate['count_badge_visibility'] ?? null) : null;
+    $countBadgeVisibility = gallery_count_badge_schema_ready()
+        ? gallery_count_badge_storage_value(
+            $candidate['count_badge_visibility'] ?? null,
+        )
+        : null;
     // $lightboxBrowsingMode stores a per-gallery lightbox mode override read from gallery.json.
-    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($candidate['lightbox_browsing_mode'] ?? null) : null;
+    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready()
+        ? gallery_lightbox_browsing_mode_storage_value(
+            $candidate['lightbox_browsing_mode'] ?? null,
+        )
+        : null;
     // $galleryDateRange stores the optional manual gallery date range read from gallery.json.
-    $galleryDateRange = gallery_date_schema_ready() ? gallery_date_sidecar_range_values($candidate['gallery_date'] ?? '', $candidate['gallery_date_end'] ?? '') : ['start' => null, 'end' => null];
+    $galleryDateRange = gallery_date_schema_ready()
+        ? gallery_date_sidecar_range_values(
+            $candidate['gallery_date'] ?? '',
+            $candidate['gallery_date_end'] ?? '',
+        )
+        : ['start' => null, 'end' => null];
     // $galleryDate stores the optional manual gallery date or range start read from gallery.json.
     $galleryDate = $galleryDateRange['start'];
     // $galleryDateEnd stores the optional manual gallery date range end read from gallery.json.
@@ -609,13 +807,28 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     // Access policy must not interpret partial/unknown schema as an unprotected gallery.
     gallery_access_assert_public_policy_available();
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
-    $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
+    $accessMode = gallery_access_schema_ready()
+    && ($candidate['access_mode'] ?? '') === 'password'
+        ? 'password'
+        : 'normal';
     // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
-    $candidateHasGrid = gallery_grid_schema_ready() && isset($candidate['grid_columns'], $candidate['grid_rows']) && $candidate['grid_columns'] !== null && $candidate['grid_rows'] !== null;
+    $candidateHasGrid =
+        gallery_grid_schema_ready()
+        && isset($candidate['grid_columns'], $candidate['grid_rows'])
+        && $candidate['grid_columns'] !== null
+        && $candidate['grid_rows'] !== null;
     // $candidateHasThumbnailBounds stores whether gallery.json defines responsive thumbnail size guardrails.
-    $candidateHasThumbnailBounds = thumbnail_bounds_schema_ready() && ($candidate['thumbnail_min_size'] !== null || $candidate['thumbnail_max_size'] !== null);
+    $candidateHasThumbnailBounds =
+        thumbnail_bounds_schema_ready()
+        && (
+            $candidate['thumbnail_min_size'] !== null
+            || $candidate['thumbnail_max_size'] !== null
+        );
     // $accessListing stores an intermediate value used by the surrounding gallery workflow.
-    $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
+    $accessListing = gallery_access_schema_ready()
+    && ($candidate['access_listing'] ?? '') === 'unlisted'
+        ? 'unlisted'
+        : 'listed';
     // Variable $parent stores this steps working value.
     $parent = find_parent_gallery_for_path($folderPath);
     // $fields stores the schema-aware persistence values for the new gallery row.
@@ -634,7 +847,9 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
         $fields['show_filenames'] = $showFilenames;
     }
     if (content_localization_schema_ready('gallery')) {
-        $fields['content_language'] = content_language_normalize($candidate['content_language'] ?? null);
+        $fields['content_language'] = content_language_normalize(
+            $candidate['content_language'] ?? null,
+        );
     }
     if (gallery_description_layout_schema_ready()) {
         $fields['description_layout'] = $descriptionLayout;
@@ -655,33 +870,65 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
         $fields['gallery_date_end'] = $galleryDateEnd;
     }
     if (gallery_grid_schema_ready()) {
-        $fields['grid_columns'] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_columns'], CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
-        $fields['grid_rows'] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
-        $fields['grid_use_for_subgalleries'] = !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
+        $fields['grid_columns'] = $candidateHasGrid
+            ? pagination_dimension_value(
+                $candidate['grid_columns'],
+                CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_MAX_COLUMNS,
+            )
+            : null;
+        $fields['grid_rows'] = $candidateHasGrid
+            ? pagination_dimension_value(
+                $candidate['grid_rows'],
+                CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_MAX_ROWS,
+            )
+            : null;
+        $fields['grid_use_for_subgalleries'] =
+            !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
     }
     if (thumbnail_bounds_schema_ready()) {
-        $fields['thumbnail_min_size'] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_min_size']) : null;
-        $fields['thumbnail_max_size'] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_max_size']) : null;
+        $fields['thumbnail_min_size'] = $candidateHasThumbnailBounds
+            ? thumbnail_bound_post_value($candidate['thumbnail_min_size'])
+            : null;
+        $fields['thumbnail_max_size'] = $candidateHasThumbnailBounds
+            ? thumbnail_bound_post_value($candidate['thumbnail_max_size'])
+            : null;
     }
     if (gallery_access_schema_ready()) {
         $fields['access_mode'] = $accessMode;
-        $fields['access_listing'] = $accessMode === 'password' ? $accessListing : 'listed';
+        $fields['access_listing'] = $accessMode === 'password'
+            ? $accessListing
+            : 'listed';
     }
-    if (function_exists('Gallery\Services\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (
+        function_exists('Gallery\Services\gallery_branding_schema_ready')
+        && gallery_branding_schema_ready()
+    ) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
-            $fields[$column] = !empty($candidate[$column]) ? normalize_relative_path((string) $candidate[$column]) : null;
+            $fields[$column] = !empty($candidate[$column])
+                ? normalize_relative_path((string) $candidate[$column])
+                : null;
         }
     }
     $fields['created_at'] = now_sql();
     $fields['updated_at'] = now_sql();
     $createdGalleryId = gallery_model_insert($fields);
     if ($candidate['breadcrumb_style'] !== BREADCRUMB_STYLE_INHERIT) {
-        gallery_breadcrumb_style_save($createdGalleryId, $candidate['breadcrumb_style']);
+        gallery_breadcrumb_style_save(
+            $createdGalleryId,
+            $candidate['breadcrumb_style'],
+        );
     }
     if (content_localization_schema_ready('gallery')) {
-        content_save_localizations('gallery', $createdGalleryId, $candidate['content_language'] ?? null, $candidate['translations'] ?? []);
+        content_save_localizations(
+            'gallery',
+            $createdGalleryId,
+            $candidate['content_language'] ?? null,
+            $candidate['translations'] ?? [],
+        );
     }
 
     // Variable $gallery stores this steps working value.
@@ -737,8 +984,9 @@ function create_empty_gallery_owned(array $input): array
 {
     $presentation = array_key_exists('presentation', $input)
         ? gallery_presentation_normalize(
-            is_array($input['presentation']) ? $input['presentation'] : null
-        ) : null;
+            is_array($input['presentation']) ? $input['presentation'] : null,
+        )
+        : null;
     if ($presentation !== null) {
         gallery_presentation_assert_writable('gallery_create.presentation');
     }
@@ -750,59 +998,92 @@ function create_empty_gallery_owned(array $input): array
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
     $tags = trim((string) ($input['tags'] ?? ''));
-    if ($tags !== '' && !schema_inspection_is_available(schema_inspection_feature('gallery_create_tags', [
-        schema_inspection_table('tags'),
-        schema_inspection_column('tags', 'id'),
-        schema_inspection_column('tags', 'name'),
-        schema_inspection_column('tags', 'slug'),
-        schema_inspection_column('tags', 'created_at'),
-        schema_inspection_column('tags', 'updated_at'),
-        schema_inspection_table('gallery_tags'),
-        schema_inspection_column('gallery_tags', 'gallery_id'),
-        schema_inspection_column('gallery_tags', 'tag_id'),
-    ]))) {
-        throw new RuntimeException('Gallery tags are unavailable. Run pending database migrations.');
+    if (
+        $tags !== ''
+        && !schema_inspection_is_available(schema_inspection_feature('gallery_create_tags', [
+            schema_inspection_table('tags'),
+            schema_inspection_column('tags', 'id'),
+            schema_inspection_column('tags', 'name'),
+            schema_inspection_column('tags', 'slug'),
+            schema_inspection_column('tags', 'created_at'),
+            schema_inspection_column('tags', 'updated_at'),
+            schema_inspection_table('gallery_tags'),
+            schema_inspection_column('gallery_tags', 'gallery_id'),
+            schema_inspection_column('gallery_tags', 'tag_id'),
+        ]))
+    ) {
+        throw new RuntimeException(
+            'Gallery tags are unavailable. Run pending database migrations.',
+        );
     }
     $contentLanguage = (string) ($input['content_language'] ?? '');
-    $translations = is_array($input['translations'] ?? null) ? $input['translations'] : [];
+    $translations = is_array($input['translations'] ?? null)
+        ? $input['translations']
+        : [];
     if ($contentLanguage !== '' || $translations !== []) {
-        if (!content_localization_enabled()
-            || ($contentLanguage !== '' && !in_array($contentLanguage, content_supported_languages(), true))
-            || !schema_inspection_is_available(content_localization_schema_status('gallery'))) {
-            throw new RuntimeException('The selected description language is unavailable.');
+        if (
+            !content_localization_enabled()
+            || (
+                $contentLanguage !== ''
+                && !in_array(
+                    $contentLanguage,
+                    content_supported_languages(),
+                    true,
+                )
+            )
+            || !schema_inspection_is_available(content_localization_schema_status(
+                'gallery',
+            ))
+        ) {
+            throw new RuntimeException(
+                'The selected description language is unavailable.',
+            );
         }
     }
     if (!empty($input['voting_enabled'])) {
         presentation_schema_assert_write_available(
             presentation_voting_schema_status(),
             'gallery_create.voting_enabled',
-            'Image voting requires the current database migration before it can be enabled for a new gallery.'
+            'Image voting requires the current database migration before it can be enabled for a new gallery.',
         );
     }
     if (array_key_exists('lightbox_browsing_mode', $input)) {
         presentation_schema_assert_known(
             presentation_lightbox_override_schema_status(),
-            'gallery_create.lightbox_override'
+            'gallery_create.lightbox_override',
         );
     }
     // $galleryDateRange stores the optional manual date range for this gallery, independent from upload dates.
     $galleryDateRange = gallery_date_schema_ready()
-        ? gallery_date_range_storage_values($input['gallery_date'] ?? '', $input['gallery_date_end'] ?? '')
+        ? gallery_date_range_storage_values(
+            $input['gallery_date'] ?? '',
+            $input['gallery_date_end'] ?? '',
+        )
         : ['start' => null, 'end' => null];
     // $galleryDate stores the optional manual date or range start for this gallery.
     $galleryDate = $galleryDateRange['start'];
     // $galleryDateEnd stores the optional manual date range end for this gallery.
     $galleryDateEnd = $galleryDateRange['end'];
     // $visibility stores an intermediate value used by the surrounding gallery workflow.
-    $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished'));
+    $visibility = gallery_visibility_storage_value(
+        (string) ($input['visibility'] ?? 'unpublished'),
+    );
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
     $showFilenames = !empty($input['show_filenames']) ? 1 : 0;
     // $countBadgeVisibility stores the optional per-gallery count badge override.
-    $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? 'inherit') : null;
+    $countBadgeVisibility = gallery_count_badge_schema_ready()
+        ? gallery_count_badge_storage_value(
+            $input['count_badge_visibility'] ?? 'inherit',
+        )
+        : null;
     // $lightboxBrowsingMode stores the optional per-gallery lightbox browsing-mode override.
-    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? 'inherit') : null;
+    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready()
+        ? gallery_lightbox_browsing_mode_storage_value(
+            $input['lightbox_browsing_mode'] ?? 'inherit',
+        )
+        : null;
     // $parentId stores an intermediate value used by the surrounding gallery workflow.
     $parentId = (int) ($input['parent_id'] ?? 0);
     // $parent stores an intermediate value used by the surrounding gallery workflow.
@@ -814,10 +1095,16 @@ function create_empty_gallery_owned(array $input): array
     // $folderName stores an intermediate value used by the surrounding gallery workflow.
     $folderName = trim((string) ($input['folder_name'] ?? ''));
     // $requestedFolderPath stores the preferred folder path before suffix fallback is applied.
-    $requestedFolderPath = gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
+    $requestedFolderPath = gallery_child_folder_path(
+        $parent,
+        $folderName !== '' ? $folderName : $title,
+    );
     gallery_creation_assert_catalog_preserved($requestedFolderPath);
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
-    $folderPath = unique_gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
+    $folderPath = unique_gallery_child_folder_path(
+        $parent,
+        $folderName !== '' ? $folderName : $title,
+    );
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = gallery_target_abs_path($folderPath);
     gallery_creation_assert_catalog_preserved($folderPath);
@@ -839,7 +1126,9 @@ function create_empty_gallery_owned(array $input): array
         'title' => $title,
         'description' => $description,
         'gallery_date' => $galleryDate,
-        'gallery_date_end' => gallery_date_range_schema_ready() ? $galleryDateEnd : null,
+        'gallery_date_end' => gallery_date_range_schema_ready()
+            ? $galleryDateEnd
+            : null,
         'visibility' => $visibility,
         'sort_order' => $sortOrder,
         'voting_enabled' => $votingEnabled,
@@ -857,13 +1146,17 @@ function create_empty_gallery_owned(array $input): array
     // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
     $sidecarWritten = write_gallery_sidecar_for_path($folderPath, $sidecarData);
     if (!$sidecarWritten) {
-        throw new RuntimeException('Gallery folder was created, but gallery.json could not be written.');
+        throw new RuntimeException(
+            'Gallery folder was created, but gallery.json could not be written.',
+        );
     }
 
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = create_gallery_row_for_folder($folderPath);
     if (!$gallery) {
-        throw new RuntimeException('Gallery folder was created, but the database row could not be created.');
+        throw new RuntimeException(
+            'Gallery folder was created, but the database row could not be created.',
+        );
     }
     sync_gallery_parent_ids();
     if (public_path_schema_ready()) {
@@ -872,7 +1165,12 @@ function create_empty_gallery_owned(array $input): array
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
     if ($contentLanguage !== '' || $translations !== []) {
-        content_save_localizations('gallery', (int) $gallery['id'], $contentLanguage, $translations);
+        content_save_localizations(
+            'gallery',
+            (int) $gallery['id'],
+            $contentLanguage,
+            $translations,
+        );
         $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
     }
     if ($tags !== '') {

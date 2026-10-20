@@ -24,6 +24,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 $root = dirname(__DIR__);
 $languages = ['en', 'cs', 'de', 'sv'];
 $requiredKeys = [
@@ -41,47 +43,67 @@ $requiredKeys = [
  *
  * @param bool $condition Assertion result.
  * @param string $message Failure diagnostic.
+ * @return void Throw when a required zoom translation expectation fails.
  */
-function lightbox_zoom_translation_assert(bool $condition, string $message): void
-{
+function lightbox_zoom_translation_assert(
+    bool $condition,
+    string $message,
+): void {
     if (!$condition) {
         throw new RuntimeException($message);
     }
 }
 
 foreach ($languages as $language) {
-    $catalogJson = (string) file_get_contents($root . '/app/lang/' . $language . '.json');
+    $catalogJson = (string) file_get_contents(
+        $root . '/app/lang/' . $language . '.json',
+    );
     $catalog = json_decode($catalogJson, true, 512, JSON_THROW_ON_ERROR);
     foreach ($requiredKeys as $key) {
         lightbox_zoom_translation_assert(
-            isset($catalog[$key]) && is_string($catalog[$key]) && trim($catalog[$key]) !== '',
-            $language . ' catalog is missing ' . $key . '.'
+            isset($catalog[$key])
+                && is_string($catalog[$key])
+                && trim($catalog[$key]) !== '',
+            $language . ' catalog is missing ' . $key . '.',
         );
     }
     lightbox_zoom_translation_assert(
         str_contains($catalog['lightbox.zoom_status'], '{percent}'),
-        $language . ' zoom status must retain the {percent} placeholder.'
+        $language . ' zoom status must retain the {percent} placeholder.',
     );
     lightbox_zoom_translation_assert(
-        str_contains($catalog['lightbox.help_shortcuts'], '+/−') && str_contains($catalog['lightbox.help_shortcuts'], '0'),
-        $language . ' shortcut help must describe zoom and reset keys.'
+        str_contains($catalog['lightbox.help_shortcuts'], '+/−')
+            && str_contains($catalog['lightbox.help_shortcuts'], '0'),
+        $language . ' shortcut help must describe zoom and reset keys.',
     );
 }
 
-$assetRendererSource = (string) file_get_contents($root . '/app/helpers_page_rendering.php');
-$lightboxMarkupSource = (string) file_get_contents($root . '/app/views/public_gallery_lightbox.php');
-$lightboxBrowserSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$assetRendererSource = (string) file_get_contents($root
+    . '/app/helpers_page_rendering.php');
+$lightboxMarkupSource = (string) file_get_contents($root
+    . '/app/views/public_gallery_lightbox.php');
+$lightboxBrowserSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox.js');
 lightbox_zoom_translation_assert(
-    str_contains($assetRendererSource, 'array_merge($defaultStrings, $activeStrings)'),
-    'Browser localization must continue exporting the active catalog with English fallback.'
+    php_source_contains(
+        $assetRendererSource,
+        'array_merge($defaultStrings, $activeStrings)',
+    ),
+    'Browser localization must continue exporting the active catalog with English fallback.',
 );
 lightbox_zoom_translation_assert(
-    str_contains($lightboxMarkupSource, "t('lightbox.zoom_status', 'Zoom {percent}', ['percent' => '100%'])"),
-    'The initial assistive status must replace {percent} through the translation helper before escaping.'
+    php_source_contains(
+        $lightboxMarkupSource,
+        "t('lightbox.zoom_status', 'Zoom {percent}', ['percent' => '100%'])",
+    ),
+    'The initial assistive status must replace {percent} through the translation helper before escaping.',
 );
 lightbox_zoom_translation_assert(
-    str_contains($lightboxBrowserSource, "i18n('lightbox.quality_loading', 'Loading full-quality image...')"),
-    'The background quality indicator must use the browser translation catalog with a safe fallback.'
+    str_contains(
+        $lightboxBrowserSource,
+        "i18n('lightbox.quality_loading', 'Loading full-quality image...')",
+    ),
+    'The background quality indicator must use the browser translation catalog with a safe fallback.',
 );
 
 echo "Lightbox zoom translation checks passed.\n";

@@ -38,34 +38,66 @@ function python_source_reports(array $sources): array
     }
     $python ??= \PhpGallery\Audit\resolve_python_command();
     if ($python === null) {
-        throw new \RuntimeException('Python 3 AST runtime unavailable; coverage unknown.');
+        throw new \RuntimeException(
+            'Python 3 AST runtime unavailable; coverage unknown.',
+        );
     }
     $request = tempnam(sys_get_temp_dir(), 'gallery-source-contract-');
     if ($request === false) {
         throw new \RuntimeException('Python AST request unavailable.');
     }
     try {
-        if (file_put_contents($request, json_encode($missing, JSON_THROW_ON_ERROR)) === false) {
-            throw new \RuntimeException('Python AST request could not be written.');
+        if (
+            file_put_contents($request, json_encode(
+                $missing,
+                JSON_THROW_ON_ERROR,
+            )) === false
+        ) {
+            throw new \RuntimeException(
+                'Python AST request could not be written.',
+            );
         }
-        $process = \PhpGallery\Audit\run_process(array_merge($python, [__DIR__ . '/python_scan.py', $request]), dirname(__DIR__, 2), 60);
+        $process = \PhpGallery\Audit\run_process(
+            array_merge($python, [__DIR__ . '/python_scan.py', $request]),
+            dirname(__DIR__, 2),
+            60,
+        );
         $reports = json_decode($process['stdout'], true);
-        if ($process['timed_out'] || $process['exit_code'] !== 0 || !is_array($reports)
-            || array_diff(array_keys($missing), array_keys($reports)) !== []) {
-            throw new \RuntimeException('Python AST parsing incomplete; coverage unknown.');
+        if (
+            $process['timed_out']
+            || $process['exit_code'] !== 0
+            || !is_array($reports)
+            || array_diff(array_keys($missing), array_keys($reports)) !== []
+        ) {
+            throw new \RuntimeException(
+                'Python AST parsing incomplete; coverage unknown.',
+            );
         }
         foreach ($missing as $key => $source) {
             $report = $reports[$key];
-            if (!is_array($report) || !isset($report['snapshots'], $report['import_findings'])
-                || !is_array($report['snapshots']) || !array_is_list($report['snapshots'])
-                || !is_array($report['import_findings']) || !array_is_list($report['import_findings'])) {
-                throw new \RuntimeException('Python AST report invalid; coverage unknown.');
+            if (
+                !is_array($report)
+                || !isset($report['snapshots'], $report['import_findings'])
+                || !is_array($report['snapshots'])
+                || !array_is_list($report['snapshots'])
+                || !is_array($report['import_findings'])
+                || !array_is_list($report['import_findings'])
+            ) {
+                throw new \RuntimeException(
+                    'Python AST report invalid; coverage unknown.',
+                );
             }
             foreach ($report['import_findings'] as $finding) {
-                if (!is_array($finding) || !isset($finding['line'], $finding['rule'])
-                    || !is_int($finding['line']) || $finding['line'] < 1
-                    || $finding['rule'] !== 'python.future_annotations') {
-                    throw new \RuntimeException('Python AST import report invalid; coverage unknown.');
+                if (
+                    !is_array($finding)
+                    || !isset($finding['line'], $finding['rule'])
+                    || !is_int($finding['line'])
+                    || $finding['line'] < 1
+                    || $finding['rule'] !== 'python.future_annotations'
+                ) {
+                    throw new \RuntimeException(
+                        'Python AST import report invalid; coverage unknown.',
+                    );
                 }
             }
         }
@@ -97,7 +129,10 @@ function python_source_cache(array $sources): array
  */
 function python_import_findings(string $source): array
 {
-    return python_source_reports([$source])[hash('sha256', $source)]['import_findings'];
+    return python_source_reports([$source])[hash(
+        'sha256',
+        $source,
+    )]['import_findings'];
 }
 
 /**

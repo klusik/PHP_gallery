@@ -61,14 +61,23 @@ function source_structure(string $source, string $language): array
                 }
             }
         }
-        if (in_array($id, [T_COMMENT, T_DOC_COMMENT, T_INLINE_HTML,
-            T_OPEN_TAG, T_CLOSE_TAG], true)) {
+        if (in_array(
+            $id,
+            [T_COMMENT, T_DOC_COMMENT, T_INLINE_HTML, T_OPEN_TAG, T_CLOSE_TAG],
+            true,
+        )) {
             continue;
         }
         // Interpolated PHP strings and heredocs stay inert, including variables.
         $delimiter = $php && ($id === T_START_HEREDOC || $text === '"');
-        $literal = $inString || $delimiter || in_array($id,
-            [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE], true);
+        $literal =
+            $inString
+            || $delimiter
+            || in_array(
+                $id,
+                [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE],
+                true,
+            );
         foreach (explode("\n", $text) as $offset => $part) {
             $line = $token['line'] + $offset - 1;
             if ($literal) {
@@ -84,9 +93,14 @@ function source_structure(string $source, string $language): array
     }
     $declarations = [];
     foreach ($records as $record) {
-        if (str_starts_with($record['name'], '(')
-            || in_array($record['kind'], ['property', 'callback',
-                'bound_callback'], true)) {
+        if (
+            str_starts_with($record['name'], '(')
+            || in_array(
+                $record['kind'],
+                ['property', 'callback', 'bound_callback'],
+                true,
+            )
+        ) {
             continue;
         }
         $start = $tokens[$record['start_token']]['line'];
@@ -110,22 +124,26 @@ function source_structure(string $source, string $language): array
             'name' => $record['name'],
         ];
     }
-    return ['code' => $code, 'literals' => $literals,
+    return [
+        'code' => $code,
+        'literals' => $literals,
         'embedded_lines' => array_keys($embedded),
-        'declarations' => $declarations];
+        'declarations' => $declarations,
+    ];
 }
 
 $request = json_decode(
     stream_get_contents(STDIN),
     true,
     READABILITY_REQUEST_JSON_DEPTH,
-    JSON_THROW_ON_ERROR
+    JSON_THROW_ON_ERROR,
 );
 $files = [];
 foreach ($request as $path => $input) {
     $files[$path] = source_structure($input['source'], $input['language']);
 }
 echo json_encode([
-    'excluded_directories' => \PhpGallery\SourceContracts\source_excluded_directories(),
+    'excluded_directories' =>
+        \PhpGallery\SourceContracts\source_excluded_directories(),
     'files' => $files,
 ], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);

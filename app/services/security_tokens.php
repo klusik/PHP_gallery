@@ -49,10 +49,15 @@ use InvalidArgumentException;
 function security_opaque_token_generate(int $entropyBytes = 32): string
 {
     if ($entropyBytes < 16 || $entropyBytes > 64) {
-        throw new InvalidArgumentException('Opaque token entropy must be between 16 and 64 bytes.');
+        throw new InvalidArgumentException(
+            'Opaque token entropy must be between 16 and 64 bytes.',
+        );
     }
 
-    return rtrim(strtr(base64_encode(random_bytes($entropyBytes)), '+/', '-_'), '=');
+    return rtrim(
+        strtr(base64_encode(random_bytes($entropyBytes)), '+/', '-_'),
+        '=',
+    );
 }
 
 /**
@@ -64,7 +69,9 @@ function security_opaque_token_generate(int $entropyBytes = 32): string
 function security_token_selector_generate(int $entropyBytes = 18): string
 {
     if ($entropyBytes < 12 || $entropyBytes > 32) {
-        throw new InvalidArgumentException('Token selector entropy must be between 12 and 32 bytes.');
+        throw new InvalidArgumentException(
+            'Token selector entropy must be between 12 and 32 bytes.',
+        );
     }
 
     return bin2hex(random_bytes($entropyBytes));
@@ -83,7 +90,9 @@ function security_token_selector_generate(int $entropyBytes = 18): string
 function security_authority_token_hash(string $token): string
 {
     if ($token === '') {
-        throw new InvalidArgumentException('Authority token must not be empty.');
+        throw new InvalidArgumentException(
+            'Authority token must not be empty.',
+        );
     }
 
     return hash('sha256', $token);
@@ -96,8 +105,10 @@ function security_authority_token_hash(string $token): string
  * @param string $token Plaintext token presented by its holder.
  * @return bool True only when the token matches the stored digest.
  */
-function security_authority_token_verify(string $storedHash, string $token): bool
-{
+function security_authority_token_verify(
+    string $storedHash,
+    string $token,
+): bool {
     if (preg_match('/^[a-f0-9]{64}$/', $storedHash) !== 1 || $token === '') {
         return false;
     }
@@ -114,15 +125,33 @@ function security_authority_token_verify(string $storedHash, string $token): boo
  * @param string $context Purpose and owner binding authenticated alongside the ciphertext.
  * @return string Canonical identifier, digest or secret as described above.
  */
-function security_secret_seal(string $secret, string $key, string $context): string
-{
-    if (strlen($key) !== 32 || $context === '' || strlen($context) > 512
-        || $secret === '' || strlen($secret) > 4096 || !function_exists('openssl_encrypt')) {
+function security_secret_seal(
+    string $secret,
+    string $key,
+    string $context,
+): string {
+    if (
+        strlen($key) !== 32
+        || $context === ''
+        || strlen($context) > 512
+        || $secret === ''
+        || strlen($secret) > 4096
+        || !function_exists('openssl_encrypt')
+    ) {
         throw new \RuntimeException('Secret encryption is unavailable.');
     }
     $iv = random_bytes(12);
     $tag = '';
-    $cipher = openssl_encrypt($secret, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, $context, 16);
+    $cipher = openssl_encrypt(
+        $secret,
+        'aes-256-gcm',
+        $key,
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        $context,
+        16,
+    );
     if ($cipher === false || strlen($tag) !== 16) {
         throw new \RuntimeException('Secret encryption failed.');
     }
@@ -136,18 +165,37 @@ function security_secret_seal(string $secret, string $key, string $context): str
  * @param string $context Purpose and owner binding authenticated alongside the ciphertext.
  * @return ?string Validated plaintext or null when authentication fails.
  */
-function security_secret_open(string $envelope, string $key, string $context): ?string
-{
-    if (strlen($key) !== 32 || $context === '' || strlen($context) > 512
-        || strlen($envelope) > 5505 || !str_starts_with($envelope, 'gcm1:')
-        || !function_exists('openssl_decrypt')) {
+function security_secret_open(
+    string $envelope,
+    string $key,
+    string $context,
+): ?string {
+    if (
+        strlen($key) !== 32
+        || $context === ''
+        || strlen($context) > 512
+        || strlen($envelope) > 5505
+        || !str_starts_with($envelope, 'gcm1:')
+        || !function_exists('openssl_decrypt')
+    ) {
         return null;
     }
     $payload = base64_decode(substr($envelope, 5), true);
-    if ($payload === false || strlen($payload) < 29 || strlen($payload) > 4124) {
+    if (
+        $payload === false
+        || strlen($payload) < 29
+        || strlen($payload) > 4124
+    ) {
         return null;
     }
-    $plain = openssl_decrypt(substr($payload, 28), 'aes-256-gcm', $key, OPENSSL_RAW_DATA,
-        substr($payload, 0, 12), substr($payload, 12, 16), $context);
+    $plain = openssl_decrypt(
+        substr($payload, 28),
+        'aes-256-gcm',
+        $key,
+        OPENSSL_RAW_DATA,
+        substr($payload, 0, 12),
+        substr($payload, 12, 16),
+        $context,
+    );
     return $plain === false ? null : $plain;
 }

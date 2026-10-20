@@ -62,8 +62,12 @@ function public_search_bar_view_model(?array $gallery = null): array
 {
     $enabled = public_home_search_enabled();
     $galleryId = $gallery ? (int) ($gallery['id'] ?? 0) : 0;
-    $searchId = $galleryId > 0 ? 'public-gallery-search-input-' . $galleryId : 'public-home-search-input';
-    $contextId = $galleryId > 0 ? 'public-gallery-search-context-' . $galleryId : '';
+    $searchId = $galleryId > 0
+        ? 'public-gallery-search-input-' . $galleryId
+        : 'public-home-search-input';
+    $contextId = $galleryId > 0
+        ? 'public-gallery-search-context-' . $galleryId
+        : '';
 
     return [
         'enabled' => $enabled,
@@ -71,13 +75,26 @@ function public_search_bar_view_model(?array $gallery = null): array
         'search_id' => $searchId,
         'context_id' => $contextId,
         'gallery_id' => $galleryId > 0 ? $galleryId : null,
-        'aria_label' => $galleryId > 0 ? t('search.gallery_label', 'Search this gallery and all galleries') : t('search.home_label', 'Search galleries and photos'),
-        'placeholder' => $galleryId > 0 ? t('search.gallery_placeholder', 'Search this gallery, subgalleries, tags, photos...') : t('search.placeholder', 'Search galleries, tags, photos...'),
-        'context_label' => t('search.context_current_gallery', 'Search only this gallery and its subgalleries'),
+        'aria_label' => $galleryId > 0
+            ? t('search.gallery_label', 'Search this gallery and all galleries')
+            : t('search.home_label', 'Search galleries and photos'),
+        'placeholder' => $galleryId > 0
+            ? t(
+                'search.gallery_placeholder',
+                'Search this gallery, subgalleries, tags, photos...',
+            )
+            : t('search.placeholder', 'Search galleries, tags, photos...'),
+        'context_label' => t(
+            'search.context_current_gallery',
+            'Search only this gallery and its subgalleries',
+        ),
         'clear_label' => t('search.clear', 'Clear search'),
         'loading_label' => t('search.loading', 'Searching...'),
         'empty_label' => t('search.empty', 'No matches found.'),
-        'error_label' => t('search.error', 'Search is temporarily unavailable.'),
+        'error_label' => t(
+            'search.error',
+            'Search is temporarily unavailable.',
+        ),
         'min_length' => 2,
         'delay_ms' => 200,
         'media_delay_ms' => 100,
@@ -88,6 +105,8 @@ function public_search_bar_view_model(?array $gallery = null): array
 
 /**
  * Return JSON results for the optional public live search.
+ *
+ * @return void Emits JSON results or an HTTP error response.
  */
 function cms_public_search(): void
 {
@@ -107,8 +126,14 @@ function cms_public_search(): void
     try {
         $phase = trim((string) ($_GET['phase'] ?? ''));
         $contextGallery = public_search_context_from_request();
-        $saveSmartGalleryUrl = current_user() && feature_capability_effective_enabled('smart_galleries') ? url_for('admin_smart_galleries', ['from_search' => $query]) : null;
-        $saveSmartGalleryLabel = current_user() && feature_capability_effective_enabled('smart_galleries') ? t('smart_gallery.save_search', 'Save search as Smart Gallery') : null;
+        $saveSmartGalleryUrl = current_user()
+        && feature_capability_effective_enabled('smart_galleries')
+            ? url_for('admin_smart_galleries', ['from_search' => $query])
+            : null;
+        $saveSmartGalleryLabel = current_user()
+        && feature_capability_effective_enabled('smart_galleries')
+            ? t('smart_gallery.save_search', 'Save search as Smart Gallery')
+            : null;
 
         if ($phase !== '') {
             if (!public_search_phase_supported($phase)) {
@@ -122,7 +147,12 @@ function cms_public_search(): void
                 'query' => $query,
                 'phase' => $phase,
                 'phase_complete' => true,
-                'results' => public_search_phase_results($phase, $query, 14, $contextGallery),
+                'results' => public_search_phase_results(
+                    $phase,
+                    $query,
+                    14,
+                    $contextGallery,
+                ),
                 'save_smart_gallery_url' => $saveSmartGalleryUrl,
                 'save_smart_gallery_label' => $saveSmartGalleryLabel,
             ]);
@@ -137,9 +167,14 @@ function cms_public_search(): void
             'save_smart_gallery_label' => $saveSmartGalleryLabel,
         ]);
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'public_search.failed', 'Public search request failed.', [
-            'exception' => $exception->getMessage(),
-        ]);
+        admin_log_event(
+            'warning',
+            'public_search.failed',
+            'Public search request failed.',
+            [
+                'exception' => $exception->getMessage(),
+            ],
+        );
         http_response_code(500);
         echo json_encode(['ok' => false, 'error' => 'search_failed']);
     }

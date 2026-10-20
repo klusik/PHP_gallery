@@ -36,6 +36,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/support/module_source.php';
+require_once __DIR__ . '/support/php_source.php';
 require_once __DIR__ . '/../app/services/schema_inspection.php';
 require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
 
@@ -58,14 +59,23 @@ use function Gallery\Services\upload_ingestion_schema_status;
 /**
  * Throw when one strict Phase 10 expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Value expected to match strictly, including its collection shape.
+ * @param TActual $actual Value compared by strict equality, including its collection shape.
  * @param string $label Assertion label.
+ * @return void Returns normally only when expected and actual match strictly.
  */
-function mutation_policy_assert_same(mixed $expected, mixed $actual, string $label): void
-{
+function mutation_policy_assert_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
@@ -82,85 +92,164 @@ function mutation_policy_assert_true(bool $condition, string $label): void
     }
 }
 
-$allAvailableExecutor = static fn (): bool => true;
+$allAvailableExecutor = static fn(): bool => true;
 schema_inspection_set_query_executor_for_tests($allAvailableExecutor);
 $deletionAvailable = gallery_deletion_schema_status();
-mutation_policy_assert_true(schema_inspection_is_available($deletionAvailable), 'gallery deletion current schema available');
+mutation_policy_assert_true(
+    schema_inspection_is_available($deletionAvailable),
+    'gallery deletion current schema available',
+);
 
 schema_inspection_set_query_executor_for_tests(
-    static fn (string $type, string $table, string $object): bool => !($type === 'column' && $table === 'images' && $object === 'gallery_id')
+    static fn(string $type, string $table, string $object): bool => !(
+        $type === 'column'
+        && $table === 'images'
+        && $object === 'gallery_id'
+    ),
 );
 $deletionMissing = gallery_deletion_schema_status();
-mutation_policy_assert_true(schema_inspection_is_missing($deletionMissing), 'gallery deletion confirmed missing state');
+mutation_policy_assert_true(
+    schema_inspection_is_missing($deletionMissing),
+    'gallery deletion confirmed missing state',
+);
 
 schema_inspection_set_query_executor_for_tests(
     static function (string $type, string $table, string $object): bool {
-        if ($type === 'column' && $table === 'images' && $object === 'gallery_id') {
-            $exception = new PDOException('private-host password=DoNotExpose SELECT * FROM images');
+        if (
+            $type === 'column'
+            && $table === 'images'
+            && $object === 'gallery_id'
+        ) {
+            $exception = new PDOException(
+                'private-host password=DoNotExpose SELECT * FROM images',
+            );
             $exception->errorInfo = ['HY000', 2002, 'metadata unavailable'];
             throw $exception;
         }
         return true;
-    }
+    },
 );
 $deletionUnknown = gallery_deletion_schema_status();
-mutation_policy_assert_true(schema_inspection_is_unknown($deletionUnknown), 'gallery deletion inspection failure is unknown');
-mutation_policy_assert_true(!str_contains((string) json_encode($deletionUnknown), 'DoNotExpose'), 'unknown capability redacts database exception details');
+mutation_policy_assert_true(
+    schema_inspection_is_unknown($deletionUnknown),
+    'gallery deletion inspection failure is unknown',
+);
+mutation_policy_assert_true(
+    !str_contains((string) json_encode($deletionUnknown), 'DoNotExpose'),
+    'unknown capability redacts database exception details',
+);
 
 schema_inspection_set_query_executor_for_tests(
-    static fn (string $type, string $table, string $object): bool => !($type === 'column' && $table === 'images' && $object === 'optional_legacy_column')
+    static fn(string $type, string $table, string $object): bool => !(
+        $type === 'column'
+        && $table === 'images'
+        && $object === 'optional_legacy_column'
+    ),
 );
 $optionalMissing = mutation_schema_optional_column_available(
     'mutation.test_optional',
     'images',
     'optional_legacy_column',
-    'test.optional_missing'
+    'test.optional_missing',
 );
-mutation_policy_assert_same(false, $optionalMissing, 'confirmed missing optional column uses compatibility path');
+mutation_policy_assert_same(
+    false,
+    $optionalMissing,
+    'confirmed missing optional column uses compatibility path',
+);
 
 schema_inspection_set_query_executor_for_tests(
     static function (string $type, string $table, string $object): bool {
-        if ($type === 'column' && $table === 'images' && $object === 'optional_legacy_column') {
+        if (
+            $type === 'column'
+            && $table === 'images'
+            && $object === 'optional_legacy_column'
+        ) {
             throw new PDOException('password=NeverLogThis');
         }
         return true;
-    }
+    },
 );
 $unknownOptionalThrew = false;
 try {
-    mutation_schema_optional_column_available('mutation.test_optional', 'images', 'optional_legacy_column', 'test.optional_unknown');
+    mutation_schema_optional_column_available(
+        'mutation.test_optional',
+        'images',
+        'optional_legacy_column',
+        'test.optional_unknown',
+    );
 } catch (MutationSchemaUnavailableException $exception) {
-    $unknownOptionalThrew = $exception->state === 'unknown'
+    $unknownOptionalThrew =
+        $exception->state === 'unknown'
         && $exception->operation === 'test.optional_unknown'
         && !str_contains($exception->getMessage(), 'NeverLogThis');
 }
-mutation_policy_assert_true($unknownOptionalThrew, 'unknown optional column refuses mutation with bounded exception');
+mutation_policy_assert_true(
+    $unknownOptionalThrew,
+    'unknown optional column refuses mutation with bounded exception',
+);
 
 schema_inspection_set_query_executor_for_tests(
-    static fn (string $type, string $table, string $object): bool => !($type === 'column' && $table === 'gallery_upload_tokens' && $object === 'token_hash')
+    static fn(string $type, string $table, string $object): bool => !(
+        $type === 'column'
+        && $table === 'gallery_upload_tokens'
+        && $object === 'token_hash'
+    ),
 );
-mutation_policy_assert_true(schema_inspection_is_missing(upload_automation_schema_status()), 'upload automation issuance requires token hash');
-mutation_policy_assert_true(schema_inspection_is_available(upload_automation_revocation_schema_status()), 'upload automation revocation remains available with narrow verified columns');
+mutation_policy_assert_true(
+    schema_inspection_is_missing(upload_automation_schema_status()),
+    'upload automation issuance requires token hash',
+);
+mutation_policy_assert_true(
+    schema_inspection_is_available(
+        upload_automation_revocation_schema_status(),
+    ),
+    'upload automation revocation remains available with narrow verified columns',
+);
 
 schema_inspection_set_query_executor_for_tests(
-    static fn (string $type, string $table, string $object): bool => !($type === 'column' && $table === 'mobile_webdav_upload_tokens' && $object === 'password_hash')
+    static fn(string $type, string $table, string $object): bool => !(
+        $type === 'column'
+        && $table === 'mobile_webdav_upload_tokens'
+        && $object === 'password_hash'
+    ),
 );
-mutation_policy_assert_true(schema_inspection_is_missing(mobile_webdav_schema_status()), 'WebDAV issuance/authentication requires password hash');
-mutation_policy_assert_true(schema_inspection_is_available(mobile_webdav_revocation_schema_status()), 'WebDAV revocation remains available with verified id column');
+mutation_policy_assert_true(
+    schema_inspection_is_missing(mobile_webdav_schema_status()),
+    'WebDAV issuance/authentication requires password hash',
+);
+mutation_policy_assert_true(
+    schema_inspection_is_available(mobile_webdav_revocation_schema_status()),
+    'WebDAV revocation remains available with verified id column',
+);
 
 $queryCount = 0;
 schema_inspection_set_query_executor_for_tests(
     static function () use (&$queryCount): bool {
         $queryCount++;
         return true;
-    }
+    },
 );
 schema_inspection_reset_request_cache();
-mutation_policy_assert_true(schema_inspection_is_available(upload_ingestion_schema_status()), 'upload ingestion current schema available');
+mutation_policy_assert_true(
+    schema_inspection_is_available(upload_ingestion_schema_status()),
+    'upload ingestion current schema available',
+);
 $firstQueryCount = $queryCount;
-mutation_policy_assert_same(13, $firstQueryCount, 'upload ingestion metadata query budget');
-mutation_policy_assert_true(schema_inspection_is_available(upload_ingestion_schema_status()), 'upload ingestion cached schema available');
-mutation_policy_assert_same($firstQueryCount, $queryCount, 'upload ingestion request-local cache prevents repeat metadata queries');
+mutation_policy_assert_same(
+    13,
+    $firstQueryCount,
+    'upload ingestion metadata query budget',
+);
+mutation_policy_assert_true(
+    schema_inspection_is_available(upload_ingestion_schema_status()),
+    'upload ingestion cached schema available',
+);
+mutation_policy_assert_same(
+    $firstQueryCount,
+    $queryCount,
+    'upload ingestion request-local cache prevents repeat metadata queries',
+);
 
 foreach (['missing', 'unknown'] as $markerState) {
     schema_inspection_set_query_executor_for_tests(
@@ -170,23 +259,44 @@ foreach (['missing', 'unknown'] as $markerState) {
          * @param string $object Validated column identifier.
          * @return bool True for verified prerequisites; false for confirmed marker absence.
          */
-        static function (string $type, string $table, string $object) use ($markerState): bool {
-            if ($type === 'column' && $table === 'images' && $object === 'thumbnail_source_identity_version') {
-                if ($markerState === 'unknown') { throw new PDOException('marker metadata unavailable'); }
+        static function (string $type, string $table, string $object) use (
+            $markerState,
+        ): bool {
+            if (
+                $type === 'column'
+                && $table === 'images'
+                && $object === 'thumbnail_source_identity_version'
+            ) {
+                if ($markerState === 'unknown') {
+                    throw new PDOException('marker metadata unavailable');
+                }
                 return false;
             }
             return true;
-        }
+        },
     );
-    foreach ([upload_ingestion_schema_status(), gallery_migration_schema_status()] as $status) {
-        mutation_policy_assert_same($markerState, $status['state'], 'new source marker must be verified before ingestion');
+    foreach ([
+        upload_ingestion_schema_status(),
+        gallery_migration_schema_status(),
+    ] as $status) {
+        mutation_policy_assert_same(
+            $markerState,
+            $status['state'],
+            'new source marker must be verified before ingestion',
+        );
         $refused = false;
         try {
-            mutation_schema_assert_available($status, 'test.source_identity_ingestion');
+            mutation_schema_assert_available(
+                $status,
+                'test.source_identity_ingestion',
+            );
         } catch (MutationSchemaUnavailableException $exception) {
             $refused = $exception->state === $markerState;
         }
-        mutation_policy_assert_true($refused, 'new source marker has no missing/unknown ingestion compatibility path');
+        mutation_policy_assert_true(
+            $refused,
+            'new source marker has no missing/unknown ingestion compatibility path',
+        );
     }
 }
 schema_inspection_set_query_executor_for_tests($allAvailableExecutor);
@@ -210,17 +320,37 @@ $phase10MutationSources = [
 foreach ($phase10MutationSources as $relativePath) {
     // module_source() also covers services that are split into part files.
     $source = module_source(__DIR__ . '/../' . $relativePath);
-    mutation_policy_assert_true(!str_contains($source, 'db_table_exists('), $relativePath . ' has no legacy table-exists mutation policy');
-    mutation_policy_assert_true(!str_contains($source, 'db_column_exists('), $relativePath . ' has no legacy column-exists mutation policy');
+    mutation_policy_assert_true(
+        !str_contains($source, 'db_table_exists('),
+        $relativePath . ' has no legacy table-exists mutation policy',
+    );
+    mutation_policy_assert_true(
+        !str_contains($source, 'db_column_exists('),
+        $relativePath . ' has no legacy column-exists mutation policy',
+    );
 }
 
 $servicesSource = (string) file_get_contents(__DIR__ . '/../app/services.php');
-$policyRegistration = strpos($servicesSource, "require_once __DIR__ . '/services/mutation_schema_policy.php';");
-$galleryMutationRegistration = strpos($servicesSource, "require_once __DIR__ . '/services/gallery_mutations.php';");
-mutation_policy_assert_true($policyRegistration !== false, 'mutation schema policy service registered');
-mutation_policy_assert_true($galleryMutationRegistration !== false && $policyRegistration < $galleryMutationRegistration, 'mutation schema policy loads before destructive consumers');
+$policyRegistration = strpos(
+    $servicesSource,
+    "require_once __DIR__ . '/services/mutation_schema_policy.php';",
+);
+$galleryMutationRegistration = strpos(
+    $servicesSource,
+    "require_once __DIR__ . '/services/gallery_mutations.php';",
+);
+mutation_policy_assert_true(
+    $policyRegistration !== false,
+    'mutation schema policy service registered',
+);
+mutation_policy_assert_true(
+    $galleryMutationRegistration !== false
+        && $policyRegistration < $galleryMutationRegistration,
+    'mutation schema policy loads before destructive consumers',
+);
 
-$dashboardSource = module_source(__DIR__ . '/../app/services/admin_dashboard.php');
+$dashboardSource = module_source(__DIR__
+    . '/../app/services/admin_dashboard.php');
 foreach ([
     'mutation_gallery_delete',
     'mutation_gallery_move',
@@ -233,68 +363,248 @@ foreach ([
     'mutation_database_maintenance',
     'mutation_application_update',
 ] as $feature) {
-    mutation_policy_assert_true(str_contains($dashboardSource, "'" . $feature . "' =>"), 'System Health registration ' . $feature);
+    mutation_policy_assert_true(
+        str_contains($dashboardSource, "'" . $feature . "' =>"),
+        'System Health registration ' . $feature,
+    );
 }
 
-$dashboardView = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php');
-mutation_policy_assert_true(str_contains($dashboardView, 'view_render_admin_dashboard_mutation_schema_card'), 'generic mutation health renderer');
-mutation_policy_assert_true(str_contains($dashboardView, 'mutation_schema_statuses'), 'System Health consumes mutation capability set');
-
-$diagnosticsSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_diagnostics.php');
-mutation_policy_assert_true(str_contains($diagnosticsSource, 'admin_mutation_schema_health_statuses()'), 'Runtime Diagnostics mutation status source');
-mutation_policy_assert_true(str_contains($diagnosticsSource, 'Destructive and ingestion database status'), 'Runtime Diagnostics mutation report heading');
-mutation_policy_assert_true(!str_contains($diagnosticsSource, 'getMessage()'), 'Runtime Diagnostics exposes no raw exception messages');
-
-$uploadSource = (string) file_get_contents(__DIR__ . '/../app/services/uploads.php');
+$dashboardView = (string) file_get_contents(__DIR__
+    . '/../app/views/admin_dashboard_sections.php');
 mutation_policy_assert_true(
-    strpos($uploadSource, "thumbnail_metadata_preflight_write_schema('upload.thumbnail_metadata_preflight')") < strpos($uploadSource, 'move_uploaded_file('),
-    'classic upload metadata preflight occurs before first gallery file move'
+    str_contains(
+        $dashboardView,
+        'view_render_admin_dashboard_mutation_schema_card',
+    ),
+    'generic mutation health renderer',
 );
-$browserUploadSource = module_source(__DIR__ . '/../app/services/browser_uploads.php');
-$browserFunctionStart = strpos($browserUploadSource, 'function browser_upload_store_prepared_zip_batch');
-$browserPreflight = strpos($browserUploadSource, "thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight')", $browserFunctionStart);
-$browserGalleryWrite = strpos($browserUploadSource, 'file_put_contents($targetPath', $browserFunctionStart);
-mutation_policy_assert_true($browserFunctionStart !== false && $browserPreflight !== false && $browserGalleryWrite !== false && $browserPreflight < $browserGalleryWrite, 'prepared browser upload preflight occurs before gallery file write');
+mutation_policy_assert_true(
+    str_contains($dashboardView, 'mutation_schema_statuses'),
+    'System Health consumes mutation capability set',
+);
+
+$diagnosticsSource = (string) file_get_contents(__DIR__
+    . '/../app/controllers/admin_diagnostics.php');
+mutation_policy_assert_true(
+    str_contains($diagnosticsSource, 'admin_mutation_schema_health_statuses()'),
+    'Runtime Diagnostics mutation status source',
+);
+mutation_policy_assert_true(
+    str_contains(
+        $diagnosticsSource,
+        'Destructive and ingestion database status',
+    ),
+    'Runtime Diagnostics mutation report heading',
+);
+mutation_policy_assert_true(
+    !str_contains($diagnosticsSource, 'getMessage()'),
+    'Runtime Diagnostics exposes no raw exception messages',
+);
+
+$uploadSource = (string) file_get_contents(__DIR__
+    . '/../app/services/uploads.php');
+$uploadTokens = php_source_contract_tokens($uploadSource);
+mutation_policy_assert_true(
+    strpos(
+        $uploadTokens,
+        php_source_contract_tokens(
+            "<?php thumbnail_metadata_preflight_write_schema('upload.thumbnail_metadata_preflight')",
+        ),
+    ) < strpos(
+        $uploadTokens,
+        php_source_contract_tokens('<?php move_uploaded_file('),
+    ),
+    'classic upload metadata preflight occurs before first gallery file move',
+);
+$browserUploadSource = module_source(__DIR__
+    . '/../app/services/browser_uploads.php');
+$browserFunctionStart = strpos(
+    $browserUploadSource,
+    'function browser_upload_store_prepared_zip_batch',
+);
+$browserUploadTokens = php_source_contract_tokens($browserUploadSource);
+$browserFunctionTokenStart = strpos(
+    $browserUploadTokens,
+    php_source_contract_tokens(
+        '<?php function browser_upload_store_prepared_zip_batch',
+    ),
+);
+$browserPreflight = strpos(
+    $browserUploadTokens,
+    php_source_contract_tokens(
+        "<?php thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight')",
+    ),
+    $browserFunctionTokenStart === false ? 0 : $browserFunctionTokenStart,
+);
+$browserGalleryWrite = strpos(
+    $browserUploadTokens,
+    php_source_contract_tokens('<?php file_put_contents($targetPath'),
+    $browserFunctionTokenStart === false ? 0 : $browserFunctionTokenStart,
+);
+mutation_policy_assert_true(
+    $browserFunctionStart !== false
+        && $browserPreflight !== false
+        && $browserGalleryWrite !== false
+        && $browserPreflight < $browserGalleryWrite,
+    'prepared browser upload preflight occurs before gallery file write',
+);
 
 $classicIngestion = strpos($uploadSource, 'upload_ingestion_schema_status()');
-mutation_policy_assert_true($classicIngestion !== false && $classicIngestion < strpos($uploadSource, 'move_uploaded_file('), 'classic upload source identity preflight precedes original move');
-$browserIngestion = strpos($browserUploadSource, 'upload_ingestion_schema_status()', $browserFunctionStart);
-mutation_policy_assert_true($browserIngestion !== false && $browserIngestion < $browserGalleryWrite, 'browser upload source identity preflight precedes target write');
+mutation_policy_assert_true(
+    $classicIngestion !== false
+        && $classicIngestion < strpos($uploadSource, 'move_uploaded_file('),
+    'classic upload source identity preflight precedes original move',
+);
+$browserIngestion = strpos(
+    $browserUploadTokens,
+    php_source_contract_tokens('<?php upload_ingestion_schema_status()'),
+    $browserFunctionTokenStart === false ? 0 : $browserFunctionTokenStart,
+);
+mutation_policy_assert_true(
+    $browserIngestion !== false && $browserIngestion < $browserGalleryWrite,
+    'browser upload source identity preflight precedes target write',
+);
 $webdavSource = module_source(__DIR__ . '/../app/services/mobile_webdav.php');
-$webdavStoreStart = strpos($webdavSource, 'function mobile_webdav_store_put_owned');
-$webdavIngestion = strpos($webdavSource, 'upload_ingestion_schema_status()', $webdavStoreStart);
-$webdavTargetMove = strpos($webdavSource, 'rename($sourcePath, $targetPath)', $webdavStoreStart);
-mutation_policy_assert_true($webdavIngestion !== false && $webdavTargetMove !== false && $webdavIngestion < $webdavTargetMove, 'WebDAV source identity preflight precedes original target move');
-$migrationSource = module_source(__DIR__ . '/../app/services/gallery_migration.php');
-$migrationInstallStart = strpos($migrationSource, 'function gallery_migration_install_asset_file_owned');
-$migrationIngestion = strpos($migrationSource, 'gallery_migration_schema_status()', $migrationInstallStart);
-$migrationCopy = strpos($migrationSource, 'copy($sourcePath, $stagePath)', $migrationInstallStart);
-mutation_policy_assert_true($migrationIngestion !== false && $migrationCopy !== false && $migrationIngestion < $migrationCopy, 'migration schema preflight precedes original staging copy');
+$webdavStoreStart = strpos(
+    $webdavSource,
+    'function mobile_webdav_store_put_owned',
+);
+$webdavIngestion = strpos(
+    $webdavSource,
+    'upload_ingestion_schema_status()',
+    $webdavStoreStart,
+);
+$webdavTargetMove = strpos(
+    $webdavSource,
+    'rename($sourcePath, $targetPath)',
+    $webdavStoreStart,
+);
+mutation_policy_assert_true(
+    $webdavIngestion !== false
+        && $webdavTargetMove !== false
+        && $webdavIngestion < $webdavTargetMove,
+    'WebDAV source identity preflight precedes original target move',
+);
+$migrationSource = module_source(__DIR__
+    . '/../app/services/gallery_migration.php');
+$migrationInstallStart = strpos(
+    $migrationSource,
+    'function gallery_migration_install_asset_file_owned',
+);
+$migrationIngestion = strpos(
+    $migrationSource,
+    'gallery_migration_schema_status()',
+    $migrationInstallStart,
+);
+$migrationCopy = strpos(
+    $migrationSource,
+    'copy($sourcePath, $stagePath)',
+    $migrationInstallStart,
+);
+mutation_policy_assert_true(
+    $migrationIngestion !== false
+        && $migrationCopy !== false
+        && $migrationIngestion < $migrationCopy,
+    'migration schema preflight precedes original staging copy',
+);
 $scanSource = module_source(__DIR__ . '/../app/services/image_scanning.php');
-$scanFunctionStart = strpos($scanSource, 'function scan_gallery_image_file_entry');
-$scanExisting = strpos($scanSource, 'scan_gallery_image_row_by_path($galleryId, $relative)', $scanFunctionStart);
-$scanIngestion = strpos($scanSource, 'upload_ingestion_schema_status()', $scanFunctionStart);
-$scanInsert = strpos($scanSource, 'image_model_insert_scan_row($fields)', $scanFunctionStart);
-mutation_policy_assert_true($scanExisting !== false && $scanIngestion !== false && $scanInsert !== false
-    && $scanExisting < $scanIngestion && $scanIngestion < $scanInsert,
-    'scanner retains legacy existing rows and preflights new registrations before insert');
+$scanFunctionStart = strpos(
+    $scanSource,
+    'function scan_gallery_image_file_entry',
+);
+$scanExisting = strpos(
+    $scanSource,
+    'scan_gallery_image_row_by_path($galleryId, $relative)',
+    $scanFunctionStart,
+);
+$scanIngestion = strpos(
+    $scanSource,
+    'upload_ingestion_schema_status()',
+    $scanFunctionStart,
+);
+$scanInsert = strpos(
+    $scanSource,
+    'image_model_insert_scan_row($fields)',
+    $scanFunctionStart,
+);
+mutation_policy_assert_true(
+    $scanExisting !== false
+        && $scanIngestion !== false
+        && $scanInsert !== false
+        && $scanExisting < $scanIngestion
+        && $scanIngestion < $scanInsert,
+    'scanner retains legacy existing rows and preflights new registrations before insert',
+);
 
-$thumbnailGenerationSource = (string) file_get_contents(__DIR__ . '/../app/services/thumbnail_generation.php');
-$generationFunctionStart = strpos($thumbnailGenerationSource, 'function create_image_thumbnails_result');
-$generationPreflight = strpos($thumbnailGenerationSource, "thumbnail_metadata_preflight_write_schema('thumbnail_generation.create_image_thumbnails')", $generationFunctionStart);
-$generationDirectoryMutation = strpos($thumbnailGenerationSource, 'gallery_thumbs_dir($gallery, true)', $generationFunctionStart);
-mutation_policy_assert_true($generationPreflight !== false && $generationDirectoryMutation !== false && $generationPreflight < $generationDirectoryMutation, 'thumbnail schema preflight occurs before derivative directory mutation');
+$thumbnailGenerationSource = (string) file_get_contents(__DIR__
+    . '/../app/services/thumbnail_generation.php');
+$thumbnailGenerationTokens = php_source_contract_tokens(
+    $thumbnailGenerationSource,
+);
+$generationFunctionStart = strpos(
+    $thumbnailGenerationTokens,
+    php_source_contract_tokens(
+        '<?php function create_image_thumbnails_result',
+    ),
+);
+$generationPreflight = strpos(
+    $thumbnailGenerationTokens,
+    php_source_contract_tokens(
+        "<?php thumbnail_metadata_preflight_write_schema('thumbnail_generation.create_image_thumbnails')",
+    ),
+    $generationFunctionStart,
+);
+$generationDirectoryMutation = strpos(
+    $thumbnailGenerationTokens,
+    php_source_contract_tokens('<?php gallery_thumbs_dir($gallery, true)'),
+    $generationFunctionStart,
+);
+mutation_policy_assert_true(
+    $generationPreflight !== false
+        && $generationDirectoryMutation !== false
+        && $generationPreflight < $generationDirectoryMutation,
+    'thumbnail schema preflight occurs before derivative directory mutation',
+);
 
-$updateJobsSource = module_source(__DIR__ . '/../app/services/updates_jobs.php');
-$updatePlanStart = strpos($updateJobsSource, 'function application_update_job_build_plan');
+$updateJobsSource = module_source(__DIR__
+    . '/../app/services/updates_jobs.php');
+$updateJobsTokens = php_source_contract_tokens($updateJobsSource);
+$updatePlanStart = strpos(
+    $updateJobsTokens,
+    php_source_contract_tokens(
+        '<?php function application_update_job_build_plan',
+    ),
+);
 $updatePlanPreflight = $updatePlanStart === false
     ? false
-    : strpos($updateJobsSource, "application_update_assert_activation_schema_known('application_update.job_activation')", $updatePlanStart);
-$updateReadyStart = strpos($updateJobsSource, 'function application_update_job_assert_ready');
+    : strpos(
+        $updateJobsTokens,
+        php_source_contract_tokens(
+            "<?php application_update_assert_activation_schema_known('application_update.job_activation')",
+        ),
+        $updatePlanStart,
+    );
+$updateReadyStart = strpos(
+    $updateJobsTokens,
+    php_source_contract_tokens(
+        '<?php function application_update_job_assert_ready',
+    ),
+);
 $updateReadyPreflight = $updateReadyStart === false
     ? false
-    : strpos($updateJobsSource, "application_update_assert_activation_schema_known('application_update.job_activation_ready')", $updateReadyStart);
-$updateActivateStart = strpos($updateJobsSource, 'function application_update_job_activate');
+    : strpos(
+        $updateJobsTokens,
+        php_source_contract_tokens(
+            "<?php application_update_assert_activation_schema_known('application_update.job_activation_ready')",
+        ),
+        $updateReadyStart,
+    );
+$updateActivateStart = strpos(
+    $updateJobsTokens,
+    php_source_contract_tokens(
+        '<?php function application_update_job_activate',
+    ),
+);
 mutation_policy_assert_true(
     $updatePlanStart !== false
         && $updatePlanPreflight !== false
@@ -305,16 +615,32 @@ mutation_policy_assert_true(
         && $updatePlanPreflight < $updateReadyStart
         && $updateReadyStart < $updateReadyPreflight
         && $updateReadyPreflight < $updateActivateStart,
-    'updater schema preflights occur before activation stage'
+    'updater schema preflights occur before activation stage',
 );
 mutation_policy_assert_true(
-    !str_contains(substr($updateJobsSource, 0, $updateActivateStart), 'application_update_activate_prepared_file('),
-    'updater performs no prepared active-file replacement before activation stage'
+    !str_contains(
+        substr($updateJobsSource, 0, $updateActivateStart),
+        'application_update_activate_prepared_file(',
+    ),
+    'updater performs no prepared active-file replacement before activation stage',
 );
 
-$updateFilesystemSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_filesystem.php');
-mutation_policy_assert_true(str_contains($updateFilesystemSource, "'app/services/schema_inspection.php'"), 'updater snapshot requires schema inspection service');
-mutation_policy_assert_true(str_contains($updateFilesystemSource, "'app/services/mutation_schema_policy.php'"), 'updater snapshot requires mutation schema policy service');
+$updateFilesystemSource = (string) file_get_contents(__DIR__
+    . '/../app/services/updates_filesystem.php');
+mutation_policy_assert_true(
+    str_contains(
+        $updateFilesystemSource,
+        "'app/services/schema_inspection.php'",
+    ),
+    'updater snapshot requires schema inspection service',
+);
+mutation_policy_assert_true(
+    str_contains(
+        $updateFilesystemSource,
+        "'app/services/mutation_schema_policy.php'",
+    ),
+    'updater snapshot requires mutation schema policy service',
+);
 
 schema_inspection_set_query_executor_for_tests(null);
 

@@ -75,13 +75,14 @@ use function Gallery\Core\run_migrations;
 function application_update_ensure_dir(string $path): void
 {
     if (!is_dir($path) && !mkdir($path, 0775, true)) {
-        throw new RuntimeException('Could not create update directory: ' . $path);
+        throw new RuntimeException('Could not create update directory: '
+            . $path);
     }
     if (!is_writable($path)) {
-        throw new RuntimeException('Update directory is not writable: ' . $path);
+        throw new RuntimeException('Update directory is not writable: '
+            . $path);
     }
 }
-
 
 /**
  * Return the application project root that contains index.php, app, public, and cache.
@@ -90,7 +91,8 @@ function application_update_ensure_dir(string $path): void
  */
 function application_update_project_root(): string
 {
-    if (defined('CACHE_LIFECYCLE_TEST_ROOT')) return (string) constant('CACHE_LIFECYCLE_TEST_ROOT');
+    if (defined('CACHE_LIFECYCLE_TEST_ROOT'))
+        return (string) constant('CACHE_LIFECYCLE_TEST_ROOT');
     // $root stores an intermediate value used by the surrounding gallery workflow.
     $root = dirname(__DIR__, 2);
     application_update_assert_project_root($root);
@@ -109,7 +111,9 @@ function application_update_assert_project_root(string $root): void
     // $normalizedRoot stores an intermediate value used by the surrounding gallery workflow.
     $normalizedRoot = rtrim(str_replace('\\', '/', $root), '/');
     if ($normalizedRoot === '' || basename($normalizedRoot) === 'app') {
-        throw new RuntimeException('Updater refused to run because the destination root resolved to the app directory instead of the project root.');
+        throw new RuntimeException(
+            'Updater refused to run because the destination root resolved to the app directory instead of the project root.',
+        );
     }
 
     // $requiredPaths stores an intermediate value used by the surrounding gallery workflow.
@@ -121,10 +125,12 @@ function application_update_assert_project_root(string $root): void
     ];
     foreach ($requiredPaths as $requiredPath) {
         // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
-        $absolutePath = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
+        $absolutePath =
+            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
         application_update_assert_safe_target($root, $requiredPath);
         if (!is_file($absolutePath)) {
-            throw new RuntimeException('Updater refused to run because the project root is missing: ' . $requiredPath);
+            throw new RuntimeException('Updater refused to run because the project root is missing: '
+                . $requiredPath);
         }
     }
 
@@ -133,7 +139,10 @@ function application_update_assert_project_root(string $root): void
         $absoluteDirectory = $root . '/' . $requiredDirectory;
         application_update_assert_safe_target($root, $requiredDirectory);
         if (!is_dir($absoluteDirectory)) {
-            throw new RuntimeException('Updater refused to run because the project root is missing directory: ' . $requiredDirectory);
+            throw new RuntimeException(
+                'Updater refused to run because the project root is missing directory: '
+                    . $requiredDirectory,
+            );
         }
     }
 }
@@ -218,16 +227,27 @@ function application_update_assert_source_root(string $sourceRoot): void
     ];
     foreach ($requiredPaths as $requiredPath) {
         // $absolutePath stores the required file inside the extracted release snapshot.
-        $absolutePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
+        $absolutePath =
+            $sourceRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
         if (!is_file($absolutePath) || !is_readable($absolutePath)) {
-            throw new RuntimeException('Downloaded update archive is incomplete. Missing or unreadable: ' . $requiredPath);
+            throw new RuntimeException(
+                'Downloaded update archive is incomplete. Missing or unreadable: '
+                    . $requiredPath,
+            );
         }
         application_update_assert_safe_target($sourceRoot, $requiredPath);
     }
 
     // A current release must provide at least one migration-definition implementation.
-    if (!is_file($sourceRoot . '/app/migration_definitions.php') && !is_file($sourceRoot . '/app/migrations.php')) {
-        throw new RuntimeException('Downloaded update archive is incomplete. Missing migration support files.');
+    if (
+        !is_file($sourceRoot . '/app/migration_definitions.php')
+        && !is_file($sourceRoot . '/app/migrations.php')
+    ) {
+        throw new RuntimeException(
+            'Downloaded update archive is incomplete. Missing migration support files.',
+        );
     }
 
     // Current source archives activate the exact reviewed updater inventory; older
@@ -244,7 +264,10 @@ function application_update_assert_source_root(string $sourceRoot): void
 function application_update_extracted_root(string $extractDir): string
 {
     // $entries stores an intermediate value used by the surrounding gallery workflow.
-    $entries = array_values(array_filter(scandir($extractDir) ?: [], static fn (string $entry): bool => $entry !== '.' && $entry !== '..'));
+    $entries = array_values(array_filter(
+        scandir($extractDir) ?: [],
+        static fn(string $entry): bool => $entry !== '.' && $entry !== '..',
+    ));
     foreach ($entries as $entry) {
         // $path stores an intermediate value used by the surrounding gallery workflow.
         $path = $extractDir . '/' . $entry;
@@ -252,7 +275,9 @@ function application_update_extracted_root(string $extractDir): string
             return $path;
         }
     }
-    throw new RuntimeException('Extracted update archive did not contain an application directory.');
+    throw new RuntimeException(
+        'Extracted update archive did not contain an application directory.',
+    );
 }
 
 /**
@@ -264,16 +289,24 @@ function application_update_extracted_root(string $extractDir): string
  * @param bool $cleanUnexpectedFiles Whether reviewed obsolete-path cleanup may include unexpected managed files.
  * @return array{files_copied:int,removed_paths:list<string>,removed_count:int} Committed file count and relative paths backed up before removal; throws on incomplete staging/activation.
  */
-function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath, bool $cleanUnexpectedFiles = false): array
-{
+function application_update_copy_files(
+    string $sourceRoot,
+    string $destinationRoot,
+    string $backupPath,
+    bool $cleanUnexpectedFiles = false,
+): array {
     application_update_assert_project_root($destinationRoot);
     application_update_assert_source_root($sourceRoot);
     application_update_assert_gallery_edit_enforcement($sourceRoot);
-    $previousUpdaterFiles = release_file_policy_prior_updater_paths($destinationRoot);
+    $previousUpdaterFiles =
+        release_file_policy_prior_updater_paths($destinationRoot);
 
     // $backup stores the rollback archive for overwritten and removed files.
     $backup = new ZipArchive();
-    if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+    if (
+        $backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+        !== true
+    ) {
         throw new RuntimeException('Could not create update backup archive.');
     }
 
@@ -286,27 +319,50 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
 
     try {
         // Stage only the canonical updater inventory; source ZIP development files stay inactive.
-        foreach (release_file_policy_archive_updater_paths($sourceRoot)['files'] as $relativePath) {
+        foreach (release_file_policy_archive_updater_paths(
+            $sourceRoot,
+        )['files'] as $relativePath) {
             application_update_assert_safe_target($sourceRoot, $relativePath);
-            application_update_assert_safe_target($destinationRoot, $relativePath, true);
-            $sourcePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            application_update_assert_safe_target(
+                $destinationRoot,
+                $relativePath,
+                true,
+            );
+            $sourcePath =
+                $sourceRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
             // $destination stores the corresponding active-installation path.
-            $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            $destination =
+                $destinationRoot
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
             if (is_dir($destination)) {
-                throw new RuntimeException('Cannot replace directory with file during update: ' . $relativePath);
+                throw new RuntimeException('Cannot replace directory with file during update: '
+                    . $relativePath);
             }
 
             $parent = dirname($destination);
             application_update_ensure_dir($parent);
-            $temporaryPath = $parent . '/.php-gallery-update-' . bin2hex(random_bytes(8)) . '.tmp';
+            $temporaryPath =
+                $parent
+                . '/.php-gallery-update-'
+                . bin2hex(random_bytes(8))
+                . '.tmp';
             if (!copy($sourcePath, $temporaryPath)) {
-                throw new RuntimeException('Could not stage update file: ' . $relativePath);
+                throw new RuntimeException('Could not stage update file: '
+                    . $relativePath);
             }
             $expectedSize = filesize($sourcePath);
             $stagedSize = filesize($temporaryPath);
-            if ($expectedSize === false || $stagedSize === false || $expectedSize !== $stagedSize) {
+            if (
+                $expectedSize === false
+                || $stagedSize === false
+                || $expectedSize !== $stagedSize
+            ) {
                 @unlink($temporaryPath);
-                throw new RuntimeException('Staged update file failed size verification: ' . $relativePath);
+                throw new RuntimeException('Staged update file failed size verification: '
+                    . $relativePath);
             }
             $stagedFiles[] = [
                 'temporary' => $temporaryPath,
@@ -326,14 +382,20 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
                     'app/controllers/admin_galleries_edit.php',
                     'app/controllers/admin_theme.php',
                     'app/controllers/public_gallery.php',
-                    'app/services/updates.php' => 10,
+                    'app/services/updates.php',
+                        => 10,
                     default => 0,
                 };
             };
-            $priorityComparison = $priority((string) $left['relative']) <=> $priority((string) $right['relative']);
+            $priorityComparison = $priority(
+                (string) $left['relative'],
+            ) <=> $priority((string) $right['relative']);
             return $priorityComparison !== 0
                 ? $priorityComparison
-                : strcmp((string) $left['relative'], (string) $right['relative']);
+                : strcmp(
+                    (string) $left['relative'],
+                    (string) $right['relative'],
+                );
         });
 
         foreach ($stagedFiles as $stagedFile) {
@@ -344,7 +406,8 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
                 $backup->addFile($destination, $relativePath);
             }
             if (!rename($temporaryPath, $destination)) {
-                throw new RuntimeException('Could not atomically replace update file: ' . $relativePath);
+                throw new RuntimeException('Could not atomically replace update file: '
+                    . $relativePath);
             }
             application_update_invalidate_opcache_for_path($destination);
             $copied++;
@@ -352,10 +415,22 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
         $stagedFiles = [];
 
         // Cleanup happens only after the complete replacement snapshot is active.
-        application_update_backup_and_remove_misplaced_project_copy($destinationRoot, $backup);
+        application_update_backup_and_remove_misplaced_project_copy(
+            $destinationRoot,
+            $backup,
+        );
         $removed = array_values(array_unique(array_merge(
-            application_update_remove_malformed_root_files($destinationRoot, $backup),
-            application_update_remove_obsolete_managed_paths($sourceRoot, $destinationRoot, $backup, $cleanUnexpectedFiles, $previousUpdaterFiles)
+            application_update_remove_malformed_root_files(
+                $destinationRoot,
+                $backup,
+            ),
+            application_update_remove_obsolete_managed_paths(
+                $sourceRoot,
+                $destinationRoot,
+                $backup,
+                $cleanUnexpectedFiles,
+                $previousUpdaterFiles,
+            ),
         )));
     } finally {
         foreach ($stagedFiles as $stagedFile) {
@@ -384,8 +459,10 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
  * @param ZipArchive $backup Open updater rollback archive.
  * @return array<int, string> Removed root filenames.
  */
-function application_update_remove_malformed_root_files(string $root, ZipArchive $backup): array
-{
+function application_update_remove_malformed_root_files(
+    string $root,
+    ZipArchive $backup,
+): array {
     application_update_assert_project_root($root);
 
     // $removed stores literal malformed filenames removed from the project root.
@@ -399,19 +476,29 @@ function application_update_remove_malformed_root_files(string $root, ZipArchive
 
         // $filename may contain a literal backslash or be a known app module flattened into the project root.
         $filename = $entry->getFilename();
-        if (!str_contains($filename, '\\') && !application_update_root_filename_is_misplaced($filename)) {
+        if (
+            !str_contains($filename, '\\')
+            && !application_update_root_filename_is_misplaced($filename)
+        ) {
             continue;
         }
 
         // Store the artifact under a safe, non-restoring diagnostic path in the rollback archive.
-        $backupName = 'malformed-root-files/' . str_replace('\\', '__BACKSLASH__', $filename);
+        $backupName =
+            'malformed-root-files/'
+            . str_replace('\\', '__BACKSLASH__', $filename);
         // $contents is loaded before deletion because ZipArchive may defer reading addFile sources until close().
         $contents = file_get_contents($entry->getPathname());
-        if ($contents === false || !$backup->addFromString($backupName, $contents)) {
-            throw new RuntimeException('Could not back up malformed root file before removal: ' . $filename);
+        if (
+            $contents === false
+            || !$backup->addFromString($backupName, $contents)
+        ) {
+            throw new RuntimeException('Could not back up malformed root file before removal: '
+                . $filename);
         }
         if (!unlink($entry->getPathname())) {
-            throw new RuntimeException('Could not remove malformed root file: ' . $filename);
+            throw new RuntimeException('Could not remove malformed root file: '
+                . $filename);
         }
         $removed[] = $filename;
     }
@@ -455,11 +542,14 @@ function application_update_root_filename_is_misplaced(string $filename): bool
  * Run the misplaced root-file cleanup as a standalone administrator maintenance action.
  *
  * @return array{removed_paths: array<int, string>, removed_count: int, backup: string}
+ *     Paths captured and removed, their count, and the backup archive path.
  */
 function application_update_cleanup_malformed_root_files(): array
 {
     if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('The PHP ZipArchive extension is required for misplaced file cleanup.');
+        throw new RuntimeException(
+            'The PHP ZipArchive extension is required for misplaced file cleanup.',
+        );
     }
 
     // $root stores the verified application root inspected by this narrowly scoped cleanup.
@@ -468,18 +558,35 @@ function application_update_cleanup_malformed_root_files(): array
     $backupDir = $root . '/cache/updates/backups';
     application_update_ensure_dir($backupDir);
     // $backupPath stores any malformed files before they are removed.
-    $backupPath = $backupDir . '/before-malformed-root-cleanup-' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.zip';
+    $backupPath =
+        $backupDir
+        . '/before-malformed-root-cleanup-'
+        . date('Ymd-His')
+        . '-'
+        . bin2hex(random_bytes(3))
+        . '.zip';
     // $backup stores the rollback archive passed to the shared guarded cleanup.
     $backup = new ZipArchive();
-    if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        throw new RuntimeException('Could not create misplaced file cleanup backup archive.');
+    if (
+        $backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+        !== true
+    ) {
+        throw new RuntimeException(
+            'Could not create misplaced file cleanup backup archive.',
+        );
     }
 
     try {
         // $removed stores the literal root filenames deleted by the cleanup.
-        $removed = application_update_remove_malformed_root_files($root, $backup);
+        $removed = application_update_remove_malformed_root_files(
+            $root,
+            $backup,
+        );
         if ($removed === []) {
-            $backup->addFromString('cleanup-result.txt', "No malformed root files were found.\n");
+            $backup->addFromString(
+                'cleanup-result.txt',
+                "No malformed root files were found.\n",
+            );
         }
     } finally {
         $backup->close();
@@ -488,7 +595,11 @@ function application_update_cleanup_malformed_root_files(): array
     return [
         'removed_paths' => $removed,
         'removed_count' => count($removed),
-        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
+        'backup' => str_replace(
+            '\\',
+            '/',
+            substr($backupPath, strlen($root) + 1),
+        ),
     ];
 }
 
@@ -513,8 +624,10 @@ function application_update_managed_server_policy_files(): array
  * @param bool $cleanUnexpectedFiles Clean unexpected files value.
  * @return bool True when the condition matches.
  */
-function application_update_path_is_managed_by_updater(string $relativePath, bool $cleanUnexpectedFiles): bool
-{
+function application_update_path_is_managed_by_updater(
+    string $relativePath,
+    bool $cleanUnexpectedFiles,
+): bool {
     // $relativePath stores the normalized project-relative path tested against managed areas.
     $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
     if ($relativePath === '') {
@@ -544,33 +657,57 @@ function application_update_remove_obsolete_managed_paths(
     string $destinationRoot,
     ZipArchive $backup,
     bool $cleanUnexpectedFiles,
-    array $previousUpdaterFiles = []
-): array
-{
+    array $previousUpdaterFiles = [],
+): array {
     // $removed stores normalized relative paths removed from the installation.
     $removed = [];
     if (!$cleanUnexpectedFiles) {
-        $incoming = array_fill_keys(release_file_policy_archive_updater_paths($sourceRoot)['files'], true);
+        $incoming = array_fill_keys(
+            release_file_policy_archive_updater_paths($sourceRoot)['files'],
+            true,
+        );
         $root = realpath($destinationRoot);
         if ($root === false) {
-            throw new RuntimeException('Updater destination root is unavailable during obsolete-file cleanup.');
+            throw new RuntimeException(
+                'Updater destination root is unavailable during obsolete-file cleanup.',
+            );
         }
         foreach ($previousUpdaterFiles as $relativePath) {
-            if (!is_string($relativePath)
-                || !\Gallery\Core\release_file_policy_is_safe_relative_path($relativePath)
+            if (
+                !is_string($relativePath)
+                || !\Gallery\Core\release_file_policy_is_safe_relative_path(
+                    $relativePath,
+                )
                 || isset($incoming[$relativePath])
-                || application_update_path_is_protected($relativePath)) {
+                || application_update_path_is_protected($relativePath)
+            ) {
                 continue;
             }
-            $absolute = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            $absolute =
+                $root
+                . '/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
             if (!is_file($absolute) && !is_link($absolute)) {
                 continue;
             }
             application_update_assert_safe_target($root, $relativePath);
-            if (is_link($absolute) || !release_file_policy_resolves_to_expected_path($root, $relativePath, $absolute)) {
-                throw new RuntimeException('Updater refuses to remove an obsolete path through a link or redirected directory.');
+            if (
+                is_link($absolute)
+                || !release_file_policy_resolves_to_expected_path(
+                    $root,
+                    $relativePath,
+                    $absolute,
+                )
+            ) {
+                throw new RuntimeException(
+                    'Updater refuses to remove an obsolete path through a link or redirected directory.',
+                );
             }
-            application_update_add_path_to_backup($backup, $absolute, 'removed-before-update/' . $relativePath);
+            application_update_add_path_to_backup(
+                $backup,
+                $absolute,
+                'removed-before-update/' . $relativePath,
+            );
             application_update_remove_path($absolute);
             $removed[] = $relativePath;
         }
@@ -580,24 +717,45 @@ function application_update_remove_obsolete_managed_paths(
 
     // $iterator stores destination entries checked from deepest to shallowest so directories can be removed safely.
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($destinationRoot, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $destinationRoot,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
         // $relativePath stores the candidate path relative to the project root.
-        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($destinationRoot) + 1));
-        if ($relativePath === '' || $item->isLink() || application_update_path_is_protected($relativePath)) {
+        $relativePath = str_replace(
+            '\\',
+            '/',
+            substr($item->getPathname(), strlen($destinationRoot) + 1),
+        );
+        if (
+            $relativePath === ''
+            || $item->isLink()
+            || application_update_path_is_protected($relativePath)
+        ) {
             continue;
         }
-        if (!application_update_path_is_managed_by_updater($relativePath, $cleanUnexpectedFiles)) {
+        if (!application_update_path_is_managed_by_updater(
+            $relativePath,
+            $cleanUnexpectedFiles,
+        )) {
             continue;
         }
         // $sourcePath stores the corresponding path in the downloaded release snapshot.
-        $sourcePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $sourcePath =
+            $sourceRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (file_exists($sourcePath)) {
             continue;
         }
-        application_update_add_path_to_backup($backup, $item->getPathname(), 'removed-before-update/' . $relativePath);
+        application_update_add_path_to_backup(
+            $backup,
+            $item->getPathname(),
+            'removed-before-update/' . $relativePath,
+        );
         application_update_remove_path($item->getPathname());
         $removed[] = $relativePath;
     }
@@ -610,44 +768,66 @@ function application_update_remove_obsolete_managed_paths(
  *
  * @param string $root Root value.
  * @param string $activeBackupPath Active backup path filesystem path.
- * @return array Structured result data for the caller.
+ * @return array{zip_files_removed:int,temporary_paths_removed:list<string>} Removed ZIP count and project-relative temporary paths.
  */
-function application_update_clean_cache_artifacts(string $root, string $activeBackupPath = ''): array
-{
+function application_update_clean_cache_artifacts(
+    string $root,
+    string $activeBackupPath = '',
+): array {
     // $cacheRoot stores the cache directory whose generated archives can be safely cleaned.
     $cacheRoot = $root . '/cache';
     if (!is_dir($cacheRoot)) {
         return ['zip_files_removed' => 0, 'temporary_paths_removed' => []];
     }
     // $activeBackupRealPath stores the current rollback backup, which must survive the reinstall.
-    $activeBackupRealPath = $activeBackupPath !== '' ? realpath($activeBackupPath) : false;
+    $activeBackupRealPath = $activeBackupPath !== ''
+        ? realpath($activeBackupPath)
+        : false;
     // $zipFilesRemoved stores how many generated ZIP files were deleted.
     $zipFilesRemoved = 0;
     // $temporaryPathsRemoved stores cache/update working directories removed after extraction.
     $temporaryPathsRemoved = [];
     // $iterator stores all cache entries, deepest first for safe directory cleanup.
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($cacheRoot, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $cacheRoot,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
         // $path stores the absolute cache item path.
         $path = $item->getPathname();
         // $pathRealPath stores a canonical path used to avoid deleting the active backup.
         $pathRealPath = realpath($path);
-        if ($activeBackupRealPath !== false && $pathRealPath !== false && $activeBackupRealPath === $pathRealPath) {
+        if (
+            $activeBackupRealPath !== false
+            && $pathRealPath !== false
+            && $activeBackupRealPath === $pathRealPath
+        ) {
             continue;
         }
         if ($item->isFile() && preg_match('/\.zip$/i', $item->getFilename())) {
             if (!unlink($path)) {
-                throw new RuntimeException('Could not remove cached ZIP file: ' . $path);
+                throw new RuntimeException('Could not remove cached ZIP file: '
+                    . $path);
             }
             $zipFilesRemoved++;
             continue;
         }
-        if ($item->isDir() && preg_match('/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/', $item->getFilename())) {
+        if (
+            $item->isDir()
+            && preg_match(
+                '/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/',
+                $item->getFilename(),
+            )
+        ) {
             application_update_remove_path($path);
-            $temporaryPathsRemoved[] = str_replace('\\', '/', substr($path, strlen($root) + 1));
+            $temporaryPathsRemoved[] = str_replace(
+                '\\',
+                '/',
+                substr($path, strlen($root) + 1),
+            );
         }
     }
     sort($temporaryPathsRemoved);
@@ -656,7 +836,6 @@ function application_update_clean_cache_artifacts(string $root, string $activeBa
         'temporary_paths_removed' => $temporaryPathsRemoved,
     ];
 }
-
 
 /**
  * Return persistent cache paths whose contents are derived from application code or remote metadata.
@@ -675,18 +854,34 @@ function application_update_version_sensitive_cache_paths(string $root): array
     return [
         'github-api' => $cacheRoot . DIRECTORY_SEPARATOR . 'github-api',
         'patch-notes' => $cacheRoot . DIRECTORY_SEPARATOR . 'patch-notes',
-        'thumbnail-warmup' => $cacheRoot . DIRECTORY_SEPARATOR . 'thumbnail-warmup',
-        'integrity-status.json' => $cacheRoot . DIRECTORY_SEPARATOR . 'integrity-status.json',
-        'admin-database-maintenance-report.json' => $cacheRoot . DIRECTORY_SEPARATOR . 'admin-database-maintenance-report.json',
+        'thumbnail-warmup' =>
+            $cacheRoot . DIRECTORY_SEPARATOR . 'thumbnail-warmup',
+        'integrity-status.json' =>
+            $cacheRoot . DIRECTORY_SEPARATOR . 'integrity-status.json',
+        'admin-database-maintenance-report.json' =>
+            $cacheRoot
+                . DIRECTORY_SEPARATOR
+                . 'admin-database-maintenance-report.json',
     ];
 }
 
 /**
  * Return the updater-owned trash root used for bounded post-update deletion.
+ *
+ * @param string $root Installation root.
+ * @return string Absolute updater prune-trash root under cache/updates.
  */
 function application_update_prune_trash_root(string $root): string
 {
-    return rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'updates' . DIRECTORY_SEPARATOR . 'prune-trash';
+    return (
+        rtrim($root, '/\\')
+            . DIRECTORY_SEPARATOR
+            . 'cache'
+            . DIRECTORY_SEPARATOR
+            . 'updates'
+            . DIRECTORY_SEPARATOR
+            . 'prune-trash'
+    );
 }
 
 /**
@@ -695,13 +890,20 @@ function application_update_prune_trash_root(string $root): string
  * The marker is diagnostic and future-cache friendly. Actual invalidation is performed
  * by moving known version-sensitive persistent caches away from their canonical paths.
  *
- * @return array{generation:int,updated_at:int,job_id:string,version:string}
+ * @param string $root Installation root containing cache/.
+ * @param string $jobId Durable updater job identifier.
+ * @param string $version Installed release version.
+ * @return array{generation:int,updated_at:int,job_id:string,version:string} Persisted cache-generation marker data.
  */
-function application_update_bump_cache_generation(string $root, string $jobId, string $version): array
-{
+function application_update_bump_cache_generation(
+    string $root,
+    string $jobId,
+    string $version,
+): array {
     $cacheRoot = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache';
     application_update_ensure_dir($cacheRoot);
-    $path = $cacheRoot . DIRECTORY_SEPARATOR . 'application-cache-generation.json';
+    $path =
+        $cacheRoot . DIRECTORY_SEPARATOR . 'application-cache-generation.json';
     $current = [];
     if (is_file($path)) {
         $decoded = json_decode((string) @file_get_contents($path), true);
@@ -715,14 +917,21 @@ function application_update_bump_cache_generation(string $root, string $jobId, s
         'job_id' => $jobId,
         'version' => $version,
     ];
-    $encoded = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    $encoded = json_encode(
+        $payload,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($encoded)) {
-        throw new RuntimeException('Could not encode application cache generation state.');
+        throw new RuntimeException(
+            'Could not encode application cache generation state.',
+        );
     }
     $temporary = $path . '.tmp-' . bin2hex(random_bytes(6));
     if (file_put_contents($temporary, $encoded, LOCK_EX) === false) {
         @unlink($temporary);
-        throw new RuntimeException('Could not persist application cache generation state.');
+        throw new RuntimeException(
+            'Could not persist application cache generation state.',
+        );
     }
     if (!@rename($temporary, $path)) {
         // Windows may refuse rename-over-existing even within one filesystem.
@@ -730,7 +939,9 @@ function application_update_bump_cache_generation(string $root, string $jobId, s
         @unlink($path);
         if (!@rename($temporary, $path)) {
             @unlink($temporary);
-            throw new RuntimeException('Could not persist application cache generation state.');
+            throw new RuntimeException(
+                'Could not persist application cache generation state.',
+            );
         }
     }
     return $payload;
@@ -743,20 +954,34 @@ function application_update_bump_cache_generation(string $root, string $jobId, s
  * cache paths disappear immediately, while physical deletion is deferred to the bounded cleanup
  * stage. Replays are idempotent because an already-staged path is never moved twice.
  *
- * @return array<string,mixed> Invalidation diagnostics stored in the update result.
+ * @param string $root Installation root containing persistent caches.
+ * @param string $jobId Durable update job identifier used in prune paths.
+ * @param string $version Installed release version for cache generation metadata.
+ * @return array{strategy:string,moved:list<string>,already_invalidated:list<string>,errors:array<string,string>,generation:?array{generation:int,updated_at:int,job_id:string,version:string},elapsed_ms:float} Cache invalidation outcome recorded in the update result.
  */
-function application_update_invalidate_persistent_caches(string $root, string $jobId, string $version): array
-{
+function application_update_invalidate_persistent_caches(
+    string $root,
+    string $jobId,
+    string $version,
+): array {
     $startedAt = microtime(true);
-    $trashRoot = application_update_prune_trash_root($root)
-        . DIRECTORY_SEPARATOR . 'cache-invalidated'
-        . DIRECTORY_SEPARATOR . $jobId;
+    $trashRoot =
+        application_update_prune_trash_root($root)
+        . DIRECTORY_SEPARATOR
+        . 'cache-invalidated'
+        . DIRECTORY_SEPARATOR
+        . $jobId;
     $moved = [];
     $alreadyInvalidated = [];
     $errors = [];
 
-    foreach (application_update_version_sensitive_cache_paths($root) as $relative => $source) {
-        $target = $trashRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+    foreach (application_update_version_sensitive_cache_paths(
+        $root,
+    ) as $relative => $source) {
+        $target =
+            $trashRoot
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (file_exists($target) || is_link($target)) {
             $alreadyInvalidated[] = $relative;
             continue;
@@ -767,7 +992,9 @@ function application_update_invalidate_persistent_caches(string $root, string $j
         try {
             application_update_ensure_dir(dirname($target));
             if (!@rename($source, $target)) {
-                throw new RuntimeException('Could not atomically stage cache path for deletion.');
+                throw new RuntimeException(
+                    'Could not atomically stage cache path for deletion.',
+                );
             }
             $moved[] = $relative;
         } catch (Throwable $exception) {
@@ -777,7 +1004,11 @@ function application_update_invalidate_persistent_caches(string $root, string $j
 
     $generation = null;
     try {
-        $generation = application_update_bump_cache_generation($root, $jobId, $version);
+        $generation = application_update_bump_cache_generation(
+            $root,
+            $jobId,
+            $version,
+        );
     } catch (Throwable $exception) {
         $errors['application-cache-generation.json'] = 'cache_generation_persist_failed';
     }
@@ -796,10 +1027,14 @@ function application_update_invalidate_persistent_caches(string $root, string $j
 /**
  * Move one updater-owned path into prune-trash without traversing its contents.
  *
+ * @param string $source Existing path to stage, or an already-staged/missing path.
+ * @param string $target Destination path under updater-owned prune-trash.
  * @return bool True when the source was moved or had already been staged.
  */
-function application_update_stage_path_for_prune(string $source, string $target): bool
-{
+function application_update_stage_path_for_prune(
+    string $source,
+    string $target,
+): bool {
     if (file_exists($target) || is_link($target)) {
         // A source that still exists has not been staged yet. Do not report success
         // merely because an older same-name trash entry is awaiting deletion.
@@ -818,8 +1053,10 @@ function application_update_stage_path_for_prune(string $source, string $target)
  * @param int $maxMoves Historical move budget retained for compatibility; unknown legacy artifacts are never admitted.
  * @return array{moved:int,remaining:bool} No automatic moves; the lifecycle inventory reports this protected storage for explicit owner migration.
  */
-function application_update_stage_legacy_cache_artifacts(string $root, int $maxMoves = 12): array
-{
+function application_update_stage_legacy_cache_artifacts(
+    string $root,
+    int $maxMoves = 12,
+): array {
     // Legacy timestamps cannot identify the selected rollback version. Preserve
     // pre-job-format backups and extraction directories until an owner migration
     // supplies version identity; age alone must never remove recovery storage.
@@ -838,8 +1075,12 @@ function application_update_stage_legacy_cache_artifacts(string $root, int $maxM
  * @param list<string> $cursor Relative directory stack from the preceding slice, never trusted as an absolute path.
  * @return array{removed:int,done:bool,elapsed_ms:float,bytes_removed:int,visited:int,blocked:bool,cursor:list<string>,failure_code:string,failure_operation:string,object_token:string} Actual reclamation, safe failure classification and a bounded continuation stack.
  */
-function application_update_delete_tree_slice(string $path, int $maxEntries = 180, float $maxSeconds = 0.18, array $cursor = []): array
-{
+function application_update_delete_tree_slice(
+    string $path,
+    int $maxEntries = 180,
+    float $maxSeconds = 0.18,
+    array $cursor = [],
+): array {
     $startedAt = microtime(true);
     $deadline = $startedAt + max(0.01, min(0.50, $maxSeconds));
     $removed = 0;
@@ -855,19 +1096,32 @@ function application_update_delete_tree_slice(string $path, int $maxEntries = 18
     // before resuming; a moved/replaced directory must never redirect deletion.
     $previous = '';
     foreach (array_slice($cursor, 1, 64) as $relative) {
-        if (!is_string($relative) || str_contains($relative, '\\') || str_contains($relative, ':') || str_contains($relative, "\0")
+        if (
+            !is_string($relative)
+            || str_contains($relative, '\\')
+            || str_contains($relative, ':')
+            || str_contains($relative, "\0")
             || dirname($relative) !== ($previous === '' ? '.' : $previous)
-            || in_array(basename($relative), ['', '.', '..'], true)) {
+            || in_array(basename($relative), ['', '.', '..'], true)
+        ) {
             $blocked = true;
             $failureCode = 'invalid_cursor';
             $failureOperation = 'validate_cursor';
             break;
         }
-        $candidate = $path . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $candidate =
+            $path
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (is_link($candidate) || !is_dir($candidate)) {
             break;
         }
-        if (realpath($candidate) !== realpath($path) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative)) {
+        if (
+            realpath($candidate)
+            !== realpath($path)
+                . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative)
+        ) {
             $blocked = true;
             $failureCode = 'unsafe_redirect';
             $failureOperation = 'validate_cursor';
@@ -880,12 +1134,26 @@ function application_update_delete_tree_slice(string $path, int $maxEntries = 18
     $handle = null;
     $opened = null;
     try {
-        while (!$blocked && $stack !== [] && $visited < max(1, $maxEntries) && microtime(true) < $deadline) {
+        while (
+            !$blocked
+            && $stack !== []
+            && $visited < max(1, $maxEntries)
+            && microtime(true) < $deadline
+        ) {
             $relative = $stack[count($stack) - 1];
-            $directory = $path . ($relative === '' ? '' : DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
+            $directory =
+                $path
+                . (
+                    $relative === ''
+                        ? ''
+                        : DIRECTORY_SEPARATOR
+                        . str_replace('/', DIRECTORY_SEPARATOR, $relative)
+                );
             if (is_link($directory) || is_file($directory)) {
                 $visited++;
-                $size = is_link($directory) ? 0 : max(0, (int) @filesize($directory));
+                $size = is_link($directory)
+                    ? 0
+                    : max(0, (int) @filesize($directory));
                 error_clear_last();
                 if (@unlink($directory)) {
                     $removed++;
@@ -950,15 +1218,27 @@ function application_update_delete_tree_slice(string $path, int $maxEntries = 18
                     $blocked = true;
                     $failureCode = 'depth_limit';
                     $failureOperation = 'descend';
-                    $failureObject = $relative === '' ? $name : $relative . '/' . $name;
+                    $failureObject = $relative === ''
+                        ? $name
+                        : $relative . '/' . $name;
                     break;
                 }
-                if (realpath($itemPath) !== realpath($path) . DIRECTORY_SEPARATOR
-                    . str_replace('/', DIRECTORY_SEPARATOR, $relative === '' ? $name : $relative . '/' . $name)) {
+                if (
+                    realpath($itemPath)
+                    !== realpath($path)
+                        . DIRECTORY_SEPARATOR
+                        . str_replace(
+                            '/',
+                            DIRECTORY_SEPARATOR,
+                            $relative === '' ? $name : $relative . '/' . $name,
+                        )
+                ) {
                     $blocked = true;
                     $failureCode = 'unsafe_redirect';
                     $failureOperation = 'descend';
-                    $failureObject = $relative === '' ? $name : $relative . '/' . $name;
+                    $failureObject = $relative === ''
+                        ? $name
+                        : $relative . '/' . $name;
                     break;
                 }
                 $stack[] = $relative === '' ? $name : $relative . '/' . $name;
@@ -973,7 +1253,9 @@ function application_update_delete_tree_slice(string $path, int $maxEntries = 18
                 $blocked = true;
                 $failureCode = application_update_prune_failure_code();
                 $failureOperation = 'unlink';
-                $failureObject = $relative === '' ? $name : $relative . '/' . $name;
+                $failureObject = $relative === ''
+                    ? $name
+                    : $relative . '/' . $name;
             }
         }
     } finally {
@@ -992,7 +1274,9 @@ function application_update_delete_tree_slice(string $path, int $maxEntries = 18
         'cursor' => $stack,
         'failure_code' => $failureCode,
         'failure_operation' => $failureOperation,
-        'object_token' => $blocked ? substr(hash('sha256', $failureObject), 0, 16) : '',
+        'object_token' => $blocked
+            ? substr(hash('sha256', $failureObject), 0, 16)
+            : '',
     ];
 }
 
@@ -1003,8 +1287,12 @@ function application_update_delete_tree_slice(string $path, int $maxEntries = 18
 function application_update_prune_failure_code(): string
 {
     $message = strtolower((string) (error_get_last()['message'] ?? ''));
-    foreach (['permission denied' => 'permission_denied', 'read-only' => 'read_only',
-        'not empty' => 'directory_not_empty', 'being used' => 'file_in_use'] as $needle => $code) {
+    foreach ([
+        'permission denied' => 'permission_denied',
+        'read-only' => 'read_only',
+        'not empty' => 'directory_not_empty',
+        'being used' => 'file_in_use',
+    ] as $needle => $code) {
         if (str_contains($message, $needle)) {
             return $code;
         }
@@ -1012,15 +1300,17 @@ function application_update_prune_failure_code(): string
     return 'io_failed';
 }
 
-
 /**
  * Back up and remove a full project copy that was accidentally written inside app.
  *
  * @param string $root Root value.
  * @param ZipArchive $backup Backup value.
+ * @return void Archives and removes known misplaced project-copy paths under app/.
  */
-function application_update_backup_and_remove_misplaced_project_copy(string $root, ZipArchive $backup): void
-{
+function application_update_backup_and_remove_misplaced_project_copy(
+    string $root,
+    ZipArchive $backup,
+): void {
     // $appDirectory stores an intermediate value used by the surrounding gallery workflow.
     $appDirectory = $root . '/app';
     if (!is_dir($appDirectory)) {
@@ -1031,11 +1321,16 @@ function application_update_backup_and_remove_misplaced_project_copy(string $roo
     $misplacedPaths = application_update_misplaced_project_paths($root);
     foreach ($misplacedPaths as $relativePath) {
         // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
-        $absolutePath = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $absolutePath =
+            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (!file_exists($absolutePath)) {
             continue;
         }
-        application_update_add_path_to_backup($backup, $absolutePath, 'misplaced-before-update/' . $relativePath);
+        application_update_add_path_to_backup(
+            $backup,
+            $absolutePath,
+            'misplaced-before-update/' . $relativePath,
+        );
         application_update_remove_path($absolutePath);
     }
 }
@@ -1082,9 +1377,13 @@ function application_update_misplaced_project_paths(string $root): array
  * @param ZipArchive $backup Backup value.
  * @param string $path Filesystem path.
  * @param string $archivePath Archive path filesystem path.
+ * @return void Adds the file tree to the archive when the source exists; omits symbolic links and directories as archive entries.
  */
-function application_update_add_path_to_backup(ZipArchive $backup, string $path, string $archivePath): void
-{
+function application_update_add_path_to_backup(
+    ZipArchive $backup,
+    string $path,
+    string $archivePath,
+): void {
     // $archivePath stores an intermediate value used by the surrounding gallery workflow.
     $archivePath = ltrim(str_replace('\\', '/', $archivePath), '/');
     if (is_file($path)) {
@@ -1098,15 +1397,22 @@ function application_update_add_path_to_backup(ZipArchive $backup, string $path,
     // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
+        RecursiveIteratorIterator::SELF_FIRST,
     );
     foreach ($iterator as $item) {
         if ($item->isLink() || $item->isDir()) {
             continue;
         }
         // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($path) + 1));
-        $backup->addFile($item->getPathname(), rtrim($archivePath, '/') . '/' . $relativePath);
+        $relativePath = str_replace(
+            '\\',
+            '/',
+            substr($item->getPathname(), strlen($path) + 1),
+        );
+        $backup->addFile(
+            $item->getPathname(),
+            rtrim($archivePath, '/') . '/' . $relativePath,
+        );
     }
 }
 
@@ -1114,12 +1420,14 @@ function application_update_add_path_to_backup(ZipArchive $backup, string $path,
  * Remove a file or directory tree after it has been captured in the updater backup.
  *
  * @param string $path Filesystem path.
+ * @return void Removes the path recursively, or throws RuntimeException when removal fails.
  */
 function application_update_remove_path(string $path): void
 {
     if (is_file($path) || is_link($path)) {
         if (!unlink($path)) {
-            throw new RuntimeException('Could not remove misplaced updater artifact: ' . $path);
+            throw new RuntimeException('Could not remove misplaced updater artifact: '
+                . $path);
         }
         return;
     }
@@ -1130,21 +1438,28 @@ function application_update_remove_path(string $path): void
     // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
         if ($item->isDir() && !$item->isLink()) {
             if (!rmdir($item->getPathname())) {
-                throw new RuntimeException('Could not remove misplaced updater directory: ' . $item->getPathname());
+                throw new RuntimeException(
+                    'Could not remove misplaced updater directory: '
+                        . $item->getPathname(),
+                );
             }
             continue;
         }
         if (!unlink($item->getPathname())) {
-            throw new RuntimeException('Could not remove misplaced updater file: ' . $item->getPathname());
+            throw new RuntimeException(
+                'Could not remove misplaced updater file: '
+                    . $item->getPathname(),
+            );
         }
     }
     if (!rmdir($path)) {
-        throw new RuntimeException('Could not remove misplaced updater directory: ' . $path);
+        throw new RuntimeException('Could not remove misplaced updater directory: '
+            . $path);
     }
 }
 
@@ -1153,9 +1468,12 @@ function application_update_remove_path(string $path): void
  *
  * @param string $updateDir Update dir value.
  * @param string $activeExtractDir Active extract dir value.
+ * @return void Removes stale extraction folders while preserving the active extraction directory and backups.
  */
-function application_update_cleanup_transient_extracts(string $updateDir, string $activeExtractDir = ''): void
-{
+function application_update_cleanup_transient_extracts(
+    string $updateDir,
+    string $activeExtractDir = '',
+): void {
     if (!is_dir($updateDir)) {
         return;
     }
@@ -1166,16 +1484,25 @@ function application_update_cleanup_transient_extracts(string $updateDir, string
         if ($entry === '.' || $entry === '..' || $entry === 'backups') {
             continue;
         }
-        if (!preg_match('/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/', $entry)) {
+        if (!preg_match(
+            '/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/',
+            $entry,
+        )) {
             continue;
         }
         // $path stores an intermediate value used by the surrounding gallery workflow.
         $path = $updateDir . '/' . $entry;
         // $activeExtractRealPath stores an intermediate value used by the surrounding gallery workflow.
-        $activeExtractRealPath = $activeExtractDir !== '' ? realpath($activeExtractDir) : false;
+        $activeExtractRealPath = $activeExtractDir !== ''
+            ? realpath($activeExtractDir)
+            : false;
         // $pathRealPath stores an intermediate value used by the surrounding gallery workflow.
         $pathRealPath = realpath($path);
-        if ($activeExtractRealPath !== false && $pathRealPath !== false && $activeExtractRealPath === $pathRealPath) {
+        if (
+            $activeExtractRealPath !== false
+            && $pathRealPath !== false
+            && $activeExtractRealPath === $pathRealPath
+        ) {
             continue;
         }
         if (is_dir($path)) {
@@ -1204,25 +1531,38 @@ function application_update_invalidate_opcache_for_path(string $path): void
  *
  * @param string $destinationRoot Destination root value.
  * @param string $sourceRoot Source root value.
+ * @return void Invalidates OPcache for PHP files restored from the source tree when OPcache is available.
  */
-function application_update_invalidate_opcache(string $destinationRoot, string $sourceRoot): void
-{
+function application_update_invalidate_opcache(
+    string $destinationRoot,
+    string $sourceRoot,
+): void {
     if (!function_exists('opcache_invalidate')) {
         return;
     }
     // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
+        new RecursiveDirectoryIterator(
+            $sourceRoot,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::SELF_FIRST,
     );
     foreach ($iterator as $item) {
         if ($item->isDir() || $item->isLink()) {
             continue;
         }
         // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
+        $relativePath = str_replace(
+            '\\',
+            '/',
+            substr($item->getPathname(), strlen($sourceRoot) + 1),
+        );
         // $destination stores an intermediate value used by the surrounding gallery workflow.
-        $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $destination =
+            $destinationRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         application_update_invalidate_opcache_for_path($destination);
     }
 }

@@ -42,7 +42,9 @@ namespace Gallery\Core {
     function verify_csrf(): void
     {
         if (($_POST['csrf_token'] ?? null) !== 'missing-schema-fixture') {
-            throw new \RuntimeException('The missing-schema fixture must provide its owned CSRF token.');
+            throw new \RuntimeException(
+                'The missing-schema fixture must provide its owned CSRF token.',
+            );
         }
         $GLOBALS['widget_admin_missing_schema_csrf_calls']++;
     }
@@ -80,9 +82,15 @@ namespace Gallery\Core {
      * @param bool $publicOnly Unused shell rendering mode.
      * @return void Emits a test header marker.
      */
-    function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
-    {
-        echo '<header data-test-admin-header>' . htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</header>';
+    function render_header(
+        string $title,
+        ?array $currentGallery = null,
+        bool $publicOnly = true,
+    ): void {
+        echo
+            '<header data-test-admin-header>'
+                . htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '</header>';
     }
 
     /**
@@ -115,7 +123,11 @@ namespace Gallery\Core {
      */
     function url_for(string $page, array $params = []): string
     {
-        return '/index.php?page=' . rawurlencode($page) . ($params === [] ? '' : '&' . http_build_query($params));
+        return (
+            '/index.php?page='
+                . rawurlencode($page)
+                . ($params === [] ? '' : '&' . http_build_query($params))
+        );
     }
 
     /**
@@ -137,7 +149,11 @@ namespace Gallery\Core {
      */
     function e(?string $value): string
     {
-        return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars(
+            $value ?? '',
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 }
 
@@ -150,8 +166,11 @@ namespace Gallery\Services {
      * @param array<string,string|int|float|bool|null> $parameters Scalar interpolation values, ignored by this English fixture.
      * @return string Fallback text, or the key when no text fallback is supplied.
      */
-    function t(string $key, string|array|null $fallback = null, array $parameters = []): string
-    {
+    function t(
+        string $key,
+        string|array|null $fallback = null,
+        array $parameters = [],
+    ): string {
         return is_string($fallback) ? $fallback : $key;
     }
 
@@ -163,8 +182,11 @@ namespace Gallery\Services {
      * @param bool $includeFragment Whether to include a section fragment.
      * @return string Relative settings URL.
      */
-    function admin_settings_url(?string $section = null, ?string $return = null, bool $includeFragment = false): string
-    {
+    function admin_settings_url(
+        ?string $section = null,
+        ?string $return = null,
+        bool $includeFragment = false,
+    ): string {
         return '/index.php?page=admin_settings';
     }
 
@@ -216,18 +238,33 @@ namespace {
          * @source-contract-opaque-param $fetchModeArgs Inherited PDO arguments are intentionally ignored by this disconnected fixture.
          * @return never Throws a fixture contract exception for unsupported SQL, or a PDOException for the absent table.
          */
-        public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): \PDOStatement|false
-        {
-            if (!str_contains($query, 'FROM public_content_widgets') || $fetchMode !== null) {
-                throw new \RuntimeException('Unexpected Admin missing-schema query.');
+        public function query(
+            string $query,
+            ?int $fetchMode = null,
+            mixed ...$fetchModeArgs,
+        ): \PDOStatement|false {
+            if (
+                !str_contains($query, 'FROM public_content_widgets')
+                || $fetchMode !== null
+            ) {
+                throw new \RuntimeException(
+                    'Unexpected Admin missing-schema query.',
+                );
             }
             $this->queryCount++;
-            if (preg_match('/^\s*(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i', $query) === 1) {
+            if (
+                preg_match(
+                    '/^\s*(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i',
+                    $query,
+                ) === 1
+            ) {
                 $this->mutationStatementCount++;
-                throw new \RuntimeException('Unexpected direct widget mutation in the missing-schema fixture.');
+                throw new \RuntimeException(
+                    'Unexpected direct widget mutation in the missing-schema fixture.',
+                );
             }
             throw new \PDOException(
-                'SQLSTATE[42S02]: Base table or view not found: 1146 Table public_content_widgets does not exist; WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC'
+                'SQLSTATE[42S02]: Base table or view not found: 1146 Table public_content_widgets does not exist; WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC',
             );
         }
 
@@ -238,21 +275,35 @@ namespace {
          * @param array<array-key,mixed> $options Opaque PDO statement options, lexically unused by this disconnected fixture.
          * @return \PDOStatement|false Never returns; the missing table prevents statement preparation.
          */
-        public function prepare(string $query, array $options = []): \PDOStatement|false
-        {
+        public function prepare(
+            string $query,
+            array $options = [],
+        ): \PDOStatement|false {
             $this->prepareCount++;
-            $isMutation = preg_match('/^\s*(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i', $query) === 1;
-            $targetsWidgetTable = preg_match('/^\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:`public_content_widgets`|public_content_widgets)(?![a-zA-Z0-9_])/i', $query) === 1;
+            $isMutation =
+                preg_match(
+                    '/^\s*(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i',
+                    $query,
+                ) === 1;
+            $targetsWidgetTable =
+                preg_match(
+                    '/^\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:`public_content_widgets`|public_content_widgets)(?![a-zA-Z0-9_])/i',
+                    $query,
+                ) === 1;
             if ($isMutation) {
                 if (!$targetsWidgetTable) {
-                    throw new \RuntimeException('Unexpected prepared mutation target in the missing-schema fixture.');
+                    throw new \RuntimeException(
+                        'Unexpected prepared mutation target in the missing-schema fixture.',
+                    );
                 }
                 $this->mutationStatementCount++;
                 throw new \PDOException(
-                    'SQLSTATE[42S02]: Base table or view not found: 1146 Table public_content_widgets does not exist; WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC'
+                    'SQLSTATE[42S02]: Base table or view not found: 1146 Table public_content_widgets does not exist; WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC',
                 );
             }
-            throw new \RuntimeException('Unexpected prepared statement in the missing-schema fixture.');
+            throw new \RuntimeException(
+                'Unexpected prepared statement in the missing-schema fixture.',
+            );
         }
 
         /**
@@ -264,10 +315,17 @@ namespace {
         public function exec(string $statement): int|false
         {
             $this->execCount++;
-            if (preg_match('/^\s*(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i', $statement) === 1) {
+            if (
+                preg_match(
+                    '/^\s*(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i',
+                    $statement,
+                ) === 1
+            ) {
                 $this->mutationStatementCount++;
             }
-            throw new \RuntimeException('Unexpected direct SQL execution in the missing-schema fixture.');
+            throw new \RuntimeException(
+                'Unexpected direct SQL execution in the missing-schema fixture.',
+            );
         }
 
         /**
@@ -335,14 +393,50 @@ namespace {
     \Gallery\Controllers\cms_admin_theme();
     $html = (string) ob_get_clean();
 
-    $check(str_contains($html, 'data-test-admin-header') && str_contains($html, 'data-test-admin-footer'), 'The actual Theme route must render the surrounding Admin page shell.');
-    $check(str_contains($html, '<h1>Public content widgets</h1>') && str_contains($html, 'class="public-widgets-form"'), 'The actual Theme route must render a usable production widget editor.');
-    $check(str_contains($html, 'Widget storage is unavailable. Check database migrations and try again.'), 'The Admin view must explain the unavailable widget storage with the safe user-facing message.');
-    $check(str_contains($html, 'No stored widgets yet. Public pages remain unchanged.'), 'The Admin view must retain a safe empty-list state.');
-    $check(!str_contains($html, 'WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC') && !str_contains($html, 'SQLSTATE[42S02]') && !str_contains($html, 'public_content_widgets does not exist'), 'Raw missing-table diagnostics must not enter Admin HTML.');
-    $check($connection->queryCount === 1, 'The route must exercise exactly one production widget-list read.');
-    $check($connection->prepareCount === 0 && $connection->execCount === 0 && $connection->mutationStatementCount === 0, 'The read-only route must not issue prepared, direct or mutating SQL.');
-    $check($GLOBALS['widget_admin_missing_schema_auth_calls'] === 2, 'Both the Theme route and widget controller must retain their Admin authentication guards.');
+    $check(
+        str_contains($html, 'data-test-admin-header')
+            && str_contains($html, 'data-test-admin-footer'),
+        'The actual Theme route must render the surrounding Admin page shell.',
+    );
+    $check(
+        str_contains($html, '<h1>Public content widgets</h1>')
+            && str_contains($html, 'class="public-widgets-form"'),
+        'The actual Theme route must render a usable production widget editor.',
+    );
+    $check(
+        str_contains(
+            $html,
+            'Widget storage is unavailable. Check database migrations and try again.',
+        ),
+        'The Admin view must explain the unavailable widget storage with the safe user-facing message.',
+    );
+    $check(
+        str_contains(
+            $html,
+            'No stored widgets yet. Public pages remain unchanged.',
+        ),
+        'The Admin view must retain a safe empty-list state.',
+    );
+    $check(
+        !str_contains($html, 'WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC')
+            && !str_contains($html, 'SQLSTATE[42S02]')
+            && !str_contains($html, 'public_content_widgets does not exist'),
+        'Raw missing-table diagnostics must not enter Admin HTML.',
+    );
+    $check(
+        $connection->queryCount === 1,
+        'The route must exercise exactly one production widget-list read.',
+    );
+    $check(
+        $connection->prepareCount === 0
+            && $connection->execCount === 0
+            && $connection->mutationStatementCount === 0,
+        'The read-only route must not issue prepared, direct or mutating SQL.',
+    );
+    $check(
+        $GLOBALS['widget_admin_missing_schema_auth_calls'] === 2,
+        'Both the Theme route and widget controller must retain their Admin authentication guards.',
+    );
 
     $validDraft = [
         'title' => 'Unavailable widget storage',
@@ -361,9 +455,23 @@ namespace {
         'source_language' => 'en',
     ];
     $writeAttempts = [
-        'create' => ['widget_action' => 'create', 'widget_id' => 'new', ...$validDraft],
-        'save' => ['widget_action' => 'save', 'widget_id' => str_repeat('a', 32), 'revision' => '1', ...$validDraft],
-        'delete' => ['widget_action' => 'delete', 'widget_id' => str_repeat('a', 32), 'revision' => '1', 'confirm_delete' => '1'],
+        'create' => [
+            'widget_action' => 'create',
+            'widget_id' => 'new',
+            ...$validDraft,
+        ],
+        'save' => [
+            'widget_action' => 'save',
+            'widget_id' => str_repeat('a', 32),
+            'revision' => '1',
+            ...$validDraft,
+        ],
+        'delete' => [
+            'widget_action' => 'delete',
+            'widget_id' => str_repeat('a', 32),
+            'revision' => '1',
+            'confirm_delete' => '1',
+        ],
     ];
     foreach ($writeAttempts as $action => $post) {
         $GLOBALS['widget_admin_missing_schema_method'] = 'POST';
@@ -375,15 +483,46 @@ namespace {
         ob_start();
         \Gallery\Controllers\cms_admin_theme();
         $writeHtml = (string) ob_get_clean();
-        $check(str_contains($writeHtml, 'Widget storage is unavailable. Check database migrations and try again.'), 'The missing table must produce the safe storage message for ' . $action . '.');
-        $check(!str_contains($writeHtml, 'WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC')
-            && !str_contains($writeHtml, 'SQLSTATE[42S02]')
-            && !str_contains($writeHtml, '1146 Table public_content_widgets does not exist'), 'The storage diagnostic must stay private for ' . $action . '.');
-        $check($GLOBALS['widget_admin_missing_schema_auth_calls'] === 2 && $GLOBALS['widget_admin_missing_schema_csrf_calls'] === 1, 'The ' . $action . ' request must retain both Admin guards and its CSRF check.');
-        $check(!$connection->inTransaction(), 'The failed ' . $action . ' request must close its transaction.');
+        $check(
+            str_contains(
+                $writeHtml,
+                'Widget storage is unavailable. Check database migrations and try again.',
+            ),
+            'The missing table must produce the safe storage message for '
+                . $action
+                . '.',
+        );
+        $check(
+            !str_contains($writeHtml, 'WIDGET_ADMIN_PRIVATE_SCHEMA_DIAGNOSTIC')
+                && !str_contains($writeHtml, 'SQLSTATE[42S02]')
+                && !str_contains(
+                    $writeHtml,
+                    '1146 Table public_content_widgets does not exist',
+                ),
+            'The storage diagnostic must stay private for ' . $action . '.',
+        );
+        $check(
+            $GLOBALS['widget_admin_missing_schema_auth_calls'] === 2
+                && $GLOBALS['widget_admin_missing_schema_csrf_calls'] === 1,
+            'The '
+                . $action
+                . ' request must retain both Admin guards and its CSRF check.',
+        );
+        $check(
+            !$connection->inTransaction(),
+            'The failed ' . $action . ' request must close its transaction.',
+        );
     }
-    $check($connection->queryCount === 5, 'Create, save and delete must each fail at the missing storage boundary and retain one safe Admin list read.');
-    $check($connection->prepareCount === 2 && $connection->mutationStatementCount === 2 && $connection->execCount === 0, 'Save and delete may attempt their guarded statements, but no prepared mutation executes or direct SQL path is used.');
+    $check(
+        $connection->queryCount === 5,
+        'Create, save and delete must each fail at the missing storage boundary and retain one safe Admin list read.',
+    );
+    $check(
+        $connection->prepareCount === 2
+            && $connection->mutationStatementCount === 2
+            && $connection->execCount === 0,
+        'Save and delete may attempt their guarded statements, but no prepared mutation executes or direct SQL path is used.',
+    );
 
     echo "public_widget_admin_missing_schema_test: PASS\n";
 }

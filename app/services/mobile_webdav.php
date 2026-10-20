@@ -51,9 +51,7 @@ use function Gallery\Models\mobile_webdav_model_mark_used;
 use function Gallery\Models\mobile_webdav_model_tokens;
 
 /** A body-staging failure with a translated, path-free message; HTTP mapping belongs to the controller. */
-final class MobileWebdavBodyException extends RuntimeException
-{
-}
+final class MobileWebdavBodyException extends RuntimeException {}
 
 /**
  * Return whether the WebDAV token table is available.
@@ -68,7 +66,7 @@ function mobile_webdav_ready(): bool
 /**
  * Return all configured mobile WebDAV upload tokens for the admin UI.
  *
- * @return array Structured result data for the caller.
+ * @return list<array{id:int|string,user_id:int|string,gallery_id:int|string,label:string,username:string,password_hash:string,path_token:string,enabled:int|string,created_at:string,updated_at:string,last_used_at:?string,gallery_title:string,gallery_folder_path:string}> Token rows safe for the admin UI.
  */
 function mobile_webdav_tokens(): array
 {
@@ -79,7 +77,10 @@ function mobile_webdav_tokens(): array
     mutation_schema_assert_known(
         $schemaStatus,
         'mobile_webdav.list_tokens',
-        t('mobile_webdav.error_schema_unknown', 'Mobile upload connections are temporarily unavailable because their database schema could not be verified.')
+        t(
+            'mobile_webdav.error_schema_unknown',
+            'Mobile upload connections are temporarily unavailable because their database schema could not be verified.',
+        ),
     );
     return mobile_webdav_model_tokens();
 }
@@ -90,26 +91,48 @@ function mobile_webdav_tokens(): array
  * @param int $userId User id identifier.
  * @param int $galleryId Gallery identifier.
  * @param string $label Label value.
- * @return array Structured result data for the caller.
+ * @return array{id:int,label:string,username:string,password:string,path_token:string,gallery:array<string,mixed>,url:string} Created credential; plaintext password is returned once.
  */
-function mobile_webdav_create_token(int $userId, int $galleryId, string $label): array
-{
+function mobile_webdav_create_token(
+    int $userId,
+    int $galleryId,
+    string $label,
+): array {
     mutation_schema_assert_available(
         mobile_webdav_schema_status(),
         'mobile_webdav.create_token',
-        t('mobile_webdav.error_migration_required', 'Run database migrations before creating mobile upload connections.'),
-        t('mobile_webdav.error_schema_unknown', 'Mobile upload connections are temporarily unavailable because their database schema could not be verified. No credential was created.')
+        t(
+            'mobile_webdav.error_migration_required',
+            'Run database migrations before creating mobile upload connections.',
+        ),
+        t(
+            'mobile_webdav.error_schema_unknown',
+            'Mobile upload connections are temporarily unavailable because their database schema could not be verified. No credential was created.',
+        ),
     );
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
-    $cleanLabel = trim($label) !== '' ? trim($label) : (string) t('mobile_webdav.default_label', 'Mobile upload');
+    $cleanLabel = trim($label) !== ''
+        ? trim($label)
+        : (string) t('mobile_webdav.default_label', 'Mobile upload');
     $pathToken = bin2hex(random_bytes(24));
     $password = mobile_webdav_plain_password();
     $username = 'mobile-' . $pathToken;
     $now = now_sql();
-    $tokenId = mobile_webdav_model_create_token($userId, $galleryId, $cleanLabel, $username, password_hash($password, PASSWORD_DEFAULT), $pathToken, $now);
+    $tokenId = mobile_webdav_model_create_token(
+        $userId,
+        $galleryId,
+        $cleanLabel,
+        $username,
+        password_hash($password, PASSWORD_DEFAULT),
+        $pathToken,
+        $now,
+    );
     return [
         'id' => $tokenId,
         'label' => $cleanLabel,
@@ -124,15 +147,22 @@ function mobile_webdav_create_token(int $userId, int $galleryId, string $label):
 /**
  * Delete one mobile WebDAV token.
  *
- * @param int $tokenId Token id identifier.
+ * @param int $tokenId Persisted credential identifier.
+ * @return void Deletes the credential row.
  */
 function mobile_webdav_delete_token(int $tokenId): void
 {
     mutation_schema_assert_available(
         mobile_webdav_revocation_schema_status(),
         'mobile_webdav.delete_token',
-        t('mobile_webdav.error_migration_required', 'Run database migrations before managing mobile upload connections.'),
-        t('mobile_webdav.error_schema_unknown', 'The mobile upload credential could not be deleted because its database schema could not be verified. No credential was changed.')
+        t(
+            'mobile_webdav.error_migration_required',
+            'Run database migrations before managing mobile upload connections.',
+        ),
+        t(
+            'mobile_webdav.error_schema_unknown',
+            'The mobile upload credential could not be deleted because its database schema could not be verified. No credential was changed.',
+        ),
     );
     mobile_webdav_model_delete_token($tokenId);
 }
@@ -155,7 +185,9 @@ function mobile_webdav_plain_password(): string
  */
 function mobile_webdav_absolute_url(string $pathToken): string
 {
-    return absolute_public_url(base_url('webdav/' . rawurlencode($pathToken) . '/'));
+    return absolute_public_url(base_url(
+        'webdav/' . rawurlencode($pathToken) . '/',
+    ));
 }
 
 /**
@@ -172,8 +204,14 @@ function mobile_webdav_find_by_path_token(string $pathToken): ?array
     mutation_schema_assert_available(
         mobile_webdav_schema_status(),
         'mobile_webdav.authenticate',
-        t('mobile_webdav.error_migration_required', 'Run database migrations before using mobile upload connections.'),
-        t('mobile_webdav.error_schema_unknown', 'Mobile upload authentication is temporarily unavailable because its database schema could not be verified.')
+        t(
+            'mobile_webdav.error_migration_required',
+            'Run database migrations before using mobile upload connections.',
+        ),
+        t(
+            'mobile_webdav.error_schema_unknown',
+            'Mobile upload authentication is temporarily unavailable because its database schema could not be verified.',
+        ),
     );
     return mobile_webdav_model_find_active_by_path_token($pathToken);
 }
@@ -181,11 +219,18 @@ function mobile_webdav_find_by_path_token(string $pathToken): ?array
 /**
  * Authenticate one mobile WebDAV request with Basic Auth.
  *
- * @param string $pathToken Path token filesystem path.
- * @return ?array Structured result data for the caller.
+ * @param string $pathToken URL path credential used to locate the token.
+ * @param string $username Basic Auth username, when supplied by the server.
+ * @param string $password Basic Auth password, when supplied by the server.
+ * @param string $authorization Raw Authorization header fallback.
+ * @return ?array<string,mixed> Active token row when credentials match; otherwise null.
  */
-function mobile_webdav_authenticated_token(string $pathToken, string $username = '', string $password = '', string $authorization = ''): ?array
-{
+function mobile_webdav_authenticated_token(
+    string $pathToken,
+    string $username = '',
+    string $password = '',
+    string $authorization = '',
+): ?array {
     $token = mobile_webdav_find_by_path_token($pathToken);
     if (!$token) {
         return null;
@@ -234,7 +279,10 @@ function mobile_webdav_filename_from_path(string $path): string
     $path = trim(str_replace('\\', '/', rawurldecode($path)), '/');
     $filename = basename($path);
     if ($filename === '' || $filename === '.' || $filename === '..') {
-        throw new RuntimeException(t('mobile_webdav.error_missing_filename', 'The WebDAV upload did not include a filename.'));
+        throw new RuntimeException(t(
+            'mobile_webdav.error_missing_filename',
+            'The WebDAV upload did not include a filename.',
+        ));
     }
     return $filename;
 }
@@ -255,45 +303,80 @@ function mobile_webdav_filename_from_path(string $path): string
  * @throws MutationSchemaUnavailableException On schema refusal; a staged body remains available where hosting permits.
  * @author Rudolf Klusal
  */
-function mobile_webdav_store_put_stream(array $token, string $targetPath, mixed $input): array
-{
+function mobile_webdav_store_put_stream(
+    array $token,
+    string $targetPath,
+    mixed $input,
+): array {
     if (!is_resource($input) || get_resource_type($input) !== 'stream') {
-        throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+        throw new MobileWebdavBodyException(t(
+            'mobile_webdav.error_read_body',
+            'Could not read upload body.',
+        ));
     }
     $temporaryDirectory = realpath(sys_get_temp_dir());
-    $temporaryPath = $temporaryDirectory === false ? false : @tempnam($temporaryDirectory, MOBILE_WEBDAV_TEMPORARY_PREFIX);
-    if (!is_string($temporaryPath)
+    $temporaryPath = $temporaryDirectory === false
+        ? false
+        : @tempnam($temporaryDirectory, MOBILE_WEBDAV_TEMPORARY_PREFIX);
+    if (
+        !is_string($temporaryPath)
         || realpath(dirname($temporaryPath)) !== $temporaryDirectory
         // Windows tempnam() keeps only the first three prefix characters.
-        || !str_starts_with(basename($temporaryPath), MOBILE_WEBDAV_TEMPORARY_PORTABLE_PREFIX)
+        || !str_starts_with(
+            basename($temporaryPath),
+            MOBILE_WEBDAV_TEMPORARY_PORTABLE_PREFIX,
+        )
         || is_link($temporaryPath)
         || !is_file($temporaryPath)
     ) {
-        throw new MobileWebdavBodyException(t('mobile_webdav.error_temp_file', 'Could not create temporary upload file.'));
+        throw new MobileWebdavBodyException(t(
+            'mobile_webdav.error_temp_file',
+            'Could not create temporary upload file.',
+        ));
     }
     $identity = @lstat($temporaryPath);
     if (!is_array($identity)) {
         // Unverified ownership cannot authorize deletion, even on staging failure.
-        throw new MobileWebdavBodyException(t('mobile_webdav.error_temp_file', 'Could not create temporary upload file.'));
+        throw new MobileWebdavBodyException(t(
+            'mobile_webdav.error_temp_file',
+            'Could not create temporary upload file.',
+        ));
     }
     $output = null;
     $retainBody = false;
     try {
         $output = @fopen($temporaryPath, 'r+b');
         if (!is_resource($output)) {
-            throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+            throw new MobileWebdavBodyException(t(
+                'mobile_webdav.error_read_body',
+                'Could not read upload body.',
+            ));
         }
         $openedIdentity = fstat($output);
-        if (!is_array($openedIdentity) || $openedIdentity['dev'] !== $identity['dev'] || $openedIdentity['ino'] !== $identity['ino']) {
-            throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+        if (
+            !is_array($openedIdentity)
+            || $openedIdentity['dev'] !== $identity['dev']
+            || $openedIdentity['ino'] !== $identity['ino']
+        ) {
+            throw new MobileWebdavBodyException(t(
+                'mobile_webdav.error_read_body',
+                'Could not read upload body.',
+            ));
         }
         $copied = @stream_copy_to_stream($input, $output);
         if ($copied === false || !feof($input) || !@fflush($output)) {
-            throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+            throw new MobileWebdavBodyException(t(
+                'mobile_webdav.error_read_body',
+                'Could not read upload body.',
+            ));
         }
         fclose($output);
         $output = null;
-        return mobile_webdav_store_put($token, mobile_webdav_filename_from_path($targetPath), $temporaryPath);
+        return mobile_webdav_store_put(
+            $token,
+            mobile_webdav_filename_from_path($targetPath),
+            $temporaryPath,
+        );
     } catch (MutationSchemaUnavailableException $exception) {
         // Both missing and unknown schema are recoverable refusals, not bad input.
         $retainBody = true;
@@ -305,8 +388,12 @@ function mobile_webdav_store_put_stream(array $token, string $targetPath, mixed 
         if (!$retainBody) {
             clearstatcache(true, $temporaryPath);
             $currentIdentity = @lstat($temporaryPath);
-            if (is_array($currentIdentity) && !is_link($temporaryPath) && is_file($temporaryPath)
-                && $currentIdentity['dev'] === $identity['dev'] && $currentIdentity['ino'] === $identity['ino']
+            if (
+                is_array($currentIdentity)
+                && !is_link($temporaryPath)
+                && is_file($temporaryPath)
+                && $currentIdentity['dev'] === $identity['dev']
+                && $currentIdentity['ino'] === $identity['ino']
             ) {
                 @unlink($temporaryPath);
             }
@@ -322,8 +409,11 @@ function mobile_webdav_store_put_stream(array $token, string $targetPath, mixed 
  * @param string $sourcePath Temporary request-body file consumed on successful installation.
  * @return array{filename:string,scanned:int,image_ids:list<int>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>} Stored name and registration/rename outcomes.
  */
-function mobile_webdav_store_put(array $token, string $filename, string $sourcePath): array
-{
+function mobile_webdav_store_put(
+    array $token,
+    string $filename,
+    string $sourcePath,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
         return mobile_webdav_store_put_owned($token, $filename, $sourcePath);
@@ -344,64 +434,118 @@ function mobile_webdav_store_put(array $token, string $filename, string $sourceP
  * @return array{filename:string,scanned:int,image_ids:list<int>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>} Stored name and registration/rename outcomes.
  * @author Rudolf Klusal
  */
-function mobile_webdav_store_put_owned(array $token, string $filename, string $sourcePath): array
-{
+function mobile_webdav_store_put_owned(
+    array $token,
+    string $filename,
+    string $sourcePath,
+): array {
     mutation_schema_assert_available(
         mobile_webdav_schema_status(),
         'mobile_webdav.store_put_token',
-        t('mobile_webdav.error_migration_required', 'Run database migrations before using mobile upload connections.'),
-        t('mobile_webdav.error_schema_unknown', 'Mobile upload is temporarily unavailable because its credential schema could not be verified. No gallery file was changed.')
+        t(
+            'mobile_webdav.error_migration_required',
+            'Run database migrations before using mobile upload connections.',
+        ),
+        t(
+            'mobile_webdav.error_schema_unknown',
+            'Mobile upload is temporarily unavailable because its credential schema could not be verified. No gallery file was changed.',
+        ),
     );
     mutation_schema_assert_available(
         upload_ingestion_schema_status(),
         'mobile_webdav.store_put_gallery',
         'Mobile upload requires the current gallery/image database schema. Run pending migrations first.',
-        'Mobile upload is temporarily unavailable because the gallery/image database schema could not be verified. No gallery file was changed.'
+        'Mobile upload is temporarily unavailable because the gallery/image database schema could not be verified. No gallery file was changed.',
     );
     if (!is_file($sourcePath)) {
-        throw new RuntimeException(t('mobile_webdav.error_empty_upload', 'The WebDAV upload body was empty.'));
+        throw new RuntimeException(t(
+            'mobile_webdav.error_empty_upload',
+            'The WebDAV upload body was empty.',
+        ));
     }
     $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-        throw new RuntimeException(t('mobile_webdav.error_supported_formats', 'Mobile WebDAV upload accepts JPG, PNG, GIF, and WebP files. Configure the mobile app to convert HEIC to JPEG before transfer.'));
+        throw new RuntimeException(t(
+            'mobile_webdav.error_supported_formats',
+            'Mobile WebDAV upload accepts JPG, PNG, GIF, and WebP files. Configure the mobile app to convert HEIC to JPEG before transfer.',
+        ));
     }
     $info = @getimagesize($sourcePath);
-    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-        throw new RuntimeException(t('upload.error.invalid_image', 'One uploaded file is not a valid image.'));
+    if (
+        $info === false
+        || empty($info['mime'])
+        || !str_starts_with((string) $info['mime'], 'image/')
+    ) {
+        throw new RuntimeException(t(
+            'upload.error.invalid_image',
+            'One uploaded file is not a valid image.',
+        ));
     }
     $gallery = find_gallery((int) $token['gallery_id'], true);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
-    [$storedFilename, $targetPath] = unique_gallery_upload_target($gallery, $filename);
+    [$storedFilename, $targetPath] = unique_gallery_upload_target(
+        $gallery,
+        $filename,
+    );
     if (!@rename($sourcePath, $targetPath)) {
         if (!@copy($sourcePath, $targetPath)) {
-            throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
+            throw new RuntimeException(t(
+                'upload.error.store_image_failed',
+                'Could not store uploaded image.',
+            ));
         }
         @unlink($sourcePath);
     }
     $changed = scan_gallery_images((int) $gallery['id']);
-    $imageIds = uploaded_gallery_image_ids((int) $gallery['id'], [$storedFilename]);
+    $imageIds = uploaded_gallery_image_ids((int) $gallery['id'], [
+        $storedFilename,
+    ]);
     $renameResult = null;
     if (admin_upload_auto_rename_enabled() && $imageIds) {
-        $renameResult = gallery_upload_auto_rename_image_ids((int) $gallery['id'], $imageIds);
-        $finalNames = uploaded_gallery_filenames_for_image_ids((int) $gallery['id'], $imageIds);
+        $renameResult = gallery_upload_auto_rename_image_ids(
+            (int) $gallery['id'],
+            $imageIds,
+        );
+        $finalNames = uploaded_gallery_filenames_for_image_ids(
+            (int) $gallery['id'],
+            $imageIds,
+        );
         $storedFilename = (string) ($finalNames[0] ?? $storedFilename);
     }
     mobile_webdav_model_mark_used((int) $token['id'], now_sql());
-    admin_log_event('info', 'mobile_webdav.uploaded', 'Mobile WebDAV client uploaded an image.', [
-        'token_id' => (int) $token['id'],
-        'gallery_id' => (int) $gallery['id'],
-        'filename' => $storedFilename,
-        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
-        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
-    ]);
+    admin_log_event(
+        'info',
+        'mobile_webdav.uploaded',
+        'Mobile WebDAV client uploaded an image.',
+        [
+            'token_id' => (int) $token['id'],
+            'gallery_id' => (int) $gallery['id'],
+            'filename' => $storedFilename,
+            'renamed' => $renameResult === null
+                ? 0
+                : (int) ($renameResult['renamed'] ?? 0),
+            'rename_failures' => $renameResult === null
+                ? []
+                : array_values((array) ($renameResult['failures'] ?? [])),
+        ],
+    );
     return [
         'filename' => $storedFilename,
         'scanned' => $changed,
         'image_ids' => array_map('intval', $imageIds),
-        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
-        'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
-        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+        'renamed' => $renameResult === null
+            ? 0
+            : (int) ($renameResult['renamed'] ?? 0),
+        'rename_warnings' => $renameResult === null
+            ? []
+            : array_values((array) ($renameResult['warnings'] ?? [])),
+        'rename_failures' => $renameResult === null
+            ? []
+            : array_values((array) ($renameResult['failures'] ?? [])),
     ];
 }

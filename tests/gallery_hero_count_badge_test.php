@@ -45,58 +45,146 @@ require_once __DIR__ . '/support/php_source.php';
  * @param string $label Assertion label.
  * @return void Throws when neither the exact fragment nor its PHP tokens occur.
  */
-function assert_gallery_hero_count_contains(string $source, string $needle, string $label): void
-{
+function assert_gallery_hero_count_contains(
+    string $source,
+    string $needle,
+    string $label,
+): void {
     if (!php_source_contains($source, $needle)) {
-        throw new RuntimeException($label . ' is missing required source fragment: ' . $needle);
+        throw new RuntimeException(
+            $label . ' is missing required source fragment: ' . $needle,
+        );
     }
 }
 
-$controller = file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
+$controller = file_get_contents(__DIR__
+    . '/../app/controllers/public_gallery_page.php');
 $view = file_get_contents(__DIR__ . '/../app/views/public_gallery_pages.php');
 $styles = file_get_contents(__DIR__ . '/../public/assets/styles/utilities.css');
 if (!is_string($controller) || !is_string($view) || !is_string($styles)) {
-    throw new RuntimeException('Unable to read gallery hero count badge sources.');
+    throw new RuntimeException(
+        'Unable to read gallery hero count badge sources.',
+    );
 }
 
-assert_gallery_hero_count_contains($controller, '$showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);', 'effective badge policy');
-if (!str_contains($controller, '$heroBranchImageCount = $showHeroCountBadge')
-    || !str_contains($controller, "public_render_profile_span('gallery_hero_branch_image_count'")) {
-    throw new RuntimeException('disabled-state query guard and profile span contract is missing.');
+assert_gallery_hero_count_contains(
+    $controller,
+    '$showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);',
+    'effective badge policy',
+);
+if (
+    !str_contains($controller, '$heroBranchImageCount = $showHeroCountBadge')
+    || !str_contains(
+        $controller,
+        "public_render_profile_span('gallery_hero_branch_image_count'",
+    )
+) {
+    throw new RuntimeException(
+        'disabled-state query guard and profile span contract is missing.',
+    );
 }
-assert_gallery_hero_count_contains($controller, 'gallery_branch_image_count((int) $gallery[\'id\'], true, true)', 'canonical public-only branch counter');
-assert_gallery_hero_count_contains($controller, "'show_count_badge' => \$showHeroCountBadge", 'controller-prepared count-badge state');
-assert_gallery_hero_count_contains($view, "if (!empty(\$viewModel['show_count_badge'])) {", 'conditional hero rendering');
-assert_gallery_hero_count_contains($view, 'gallery.hero.branch_image_count_aria', 'translated accessible label');
-assert_gallery_hero_count_contains($view, 'gallery.hero.branch_image_count_hint', 'translated explanatory title');
-assert_gallery_hero_count_contains($view, 'gallery-hero-count-badge', 'hero count badge markup');
-assert_gallery_hero_count_contains($view, 'subgallery-stack-icon', 'shared stacked-picture icon');
-assert_gallery_hero_count_contains($controller, 'gallery_count_badge_needs_total($gallery, $isCountAdmin)', 'admin-only total query guard');
-assert_gallery_hero_count_contains($controller, 'gallery_branch_image_count((int) $gallery[\'id\'], true, true)', 'visitor-only access rules without admin bypass');
-assert_gallery_hero_count_contains($controller, "'count_badge' => \$heroCountBadge", 'server-built count presentation');
-assert_gallery_hero_count_contains($view, 'view_gallery_count_admin_values($badge)', 'admin mode-aware count rendering');
-assert_gallery_hero_count_contains($view, 'gallery.hero.branch_image_count_aria', 'guest count retained');
+assert_gallery_hero_count_contains(
+    $controller,
+    'gallery_branch_image_count((int) $gallery[\'id\'], true, true)',
+    'canonical public-only branch counter',
+);
+assert_gallery_hero_count_contains(
+    $controller,
+    "'show_count_badge' => \$showHeroCountBadge",
+    'controller-prepared count-badge state',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    "if (!empty(\$viewModel['show_count_badge'])) {",
+    'conditional hero rendering',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    'gallery.hero.branch_image_count_aria',
+    'translated accessible label',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    'gallery.hero.branch_image_count_hint',
+    'translated explanatory title',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    'gallery-hero-count-badge',
+    'hero count badge markup',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    'subgallery-stack-icon',
+    'shared stacked-picture icon',
+);
+assert_gallery_hero_count_contains(
+    $controller,
+    'gallery_count_badge_needs_total($gallery, $isCountAdmin)',
+    'admin-only total query guard',
+);
+assert_gallery_hero_count_contains(
+    $controller,
+    'gallery_branch_image_count((int) $gallery[\'id\'], true, true)',
+    'visitor-only access rules without admin bypass',
+);
+assert_gallery_hero_count_contains(
+    $controller,
+    "'count_badge' => \$heroCountBadge",
+    'server-built count presentation',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    'view_gallery_count_admin_values($badge)',
+    'admin mode-aware count rendering',
+);
+assert_gallery_hero_count_contains(
+    $view,
+    'gallery.hero.branch_image_count_aria',
+    'guest count retained',
+);
 
-assert_gallery_hero_count_contains($styles, '.public-page .gallery-hero-count-badge', 'hero badge styling');
-assert_gallery_hero_count_contains($styles, 'display: inline-flex;', 'in-flow hero badge layout');
-assert_gallery_hero_count_contains($styles, 'font-variant-numeric: tabular-nums;', 'stable count typography');
+assert_gallery_hero_count_contains(
+    $styles,
+    '.public-page .gallery-hero-count-badge',
+    'hero badge styling',
+);
+assert_gallery_hero_count_contains(
+    $styles,
+    'display: inline-flex;',
+    'in-flow hero badge layout',
+);
+assert_gallery_hero_count_contains(
+    $styles,
+    'font-variant-numeric: tabular-nums;',
+    'stable count typography',
+);
 
 foreach (['en', 'cs', 'de', 'sv'] as $language) {
     $catalogPath = __DIR__ . '/../app/lang/' . $language . '.json';
     $catalogJson = file_get_contents($catalogPath);
     if (!is_string($catalogJson)) {
-        throw new RuntimeException('Unable to read translation catalog: ' . $catalogPath);
+        throw new RuntimeException('Unable to read translation catalog: '
+            . $catalogPath);
     }
     $catalog = json_decode($catalogJson, true, 512, JSON_THROW_ON_ERROR);
     foreach ([
-        'gallery.hero.branch_image_count_aria', 'gallery.hero.branch_image_count_hint',
-        'gallery.count_badge.admin_both_aria', 'gallery.count_badge.admin_all_aria',
-        'gallery.count_badge.admin_public_aria', 'gallery.count_badge.public_only',
-        'gallery.count_badge.all_only', 'gallery.count_badge.both', 'gallery.count_badge.mode_hidden',
-        'admin.theme.layout.count_badge_mode_label', 'admin.theme.layout.count_badge_icons_label',
+        'gallery.hero.branch_image_count_aria',
+        'gallery.hero.branch_image_count_hint',
+        'gallery.count_badge.admin_both_aria',
+        'gallery.count_badge.admin_all_aria',
+        'gallery.count_badge.admin_public_aria',
+        'gallery.count_badge.public_only',
+        'gallery.count_badge.all_only',
+        'gallery.count_badge.both',
+        'gallery.count_badge.mode_hidden',
+        'admin.theme.layout.count_badge_mode_label',
+        'admin.theme.layout.count_badge_icons_label',
     ] as $key) {
         if (!isset($catalog[$key]) || trim((string) $catalog[$key]) === '') {
-            throw new RuntimeException($language . ' catalog is missing translation key: ' . $key);
+            throw new RuntimeException(
+                $language . ' catalog is missing translation key: ' . $key,
+            );
         }
     }
 }

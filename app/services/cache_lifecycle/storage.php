@@ -22,9 +22,15 @@ function cache_lifecycle_with_lock(callable $operation): array
     $directory = cache_lifecycle_control_directory();
     cache_lifecycle_assert_path($directory . '/worker.lock');
     $handle = @fopen($directory . '/worker.lock', 'c');
-    if ($handle === false) throw new \RuntimeException('Cache lifecycle lock is unavailable.');
+    if ($handle === false)
+        throw new \RuntimeException('Cache lifecycle lock is unavailable.');
     try {
-        if (!flock($handle, LOCK_EX | LOCK_NB)) return ['ok'=>false,'busy'=>true,'reason'=>'cache_lifecycle_busy'];
+        if (!flock($handle, LOCK_EX | LOCK_NB))
+            return [
+                'ok' => false,
+                'busy' => true,
+                'reason' => 'cache_lifecycle_busy',
+            ];
         return $operation();
     } finally {
         flock($handle, LOCK_UN);
@@ -39,5 +45,17 @@ function cache_lifecycle_with_lock(callable $operation): array
  */
 function cache_lifecycle_frame(string $relative): array
 {
-    return ['path'=>$relative,'offset'=>0,'catalog'=>'','catalog_ok'=>false,'catalog_attempts'=>0,'bytes'=>0,'files'=>0,'dirs'=>0,'newest'=>0,'pinned'=>false,'unsafe'=>false];
+    return [
+        'path' => $relative,
+        'offset' => 0,
+        'catalog' => '',
+        'catalog_ok' => false,
+        'catalog_attempts' => 0,
+        'bytes' => 0,
+        'files' => 0,
+        'dirs' => 0,
+        'newest' => 0,
+        'pinned' => false,
+        'unsafe' => false,
+    ];
 }

@@ -23,7 +23,11 @@ namespace Gallery\Core {
      */
     function e(string|int|float|bool|null $value): string
     {
-        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars(
+            (string) $value,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 
     /**
@@ -34,12 +38,22 @@ namespace Gallery\Core {
      * @param bool $publicOnly Whether the detail page is rendered in public-only mode.
      * @return void Emit the test shell header and opening main element.
      */
-    function render_header(string $title, array $gallery = [], bool $publicOnly = false): void
-    {
-        echo '<header data-existing-header><nav data-existing-navigation>Existing navigation</nav>'
-            . '<span data-existing-page-title>' . e($title) . '</span>'
-            . '<span data-existing-gallery-meta-count="' . count($gallery) . '"></span>'
-            . '<span data-existing-public-mode>' . ($publicOnly ? 'public' : 'normal') . '</span></header><main>';
+    function render_header(
+        string $title,
+        array $gallery = [],
+        bool $publicOnly = false,
+    ): void {
+        echo
+            '<header data-existing-header><nav data-existing-navigation>Existing navigation</nav>'
+                . '<span data-existing-page-title>'
+                . e($title)
+                . '</span>'
+                . '<span data-existing-gallery-meta-count="'
+                . count($gallery)
+                . '"></span>'
+                . '<span data-existing-public-mode>'
+                . ($publicOnly ? 'public' : 'normal')
+                . '</span></header><main>';
     }
 
     /**
@@ -50,8 +64,10 @@ namespace Gallery\Core {
      */
     function render_footer(string $publicWidgetFooterHtml): void
     {
-        echo '</main><footer class="site-footer">' . $publicWidgetFooterHtml
-            . '<span data-existing-footer-credit>Existing footer credit</span></footer>';
+        echo
+            '</main><footer class="site-footer">'
+                . $publicWidgetFooterHtml
+                . '<span data-existing-footer-credit>Existing footer credit</span></footer>';
     }
 }
 
@@ -67,10 +83,16 @@ namespace Gallery\Services {
     function t(string $key, string $fallback, array $replace = []): string
     {
         if (trim($key) === '') {
-            throw new \InvalidArgumentException('Localization test keys must not be empty.');
+            throw new \InvalidArgumentException(
+                'Localization test keys must not be empty.',
+            );
         }
         foreach ($replace as $name => $value) {
-            $fallback = str_replace('{' . $name . '}', (string) $value, $fallback);
+            $fallback = str_replace(
+                '{' . $name . '}',
+                (string) $value,
+                $fallback,
+            );
         }
         return $fallback;
     }
@@ -85,8 +107,10 @@ namespace Gallery\Views {
      */
     function view_render_public_search_bar(array $viewModel): void
     {
-        echo '<section data-existing-search data-existing-search-state="'
-            . (empty($viewModel) ? 'empty' : 'prepared') . '">Existing public search</section>';
+        echo
+            '<section data-existing-search data-existing-search-state="'
+                . (empty($viewModel) ? 'empty' : 'prepared')
+                . '">Existing public search</section>';
     }
 
     /**
@@ -97,9 +121,13 @@ namespace Gallery\Views {
      */
     function view_render_public_hero_tags(array $viewModel): void
     {
-        $groups = is_array($viewModel['groups'] ?? null) ? $viewModel['groups'] : [];
-        echo '<div data-existing-hero-tags data-existing-tag-group-count="' . count($groups)
-            . '">Existing Gallery hero tags</div>';
+        $groups = is_array($viewModel['groups'] ?? null)
+            ? $viewModel['groups']
+            : [];
+        echo
+            '<div data-existing-hero-tags data-existing-tag-group-count="'
+                . count($groups)
+                . '">Existing Gallery hero tags</div>';
     }
 }
 
@@ -125,15 +153,28 @@ namespace {
             throw $error;
         }
     };
-    $assertOrdered = static function (string $html, array $markers, string $context) use ($check): void {
+    $assertOrdered = static function (
+        string $html,
+        array $markers,
+        string $context,
+    ) use ($check): void {
         $cursor = 0;
         foreach ($markers as $marker) {
             $position = strpos($html, $marker, $cursor);
-            $check($position !== false, $context . ' is missing marker: ' . $marker);
+            $check(
+                $position !== false,
+                $context . ' is missing marker: ' . $marker,
+            );
             $cursor = $position + strlen($marker);
         }
     };
-    $makeWidget = static fn (string $id, string $title, string $body, int $sortOrder, string $placementMode = 'flow'): array => [
+    $makeWidget = static fn(
+        string $id,
+        string $title,
+        string $body,
+        int $sortOrder,
+        string $placementMode = 'flow',
+    ): array => [
         'widget_id' => $id,
         'title' => $title,
         'body_html' => '<p>' . $body . '</p>',
@@ -160,9 +201,14 @@ namespace {
         'total_pages' => 2,
         'back_to_top_html' => '<button data-existing-back-to-top>Back to top</button>',
     ];
-    $renderHome = static function (array $widgets) use ($capture, $homeBase): string {
+    $renderHome = static function (array $widgets) use (
+        $capture,
+        $homeBase,
+    ): string {
         return $capture(static function () use ($widgets, $homeBase): void {
-            view_render_public_gallery_home($homeBase + ['public_widgets' => $widgets]);
+            view_render_public_gallery_home(
+                $homeBase + ['public_widgets' => $widgets],
+            );
         });
     };
     $emptyWidgetPlan = [
@@ -178,89 +224,193 @@ namespace {
 
     $homeWithWidgets = $renderHome([
         'home_before_grid' => [
-            $makeWidget(str_repeat('a', 32), 'Before grid', 'Before-grid widget', 10),
-            $makeWidget(str_repeat('2', 32), 'Second before grid', 'Second before-grid widget', 15),
+            $makeWidget(
+                str_repeat('a', 32),
+                'Before grid',
+                'Before-grid widget',
+                10,
+            ),
+            $makeWidget(
+                str_repeat('2', 32),
+                'Second before grid',
+                'Second before-grid widget',
+                15,
+            ),
         ],
-        'home_after_grid' => [$makeWidget(str_repeat('b', 32), 'After grid', 'After-grid widget', 20)],
+        'home_after_grid' => [$makeWidget(
+            str_repeat('b', 32),
+            'After grid',
+            'After-grid widget',
+            20,
+        )],
         'floating' => [
-            $makeWidget(str_repeat('c', 32), 'First floating widget', 'First floating content', 30, 'floating'),
-            $makeWidget(str_repeat('7', 32), 'Second floating widget', 'Second floating content', 40, 'floating'),
+            $makeWidget(
+                str_repeat('c', 32),
+                'First floating widget',
+                'First floating content',
+                30,
+                'floating',
+            ),
+            $makeWidget(
+                str_repeat('7', 32),
+                'Second floating widget',
+                'Second floating content',
+                40,
+                'floating',
+            ),
         ],
-        'footer' => [$makeWidget(str_repeat('8', 32), 'Footer widget', 'Footer widget content', 50)],
+        'footer' => [$makeWidget(
+            str_repeat('8', 32),
+            'Footer widget',
+            'Footer widget content',
+            50,
+        )],
     ]);
-    $assertOrdered($homeWithWidgets, [
-        'data-existing-header',
-        'data-existing-navigation',
-        'data-existing-search',
-        'data-public-widget-zone="home_before_grid"',
-        'data-public-widget-id="' . str_repeat('a', 32) . '"',
-        'Before grid',
-        'data-public-widget-id="' . str_repeat('2', 32) . '"',
-        'Second before grid',
-        'data-existing-pagination',
-        'data-public-gallery-index-grid',
-        'data-existing-gallery-card',
-        'data-existing-pagination',
-        'data-public-widget-zone="home_after_grid"',
-        'data-existing-back-to-top',
-        'data-public-widget-zone="floating"',
-        'data-public-widget-id="' . str_repeat('c', 32) . '"',
-        'data-public-widget-anchor="bottom-right"',
-        'data-public-widget-id="' . str_repeat('7', 32) . '"',
-        'data-public-widget-anchor="bottom-right"',
-    ], 'Home view with widgets');
-    $check(substr_count($homeWithWidgets, 'data-public-widget-zone="home_before_grid"') === 1
-        && substr_count($homeWithWidgets, 'data-public-widget-zone="floating"') === 1,
-        'Multiple widgets in one Home slot or floating anchor share one region instance.');
-    $check(substr_count($homeWithWidgets, 'data-public-widget-anchor="bottom-right"') === 2,
-        'Multiple floating widgets at the same anchor remain distinct in the server-rendered flow fallback.');
-    $check(str_contains($homeWithWidgets, '<article class="public-content-widget public-content-widget--card" data-public-widget-id="' . str_repeat('c', 32) . '"')
-        && str_contains($homeWithWidgets, '<article class="public-content-widget public-content-widget--card" data-public-widget-id="' . str_repeat('7', 32) . '"')
-        && substr_count($homeWithWidgets, 'data-public-widget-floating="1"') === 2,
-        'Both floating-placement widgets remain separate server-rendered articles eligible for progressive enhancement.');
+    $assertOrdered(
+        $homeWithWidgets,
+        [
+            'data-existing-header',
+            'data-existing-navigation',
+            'data-existing-search',
+            'data-public-widget-zone="home_before_grid"',
+            'data-public-widget-id="' . str_repeat('a', 32) . '"',
+            'Before grid',
+            'data-public-widget-id="' . str_repeat('2', 32) . '"',
+            'Second before grid',
+            'data-existing-pagination',
+            'data-public-gallery-index-grid',
+            'data-existing-gallery-card',
+            'data-existing-pagination',
+            'data-public-widget-zone="home_after_grid"',
+            'data-existing-back-to-top',
+            'data-public-widget-zone="floating"',
+            'data-public-widget-id="' . str_repeat('c', 32) . '"',
+            'data-public-widget-anchor="bottom-right"',
+            'data-public-widget-id="' . str_repeat('7', 32) . '"',
+            'data-public-widget-anchor="bottom-right"',
+        ],
+        'Home view with widgets',
+    );
+    $check(
+        substr_count(
+            $homeWithWidgets,
+            'data-public-widget-zone="home_before_grid"',
+        ) === 1
+            && substr_count(
+                $homeWithWidgets,
+                'data-public-widget-zone="floating"',
+            ) === 1,
+        'Multiple widgets in one Home slot or floating anchor share one region instance.',
+    );
+    $check(
+        substr_count(
+            $homeWithWidgets,
+            'data-public-widget-anchor="bottom-right"',
+        ) === 2,
+        'Multiple floating widgets at the same anchor remain distinct in the server-rendered flow fallback.',
+    );
+    $check(
+        str_contains(
+            $homeWithWidgets,
+            '<article class="public-content-widget public-content-widget--card" data-public-widget-id="'
+                . str_repeat('c', 32)
+                . '"',
+        )
+            && str_contains(
+                $homeWithWidgets,
+                '<article class="public-content-widget public-content-widget--card" data-public-widget-id="'
+                    . str_repeat('7', 32)
+                    . '"',
+            )
+            && substr_count($homeWithWidgets, 'data-public-widget-floating="1"')
+                === 2,
+        'Both floating-placement widgets remain separate server-rendered articles eligible for progressive enhancement.',
+    );
     $homeFooter = strpos($homeWithWidgets, '<footer class="site-footer">');
-    $homeFooterWidget = strpos($homeWithWidgets, 'data-public-widget-zone="footer"');
+    $homeFooterWidget = strpos(
+        $homeWithWidgets,
+        'data-public-widget-zone="footer"',
+    );
     $homeFooterCredit = strpos($homeWithWidgets, 'data-existing-footer-credit');
     $homeFooterEnd = strpos($homeWithWidgets, '</footer>');
-    $check($homeFooter !== false && $homeFooterWidget !== false && $homeFooterCredit !== false
-        && $homeFooterEnd !== false && $homeFooter < $homeFooterWidget
-        && $homeFooterWidget < $homeFooterCredit && $homeFooterCredit < $homeFooterEnd,
-        'Home footer widget stays inside the existing footer before its credit.');
-    $check(substr_count($homeWithWidgets, 'data-existing-pagination') === 2,
-        'Home keeps both pagination instances when grid widgets are present.');
+    $check(
+        $homeFooter !== false
+            && $homeFooterWidget !== false
+            && $homeFooterCredit !== false
+            && $homeFooterEnd !== false
+            && $homeFooter < $homeFooterWidget
+            && $homeFooterWidget < $homeFooterCredit
+            && $homeFooterCredit < $homeFooterEnd,
+        'Home footer widget stays inside the existing footer before its credit.',
+    );
+    $check(
+        substr_count($homeWithWidgets, 'data-existing-pagination') === 2,
+        'Home keeps both pagination instances when grid widgets are present.',
+    );
 
     $homeWithoutWidgets = $renderHome($emptyWidgetPlan);
-    $check(!str_contains($homeWithoutWidgets, 'data-public-widget-zone="')
-        && !str_contains($homeWithoutWidgets, 'public-widget-rails-container')
-        && !str_contains($homeWithoutWidgets, 'public-widget-content-layout')
-        && !str_contains($homeWithoutWidgets, 'public-widget-primary')
-        && !str_contains($homeWithoutWidgets, 'public-widget-region')
-        && !str_contains($homeWithoutWidgets, 'data-public-widget-floating='),
-        'An empty Home plan emits no widget region or rail wrapper.');
+    $check(
+        !str_contains($homeWithoutWidgets, 'data-public-widget-zone="')
+            && !str_contains(
+                $homeWithoutWidgets,
+                'public-widget-rails-container',
+            )
+            && !str_contains(
+                $homeWithoutWidgets,
+                'public-widget-content-layout',
+            )
+            && !str_contains($homeWithoutWidgets, 'public-widget-primary')
+            && !str_contains($homeWithoutWidgets, 'public-widget-region')
+            && !str_contains(
+                $homeWithoutWidgets,
+                'data-public-widget-floating=',
+            ),
+        'An empty Home plan emits no widget region or rail wrapper.',
+    );
     $homeHeaderEnd = strpos($homeWithWidgets, '</header>');
     $homeHeaderWithoutWidgetsEnd = strpos($homeWithoutWidgets, '</header>');
-    $firstHomeWidgetRegion = strpos($homeWithWidgets, 'data-public-widget-zone=');
-    $check($homeHeaderEnd !== false && $homeHeaderWithoutWidgetsEnd !== false
-        && substr($homeWithWidgets, 0, $homeHeaderEnd + strlen('</header>'))
-            === substr($homeWithoutWidgets, 0, $homeHeaderWithoutWidgetsEnd + strlen('</header>'))
-        && $firstHomeWidgetRegion !== false && $firstHomeWidgetRegion > $homeHeaderEnd,
-        'Home widgets leave the existing header and navigation byte-for-byte intact and begin after it.');
-    $assertOrdered($homeWithoutWidgets, [
-        'data-existing-header',
-        'data-existing-navigation',
-        'data-existing-search',
-        'data-existing-pagination',
-        'data-public-gallery-index-grid',
-        'data-existing-gallery-card',
-        'data-existing-pagination',
-        'data-existing-back-to-top',
-        'data-existing-footer-credit',
-    ], 'Home view without widgets');
-    $check(substr_count($homeWithWidgets, '<footer class="site-footer">') === 1
-        && substr_count($homeWithWidgets, 'data-existing-footer-credit') === 1
-        && substr_count($homeWithoutWidgets, '<footer class="site-footer">') === 1
-        && substr_count($homeWithoutWidgets, 'data-existing-footer-credit') === 1,
-        'Home retains one existing footer and one credit with or without widgets.');
+    $firstHomeWidgetRegion = strpos(
+        $homeWithWidgets,
+        'data-public-widget-zone=',
+    );
+    $check(
+        $homeHeaderEnd !== false
+            && $homeHeaderWithoutWidgetsEnd !== false
+            && substr($homeWithWidgets, 0, $homeHeaderEnd + strlen('</header>'))
+            === substr(
+                $homeWithoutWidgets,
+                0,
+                $homeHeaderWithoutWidgetsEnd + strlen('</header>'),
+            )
+            && $firstHomeWidgetRegion !== false
+            && $firstHomeWidgetRegion > $homeHeaderEnd,
+        'Home widgets leave the existing header and navigation byte-for-byte intact and begin after it.',
+    );
+    $assertOrdered(
+        $homeWithoutWidgets,
+        [
+            'data-existing-header',
+            'data-existing-navigation',
+            'data-existing-search',
+            'data-existing-pagination',
+            'data-public-gallery-index-grid',
+            'data-existing-gallery-card',
+            'data-existing-pagination',
+            'data-existing-back-to-top',
+            'data-existing-footer-credit',
+        ],
+        'Home view without widgets',
+    );
+    $check(
+        substr_count($homeWithWidgets, '<footer class="site-footer">') === 1
+            && substr_count($homeWithWidgets, 'data-existing-footer-credit')
+                === 1
+            && substr_count($homeWithoutWidgets, '<footer class="site-footer">')
+                === 1
+            && substr_count($homeWithoutWidgets, 'data-existing-footer-credit')
+                === 1,
+        'Home retains one existing footer and one credit with or without widgets.',
+    );
 
     $galleryBase = [
         'page_title' => 'Existing Gallery title',
@@ -293,109 +443,228 @@ namespace {
         'back_to_top_html' => '<button data-existing-gallery-back-to-top>Back to top</button>',
         'lightbox_html' => '<div data-existing-lightbox>Existing Gallery lightbox</div>',
     ];
-    $renderGallery = static function (array $widgets) use ($capture, $galleryBase): string {
+    $renderGallery = static function (array $widgets) use (
+        $capture,
+        $galleryBase,
+    ): string {
         return $capture(static function () use ($widgets, $galleryBase): void {
-            view_render_public_gallery_detail($galleryBase + ['public_widgets' => $widgets]);
+            view_render_public_gallery_detail(
+                $galleryBase + ['public_widgets' => $widgets],
+            );
         });
     };
 
     $galleryWithWidgets = $renderGallery([
-        'content_top' => [$makeWidget(str_repeat('d', 32), 'Gallery top', 'Gallery top widget', 10)],
-        'left_rail' => [$makeWidget(str_repeat('9', 32), 'Gallery left rail', 'Gallery left widget', 15)],
-        'right_rail' => [$makeWidget(str_repeat('e', 32), 'Gallery rail', 'Gallery rail widget', 20)],
-        'content_bottom' => [$makeWidget(str_repeat('f', 32), 'Gallery bottom', 'Gallery bottom widget', 30)],
-        'footer' => [$makeWidget(str_repeat('1', 32), 'Gallery footer', 'Gallery footer widget', 40)],
+        'content_top' => [$makeWidget(
+            str_repeat('d', 32),
+            'Gallery top',
+            'Gallery top widget',
+            10,
+        )],
+        'left_rail' => [$makeWidget(
+            str_repeat('9', 32),
+            'Gallery left rail',
+            'Gallery left widget',
+            15,
+        )],
+        'right_rail' => [$makeWidget(
+            str_repeat('e', 32),
+            'Gallery rail',
+            'Gallery rail widget',
+            20,
+        )],
+        'content_bottom' => [$makeWidget(
+            str_repeat('f', 32),
+            'Gallery bottom',
+            'Gallery bottom widget',
+            30,
+        )],
+        'footer' => [$makeWidget(
+            str_repeat('1', 32),
+            'Gallery footer',
+            'Gallery footer widget',
+            40,
+        )],
     ]);
-    $assertOrdered($galleryWithWidgets, [
-        'data-existing-header',
-        'data-existing-navigation',
-        'data-public-widget-zone="content_top"',
-        'public-widget-rails-container',
-        'public-widget-content-layout--both',
-        'class="hero" data-public-gallery-id="17"',
-        'data-existing-gallery-heading',
-        'data-existing-breadcrumbs',
-        'data-existing-hero-tags',
-        'data-existing-branding-separator',
-        'data-existing-preview-toolbar',
-        'data-existing-search',
-        'data-existing-picture-manager-toolbar',
-        'data-existing-top-smart-gallery',
-        'data-existing-gallery-pagination',
-        'data-gallery-image-list',
-        'data-existing-photo-card',
-        'data-existing-gallery-pagination',
-        'data-existing-bottom-smart-gallery',
-        'data-existing-gallery-back-to-top',
-        'data-public-widget-zone="left_rail"',
-        'data-public-widget-zone="right_rail"',
-        'data-public-widget-zone="content_bottom"',
-        'data-existing-lightbox',
-    ], 'Gallery detail view with widgets');
-    $galleryFooter = strpos($galleryWithWidgets, '<footer class="site-footer">');
-    $galleryFooterWidget = strpos($galleryWithWidgets, 'data-public-widget-zone="footer"');
-    $galleryFooterCredit = strpos($galleryWithWidgets, 'data-existing-footer-credit');
+    $assertOrdered(
+        $galleryWithWidgets,
+        [
+            'data-existing-header',
+            'data-existing-navigation',
+            'data-public-widget-zone="content_top"',
+            'public-widget-rails-container',
+            'public-widget-content-layout--both',
+            'class="hero" data-public-gallery-id="17"',
+            'data-existing-gallery-heading',
+            'data-existing-breadcrumbs',
+            'data-existing-hero-tags',
+            'data-existing-branding-separator',
+            'data-existing-preview-toolbar',
+            'data-existing-search',
+            'data-existing-picture-manager-toolbar',
+            'data-existing-top-smart-gallery',
+            'data-existing-gallery-pagination',
+            'data-gallery-image-list',
+            'data-existing-photo-card',
+            'data-existing-gallery-pagination',
+            'data-existing-bottom-smart-gallery',
+            'data-existing-gallery-back-to-top',
+            'data-public-widget-zone="left_rail"',
+            'data-public-widget-zone="right_rail"',
+            'data-public-widget-zone="content_bottom"',
+            'data-existing-lightbox',
+        ],
+        'Gallery detail view with widgets',
+    );
+    $galleryFooter = strpos(
+        $galleryWithWidgets,
+        '<footer class="site-footer">',
+    );
+    $galleryFooterWidget = strpos(
+        $galleryWithWidgets,
+        'data-public-widget-zone="footer"',
+    );
+    $galleryFooterCredit = strpos(
+        $galleryWithWidgets,
+        'data-existing-footer-credit',
+    );
     $galleryFooterEnd = strpos($galleryWithWidgets, '</footer>');
-    $check($galleryFooter !== false && $galleryFooterWidget !== false && $galleryFooterCredit !== false
-        && $galleryFooterEnd !== false && $galleryFooter < $galleryFooterWidget
-        && $galleryFooterWidget < $galleryFooterCredit && $galleryFooterCredit < $galleryFooterEnd,
-        'Gallery footer widget stays inside the existing footer before its credit.');
+    $check(
+        $galleryFooter !== false
+            && $galleryFooterWidget !== false
+            && $galleryFooterCredit !== false
+            && $galleryFooterEnd !== false
+            && $galleryFooter < $galleryFooterWidget
+            && $galleryFooterWidget < $galleryFooterCredit
+            && $galleryFooterCredit < $galleryFooterEnd,
+        'Gallery footer widget stays inside the existing footer before its credit.',
+    );
 
     $galleryWithoutWidgets = $renderGallery($emptyWidgetPlan);
-    $check(!str_contains($galleryWithoutWidgets, 'data-public-widget-zone="')
-        && !str_contains($galleryWithoutWidgets, 'public-widget-rails-container')
-        && !str_contains($galleryWithoutWidgets, 'public-widget-content-layout')
-        && !str_contains($galleryWithoutWidgets, 'public-widget-primary')
-        && !str_contains($galleryWithoutWidgets, 'public-widget-region')
-        && !str_contains($galleryWithoutWidgets, 'data-public-widget-floating='),
-        'An empty Gallery plan emits no widget region or rail wrapper.');
+    $check(
+        !str_contains($galleryWithoutWidgets, 'data-public-widget-zone="')
+            && !str_contains(
+                $galleryWithoutWidgets,
+                'public-widget-rails-container',
+            )
+            && !str_contains(
+                $galleryWithoutWidgets,
+                'public-widget-content-layout',
+            )
+            && !str_contains($galleryWithoutWidgets, 'public-widget-primary')
+            && !str_contains($galleryWithoutWidgets, 'public-widget-region')
+            && !str_contains(
+                $galleryWithoutWidgets,
+                'data-public-widget-floating=',
+            ),
+        'An empty Gallery plan emits no widget region or rail wrapper.',
+    );
     $galleryHeaderEnd = strpos($galleryWithWidgets, '</header>');
-    $galleryHeaderWithoutWidgetsEnd = strpos($galleryWithoutWidgets, '</header>');
-    $firstGalleryWidgetRegion = strpos($galleryWithWidgets, 'data-public-widget-zone=');
-    $check($galleryHeaderEnd !== false && $galleryHeaderWithoutWidgetsEnd !== false
-        && substr($galleryWithWidgets, 0, $galleryHeaderEnd + strlen('</header>'))
-            === substr($galleryWithoutWidgets, 0, $galleryHeaderWithoutWidgetsEnd + strlen('</header>'))
-        && $firstGalleryWidgetRegion !== false && $firstGalleryWidgetRegion > $galleryHeaderEnd,
-        'Gallery widgets leave the existing header and navigation byte-for-byte intact and begin after it.');
+    $galleryHeaderWithoutWidgetsEnd = strpos(
+        $galleryWithoutWidgets,
+        '</header>',
+    );
+    $firstGalleryWidgetRegion = strpos(
+        $galleryWithWidgets,
+        'data-public-widget-zone=',
+    );
+    $check(
+        $galleryHeaderEnd !== false
+            && $galleryHeaderWithoutWidgetsEnd !== false
+            && substr(
+                $galleryWithWidgets,
+                0,
+                $galleryHeaderEnd + strlen('</header>'),
+            )
+            === substr(
+                $galleryWithoutWidgets,
+                0,
+                $galleryHeaderWithoutWidgetsEnd + strlen('</header>'),
+            )
+            && $firstGalleryWidgetRegion !== false
+            && $firstGalleryWidgetRegion > $galleryHeaderEnd,
+        'Gallery widgets leave the existing header and navigation byte-for-byte intact and begin after it.',
+    );
     $galleryHeroStart = strpos($galleryWithWidgets, '<section class="hero"');
-    $galleryHeroEnd = $galleryHeroStart === false ? false : strpos($galleryWithWidgets, '</section>', $galleryHeroStart);
-    $galleryHeroWithoutWidgetsStart = strpos($galleryWithoutWidgets, '<section class="hero"');
+    $galleryHeroEnd = $galleryHeroStart === false
+        ? false
+        : strpos($galleryWithWidgets, '</section>', $galleryHeroStart);
+    $galleryHeroWithoutWidgetsStart = strpos(
+        $galleryWithoutWidgets,
+        '<section class="hero"',
+    );
     $galleryHeroWithoutWidgetsEnd = $galleryHeroWithoutWidgetsStart === false
-        ? false : strpos($galleryWithoutWidgets, '</section>', $galleryHeroWithoutWidgetsStart);
-    $check($galleryHeroStart !== false && $galleryHeroEnd !== false
-        && $galleryHeroWithoutWidgetsStart !== false && $galleryHeroWithoutWidgetsEnd !== false
-        && substr($galleryWithWidgets, $galleryHeroStart, $galleryHeroEnd + strlen('</section>') - $galleryHeroStart)
-            === substr($galleryWithoutWidgets, $galleryHeroWithoutWidgetsStart,
-                $galleryHeroWithoutWidgetsEnd + strlen('</section>') - $galleryHeroWithoutWidgetsStart)
-        && !str_contains(substr($galleryWithWidgets, $galleryHeroStart,
-            $galleryHeroEnd + strlen('</section>') - $galleryHeroStart), 'data-public-widget-zone='),
-        'Gallery widgets stay outside the hero and leave its full markup unchanged.');
-    $assertOrdered($galleryWithoutWidgets, [
-        'data-existing-header',
-        'data-existing-navigation',
-        'class="hero" data-public-gallery-id="17"',
-        'data-existing-gallery-heading',
-        'data-existing-breadcrumbs',
-        'data-existing-hero-tags',
-        'data-existing-branding-separator',
-        'data-existing-preview-toolbar',
-        'data-existing-search',
-        'data-existing-picture-manager-toolbar',
-        'data-existing-top-smart-gallery',
-        'data-existing-gallery-pagination',
-        'data-gallery-image-list',
-        'data-existing-photo-card',
-        'data-existing-gallery-pagination',
-        'data-existing-bottom-smart-gallery',
-        'data-existing-gallery-back-to-top',
-        'data-existing-lightbox',
-        'data-existing-footer-credit',
-    ], 'Gallery detail view without widgets');
-    $check(substr_count($galleryWithWidgets, '<footer class="site-footer">') === 1
-        && substr_count($galleryWithWidgets, 'data-existing-footer-credit') === 1
-        && substr_count($galleryWithoutWidgets, '<footer class="site-footer">') === 1
-        && substr_count($galleryWithoutWidgets, 'data-existing-footer-credit') === 1,
-        'Gallery retains one existing footer and one credit with or without widgets.');
+        ? false
+        : strpos(
+            $galleryWithoutWidgets,
+            '</section>',
+            $galleryHeroWithoutWidgetsStart,
+        );
+    $check(
+        $galleryHeroStart !== false
+            && $galleryHeroEnd !== false
+            && $galleryHeroWithoutWidgetsStart !== false
+            && $galleryHeroWithoutWidgetsEnd !== false
+            && substr(
+                $galleryWithWidgets,
+                $galleryHeroStart,
+                $galleryHeroEnd + strlen('</section>') - $galleryHeroStart,
+            )
+            === substr(
+                $galleryWithoutWidgets,
+                $galleryHeroWithoutWidgetsStart,
+                $galleryHeroWithoutWidgetsEnd + strlen('</section>')
+                    - $galleryHeroWithoutWidgetsStart,
+            )
+            && !str_contains(
+                substr(
+                    $galleryWithWidgets,
+                    $galleryHeroStart,
+                    $galleryHeroEnd + strlen('</section>') - $galleryHeroStart,
+                ),
+                'data-public-widget-zone=',
+            ),
+        'Gallery widgets stay outside the hero and leave its full markup unchanged.',
+    );
+    $assertOrdered(
+        $galleryWithoutWidgets,
+        [
+            'data-existing-header',
+            'data-existing-navigation',
+            'class="hero" data-public-gallery-id="17"',
+            'data-existing-gallery-heading',
+            'data-existing-breadcrumbs',
+            'data-existing-hero-tags',
+            'data-existing-branding-separator',
+            'data-existing-preview-toolbar',
+            'data-existing-search',
+            'data-existing-picture-manager-toolbar',
+            'data-existing-top-smart-gallery',
+            'data-existing-gallery-pagination',
+            'data-gallery-image-list',
+            'data-existing-photo-card',
+            'data-existing-gallery-pagination',
+            'data-existing-bottom-smart-gallery',
+            'data-existing-gallery-back-to-top',
+            'data-existing-lightbox',
+            'data-existing-footer-credit',
+        ],
+        'Gallery detail view without widgets',
+    );
+    $check(
+        substr_count($galleryWithWidgets, '<footer class="site-footer">') === 1
+            && substr_count($galleryWithWidgets, 'data-existing-footer-credit')
+                === 1
+            && substr_count(
+                $galleryWithoutWidgets,
+                '<footer class="site-footer">',
+            ) === 1
+            && substr_count(
+                $galleryWithoutWidgets,
+                'data-existing-footer-credit',
+            ) === 1,
+        'Gallery retains one existing footer and one credit with or without widgets.',
+    );
 
     echo "public_content_widget_page_composition_test: PASS\n";
 }

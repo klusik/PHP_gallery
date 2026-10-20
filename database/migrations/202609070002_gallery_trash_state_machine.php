@@ -39,9 +39,9 @@ declare(strict_types=1);
 
 return [
     "ALTER TABLE gallery_trash_entries MODIFY COLUMN status VARCHAR(24) NOT NULL DEFAULT 'preparing'",
-    "ALTER TABLE gallery_trash_entries MODIFY COLUMN snapshot_json LONGTEXT NULL",
-    "ALTER TABLE gallery_trash_entries ADD COLUMN snapshot_version SMALLINT UNSIGNED NOT NULL DEFAULT 1 AFTER byte_size",
-    "ALTER TABLE gallery_trash_entries ADD COLUMN operation_started_at DATETIME NULL AFTER purge_after",
-    "ALTER TABLE gallery_trash_entries ADD COLUMN last_error_code VARCHAR(64) NULL AFTER purged_at",
-    "ALTER TABLE gallery_trash_entries ADD KEY gallery_trash_entries_original_path_index (original_folder_path(191))",
+    'ALTER TABLE gallery_trash_entries MODIFY COLUMN snapshot_json LONGTEXT NULL',
+    'ALTER TABLE gallery_trash_entries ADD COLUMN snapshot_version SMALLINT UNSIGNED NOT NULL DEFAULT 1 AFTER byte_size',
+    'ALTER TABLE gallery_trash_entries ADD COLUMN operation_started_at DATETIME NULL AFTER purge_after',
+    'ALTER TABLE gallery_trash_entries ADD COLUMN last_error_code VARCHAR(64) NULL AFTER purged_at',
+    'ALTER TABLE gallery_trash_entries ADD KEY gallery_trash_entries_original_path_index (original_folder_path(191))',
 ];

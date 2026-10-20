@@ -33,7 +33,7 @@
  */
 
 return [
-    "ALTER TABLE galleries MODIFY gps_map_enabled TINYINT(1) NULL DEFAULT NULL",
-    "UPDATE galleries SET gps_map_enabled = NULL WHERE gps_map_enabled = 0",
+    'ALTER TABLE galleries MODIFY gps_map_enabled TINYINT(1) NULL DEFAULT NULL',
+    'UPDATE galleries SET gps_map_enabled = NULL WHERE gps_map_enabled = 0',
     "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES ('exif_gps_maps_default_enabled', '1', NOW()) ON DUPLICATE KEY UPDATE setting_value = setting_value",
 ];

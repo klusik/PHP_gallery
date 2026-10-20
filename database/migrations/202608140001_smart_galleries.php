@@ -45,7 +45,7 @@ return [
         UNIQUE KEY smart_galleries_slug_unique (slug),
         KEY smart_galleries_public_listing (enabled, visibility, title)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "ALTER TABLE images
+    'ALTER TABLE images
         ADD COLUMN editorial_rating TINYINT UNSIGNED NULL AFTER visibility,
-        ADD KEY images_editorial_rating_lookup (editorial_rating, gallery_id, visibility)",
+        ADD KEY images_editorial_rating_lookup (editorial_rating, gallery_id, visibility)',
 ];

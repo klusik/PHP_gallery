@@ -52,7 +52,9 @@ namespace Gallery\Services {
     /** Return one deterministic gallery from the isolated ancestry map. */
     function find_gallery(int $galleryId): ?array
     {
-        $gallery = $GLOBALS['public_media_authorization_galleries'][$galleryId] ?? null;
+        $gallery =
+            $GLOBALS['public_media_authorization_galleries'][$galleryId]
+            ?? null;
         return is_array($gallery) ? $gallery : null;
     }
 
@@ -62,16 +64,43 @@ namespace Gallery\Services {
         return ['state' => 'available', 'table' => $table, 'column' => $column];
     }
 
-    /** Return a fully available synthetic schema-definition requirement. */
-    function schema_inspection_column_definition_contains(string $table, string $column, string $needle): array
-    {
-        return ['state' => 'available', 'table' => $table, 'column' => $column, 'needle' => $needle];
+    /**
+     * Return a fully available synthetic schema-definition requirement.
+     *
+     * @param string $table Schema table name.
+     * @param string $column Schema column name.
+     * @param string $needle Definition token required by the fixture.
+     * @return array{state:string,table:string,column:string,needle:string} Available synthetic column-definition result.
+     */
+    function schema_inspection_column_definition_contains(
+        string $table,
+        string $column,
+        string $needle,
+    ): array {
+        return [
+            'state' => 'available',
+            'table' => $table,
+            'column' => $column,
+            'needle' => $needle,
+        ];
     }
 
-    /** Aggregate synthetic schema requirements for this isolated test. */
-    function schema_inspection_feature(string $feature, array $requirements): array
-    {
-        return ['state' => 'available', 'feature' => $feature, 'requirements' => $requirements];
+    /**
+     * Aggregate synthetic schema requirements for this isolated test.
+     *
+     * @param string $feature Stable schema feature key.
+     * @param list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}> $requirements Individual schema inspection results.
+     * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Available feature result retaining its requirements.
+     */
+    function schema_inspection_feature(
+        string $feature,
+        array $requirements,
+    ): array {
+        return [
+            'state' => 'available',
+            'feature' => $feature,
+            'requirements' => $requirements,
+        ];
     }
 
     /** Return true for the fully available synthetic state. */
@@ -98,35 +127,70 @@ namespace {
     use function Gallery\Services\grant_gallery_public_access;
     use function Gallery\Services\grant_nsfw_guard_access;
     use function Gallery\Services\public_image_visible_to_current_visitor;
-    use function Gallery\Services\visitor_can_access_gallery_without_admin_bypass;
+    use function Gallery\Services\visitor_can_access_gallery_without_admin_bypass
+    ;
 
-    /** Throw when one public authorization contract fails. */
-    function public_media_authorization_assert(bool $condition, string $label): void
-    {
+    /**
+     * Throw when one public authorization contract fails.
+     *
+     * @param bool $condition Whether the authorization contract holds.
+     * @param string $label Description of the failed contract.
+     * @return void Throws when the condition is false.
+     */
+    function public_media_authorization_assert(
+        bool $condition,
+        string $label,
+    ): void {
         if (!$condition) {
             throw new RuntimeException($label);
         }
     }
 
-    /** Build a gallery fixture with explicit policy defaults. */
-    function public_media_authorization_gallery(int $id, string $visibility = 'public', string $accessMode = 'normal', ?int $parentId = null, int $nsfw = 0): array
-    {
+    /**
+     * Build a gallery fixture with explicit policy defaults.
+     *
+     * @param int $id Gallery identifier.
+     * @param string $visibility Stored gallery visibility.
+     * @param string $accessMode Stored gallery access mode.
+     * @param int|null $parentId Parent gallery identifier, or null for a root.
+     * @param int $nsfw Whether NSFW restriction is enabled.
+     * @return array{id:int,parent_id:int|null,visibility:string,access_listing:string,access_mode:string,access_password_hash:string|null,access_token_hash:null,access_token_expires_at:null,nsfw_enabled:int} Gallery row with all authorization-policy fields.
+     */
+    function public_media_authorization_gallery(
+        int $id,
+        string $visibility = 'public',
+        string $accessMode = 'normal',
+        ?int $parentId = null,
+        int $nsfw = 0,
+    ): array {
         return [
             'id' => $id,
             'parent_id' => $parentId,
             'visibility' => $visibility,
             'access_listing' => 'listed',
             'access_mode' => $accessMode,
-            'access_password_hash' => $accessMode === 'password' ? password_hash('secret', PASSWORD_DEFAULT) : null,
+            'access_password_hash' => $accessMode === 'password'
+                ? password_hash('secret', PASSWORD_DEFAULT)
+                : null,
             'access_token_hash' => null,
             'access_token_expires_at' => null,
             'nsfw_enabled' => $nsfw,
         ];
     }
 
-    /** Build one public image fixture. */
-    function public_media_authorization_image(int $galleryId, int $nsfw = 0, string $visibility = 'public'): array
-    {
+    /**
+     * Build one public image fixture.
+     *
+     * @param int $galleryId Owning gallery identifier.
+     * @param int $nsfw Whether image-level NSFW restriction is enabled.
+     * @param string $visibility Stored image visibility.
+     * @return array{id:int,gallery_id:int,visibility:string,nsfw_enabled:int} Image row with public authorization fields.
+     */
+    function public_media_authorization_image(
+        int $galleryId,
+        int $nsfw = 0,
+        string $visibility = 'public',
+    ): array {
         return [
             'id' => 1000 + $galleryId,
             'gallery_id' => $galleryId,
@@ -147,12 +211,31 @@ namespace {
     $unpublished = public_media_authorization_gallery(2, 'unpublished');
     $private = public_media_authorization_gallery(3, 'private');
     $password = public_media_authorization_gallery(4, 'public', 'password');
-    $passwordChild = public_media_authorization_gallery(5, 'public', 'normal', 4);
-    $passwordUnpublishedChild = public_media_authorization_gallery(6, 'unpublished', 'normal', 4);
+    $passwordChild = public_media_authorization_gallery(
+        5,
+        'public',
+        'normal',
+        4,
+    );
+    $passwordUnpublishedChild = public_media_authorization_gallery(
+        6,
+        'unpublished',
+        'normal',
+        4,
+    );
     $unpublishedParent = public_media_authorization_gallery(7, 'unpublished');
-    $publicChildOfUnpublished = public_media_authorization_gallery(8, 'public', 'normal', 7);
+    $publicChildOfUnpublished = public_media_authorization_gallery(
+        8,
+        'public',
+        'normal',
+        7,
+    );
     $nsfw = public_media_authorization_gallery(9, 'public', 'normal', null, 1);
-    $shareProtected = public_media_authorization_gallery(10, 'private', 'password');
+    $shareProtected = public_media_authorization_gallery(
+        10,
+        'private',
+        'password',
+    );
     $shareToken = 'fixture-share-token';
     $shareProtected['access_token_hash'] = hash('sha256', $shareToken);
     $shareProtected['access_token_expires_at'] = '2099-01-01 00:00:00';
@@ -171,98 +254,158 @@ namespace {
     ];
 
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(1), $public),
-        'Public gallery/public image must remain directly visible.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(1),
+            $public,
+        ),
+        'Public gallery/public image must remain directly visible.',
     );
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(2), $unpublished),
-        'Unpublished galleries must retain direct-URL media access semantics.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(2),
+            $unpublished,
+        ),
+        'Unpublished galleries must retain direct-URL media access semantics.',
     );
     public_media_authorization_assert(
-        !public_image_visible_to_current_visitor(public_media_authorization_image(3), $private),
-        'Private gallery media must not be exposed to an anonymous visitor.'
+        !public_image_visible_to_current_visitor(
+            public_media_authorization_image(3),
+            $private,
+        ),
+        'Private gallery media must not be exposed to an anonymous visitor.',
     );
     public_media_authorization_assert(
-        !public_image_visible_to_current_visitor(public_media_authorization_image(4), $password),
-        'Password gallery media must remain blocked before unlock.'
+        !public_image_visible_to_current_visitor(
+            public_media_authorization_image(4),
+            $password,
+        ),
+        'Password gallery media must remain blocked before unlock.',
     );
 
     grant_gallery_public_access(4);
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(4), $password),
-        'Password gallery media must become available after a valid unlock.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(4),
+            $password,
+        ),
+        'Password gallery media must become available after a valid unlock.',
     );
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(5), $passwordChild),
-        'Public child media must inherit a valid password grant from its protected parent.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(5),
+            $passwordChild,
+        ),
+        'Public child media must inherit a valid password grant from its protected parent.',
     );
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(6), $passwordUnpublishedChild),
-        'Unpublished child media must inherit a valid password grant from its protected parent.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(6),
+            $passwordUnpublishedChild,
+        ),
+        'Unpublished child media must inherit a valid password grant from its protected parent.',
     );
 
     unset($_SESSION[gallery_access_session_key(4)]);
     public_media_authorization_assert(
-        !public_image_visible_to_current_visitor(public_media_authorization_image(5), $passwordChild),
-        'Public child media must not bypass a locked password-protected parent.'
+        !public_image_visible_to_current_visitor(
+            public_media_authorization_image(5),
+            $passwordChild,
+        ),
+        'Public child media must not bypass a locked password-protected parent.',
     );
     public_media_authorization_assert(
-        !public_image_visible_to_current_visitor(public_media_authorization_image(6), $passwordUnpublishedChild),
-        'Unpublished child media must not bypass a locked password-protected parent.'
+        !public_image_visible_to_current_visitor(
+            public_media_authorization_image(6),
+            $passwordUnpublishedChild,
+        ),
+        'Unpublished child media must not bypass a locked password-protected parent.',
     );
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(8), $publicChildOfUnpublished),
-        'A public child under an unpublished non-password parent must preserve current direct-access semantics.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(8),
+            $publicChildOfUnpublished,
+        ),
+        'A public child under an unpublished non-password parent must preserve current direct-access semantics.',
     );
 
     public_media_authorization_assert(
-        !public_image_visible_to_current_visitor(public_media_authorization_image(9), $nsfw),
-        'NSFW gallery media must remain blocked without the session acknowledgment.'
+        !public_image_visible_to_current_visitor(
+            public_media_authorization_image(9),
+            $nsfw,
+        ),
+        'NSFW gallery media must remain blocked without the session acknowledgment.',
     );
     grant_nsfw_guard_access();
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(9), $nsfw),
-        'NSFW gallery media must become available after the valid session acknowledgment.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(9),
+            $nsfw,
+        ),
+        'NSFW gallery media must become available after the valid session acknowledgment.',
     );
 
     $_SESSION = [];
     $_GET = ['share' => $shareToken];
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(10), $shareProtected),
-        'A valid current-request share token must authorize the protected gallery media.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(10),
+            $shareProtected,
+        ),
+        'A valid current-request share token must authorize the protected gallery media.',
     );
 
     $_SESSION = [];
     $_GET = [];
-    $GLOBALS['public_media_authorization_user'] = ['id' => 1, 'username' => 'admin'];
+    $GLOBALS['public_media_authorization_user'] = [
+        'id' => 1,
+        'username' => 'admin',
+    ];
     public_media_authorization_assert(
-        public_image_visible_to_current_visitor(public_media_authorization_image(4), $password),
-        'The normal public-image policy must retain the intentional administrator bypass.'
+        public_image_visible_to_current_visitor(
+            public_media_authorization_image(4),
+            $password,
+        ),
+        'The normal public-image policy must retain the intentional administrator bypass.',
     );
     public_media_authorization_assert(
         !visitor_can_access_gallery_without_admin_bypass($password),
-        'Viewer-owned source-image references must not inherit the administrator bypass.'
+        'Viewer-owned source-image references must not inherit the administrator bypass.',
     );
     public_media_authorization_assert(
-        !public_image_visible_to_current_visitor(public_media_authorization_image(1, 0, 'private'), $public),
-        'Image-level non-public visibility must remain a hard deny even for an administrator-oriented public-image decision.'
+        !public_image_visible_to_current_visitor(
+            public_media_authorization_image(1, 0, 'private'),
+            $public,
+        ),
+        'Image-level non-public visibility must remain a hard deny even for an administrator-oriented public-image decision.',
     );
 
-    $publicMediaSource = (string) file_get_contents($root . '/app/controllers/public_media.php');
-    $downloadsSource = (string) file_get_contents($root . '/app/services/downloads.php');
-    $viewerContentSource = (string) file_get_contents($root . '/app/services/viewer_content_foundations.php');
+    $publicMediaSource = (string) file_get_contents($root
+        . '/app/controllers/public_media.php');
+    $downloadsSource = (string) file_get_contents($root
+        . '/app/services/downloads.php');
+    $viewerContentSource = (string) file_get_contents($root
+        . '/app/services/viewer_content_foundations.php');
 
     public_media_authorization_assert(
-        substr_count($publicMediaSource, 'public_image_visible_to_current_visitor(') >= 4,
-        'Public media endpoints must continue to delegate image authorization to the canonical public-image policy.'
+        substr_count(
+            $publicMediaSource,
+            'public_image_visible_to_current_visitor(',
+        ) >= 4,
+        'Public media endpoints must continue to delegate image authorization to the canonical public-image policy.',
     );
     public_media_authorization_assert(
-        substr_count($downloadsSource, 'public_image_visible_to_current_visitor(') >= 6,
-        'Download manifest/build paths must continue to delegate image authorization to the canonical public-image policy.'
+        substr_count(
+            $downloadsSource,
+            'public_image_visible_to_current_visitor(',
+        ) >= 6,
+        'Download manifest/build paths must continue to delegate image authorization to the canonical public-image policy.',
     );
     public_media_authorization_assert(
-        substr_count($viewerContentSource, 'visitor_can_access_gallery_without_admin_bypass(') >= 2,
-        'Viewer-owned source-image reference flows must continue to use the no-admin-bypass gallery policy.'
+        substr_count(
+            $viewerContentSource,
+            'visitor_can_access_gallery_without_admin_bypass(',
+        ) >= 2,
+        'Viewer-owned source-image reference flows must continue to use the no-admin-bypass gallery policy.',
     );
 
     // The original OFP attachment inherits the gallery's direct-link policy.
@@ -273,64 +416,108 @@ namespace {
     $GLOBALS['public_media_authorization_user'] = false;
     public_media_authorization_assert(
         \Gallery\Services\simbrief_ofp_visitor_access_allowed($public, false)
-            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($unpublished, false),
-        'Fresh anonymous visitors must read original PDFs of public and unpublished galleries.'
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $unpublished,
+                false,
+            ),
+        'Fresh anonymous visitors must read original PDFs of public and unpublished galleries.',
     );
     public_media_authorization_assert(
         !\Gallery\Services\simbrief_ofp_visitor_access_allowed($private, false)
-            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed($shareProtected, false),
-        'Ungated private galleries and locked private share galleries must not disclose PDFs.'
+            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $shareProtected,
+                false,
+            ),
+        'Ungated private galleries and locked private share galleries must not disclose PDFs.',
     );
     public_media_authorization_assert(
         !\Gallery\Services\simbrief_ofp_visitor_access_allowed($password, false)
-            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed($passwordUnpublishedChild, false)
-            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed($nsfw, false),
-        'Published and unpublished inherited-password PDFs and NSFW PDFs require visitor grants.'
+            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $passwordUnpublishedChild,
+                false,
+            )
+            && !\Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $nsfw,
+                false,
+            ),
+        'Published and unpublished inherited-password PDFs and NSFW PDFs require visitor grants.',
     );
     grant_gallery_public_access(4);
     grant_nsfw_guard_access();
     public_media_authorization_assert(
         \Gallery\Services\simbrief_ofp_visitor_access_allowed($password, false)
-            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($passwordChild, false)
-            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($passwordUnpublishedChild, false)
-            && \Gallery\Services\simbrief_ofp_visitor_access_allowed($nsfw, false),
-        'Original PDFs inherit password and NSFW grants, including unpublished descendants.'
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $passwordChild,
+                false,
+            )
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $passwordUnpublishedChild,
+                false,
+            )
+            && \Gallery\Services\simbrief_ofp_visitor_access_allowed(
+                $nsfw,
+                false,
+            ),
+        'Original PDFs inherit password and NSFW grants, including unpublished descendants.',
     );
     $_SESSION = [];
     $_GET = ['share' => $shareToken];
     public_media_authorization_assert(
-        \Gallery\Services\simbrief_ofp_visitor_access_allowed($shareProtected, false),
-        'A valid share token must authorize the original PDF when the private gallery page itself is accessible.'
+        \Gallery\Services\simbrief_ofp_visitor_access_allowed(
+            $shareProtected,
+            false,
+        ),
+        'A valid share token must authorize the original PDF when the private gallery page itself is accessible.',
     );
     public_media_authorization_assert(
         \Gallery\Services\simbrief_ofp_visitor_access_allowed($private, true),
-        'Verified administrators must retain access to their private OFP attachments.'
+        'Verified administrators must retain access to their private OFP attachments.',
     );
     public_media_authorization_assert(
         !\Gallery\Services\simbrief_ofp_visitor_access_allowed($private, false),
-        'Anonymous Admin preview must not inherit administrator PDF permissions.'
+        'Anonymous Admin preview must not inherit administrator PDF permissions.',
     );
 
     // Cache privacy is a property of protected content, not the current caller's role.
-    $GLOBALS['public_media_authorization_user'] = ['id' => 1, 'username' => 'admin'];
+    $GLOBALS['public_media_authorization_user'] = [
+        'id' => 1,
+        'username' => 'admin',
+    ];
     public_media_authorization_assert(
         !\Gallery\Services\public_media_needs_private_cache($public),
-        'Ordinary public gallery media must remain eligible for shared caching.'
+        'Ordinary public gallery media must remain eligible for shared caching.',
     );
     public_media_authorization_assert(
         \Gallery\Services\public_media_needs_private_cache($password)
-            && \Gallery\Services\public_media_needs_private_cache($passwordChild)
+            && \Gallery\Services\public_media_needs_private_cache(
+                $passwordChild,
+            )
             && \Gallery\Services\public_media_needs_private_cache($nsfw),
-        'Protected and NSFW gallery media must use private caching even for an authenticated administrator.'
+        'Protected and NSFW gallery media must use private caching even for an authenticated administrator.',
     );
-    $brandingStart = strpos($publicMediaSource, 'function cms_gallery_branding_asset(): void');
-    $brandingEnd = strpos($publicMediaSource, 'function cms_gallery_ofp_pdf_not_found(', $brandingStart === false ? 0 : $brandingStart);
-    $brandingSource = $brandingStart !== false && $brandingEnd !== false
-        ? substr($publicMediaSource, $brandingStart, $brandingEnd - $brandingStart)
-        : '';
+    $brandingStart = strpos(
+        $publicMediaSource,
+        'function cms_gallery_branding_asset(): void',
+    );
+    $brandingEnd = strpos(
+        $publicMediaSource,
+        'function cms_gallery_ofp_pdf_not_found(',
+        $brandingStart === false ? 0 : $brandingStart,
+    );
+    $brandingSource =
+        $brandingStart !== false && $brandingEnd !== false
+            ? substr(
+                $publicMediaSource,
+                $brandingStart,
+                $brandingEnd - $brandingStart,
+            )
+            : '';
     public_media_authorization_assert(
-        str_contains($brandingSource, '$cacheControl = public_media_needs_private_cache($gallery)'),
-        'Branding asset responses must derive cache privacy from canonical gallery access, never from administrator identity.'
+        str_contains(
+            $brandingSource,
+            '$cacheControl = public_media_needs_private_cache($gallery)',
+        ),
+        'Branding asset responses must derive cache privacy from canonical gallery access, never from administrator identity.',
     );
 
     echo "public_media_authorization_contract_test: ok\n";

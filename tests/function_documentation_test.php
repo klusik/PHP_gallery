@@ -15,10 +15,10 @@
  *   - Require a JSDoc block for named JavaScript functions and methods
  *   - Report exact source locations for maintainers
  *   - Ignore anonymous functions and callbacks, including variable-bound arrows
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
@@ -31,10 +31,14 @@ require_once dirname(__DIR__) . '/scripts/check_source_documentation.php';
  * @param array<int,string> $extensions Lowercase extensions without dots.
  * @return array<int,string> Sorted absolute paths.
  */
-function function_documentation_source_files(string $root, array $extensions): array
-{
+function function_documentation_source_files(
+    string $root,
+    array $extensions,
+): array {
     $files = [];
-    foreach (\PhpGallery\SourceContracts\inventory($root)['files'] as $relative => $extension) {
+    foreach (\PhpGallery\SourceContracts\inventory(
+        $root,
+    )['files'] as $relative => $extension) {
         if (in_array($extension, $extensions, true)) {
             $files[] = $root . '/' . $relative;
         }
@@ -56,14 +60,20 @@ function function_documentation_audit_php(string $root, array $files): array
     $missing = [];
     foreach ($files as $file) {
         $source = (string) file_get_contents($file);
-        foreach (\PhpGallery\SourceContracts\php_declarations($source) as $record) {
+        foreach (\PhpGallery\SourceContracts\php_declarations(
+            $source,
+        ) as $record) {
             if ($record['kind'] !== 'callable') {
                 continue;
             }
             $total++;
             if ($record['doc'] === '') {
-                $relative = substr(str_replace('\\', '/', $file), strlen(str_replace('\\', '/', $root)) + 1);
-                $missing[] = $relative . ':' . $record['line'] . ':' . $record['name'];
+                $relative = substr(
+                    str_replace('\\', '/', $file),
+                    strlen(str_replace('\\', '/', $root)) + 1,
+                );
+                $missing[] =
+                    $relative . ':' . $record['line'] . ':' . $record['name'];
             }
         }
     }
@@ -77,8 +87,10 @@ function function_documentation_audit_php(string $root, array $files): array
  * @param int $offset Declaration byte offset.
  * @return bool Whether the nearest completed comment is an attached JSDoc.
  */
-function function_documentation_js_has_docblock(string $source, int $offset): bool
-{
+function function_documentation_js_has_docblock(
+    string $source,
+    int $offset,
+): bool {
     $prefix = rtrim(substr($source, 0, $offset));
     return preg_match('#/\*\*(?:(?!\*/)[\s\S])*\*/\s*$#', $prefix) === 1;
 }
@@ -93,13 +105,23 @@ function function_documentation_js_has_docblock(string $source, int $offset): bo
  * @param array<int,string> $files JavaScript source paths.
  * @return array{total:int,missing:array<int,string>} Count and source locations of undocumented named declarations.
  */
-function function_documentation_audit_javascript(string $root, array $files): array
-{
+function function_documentation_audit_javascript(
+    string $root,
+    array $files,
+): array {
     $patterns = [
         '/^[ \t]*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/m',
         '/^[ \t]*(?:static\s+)?(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^\r\n;{}]*\)\s*\{/m',
     ];
-    $reserved = array_fill_keys(['if', 'for', 'while', 'switch', 'catch', 'with', 'function'], true);
+    $reserved = array_fill_keys([
+        'if',
+        'for',
+        'while',
+        'switch',
+        'catch',
+        'with',
+        'function',
+    ], true);
     $total = 0;
     $missing = [];
     foreach ($files as $file) {
@@ -113,17 +135,26 @@ function function_documentation_audit_javascript(string $root, array $files): ar
                     continue;
                 }
                 $offset = (int) ($matches[0][$matchIndex][1] ?? 0);
-                $declarations[$offset . ':' . $name] = ['offset' => $offset, 'name' => $name];
+                $declarations[$offset . ':' . $name] = [
+                    'offset' => $offset,
+                    'name' => $name,
+                ];
             }
         }
         foreach ($declarations as $declaration) {
             $total++;
-            if (function_documentation_js_has_docblock($source, (int) $declaration['offset'])) {
+            if (function_documentation_js_has_docblock(
+                $source,
+                (int) $declaration['offset'],
+            )) {
                 continue;
             }
             $offset = (int) $declaration['offset'];
             $line = substr_count(substr($source, 0, $offset), "\n") + 1;
-            $relative = substr(str_replace('\\', '/', $file), strlen(str_replace('\\', '/', $root)) + 1);
+            $relative = substr(
+                str_replace('\\', '/', $file),
+                strlen(str_replace('\\', '/', $root)) + 1,
+            );
             $missing[] = $relative . ':' . $line . ':' . $declaration['name'];
         }
     }
@@ -139,19 +170,44 @@ function function_documentation_audit_javascript(string $root, array $files): ar
 function function_documentation_main(): int
 {
     $root = dirname(__DIR__);
-    $php = function_documentation_audit_php($root, function_documentation_source_files($root, ['php']));
-    $javascript = function_documentation_audit_javascript($root, function_documentation_source_files($root, ['js']));
+    $php = function_documentation_audit_php($root, function_documentation_source_files($root, [
+        'php',
+    ]));
+    $javascript = function_documentation_audit_javascript($root, function_documentation_source_files($root, [
+        'js',
+    ]));
     $missing = array_merge($php['missing'], $javascript['missing']);
     if ($missing !== []) {
-        fwrite(STDERR, "Undocumented named functions/methods:\n" . implode("\n", $missing) . "\n");
-        fwrite(STDERR, 'PHP declarations: ' . $php['total'] . '; JavaScript declarations: ' . $javascript['total'] . '; missing: ' . count($missing) . "\n");
+        fwrite(
+            STDERR,
+            "Undocumented named functions/methods:\n"
+                . implode("\n", $missing)
+                . "\n",
+        );
+        fwrite(
+            STDERR,
+            'PHP declarations: '
+                . $php['total']
+                . '; JavaScript declarations: '
+                . $javascript['total']
+                . '; missing: '
+                . count($missing)
+                . "\n",
+        );
         return 1;
     }
-    echo 'Function documentation checks passed: '
-        . $php['total'] . ' PHP and '
-        . $javascript['total'] . " JavaScript named declarations documented (presence gate only).\n";
+    echo
+        'Function documentation checks passed: '
+            . $php['total']
+            . ' PHP and '
+            . $javascript['total']
+            . " JavaScript named declarations documented (presence gate only).\n";
     return 0;
 }
-if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+
+if (
+    PHP_SAPI === 'cli'
+    && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__
+) {
     exit(function_documentation_main());
 }

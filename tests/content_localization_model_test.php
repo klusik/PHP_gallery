@@ -24,20 +24,37 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
-    /** Return the maintained-language fixture used by this isolated test. */
+    /**
+     * Return the maintained-language fixture used by this isolated test.
+     *
+     * @return array{language:array{default:string,available:list<string>}} Language defaults and maintained locale order.
+     */
     function cms_config(): array
     {
-        return ['language' => ['default' => 'en', 'available' => ['en', 'cs', 'de', 'sv']]];
+        return [
+            'language' => [
+                'default' => 'en',
+                'available' => ['en', 'cs', 'de', 'sv'],
+            ],
+        ];
     }
 }
 
 namespace Gallery\Services {
     $GLOBALS['content_localization_feature_enabled'] = true;
 
-    /** Return the isolated authored-content capability state. */
+    /**
+     * Return the isolated authored-content capability state.
+     *
+     * @param string $key Capability key to inspect.
+     * @return bool Whether the requested capability is enabled in the fixture.
+     */
     function feature_capability_effective_enabled(string $key): bool
     {
-        return $key !== 'multilingual_content' || !empty($GLOBALS['content_localization_feature_enabled']);
+        return (
+            $key !== 'multilingual_content'
+                || !empty($GLOBALS['content_localization_feature_enabled'])
+        );
     }
 
     require_once dirname(__DIR__) . '/app/services/translations.php';
@@ -50,14 +67,22 @@ namespace Gallery\Services {
      * @param string $column Column name.
      * @return array<string,string> Available result.
      */
-    function schema_inspection_column(string $table, string $column): array { return ['state' => 'available']; }
+    function schema_inspection_column(string $table, string $column): array
+    {
+        return ['state' => 'available'];
+    }
+
     /**
      * Return an available table-inspection fixture.
      *
      * @param string $table Table name.
      * @return array<string,string> Available result.
      */
-    function schema_inspection_table(string $table): array { return ['state' => 'available']; }
+    function schema_inspection_table(string $table): array
+    {
+        return ['state' => 'available'];
+    }
+
     /**
      * Aggregate available inspection fixtures for the isolated service load.
      *
@@ -65,55 +90,152 @@ namespace Gallery\Services {
      * @param array<int,array<string,mixed>> $requirements Requirement fixtures.
      * @return array<string,mixed> Available feature result.
      */
-    function schema_inspection_feature(string $feature, array $requirements): array { return ['state' => 'available', 'feature' => $feature, 'requirements' => $requirements]; }
+    function schema_inspection_feature(
+        string $feature,
+        array $requirements,
+    ): array {
+        return [
+            'state' => 'available',
+            'feature' => $feature,
+            'requirements' => $requirements,
+        ];
+    }
+
     /**
      * Return whether the isolated inspection fixture is available.
      *
      * @param array<string,mixed> $result Inspection result.
      * @return bool True for available state.
      */
-    function schema_inspection_is_available(array $result): bool { return ($result['state'] ?? '') === 'available'; }
+    function schema_inspection_is_available(array $result): bool
+    {
+        return ($result['state'] ?? '') === 'available';
+    }
 
     require_once dirname(__DIR__) . '/app/services/content_localization.php';
 
     /**
      * Assert strict equality for one content-localization behavior.
      *
-     * @param mixed $expected Expected value.
-     * @param mixed $actual Actual value.
+     * @template TExpected
+     * @template TActual
+     * @param TExpected $expected Expected value, including its collection shape when applicable.
+     * @param TActual $actual Actual value, including its collection shape when applicable.
      * @param string $label Assertion label.
+     * @return void Throws when strict comparison fails.
      */
-    function content_test_same(mixed $expected, mixed $actual, string $label): void
-    {
+    function content_test_same(
+        mixed $expected,
+        mixed $actual,
+        string $label,
+    ): void {
         if ($expected !== $actual) {
-            throw new \RuntimeException($label . ': expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+            throw new \RuntimeException(
+                $label . ': expected ' . var_export($expected, true) . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
-    content_test_same(['en', 'cs', 'de', 'sv'], content_supported_languages(), 'Maintained language order');
-    content_test_same(null, content_language_normalize('CS-cz'), 'Regional locale rejected in favor of architecture code');
-    content_test_same(null, content_language_normalize('fr'), 'Dormant language rejected');
-    content_test_same(null, content_language_normalize(''), 'Blank source remains unspecified');
-    content_test_same('de_DE', content_language_og_locale('de'), 'German Open Graph locale');
-    content_test_same('en_GB', content_language_og_locale('invalid'), 'Invalid Open Graph locale fallback');
+    content_test_same(
+        ['en', 'cs', 'de', 'sv'],
+        content_supported_languages(),
+        'Maintained language order',
+    );
+    content_test_same(
+        null,
+        content_language_normalize('CS-cz'),
+        'Regional locale rejected in favor of architecture code',
+    );
+    content_test_same(
+        null,
+        content_language_normalize('fr'),
+        'Dormant language rejected',
+    );
+    content_test_same(
+        null,
+        content_language_normalize(''),
+        'Blank source remains unspecified',
+    );
+    content_test_same(
+        'de_DE',
+        content_language_og_locale('de'),
+        'German Open Graph locale',
+    );
+    content_test_same(
+        'en_GB',
+        content_language_og_locale('invalid'),
+        'Invalid Open Graph locale fallback',
+    );
 
-    $base = ['id' => 7, 'title' => 'Praha', 'description' => 'Český text', 'content_language' => 'cs'];
-    $translated = content_localized_fields($base, 'de', ['de' => ['title' => 'Prag', 'description' => 'Deutscher Text']]);
-    content_test_same('Prag', $translated['title'], 'Translated title selected');
-    content_test_same('Deutscher Text', $translated['description'], 'Translated description selected');
-    content_test_same('translation', $translated['title_source'], 'Title provenance');
+    $base = [
+        'id' => 7,
+        'title' => 'Praha',
+        'description' => 'Český text',
+        'content_language' => 'cs',
+    ];
+    $translated = content_localized_fields($base, 'de', ['de' => [
+        'title' => 'Prag',
+        'description' => 'Deutscher Text',
+    ]]);
+    content_test_same(
+        'Prag',
+        $translated['title'],
+        'Translated title selected',
+    );
+    content_test_same(
+        'Deutscher Text',
+        $translated['description'],
+        'Translated description selected',
+    );
+    content_test_same(
+        'translation',
+        $translated['title_source'],
+        'Title provenance',
+    );
 
-    $partial = content_localized_fields($base, 'de', ['de' => ['title' => 'Prag', 'description' => '']]);
+    $partial = content_localized_fields($base, 'de', ['de' => [
+        'title' => 'Prag',
+        'description' => '',
+    ]]);
     content_test_same('Prag', $partial['title'], 'Partial title selected');
-    content_test_same('Český text', $partial['description'], 'Partial description falls back independently');
-    $photoCaption = content_localized_fields($base, 'de', ['de' => ['title' => 'Prag', 'description' => '']], false);
-    content_test_same('Prag', $photoCaption['title'], 'Photo translated title selected');
-    content_test_same('', $photoCaption['description'], 'Photo caption does not mix source description into translated variant');
-    $source = content_localized_fields($base, 'cs', ['cs' => ['title' => 'Wrong duplicate', 'description' => 'Wrong']]);
-    content_test_same('Praha', $source['title'], 'Source language ignores duplicate translation');
+    content_test_same(
+        'Český text',
+        $partial['description'],
+        'Partial description falls back independently',
+    );
+    $photoCaption = content_localized_fields(
+        $base,
+        'de',
+        ['de' => ['title' => 'Prag', 'description' => '']],
+        false,
+    );
+    content_test_same(
+        'Prag',
+        $photoCaption['title'],
+        'Photo translated title selected',
+    );
+    content_test_same(
+        '',
+        $photoCaption['description'],
+        'Photo caption does not mix source description into translated variant',
+    );
+    $source = content_localized_fields($base, 'cs', ['cs' => [
+        'title' => 'Wrong duplicate',
+        'description' => 'Wrong',
+    ]]);
+    content_test_same(
+        'Praha',
+        $source['title'],
+        'Source language ignores duplicate translation',
+    );
 
     $calls = 0;
-    content_localization_set_loader_for_tests(static function (string $type, array $ids, ?string $language) use (&$calls): array {
+    content_localization_set_loader_for_tests(static function (
+        string $type,
+        array $ids,
+        ?string $language,
+    ) use (&$calls): array {
         $calls++;
         content_test_same('gallery', $type, 'Batch entity type');
         content_test_same([1, 2], $ids, 'Batch identifiers');
@@ -124,12 +246,30 @@ namespace Gallery\Services {
         ];
     });
     $rows = [
-        ['id' => 2, 'title' => 'Two', 'description' => 'Second', 'content_language' => 'en'],
-        ['id' => 1, 'title' => 'One', 'description' => 'First', 'content_language' => 'en'],
+        [
+            'id' => 2,
+            'title' => 'Two',
+            'description' => 'Second',
+            'content_language' => 'en',
+        ],
+        [
+            'id' => 1,
+            'title' => 'One',
+            'description' => 'First',
+            'content_language' => 'en',
+        ],
     ];
     $localized = content_localize_entities('gallery', $rows, 'sv');
-    content_test_same('Andra', $localized[0]['description'], 'Batch description overlay');
-    content_test_same('Two', $localized[0]['title'], 'Blank batch title fallback');
+    content_test_same(
+        'Andra',
+        $localized[0]['description'],
+        'Batch description overlay',
+    );
+    content_test_same(
+        'Two',
+        $localized[0]['title'],
+        'Blank batch title fallback',
+    );
     content_test_same('Ett', $localized[1]['title'], 'Batch title overlay');
     content_localize_entities('gallery', $rows, 'sv');
     content_test_same(1, $calls, 'Batch result cached per request');
@@ -140,15 +280,39 @@ namespace Gallery\Services {
     $GLOBALS['content_localization_feature_enabled'] = false;
     content_localization_reset_request_cache();
     $disabledLocalized = content_localize_entities('gallery', $rows, 'sv');
-    content_test_same(2, $calls, 'Disabled authored-content localization skips the translation loader entirely');
-    content_test_same('Two', $disabledLocalized[0]['title'], 'Disabled localization renders canonical source title');
-    content_test_same('Second', $disabledLocalized[0]['description'], 'Disabled localization renders canonical source description');
-    content_test_same(['en', 'cs', 'de', 'sv'], content_supported_languages(), 'Maintained language catalog remains available while authored localization is disabled');
+    content_test_same(
+        2,
+        $calls,
+        'Disabled authored-content localization skips the translation loader entirely',
+    );
+    content_test_same(
+        'Two',
+        $disabledLocalized[0]['title'],
+        'Disabled localization renders canonical source title',
+    );
+    content_test_same(
+        'Second',
+        $disabledLocalized[0]['description'],
+        'Disabled localization renders canonical source description',
+    );
+    content_test_same(
+        ['en', 'cs', 'de', 'sv'],
+        content_supported_languages(),
+        'Maintained language catalog remains available while authored localization is disabled',
+    );
     $GLOBALS['content_localization_feature_enabled'] = true;
     content_localization_reset_request_cache();
     $reenabledLocalized = content_localize_entities('gallery', $rows, 'sv');
-    content_test_same(3, $calls, 'Re-enabled authored localization resumes translation loading');
-    content_test_same('Ett', $reenabledLocalized[1]['title'], 'Re-enabled authored localization restores stored translated content');
+    content_test_same(
+        3,
+        $calls,
+        'Re-enabled authored localization resumes translation loading',
+    );
+    content_test_same(
+        'Ett',
+        $reenabledLocalized[1]['title'],
+        'Re-enabled authored localization restores stored translated content',
+    );
 
     try {
         content_localization_storage('tag');

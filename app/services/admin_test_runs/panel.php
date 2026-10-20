@@ -38,7 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -56,15 +55,24 @@ function admin_test_run_panel_model(): ?array
 {
     $user = current_user();
     $page = (string) (request_data('query')['page'] ?? 'home');
-    if (!$user || !in_array($page, ['gallery', 'smart_gallery'], true) || !feature_capability_effective_enabled('admin_test_runs')) {
+    if (
+        !$user
+        || !in_array($page, ['gallery', 'smart_gallery'], true)
+        || !feature_capability_effective_enabled('admin_test_runs')
+    ) {
         return null;
     }
-    $target = admin_test_run_normalize_target((string) (request_data('server')['REQUEST_URI'] ?? '/'));
+    $target = admin_test_run_normalize_target(
+        (string) (request_data('server')['REQUEST_URI'] ?? '/'),
+    );
     $activeToken = admin_test_run_cookie_token();
     $active = admin_test_run_active();
     $latest = admin_test_run_latest_for_target($target);
     $currentRequestId = admin_test_run_current_request_id();
-    $starterRequestId = preg_match('/^[a-z0-9_.:-]{8,160}$/iD', (string) (request_data('query')['test_run_starter_request_id'] ?? ''))
+    $starterRequestId = preg_match(
+        '/^[a-z0-9_.:-]{8,160}$/iD',
+        (string) (request_data('query')['test_run_starter_request_id'] ?? ''),
+    )
         ? (string) request_data('query')['test_run_starter_request_id']
         : '';
 
@@ -77,10 +85,14 @@ function admin_test_run_panel_model(): ?array
         'finalize_url' => url_for('admin_test_run_finalize'),
         'probe_url' => url_for('admin_test_run_probe'),
         'static_probe_url' => function_exists('Gallery\\Core\\asset_url')
-            ? \Gallery\Core\asset_url('assets/gallery-benchmark-static-probe.txt')
+            ? \Gallery\Core\asset_url(
+                'assets/gallery-benchmark-static-probe.txt',
+            )
             : '/public/assets/gallery-benchmark-static-probe.txt',
         'csrf_token' => \Gallery\Core\csrf_token(),
         'latest' => $latest,
-        'latest_download_url' => $latest ? url_for('admin_test_run_download', ['token' => $latest['token']]) : '',
+        'latest_download_url' => $latest
+            ? url_for('admin_test_run_download', ['token' => $latest['token']])
+            : '',
     ];
 }

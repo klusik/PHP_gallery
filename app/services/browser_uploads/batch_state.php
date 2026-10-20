@@ -60,7 +60,9 @@ use function Gallery\Models\image_model_next_sort_order;
 function browser_upload_batch_cache_dir(): string
 {
     $configured = (string) (cms_config()['zip_cache_path'] ?? '');
-    $base = $configured !== '' ? dirname($configured) : dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache';
+    $base = $configured !== ''
+        ? dirname($configured)
+        : dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache';
     $path = $base . DIRECTORY_SEPARATOR . 'browser_upload_batches';
     if (!is_dir($path)) {
         @mkdir($path, 0775, true);
@@ -76,8 +78,11 @@ function browser_upload_batch_cache_dir(): string
  * @param int $batchIndex Batch index value.
  * @return string Text result for the caller.
  */
-function browser_upload_batch_cache_key(int $galleryId, string $sessionId, int $batchIndex): string
-{
+function browser_upload_batch_cache_key(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+): string {
     $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', $sessionId) ?: 'session';
     return hash('sha256', $galleryId . '|' . $sessionId . '|' . $batchIndex);
 }
@@ -88,11 +93,18 @@ function browser_upload_batch_cache_key(int $galleryId, string $sessionId, int $
  * @param int $galleryId Gallery identifier.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
- * @return array<string mixed>|null.
+ * @return array<string,mixed>|null Previously acknowledged successful batch response, or null when absent or invalid.
  */
-function browser_upload_cached_batch_response(int $galleryId, string $sessionId, int $batchIndex): ?array
-{
-    $path = browser_upload_batch_cache_dir() . DIRECTORY_SEPARATOR . browser_upload_batch_cache_key($galleryId, $sessionId, $batchIndex) . '.json';
+function browser_upload_cached_batch_response(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+): ?array {
+    $path =
+        browser_upload_batch_cache_dir()
+        . DIRECTORY_SEPARATOR
+        . browser_upload_batch_cache_key($galleryId, $sessionId, $batchIndex)
+        . '.json';
     if (!is_file($path)) {
         return null;
     }
@@ -107,16 +119,29 @@ function browser_upload_cached_batch_response(int $galleryId, string $sessionId,
  * @param int $galleryId Gallery identifier.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
- * @param array $response Response data.
+ * @param array<string,mixed> $response Successful batch response to cache for idempotent retries.
+ * @return void Stores the response JSON when the cache directory is writable.
  */
-function browser_upload_store_cached_batch_response(int $galleryId, string $sessionId, int $batchIndex, array $response): void
-{
+function browser_upload_store_cached_batch_response(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+    array $response,
+): void {
     $dir = browser_upload_batch_cache_dir();
     if (!is_dir($dir) || !is_writable($dir)) {
         return;
     }
-    $path = $dir . DIRECTORY_SEPARATOR . browser_upload_batch_cache_key($galleryId, $sessionId, $batchIndex) . '.json';
-    @file_put_contents($path, json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    $path =
+        $dir
+        . DIRECTORY_SEPARATOR
+        . browser_upload_batch_cache_key($galleryId, $sessionId, $batchIndex)
+        . '.json';
+    @file_put_contents(
+        $path,
+        json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        LOCK_EX,
+    );
 }
 
 /**
@@ -127,9 +152,22 @@ function browser_upload_store_cached_batch_response(int $galleryId, string $sess
  * @param int $batchIndex Batch index value.
  * @return string Text result for the caller.
  */
-function browser_upload_batch_state_path(int $galleryId, string $sessionId, int $batchIndex): string
-{
-    return browser_upload_batch_cache_dir() . DIRECTORY_SEPARATOR . 'state-' . browser_upload_batch_cache_key($galleryId, $sessionId, $batchIndex) . '.json';
+function browser_upload_batch_state_path(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+): string {
+    return (
+        browser_upload_batch_cache_dir()
+            . DIRECTORY_SEPARATOR
+            . 'state-'
+            . browser_upload_batch_cache_key(
+                $galleryId,
+                $sessionId,
+                $batchIndex,
+            )
+            . '.json'
+    );
 }
 
 /**
@@ -139,10 +177,18 @@ function browser_upload_batch_state_path(int $galleryId, string $sessionId, int 
  * @param string $sessionId Session id identifier.
  * @return string Text result for the caller.
  */
-function browser_upload_session_order_path(int $galleryId, string $sessionId): string
-{
+function browser_upload_session_order_path(
+    int $galleryId,
+    string $sessionId,
+): string {
     $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', $sessionId) ?: 'session';
-    return browser_upload_batch_cache_dir() . DIRECTORY_SEPARATOR . 'order-' . hash('sha256', $galleryId . '|' . $sessionId) . '.json';
+    return (
+        browser_upload_batch_cache_dir()
+            . DIRECTORY_SEPARATOR
+            . 'order-'
+            . hash('sha256', $galleryId . '|' . $sessionId)
+            . '.json'
+    );
 }
 
 /**
@@ -157,8 +203,10 @@ function browser_upload_session_order_path(int $galleryId, string $sessionId): s
  * @param string $sessionId Session id identifier.
  * @return int First sort_order value reserved for this upload session.
  */
-function browser_upload_session_sort_base(int $galleryId, string $sessionId): int
-{
+function browser_upload_session_sort_base(
+    int $galleryId,
+    string $sessionId,
+): int {
     $path = browser_upload_session_order_path($galleryId, $sessionId);
     if (is_file($path)) {
         $raw = @file_get_contents($path);
@@ -172,12 +220,16 @@ function browser_upload_session_sort_base(int $galleryId, string $sessionId): in
     $base = image_model_next_sort_order($galleryId);
     $dir = browser_upload_batch_cache_dir();
     if (is_dir($dir) && is_writable($dir)) {
-        @file_put_contents($path, json_encode([
-            'version' => 1,
-            'gallery_id' => $galleryId,
-            'session_id' => $sessionId,
-            'sort_base' => $base,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+        @file_put_contents(
+            $path,
+            json_encode([
+                'version' => 1,
+                'gallery_id' => $galleryId,
+                'session_id' => $sessionId,
+                'sort_base' => $base,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            LOCK_EX,
+        );
     }
     return $base;
 }
@@ -190,8 +242,11 @@ function browser_upload_session_sort_base(int $galleryId, string $sessionId): in
  * @param int $sortBase First sort_order value for source_index zero.
  * @return int Number of rows whose sort_order was touched.
  */
-function browser_upload_apply_source_sort_order(int $galleryId, array $sourceIndexByRelativePath, int $sortBase): int
-{
+function browser_upload_apply_source_sort_order(
+    int $galleryId,
+    array $sourceIndexByRelativePath,
+    int $sortBase,
+): int {
     if ($galleryId <= 0 || !$sourceIndexByRelativePath) {
         return 0;
     }
@@ -200,10 +255,16 @@ function browser_upload_apply_source_sort_order(int $galleryId, array $sourceInd
     foreach ($sourceIndexByRelativePath as $relativePath => $sourceIndex) {
         $relativePath = normalize_relative_path((string) $relativePath);
         if ($relativePath !== '') {
-            $sourceIndexByPathHash[hash('sha256', $relativePath)] = (int) $sourceIndex;
+            $sourceIndexByPathHash[hash('sha256', $relativePath)] =
+                (int) $sourceIndex;
         }
     }
-    return image_model_apply_upload_sort_order($galleryId, $sourceIndexByPathHash, $sortBase, now_sql());
+    return image_model_apply_upload_sort_order(
+        $galleryId,
+        $sourceIndexByPathHash,
+        $sortBase,
+        now_sql(),
+    );
 }
 
 /**
@@ -215,8 +276,12 @@ function browser_upload_apply_source_sort_order(int $galleryId, array $sourceInd
  * @param string $manifestHash Manifest hash value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function browser_upload_empty_batch_state(int $galleryId, string $sessionId, int $batchIndex, string $manifestHash): array
-{
+function browser_upload_empty_batch_state(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+    string $manifestHash,
+): array {
     return [
         'version' => 1,
         'gallery_id' => $galleryId,
@@ -236,16 +301,38 @@ function browser_upload_empty_batch_state(int $galleryId, string $sessionId, int
  * @param string $manifestHash Manifest hash value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function browser_upload_load_batch_state(int $galleryId, string $sessionId, int $batchIndex, string $manifestHash): array
-{
-    $path = browser_upload_batch_state_path($galleryId, $sessionId, $batchIndex);
+function browser_upload_load_batch_state(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+    string $manifestHash,
+): array {
+    $path = browser_upload_batch_state_path(
+        $galleryId,
+        $sessionId,
+        $batchIndex,
+    );
     if (!is_file($path)) {
-        return browser_upload_empty_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
+        return browser_upload_empty_batch_state(
+            $galleryId,
+            $sessionId,
+            $batchIndex,
+            $manifestHash,
+        );
     }
     $raw = @file_get_contents($path);
     $decoded = is_string($raw) ? json_decode($raw, true) : null;
-    if (!is_array($decoded) || (string) ($decoded['manifest_hash'] ?? '') !== $manifestHash || !is_array($decoded['items'] ?? null)) {
-        return browser_upload_empty_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
+    if (
+        !is_array($decoded)
+        || (string) ($decoded['manifest_hash'] ?? '') !== $manifestHash
+        || !is_array($decoded['items'] ?? null)
+    ) {
+        return browser_upload_empty_batch_state(
+            $galleryId,
+            $sessionId,
+            $batchIndex,
+            $manifestHash,
+        );
     }
     return $decoded;
 }
@@ -256,30 +343,51 @@ function browser_upload_load_batch_state(int $galleryId, string $sessionId, int 
  * @param int $galleryId Gallery identifier.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
- * @param array $state State data.
+ * @param array{version:int,gallery_id:int,session_id:string,batch_index:int,manifest_hash:string,items:array<string,array{manifest_index:int,source_index:int,stored_filename:string,image_id:int}>} $state Durable partial-batch state to encode.
+ * @return void Stores the state JSON when the cache directory is writable.
  */
-function browser_upload_store_batch_state(int $galleryId, string $sessionId, int $batchIndex, array $state): void
-{
+function browser_upload_store_batch_state(
+    int $galleryId,
+    string $sessionId,
+    int $batchIndex,
+    array $state,
+): void {
     $dir = browser_upload_batch_cache_dir();
     if (!is_dir($dir) || !is_writable($dir)) {
         return;
     }
-    $path = browser_upload_batch_state_path($galleryId, $sessionId, $batchIndex);
-    @file_put_contents($path, json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    $path = browser_upload_batch_state_path(
+        $galleryId,
+        $sessionId,
+        $batchIndex,
+    );
+    @file_put_contents(
+        $path,
+        json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        LOCK_EX,
+    );
 }
 
 /**
  * Return the reusable filename from a prior partial batch state item.
  *
- * @param array $gallery Gallery row.
- * @param array $stateItem State item data.
- * @return string|null Text result for the caller.
+ * @param array<string,mixed> $gallery Gallery row containing id and folder_path.
+ * @param array{manifest_index?:int,source_index?:int,stored_filename?:string,image_id?:int} $stateItem Partial-batch item containing stored_filename and/or image_id.
+ * @return string|null Existing safe filename belonging to the gallery, or null when no reusable file is found.
  */
-function browser_upload_reusable_state_filename(array $gallery, array $stateItem): ?string
-{
+function browser_upload_reusable_state_filename(
+    array $gallery,
+    array $stateItem,
+): ?string {
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
-    $filename = normalize_relative_path((string) ($stateItem['stored_filename'] ?? ''));
-    if ($filename !== '' && !str_contains($filename, '/') && is_file($galleryRoot . DIRECTORY_SEPARATOR . $filename)) {
+    $filename = normalize_relative_path(
+        (string) ($stateItem['stored_filename'] ?? ''),
+    );
+    if (
+        $filename !== ''
+        && !str_contains($filename, '/')
+        && is_file($galleryRoot . DIRECTORY_SEPARATOR . $filename)
+    ) {
         return $filename;
     }
 
@@ -288,12 +396,19 @@ function browser_upload_reusable_state_filename(array $gallery, array $stateItem
         return null;
     }
     $image = find_image($imageId);
-    if (!is_array($image) || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)) {
+    if (
+        !is_array($image)
+        || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)
+    ) {
         return null;
     }
-    $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+    $relativePath = normalize_relative_path(
+        (string) ($image['relative_path'] ?? ''),
+    );
     if ($relativePath === '' || str_contains($relativePath, '/')) {
         return null;
     }
-    return is_file($galleryRoot . DIRECTORY_SEPARATOR . $relativePath) ? $relativePath : null;
+    return is_file($galleryRoot . DIRECTORY_SEPARATOR . $relativePath)
+        ? $relativePath
+        : null;
 }

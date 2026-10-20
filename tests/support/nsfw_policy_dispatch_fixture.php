@@ -58,18 +58,19 @@ namespace Gallery\Services {
         return null;
     }
 
-
-
     /**
      * Return deterministic translated wording for the isolated dispatcher fixture.
      *
      * @param string $key Translation key.
-     * @param mixed $fallback Fallback text or replacements.
-     * @param array $replacements Placeholder replacements.
+     * @param string|int|float|bool|null|array<string,scalar> $fallback Fallback text or replacement values keyed by placeholder.
+     * @param array<string,scalar> $replacements Placeholder values keyed by name.
      * @return string Resolved fixture text.
      */
-    function t(string $key, mixed $fallback = '', array $replacements = []): string
-    {
+    function t(
+        string $key,
+        mixed $fallback = '',
+        array $replacements = [],
+    ): string {
         if (is_array($fallback)) {
             $replacements = $fallback;
             $fallback = $key;
@@ -97,12 +98,24 @@ namespace Gallery\Services {
      * @param string $level Legacy event level.
      * @param string $eventKey Stable event key.
      * @param string $message Safe internal message.
-     * @param array $context Structured event context.
-     * @param array $options Event classification and correlation options.
+     * @param array<string,scalar|null|array<string,scalar|null>> $context Structured event context fields.
+     * @param array<string,scalar|null> $options Event classification and correlation options.
+     * @return void Append the bounded event fields to fixture log state.
      */
-    function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-    {
-        $GLOBALS['nsfw_policy_fixture_logs'][] = compact('level', 'eventKey', 'message', 'context', 'options');
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
+        $GLOBALS['nsfw_policy_fixture_logs'][] = compact(
+            'level',
+            'eventKey',
+            'message',
+            'context',
+            'options',
+        );
     }
 
     /**
@@ -124,8 +137,11 @@ namespace Gallery\Services {
      * @param bool $isAdmin Whether the current principal is Admin.
      * @return array<string,mixed> Disabled-route decision.
      */
-    function feature_flag_disabled_route_decision(string $page, bool $wantsJson, bool $isAdmin): array
-    {
+    function feature_flag_disabled_route_decision(
+        string $page,
+        bool $wantsJson,
+        bool $isAdmin,
+    ): array {
         $GLOBALS['nsfw_policy_fixture_disabled_route'] = $page;
         return [
             'status' => 404,
@@ -137,7 +153,6 @@ namespace Gallery\Services {
             'admin' => false,
         ];
     }
-
 }
 
 namespace Gallery\Controllers {
@@ -195,7 +210,8 @@ namespace {
 
     use function Gallery\Core\admin_anonymous_preview_active;
     use function Gallery\Core\cms_dispatch_page;
-    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests
+    ;
 
     $state = (string) ($argv[1] ?? 'unknown');
     $route = (string) ($argv[2] ?? 'gallery');
@@ -205,12 +221,24 @@ namespace {
         fwrite(STDERR, "Invalid fixture schema state.\n");
         exit(2);
     }
-    if (!in_array($route, ['gallery', 'public_media', 'public_thumb', 'gallery_lightbox_data', 'gallery_map_data'], true)) {
+    if (!in_array(
+        $route,
+        [
+            'gallery',
+            'public_media',
+            'public_thumb',
+            'gallery_lightbox_data',
+            'gallery_map_data',
+        ],
+        true,
+    )) {
         fwrite(STDERR, "Invalid fixture route.\n");
         exit(2);
     }
 
-    $GLOBALS['nsfw_policy_fixture_user'] = $anonymousPreview ? ['id' => 91, 'role' => 'admin'] : null;
+    $GLOBALS['nsfw_policy_fixture_user'] = $anonymousPreview
+        ? ['id' => 91, 'role' => 'admin']
+        : null;
     $GLOBALS['nsfw_policy_fixture_handler_reached'] = false;
     $GLOBALS['nsfw_policy_fixture_logs'] = [];
     if ($anonymousPreview) {
@@ -220,10 +248,12 @@ namespace {
     }
 
     schema_inspection_set_query_executor_for_tests(match ($state) {
-        'available' => static fn (): bool => true,
-        'missing' => static fn (): bool => false,
+        'available' => static fn(): bool => true,
+        'missing' => static fn(): bool => false,
         default => static function (): bool {
-            throw new \RuntimeException('fixture-secret password=phase7 SELECT * FROM private_media');
+            throw new \RuntimeException(
+                'fixture-secret password=phase7 SELECT * FROM private_media',
+            );
         },
     });
 
@@ -237,11 +267,15 @@ namespace {
         'route' => $route,
         'status' => http_response_code(),
         'body' => $body,
-        'handler_reached' => (bool) $GLOBALS['nsfw_policy_fixture_handler_reached'],
+        'handler_reached' =>
+            (bool) $GLOBALS['nsfw_policy_fixture_handler_reached'],
         'anonymous_preview_active' => admin_anonymous_preview_active(),
         'log' => $GLOBALS['nsfw_policy_fixture_logs'][0] ?? [],
     ];
 
     schema_inspection_set_query_executor_for_tests(null);
-    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    echo json_encode(
+        $result,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    );
 }

@@ -46,7 +46,11 @@ use function Gallery\Core\db;
  */
 function gallery_order_model_tree_rows(): array
 {
-    return db()->query('SELECT id, parent_id, sort_order, title, folder_path FROM galleries ORDER BY id')->fetchAll();
+    return db()
+        ->query(
+            'SELECT id, parent_id, sort_order, title, folder_path FROM galleries ORDER BY id',
+        )
+        ->fetchAll();
 }
 
 /**
@@ -59,12 +63,16 @@ function gallery_order_model_tree_rows(): array
  * @param string $now Shared SQL timestamp for all touched rows.
  * @return array<int,int> Persisted sort order keyed by gallery identifier.
  */
-function gallery_order_model_save_tree(array $submittedEntries, string $now): array
-{
+function gallery_order_model_save_tree(
+    array $submittedEntries,
+    string $now,
+): array {
     $pdo = db();
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+        $stmt = $pdo->prepare(
+            'UPDATE galleries SET sort_order = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+        );
         $siblingPositionByParent = [];
         $nextSortOrderById = [];
         foreach ($submittedEntries as $entry) {
@@ -94,12 +102,17 @@ function gallery_order_model_save_tree(array $submittedEntries, string $now): ar
  * @param string $now Shared SQL timestamp for all touched rows.
  * @return void
  */
-function gallery_order_model_save_children(int $parentGalleryId, array $orderedIds, string $now): void
-{
+function gallery_order_model_save_children(
+    int $parentGalleryId,
+    array $orderedIds,
+    string $now,
+): void {
     $pdo = db();
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ? AND parent_id = ?');
+        $stmt = $pdo->prepare(
+            'UPDATE galleries SET sort_order = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ? AND parent_id = ?',
+        );
         foreach ($orderedIds as $index => $galleryId) {
             $sortOrder = ($index + 1) * 10;
             $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);

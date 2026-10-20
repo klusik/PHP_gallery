@@ -35,6 +35,7 @@
 declare(strict_types=1);
 
 const GALLERY_BOOTSTRAP_ARCHIVE_URL = 'https://github.com/klusik/PHP_gallery/archive/refs/heads/main.zip';
+
 const GALLERY_BOOTSTRAP_ARCHIVE_LABEL = 'PHP_gallery main branch archive';
 
 session_name('gallery_cms_bootstrap_installer');
@@ -65,12 +66,12 @@ if (empty($_SESSION['bootstrap_token'])) {
 
 if (is_file($configFile) || is_file($installLockFile)) {
     gallery_bootstrap_render_locked($configFile, $installLockFile);
-    exit;
+    exit();
 }
 
 if (is_file($bootstrapLockFile)) {
     gallery_bootstrap_render_already_downloaded();
-    exit;
+    exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -84,12 +85,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        [$messages, $errors] = gallery_bootstrap_run($root, $cachePath, $bootstrapLockFile);
+        [$messages, $errors] = gallery_bootstrap_run(
+            $root,
+            $cachePath,
+            $bootstrapLockFile,
+        );
     }
 
     if (!$errors) {
         header('Location: install.php', true, 303);
-        exit;
+        exit();
     }
 }
 
@@ -98,12 +103,16 @@ gallery_bootstrap_render_page($messages, $errors, $downloadStarted);
 /**
  * Render the main bootstrap installer page.
  *
- * @param array $messages Status messages for the caller.
- * @param array $errors Error messages for the caller.
+ * @param list<string> $messages Status messages accumulated by the bootstrap workflow.
+ * @param list<string> $errors Errors accumulated by the bootstrap workflow.
  * @param bool $downloadStarted Download started value.
+ * @return void Emits the bootstrap page and its environment checks.
  */
-function gallery_bootstrap_render_page(array $messages, array $errors, bool $downloadStarted): void
-{
+function gallery_bootstrap_render_page(
+    array $messages,
+    array $errors,
+    bool $downloadStarted,
+): void {
     // $checks stores an intermediate value used by the surrounding gallery workflow.
     $checks = gallery_bootstrap_environment_checks(__DIR__);
     // $hasBlockingCheck stores an intermediate value used by the surrounding gallery workflow.
@@ -119,10 +128,14 @@ function gallery_bootstrap_render_page(array $messages, array $errors, bool $dow
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>PHP Gallery Bootstrap Installer</title>';
-    echo '<style>' . gallery_bootstrap_css() . '</style></head><body><main class="card">';
+    echo
+        '<style>'
+            . gallery_bootstrap_css()
+            . '</style></head><body><main class="card">';
     echo '<p class="eyebrow">PHP Gallery CMS</p>';
     echo '<h1>Bootstrap installer</h1>';
-    echo '<p class="lead">This single PHP file downloads the gallery package from GitHub, unpacks it into this directory, and then opens the normal <code>install.php</code> setup wizard.</p>';
+    echo
+        '<p class="lead">This single PHP file downloads the gallery package from GitHub, unpacks it into this directory, and then opens the normal <code>install.php</code> setup wizard.</p>';
 
     if ($messages) {
         echo '<section class="notice good"><h2>Completed steps</h2><ul>';
@@ -143,31 +156,59 @@ function gallery_bootstrap_render_page(array $messages, array $errors, bool $dow
     echo '<section><h2>Environment check</h2><div class="checks">';
     foreach ($checks as $check) {
         // $className stores an intermediate value used by the surrounding gallery workflow.
-        $className = $check['ok'] ? 'check ok' : ($check['required'] ? 'check fail' : 'check warn');
+        $className = $check['ok']
+            ? 'check ok'
+            : ($check['required'] ? 'check fail' : 'check warn');
         // $status stores an intermediate value used by the surrounding gallery workflow.
-        $status = $check['ok'] ? 'OK' : ($check['required'] ? 'Required' : 'Optional');
-        echo '<div class="' . $className . '"><strong>' . gallery_bootstrap_e($check['label']) . '</strong><span>' . gallery_bootstrap_e($status) . '</span><p>' . gallery_bootstrap_e($check['detail']) . '</p></div>';
+        $status = $check['ok']
+            ? 'OK'
+            : ($check['required'] ? 'Required' : 'Optional');
+        echo
+            '<div class="'
+                . $className
+                . '"><strong>'
+                . gallery_bootstrap_e($check['label'])
+                . '</strong><span>'
+                . gallery_bootstrap_e($status)
+                . '</span><p>'
+                . gallery_bootstrap_e($check['detail'])
+                . '</p></div>';
     }
     echo '</div></section>';
 
     echo '<section class="details"><h2>What will happen</h2><ol>';
-    echo '<li>Download <code>' . gallery_bootstrap_e(GALLERY_BOOTSTRAP_ARCHIVE_LABEL) . '</code>.</li>';
+    echo
+        '<li>Download <code>'
+            . gallery_bootstrap_e(GALLERY_BOOTSTRAP_ARCHIVE_LABEL)
+            . '</code>.</li>';
     echo '<li>Extract the archive into a temporary folder.</li>';
     echo '<li>Copy the project files into the current web directory.</li>';
-    echo '<li>Create <code>cache/bootstrap-installed.lock</code> so this downloader cannot run twice.</li>';
-    echo '<li>Redirect you to <code>install.php</code> to configure the database and admin account.</li>';
+    echo
+        '<li>Create <code>cache/bootstrap-installed.lock</code> so this downloader cannot run twice.</li>';
+    echo
+        '<li>Redirect you to <code>install.php</code> to configure the database and admin account.</li>';
     echo '</ol></section>';
 
     echo '<form method="post">';
-    echo '<input type="hidden" name="bootstrap_token" value="' . gallery_bootstrap_e((string) $_SESSION['bootstrap_token']) . '">';
-    echo '<button type="submit"' . ($hasBlockingCheck ? ' disabled' : '') . '>' . ($downloadStarted ? 'Try again' : 'Download and start installer') . '</button>';
+    echo
+        '<input type="hidden" name="bootstrap_token" value="'
+            . gallery_bootstrap_e((string) $_SESSION['bootstrap_token'])
+            . '">';
+    echo
+        '<button type="submit"'
+            . ($hasBlockingCheck ? ' disabled' : '')
+            . '>'
+            . ($downloadStarted ? 'Try again' : 'Download and start installer')
+            . '</button>';
     echo '</form>';
 
     if ($hasBlockingCheck) {
-        echo '<p class="muted">Fix the required checks above before running the bootstrap installer.</p>';
+        echo
+            '<p class="muted">Fix the required checks above before running the bootstrap installer.</p>';
     }
 
-    echo '<p class="muted">For security, keep this file only for the initial deployment. It refuses to run after <code>config.php</code>, <code>cache/installed.lock</code>, or <code>cache/bootstrap-installed.lock</code> exists.</p>';
+    echo
+        '<p class="muted">For security, keep this file only for the initial deployment. It refuses to run after <code>config.php</code>, <code>cache/installed.lock</code>, or <code>cache/bootstrap-installed.lock</code> exists.</p>';
     echo '</main></body></html>';
 }
 
@@ -177,33 +218,50 @@ function gallery_bootstrap_render_page(array $messages, array $errors, bool $dow
  * @param string $root Root value.
  * @param string $cachePath Cache path filesystem path.
  * @param string $bootstrapLockFile Bootstrap lock file value.
- * @return array Structured result data for the caller.
+ * @return array{0:list<string>,1:list<string>} Status messages and errors from the bootstrap workflow.
  */
-function gallery_bootstrap_run(string $root, string $cachePath, string $bootstrapLockFile): array
-{
+function gallery_bootstrap_run(
+    string $root,
+    string $cachePath,
+    string $bootstrapLockFile,
+): array {
     // $messages stores an intermediate value used by the surrounding gallery workflow.
     $messages = [];
     // $errors stores an intermediate value used by the surrounding gallery workflow.
     $errors = [];
 
     if (!gallery_bootstrap_ensure_directory($cachePath)) {
-        return [$messages, ['Cannot create or write the cache directory: ' . $cachePath]];
+        return [
+            $messages,
+            ['Cannot create or write the cache directory: ' . $cachePath],
+        ];
     }
 
     // $temporaryRoot stores an intermediate value used by the surrounding gallery workflow.
-    $temporaryRoot = $cachePath . '/bootstrap-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4));
+    $temporaryRoot =
+        $cachePath
+        . '/bootstrap-'
+        . date('Ymd-His')
+        . '-'
+        . bin2hex(random_bytes(4));
     // $archivePath stores an intermediate value used by the surrounding gallery workflow.
     $archivePath = $temporaryRoot . '/package.zip';
     // $extractPath stores an intermediate value used by the surrounding gallery workflow.
     $extractPath = $temporaryRoot . '/extract';
 
     if (!mkdir($temporaryRoot, 0755, true) && !is_dir($temporaryRoot)) {
-        return [$messages, ['Cannot create temporary directory: ' . $temporaryRoot]];
+        return [
+            $messages,
+            ['Cannot create temporary directory: ' . $temporaryRoot],
+        ];
     }
 
     if (!mkdir($extractPath, 0755, true) && !is_dir($extractPath)) {
         gallery_bootstrap_remove_tree($temporaryRoot);
-        return [$messages, ['Cannot create extraction directory: ' . $extractPath]];
+        return [
+            $messages,
+            ['Cannot create extraction directory: ' . $extractPath],
+        ];
     }
 
     try {
@@ -217,7 +275,10 @@ function gallery_bootstrap_run(string $root, string $cachePath, string $bootstra
         gallery_bootstrap_validate_project_root($projectRoot);
         $messages[] = 'Validated the extracted gallery package.';
 
-        gallery_bootstrap_copy_tree($projectRoot, $root, [basename(__FILE__), 'config.php']);
+        gallery_bootstrap_copy_tree($projectRoot, $root, [
+            basename(__FILE__),
+            'config.php',
+        ]);
         $messages[] = 'Copied gallery files into the current web directory.';
 
         gallery_bootstrap_write_lock($bootstrapLockFile);
@@ -238,6 +299,7 @@ function gallery_bootstrap_run(string $root, string $cachePath, string $bootstra
  *
  * @param string $url URL used by this workflow.
  * @param string $targetPath Target filesystem path.
+ * @return void Downloads the archive or throws when transfer fails.
  */
 function gallery_bootstrap_download(string $url, string $targetPath): void
 {
@@ -245,7 +307,8 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
         // $targetHandle stores an intermediate value used by the surrounding gallery workflow.
         $targetHandle = fopen($targetPath, 'wb');
         if ($targetHandle === false) {
-            throw new RuntimeException('Cannot write downloaded archive: ' . $targetPath);
+            throw new RuntimeException('Cannot write downloaded archive: '
+                . $targetPath);
         }
 
         // $curlHandle stores an intermediate value used by the surrounding gallery workflow.
@@ -275,11 +338,18 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
 
         if ($result !== true) {
             @unlink($targetPath);
-            throw new RuntimeException('GitHub download failed via cURL. HTTP status: ' . $statusCode . '. ' . $error);
+            throw new RuntimeException(
+                'GitHub download failed via cURL. HTTP status: '
+                    . $statusCode
+                    . '. '
+                    . $error,
+            );
         }
     } else {
         if (!ini_get('allow_url_fopen')) {
-            throw new RuntimeException('Neither cURL nor allow_url_fopen is available. Upload the full project ZIP manually or enable one of them on the server.');
+            throw new RuntimeException(
+                'Neither cURL nor allow_url_fopen is available. Upload the full project ZIP manually or enable one of them on the server.',
+            );
         }
 
         // $context stores an intermediate value used by the surrounding gallery workflow.
@@ -295,16 +365,25 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
         ]);
 
         // $downloadedBytes stores an intermediate value used by the surrounding gallery workflow.
-        $downloadedBytes = @file_put_contents($targetPath, fopen($url, 'rb', false, $context));
+        $downloadedBytes = @file_put_contents($targetPath, fopen(
+            $url,
+            'rb',
+            false,
+            $context,
+        ));
         if ($downloadedBytes === false) {
             @unlink($targetPath);
-            throw new RuntimeException('GitHub download failed via PHP streams.');
+            throw new RuntimeException(
+                'GitHub download failed via PHP streams.',
+            );
         }
     }
 
     if (!is_file($targetPath) || filesize($targetPath) < 1024) {
         @unlink($targetPath);
-        throw new RuntimeException('Downloaded archive is missing or unexpectedly small.');
+        throw new RuntimeException(
+            'Downloaded archive is missing or unexpectedly small.',
+        );
     }
 }
 
@@ -315,10 +394,14 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
  * @param string $extractPath Extract path filesystem path.
  * @return string Text result for the caller.
  */
-function gallery_bootstrap_extract(string $archivePath, string $extractPath): string
-{
+function gallery_bootstrap_extract(
+    string $archivePath,
+    string $extractPath,
+): string {
     if (!class_exists('ZipArchive')) {
-        throw new RuntimeException('PHP ZipArchive extension is missing. Ask the host to enable zip support or upload the extracted project manually.');
+        throw new RuntimeException(
+            'PHP ZipArchive extension is missing. Ask the host to enable zip support or upload the extracted project manually.',
+        );
     }
 
     // $zip stores an intermediate value used by the surrounding gallery workflow.
@@ -326,7 +409,8 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
     // $openResult stores an intermediate value used by the surrounding gallery workflow.
     $openResult = $zip->open($archivePath);
     if ($openResult !== true) {
-        throw new RuntimeException('Cannot open downloaded ZIP archive. ZipArchive error code: ' . $openResult);
+        throw new RuntimeException('Cannot open downloaded ZIP archive. ZipArchive error code: '
+            . $openResult);
     }
 
     for ($index = 0; $index < $zip->numFiles; $index++) {
@@ -334,7 +418,8 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
         $entryName = (string) $zip->getNameIndex($index);
         if (gallery_bootstrap_zip_entry_is_unsafe($entryName)) {
             $zip->close();
-            throw new RuntimeException('Unsafe ZIP entry detected: ' . $entryName);
+            throw new RuntimeException('Unsafe ZIP entry detected: '
+                . $entryName);
         }
     }
 
@@ -346,9 +431,12 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
     $zip->close();
 
     // $entries stores an intermediate value used by the surrounding gallery workflow.
-    $entries = array_values(array_filter(scandir($extractPath) ?: [], static function (string $entry): bool {
-        return $entry !== '.' && $entry !== '..';
-    }));
+    $entries = array_values(array_filter(
+        scandir($extractPath) ?: [],
+        static function (string $entry): bool {
+            return $entry !== '.' && $entry !== '..';
+        },
+    ));
 
     if (count($entries) === 1 && is_dir($extractPath . '/' . $entries[0])) {
         return $extractPath . '/' . $entries[0];
@@ -367,24 +455,35 @@ function gallery_bootstrap_zip_entry_is_unsafe(string $entryName): bool
 {
     // $normalized stores an intermediate value used by the surrounding gallery workflow.
     $normalized = str_replace('\\', '/', $entryName);
-    return $normalized === ''
-        || str_starts_with($normalized, '/')
-        || preg_match('#(^|/)\.\.(/|$)#', $normalized) === 1
-        || preg_match('#^[A-Za-z]:/#', $normalized) === 1;
+    return (
+        $normalized === ''
+            || str_starts_with($normalized, '/')
+            || preg_match('#(^|/)\.\.(/|$)#', $normalized) === 1
+            || preg_match('#^[A-Za-z]:/#', $normalized) === 1
+    );
 }
 
 /**
  * Confirm that the extracted archive looks like PHP Gallery CMS.
  *
  * @param string $projectRoot Project root value.
+ * @return void Confirms required project files exist or throws on invalid content.
  */
 function gallery_bootstrap_validate_project_root(string $projectRoot): void
 {
     // $requiredFiles stores an intermediate value used by the surrounding gallery workflow.
-    $requiredFiles = ['index.php', 'install.php', 'app/bootstrap.php', 'config.example.php'];
+    $requiredFiles = [
+        'index.php',
+        'install.php',
+        'app/bootstrap.php',
+        'config.example.php',
+    ];
     foreach ($requiredFiles as $requiredFile) {
         if (!is_file($projectRoot . '/' . $requiredFile)) {
-            throw new RuntimeException('The downloaded archive does not look like PHP Gallery CMS. Missing file: ' . $requiredFile);
+            throw new RuntimeException(
+                'The downloaded archive does not look like PHP Gallery CMS. Missing file: '
+                    . $requiredFile,
+            );
         }
     }
 }
@@ -394,19 +493,25 @@ function gallery_bootstrap_validate_project_root(string $projectRoot): void
  *
  * @param string $sourcePath Source filesystem path.
  * @param string $targetPath Target filesystem path.
- * @param array $excludedRootFiles Excluded root files value.
+ * @param list<string> $excludedRootFiles Root-level filenames to preserve at the target.
+ * @return void Copies the tree or throws when a directory or file operation fails.
  */
-function gallery_bootstrap_copy_tree(string $sourcePath, string $targetPath, array $excludedRootFiles = []): void
-{
+function gallery_bootstrap_copy_tree(
+    string $sourcePath,
+    string $targetPath,
+    array $excludedRootFiles = [],
+): void {
     // $directory stores an intermediate value used by the surrounding gallery workflow.
     $directory = opendir($sourcePath);
     if ($directory === false) {
-        throw new RuntimeException('Cannot read extracted project directory: ' . $sourcePath);
+        throw new RuntimeException('Cannot read extracted project directory: '
+            . $sourcePath);
     }
 
     if (!is_dir($targetPath) && !mkdir($targetPath, 0755, true)) {
         closedir($directory);
-        throw new RuntimeException('Cannot create target directory: ' . $targetPath);
+        throw new RuntimeException('Cannot create target directory: '
+            . $targetPath);
     }
 
     while (($entry = readdir($directory)) !== false) {
@@ -430,7 +535,8 @@ function gallery_bootstrap_copy_tree(string $sourcePath, string $targetPath, arr
 
         if (!copy($sourceEntry, $targetEntry)) {
             closedir($directory);
-            throw new RuntimeException('Cannot copy file to target directory: ' . $targetEntry);
+            throw new RuntimeException('Cannot copy file to target directory: '
+                . $targetEntry);
         }
     }
 
@@ -462,13 +568,15 @@ function gallery_bootstrap_write_lock(string $path): void
     // $directory stores an intermediate value used by the surrounding gallery workflow.
     $directory = dirname($path);
     if (!gallery_bootstrap_ensure_directory($directory)) {
-        throw new RuntimeException('Cannot write lock directory: ' . $directory);
+        throw new RuntimeException('Cannot write lock directory: '
+            . $directory);
     }
 
     // $content stores an intermediate value used by the surrounding gallery workflow.
     $content = 'Bootstrap installer completed at ' . date('c') . PHP_EOL;
     if (file_put_contents($path, $content, LOCK_EX) === false) {
-        throw new RuntimeException('Cannot write bootstrap lock file: ' . $path);
+        throw new RuntimeException('Cannot write bootstrap lock file: '
+            . $path);
     }
 }
 
@@ -517,7 +625,10 @@ function gallery_bootstrap_environment_checks(string $root): array
             'label' => 'PHP version',
             'ok' => version_compare(PHP_VERSION, '8.1.0', '>='),
             'required' => true,
-            'detail' => 'Detected PHP ' . PHP_VERSION . '. PHP 8.1 or newer is required.',
+            'detail' =>
+                'Detected PHP '
+                    . PHP_VERSION
+                    . '. PHP 8.1 or newer is required.',
         ],
         [
             'label' => 'Target directory writable',
@@ -533,7 +644,9 @@ function gallery_bootstrap_environment_checks(string $root): array
         ],
         [
             'label' => 'Outbound HTTPS download',
-            'ok' => function_exists('curl_init') || (bool) ini_get('allow_url_fopen'),
+            'ok' =>
+                function_exists('curl_init')
+                    || (bool) ini_get('allow_url_fopen'),
             'required' => true,
             'detail' => 'The installer needs cURL or allow_url_fopen to download from GitHub.',
         ],
@@ -557,13 +670,22 @@ function gallery_bootstrap_environment_checks(string $root): array
  *
  * @param string $configFile Config file value.
  * @param string $installLockFile Install lock file value.
+ * @return void Emits the locked-installer page.
  */
-function gallery_bootstrap_render_locked(string $configFile, string $installLockFile): void
-{
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bootstrap installer locked</title><style>' . gallery_bootstrap_css() . '</style></head><body><main class="card">';
-    echo '<p class="eyebrow">PHP Gallery CMS</p><h1>Bootstrap installer locked</h1>';
-    echo '<p>This gallery already appears to be installed. The bootstrap installer refuses to run when <code>config.php</code> or <code>cache/installed.lock</code> exists.</p>';
-    echo '<ul><li><code>config.php</code></li><li><code>cache/installed.lock</code></li></ul>';
+function gallery_bootstrap_render_locked(
+    string $configFile,
+    string $installLockFile,
+): void {
+    echo
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bootstrap installer locked</title><style>'
+            . gallery_bootstrap_css()
+            . '</style></head><body><main class="card">';
+    echo
+        '<p class="eyebrow">PHP Gallery CMS</p><h1>Bootstrap installer locked</h1>';
+    echo
+        '<p>This gallery already appears to be installed. The bootstrap installer refuses to run when <code>config.php</code> or <code>cache/installed.lock</code> exists.</p>';
+    echo
+        '<ul><li><code>config.php</code></li><li><code>cache/installed.lock</code></li></ul>';
     echo '<p><a class="buttonlike" href="index.php">Open gallery</a></p>';
     echo '</main></body></html>';
 }
@@ -573,9 +695,14 @@ function gallery_bootstrap_render_locked(string $configFile, string $installLock
  */
 function gallery_bootstrap_render_already_downloaded(): void
 {
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bootstrap already completed</title><style>' . gallery_bootstrap_css() . '</style></head><body><main class="card">';
-    echo '<p class="eyebrow">PHP Gallery CMS</p><h1>Bootstrap already completed</h1>';
-    echo '<p>The gallery files were already downloaded and unpacked. Continue with the normal installer.</p>';
+    echo
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bootstrap already completed</title><style>'
+            . gallery_bootstrap_css()
+            . '</style></head><body><main class="card">';
+    echo
+        '<p class="eyebrow">PHP Gallery CMS</p><h1>Bootstrap already completed</h1>';
+    echo
+        '<p>The gallery files were already downloaded and unpacked. Continue with the normal installer.</p>';
     echo '<p><a class="buttonlike" href="install.php">Open install.php</a></p>';
     echo '</main></body></html>';
 }

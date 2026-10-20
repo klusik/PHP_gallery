@@ -111,12 +111,16 @@ use function Gallery\Views\view_telemetry_report_number;
 /**
  * Render one small metric card for the telemetry dashboard.
  *
- * @param string $label Label value.
- * @param string $value Value to process.
- * @param string $hint Hint value.
+ * @param string $label Metric title.
+ * @param string $value Formatted metric value.
+ * @param string $hint Optional supporting detail.
+ * @return void Render the metric card.
  */
-function render_telemetry_metric_card(string $label, string $value, string $hint = ''): void
-{
+function render_telemetry_metric_card(
+    string $label,
+    string $value,
+    string $hint = '',
+): void {
     \Gallery\Views\view_render_telemetry_metric_card($label, $value, $hint);
 }
 
@@ -134,12 +138,27 @@ function cms_admin_telemetry(): void
     $schemaMessage = '';
     if (!$schemaReady) {
         if (schema_inspection_is_unknown($schemaStatus)) {
-            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_dashboard');
-            $schemaTitle = t('admin.telemetry.schema_unavailable', 'Telemetry database status unavailable');
-            $schemaMessage = t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.');
+            presentation_schema_log_degraded(
+                $schemaStatus,
+                'admin_telemetry_dashboard',
+            );
+            $schemaTitle = t(
+                'admin.telemetry.schema_unavailable',
+                'Telemetry database status unavailable',
+            );
+            $schemaMessage = t(
+                'admin.telemetry.schema_unavailable_text',
+                'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.',
+            );
         } else {
-            $schemaTitle = t('admin.telemetry.migrations_required', 'Migrations required');
-            $schemaMessage = t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.');
+            $schemaTitle = t(
+                'admin.telemetry.migrations_required',
+                'Migrations required',
+            );
+            $schemaMessage = t(
+                'admin.telemetry.migrations_required_text',
+                'Telemetry tables are not available yet. Run database migrations first.',
+            );
         }
     }
 
@@ -148,12 +167,59 @@ function cms_admin_telemetry(): void
     if ($schemaReady) {
         $sessionSummary = telemetry_report_session_summary(30);
         $metrics = [
-            ['label' => t('admin.telemetry.metric_anonymous_sessions', 'Anonymous sessions'), 'value' => (string) ((int) ($sessionSummary['sessions'] ?? 0))],
-            ['label' => t('admin.telemetry.metric_page_views', 'Page views'), 'value' => (string) telemetry_metric_events('public.page_views', 30)],
-            ['label' => t('admin.telemetry.metric_photo_opens', 'Photo opens'), 'value' => (string) telemetry_metric_events('photo.views', 30)],
-            ['label' => t('admin.telemetry.metric_total_capped_photo_time', 'Total capped photo time'), 'value' => number_format(telemetry_metric_sum('photo.view_seconds', 30), 0) . ' s'],
-            ['label' => t('admin.telemetry.metric_client_errors', 'Client errors'), 'value' => (string) telemetry_metric_events('client.errors', 30)],
-            ['label' => t('admin.telemetry.metric_image_bytes_measured', 'Image bytes measured'), 'value' => telemetry_format_bytes(telemetry_metric_sum('media.image.bytes', 30) + telemetry_metric_sum('media.thumbnail.bytes', 30), 1)],
+            [
+                'label' => t(
+                    'admin.telemetry.metric_anonymous_sessions',
+                    'Anonymous sessions',
+                ),
+                'value' => (string) (int) ($sessionSummary['sessions'] ?? 0),
+            ],
+            [
+                'label' => t('admin.telemetry.metric_page_views', 'Page views'),
+                'value' => (string) telemetry_metric_events(
+                    'public.page_views',
+                    30,
+                ),
+            ],
+            [
+                'label' => t(
+                    'admin.telemetry.metric_photo_opens',
+                    'Photo opens',
+                ),
+                'value' => (string) telemetry_metric_events('photo.views', 30),
+            ],
+            [
+                'label' => t(
+                    'admin.telemetry.metric_total_capped_photo_time',
+                    'Total capped photo time',
+                ),
+                'value' =>
+                    number_format(
+                        telemetry_metric_sum('photo.view_seconds', 30),
+                        0,
+                    ) . ' s',
+            ],
+            [
+                'label' => t(
+                    'admin.telemetry.metric_client_errors',
+                    'Client errors',
+                ),
+                'value' => (string) telemetry_metric_events(
+                    'client.errors',
+                    30,
+                ),
+            ],
+            [
+                'label' => t(
+                    'admin.telemetry.metric_image_bytes_measured',
+                    'Image bytes measured',
+                ),
+                'value' => telemetry_format_bytes(
+                    telemetry_metric_sum('media.image.bytes', 30)
+                        + telemetry_metric_sum('media.thumbnail.bytes', 30),
+                    1,
+                ),
+            ],
         ];
         $tables = [
             'top_photos' => telemetry_top_photos(),
@@ -163,17 +229,42 @@ function cms_admin_telemetry(): void
         ];
     }
     $checkboxLabels = [
-        'telemetry_enabled' => t('admin.telemetry.setting_enable_subsystem', 'Enable telemetry subsystem'),
-        'telemetry_public_usage_enabled' => t('admin.telemetry.setting_collect_public_usage', 'Collect anonymous public usage telemetry'),
-        'telemetry_performance_enabled' => t('admin.telemetry.setting_collect_performance', 'Collect sampled browser performance metrics'),
-        'telemetry_cache_enabled' => t('admin.telemetry.setting_collect_cache', 'Collect cache efficiency metrics'),
-        'telemetry_database_enabled' => t('admin.telemetry.setting_collect_database', 'Collect database health metrics'),
-        'telemetry_respect_dnt' => t('admin.telemetry.setting_respect_dnt', 'Respect Do Not Track'),
-        'telemetry_admin_excluded' => t('admin.telemetry.setting_exclude_admins', 'Exclude logged-in admins from public telemetry'),
+        'telemetry_enabled' => t(
+            'admin.telemetry.setting_enable_subsystem',
+            'Enable telemetry subsystem',
+        ),
+        'telemetry_public_usage_enabled' => t(
+            'admin.telemetry.setting_collect_public_usage',
+            'Collect anonymous public usage telemetry',
+        ),
+        'telemetry_performance_enabled' => t(
+            'admin.telemetry.setting_collect_performance',
+            'Collect sampled browser performance metrics',
+        ),
+        'telemetry_cache_enabled' => t(
+            'admin.telemetry.setting_collect_cache',
+            'Collect cache efficiency metrics',
+        ),
+        'telemetry_database_enabled' => t(
+            'admin.telemetry.setting_collect_database',
+            'Collect database health metrics',
+        ),
+        'telemetry_respect_dnt' => t(
+            'admin.telemetry.setting_respect_dnt',
+            'Respect Do Not Track',
+        ),
+        'telemetry_admin_excluded' => t(
+            'admin.telemetry.setting_exclude_admins',
+            'Exclude logged-in admins from public telemetry',
+        ),
     ];
     $checkboxes = [];
     foreach ($checkboxLabels as $key => $label) {
-        $checkboxes[] = ['key' => $key, 'label' => $label, 'checked' => (($settings[$key] ?? '0') === '1')];
+        $checkboxes[] = [
+            'key' => $key,
+            'label' => $label,
+            'checked' => ($settings[$key] ?? '0') === '1',
+        ];
     }
 
     \Gallery\Views\view_render_admin_telemetry_dashboard([
@@ -181,18 +272,31 @@ function cms_admin_telemetry(): void
         'settings_url' => admin_settings_url('privacy'),
         'logs_url' => url_for('admin_logs'),
         'export_urls' => [
-            'all' => url_for('admin_telemetry_export', ['traffic_segment' => 'all']),
-            'non_bot' => url_for('admin_telemetry_export', ['traffic_segment' => 'non_bot']),
-            'bot' => url_for('admin_telemetry_export', ['traffic_segment' => 'bot']),
-            'unknown' => url_for('admin_telemetry_export', ['traffic_segment' => 'unknown']),
+            'all' => url_for('admin_telemetry_export', [
+                'traffic_segment' => 'all',
+            ]),
+            'non_bot' => url_for('admin_telemetry_export', [
+                'traffic_segment' => 'non_bot',
+            ]),
+            'bot' => url_for('admin_telemetry_export', [
+                'traffic_segment' => 'bot',
+            ]),
+            'unknown' => url_for('admin_telemetry_export', [
+                'traffic_segment' => 'unknown',
+            ]),
         ],
         'dashboard_url' => url_for('admin'),
         'schema_ready' => $schemaReady,
         'schema_title' => $schemaTitle,
         'schema_message' => $schemaMessage,
         'public_enabled' => $schemaReady && telemetry_public_usage_enabled(),
-        'raw_retention_days' => $schemaReady ? telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90) : 7,
-        'admin_excluded' => $schemaReady && current_user() && telemetry_setting_enabled('telemetry_admin_excluded', '1'),
+        'raw_retention_days' => $schemaReady
+            ? telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90)
+            : 7,
+        'admin_excluded' =>
+            $schemaReady
+                && current_user()
+                && telemetry_setting_enabled('telemetry_admin_excluded', '1'),
         'metrics' => $metrics,
         'settings' => $settings,
         'checkboxes' => $checkboxes,
@@ -206,13 +310,21 @@ function cms_admin_telemetry(): void
 /**
  * Render one checkbox setting row.
  *
- * @param string $key Lookup key.
- * @param string $label Label value.
- * @param array $settings Settings used by this workflow.
+ * @param string $key Telemetry setting name.
+ * @param string $label Checkbox label.
+ * @param array<string,string> $settings Telemetry setting values keyed by setting name.
+ * @return void Render the checkbox row.
  */
-function render_telemetry_checkbox(string $key, string $label, array $settings): void
-{
-    \Gallery\Views\view_render_telemetry_checkbox($key, $label, (($settings[$key] ?? '0') === '1'));
+function render_telemetry_checkbox(
+    string $key,
+    string $label,
+    array $settings,
+): void {
+    \Gallery\Views\view_render_telemetry_checkbox(
+        $key,
+        $label,
+        ($settings[$key] ?? '0') === '1',
+    );
 }
 
 /**
@@ -231,29 +343,48 @@ function render_telemetry_tables(): void
 /**
  * Render a photo telemetry table.
  *
- * @param array $rows Rows to process.
- * @param string $valueKey Value key value.
- * @param string $valueLabel Value label value.
+ * @param list<array{filename?:string,gallery_title?:string}> $rows Photo rows with filename, gallery title, and metric values.
+ * @param string $valueKey Row field used for the displayed value.
+ * @param string $valueLabel Column heading for the displayed value.
+ * @return void Render the photo telemetry table.
  */
-function render_telemetry_photo_table(array $rows, string $valueKey, string $valueLabel): void
-{
-    \Gallery\Views\view_render_telemetry_photo_table($rows, $valueKey, $valueLabel);
+function render_telemetry_photo_table(
+    array $rows,
+    string $valueKey,
+    string $valueLabel,
+): void {
+    \Gallery\Views\view_render_telemetry_photo_table(
+        $rows,
+        $valueKey,
+        $valueLabel,
+    );
 }
 
 /**
  * Render a simple key-value telemetry table.
  *
- * @param array $rows Rows to process.
- * @param string $keyColumn Key column value.
- * @param string $valueColumn Value column value.
- * @param string $keyLabel Key label value.
- * @param string $valueLabel Value label value.
+ * @param list<array<string,int|float|string|null>> $rows Aggregate rows keyed by requested columns.
+ * @param string $keyColumn Row field used for each key.
+ * @param string $valueColumn Row field used for each value.
+ * @param string $keyLabel Heading for the key column.
+ * @param string $valueLabel Heading for the value column.
+ * @return void Render the key-value telemetry table.
  */
-function render_telemetry_key_value_table(array $rows, string $keyColumn, string $valueColumn, string $keyLabel, string $valueLabel): void
-{
-    \Gallery\Views\view_render_telemetry_key_value_table($rows, $keyColumn, $valueColumn, $keyLabel, $valueLabel);
+function render_telemetry_key_value_table(
+    array $rows,
+    string $keyColumn,
+    string $valueColumn,
+    string $keyLabel,
+    string $valueLabel,
+): void {
+    \Gallery\Views\view_render_telemetry_key_value_table(
+        $rows,
+        $keyColumn,
+        $valueColumn,
+        $keyLabel,
+        $valueLabel,
+    );
 }
-
 
 /**
  * Render one telemetry report metric card for the standalone HTML export.
@@ -263,8 +394,11 @@ function render_telemetry_key_value_table(array $rows, string $keyColumn, string
  * @param string $hint Hint value.
  * @return string Text result for the caller.
  */
-function telemetry_export_metric_card(string $label, string $value, string $hint = ''): string
-{
+function telemetry_export_metric_card(
+    string $label,
+    string $value,
+    string $hint = '',
+): string {
     return view_telemetry_export_metric_card($label, $value, $hint);
 }
 
@@ -294,54 +428,71 @@ function telemetry_report_duration(mixed $seconds): string
 /**
  * Render one generic telemetry report table.
  *
- * @param array $rows Rows to process.
- * @param array $columns Columns value.
+ * @param list<array<string,mixed>> $rows Telemetry records keyed by their data fields.
+ * @param list<array{key:string,label:string,format?:callable(mixed,array<string,mixed>):string}> $columns Column definitions with a row key, heading, and optional formatter.
  * @param string $emptyText Empty text value.
- * @return string Text result for the caller.
+ * @return string Complete escaped table markup.
  */
-function telemetry_export_table(array $rows, array $columns, string $emptyText = ''): string
-{
+function telemetry_export_table(
+    array $rows,
+    array $columns,
+    string $emptyText = '',
+): string {
     return view_telemetry_export_table($rows, $columns, $emptyText);
 }
-
 
 /**
  * Render a photo engagement table for the standalone report.
  *
- * @param array $rows Rows to process.
- * @param string $valueKey Value key value.
- * @param string $valueLabel Value label value.
- * @return string Text result for the caller.
+ * @param list<array{filename?:string,gallery_title?:string}> $rows Photo engagement records with filename, gallery title, and metric values.
+ * @param string $valueKey Row field used for the displayed value.
+ * @param string $valueLabel Column heading for the displayed value.
+ * @return string Complete escaped table markup.
  */
-function telemetry_export_photo_table(array $rows, string $valueKey, string $valueLabel): string
-{
+function telemetry_export_photo_table(
+    array $rows,
+    string $valueKey,
+    string $valueLabel,
+): string {
     return view_telemetry_export_photo_table($rows, $valueKey, $valueLabel);
 }
 
 /**
  * Render one compact bar chart from labeled rows.
  *
- * @param array $rows Rows to process.
- * @param string $labelKey Label key value.
- * @param string $valueKey Value key value.
- * @param string $valueSuffix Value suffix value.
- * @return string Text result for the caller.
+ * @param list<array<string,int|float|string|null>> $rows Labeled metric records to chart.
+ * @param string $labelKey Row field containing each bar label.
+ * @param string $valueKey Row field containing each numeric bar value.
+ * @param string $valueSuffix Text appended to displayed values.
+ * @return string Complete escaped bar-chart markup.
  */
-function telemetry_export_bar_chart(array $rows, string $labelKey, string $valueKey, string $valueSuffix = ''): string
-{
-    return view_telemetry_export_bar_chart($rows, $labelKey, $valueKey, $valueSuffix);
+function telemetry_export_bar_chart(
+    array $rows,
+    string $labelKey,
+    string $valueKey,
+    string $valueSuffix = '',
+): string {
+    return view_telemetry_export_bar_chart(
+        $rows,
+        $labelKey,
+        $valueKey,
+        $valueSuffix,
+    );
 }
 
 /**
  * Render a trend chart from daily aggregate rows.
  *
- * @param array $rows Rows to process.
- * @param string $valueKey Value key value.
- * @param string $label Label value.
- * @return string Text result for the caller.
+ * @param list<array{report_date?:string}> $rows Daily aggregate records with date and numeric metric values.
+ * @param string $valueKey Row field containing the numeric trend value.
+ * @param string $label Chart series label.
+ * @return string Complete escaped trend-chart markup.
  */
-function telemetry_export_trend_chart(array $rows, string $valueKey, string $label): string
-{
+function telemetry_export_trend_chart(
+    array $rows,
+    string $valueKey,
+    string $label,
+): string {
     return view_telemetry_export_trend_chart($rows, $valueKey, $label);
 }
 
@@ -356,26 +507,51 @@ function cms_admin_telemetry_export(): void
     if (!schema_inspection_is_available($schemaStatus)) {
         header('Content-Type: text/plain; charset=utf-8');
         if (schema_inspection_is_unknown($schemaStatus)) {
-            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_export');
+            presentation_schema_log_degraded(
+                $schemaStatus,
+                'admin_telemetry_export',
+            );
             http_response_code(503);
-            echo t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.');
+            echo t(
+                'admin.telemetry.schema_unavailable_text',
+                'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.',
+            );
         } else {
             http_response_code(409);
-            echo t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.');
+            echo t(
+                'admin.telemetry.migrations_required_text',
+                'Telemetry tables are not available yet. Run database migrations first.',
+            );
         }
         return;
     }
 
     $days = 30;
     $query = request_data('query');
-    $trafficSegment = telemetry_traffic_segment($query['traffic_segment'] ?? 'all');
+    $trafficSegment = telemetry_traffic_segment(
+        $query['traffic_segment'] ?? 'all',
+    );
     $trafficSegmentLabel = match ($trafficSegment) {
-        'non_bot' => t('admin.telemetry.traffic_segment_non_bot', 'Non-bot-classified traffic'),
-        'bot' => t('admin.telemetry.traffic_segment_bot', 'Bot-classified traffic'),
-        'unknown' => t('admin.telemetry.traffic_segment_unknown', 'Unclassified traffic'),
+        'non_bot' => t(
+            'admin.telemetry.traffic_segment_non_bot',
+            'Non-bot-classified traffic',
+        ),
+        'bot' => t(
+            'admin.telemetry.traffic_segment_bot',
+            'Bot-classified traffic',
+        ),
+        'unknown' => t(
+            'admin.telemetry.traffic_segment_unknown',
+            'Unclassified traffic',
+        ),
         default => t('admin.telemetry.traffic_segment_all', 'All traffic'),
     };
-    $rawRetentionDays = telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90);
+    $rawRetentionDays = telemetry_retention_days(
+        'telemetry_raw_retention_days',
+        7,
+        1,
+        90,
+    );
     telemetry_reset_report_query_profile();
     $photoDiagnosticDays = min($days, $rawRetentionDays);
     $photoOpenThreshold = 50;
@@ -383,60 +559,208 @@ function cms_admin_telemetry_export(): void
     $fileName = 'php-gallery-telemetry-' . date('Ymd-His') . '.html';
     $sessionSummary = telemetry_report_session_summary($days, $trafficSegment);
     $dailyTrends = telemetry_report_daily_trends($days, $trafficSegment);
-    $consistency = telemetry_report_consistency($days, $sessionSummary, $dailyTrends, $trafficSegment);
+    $consistency = telemetry_report_consistency(
+        $days,
+        $sessionSummary,
+        $dailyTrends,
+        $trafficSegment,
+    );
     $topGalleries = telemetry_report_top_galleries($days, 25, $trafficSegment);
     $topRoutes = telemetry_report_top_routes($days, 25, $trafficSegment);
-    $browserSessions = telemetry_report_session_distribution('browser_family', $days, 12, $trafficSegment);
-    $osSessions = telemetry_report_session_distribution('os_family', $days, 12, $trafficSegment);
-    $deviceSessions = telemetry_report_session_distribution('device_type', $days, 12, $trafficSegment);
-    $viewportSessions = telemetry_report_session_distribution('viewport_class', $days, 12, $trafficSegment);
-    $entryReferrers = telemetry_report_session_distribution('entry_referrer_category', $days, 12, $trafficSegment);
-    $landingRoutes = telemetry_report_session_distribution('first_route_name', $days, 20, $trafficSegment);
-    $exitRoutes = telemetry_report_session_distribution('exit_route_name', $days, 20, $trafficSegment);
-    $pageKinds = telemetry_report_metric_distribution('page_kind', $days, 'public.page_views', 12, $trafficSegment);
-    $mediaVariants = telemetry_report_metric_distribution('media_variant', $days, 'media.thumbnail.bytes', 20, $trafficSegment);
-    $imageVariants = telemetry_report_metric_distribution('media_variant', $days, 'media.image.bytes', 20, $trafficSegment);
-    $cacheThumbnail = telemetry_report_metric_distribution('cache_result', $days, 'cache.thumbnail.hit', 12, $trafficSegment);
-    $cacheMisses = telemetry_report_metric_distribution('cache_result', $days, 'cache.thumbnail.miss', 12, $trafficSegment);
-    $performanceMetrics = telemetry_report_performance_metrics($days, $trafficSegment);
-    $photoOpenBuckets = telemetry_report_photo_open_session_buckets($days, $trafficSegment);
-    $photoOpenAnomalySummary = telemetry_report_photo_open_anomaly_summary($days, $photoOpenThreshold, $trafficSegment);
-    $photoOpenGalleryDiagnostics = telemetry_report_gallery_photo_opens_per_session($photoDiagnosticDays, 3, 20, $trafficSegment);
+    $browserSessions = telemetry_report_session_distribution(
+        'browser_family',
+        $days,
+        12,
+        $trafficSegment,
+    );
+    $osSessions = telemetry_report_session_distribution(
+        'os_family',
+        $days,
+        12,
+        $trafficSegment,
+    );
+    $deviceSessions = telemetry_report_session_distribution(
+        'device_type',
+        $days,
+        12,
+        $trafficSegment,
+    );
+    $viewportSessions = telemetry_report_session_distribution(
+        'viewport_class',
+        $days,
+        12,
+        $trafficSegment,
+    );
+    $entryReferrers = telemetry_report_session_distribution(
+        'entry_referrer_category',
+        $days,
+        12,
+        $trafficSegment,
+    );
+    $landingRoutes = telemetry_report_session_distribution(
+        'first_route_name',
+        $days,
+        20,
+        $trafficSegment,
+    );
+    $exitRoutes = telemetry_report_session_distribution(
+        'exit_route_name',
+        $days,
+        20,
+        $trafficSegment,
+    );
+    $pageKinds = telemetry_report_metric_distribution(
+        'page_kind',
+        $days,
+        'public.page_views',
+        12,
+        $trafficSegment,
+    );
+    $mediaVariants = telemetry_report_metric_distribution(
+        'media_variant',
+        $days,
+        'media.thumbnail.bytes',
+        20,
+        $trafficSegment,
+    );
+    $imageVariants = telemetry_report_metric_distribution(
+        'media_variant',
+        $days,
+        'media.image.bytes',
+        20,
+        $trafficSegment,
+    );
+    $cacheThumbnail = telemetry_report_metric_distribution(
+        'cache_result',
+        $days,
+        'cache.thumbnail.hit',
+        12,
+        $trafficSegment,
+    );
+    $cacheMisses = telemetry_report_metric_distribution(
+        'cache_result',
+        $days,
+        'cache.thumbnail.miss',
+        12,
+        $trafficSegment,
+    );
+    $performanceMetrics = telemetry_report_performance_metrics(
+        $days,
+        $trafficSegment,
+    );
+    $photoOpenBuckets = telemetry_report_photo_open_session_buckets(
+        $days,
+        $trafficSegment,
+    );
+    $photoOpenAnomalySummary = telemetry_report_photo_open_anomaly_summary(
+        $days,
+        $photoOpenThreshold,
+        $trafficSegment,
+    );
+    $photoOpenGalleryDiagnostics = telemetry_report_gallery_photo_opens_per_session(
+        $photoDiagnosticDays,
+        3,
+        20,
+        $trafficSegment,
+    );
     $photoOpenOriginsAvailable = null;
-    $photoOpenOrigins = telemetry_report_photo_open_origins($photoDiagnosticDays, $trafficSegment, $photoOpenOriginsAvailable);
-    $cachePhases = telemetry_report_cache_phases($photoDiagnosticDays, $trafficSegment);
+    $photoOpenOrigins = telemetry_report_photo_open_origins(
+        $photoDiagnosticDays,
+        $trafficSegment,
+        $photoOpenOriginsAvailable,
+    );
+    $cachePhases = telemetry_report_cache_phases(
+        $photoDiagnosticDays,
+        $trafficSegment,
+    );
     $clientErrors = telemetry_report_client_errors($days, 25, $trafficSegment);
     $recentEvents = telemetry_report_recent_events($days, 80, $trafficSegment);
     $databaseSummary = telemetry_report_database_summary($days, 40);
     $databaseFingerprints = telemetry_report_database_fingerprints($days, 30);
-    $databaseFingerprintsVolume = telemetry_report_database_fingerprints($days, 30, 'volume');
-    $databaseFingerprintsFailed = telemetry_report_database_fingerprints($days, 30, 'failed');
+    $databaseFingerprintsVolume = telemetry_report_database_fingerprints(
+        $days,
+        30,
+        'volume',
+    );
+    $databaseFingerprintsFailed = telemetry_report_database_fingerprints(
+        $days,
+        30,
+        'failed',
+    );
     $jobRuns = telemetry_report_job_runs($days, 40);
 
     $sessions = (float) ($sessionSummary['sessions'] ?? 0);
-    $pageViews = (float) telemetry_metric_events('public.page_views', $days, $trafficSegment);
-    $photoViews = (float) telemetry_metric_events('photo.views', $days, $trafficSegment);
+    $pageViews = (float) telemetry_metric_events(
+        'public.page_views',
+        $days,
+        $trafficSegment,
+    );
+    $photoViews = (float) telemetry_metric_events(
+        'photo.views',
+        $days,
+        $trafficSegment,
+    );
     $durationSeconds = (float) ($sessionSummary['duration_seconds'] ?? 0);
     $bouncedSessions = (float) ($sessionSummary['bounced_sessions'] ?? 0);
     $bounceRate = $sessions > 0 ? ($bouncedSessions / $sessions) * 100 : 0;
     $avgPagesPerSession = $sessions > 0 ? $pageViews / $sessions : 0.0;
     $avgPhotosPerSession = $sessions > 0 ? $photoViews / $sessions : 0.0;
-    $avgDurationSeconds = (float) ($sessionSummary['avg_duration_seconds'] ?? 0);
-    $mediaBytes = telemetry_metric_sum('media.image.bytes', $days, $trafficSegment) + telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment) + telemetry_metric_sum('media.download.bytes', $days, $trafficSegment);
-    $thumbnailBytes = telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment);
-    $imageBytes = telemetry_metric_sum('media.image.bytes', $days, $trafficSegment);
-    $downloadBytes = telemetry_metric_sum('media.download.bytes', $days, $trafficSegment);
-    $clientErrorCount = telemetry_metric_events('client.errors', $days, $trafficSegment);
-    $photoSeconds = telemetry_metric_sum('photo.view_seconds', $days, $trafficSegment);
-    $cacheHitEvents = telemetry_metric_events('cache.lightbox.hit', $days, $trafficSegment);
-    $cacheMissEvents = telemetry_metric_events('cache.lightbox.miss', $days, $trafficSegment);
+    $avgDurationSeconds = (float) (
+        $sessionSummary['avg_duration_seconds'] ?? 0
+    );
+    $mediaBytes =
+        telemetry_metric_sum('media.image.bytes', $days, $trafficSegment)
+        + telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment)
+        + telemetry_metric_sum('media.download.bytes', $days, $trafficSegment);
+    $thumbnailBytes = telemetry_metric_sum(
+        'media.thumbnail.bytes',
+        $days,
+        $trafficSegment,
+    );
+    $imageBytes = telemetry_metric_sum(
+        'media.image.bytes',
+        $days,
+        $trafficSegment,
+    );
+    $downloadBytes = telemetry_metric_sum(
+        'media.download.bytes',
+        $days,
+        $trafficSegment,
+    );
+    $clientErrorCount = telemetry_metric_events(
+        'client.errors',
+        $days,
+        $trafficSegment,
+    );
+    $photoSeconds = telemetry_metric_sum(
+        'photo.view_seconds',
+        $days,
+        $trafficSegment,
+    );
+    $cacheHitEvents = telemetry_metric_events(
+        'cache.lightbox.hit',
+        $days,
+        $trafficSegment,
+    );
+    $cacheMissEvents = telemetry_metric_events(
+        'cache.lightbox.miss',
+        $days,
+        $trafficSegment,
+    );
     $cacheSampleCount = $cacheHitEvents + $cacheMissEvents;
-    $telemetryMasterEnabled = telemetry_setting_enabled('telemetry_enabled', '0');
-    $cacheTelemetryEnabled = $telemetryMasterEnabled && telemetry_setting_enabled('telemetry_cache_enabled', '1');
+    $telemetryMasterEnabled = telemetry_setting_enabled(
+        'telemetry_enabled',
+        '0',
+    );
+    $cacheTelemetryEnabled =
+        $telemetryMasterEnabled
+        && telemetry_setting_enabled('telemetry_cache_enabled', '1');
     $cacheEmptyText = !$cacheTelemetryEnabled
         ? t('admin.telemetry.export.disabled', 'Disabled')
         : t('admin.telemetry.export.no_cache_samples', 'No cache samples');
-    $cacheEfficiency = $cacheSampleCount > 0 ? ($cacheHitEvents / $cacheSampleCount) * 100 : 0;
+    $cacheEfficiency = $cacheSampleCount > 0
+        ? ($cacheHitEvents / $cacheSampleCount) * 100
+        : 0;
     $cacheEfficiencyDisplay = $cacheSampleCount > 0
         ? view_telemetry_report_number($cacheEfficiency, 1) . ' %'
         : $cacheEmptyText;
@@ -445,21 +769,36 @@ function cms_admin_telemetry_export(): void
     $dbQueryCount = (float) ($databaseTotals['query_count'] ?? 0);
     $dbSlowCount = (float) ($databaseTotals['slow_count'] ?? 0);
     $dbFailedCount = (float) ($databaseTotals['failed_count'] ?? 0);
-    $databaseTelemetryEnabled = $telemetryMasterEnabled && telemetry_setting_enabled('telemetry_database_enabled', '1');
+    $databaseTelemetryEnabled =
+        $telemetryMasterEnabled
+        && telemetry_setting_enabled('telemetry_database_enabled', '1');
     $dbTelemetryHasSamples = $dbQueryCount > 0;
     $dbEmptyText = !$databaseTelemetryEnabled
         ? t('admin.telemetry.export.disabled', 'Disabled')
         : t('admin.telemetry.export.no_samples', 'No samples');
-    $dbQueryCountDisplay = $dbTelemetryHasSamples ? view_telemetry_report_number($dbQueryCount) : $dbEmptyText;
-    $dbSlowCountDisplay = $dbTelemetryHasSamples ? view_telemetry_report_number($dbSlowCount) : $dbEmptyText;
-    $dbFailedCountDisplay = $dbTelemetryHasSamples ? view_telemetry_report_number($dbFailedCount) : $dbEmptyText;
+    $dbQueryCountDisplay = $dbTelemetryHasSamples
+        ? view_telemetry_report_number($dbQueryCount)
+        : $dbEmptyText;
+    $dbSlowCountDisplay = $dbTelemetryHasSamples
+        ? view_telemetry_report_number($dbSlowCount)
+        : $dbEmptyText;
+    $dbFailedCountDisplay = $dbTelemetryHasSamples
+        ? view_telemetry_report_number($dbFailedCount)
+        : $dbEmptyText;
 
     $activeLanguage = translation_active_language();
     $publicTelemetryEnabled = telemetry_public_usage_enabled();
     $topPhotos = telemetry_top_photos($days, 25, $trafficSegment);
-    $longestPhotos = telemetry_longest_viewed_photos($days, 25, $trafficSegment);
+    $longestPhotos = telemetry_longest_viewed_photos(
+        $days,
+        25,
+        $trafficSegment,
+    );
     $storageDiagnostics = telemetry_report_storage_diagnostics($days);
-    $rollupConsistency = telemetry_report_daily_rollup_consistency(min(7, max(1, $days - 1)), $trafficSegment);
+    $rollupConsistency = telemetry_report_daily_rollup_consistency(
+        min(7, max(1, $days - 1)),
+        $trafficSegment,
+    );
     $reportQueryProfile = telemetry_report_query_profile();
     $reportQueryPlans = telemetry_report_query_plans($days, $trafficSegment);
     $storedCounts = [];
@@ -487,10 +826,19 @@ function cms_admin_telemetry_settings(): void
     $schemaStatus = presentation_telemetry_settings_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {
-            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_settings_save');
-            flash_message('admin_notice', t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.'));
+            presentation_schema_log_degraded(
+                $schemaStatus,
+                'admin_telemetry_settings_save',
+            );
+            flash_message('admin_notice', t(
+                'admin.telemetry.schema_unavailable_text',
+                'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.',
+            ));
         } else {
-            flash_message('admin_notice', t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.'));
+            flash_message('admin_notice', t(
+                'admin.telemetry.migrations_required_text',
+                'Telemetry tables are not available yet. Run database migrations first.',
+            ));
         }
         redirect_to(url_for('admin_telemetry'));
     }
@@ -506,13 +854,18 @@ function cms_admin_telemetry_settings(): void
     ];
     $values = [];
     try {
-        $definitions = \Gallery\Services\telemetry_admin_editable_setting_definitions();
-        foreach (['telemetry_max_photo_view_seconds', 'telemetry_raw_retention_days',
-            'telemetry_hourly_retention_days', 'telemetry_daily_retention_days',
-            'telemetry_database_retention_days'] as $key) {
+        $definitions =
+            \Gallery\Services\telemetry_admin_editable_setting_definitions();
+        foreach ([
+            'telemetry_max_photo_view_seconds',
+            'telemetry_raw_retention_days',
+            'telemetry_hourly_retention_days',
+            'telemetry_daily_retention_days',
+            'telemetry_database_retention_days',
+        ] as $key) {
             $values[$key] = \Gallery\Services\telemetry_admin_setting_normalize(
                 $key,
-                $_POST[$key] ?? $definitions[$key]['default']
+                $_POST[$key] ?? $definitions[$key]['default'],
             );
         }
     } catch (\InvalidArgumentException) {
@@ -525,11 +878,17 @@ function cms_admin_telemetry_settings(): void
     foreach ($values as $key => $value) {
         telemetry_set_setting($key, $value);
     }
-    admin_log_event('info', 'telemetry.settings_updated', 'Telemetry settings were updated.', [], [
-        'category' => 'telemetry',
-        'severity' => 'notice',
-        'route_name' => 'admin_telemetry',
-    ]);
+    admin_log_event(
+        'info',
+        'telemetry.settings_updated',
+        'Telemetry settings were updated.',
+        [],
+        [
+            'category' => 'telemetry',
+            'severity' => 'notice',
+            'route_name' => 'admin_telemetry',
+        ],
+    );
     redirect_to(url_for('admin_telemetry'));
 }
 
@@ -540,7 +899,10 @@ function cms_admin_telemetry_settings(): void
 function cms_admin_telemetry_maintenance(): void
 {
     require_admin();
-    if (strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+    if (
+        strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'))
+        !== 'POST'
+    ) {
         http_response_code(405);
         header('Allow: POST');
         return;
@@ -549,25 +911,58 @@ function cms_admin_telemetry_maintenance(): void
     $schemaStatus = presentation_telemetry_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {
-            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_maintenance');
-            flash_message('admin_notice', t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.'));
+            presentation_schema_log_degraded(
+                $schemaStatus,
+                'admin_telemetry_maintenance',
+            );
+            flash_message('admin_notice', t(
+                'admin.telemetry.schema_unavailable_text',
+                'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.',
+            ));
         } else {
-            flash_message('admin_notice', t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.'));
+            flash_message('admin_notice', t(
+                'admin.telemetry.migrations_required_text',
+                'Telemetry tables are not available yet. Run database migrations first.',
+            ));
         }
         redirect_to(url_for('admin_telemetry'));
     }
     $result = telemetry_run_maintenance();
-    $status = empty($result['ok']) ? 'failed' : (!empty($result['skipped']) ? 'skipped' : (!empty($result['has_more']) ? 'pending' : 'completed'));
+    $status = empty($result['ok'])
+        ? 'failed'
+        : (
+            !empty($result['skipped'])
+                ? 'skipped'
+                : (!empty($result['has_more']) ? 'pending' : 'completed')
+        );
     $statusMessage = match ($status) {
-        'failed' => t('admin.telemetry.maintenance_failed', 'Maintenance failed. Inspect the bounded result and job log.'),
-        'pending' => t('admin.telemetry.maintenance_pending', 'One bounded maintenance slice completed. More work remains; subsequent scheduled slices will continue.'),
-        'skipped' => t('admin.telemetry.maintenance_skipped', 'No maintenance slice ran. See the reason below.'),
-        default => t('admin.telemetry.maintenance_completed', 'Rollup and retention cleanup completed.'),
+        'failed' => t(
+            'admin.telemetry.maintenance_failed',
+            'Maintenance failed. Inspect the bounded result and job log.',
+        ),
+        'pending' => t(
+            'admin.telemetry.maintenance_pending',
+            'One bounded maintenance slice completed. More work remains; subsequent scheduled slices will continue.',
+        ),
+        'skipped' => t(
+            'admin.telemetry.maintenance_skipped',
+            'No maintenance slice ran. See the reason below.',
+        ),
+        default => t(
+            'admin.telemetry.maintenance_completed',
+            'Rollup and retention cleanup completed.',
+        ),
     };
     \Gallery\Views\view_render_admin_telemetry_maintenance([
         'status_message' => $statusMessage,
-        'title' => t('admin.telemetry.maintenance_title', 'Telemetry maintenance'),
+        'title' => t(
+            'admin.telemetry.maintenance_title',
+            'Telemetry maintenance',
+        ),
         'back_url' => url_for('admin_telemetry'),
-        'result_json' => (string) json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'result_json' => (string) json_encode(
+            $result,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        ),
     ]);
 }

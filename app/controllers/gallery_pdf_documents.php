@@ -27,9 +27,8 @@ namespace Gallery\Controllers;
 function gallery_pdf_documents_view_model(
     array $gallery,
     bool $editor = false,
-    bool $publicOnly = false
-): array
-{
+    bool $publicOnly = false,
+): array {
     require_once __DIR__ . '/../services/gallery_pdf_documents.php';
     require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
     require_once __DIR__ . '/../services/gallery_pdf_settings.php';
@@ -38,7 +37,10 @@ function gallery_pdf_documents_view_model(
     $documents = [];
     $editor = $editor && !$publicOnly;
     $user = $publicOnly ? null : \Gallery\Core\current_user();
-    $admin = is_array($user) && ($user['role'] ?? '') === 'admin' && !\Gallery\Core\admin_anonymous_preview_active();
+    $admin =
+        is_array($user)
+        && ($user['role'] ?? '') === 'admin'
+        && !\Gallery\Core\admin_anonymous_preview_active();
     try {
         $entries = \Gallery\Services\gallery_pdf_documents_list($gallery);
     } catch (\Throwable) {
@@ -49,34 +51,85 @@ function gallery_pdf_documents_view_model(
         if ($hidden && !$admin) {
             continue;
         }
-        $query = ['page' => 'gallery_ofp_pdf', 'id' => $id, 'document' => $entry['id']];
+        $query = [
+            'page' => 'gallery_ofp_pdf',
+            'id' => $id,
+            'document' => $entry['id'],
+        ];
         $documents[] = [
-            'id' => $entry['id'], 'title' => $entry['title'], 'filename' => $entry['filename'], 'size' => $entry['size'], 'hidden' => $hidden, 'version' => $entry['sha256'],
-            'view_url' => $base . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
-            'download_url' => $base . '?' . http_build_query($query + ['download' => 1], '', '&', PHP_QUERY_RFC3986),
+            'id' => $entry['id'],
+            'title' => $entry['title'],
+            'filename' => $entry['filename'],
+            'size' => $entry['size'],
+            'hidden' => $hidden,
+            'version' => $entry['sha256'],
+            'view_url' =>
+                $base
+                    . '?'
+                    . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
+            'download_url' =>
+                $base
+                    . '?'
+                    . http_build_query(
+                        $query + ['download' => 1],
+                        '',
+                        '&',
+                        PHP_QUERY_RFC3986,
+                    ),
         ];
     }
     $ofpPath = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
-    $ofpHidden = \Gallery\Services\gallery_pdf_documents_hidden($gallery, 'ofp');
+    $ofpHidden = \Gallery\Services\gallery_pdf_documents_hidden(
+        $gallery,
+        'ofp',
+    );
     if ($ofpPath !== null && (!$ofpHidden || $admin)) {
         $query = ['page' => 'gallery_ofp_pdf', 'id' => $id];
-        $documents[] = ['id' => 'ofp', 'title' => 'SimBrief OFP', 'filename' => 'simbrief-ofp.pdf', 'size' => (int) @filesize($ofpPath), 'hidden' => $ofpHidden, 'version' => (string) @hash_file('sha256', $ofpPath),
-            'view_url' => $base . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
-            'download_url' => $base . '?' . http_build_query($query + ['download' => 1], '', '&', PHP_QUERY_RFC3986)];
+        $documents[] = [
+            'id' => 'ofp',
+            'title' => 'SimBrief OFP',
+            'filename' => 'simbrief-ofp.pdf',
+            'size' => (int) @filesize($ofpPath),
+            'hidden' => $ofpHidden,
+            'version' => (string) @hash_file('sha256', $ofpPath),
+            'view_url' =>
+                $base
+                    . '?'
+                    . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
+            'download_url' =>
+                $base
+                    . '?'
+                    . http_build_query(
+                        $query + ['download' => 1],
+                        '',
+                        '&',
+                        PHP_QUERY_RFC3986,
+                    ),
+        ];
     }
     $controls = ['operation_key' => '', 'browser_config' => '{}'];
     if ($admin) {
         \Gallery\Core\cms_runtime_kernel()->load('domain-admin-uploads');
         $controls = gallery_pdf_documents_admin_controls();
     }
-    return ['gallery_id' => $id, 'admin' => $admin, 'editor' => $editor,
-        'action_url' => $base . '?' . http_build_query(['page' => 'admin_edit_gallery', 'id' => $id]),
+    return [
+        'gallery_id' => $id,
+        'admin' => $admin,
+        'editor' => $editor,
+        'action_url' =>
+            $base
+                . '?'
+                . http_build_query([
+                    'page' => 'admin_edit_gallery',
+                    'id' => $id,
+                ]),
         'csrf_html' => $admin ? \Gallery\Core\csrf_field() : '',
         'operation_key' => $controls['operation_key'],
         'dpi' => \Gallery\Services\gallery_pdf_render_dpi(),
         'browser_config' => $controls['browser_config'],
         'language' => \Gallery\Services\translation_active_language(),
-        'documents' => $documents];
+        'documents' => $documents,
+    ];
 }
 
 /**
@@ -93,11 +146,15 @@ function gallery_pdf_documents_view_model(
  */
 function gallery_pdf_documents_smart_view_model(
     int $smartGalleryId,
-    array $sources
+    array $sources,
 ): array {
     $documents = [];
-    usort($sources, static fn (array $left, array $right): int =>
-        $left['id'] <=> $right['id']);
+    usort(
+        $sources,
+        static fn(array $left, array $right): int => (
+            $left['id'] <=> $right['id']
+        ),
+    );
     foreach ($sources as $source) {
         $model = gallery_pdf_documents_view_model($source, false, true);
         foreach ($model['documents'] as $document) {
@@ -127,8 +184,13 @@ function gallery_pdf_documents_smart_view_model(
  */
 function gallery_pdf_documents_admin_controls(): array
 {
-    return ['operation_key' => \Gallery\Services\admin_operation_form_key(null),
-        'browser_config' => (string) json_encode(\Gallery\Services\browser_upload_browser_config(), JSON_UNESCAPED_SLASHES)];
+    return [
+        'operation_key' => \Gallery\Services\admin_operation_form_key(null),
+        'browser_config' => (string) json_encode(
+            \Gallery\Services\browser_upload_browser_config(),
+            JSON_UNESCAPED_SLASHES,
+        ),
+    ];
 }
 
 /**
@@ -137,15 +199,20 @@ function gallery_pdf_documents_admin_controls(): array
  * @param bool $editor Whether the refreshed fragment includes editor-only attachment controls; defaults to true.
  * @return string Documents card HTML with delegated forms, or empty when OFF.
  */
-function admin_gallery_pdf_documents_html(array $gallery, bool $editor = true): string
-{
+function admin_gallery_pdf_documents_html(
+    array $gallery,
+    bool $editor = true,
+): string {
     if (!\Gallery\Services\feature_capability_effective_enabled(
-        'gallery_pdf_documents'
+        'gallery_pdf_documents',
     )) {
         return '';
     }
     require_once __DIR__ . '/../views/gallery_pdf_documents.php';
     ob_start();
-    \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model($gallery, $editor));
+    \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model(
+        $gallery,
+        $editor,
+    ));
     return (string) ob_get_clean();
 }

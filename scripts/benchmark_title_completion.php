@@ -21,12 +21,22 @@ use function Gallery\Tests\title_completion_fixture_rows;
 
 require_once __DIR__ . '/cli_guard.php';
 gallery_require_cli_sapi();
-$titleCompletionFixturePath = dirname(__DIR__) . '/tests/support/gallery_title_completion_fixture.php';
-if (!is_file($titleCompletionFixturePath) || !is_readable($titleCompletionFixturePath)) {
-    fwrite(STDERR, "BLOCKED: title completion benchmark requires a source checkout with its test fixtures; deployment packages exclude tests.\n");
+$titleCompletionFixturePath =
+    dirname(__DIR__) . '/tests/support/gallery_title_completion_fixture.php';
+if (
+    !is_file($titleCompletionFixturePath)
+    || !is_readable($titleCompletionFixturePath)
+) {
+    fwrite(
+        STDERR,
+        "BLOCKED: title completion benchmark requires a source checkout with its test fixtures; deployment packages exclude tests.\n",
+    );
     exit(1);
 }
-if (!class_exists(PDO::class) || !in_array('sqlite', PDO::getAvailableDrivers(), true)) {
+if (
+    !class_exists(PDO::class)
+    || !in_array('sqlite', PDO::getAvailableDrivers(), true)
+) {
     fwrite(STDERR, "BLOCKED: benchmark requires pdo_sqlite.\n");
     exit(1);
 }
@@ -35,7 +45,12 @@ require_once $titleCompletionFixturePath;
 require_once dirname(__DIR__) . '/app/models/galleries.php';
 require_once dirname(__DIR__) . '/app/services/gallery_picker.php';
 
-/** Measure nine requests; setup allocations and fixture inserts are excluded. */
+/**
+ * Measure the request's median runtime and peak extra memory over nine runs.
+ *
+ * @param callable():array<string,int|float|bool> $request One request operation returning benchmark metrics.
+ * @return array{median_ms:float,peak_extra_bytes:?int,result:array<string,int|float|bool>} Median time, peak extra memory when supported, and the final request metrics.
+ */
 function title_completion_measure(callable $request): array
 {
     $samples = [];
@@ -55,53 +70,109 @@ function title_completion_measure(callable $request): array
         }
     }
     sort($samples);
-    return ['median_ms' => round($samples[4], 3), 'peak_extra_bytes' => $peak, 'result' => $result];
+    return [
+        'median_ms' => round($samples[4], 3),
+        'peak_extra_bytes' => $peak,
+        'result' => $result,
+    ];
 }
 
-$report = ['php' => PHP_VERSION, 'database' => 'disposable sqlite::memory:', 'runs' => 9, 'measurements' => []];
+$report = [
+    'php' => PHP_VERSION,
+    'database' => 'disposable sqlite::memory:',
+    'runs' => 9,
+    'measurements' => [],
+];
 foreach ([100, 1000, 10000] as $size) {
     $fixture = new Gallery\Tests\TitleCompletionFixtureDatabase();
     $GLOBALS['title_completion_fixture'] = $fixture;
     $fixture->seed(title_completion_fixture_rows($size));
 
     /** Reproduce the removed catalog payload with deterministic synthetic paths. */
-    $baseline = title_completion_measure(static function () use ($fixture): array {
-        $rows = $fixture->pdo->query('SELECT id, parent_id, title, created_at FROM galleries ORDER BY created_at DESC, id DESC')->fetchAll(PDO::FETCH_ASSOC);
+    $baseline = title_completion_measure(static function () use (
+        $fixture,
+    ): array {
+        $rows = $fixture
+            ->pdo
+            ->query(
+                'SELECT id, parent_id, title, created_at FROM galleries ORDER BY created_at DESC, id DESC',
+            )
+            ->fetchAll(PDO::FETCH_ASSOC);
         $candidates = [];
         foreach ($rows as $row) {
             $candidates[] = [
-                'id' => (int) $row['id'], 'parent_id' => (int) ($row['parent_id'] ?? 0),
-                'title' => trim($row['title']), 'path' => 'synthetic/catalog/' . $row['id'], 'created_at' => $row['created_at'],
+                'id' => (int) $row['id'],
+                'parent_id' => (int) ($row['parent_id'] ?? 0),
+                'title' => trim($row['title']),
+                'path' => 'synthetic/catalog/' . $row['id'],
+                'created_at' => $row['created_at'],
             ];
         }
-        $encoded = json_encode($candidates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        return ['catalog_json_bytes' => strlen($encoded), 'embedded_attribute_value_bytes' => strlen(htmlspecialchars($encoded, ENT_QUOTES, 'UTF-8'))];
+        $encoded = json_encode(
+            $candidates,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        return [
+            'catalog_json_bytes' => strlen($encoded),
+            'embedded_attribute_value_bytes' => strlen(htmlspecialchars(
+                $encoded,
+                ENT_QUOTES,
+                'UTF-8',
+            )),
+        ];
     });
-    $report['measurements'][] = ['size' => $size, 'scenario' => 'removed_catalog_baseline'] + $baseline;
+    $report['measurements'][] =
+        ['size' => $size, 'scenario' => 'removed_catalog_baseline'] + $baseline;
 
-    foreach ([['sibling_match', 'fl', 7], ['sibling_miss', 'missing', 7], ['fallback_miss', 'missing', 99999]] as [$name, $query, $parent]) {
+    foreach ([
+        ['sibling_match', 'fl', 7],
+        ['sibling_miss', 'missing', 7],
+        ['fallback_miss', 'missing', 99999],
+    ] as [$name, $query, $parent]) {
         /** Measure one real service request against the selected synthetic scope. */
-        $measurement = title_completion_measure(static function () use ($fixture, $query, $parent): array {
+        $measurement = title_completion_measure(static function () use (
+            $fixture,
+            $query,
+            $parent,
+        ): array {
             $fixture->queries = [];
             $response = gallery_title_completion_candidates($query, $parent);
             return [
                 'queries' => count($fixture->queries),
-                'sql_ms' => round(array_sum(array_column($fixture->queries, 'milliseconds')), 3),
-                'fetched_rows' => array_sum(array_column($fixture->queries, 'rows')),
+                'sql_ms' => round(
+                    array_sum(array_column($fixture->queries, 'milliseconds')),
+                    3,
+                ),
+                'fetched_rows' => array_sum(array_column(
+                    $fixture->queries,
+                    'rows',
+                )),
                 'candidates' => count($response['candidates']),
-                'response_bytes' => strlen(json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+                'response_bytes' => strlen(json_encode(
+                    $response,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                )),
                 'truncated' => $response['truncated'],
             ];
         });
-        $report['measurements'][] = ['size' => $size, 'scenario' => $name] + $measurement;
+        $report['measurements'][] =
+            ['size' => $size, 'scenario' => $name] + $measurement;
         if ($size === 10000 && $name === 'fallback_miss') {
             foreach ($fixture->queries as $queryRecord) {
-                $explain = $fixture->pdo->prepare('EXPLAIN QUERY PLAN ' . $queryRecord['sql']);
+                $explain = $fixture->pdo->prepare(
+                    'EXPLAIN QUERY PLAN ' . $queryRecord['sql'],
+                );
                 $explain->execute($queryRecord['params']);
-                $report['plans'][] = ['sql' => $queryRecord['sql'], 'plan' => $explain->fetchAll(PDO::FETCH_ASSOC)];
+                $report['plans'][] = [
+                    'sql' => $queryRecord['sql'],
+                    'plan' => $explain->fetchAll(PDO::FETCH_ASSOC),
+                ];
             }
         }
     }
 }
-$report['new_form_model_bytes'] = strlen(json_encode(['candidates' => [], 'url' => '/index.php?page=admin_gallery_title_completion'], JSON_UNESCAPED_SLASHES));
+$report['new_form_model_bytes'] = strlen(json_encode([
+    'candidates' => [],
+    'url' => '/index.php?page=admin_gallery_title_completion',
+], JSON_UNESCAPED_SLASHES));
 echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), PHP_EOL;

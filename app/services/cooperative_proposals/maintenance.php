@@ -19,7 +19,12 @@ namespace Gallery\Services;
  */
 function cooperative_maintenance_plan(array $group): array
 {
-    $plan = ['action' => 'blocked', 'peer_id' => null, 'retry_at' => null, 'reason' => null];
+    $plan = [
+        'action' => 'blocked',
+        'peer_id' => null,
+        'retry_at' => null,
+        'reason' => null,
+    ];
     cooperative_require_enabled();
     $own = cooperative_proposal_own_decision($group);
     if ($own['decision'] !== 'approved') {
@@ -33,7 +38,9 @@ function cooperative_maintenance_plan(array $group): array
         return $plan;
     }
     if (cooperative_activation_lease_valid($group)) {
-        $renewAt = $group['exchange']['lease']['expires_at'] - COOPERATIVE_RENEWAL_WINDOW;
+        $renewAt =
+            $group['exchange']['lease']['expires_at']
+            - COOPERATIVE_RENEWAL_WINDOW;
         $plan['action'] = time() < $renewAt ? 'ready' : 'start';
         $plan['retry_at'] = $renewAt;
         return $plan;
@@ -45,7 +52,11 @@ function cooperative_maintenance_plan(array $group): array
         }
         $round = cooperative_verification_round($group, $round['round_id']);
     } catch (CooperativeException $error) {
-        if (!in_array($error->reason, ['verification_unavailable', 'verification_expired'], true)) {
+        if (!in_array(
+            $error->reason,
+            ['verification_unavailable', 'verification_expired'],
+            true,
+        )) {
             throw $error;
         }
         $plan['action'] = 'start';
@@ -56,8 +67,11 @@ function cooperative_maintenance_plan(array $group): array
         if (is_array($receipt) && ($receipt['decision'] ?? '') === 'approved') {
             continue;
         }
-        $retryAt = is_array($receipt) ? $receipt['observed_at'] + COOPERATIVE_CONSENT_RETRY_DELAY : null;
-        $plan['action'] = $retryAt !== null && time() < $retryAt ? 'waiting' : 'verify';
+        $retryAt = is_array($receipt)
+            ? $receipt['observed_at'] + COOPERATIVE_CONSENT_RETRY_DELAY
+            : null;
+        $plan['action'] =
+            $retryAt !== null && time() < $retryAt ? 'waiting' : 'verify';
         $plan['peer_id'] = $remote;
         $plan['retry_at'] = $retryAt;
         $plan['reason'] = is_array($receipt) ? 'consent_missing' : null;
@@ -83,8 +97,17 @@ function cooperative_maintenance_step(string $groupId, int $expected): array
     $plan = cooperative_maintenance_plan($group);
     return match ($plan['action']) {
         'start' => cooperative_verification_start($groupId, $expected),
-        'verify' => cooperative_verification_peer($groupId, $expected, $group['exchange']['verification']['round_id'], $plan['peer_id']),
-        'finalize' => cooperative_activation_finalize($groupId, $expected, $group['exchange']['verification']['round_id']),
+        'verify' => cooperative_verification_peer(
+            $groupId,
+            $expected,
+            $group['exchange']['verification']['round_id'],
+            $plan['peer_id'],
+        ),
+        'finalize' => cooperative_activation_finalize(
+            $groupId,
+            $expected,
+            $group['exchange']['verification']['round_id'],
+        ),
         default => cooperative_proposal_exchange_projection($stored),
     };
 }
@@ -105,7 +128,11 @@ function cooperative_maintenance_renew(string $groupId): array
     // One start, at most one check per other member, and one finalization.
     $steps = count($state['body']['members']) + 1;
     for ($step = 0; $step < $steps; $step++) {
-        if (in_array($state['maintenance']['action'], ['ready', 'waiting', 'blocked'], true)) {
+        if (in_array(
+            $state['maintenance']['action'],
+            ['ready', 'waiting', 'blocked'],
+            true,
+        )) {
             return $state;
         }
         // Do not start a second round in the same pass if collection crossed its deadline.

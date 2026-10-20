@@ -54,6 +54,7 @@ const CACHE_LIFECYCLE_CATALOG_RESERVE = 4097;
  * Rationale: at most 5000 payload metadata observations and 180 ms admission keep shared-hosting slices bounded; streamed catalogs have separate name/byte bounds and background burst admission. Blocking OS calls can overrun admission.
  */
 const CACHE_LIFECYCLE_SLICE_ENTRIES = 5000;
+
 /**
  * Bound time for admitting new lifecycle filesystem work.
  * Type: float. Units: seconds. Scope: one worker slice.
@@ -101,6 +102,7 @@ const CACHE_LIFECYCLE_CATALOG_ATTEMPTS = 3;
  * Rationale: thirty-two short alternating slices limit filesystem pressure and release locks between checkpoints.
  */
 const CACHE_LIFECYCLE_RUN_SLICES = 32;
+
 /**
  * Refuse known-low filesystem capacity before admitting inventory or payload detachment.
  * Type: int. Units: bytes. Scope: the cache filesystem.
@@ -108,6 +110,7 @@ const CACHE_LIFECYCLE_RUN_SLICES = 32;
  * Rationale: sixteen MiB is planning headroom when measurable. Hosting-disabled/unknown capacity instead relies on successful bounded checkpoint writes; it never claims a measured reserve or host quota.
  */
 const CACHE_LIFECYCLE_RESERVE_BYTES = 16777216;
+
 /**
  * Bound private catalog and plan growth across one resumable observation cycle.
  * Type: int. Units: bytes. Scope: committed inventory metadata for one cycle.
@@ -122,12 +125,14 @@ const CACHE_LIFECYCLE_METADATA_BYTES = 67108864;
  * Consumers: contextual archive retention. Rationale: two copies include the latest job rollback and selected legacy recovery before spare historical archives; active references remain protected independently.
  */
 const CACHE_LIFECYCLE_UPDATE_RECOVERY_COPIES = 2;
+
 /**
  * Bound historical archive-name discovery without a whole-cache traversal.
  * Type: int. Units: names. Scope: updater root and backups in one retention decision.
  * Consumers: legacy archive retention. Rationale: 4096 names covers historical flat archives while incomplete or larger catalogs fail closed.
  */
 const CACHE_LIFECYCLE_UPDATE_ARCHIVE_NAMES = 4096;
+
 /**
  * Bound ZIP proof probes while choosing retained recovery copies.
  * Type: int. Units: archives. Scope: one historical retention decision.

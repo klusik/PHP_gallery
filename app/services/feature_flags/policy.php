@@ -71,7 +71,10 @@ function feature_capability_report_unknown(string $key): void
  */
 function feature_capability_exists(string $key): bool
 {
-    return array_key_exists(feature_flag_normalize_key($key), feature_capability_definitions());
+    return array_key_exists(
+        feature_flag_normalize_key($key),
+        feature_capability_definitions(),
+    );
 }
 
 /**
@@ -108,7 +111,10 @@ function feature_capability_default_enabled(string $key): bool
     if ($definition === null) {
         return false;
     }
-    return !array_key_exists('default_enabled', $definition) || $definition['default_enabled'] === true;
+    return (
+        !array_key_exists('default_enabled', $definition)
+            || $definition['default_enabled'] === true
+    );
 }
 
 /**
@@ -143,8 +149,10 @@ function feature_capability_configured_enabled(string $key): bool
  * @param array<string,bool> $resolving Internal recursion guard.
  * @return bool Effective state after dependencies.
  */
-function feature_capability_effective_enabled(string $key, array $resolving = []): bool
-{
+function feature_capability_effective_enabled(
+    string $key,
+    array $resolving = [],
+): bool {
     $key = feature_flag_normalize_key($key);
     $definition = feature_capability_definition($key);
     if ($definition === null || isset($resolving[$key])) {
@@ -157,7 +165,10 @@ function feature_capability_effective_enabled(string $key, array $resolving = []
     $resolving[$key] = true;
     foreach ((array) ($definition['dependencies'] ?? []) as $dependency) {
         $dependencyKey = feature_flag_normalize_key((string) $dependency);
-        if ($dependencyKey === '' || !feature_capability_effective_enabled($dependencyKey, $resolving)) {
+        if (
+            $dependencyKey === ''
+            || !feature_capability_effective_enabled($dependencyKey, $resolving)
+        ) {
             return false;
         }
     }
@@ -183,7 +194,10 @@ function set_feature_capability_enabled(string $key, bool $enabled): bool
         return false;
     }
 
-    if (empty($definition['editable_on_features']) && ($definition['source']['type'] ?? '') === 'derived') {
+    if (
+        empty($definition['editable_on_features'])
+        && ($definition['source']['type'] ?? '') === 'derived'
+    ) {
         return false;
     }
 
@@ -212,13 +226,21 @@ function feature_capability_seed_fresh_install_defaults(?array $definitions = nu
     $complete = true;
     foreach ($definitions as $key => $definition) {
         $key = feature_flag_normalize_key((string) $key);
-        if ($key === '' || !is_array($definition) || !array_key_exists('fresh_default_enabled', $definition)) {
+        if (
+            $key === ''
+            || !is_array($definition)
+            || !array_key_exists('fresh_default_enabled', $definition)
+        ) {
             continue;
         }
         if (feature_capability_source_has_explicit_value($key, $definition)) {
             continue;
         }
-        if (feature_capability_source_write($key, $definition, (bool) $definition['fresh_default_enabled'])) {
+        if (feature_capability_source_write(
+            $key,
+            $definition,
+            (bool) $definition['fresh_default_enabled'],
+        )) {
             $seeded[] = $key;
         } else {
             $complete = false;
@@ -241,8 +263,10 @@ function feature_capability_seed_fresh_install_defaults(?array $definitions = nu
  * @param array<string,array<string,string>>|null $groups Group metadata to validate against.
  * @return list<string> Validation errors. An empty list means the registry is valid.
  */
-function feature_capability_validate_registry(?array $definitions = null, ?array $groups = null): array
-{
+function feature_capability_validate_registry(
+    ?array $definitions = null,
+    ?array $groups = null,
+): array {
     $definitions ??= feature_capability_definitions();
     $groups ??= feature_flag_groups();
     $errors = [];
@@ -265,7 +289,10 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
             $errors[] = 'unknown_group:' . $normalizedKey . ':' . $group;
         }
 
-        if (array_key_exists('default_enabled', $definition) && !is_bool($definition['default_enabled'])) {
+        if (
+            array_key_exists('default_enabled', $definition)
+            && !is_bool($definition['default_enabled'])
+        ) {
             $errors[] = 'invalid_default:' . $normalizedKey;
         }
 
@@ -273,24 +300,55 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
         $sourceType = is_array($source) ? (string) ($source['type'] ?? '') : '';
         if (!is_array($source) || $sourceType === '') {
             $errors[] = 'invalid_source:' . $normalizedKey;
-        } elseif (!in_array($sourceType, ['feature_flag', 'app_setting', 'domain_adapter', 'derived'], true)) {
-            $errors[] = 'unsupported_source:' . $normalizedKey . ':' . $sourceType;
-        } elseif ($sourceType === 'app_setting' && trim((string) ($source['key'] ?? '')) === '') {
+        } elseif (!in_array(
+            $sourceType,
+            ['feature_flag', 'app_setting', 'domain_adapter', 'derived'],
+            true,
+        )) {
+            $errors[] =
+                'unsupported_source:' . $normalizedKey . ':' . $sourceType;
+        } elseif (
+            $sourceType === 'app_setting'
+            && trim((string) ($source['key'] ?? '')) === ''
+        ) {
             $errors[] = 'invalid_app_setting_source:' . $normalizedKey;
         } elseif ($sourceType === 'domain_adapter') {
-            $adapterId = feature_flag_normalize_key((string) ($source['adapter'] ?? ''));
-            if ($adapterId === '' || !array_key_exists($adapterId, feature_capability_domain_adapters())) {
-                $errors[] = 'unknown_domain_adapter:' . $normalizedKey . ':' . $adapterId;
+            $adapterId = feature_flag_normalize_key(
+                (string) ($source['adapter'] ?? ''),
+            );
+            if (
+                $adapterId === ''
+                || !array_key_exists(
+                    $adapterId,
+                    feature_capability_domain_adapters(),
+                )
+            ) {
+                $errors[] =
+                    'unknown_domain_adapter:'
+                    . $normalizedKey
+                    . ':'
+                    . $adapterId;
             }
-        } elseif ($sourceType === 'derived' && !empty($definition['editable_on_features'])) {
+        } elseif (
+            $sourceType === 'derived'
+            && !empty($definition['editable_on_features'])
+        ) {
             $errors[] = 'editable_derived_source:' . $normalizedKey;
         }
 
         if (array_key_exists('fresh_default_enabled', $definition)) {
             if (!is_bool($definition['fresh_default_enabled'])) {
                 $errors[] = 'invalid_fresh_default:' . $normalizedKey;
-            } elseif (!in_array($sourceType, ['feature_flag', 'app_setting', 'domain_adapter'], true)) {
-                $errors[] = 'unwritable_fresh_default_source:' . $normalizedKey . ':' . $sourceType;
+            } elseif (!in_array(
+                $sourceType,
+                ['feature_flag', 'app_setting', 'domain_adapter'],
+                true,
+            )) {
+                $errors[] =
+                    'unwritable_fresh_default_source:'
+                    . $normalizedKey
+                    . ':'
+                    . $sourceType;
             }
         }
 
@@ -303,8 +361,15 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
             $dependencyKey = feature_flag_normalize_key((string) $dependency);
             if ($dependencyKey === $normalizedKey) {
                 $errors[] = 'self_dependency:' . $normalizedKey;
-            } elseif ($dependencyKey === '' || !array_key_exists($dependencyKey, $definitions)) {
-                $errors[] = 'unknown_dependency:' . $normalizedKey . ':' . $dependencyKey;
+            } elseif (
+                $dependencyKey === ''
+                || !array_key_exists($dependencyKey, $definitions)
+            ) {
+                $errors[] =
+                    'unknown_dependency:'
+                    . $normalizedKey
+                    . ':'
+                    . $dependencyKey;
             }
         }
 
@@ -315,12 +380,24 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
         }
         foreach ($routes as $route) {
             $routeKey = trim((string) $route);
-            if ($routeKey === '' || preg_match('/^[a-z0-9_]+$/D', $routeKey) !== 1) {
+            if (
+                $routeKey === ''
+                || preg_match('/^[a-z0-9_]+$/D', $routeKey) !== 1
+            ) {
                 $errors[] = 'invalid_route:' . $normalizedKey;
                 continue;
             }
-            if (isset($routeOwners[$routeKey]) && $routeOwners[$routeKey] !== $normalizedKey) {
-                $errors[] = 'conflicting_route_owner:' . $routeKey . ':' . $routeOwners[$routeKey] . ':' . $normalizedKey;
+            if (
+                isset($routeOwners[$routeKey])
+                && $routeOwners[$routeKey] !== $normalizedKey
+            ) {
+                $errors[] =
+                    'conflicting_route_owner:'
+                    . $routeKey
+                    . ':'
+                    . $routeOwners[$routeKey]
+                    . ':'
+                    . $normalizedKey;
                 continue;
             }
             $routeOwners[$routeKey] = $normalizedKey;
@@ -333,12 +410,24 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
         }
         foreach ($prefixes as $prefix) {
             $prefixKey = trim((string) $prefix);
-            if ($prefixKey === '' || preg_match('/^[a-z0-9_]+$/D', $prefixKey) !== 1) {
+            if (
+                $prefixKey === ''
+                || preg_match('/^[a-z0-9_]+$/D', $prefixKey) !== 1
+            ) {
                 $errors[] = 'invalid_route_prefix:' . $normalizedKey;
                 continue;
             }
-            if (isset($prefixOwners[$prefixKey]) && $prefixOwners[$prefixKey] !== $normalizedKey) {
-                $errors[] = 'conflicting_route_prefix_owner:' . $prefixKey . ':' . $prefixOwners[$prefixKey] . ':' . $normalizedKey;
+            if (
+                isset($prefixOwners[$prefixKey])
+                && $prefixOwners[$prefixKey] !== $normalizedKey
+            ) {
+                $errors[] =
+                    'conflicting_route_prefix_owner:'
+                    . $prefixKey
+                    . ':'
+                    . $prefixOwners[$prefixKey]
+                    . ':'
+                    . $normalizedKey;
                 continue;
             }
             $prefixOwners[$prefixKey] = $normalizedKey;
@@ -347,38 +436,70 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
 
     foreach ($routeOwners as $routeKey => $routeOwner) {
         foreach ($prefixOwners as $prefixKey => $prefixOwner) {
-            if ($routeOwner !== $prefixOwner && str_starts_with($routeKey, $prefixKey)) {
-                $errors[] = 'conflicting_route_prefix_owner:' . $routeKey . ':' . $routeOwner . ':' . $prefixOwner;
+            if (
+                $routeOwner !== $prefixOwner
+                && str_starts_with($routeKey, $prefixKey)
+            ) {
+                $errors[] =
+                    'conflicting_route_prefix_owner:'
+                    . $routeKey
+                    . ':'
+                    . $routeOwner
+                    . ':'
+                    . $prefixOwner;
             }
         }
     }
     $prefixKeys = array_keys($prefixOwners);
     foreach ($prefixKeys as $index => $prefixKey) {
         foreach (array_slice($prefixKeys, $index + 1) as $otherPrefixKey) {
-            if ($prefixOwners[$prefixKey] !== $prefixOwners[$otherPrefixKey]
-                && (str_starts_with($prefixKey, $otherPrefixKey) || str_starts_with($otherPrefixKey, $prefixKey))) {
-                $errors[] = 'overlapping_route_prefixes:' . $prefixKey . ':' . $otherPrefixKey;
+            if (
+                $prefixOwners[$prefixKey] !== $prefixOwners[$otherPrefixKey]
+                && (
+                    str_starts_with($prefixKey, $otherPrefixKey)
+                    || str_starts_with($otherPrefixKey, $prefixKey)
+                )
+            ) {
+                $errors[] =
+                    'overlapping_route_prefixes:'
+                    . $prefixKey
+                    . ':'
+                    . $otherPrefixKey;
             }
         }
     }
 
     $states = [];
-    $visit = function (string $key, array $path = []) use (&$visit, &$states, &$errors, $definitions): void {
+    $visit = function (string $key, array $path = []) use (
+        &$visit,
+        &$states,
+        &$errors,
+        $definitions,
+    ): void {
         $state = $states[$key] ?? 0;
         if ($state === 2) {
             return;
         }
         if ($state === 1) {
-            $errors[] = 'dependency_cycle:' . implode('>', array_merge($path, [$key]));
+            $errors[] =
+                'dependency_cycle:' . implode('>', array_merge($path, [$key]));
             return;
         }
 
         $states[$key] = 1;
         $definition = $definitions[$key] ?? null;
-        if (is_array($definition) && is_array($definition['dependencies'] ?? null)) {
+        if (
+            is_array($definition)
+            && is_array($definition['dependencies'] ?? null)
+        ) {
             foreach ($definition['dependencies'] as $dependency) {
-                $dependencyKey = feature_flag_normalize_key((string) $dependency);
-                if ($dependencyKey !== '' && array_key_exists($dependencyKey, $definitions)) {
+                $dependencyKey = feature_flag_normalize_key(
+                    (string) $dependency,
+                );
+                if (
+                    $dependencyKey !== ''
+                    && array_key_exists($dependencyKey, $definitions)
+                ) {
                     $visit($dependencyKey, array_merge($path, [$key]));
                 }
             }
@@ -388,34 +509,65 @@ function feature_capability_validate_registry(?array $definitions = null, ?array
 
     foreach (array_keys($definitions) as $key) {
         $normalizedKey = feature_flag_normalize_key((string) $key);
-        if ($normalizedKey !== '' && array_key_exists($normalizedKey, $definitions)) {
+        if (
+            $normalizedKey !== ''
+            && array_key_exists($normalizedKey, $definitions)
+        ) {
             $visit($normalizedKey);
         }
     }
 
-    $multiRequirements = function_exists(__NAMESPACE__ . '\\feature_capability_multi_route_requirements')
+    $multiRequirements = function_exists(__NAMESPACE__
+        . '\\feature_capability_multi_route_requirements')
         ? feature_capability_multi_route_requirements()
         : [];
     foreach ($multiRequirements as $route => $requirement) {
         $routeKey = trim((string) $route);
-        $normalized = function_exists(__NAMESPACE__ . '\\feature_capability_normalize_route_requirement')
+        $normalized = function_exists(__NAMESPACE__
+            . '\\feature_capability_normalize_route_requirement')
             ? feature_capability_normalize_route_requirement($requirement)
             : null;
-        if ($routeKey === '' || preg_match('/^[a-z0-9_]+$/D', $routeKey) !== 1 || $normalized === null) {
+        if (
+            $routeKey === ''
+            || preg_match('/^[a-z0-9_]+$/D', $routeKey) !== 1
+            || $normalized === null
+        ) {
             $errors[] = 'invalid_multi_route_requirement:' . $routeKey;
             continue;
         }
         foreach ($normalized['capabilities'] as $capabilityKey) {
             if (!array_key_exists($capabilityKey, $definitions)) {
-                $errors[] = 'unknown_route_requirement:' . $routeKey . ':' . $capabilityKey;
+                $errors[] =
+                    'unknown_route_requirement:'
+                    . $routeKey
+                    . ':'
+                    . $capabilityKey;
             }
         }
-        if (isset($routeOwners[$routeKey]) && !in_array($routeOwners[$routeKey], $normalized['capabilities'], true)) {
-            $errors[] = 'conflicting_multi_route_owner:' . $routeKey . ':' . $routeOwners[$routeKey];
+        if (
+            isset($routeOwners[$routeKey])
+            && !in_array(
+                $routeOwners[$routeKey],
+                $normalized['capabilities'],
+                true,
+            )
+        ) {
+            $errors[] =
+                'conflicting_multi_route_owner:'
+                . $routeKey
+                . ':'
+                . $routeOwners[$routeKey];
         }
         foreach ($prefixOwners as $prefixKey => $prefixOwner) {
-            if (str_starts_with($routeKey, $prefixKey) && !in_array($prefixOwner, $normalized['capabilities'], true)) {
-                $errors[] = 'conflicting_multi_route_prefix_owner:' . $routeKey . ':' . $prefixOwner;
+            if (
+                str_starts_with($routeKey, $prefixKey)
+                && !in_array($prefixOwner, $normalized['capabilities'], true)
+            ) {
+                $errors[] =
+                    'conflicting_multi_route_prefix_owner:'
+                    . $routeKey
+                    . ':'
+                    . $prefixOwner;
             }
         }
     }

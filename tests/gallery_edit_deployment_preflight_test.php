@@ -60,23 +60,44 @@ namespace {
         $GLOBALS['edit_preflight_state'] = $state;
         $refused = false;
         try {
-            Gallery\Services\application_update_assert_gallery_edit_enforcement($root);
+            Gallery\Services\application_update_assert_gallery_edit_enforcement(
+                $root,
+            );
         } catch (RuntimeException $error) {
             $refused = true;
-            if (preg_match('/\b(?:trigger|SUPER|privilege|grant|DBA)\b/i', $error->getMessage()) === 1) {
-                throw new RuntimeException('Updater preflight exposed an obsolete privileged-database requirement.');
+            if (
+                preg_match(
+                    '/\b(?:trigger|SUPER|privilege|grant|DBA)\b/i',
+                    $error->getMessage(),
+                ) === 1
+            ) {
+                throw new RuntimeException(
+                    'Updater preflight exposed an obsolete privileged-database requirement.',
+                );
             }
         }
         if ($refused !== ($state !== 'available')) {
-            throw new RuntimeException('Activation preflight classified revision storage incorrectly.');
+            throw new RuntimeException(
+                'Activation preflight classified revision storage incorrectly.',
+            );
         }
     }
 
     $GLOBALS['edit_preflight_state'] = 'unknown';
-    Gallery\Services\application_update_assert_gallery_edit_enforcement($root . '/tests/fixtures');
-    foreach (['app/services/updates_jobs/plan.php', 'app/services/updates_jobs/activation.php', 'app/services/updates_filesystem.php'] as $path) {
-        if (!str_contains((string) file_get_contents($root . '/' . $path), 'application_update_assert_gallery_edit_enforcement(')) {
-            throw new RuntimeException('An activation entry point omits the revision-storage preflight.');
+    Gallery\Services\application_update_assert_gallery_edit_enforcement($root
+        . '/tests/fixtures');
+    foreach ([
+        'app/services/updates_jobs/plan.php',
+        'app/services/updates_jobs/activation.php',
+        'app/services/updates_filesystem.php',
+    ] as $path) {
+        if (!str_contains(
+            (string) file_get_contents($root . '/' . $path),
+            'application_update_assert_gallery_edit_enforcement(',
+        )) {
+            throw new RuntimeException(
+                'An activation entry point omits the revision-storage preflight.',
+            );
         }
     }
     echo "Gallery edit deployment revision-storage preflight checks passed.\n";

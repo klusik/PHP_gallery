@@ -48,7 +48,28 @@ function inventory(string $root): array
 {
     $root = rtrim(str_replace('\\', '/', realpath($root) ?: $root), '/');
     $excludedDirectories = source_excluded_directories();
-    $extensions = ['php', 'js', 'mjs', 'cjs', 'css', 'py', 'pyw', 'sh', 'bat', 'cmd', 'ps1', 'psm1', 'sql', 'yml', 'yaml', 'html', 'htm', 'svg', 'tex', 'htaccess'];
+    $extensions = [
+        'php',
+        'js',
+        'mjs',
+        'cjs',
+        'css',
+        'py',
+        'pyw',
+        'sh',
+        'bat',
+        'cmd',
+        'ps1',
+        'psm1',
+        'sql',
+        'yml',
+        'yaml',
+        'html',
+        'htm',
+        'svg',
+        'tex',
+        'htaccess',
+    ];
     $excluded = [];
     $thirdParty = source_provenance_exclusions();
     $provenance = [];
@@ -57,30 +78,62 @@ function inventory(string $root): array
      * @param \SplFileInfo $item Candidate filesystem entry.
      * @return bool Whether discovery may visit the entry.
      */
-    $filter = static function (\SplFileInfo $item) use ($root, $excludedDirectories, $thirdParty, &$excluded, &$provenance): bool {
-        $relative = substr(str_replace('\\', '/', $item->getPathname()), strlen($root) + 1);
+    $filter = static function (\SplFileInfo $item) use (
+        $root,
+        $excludedDirectories,
+        $thirdParty,
+        &$excluded,
+        &$provenance,
+    ): bool {
+        $relative = substr(
+            str_replace('\\', '/', $item->getPathname()),
+            strlen($root) + 1,
+        );
         if ($item->isLink()) {
             $excluded[$relative] = 'symlink; not followed';
             return false;
         }
-        if ($item->isDir() && in_array($item->getFilename(), $excludedDirectories, true)) {
-            $excluded[$relative . '/'] = 'private, generated, third-party, or agent-owned tree; pruned';
+        if (
+            $item->isDir()
+            && in_array($item->getFilename(), $excludedDirectories, true)
+        ) {
+            $excluded[$relative
+                . '/'] = 'private, generated, third-party, or agent-owned tree; pruned';
             return false;
         }
-        if ($relative === 'config.php' || in_array($relative, ['public/assets/custom.css', 'public/assets/custom-overrides.css', 'public/assets/.custom-overrides.lock'], true) || str_starts_with($item->getFilename(), '.env')) {
+        if (
+            $relative === 'config.php'
+            || in_array(
+                $relative,
+                [
+                    'public/assets/custom.css',
+                    'public/assets/custom-overrides.css',
+                    'public/assets/.custom-overrides.lock',
+                ],
+                true,
+            )
+            || str_starts_with($item->getFilename(), '.env')
+        ) {
             $excluded[$relative] = 'installation-owned configuration; never opened';
             return false;
         }
         if (isset($thirdParty[$relative])) {
             $provenance[$relative] = $thirdParty[$relative];
-            $excluded[$relative] = 'third-party vector; preserve upstream attribution in ' . $thirdParty[$relative]['license'];
+            $excluded[$relative] =
+                'third-party vector; preserve upstream attribution in '
+                . $thirdParty[$relative]['license'];
             return false;
         }
         return true;
     };
-    $iterator = new \RecursiveIteratorIterator(new \RecursiveCallbackFilterIterator(
-        new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS), $filter
-    ));
+    $iterator =
+        new \RecursiveIteratorIterator(new \RecursiveCallbackFilterIterator(
+            new \RecursiveDirectoryIterator(
+                $root,
+                \FilesystemIterator::SKIP_DOTS,
+            ),
+            $filter,
+        ));
     $files = [];
     $other = [];
     foreach ($iterator as $item) {
@@ -100,7 +153,12 @@ function inventory(string $root): array
     ksort($other);
     ksort($excluded);
     ksort($provenance);
-    return ['files' => $files, 'other_formats' => $other, 'excluded' => $excluded, 'provenance' => $provenance];
+    return [
+        'files' => $files,
+        'other_formats' => $other,
+        'excluded' => $excluded,
+        'provenance' => $provenance,
+    ];
 }
 
 /**
@@ -110,9 +168,26 @@ function inventory(string $root): array
 function source_excluded_directories(): array
 {
     return [
-        '.git', '.claude', '.codex', '.agent', '.agent-local', '.idea', '.vscode',
-        'cache', 'data', 'galleries', 'logs', 'tmp', 'deploy', 'node_modules', 'vendor',
-        '__pycache__', '.pytest_cache', '.venv', 'venv', 'http_monitor_logs',
+        '.git',
+        '.claude',
+        '.codex',
+        '.agent',
+        '.agent-local',
+        '.idea',
+        '.vscode',
+        'cache',
+        'data',
+        'galleries',
+        'logs',
+        'tmp',
+        'deploy',
+        'node_modules',
+        'vendor',
+        '__pycache__',
+        '.pytest_cache',
+        '.venv',
+        'venv',
+        'http_monitor_logs',
     ];
 }
 
@@ -124,25 +199,46 @@ function source_excluded_directories(): array
  * @param int|null $endOffset Receives the byte offset after the native header/preamble.
  * @return string Leading comments; Python module docstrings are also accepted.
  */
-function leading_header(string $source, string $extension, ?int &$endOffset = null): string
-{
+function leading_header(
+    string $source,
+    string $extension,
+    ?int &$endOffset = null,
+): string {
     $originalLength = strlen($source);
     $source = preg_replace('/^\xEF\xBB\xBF/', '', $source) ?? $source;
     $source = preg_replace('/^#![^\r\n]*\R/', '', $source) ?? $source;
     if ($extension === 'php') {
         $source = preg_replace('/^\s*<\?php\s*/', '', $source) ?? $source;
-        $source = preg_replace('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;\s*/', '', $source) ?? $source;
+        $source =
+            preg_replace(
+                '/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;\s*/',
+                '',
+                $source,
+            ) ?? $source;
     } elseif (in_array($extension, ['bat', 'cmd'], true)) {
-        $source = preg_replace('/^\s*@?echo\s+off\s*(?:\R|$)/i', '', $source) ?? $source;
+        $source =
+            preg_replace('/^\s*@?echo\s+off\s*(?:\R|$)/i', '', $source)
+            ?? $source;
     } elseif (in_array($extension, ['html', 'htm', 'svg'], true)) {
-        $source = preg_replace('/^\s*<\?xml[\s\S]*?\?>\s*/i', '', $source) ?? $source;
-        $source = preg_replace('/^\s*<!doctype[^>]*>\s*/i', '', $source) ?? $source;
+        $source =
+            preg_replace('/^\s*<\?xml[\s\S]*?\?>\s*/i', '', $source) ?? $source;
+        $source =
+            preg_replace('/^\s*<!doctype[^>]*>\s*/i', '', $source) ?? $source;
     }
     $source = ltrim($source);
     $patterns = match ($extension) {
-        'php', 'js', 'mjs', 'cjs', 'css', 'sql' => ['~^/\*[\s\S]*?\*/~', '~^(?:(?://|--)[^\r\n]*(?:\R|$)|\s*\R)+~'],
-        'ps1', 'psm1' => ['~^<#[\s\S]*?#>~', '~^(?:\#[^\r\n]*(?:\R|$)|\s*\R)+~'],
-        'py', 'pyw' => ['~^(?:\#[^\r\n]*(?:\R|$)|\s*\R)+~', '~^(?:[ru])?("""|\'\'\')[\s\S]*?\1~i'],
+        'php', 'js', 'mjs', 'cjs', 'css', 'sql' => [
+            '~^/\*[\s\S]*?\*/~',
+            '~^(?:(?://|--)[^\r\n]*(?:\R|$)|\s*\R)+~',
+        ],
+        'ps1', 'psm1' => [
+            '~^<#[\s\S]*?#>~',
+            '~^(?:\#[^\r\n]*(?:\R|$)|\s*\R)+~',
+        ],
+        'py', 'pyw' => [
+            '~^(?:\#[^\r\n]*(?:\R|$)|\s*\R)+~',
+            '~^(?:[ru])?("""|\'\'\')[\s\S]*?\1~i',
+        ],
         'sh', 'yml', 'yaml', 'htaccess' => ['~^(?:\#[^\r\n]*(?:\R|$)|\s*\R)+~'],
         'tex' => ['~^(?:%[^\r\n]*(?:\R|$)|\s*\R)+~'],
         'html', 'htm', 'svg', 'md' => ['~^<!--[\s\S]*?-->~'],
@@ -153,7 +249,10 @@ function leading_header(string $source, string $extension, ?int &$endOffset = nu
     while ($source !== '') {
         $matched = false;
         foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $source, $match) === 1 && $match[0] !== '') {
+            if (
+                preg_match($pattern, $source, $match) === 1
+                && $match[0] !== ''
+            ) {
                 $header .= "\n" . $match[0];
                 $source = ltrim(substr($source, strlen($match[0])));
                 $matched = true;
@@ -176,24 +275,57 @@ function leading_header(string $source, string $extension, ?int &$endOffset = nu
  */
 function header_issues(string $source, string $path): array
 {
-    $header = leading_header($source, strtolower(pathinfo($path, PATHINFO_EXTENSION)));
+    $header = leading_header(
+        $source,
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+    );
     $header = str_replace(['<!--', '-->'], '', $header);
-    $header = preg_replace('/^\s*(?:\/\*+|\*\/|\*|\/\/|#|%|--|@?rem\b|::)\s?/mi', '', $header) ?? $header;
+    $header =
+        preg_replace(
+            '/^\s*(?:\/\*+|\*\/|\*|\/\/|#|%|--|@?rem\b|::)\s?/mi',
+            '',
+            $header,
+        ) ?? $header;
     $issues = [];
     // These two shipped assets have an enforced byte-identity compatibility
     // contract. The shared header must truthfully name both roles, not omit File.
     $fileIdentity = match ($path) {
-        'public/assets/usage.js', 'public/assets/telemetry.js' => 'public/assets/usage.js (canonical); public/assets/telemetry.js (compatibility copy)',
+        'public/assets/usage.js',
+        'public/assets/telemetry.js',
+            => 'public/assets/usage.js (canonical); public/assets/telemetry.js (compatibility copy)',
         default => $path,
     };
-    foreach (['Project' => 'PHP Gallery', 'Repository' => 'https://github.com/klusik/PHP_gallery', 'File' => $fileIdentity, 'Author' => 'Rudolf Klusal'] as $field => $expected) {
-        if (preg_match('/(?:^|\R)\s*' . preg_quote($field, '/') . ':\s*' . preg_quote($expected, '/') . '\s*(?:\R|$)/', $header) !== 1) {
+    foreach ([
+        'Project' => 'PHP Gallery',
+        'Repository' => 'https://github.com/klusik/PHP_gallery',
+        'File' => $fileIdentity,
+        'Author' => 'Rudolf Klusal',
+    ] as $field => $expected) {
+        if (
+            preg_match(
+                '/(?:^|\R)\s*'
+                    . preg_quote($field, '/')
+                    . ':\s*'
+                    . preg_quote($expected, '/')
+                    . '\s*(?:\R|$)/',
+                $header,
+            ) !== 1
+        ) {
             $issues[] = 'header.' . strtolower($field);
         }
     }
     foreach (['Module Type', 'Purpose', 'Responsibilities'] as $field) {
-        if (preg_match('/(?:^|\R)\s*' . preg_quote($field, '/') . ':\s*([^\r\n]+)/', $header, $match) !== 1
-            || preg_match('/^(?:Project|Repository|File|Module Type|Purpose|Responsibilities|Author|Contact|License|Notes):/i', trim($match[1])) === 1) {
+        if (
+            preg_match(
+                '/(?:^|\R)\s*' . preg_quote($field, '/') . ':\s*([^\r\n]+)/',
+                $header,
+                $match,
+            ) !== 1
+            || preg_match(
+                '/^(?:Project|Repository|File|Module Type|Purpose|Responsibilities|Author|Contact|License|Notes):/i',
+                trim($match[1]),
+            ) === 1
+        ) {
             $issues[] = 'header.' . strtolower(str_replace(' ', '_', $field));
         }
     }

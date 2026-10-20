@@ -123,7 +123,13 @@ function manifest_detect_version(string $rootPath): string
         return '';
     }
 
-    if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match) === 1) {
+    if (
+        preg_match(
+            "/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i",
+            $bootstrap,
+            $match,
+        ) === 1
+    ) {
         return (string) $match[1];
     }
 
@@ -237,17 +243,26 @@ function manifest_is_ignored_path(string $relativePath): bool
  * @param ?array<string,bool> $approvedProductionSet Optional positive membership set from the static inventory.
  * @return bool True when the condition matches.
  */
-function manifest_is_core_like_path(string $relativePath, ?array $approvedProductionSet = null): bool
-{
+function manifest_is_core_like_path(
+    string $relativePath,
+    ?array $approvedProductionSet = null,
+): bool {
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = str_replace('\\', '/', ltrim($relativePath, '/'));
     if ($normalizedPath === '') {
         return false;
     }
 
-    $approvedProductionSet ??= array_fill_keys(\Gallery\Core\release_file_policy_paths(manifest_root_path()), true);
-    return isset($approvedProductionSet[$normalizedPath])
-        && \Gallery\Core\release_file_policy_is_integrity_path($normalizedPath);
+    $approvedProductionSet ??= array_fill_keys(
+        \Gallery\Core\release_file_policy_paths(manifest_root_path()),
+        true,
+    );
+    return (
+        isset($approvedProductionSet[$normalizedPath])
+            && \Gallery\Core\release_file_policy_is_integrity_path(
+                $normalizedPath,
+            )
+    );
 }
 
 /**
@@ -263,7 +278,10 @@ function manifest_discover_files(string $rootPath): array
     $productionPaths = \Gallery\Core\release_file_policy_paths($rootPath);
     $approvedProductionSet = array_fill_keys($productionPaths, true);
     foreach ($productionPaths as $relativePath) {
-        if (!manifest_is_core_like_path($relativePath, $approvedProductionSet)) {
+        if (!manifest_is_core_like_path(
+            $relativePath,
+            $approvedProductionSet,
+        )) {
             continue;
         }
 
@@ -286,18 +304,27 @@ function manifest_hash_file(string $absolutePath): string
     // transport/API representation (notably for files larger than 1 MiB).
     clearstatcache(true, $absolutePath);
     $before = @stat($absolutePath);
-    if (!is_array($before) || !is_file($absolutePath) || !is_readable($absolutePath)) {
-        throw new RuntimeException('Manifest input is missing or unreadable: ' . $absolutePath);
+    if (
+        !is_array($before)
+        || !is_file($absolutePath)
+        || !is_readable($absolutePath)
+    ) {
+        throw new RuntimeException('Manifest input is missing or unreadable: '
+            . $absolutePath);
     }
     $contents = @file_get_contents($absolutePath);
     clearstatcache(true, $absolutePath);
     $after = @stat($absolutePath);
-    if (!is_string($contents) || !is_array($after)
+    if (
+        !is_string($contents)
+        || !is_array($after)
         || strlen($contents) !== (int) $before['size']
         || (int) $before['size'] !== (int) $after['size']
         || (int) $before['mtime'] !== (int) $after['mtime']
-        || (int) $before['ino'] !== (int) $after['ino']) {
-        throw new RuntimeException('Manifest input changed or was not read completely: ' . $absolutePath);
+        || (int) $before['ino'] !== (int) $after['ino']
+    ) {
+        throw new RuntimeException('Manifest input changed or was not read completely: '
+            . $absolutePath);
     }
 
     if (str_starts_with($contents, "\xEF\xBB\xBF")) {
@@ -317,13 +344,18 @@ function manifest_hash_file(string $absolutePath): string
  */
 function manifest_print_usage(): void
 {
-    echo "Usage: php scripts/generate_manifest.php [--root=PATH] [--version=0.46] [--check]\n";
+    echo
+        "Usage: php scripts/generate_manifest.php [--root=PATH] [--version=0.46] [--check]\n";
     echo "\n";
     echo "Options:\n";
-    echo "  --version=VERSION  Override the version detected from app/bootstrap.php.\n";
-    echo "  --root=PATH        Read/write manifests under another project root.\n";
-    echo "  --check            Exit with code 1 if the generated manifest differs.\n";
-    echo "  SOURCE_DATE_EPOCH  Optional bounded Unix epoch for a reproducible generated_at timestamp.\n";
+    echo
+        "  --version=VERSION  Override the version detected from app/bootstrap.php.\n";
+    echo
+        "  --root=PATH        Read/write manifests under another project root.\n";
+    echo
+        "  --check            Exit with code 1 if the generated manifest differs.\n";
+    echo
+        "  SOURCE_DATE_EPOCH  Optional bounded Unix epoch for a reproducible generated_at timestamp.\n";
 }
 
 /**
@@ -337,8 +369,13 @@ function manifest_generation_timestamp(): string
     if ($epoch === false || $epoch === '') {
         return gmdate('c');
     }
-    if (preg_match('/^(0|[1-9][0-9]{0,11})$/D', $epoch) !== 1 || (int) $epoch > 253402300799) {
-        throw new InvalidArgumentException('SOURCE_DATE_EPOCH must be a nonnegative Unix timestamp before year 10000.');
+    if (
+        preg_match('/^(0|[1-9][0-9]{0,11})$/D', $epoch) !== 1
+        || (int) $epoch > 253402300799
+    ) {
+        throw new InvalidArgumentException(
+            'SOURCE_DATE_EPOCH must be a nonnegative Unix timestamp before year 10000.',
+        );
     }
 
     return gmdate('c', (int) $epoch);
@@ -352,7 +389,9 @@ if (manifest_has_flag('--help') || manifest_has_flag('-h')) {
 // $rootPath stores an intermediate value used by the surrounding gallery workflow.
 $rootPath = manifest_root_path();
 // $version stores an intermediate value used by the surrounding gallery workflow.
-$version = manifest_option_value('--version') ?? manifest_detect_version($rootPath);
+$version = manifest_option_value('--version') ?? manifest_detect_version(
+    $rootPath,
+);
 if ($version === '') {
     fwrite(STDERR, "Unable to detect CMS version. Use --version=VERSION.\n");
     exit(1);
@@ -370,13 +409,16 @@ $manifest = [
 ];
 
 foreach ($files as $relativePath) {
-    $manifest['files'][$relativePath] = manifest_hash_file($rootPath . '/' . $relativePath);
+    $manifest['files'][$relativePath] = manifest_hash_file(
+        $rootPath . '/' . $relativePath,
+    );
 }
 
 // $outputPath stores an intermediate value used by the surrounding gallery workflow.
 $outputPath = $rootPath . '/app/core-manifest.json';
 // $output stores an intermediate value used by the surrounding gallery workflow.
-$output = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+$output =
+    json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 if ($output === false) {
     fwrite(STDERR, "Unable to encode manifest JSON.\n");
     exit(1);
@@ -384,14 +426,19 @@ if ($output === false) {
 
 // Compare substantive inputs in both modes. A reproducible candidate must keep
 // its existing generated_at when every version/hash/membership input is unchanged.
-$currentJson = is_file($outputPath) && !is_link($outputPath) ? file_get_contents($outputPath) : false;
-$currentManifest = is_string($currentJson) ? json_decode($currentJson, true) : null;
-$currentComparable = is_array($currentManifest) ? [
-    'version' => (string) ($currentManifest['version'] ?? ''),
-    'algorithm' => (string) ($currentManifest['algorithm'] ?? ''),
-    'hash_mode' => (string) ($currentManifest['hash_mode'] ?? ''),
-    'files' => $currentManifest['files'] ?? [],
-] : null;
+$currentJson = is_file($outputPath) && !is_link($outputPath)
+    ? file_get_contents($outputPath)
+    : false;
+$currentManifest = is_string($currentJson)
+    ? json_decode($currentJson, true)
+    : null;
+$currentComparable = is_array($currentManifest)
+    ? [
+        'version' => (string) ($currentManifest['version'] ?? ''),
+        'algorithm' => (string) ($currentManifest['algorithm'] ?? ''),
+        'hash_mode' => (string) ($currentManifest['hash_mode'] ?? ''),
+        'files' => $currentManifest['files'] ?? [],
+    ] : null;
 $generatedComparable = [
     'version' => $manifest['version'],
     'algorithm' => $manifest['algorithm'],
@@ -401,37 +448,63 @@ $generatedComparable = [
 
 if (manifest_has_flag('--check')) {
     if (!is_array($currentManifest)) {
-        fwrite(STDERR, "Manifest is missing or invalid. Run php scripts/prepare_candidate.php.\n");
+        fwrite(
+            STDERR,
+            "Manifest is missing or invalid. Run php scripts/prepare_candidate.php.\n",
+        );
         exit(1);
     }
     if ($currentComparable !== $generatedComparable) {
         // Report actionable membership/hash differences without dumping entire manifests.
         // This remains a read-only check; release preparation owns regeneration.
-        $actualFiles = is_array($currentComparable['files']) ? $currentComparable['files'] : [];
+        $actualFiles = is_array($currentComparable['files'])
+            ? $currentComparable['files']
+            : [];
         $expectedFiles = $generatedComparable['files'];
         $missing = array_keys(array_diff_key($expectedFiles, $actualFiles));
         $extra = array_keys(array_diff_key($actualFiles, $expectedFiles));
         $changed = [];
         foreach ($expectedFiles as $file => $hash) {
-            if (array_key_exists($file, $actualFiles) && $actualFiles[$file] !== $hash) {
+            if (
+                array_key_exists($file, $actualFiles)
+                && $actualFiles[$file] !== $hash
+            ) {
                 $changed[] = $file;
             }
         }
-        foreach (['missing' => $missing, 'extra' => $extra, 'changed' => $changed] as $label => $paths) {
+        foreach ([
+            'missing' => $missing,
+            'extra' => $extra,
+            'changed' => $changed,
+        ] as $label => $paths) {
             if ($paths !== []) {
-                fwrite(STDERR, "Manifest {$label} paths (" . count($paths) . '): '
-                    . implode(', ', array_slice($paths, 0, 16))
-                    . (count($paths) > 16 ? ', ...' : '') . "\n");
+                fwrite(
+                    STDERR,
+                    "Manifest {$label} paths ("
+                        . count($paths)
+                        . '): '
+                        . implode(', ', array_slice($paths, 0, 16))
+                        . (count($paths) > 16 ? ', ...' : '')
+                        . "\n",
+                );
             }
         }
         if ($currentComparable['version'] !== $generatedComparable['version']) {
-            fwrite(STDERR, "Manifest version mismatch: expected " . $generatedComparable['version'] . "\n");
+            fwrite(
+                STDERR,
+                'Manifest version mismatch: expected '
+                    . $generatedComparable['version']
+                    . "\n",
+            );
         }
-        fwrite(STDERR, "Manifest is not current. Run php scripts/prepare_candidate.php.\n");
+        fwrite(
+            STDERR,
+            "Manifest is not current. Run php scripts/prepare_candidate.php.\n",
+        );
         exit(1);
     }
 
-    echo "Manifest is current: " . count($manifest['files']) . " files.\n";
+    echo 'Manifest is current: ' . count($manifest['files']) . " files.\n";
     exit(0);
 }
 
@@ -449,4 +522,7 @@ if (file_put_contents($outputPath, $output, LOCK_EX) === false) {
     exit(1);
 }
 
-echo "Manifest generated for version $version: " . count($manifest['files']) . " files.\n";
+echo
+    "Manifest generated for version $version: "
+        . count($manifest['files'])
+        . " files.\n";

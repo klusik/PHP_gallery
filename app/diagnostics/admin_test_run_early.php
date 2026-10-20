@@ -42,6 +42,7 @@ namespace Gallery\Diagnostics;
 use Throwable;
 
 const ADMIN_TEST_RUN_EARLY_COOKIE = 'gallery_admin_test_run';
+
 const ADMIN_TEST_RUN_EARLY_TTL_SECONDS = 600;
 
 /**
@@ -49,10 +50,16 @@ const ADMIN_TEST_RUN_EARLY_TTL_SECONDS = 600;
  */
 function admin_test_run_early_request_time(): float
 {
-    if (isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])) {
+    if (
+        isset($_SERVER['REQUEST_TIME_FLOAT'])
+        && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+    ) {
         return (float) $_SERVER['REQUEST_TIME_FLOAT'];
     }
-    if (isset($_SERVER['REQUEST_TIME']) && is_numeric($_SERVER['REQUEST_TIME'])) {
+    if (
+        isset($_SERVER['REQUEST_TIME'])
+        && is_numeric($_SERVER['REQUEST_TIME'])
+    ) {
         return (float) $_SERVER['REQUEST_TIME'];
     }
     return microtime(true);
@@ -79,6 +86,8 @@ function admin_test_run_early_last_error(): ?array
 
 /**
  * Return true when the raw request is the Test Run starter route.
+ *
+ * @return bool True when the request is a POST to the starter route.
  */
 function admin_test_run_early_is_starter_request(): bool
 {
@@ -95,23 +104,37 @@ function admin_test_run_early_is_starter_request(): bool
             return true;
         }
     }
-    return str_contains((string) ($_SERVER['REQUEST_URI'] ?? ''), 'page=admin_test_run_start');
+    return str_contains(
+        (string) ($_SERVER['REQUEST_URI'] ?? ''),
+        'page=admin_test_run_start',
+    );
 }
 
 /**
  * Return active Test Run metadata for a plausible cookie without bootstrapping the application.
  *
- * @return array<string,mixed>|null
+ * @param string $projectRoot Absolute path to the project root containing the cache directory.
+ * @return array{token:string,meta_path:string}|null Active token context, or null when no valid run is found.
  */
 function admin_test_run_early_cookie_context(string $projectRoot): ?array
 {
-    $token = strtolower(trim((string) ($_COOKIE[ADMIN_TEST_RUN_EARLY_COOKIE] ?? '')));
+    $token = strtolower(trim(
+        (string) ($_COOKIE[ADMIN_TEST_RUN_EARLY_COOKIE] ?? ''),
+    ));
     if (preg_match('/^[a-f0-9]{32}$/D', $token) !== 1) {
         return null;
     }
-    $path = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'admin-test-runs'
-        . DIRECTORY_SEPARATOR . $token . DIRECTORY_SEPARATOR . 'meta.json';
-    if (!is_file($path) || (@filesize($path) ?: 0) > 512 * 1024) {
+    $path =
+        rtrim($projectRoot, '/\\')
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'admin-test-runs'
+        . DIRECTORY_SEPARATOR
+        . $token
+        . DIRECTORY_SEPARATOR
+        . 'meta.json';
+    if (!is_file($path) || (@filesize($path) ?: 0) > (512 * 1024)) {
         return null;
     }
     $raw = @file_get_contents($path);
@@ -123,7 +146,11 @@ function admin_test_run_early_cookie_context(string $projectRoot): ?array
         return null;
     }
     $createdAt = (int) ($meta['created_at_unix'] ?? 0);
-    if ($createdAt <= 0 || time() - $createdAt > ADMIN_TEST_RUN_EARLY_TTL_SECONDS || !empty($meta['finalized_at'])) {
+    if (
+        $createdAt <= 0
+        || (time() - $createdAt) > ADMIN_TEST_RUN_EARLY_TTL_SECONDS
+        || !empty($meta['finalized_at'])
+    ) {
         return null;
     }
     if (!hash_equals($token, strtolower((string) ($meta['token'] ?? '')))) {
@@ -134,10 +161,16 @@ function admin_test_run_early_cookie_context(string $projectRoot): ?array
 
 /**
  * Initialize the in-memory early trace when this request can plausibly participate in a Test Run.
+ *
+ * @param string $projectRoot Absolute path to the project root.
+ * @return void Initializes tracing state and registers its shutdown fallback when applicable.
  */
 function admin_test_run_early_init(string $projectRoot): void
 {
-    if (isset($GLOBALS['gallery_admin_test_run_early']) && is_array($GLOBALS['gallery_admin_test_run_early'])) {
+    if (
+        isset($GLOBALS['gallery_admin_test_run_early'])
+        && is_array($GLOBALS['gallery_admin_test_run_early'])
+    ) {
         return;
     }
     $cookieContext = admin_test_run_early_cookie_context($projectRoot);
@@ -152,11 +185,13 @@ function admin_test_run_early_init(string $projectRoot): void
         '%s-%s-%s',
         (string) (function_exists('getmypid') ? getmypid() : 0),
         str_replace('.', '', sprintf('%.6f', $now)),
-        bin2hex(random_bytes(4))
+        bin2hex(random_bytes(4)),
     );
     $state = [
         'enabled' => true,
-        'candidate_reason' => $cookieContext !== null ? 'active_cookie_context' : 'starter_route_candidate',
+        'candidate_reason' => $cookieContext !== null
+            ? 'active_cookie_context'
+            : 'starter_route_candidate',
         'project_root' => rtrim($projectRoot, '/\\'),
         'token' => (string) ($cookieContext['token'] ?? ''),
         'request_id' => $requestId,
@@ -169,7 +204,15 @@ function admin_test_run_early_init(string $projectRoot): void
     ];
     $GLOBALS['gallery_admin_test_run_early'] = $state;
 
-    admin_test_run_early_phase_record('entrypoint', $requestTime, $now, null, null, true, null);
+    admin_test_run_early_phase_record(
+        'entrypoint',
+        $requestTime,
+        $now,
+        null,
+        null,
+        true,
+        null,
+    );
     register_shutdown_function(static function (): void {
         admin_test_run_early_shutdown_fallback();
     });
@@ -177,6 +220,15 @@ function admin_test_run_early_init(string $projectRoot): void
 
 /**
  * Record one already-completed early phase.
+ *
+ * @param string $name Phase name to store.
+ * @param float $startedAt Phase start time as a Unix timestamp with fractional seconds.
+ * @param float $endedAt Phase end time as a Unix timestamp with fractional seconds.
+ * @param ?int $memoryStart PHP memory usage in bytes before the phase, when available.
+ * @param ?int $includedStart Included-file count before the phase, when available.
+ * @param bool $completed Whether the phase completed normally.
+ * @param ?array<string,mixed> $error Sanitized error context, or null when no error was observed.
+ * @return void Appends the phase record when early tracing is active.
  */
 function admin_test_run_early_phase_record(
     string $name,
@@ -185,9 +237,12 @@ function admin_test_run_early_phase_record(
     ?int $memoryStart,
     ?int $includedStart,
     bool $completed,
-    ?array $error
+    ?array $error,
 ): void {
-    if (!isset($GLOBALS['gallery_admin_test_run_early']) || !is_array($GLOBALS['gallery_admin_test_run_early'])) {
+    if (
+        !isset($GLOBALS['gallery_admin_test_run_early'])
+        || !is_array($GLOBALS['gallery_admin_test_run_early'])
+    ) {
         return;
     }
     $GLOBALS['gallery_admin_test_run_early']['phases'][] = [
@@ -197,10 +252,14 @@ function admin_test_run_early_phase_record(
         'duration_ms' => max(0.0, ($endedAt - $startedAt) * 1000),
         'memory_start_bytes' => $memoryStart,
         'memory_end_bytes' => memory_get_usage(true),
-        'memory_delta_bytes' => $memoryStart === null ? null : memory_get_usage(true) - $memoryStart,
+        'memory_delta_bytes' => $memoryStart === null
+            ? null
+            : memory_get_usage(true) - $memoryStart,
         'included_files_start' => $includedStart,
         'included_files_end' => count(get_included_files()),
-        'included_files_delta' => $includedStart === null ? null : count(get_included_files()) - $includedStart,
+        'included_files_delta' => $includedStart === null
+            ? null
+            : count(get_included_files()) - $includedStart,
         'completed' => $completed,
         'error_or_warning' => $error,
     ];
@@ -211,8 +270,11 @@ function admin_test_run_early_phase_record(
  */
 function admin_test_run_early_phase_start(string $name): void
 {
-    if (!isset($GLOBALS['gallery_admin_test_run_early']) || !is_array($GLOBALS['gallery_admin_test_run_early'])
-        || !empty($GLOBALS['gallery_admin_test_run_early']['adopted'])) {
+    if (
+        !isset($GLOBALS['gallery_admin_test_run_early'])
+        || !is_array($GLOBALS['gallery_admin_test_run_early'])
+        || !empty($GLOBALS['gallery_admin_test_run_early']['adopted'])
+    ) {
         return;
     }
     $GLOBALS['gallery_admin_test_run_early']['open_phases'][$name] = [
@@ -225,14 +287,26 @@ function admin_test_run_early_phase_start(string $name): void
 
 /**
  * Finish one bootstrap phase and record whether a new PHP warning/error appeared.
+ *
+ * @param string $name Name of the phase previously started.
+ * @param bool $completed Whether the phase completed normally.
+ * @param ?Throwable $exception Exception caught while running the phase, if any.
+ * @return void Records the phase when tracing is active and the phase was started.
  */
-function admin_test_run_early_phase_end(string $name, bool $completed = true, ?Throwable $exception = null): void
-{
-    if (!isset($GLOBALS['gallery_admin_test_run_early']) || !is_array($GLOBALS['gallery_admin_test_run_early'])
-        || !empty($GLOBALS['gallery_admin_test_run_early']['adopted'])) {
+function admin_test_run_early_phase_end(
+    string $name,
+    bool $completed = true,
+    ?Throwable $exception = null,
+): void {
+    if (
+        !isset($GLOBALS['gallery_admin_test_run_early'])
+        || !is_array($GLOBALS['gallery_admin_test_run_early'])
+        || !empty($GLOBALS['gallery_admin_test_run_early']['adopted'])
+    ) {
         return;
     }
-    $open = $GLOBALS['gallery_admin_test_run_early']['open_phases'][$name] ?? null;
+    $open =
+        $GLOBALS['gallery_admin_test_run_early']['open_phases'][$name] ?? null;
     if (!is_array($open)) {
         return;
     }
@@ -255,7 +329,7 @@ function admin_test_run_early_phase_end(string $name, bool $completed = true, ?T
         (int) ($open['memory_start_bytes'] ?? memory_get_usage(true)),
         (int) ($open['included_files_start'] ?? count(get_included_files())),
         $completed,
-        $phaseError
+        $phaseError,
     );
 }
 
@@ -263,18 +337,29 @@ function admin_test_run_early_phase_end(string $name, bool $completed = true, ?T
  * Add one low-cost lifecycle mark before the full diagnostics service has adopted the trace.
  *
  * @param array<string,mixed> $context Structured non-secret context.
+ * @param string $name Mark name to store.
+ * @return void Appends the mark when early tracing is active and not adopted.
  */
 function admin_test_run_early_mark(string $name, array $context = []): void
 {
-    if (!isset($GLOBALS['gallery_admin_test_run_early']) || !is_array($GLOBALS['gallery_admin_test_run_early'])
-        || !empty($GLOBALS['gallery_admin_test_run_early']['adopted'])) {
+    if (
+        !isset($GLOBALS['gallery_admin_test_run_early'])
+        || !is_array($GLOBALS['gallery_admin_test_run_early'])
+        || !empty($GLOBALS['gallery_admin_test_run_early']['adopted'])
+    ) {
         return;
     }
     $now = microtime(true);
     $GLOBALS['gallery_admin_test_run_early']['marks'][] = [
         'name' => preg_replace('/[^a-z0-9_.:-]+/i', '_', $name) ?: 'mark',
         'at_unix' => $now,
-        'offset_from_request_ms' => max(0.0, ($now - (float) $GLOBALS['gallery_admin_test_run_early']['request_time_unix']) * 1000),
+        'offset_from_request_ms' => max(
+            0.0,
+            (
+                $now
+                - (float) $GLOBALS['gallery_admin_test_run_early']['request_time_unix']
+            ) * 1000,
+        ),
         'memory_usage_bytes' => memory_get_usage(true),
         'included_file_count' => count(get_included_files()),
         'context' => $context,
@@ -286,7 +371,10 @@ function admin_test_run_early_mark(string $name, array $context = []): void
  */
 function admin_test_run_early_bind_token(string $token): void
 {
-    if (!isset($GLOBALS['gallery_admin_test_run_early']) || !is_array($GLOBALS['gallery_admin_test_run_early'])) {
+    if (
+        !isset($GLOBALS['gallery_admin_test_run_early'])
+        || !is_array($GLOBALS['gallery_admin_test_run_early'])
+    ) {
         return;
     }
     if (preg_match('/^[a-f0-9]{32}$/D', strtolower($token)) !== 1) {
@@ -317,13 +405,18 @@ function admin_test_run_early_snapshot(): ?array
  */
 function admin_test_run_early_mark_adopted(): void
 {
-    if (isset($GLOBALS['gallery_admin_test_run_early']) && is_array($GLOBALS['gallery_admin_test_run_early'])) {
+    if (
+        isset($GLOBALS['gallery_admin_test_run_early'])
+        && is_array($GLOBALS['gallery_admin_test_run_early'])
+    ) {
         $GLOBALS['gallery_admin_test_run_early']['adopted'] = true;
     }
 }
 
 /**
  * Persist a minimal early-failure sidecar only when a valid Test Run token was already known.
+ *
+ * @return void Writes the fallback sidecar when a valid active trace is available.
  */
 function admin_test_run_early_shutdown_fallback(): void
 {
@@ -344,9 +437,11 @@ function admin_test_run_early_shutdown_fallback(): void
             (float) ($open['started_at_unix'] ?? microtime(true)),
             microtime(true),
             (int) ($open['memory_start_bytes'] ?? memory_get_usage(true)),
-            (int) ($open['included_files_start'] ?? count(get_included_files())),
+            (int) (
+                $open['included_files_start'] ?? count(get_included_files())
+            ),
             false,
-            admin_test_run_early_last_error()
+            admin_test_run_early_last_error(),
         );
     }
     $state = $GLOBALS['gallery_admin_test_run_early'];
@@ -354,12 +449,27 @@ function admin_test_run_early_shutdown_fallback(): void
     if ($root === '') {
         return;
     }
-    $directory = $root . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'admin-test-runs'
-        . DIRECTORY_SEPARATOR . $token . DIRECTORY_SEPARATOR . 'requests';
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+    $directory =
+        $root
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'admin-test-runs'
+        . DIRECTORY_SEPARATOR
+        . $token
+        . DIRECTORY_SEPARATOR
+        . 'requests';
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
         return;
     }
-    $requestId = (string) ($state['request_id'] ?? 'early-' . bin2hex(random_bytes(4)));
+    $requestId = (string) (
+        $state['request_id']
+        ?? 'early-' . bin2hex(random_bytes(4))
+    );
     $early = admin_test_run_early_snapshot();
     if (is_array($early)) {
         unset($early['token']);
@@ -367,14 +477,26 @@ function admin_test_run_early_shutdown_fallback(): void
     $payload = [
         'request_id' => $requestId,
         'kind' => 'early_bootstrap_failure',
-        'request_time_unix' => (float) ($state['request_time_unix'] ?? admin_test_run_early_request_time()),
+        'request_time_unix' => (float) (
+            $state['request_time_unix'] ?? admin_test_run_early_request_time()
+        ),
         'finished_at_unix' => microtime(true),
         'finished' => false,
         'early_bootstrap' => $early,
         'last_error' => admin_test_run_early_last_error(),
     ];
-    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    $json = json_encode(
+        $payload,
+        JSON_PRETTY_PRINT
+            | JSON_UNESCAPED_SLASHES
+            | JSON_UNESCAPED_UNICODE
+            | JSON_INVALID_UTF8_SUBSTITUTE,
+    );
     if (is_string($json)) {
-        @file_put_contents($directory . DIRECTORY_SEPARATOR . $requestId . '.early.json', $json . "\n", LOCK_EX);
+        @file_put_contents(
+            $directory . DIRECTORY_SEPARATOR . $requestId . '.early.json',
+            $json . "\n",
+            LOCK_EX,
+        );
     }
 }

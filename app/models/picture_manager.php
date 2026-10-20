@@ -63,20 +63,26 @@ function picture_manager_model_image_table_columns(): array
  * @param bool $copyTags Whether image_tags persistence is verified and available.
  * @param array<int,int> $destinationBranchIds Gallery ids accepted by the existing cover.
  * @param string $now Shared SQL timestamp.
- * @return array{created_image_ids:array<int,int>,destination_cover_image_id:int|null}
+ * @return array{created_image_ids:list<int>,destination_cover_image_id:?int} Created image ids and the resulting destination cover image id, if one was assigned.
  */
 function picture_manager_model_copy_rows(
     int $destinationGalleryId,
     array $rowsBySourceImageId,
     bool $copyTags,
     array $destinationBranchIds,
-    string $now
+    string $now,
 ): array {
     if ($destinationGalleryId <= 0 || $rowsBySourceImageId === []) {
-        return ['created_image_ids' => [], 'destination_cover_image_id' => null];
+        return [
+            'created_image_ids' => [],
+            'destination_cover_image_id' => null,
+        ];
     }
 
-    $allowedColumns = array_fill_keys(picture_manager_model_image_table_columns(), true);
+    $allowedColumns = array_fill_keys(
+        picture_manager_model_image_table_columns(),
+        true,
+    );
     unset($allowedColumns['id']);
     $pdo = db();
     $pdo->beginTransaction();
@@ -84,43 +90,71 @@ function picture_manager_model_copy_rows(
         $createdImageIds = [];
         foreach ($rowsBySourceImageId as $sourceImageId => $row) {
             if (!is_array($row) || $row === []) {
-                throw new RuntimeException('Picture Manager copy row is empty.');
+                throw new RuntimeException(
+                    'Picture Manager copy row is empty.',
+                );
             }
             $columns = array_keys($row);
             foreach ($columns as $column) {
-                if (!is_string($column) || !isset($allowedColumns[$column]) || preg_match('/^[A-Za-z0-9_]+$/D', $column) !== 1) {
-                    throw new RuntimeException('Picture Manager copy row contains an unsupported image column.');
+                if (
+                    !is_string($column)
+                    || !isset($allowedColumns[$column])
+                    || preg_match('/^[A-Za-z0-9_]+$/D', $column) !== 1
+                ) {
+                    throw new RuntimeException(
+                        'Picture Manager copy row contains an unsupported image column.',
+                    );
                 }
             }
             $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-            $columnSql = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columns));
-            $stmt = $pdo->prepare('INSERT INTO images (' . $columnSql . ') VALUES (' . $placeholders . ')');
+            $columnSql = implode(', ', array_map(
+                static fn(string $column): string => '`' . $column . '`',
+                $columns,
+            ));
+            $stmt = $pdo->prepare(
+                'INSERT INTO images ('
+                    . $columnSql
+                    . ') VALUES ('
+                    . $placeholders
+                    . ')',
+            );
             $stmt->execute(array_values($row));
             $createdImageIds[(int) $sourceImageId] = (int) $pdo->lastInsertId();
         }
 
         if ($copyTags && $createdImageIds !== []) {
             $tagStmt = $pdo->prepare(
-                'INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT ?, tag_id FROM image_tags WHERE image_id = ?'
+                'INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT ?, tag_id FROM image_tags WHERE image_id = ?',
             );
             foreach ($createdImageIds as $sourceImageId => $destinationImageId) {
                 $tagStmt->execute([$destinationImageId, $sourceImageId]);
             }
         }
 
-        $coverStmt = $pdo->prepare('SELECT cover_image_id FROM galleries WHERE id = ?');
+        $coverStmt = $pdo->prepare(
+            'SELECT cover_image_id FROM galleries WHERE id = ?',
+        );
         $coverStmt->execute([$destinationGalleryId]);
         $coverRaw = $coverStmt->fetchColumn();
         $destinationCoverImageId = $coverRaw ? (int) $coverRaw : null;
         if (
             $destinationCoverImageId === null
-            || !gallery_mutation_model_image_belongs_to_galleries($destinationCoverImageId, $destinationBranchIds)
+            || !gallery_mutation_model_image_belongs_to_galleries(
+                $destinationCoverImageId,
+                $destinationBranchIds,
+            )
         ) {
             $destinationCoverImageId = gallery_mutation_model_first_cover_candidate($destinationGalleryId, []);
         }
 
-        $updateCover = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
-        $updateCover->execute([$destinationCoverImageId, $now, $destinationGalleryId]);
+        $updateCover = $pdo->prepare(
+            'UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+        );
+        $updateCover->execute([
+            $destinationCoverImageId,
+            $now,
+            $destinationGalleryId,
+        ]);
         $pdo->commit();
 
         return [

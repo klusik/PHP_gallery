@@ -43,14 +43,27 @@ use Throwable;
  * Return the allowlisted provider/CDN/proxy response headers from a normalized map.
  *
  * @param array<string,mixed> $headers Header-name/value map.
- * @return array<string,string>
+ * @return array<string,string> Sorted map of allowlisted lower-case provider header names to bounded string values.
  */
 function admin_test_run_filter_provider_headers(array $headers): array
 {
     $allowlist = [
-        'x-location', 'x-cdn-cache-status', 'x-rate-limit', 'age', 'server', 'via', 'alt-svc',
-        'x-cacheable', 'x-filter-info', 'cf-cache-status', 'x-cache', 'x-served-by', 'x-timer',
-        'cache-control', 'server-timing', 'x-gallery-test-request-id',
+        'x-location',
+        'x-cdn-cache-status',
+        'x-rate-limit',
+        'age',
+        'server',
+        'via',
+        'alt-svc',
+        'x-cacheable',
+        'x-filter-info',
+        'cf-cache-status',
+        'x-cache',
+        'x-served-by',
+        'x-timer',
+        'cache-control',
+        'server-timing',
+        'x-gallery-test-request-id',
     ];
     $allowed = array_fill_keys($allowlist, true);
     $result = [];
@@ -59,7 +72,11 @@ function admin_test_run_filter_provider_headers(array $headers): array
         if (!isset($allowed[$normalized])) {
             continue;
         }
-        if (in_array($normalized, ['set-cookie', 'authorization', 'proxy-authorization', 'cookie'], true)) {
+        if (in_array(
+            $normalized,
+            ['set-cookie', 'authorization', 'proxy-authorization', 'cookie'],
+            true,
+        )) {
             continue;
         }
         $result[$normalized] = substr(trim((string) $value), 0, 2000);
@@ -112,7 +129,12 @@ function admin_test_run_sanitize_url(string $url): string
  */
 function admin_test_run_sensitive_query_key(string $key): bool
 {
-    return preg_match('/(^|[_\-\[\]])(token|ticket|csrf|password|passwd|secret|api[_-]?key|authorization|session)($|[_\-\[\]])/i', urldecode($key)) === 1;
+    return (
+        preg_match(
+            '/(^|[_\-\[\]])(token|ticket|csrf|password|passwd|secret|api[_-]?key|authorization|session)($|[_\-\[\]])/i',
+            urldecode($key),
+        ) === 1
+    );
 }
 
 /**
@@ -140,21 +162,26 @@ function admin_test_run_sanitize_query(array $query): array
  */
 function admin_test_run_sanitize_text(string $value): string
 {
-    $value = preg_replace_callback(
-        '/([?&]([^=&#\s]+)=)([^&#\s]*)/i',
-        /** Redact the credential value in one recorded query parameter.
-         * @param array<int,string> $match Full regex match, parameter prefix, key and value.
-         * @return string Original safe parameter or redacted credential parameter.
-         */
-        static fn (array $match): string => admin_test_run_sensitive_query_key((string) $match[2])
-            ? (string) $match[1] . '[REDACTED]' : (string) $match[0],
-        $value
-    ) ?? $value;
-    $value = preg_replace(
-        '~((?:cache[\\\\/])?admin-test-runs[\\\\/])[a-f0-9]{32}(?=([\\\\/]|$))~i',
-        '$1[REDACTED]',
-        $value
-    ) ?? $value;
+    $value =
+        preg_replace_callback(
+            '/([?&]([^=&#\s]+)=)([^&#\s]*)/i',
+            /** Redact the credential value in one recorded query parameter.
+             * @param array<int,string> $match Full regex match, parameter prefix, key and value.
+             * @return string Original safe parameter or redacted credential parameter.
+             */
+            static fn(array $match): string => admin_test_run_sensitive_query_key(
+                (string) $match[2],
+            )
+                    ? (string) $match[1] . '[REDACTED]'
+                    : (string) $match[0],
+            $value,
+        ) ?? $value;
+    $value =
+        preg_replace(
+            '~((?:cache[\\\\/])?admin-test-runs[\\\\/])[a-f0-9]{32}(?=([\\\\/]|$))~i',
+            '$1[REDACTED]',
+            $value,
+        ) ?? $value;
     return substr($value, 0, 16000);
 }
 
@@ -162,7 +189,7 @@ function admin_test_run_sanitize_text(string $value): string
  * Replace one exact opaque Test Run token anywhere in a report value.
  *
  * @param mixed $value Diagnostic value.
- * @return mixed
+ * @return array<array-key,mixed>|string|int|float|bool|object|null Recursively redacted arrays and strings, preserving non-string scalar/object values.
  */
 function admin_test_run_redact_exact_token(mixed $value, string $token): mixed
 {
@@ -185,8 +212,9 @@ function admin_test_run_redact_exact_token(mixed $value, string $token): mixed
 /**
  * Redact opaque Test Run directory identifiers, including retained historical pre-v1.1.2 runs.
  *
- * @param mixed $value Diagnostic value.
- * @return mixed
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Diagnostic scalar, nested array, object, resource, or null value; arrays and strings are sanitized recursively.
+ * @phpstan-type SanitizedDiagnostic array<array-key,mixed>|scalar|object{}|resource|null
+ * @return SanitizedDiagnostic Recursively redacted arrays and strings with other values preserved unchanged.
  */
 function admin_test_run_redact_storage_run_ids(mixed $value): mixed
 {
@@ -198,11 +226,13 @@ function admin_test_run_redact_storage_run_ids(mixed $value): mixed
         return $result;
     }
     if (is_string($value)) {
-        return preg_replace(
-            '~((?:cache[\\\\/])?admin-test-runs[\\\\/])[a-f0-9]{32}(?=([\\\\/]|$))~i',
-            '$1[REDACTED]',
-            $value
-        ) ?? $value;
+        return (
+            preg_replace(
+                '~((?:cache[\\\\/])?admin-test-runs[\\\\/])[a-f0-9]{32}(?=([\\\\/]|$))~i',
+                '$1[REDACTED]',
+                $value,
+            ) ?? $value
+        );
     }
     return $value;
 }
@@ -210,14 +240,23 @@ function admin_test_run_redact_storage_run_ids(mixed $value): mixed
 /**
  * Recursively sanitize the browser payload as a defense in depth layer.
  *
- * @param mixed $value Browser-supplied value.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Browser scalar, nested array, object, resource, or null value; unsupported values pass through unchanged.
  * @param string $key Current key.
- * @return mixed
+ * @phpstan-type SanitizedBrowserValue array<array-key,mixed>|scalar|object{}|resource|null
+ * @return SanitizedBrowserValue Sanitized browser value, preserving safe scalar values and recursively filtering arrays.
  */
-function admin_test_run_sanitize_browser_value(mixed $value, string $key = ''): mixed
-{
+function admin_test_run_sanitize_browser_value(
+    mixed $value,
+    string $key = '',
+): mixed {
     $lowerKey = strtolower($key);
-    if ($key !== '' && preg_match('/(^|_)(cookie|authorization|password|passwd|secret|csrf|api[_-]?key|session|test[_-]?run[_-]?token|access[_-]?token|refresh[_-]?token)($|_)/', $lowerKey) === 1) {
+    if (
+        $key !== ''
+        && preg_match(
+            '/(^|_)(cookie|authorization|password|passwd|secret|csrf|api[_-]?key|session|test[_-]?run[_-]?token|access[_-]?token|refresh[_-]?token)($|_)/',
+            $lowerKey,
+        ) === 1
+    ) {
         return '[REDACTED]';
     }
     if (is_array($value)) {
@@ -228,12 +267,21 @@ function admin_test_run_sanitize_browser_value(mixed $value, string $key = ''): 
                 $result['_truncated'] = true;
                 break;
             }
-            $result[$childKey] = admin_test_run_sanitize_browser_value($childValue, (string) $childKey);
+            $result[$childKey] = admin_test_run_sanitize_browser_value(
+                $childValue,
+                (string) $childKey,
+            );
         }
         return $result;
     }
     if (is_string($value)) {
-        if ($lowerKey === 'url' || str_ends_with($lowerKey, '_url') || $lowerKey === 'uri' || str_ends_with($lowerKey, '_uri') || $lowerKey === 'name') {
+        if (
+            $lowerKey === 'url'
+            || str_ends_with($lowerKey, '_url')
+            || $lowerKey === 'uri'
+            || str_ends_with($lowerKey, '_uri')
+            || $lowerKey === 'name'
+        ) {
             return admin_test_run_sanitize_url($value);
         }
         return admin_test_run_sanitize_text($value);

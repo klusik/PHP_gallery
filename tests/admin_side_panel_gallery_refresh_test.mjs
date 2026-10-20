@@ -146,7 +146,7 @@ assert.equal(evaluateFunction(extractedCommentFixture)(), '/* literal */ // lite
 // Claim before target creation; a replay must select the original response, while
 // new work records the canonical result durably before either transport sends it.
 assert.match(createControllerSource, /admin_operation_begin\([\s\S]*?if \(!empty\(\$operationClaim\['replay'\]\)\) \{[\s\S]*?\$response = \$operationClaim\['response'\];[\s\S]*?\} else \{[\s\S]*?admin_create_gallery_from_input\(\$input\)/);
-assert.match(createControllerSource, /admin_operation_complete\(\$operationClaim, admin_new_gallery_success_response\(\$gallery\)\);[\s\S]*?if \(admin_wants_json\(\)\)[\s\S]*?echo json_encode\(\$response\)/);
+assert.match(createControllerSource, /admin_operation_complete\(\s*\$operationClaim,\s*admin_new_gallery_success_response\(\$gallery\),?\s*\);[\s\S]*?if \(admin_wants_json\(\)\)[\s\S]*?echo json_encode\(\$response\)/);
 assert.match(createControllerSource, /'gallery_id'\s*=>\s*\(int\) \$gallery\['id'\]/);
 assert.match(createControllerSource, /admin_mutation_public_gallery_context\([\s\S]*admin_mutation_gallery_membership_postcondition\(/);
 

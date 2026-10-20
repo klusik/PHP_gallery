@@ -67,17 +67,26 @@ function csrf_token(): string
  */
 function csrf_field(): string
 {
-    return '<input type="hidden" name="csrf_token" value="' . e(csrf_token()) . '">';
+    return (
+        '<input type="hidden" name="csrf_token" value="'
+            . e(csrf_token())
+            . '">'
+    );
 }
 
 /**
  * Abort the request when a POST form does not contain the expected token.
+ *
+ * @return void No value; performs the documented operation.
  */
 function verify_csrf(): void
 {
     // Variable $token stores this steps working value.
     $token = (string) ($_POST['csrf_token'] ?? '');
-    if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
+    if (
+        $token === ''
+        || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)
+    ) {
         http_response_code(400);
         if (security_request_wants_json()) {
             header('Content-Type: application/json; charset=UTF-8');
@@ -87,7 +96,7 @@ function verify_csrf(): void
                 'error' => t('security.invalid_csrf', 'Invalid CSRF token.'),
                 'error_code' => 'security.invalid_csrf',
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            exit;
+            exit();
         }
         exit('Invalid CSRF token.');
     }
@@ -108,12 +117,18 @@ function security_request_wants_json(): bool
         return admin_wants_json();
     }
 
-    return !empty($_POST['ajax'])
-        || !empty($_GET['ajax'])
-        || !empty($_POST['panel'])
-        || !empty($_GET['panel'])
-        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-        || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+    return (
+        !empty($_POST['ajax'])
+            || !empty($_GET['ajax'])
+            || !empty($_POST['panel'])
+            || !empty($_GET['panel'])
+            || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''))
+            === 'xmlhttprequest'
+            || str_contains(
+                strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')),
+                'application/json',
+            )
+    );
 }
 
 /**
@@ -147,7 +162,11 @@ function admin_auth_apply_remember_cookie_instruction(array $instruction): bool
 
     $name = (string) ($instruction['name'] ?? '');
     $expiresAt = (int) ($instruction['expires_at'] ?? 0);
-    if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1 || $expiresAt <= 0) {
+    if (
+        $name === ''
+        || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1
+        || $expiresAt <= 0
+    ) {
         return false;
     }
 
@@ -172,14 +191,18 @@ function admin_auth_apply_remember_cookie_instruction(array $instruction): bool
 
 /**
  * Clear the administrator remember cookie for the current browser.
+ *
+ * @return void No value; performs the documented operation.
  */
 function admin_auth_clear_remember_cookie(): void
 {
-    if (!function_exists('Gallery\\Services\\auth_remember_cookie_instruction')) {
+    if (!function_exists(
+        'Gallery\\Services\\auth_remember_cookie_instruction',
+    )) {
         return;
     }
     admin_auth_apply_remember_cookie_instruction(
-        \Gallery\Services\auth_remember_cookie_instruction('', time() - 3600)
+        \Gallery\Services\auth_remember_cookie_instruction('', time() - 3600),
     );
 }
 
@@ -187,6 +210,8 @@ function admin_auth_clear_remember_cookie(): void
  * Issue persistent administrator authority for the current HTTP request.
  *
  * @param int $userId Authenticated administrator identifier.
+ *
+ * @return void No value; performs the documented operation.
  */
 function admin_auth_issue_persistent_login_for_request(int $userId): void
 {
@@ -195,7 +220,7 @@ function admin_auth_issue_persistent_login_for_request(int $userId): void
     }
     $instruction = \Gallery\Services\auth_issue_persistent_login(
         $userId,
-        (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')
+        (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
     );
     if (is_array($instruction)) {
         admin_auth_apply_remember_cookie_instruction($instruction);
@@ -209,12 +234,16 @@ function admin_auth_issue_persistent_login_for_request(int $userId): void
  */
 function admin_auth_restore_persistent_login_from_request(): ?array
 {
-    if (session_status() !== PHP_SESSION_ACTIVE
-        || !function_exists('Gallery\\Services\\auth_restore_persistent_login')) {
+    if (
+        session_status() !== PHP_SESSION_ACTIVE
+        || !function_exists('Gallery\\Services\\auth_restore_persistent_login')
+    ) {
         return null;
     }
 
-    $result = \Gallery\Services\auth_restore_persistent_login(admin_auth_remember_cookie_value());
+    $result = \Gallery\Services\auth_restore_persistent_login(
+        admin_auth_remember_cookie_value(),
+    );
     if (!empty($result['clear_cookie'])) {
         admin_auth_clear_remember_cookie();
     }
@@ -230,12 +259,18 @@ function admin_auth_restore_persistent_login_from_request(): ?array
 
 /**
  * Revoke the current browser's administrator remember credential and clear the cookie.
+ *
+ * @return void No value; performs the documented operation.
  */
 function admin_auth_revoke_current_persistent_login_for_request(): void
 {
     try {
-        if (function_exists('Gallery\\Services\\auth_revoke_current_persistent_login')) {
-            \Gallery\Services\auth_revoke_current_persistent_login(admin_auth_remember_cookie_value());
+        if (function_exists(
+            'Gallery\\Services\\auth_revoke_current_persistent_login',
+        )) {
+            \Gallery\Services\auth_revoke_current_persistent_login(
+                admin_auth_remember_cookie_value(),
+            );
         }
     } finally {
         admin_auth_clear_remember_cookie();
@@ -246,11 +281,15 @@ function admin_auth_revoke_current_persistent_login_for_request(): void
  * Revoke all persistent administrator credentials for one user and clear this browser's cookie.
  *
  * @param int $userId Administrator identifier.
+ *
+ * @return void No value; performs the documented operation.
  */
 function admin_auth_revoke_user_persistent_logins_for_request(int $userId): void
 {
     try {
-        if (function_exists('Gallery\\Services\\auth_revoke_user_persistent_logins')) {
+        if (function_exists(
+            'Gallery\\Services\\auth_revoke_user_persistent_logins',
+        )) {
             \Gallery\Services\auth_revoke_user_persistent_logins($userId);
         }
     } finally {
@@ -268,7 +307,9 @@ function admin_auth_throttle_visitor_subject_for_request(): string
     if (!function_exists('Gallery\\Services\\auth_throttle_visitor_subject')) {
         return '';
     }
-    return \Gallery\Services\auth_throttle_visitor_subject((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return \Gallery\Services\auth_throttle_visitor_subject(
+        (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+    );
 }
 
 /**
@@ -298,15 +339,19 @@ function current_user(): ?array
     // Preserve standalone callers of this historical Core entry point.
     require_once __DIR__ . '/models/auth.php';
     require_once __DIR__ . '/services/auth_accounts.php';
-    $user = \Gallery\Services\auth_account_session_user((int) $_SESSION['user_id']);
+    $user = \Gallery\Services\auth_account_session_user(
+        (int) $_SESSION['user_id'],
+    );
 
     // $cache stores an intermediate value used by the surrounding gallery workflow.
     $cache = true;
-    return $cachedUser = ($user ?: null);
+    return $cachedUser = $user ?: null;
 }
 
 /**
  * Redirect anonymous/non-admin users to the login page.
+ *
+ * @return void No value; performs the documented operation.
  */
 function require_admin(): void
 {
@@ -321,14 +366,21 @@ function require_admin(): void
             header('Cache-Control: no-store, private, max-age=0');
             echo json_encode([
                 'ok' => false,
-                'error' => t('auth.admin_required', 'Admin access is required.'),
+                'error' => t(
+                    'auth.admin_required',
+                    'Admin access is required.',
+                ),
                 'error_code' => 'auth.admin_required',
-                'login_url' => url_for('admin_login', ['return' => current_login_return_target()]),
+                'login_url' => url_for('admin_login', [
+                    'return' => current_login_return_target(),
+                ]),
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            exit;
+            exit();
         }
         // Preserve the protected URL so successful login resumes the intended admin action.
-        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
+        redirect_to(url_for('admin_login', [
+            'return' => current_login_return_target(),
+        ]));
     }
 }
 
@@ -348,9 +400,10 @@ function visitor_hash(): string
     return hash('sha256', $ip . '|' . $agent . '|' . $secret);
 }
 
-
 /**
  * Send conservative browser security headers for normal HTML and asset routes.
+ *
+ * @return void No value; performs the documented operation.
  */
 function send_security_headers(): void
 {
@@ -365,17 +418,29 @@ function send_security_headers(): void
     $page = (string) ($_GET['page'] ?? 'home');
     // Viewer and viewer pre-auth session state must never be eligible for anonymous/public response caching.
     // This is intentionally a PHP-session presence check only; cache classification must not query viewer tables.
-    $hasViewerSensitiveState = isset($_SESSION['viewer_auth'])
+    $hasViewerSensitiveState =
+        isset($_SESSION['viewer_auth'])
         || isset($_SESSION['viewer_registration_activation'])
         || isset($_SESSION['viewer_password_reset'])
         || isset($_SESSION['viewer_csrf_token'])
         || isset($_COOKIE['php_gallery_viewer_remember']);
     // $isAnonymousGet stores an intermediate value used by the surrounding gallery workflow.
-    $isAnonymousGet = request_method() === 'GET' && current_user() === null && !$hasViewerSensitiveState;
+    $isAnonymousGet =
+        request_method() === 'GET'
+        && current_user() === null
+        && !$hasViewerSensitiveState;
     // $isPublicHtmlCacheCandidate stores public pages whose rendered HTML depends on DB-backed theme and gallery settings.
-    $isPublicHtmlCacheCandidate = in_array($page, ['home', 'gallery', 'share', 'tag', 'picture_game'], true);
+    $isPublicHtmlCacheCandidate = in_array(
+        $page,
+        ['home', 'gallery', 'share', 'tag', 'picture_game'],
+        true,
+    );
     // $isStaticPublicCacheCandidate stores public routes that do not render gallery-card HTML.
-    $isStaticPublicCacheCandidate = in_array($page, ['robots', 'sitemap', 'theme_css'], true);
+    $isStaticPublicCacheCandidate = in_array(
+        $page,
+        ['robots', 'sitemap', 'theme_css'],
+        true,
+    );
 
     if ($isAnonymousGet && $isPublicHtmlCacheCandidate) {
         // Public gallery pages include theme-controlled HTML classes, for example the horizontal/vertical
@@ -383,12 +448,15 @@ function send_security_headers(): void
         header('Cache-Control: no-cache, must-revalidate, max-age=0');
         header('Pragma: no-cache');
         header('Expires: 0');
-        header('X-Theme-Content-Revision: ' . (string) app_setting('theme_public_content_revision', '0'));
+        header('X-Theme-Content-Revision: '
+            . (string) app_setting('theme_public_content_revision', '0'));
         return;
     }
 
     if ($isAnonymousGet && $isStaticPublicCacheCandidate) {
-        header('Cache-Control: public, max-age=120, stale-while-revalidate=600');
+        header(
+            'Cache-Control: public, max-age=120, stale-while-revalidate=600',
+        );
         return;
     }
 
@@ -401,6 +469,8 @@ function send_security_headers(): void
  * Reject public POST abuse by limiting fast repeated anonymous votes per image.
  *
  * @param int $imageId Image identifier.
+ *
+ * @return void No value; performs the documented operation.
  */
 function verify_vote_rate_limit(int $imageId): void
 {
@@ -413,7 +483,14 @@ function verify_vote_rate_limit(int $imageId): void
     if ($lastVote > 0 && ($now - $lastVote) < 2) {
         http_response_code(429);
         header('Content-Type: application/json');
-        exit(json_encode(['error' => function_exists('Gallery\\Services\\t') ? t('vote.error.too_many_votes', 'Too many votes. Try again in a moment.') : 'Too many votes. Try again in a moment.']));
+        exit(json_encode([
+            'error' => function_exists('Gallery\\Services\\t')
+                ? t(
+                    'vote.error.too_many_votes',
+                    'Too many votes. Try again in a moment.',
+                )
+                : 'Too many votes. Try again in a moment.',
+        ]));
     }
     $_SESSION[$key] = $now;
 }

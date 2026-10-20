@@ -39,7 +39,10 @@ function &storage_observer_state(): array
 function storage_observer_start(): void
 {
     $state = &storage_observer_state();
-    $state = ['active' => true, 'metrics' => ['observer.metric_updates_dropped' => 0]];
+    $state = [
+        'active' => true,
+        'metrics' => ['observer.metric_updates_dropped' => 0],
+    ];
 }
 
 /**
@@ -63,9 +66,12 @@ function storage_observer_finish(): array
 function storage_observer_add(string $key, int|float $value = 1): void
 {
     $state = &storage_observer_state();
-    if (!$state['active']) return;
-    if (!isset($state['metrics'][$key])
-        && count($state['metrics']) >= STORAGE_OBSERVER_MAX_METRICS) {
+    if (!$state['active'])
+        return;
+    if (
+        !isset($state['metrics'][$key])
+        && count($state['metrics']) >= STORAGE_OBSERVER_MAX_METRICS
+    ) {
         $state['metrics']['observer.metric_updates_dropped']++;
         return;
     }
@@ -82,12 +88,14 @@ function storage_observer_add(string $key, int|float $value = 1): void
 function storage_observer_call(string $key, callable $callback): mixed
 {
     $state = &storage_observer_state();
-    if (!$state['active']) return $callback();
+    if (!$state['active'])
+        return $callback();
     $started = hrtime(true);
     storage_observer_add($key . '.calls');
     try {
         $result = $callback();
-        if ($result === false) storage_observer_add($key . '.false_results');
+        if ($result === false)
+            storage_observer_add($key . '.false_results');
         if (str_starts_with($key, 'fs.read.') && is_string($result)) {
             storage_observer_add($key . '.bytes', strlen($result));
         }
@@ -99,10 +107,13 @@ function storage_observer_call(string $key, callable $callback): mixed
         // hrtime uses nanoseconds; division converts this unit, not a policy.
         $seconds = max(0.0, (hrtime(true) - $started) / 1e9);
         storage_observer_add($key . '.seconds', $seconds);
-        if (isset($state['metrics'][$key . '.max_seconds'])
-            || count($state['metrics']) < STORAGE_OBSERVER_MAX_METRICS) {
+        if (
+            isset($state['metrics'][$key . '.max_seconds'])
+            || count($state['metrics']) < STORAGE_OBSERVER_MAX_METRICS
+        ) {
             $state['metrics'][$key . '.max_seconds'] = max(
-                (float) ($state['metrics'][$key . '.max_seconds'] ?? 0), $seconds
+                (float) ($state['metrics'][$key . '.max_seconds'] ?? 0),
+                $seconds,
             );
         } else {
             $state['metrics']['observer.metric_updates_dropped']++;

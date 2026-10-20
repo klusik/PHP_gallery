@@ -45,15 +45,21 @@ use function Gallery\Core\db;
  * @param int $galleryId Gallery whose direct image order is being saved.
  * @param array<int> $orderedIds Complete ordered image ids for this gallery.
  * @param string $now Shared SQL timestamp for every touched row.
+ * @return void Atomically writes sort positions, rolling back and rethrowing on failure.
  */
-function image_order_model_save(int $galleryId, array $orderedIds, string $now): void
-{
+function image_order_model_save(
+    int $galleryId,
+    array $orderedIds,
+    string $now,
+): void {
     // Variable $pdo stores the active database connection used for the atomic sort_order update.
     $pdo = db();
     try {
         $pdo->beginTransaction();
         // Variable $stmt stores the prepared update reused for each reordered image row.
-        $stmt = $pdo->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
+        $stmt = $pdo->prepare(
+            'UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ? AND gallery_id = ?',
+        );
         foreach ($orderedIds as $index => $imageId) {
             // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
             $sortOrder = ($index + 1) * 10;

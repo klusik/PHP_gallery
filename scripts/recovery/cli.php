@@ -45,23 +45,28 @@ require_once __DIR__ . '/fixture.php';
 function usage(): string
 {
     return <<<'HELP'
-Recovery assurance (PHP 8.1+, CLI only)
-  php scripts/recovery.php template --kind=set --out=/private/set.json
-  php scripts/recovery.php inventory --set=/private/set.json --out=/private/inventory.json
-  php scripts/recovery.php template --kind=isolation --set=/private/set.json --out=/isolated/.recovery-isolated.json
-  php scripts/recovery.php template --kind=observations --set=/private/set.json --root=/isolated --out=/private/observations.json
-  php scripts/recovery.php validate --set=/private/set.json --root=/isolated [--observations=/private/observations.json] --out=/private/evidence.json
-  php scripts/recovery.php drill --work=/private/new-fixture-directory
+    Recovery assurance (PHP 8.1+, CLI only)
+      php scripts/recovery.php template --kind=set --out=/private/set.json
+      php scripts/recovery.php inventory --set=/private/set.json --out=/private/inventory.json
+      php scripts/recovery.php template --kind=isolation --set=/private/set.json --out=/isolated/.recovery-isolated.json
+      php scripts/recovery.php template --kind=observations --set=/private/set.json --root=/isolated --out=/private/observations.json
+      php scripts/recovery.php validate --set=/private/set.json --root=/isolated [--observations=/private/observations.json] --out=/private/evidence.json
+      php scripts/recovery.php drill --work=/private/new-fixture-directory
 
-Options require --name=value. Evidence files and the drill directory must be new.
-Exit: 0 PASS (see coverage), 1 FAIL/invalid input, 2 INCOMPLETE.
-Never reads config.php, connects to a database, executes restored PHP, or calls HTTP.
-Isolation is an operator prerequisite, not something this tool can enforce.
-See docs/RECOVERY_ASSURANCE.md and docs/RECOVERY_OFF_HOST.md.
-HELP;
+    Options require --name=value. Evidence files and the drill directory must be new.
+    Exit: 0 PASS (see coverage), 1 FAIL/invalid input, 2 INCOMPLETE.
+    Never reads config.php, connects to a database, executes restored PHP, or calls HTTP.
+    Isolation is an operator prerequisite, not something this tool can enforce.
+    See docs/RECOVERY_ASSURANCE.md and docs/RECOVERY_OFF_HOST.md.
+    HELP;
 }
 
-/** Accept documented options once each without permissive shell-style parsing. */
+/**
+ * Accept documented options once each without permissive shell-style parsing.
+ *
+ * @param list<string> $argv Process arguments including the command name.
+ * @return array{0:string,1:array<string,string>} Command name and its validated option map.
+ */
 function parse_arguments(array $argv): array
 {
     $command = $argv[1] ?? 'help';
@@ -74,8 +79,15 @@ function parse_arguments(array $argv): array
     demand(isset($allowed[$command]), 'invalid_command');
     $options = [];
     foreach (array_slice($argv, 2) as $argument) {
-        demand(preg_match('/^--([a-z]+)=(.+)$/sD', $argument, $matches) === 1, 'invalid_option');
-        demand(in_array($matches[1], $allowed[$command], true) && !isset($options[$matches[1]]), 'invalid_option');
+        demand(
+            preg_match('/^--([a-z]+)=(.+)$/sD', $argument, $matches) === 1,
+            'invalid_option',
+        );
+        demand(
+            in_array($matches[1], $allowed[$command], true)
+                && !isset($options[$matches[1]]),
+            'invalid_option',
+        );
         $options[$matches[1]] = $matches[2];
     }
     return [$command, $options];
@@ -88,10 +100,18 @@ function required_option(array $options, string $name): string
     return $options[$name];
 }
 
-/** Dispatch CLI-only evidence work with bounded output and stable exit statuses. */
+/**
+ * Dispatch CLI-only evidence work with bounded output and stable exit statuses.
+ *
+ * @param list<string> $argv Process arguments including the command name.
+ * @return int Process exit status: zero for PASS/help, one for failure, or two for incomplete evidence.
+ */
 function main(array $argv): int
 {
-    if (!isset($argv[1]) || in_array($argv[1], ['help', '--help', '-h'], true)) {
+    if (
+        !isset($argv[1])
+        || in_array($argv[1], ['help', '--help', '-h'], true)
+    ) {
         echo usage() . "\n";
         return 0;
     }
@@ -106,7 +126,10 @@ function main(array $argv): int
         } else {
             $out = required_option($options, 'out');
             $kind = $options['kind'] ?? '';
-            $set = $command === 'template' && $kind === 'set' ? set_template() : read_json(required_option($options, 'set'));
+            $set =
+                $command === 'template' && $kind === 'set'
+                    ? set_template()
+                    : read_json(required_option($options, 'set'));
             check_set($set);
             if ($command === 'template') {
                 if ($kind === 'set') {
@@ -115,11 +138,18 @@ function main(array $argv): int
                     $value = isolation_template($set);
                 } else {
                     demand($kind === 'observations', 'invalid_template');
-                    $root = external_directory(required_option($options, 'root'));
-                    $value = observations_template($set, check_isolation($root, $set));
+                    $root = external_directory(required_option(
+                        $options,
+                        'root',
+                    ));
+                    $value = observations_template($set, check_isolation(
+                        $root,
+                        $set,
+                    ));
                 }
                 write_json($out, $value);
-                echo "PASS template_created (unverified; complete the documented operator steps)\n";
+                echo
+                    "PASS template_created (unverified; complete the documented operator steps)\n";
                 return 0;
             }
             if ($command === 'inventory') {
@@ -127,17 +157,31 @@ function main(array $argv): int
             } else {
                 $root = external_directory(required_option($options, 'root'));
                 $destination = external_directory(dirname($out));
-                demand(!contains_path($root, $destination), 'evidence_inside_restore');
-                $observations = isset($options['observations']) ? read_json($options['observations']) : null;
+                demand(
+                    !contains_path($root, $destination),
+                    'evidence_inside_restore',
+                );
+                $observations = isset($options['observations'])
+                    ? read_json($options['observations'])
+                    : null;
                 $report = validate($set, $root, $observations, time());
             }
             write_json($out, $report);
         }
-        echo $report['status'] . ' coverage=' . $report['coverage'] . ' recovery_readiness=' . $report['recovery_readiness'] . "\n";
+        echo
+            $report['status']
+                . ' coverage='
+                . $report['coverage']
+                . ' recovery_readiness='
+                . $report['recovery_readiness']
+                . "\n";
         return ['PASS' => 0, 'FAIL' => 1, 'INCOMPLETE' => 2][$report['status']];
     } catch (Throwable $error) {
         // Never echo external exception text, command arguments, file contents or paths.
-        fwrite(STDERR, "FAIL recovery_input_or_io; check schema, isolation, paths and fresh output (see recovery documentation).\n");
+        fwrite(
+            STDERR,
+            "FAIL recovery_input_or_io; check schema, isolation, paths and fresh output (see recovery documentation).\n",
+        );
         return 1;
     } finally {
         restore_error_handler();

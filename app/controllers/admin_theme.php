@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Services\feature_capability_effective_enabled;
@@ -57,15 +56,24 @@ require_once __DIR__ . '/admin_public_widgets.php';
 function cms_admin_theme(): void
 {
     require_admin();
-    if (($_GET['widgets'] ?? null) === '1' || array_key_exists('widget_action', $_POST)) {
+    if (
+        ($_GET['widgets'] ?? null) === '1'
+        || array_key_exists('widget_action', $_POST)
+    ) {
         cms_admin_public_widgets();
         return;
     }
 
     // $gpsMapsFeatureEnabled stores whether GPS-related theme controls should be visible and saved.
-    $gpsMapsFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
+    $gpsMapsFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('gallery_maps');
     // $lightboxModesFeatureEnabled stores whether lightbox browsing-mode theme controls should be visible and saved.
-    $lightboxModesFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('lightbox_modes');
+    $lightboxModesFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('lightbox_modes');
 
     if (isset($_GET['download_language_pack'])) {
         admin_theme_download_language_pack();
@@ -73,9 +81,15 @@ function cms_admin_theme(): void
     }
 
     if (request_method() === 'POST') {
-        admin_theme_process_post($gpsMapsFeatureEnabled, $lightboxModesFeatureEnabled);
+        admin_theme_process_post(
+            $gpsMapsFeatureEnabled,
+            $lightboxModesFeatureEnabled,
+        );
         return;
     }
 
-    render_admin_theme_page($gpsMapsFeatureEnabled, $lightboxModesFeatureEnabled);
+    render_admin_theme_page(
+        $gpsMapsFeatureEnabled,
+        $lightboxModesFeatureEnabled,
+    );
 }

@@ -58,7 +58,7 @@ function gallery_metadata_organizer_schema_ready(): bool
 {
     return presentation_schema_render_available(
         presentation_metadata_organizer_schema_status(),
-        'gallery_metadata_organizer.capture_date'
+        'gallery_metadata_organizer.capture_date',
     );
 }
 
@@ -100,12 +100,14 @@ function gallery_metadata_organizer_default_max_date(): string
 /**
  * Validate one organizer date boundary.
  *
- * @param mixed $value Value to process.
+ * @param scalar|\Stringable|null $value Submitted date converted to text before strict validation.
  * @param string $fallback Fallback date in YYYY-MM-DD format.
- * @return string Date in YYYY-MM-DD format.
+ * @return string Validated YYYY-MM-DD date, using the supplied fallback only for blank input; malformed dates throw InvalidArgumentException.
  */
-function gallery_metadata_organizer_boundary_date(mixed $value, string $fallback): string
-{
+function gallery_metadata_organizer_boundary_date(
+    mixed $value,
+    string $fallback,
+): string {
     // $date stores the submitted boundary before strict validation.
     $date = trim((string) $value);
     if ($date === '') {
@@ -114,7 +116,10 @@ function gallery_metadata_organizer_boundary_date(mixed $value, string $fallback
 
     $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
     if (!$parsed || $parsed->format('Y-m-d') !== $date) {
-        throw new InvalidArgumentException(t('admin.metadata_organizer.invalid_date', 'Enter valid minimum and maximum dates.'));
+        throw new InvalidArgumentException(t(
+            'admin.metadata_organizer.invalid_date',
+            'Enter valid minimum and maximum dates.',
+        ));
     }
 
     return $date;
@@ -123,19 +128,23 @@ function gallery_metadata_organizer_boundary_date(mixed $value, string $fallback
 /**
  * Normalize metadata-organizer options from query or form values.
  *
- * @param array $input Input value.
- * @return array{primary:string,secondary:string,min_date:string,max_date:string} Structured result data for the caller.
+ * @param array<string,string|int|float|bool|null> $input Submitted grouping and YYYY-MM-DD boundary values.
+ * @return array{primary:string,secondary:string,min_date:string,max_date:string} Normalized grouping and inclusive date-range options.
  */
 function gallery_metadata_organizer_options(array $input): array
 {
     // $primary stores the future-proof first grouping dimension. Date is the only implemented mode now.
-    $primary = strtolower(trim((string) ($input['primary_grouping'] ?? 'date')));
+    $primary = strtolower(trim(
+        (string) ($input['primary_grouping'] ?? 'date'),
+    ));
     if ($primary !== 'date') {
         $primary = 'date';
     }
 
     // $secondary stores the future-proof second grouping dimension. It is intentionally inactive in phase 1.
-    $secondary = strtolower(trim((string) ($input['secondary_grouping'] ?? 'none')));
+    $secondary = strtolower(trim(
+        (string) ($input['secondary_grouping'] ?? 'none'),
+    ));
     if (!in_array($secondary, ['none', 'location'], true)) {
         $secondary = 'none';
     }
@@ -143,10 +152,19 @@ function gallery_metadata_organizer_options(array $input): array
         $secondary = 'none';
     }
 
-    $minDate = gallery_metadata_organizer_boundary_date($input['min_date'] ?? '', gallery_metadata_organizer_default_min_date());
-    $maxDate = gallery_metadata_organizer_boundary_date($input['max_date'] ?? '', gallery_metadata_organizer_default_max_date());
+    $minDate = gallery_metadata_organizer_boundary_date(
+        $input['min_date'] ?? '',
+        gallery_metadata_organizer_default_min_date(),
+    );
+    $maxDate = gallery_metadata_organizer_boundary_date(
+        $input['max_date'] ?? '',
+        gallery_metadata_organizer_default_max_date(),
+    );
     if (strcmp($maxDate, $minDate) < 0) {
-        throw new InvalidArgumentException(t('admin.metadata_organizer.invalid_range', 'The maximum date cannot be before the minimum date.'));
+        throw new InvalidArgumentException(t(
+            'admin.metadata_organizer.invalid_range',
+            'The maximum date cannot be before the minimum date.',
+        ));
     }
 
     return [
@@ -205,8 +223,10 @@ function gallery_metadata_organizer_next_child_sort_order(int $parentGalleryId):
  * @param string $title Gallery title.
  * @return array<string,mixed>|null Structured result data for the caller.
  */
-function gallery_metadata_organizer_find_child_by_title(int $parentGalleryId, string $title): ?array
-{
+function gallery_metadata_organizer_find_child_by_title(
+    int $parentGalleryId,
+    string $title,
+): ?array {
     return gallery_model_find_child_by_title($parentGalleryId, $title);
 }
 
@@ -229,8 +249,11 @@ function gallery_metadata_organizer_source_images(int $galleryId): array
  * @param int $limit Maximum rows to return, or zero for all rows.
  * @return array<int,array<string,mixed>> Structured result data for the caller.
  */
-function gallery_metadata_organizer_source_images_page(int $galleryId, int $offset = 0, int $limit = 0): array
-{
+function gallery_metadata_organizer_source_images_page(
+    int $galleryId,
+    int $offset = 0,
+    int $limit = 0,
+): array {
     if (!gallery_metadata_organizer_schema_ready()) {
         return [];
     }
@@ -243,12 +266,14 @@ function gallery_metadata_organizer_source_images_page(int $galleryId, int $offs
 /**
  * Return one image row enriched with the date organizer fields used by previews.
  *
- * @param array $image Image row or image data.
+ * @param array<string,int|float|string|bool|null> $image Persisted image row supplying ID, filename, path, title, visibility, and EXIF date.
  * @param string $date Date in YYYY-MM-DD format.
- * @return array<string,mixed> Structured result data for the caller.
+ * @return array{id:int,filename:string,relative_path:string,title:string,visibility:string,exif_taken_at:string,group_date:string} Image preview fields used by the date organizer.
  */
-function gallery_metadata_organizer_preview_image(array $image, string $date): array
-{
+function gallery_metadata_organizer_preview_image(
+    array $image,
+    string $date,
+): array {
     return [
         'id' => (int) ($image['id'] ?? 0),
         'filename' => (string) ($image['filename'] ?? ''),
@@ -262,17 +287,22 @@ function gallery_metadata_organizer_preview_image(array $image, string $date): a
 
 /**
  * Build a DB-driven organizer plan for date-based child galleries.
- *
  * The plan reads only existing image rows and does not scan media files. Images
  * without usable EXIF capture dates, and images outside the configured date
  * interval, are reported as ignored instead of being moved.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $input Input value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<string,string|int|float|bool|null> $input Submitted grouping and inclusive date-range values.
+ * @param int $offset Zero-based offset into the gallery image rows; negative values are clamped to zero.
+ * @param int $limit Maximum number of source image rows to inspect; zero reads all rows.
+ * @return array{schema_ready:bool,gallery?:array<string,int|float|string|bool|null>,options:array{primary:string,secondary:string,min_date:string,max_date:string},groups:list<array{key:string,date:string,title:string,folder_name:string,destination_gallery_id:int,destination_status:'existing'|'new',destination_folder_path:string,image_count:int,images:list<array{id:int,filename:string,relative_path:string,title:string,visibility:string,exif_taken_at:string,group_date:string}>}>,total_images:int,batch_total_images:int,candidate_images:int,ignored_without_date:int,ignored_before_min:int,ignored_after_max:int,group_count?:int,batch:array{offset:int,limit:int,returned:int,next_offset:int,done:bool}} Plan status, optional source gallery and group count, normalized options, ordered groups and images, ignored-image totals, and batch pagination state.
  */
-function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input = [], int $offset = 0, int $limit = 0): array
-{
+function gallery_metadata_organizer_build_date_plan(
+    int $galleryId,
+    array $input = [],
+    int $offset = 0,
+    int $limit = 0,
+): array {
     $offset = max(0, $offset);
     $limit = max(0, $limit);
     if (!gallery_metadata_organizer_schema_ready()) {
@@ -298,7 +328,10 @@ function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input
 
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('admin.metadata_organizer.gallery_missing', 'Gallery was not found.'));
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.gallery_missing',
+            'Gallery was not found.',
+        ));
     }
 
     $options = gallery_metadata_organizer_options($input);
@@ -309,7 +342,11 @@ function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input
     $candidateImages = 0;
     $totalImages = gallery_metadata_organizer_source_image_count($galleryId);
     $sourceImages = $limit > 0
-        ? gallery_metadata_organizer_source_images_page($galleryId, $offset, $limit)
+        ? gallery_metadata_organizer_source_images_page(
+            $galleryId,
+            $offset,
+            $limit,
+        )
         : gallery_metadata_organizer_source_images($galleryId);
 
     foreach ($sourceImages as $image) {
@@ -339,21 +376,34 @@ function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input
         $candidateImages++;
         $title = gallery_metadata_organizer_date_title($date);
         if (!isset($groups[$date])) {
-            $existingChild = gallery_metadata_organizer_find_child_by_title($galleryId, $title);
+            $existingChild = gallery_metadata_organizer_find_child_by_title(
+                $galleryId,
+                $title,
+            );
             $groups[$date] = [
                 'key' => $date,
                 'date' => $date,
                 'title' => $title,
-                'folder_name' => gallery_metadata_organizer_date_folder_name($date),
-                'destination_gallery_id' => is_array($existingChild) ? (int) ($existingChild['id'] ?? 0) : 0,
-                'destination_status' => is_array($existingChild) ? 'existing' : 'new',
-                'destination_folder_path' => is_array($existingChild) ? (string) ($existingChild['folder_path'] ?? '') : '',
+                'folder_name' =>
+                    gallery_metadata_organizer_date_folder_name($date),
+                'destination_gallery_id' => is_array($existingChild)
+                    ? (int) ($existingChild['id'] ?? 0)
+                    : 0,
+                'destination_status' => is_array($existingChild)
+                    ? 'existing'
+                    : 'new',
+                'destination_folder_path' => is_array($existingChild)
+                    ? (string) ($existingChild['folder_path'] ?? '')
+                    : '',
                 'image_count' => 0,
                 'images' => [],
             ];
         }
         $groups[$date]['image_count'] = (int) $groups[$date]['image_count'] + 1;
-        $groups[$date]['images'][] = gallery_metadata_organizer_preview_image($image, $date);
+        $groups[$date]['images'][] = gallery_metadata_organizer_preview_image(
+            $image,
+            $date,
+        );
     }
 
     ksort($groups);
@@ -375,7 +425,8 @@ function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input
             'limit' => $limit,
             'returned' => count($sourceImages),
             'next_offset' => $offset + count($sourceImages),
-            'done' => $limit <= 0 || ($offset + count($sourceImages)) >= $totalImages,
+            'done' =>
+                $limit <= 0 || ($offset + count($sourceImages)) >= $totalImages,
         ],
     ];
 }
@@ -393,13 +444,18 @@ function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input
  * @return array{id:int,folder_path:string,title:string,parent_id:int|null,
  *     visibility:string} Created physical-gallery row including its identity.
  */
-function gallery_metadata_organizer_create_child_gallery(array $sourceGallery, array $group, int $sortOrder): array
-{
+function gallery_metadata_organizer_create_child_gallery(
+    array $sourceGallery,
+    array $group,
+    int $sortOrder,
+): array {
     $input = [
         'title' => (string) ($group['title'] ?? ''),
         'folder_name' => (string) ($group['folder_name'] ?? ''),
         'description' => '',
-        'visibility' => gallery_visibility_storage_value((string) ($sourceGallery['visibility'] ?? 'unpublished')),
+        'visibility' => gallery_visibility_storage_value(
+            (string) ($sourceGallery['visibility'] ?? 'unpublished'),
+        ),
         'parent_id' => (int) ($sourceGallery['id'] ?? 0),
         'sort_order' => $sortOrder,
         'voting_enabled' => (int) ($sourceGallery['voting_enabled'] ?? 0) === 1,
@@ -411,14 +467,20 @@ function gallery_metadata_organizer_create_child_gallery(array $sourceGallery, a
         $input['gallery_date_end'] = (string) ($group['date'] ?? '');
     }
     if (gallery_count_badge_schema_ready()) {
-        $input['count_badge_visibility'] = gallery_count_badge_storage_value($sourceGallery['count_badge_visibility'] ?? null) ?? 'inherit';
+        $input['count_badge_visibility'] =
+            gallery_count_badge_storage_value(
+                $sourceGallery['count_badge_visibility'] ?? null,
+            ) ?? 'inherit';
     }
     presentation_schema_assert_known(
         presentation_lightbox_override_schema_status(),
-        'gallery_metadata_organizer.inherit_lightbox_override'
+        'gallery_metadata_organizer.inherit_lightbox_override',
     );
     if (gallery_lightbox_browsing_mode_schema_ready()) {
-        $input['lightbox_browsing_mode'] = gallery_lightbox_browsing_mode_storage_value($sourceGallery['lightbox_browsing_mode'] ?? null) ?? 'inherit';
+        $input['lightbox_browsing_mode'] =
+            gallery_lightbox_browsing_mode_storage_value(
+                $sourceGallery['lightbox_browsing_mode'] ?? null,
+            ) ?? 'inherit';
     }
 
     if (($sourceGallery['presentation_json'] ?? null) !== null) {
@@ -447,25 +509,32 @@ function gallery_metadata_organizer_group_image_ids(array $group): array
 
 /**
  * Return the next candidate photos that still belong to the source gallery.
- *
  * The apply workflow deliberately does not use offsets because each successful
  * batch changes gallery ownership. Selecting the next remaining candidate keeps
  * repeated AJAX calls stable even after earlier photos have moved.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $input Input value.
+ * @param array<string,string|int|float|bool|null> $input Submitted grouping and inclusive date-range values.
  * @param int $limit Maximum number of candidate rows.
- * @return array<int,array<string,mixed>> Structured result data for the caller.
+ * @return list<array{id:int|string,filename:string,relative_path:string,title?:string|null,visibility:string,exif_taken_at:string|null}> Candidate image rows with valid capture dates, still owned by the source gallery.
  */
-function gallery_metadata_organizer_candidate_images_batch(int $galleryId, array $input, int $limit): array
-{
+function gallery_metadata_organizer_candidate_images_batch(
+    int $galleryId,
+    array $input,
+    int $limit,
+): array {
     if (!gallery_metadata_organizer_schema_ready()) {
         return [];
     }
 
     $options = gallery_metadata_organizer_options($input);
     $limit = max(1, min(100, $limit));
-    $candidateImages = image_model_metadata_organizer_candidates($galleryId, $options['min_date'], $options['max_date'], $limit);
+    $candidateImages = image_model_metadata_organizer_candidates(
+        $galleryId,
+        $options['min_date'],
+        $options['max_date'],
+        $limit,
+    );
 
     $rows = [];
     foreach ($candidateImages as $image) {
@@ -484,17 +553,23 @@ function gallery_metadata_organizer_candidate_images_batch(int $galleryId, array
  * Return how many candidate photos remain in the source gallery.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $input Input value.
- * @return int Integer result for the caller.
+ * @param array<string,string|int|float|bool|null> $input Submitted grouping and inclusive date-range values.
+ * @return int Number of date-range candidates still owned by the source gallery.
  */
-function gallery_metadata_organizer_remaining_candidate_count(int $galleryId, array $input): int
-{
+function gallery_metadata_organizer_remaining_candidate_count(
+    int $galleryId,
+    array $input,
+): int {
     if (!gallery_metadata_organizer_schema_ready()) {
         return 0;
     }
 
     $options = gallery_metadata_organizer_options($input);
-    return image_model_metadata_organizer_candidate_count($galleryId, $options['min_date'], $options['max_date']);
+    return image_model_metadata_organizer_candidate_count(
+        $galleryId,
+        $options['min_date'],
+        $options['max_date'],
+    );
 }
 
 /**
@@ -505,8 +580,11 @@ function gallery_metadata_organizer_remaining_candidate_count(int $galleryId, ar
  * @param array<string,mixed> $options Organizer options.
  * @return array<int,array<string,mixed>> Structured result data for the caller.
  */
-function gallery_metadata_organizer_groups_from_images(int $galleryId, array $images, array $options): array
-{
+function gallery_metadata_organizer_groups_from_images(
+    int $galleryId,
+    array $images,
+    array $options,
+): array {
     $groups = [];
     foreach ($images as $image) {
         $takenAt = trim((string) ($image['exif_taken_at'] ?? ''));
@@ -515,27 +593,43 @@ function gallery_metadata_organizer_groups_from_images(int $galleryId, array $im
         if (!$parsed || $parsed->format('Y-m-d') !== $date) {
             continue;
         }
-        if (strcmp($date, (string) ($options['min_date'] ?? '')) < 0 || strcmp($date, (string) ($options['max_date'] ?? '')) > 0) {
+        if (
+            strcmp($date, (string) ($options['min_date'] ?? '')) < 0
+            || strcmp($date, (string) ($options['max_date'] ?? '')) > 0
+        ) {
             continue;
         }
 
         $title = gallery_metadata_organizer_date_title($date);
         if (!isset($groups[$date])) {
-            $existingChild = gallery_metadata_organizer_find_child_by_title($galleryId, $title);
+            $existingChild = gallery_metadata_organizer_find_child_by_title(
+                $galleryId,
+                $title,
+            );
             $groups[$date] = [
                 'key' => $date,
                 'date' => $date,
                 'title' => $title,
-                'folder_name' => gallery_metadata_organizer_date_folder_name($date),
-                'destination_gallery_id' => is_array($existingChild) ? (int) ($existingChild['id'] ?? 0) : 0,
-                'destination_status' => is_array($existingChild) ? 'existing' : 'new',
-                'destination_folder_path' => is_array($existingChild) ? (string) ($existingChild['folder_path'] ?? '') : '',
+                'folder_name' =>
+                    gallery_metadata_organizer_date_folder_name($date),
+                'destination_gallery_id' => is_array($existingChild)
+                    ? (int) ($existingChild['id'] ?? 0)
+                    : 0,
+                'destination_status' => is_array($existingChild)
+                    ? 'existing'
+                    : 'new',
+                'destination_folder_path' => is_array($existingChild)
+                    ? (string) ($existingChild['folder_path'] ?? '')
+                    : '',
                 'image_count' => 0,
                 'images' => [],
             ];
         }
         $groups[$date]['image_count'] = (int) $groups[$date]['image_count'] + 1;
-        $groups[$date]['images'][] = gallery_metadata_organizer_preview_image($image, $date);
+        $groups[$date]['images'][] = gallery_metadata_organizer_preview_image(
+            $image,
+            $date,
+        );
     }
     ksort($groups);
     return array_values($groups);
@@ -545,34 +639,58 @@ function gallery_metadata_organizer_groups_from_images(int $galleryId, array $im
  * Apply one AJAX-sized date organizer batch.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $input Input value.
+ * @param array<string,string|int|float|bool|null> $input Submitted grouping and inclusive date-range values.
  * @param int $limit Maximum candidate photos to move in this request.
- * @return array<string,mixed> Structured result data for the caller.
+ * @return array{created_galleries:int,reused_galleries:int,requested_images:int,moved_images:int,originals_moved:int,derivatives_moved:int,remaining_after:int,done:bool,batch_limit:int,candidate_rows:int,groups_processed:int,selection_ms:float,move_ms:float,maintenance_ms:float,duration_ms:float,maintenance:array{ran:bool,thumbnail_cache_cleared:bool,gallery_public_paths:int,image_public_slugs:int,sidecars_written:int},group_results:list<array{title:string,date:string,destination_gallery_id:int,destination_status:'created'|'existing',requested:int,moved:int,image_ids:list<int>,originals_moved:int,derivatives_moved:int,duration_ms:float}>,failures:list<string>} Batch movement counts, timing, maintenance results, per-date outcomes, and failures.
  */
-function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array $input = [], int $limit = 1): array
-{
+function gallery_metadata_organizer_apply_date_plan_batch(
+    int $galleryId,
+    array $input = [],
+    int $limit = 1,
+): array {
     $requestStartedAt = microtime(true);
     if (!gallery_metadata_organizer_schema_ready()) {
-        throw new RuntimeException(t('admin.metadata_organizer.schema_unavailable', 'Metadata organizer requires scanned EXIF capture-date data in the image database.'));
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.schema_unavailable',
+            'Metadata organizer requires scanned EXIF capture-date data in the image database.',
+        ));
     }
 
     $sourceGallery = find_gallery($galleryId, true);
     if (!$sourceGallery) {
-        throw new RuntimeException(t('admin.metadata_organizer.gallery_missing', 'Gallery was not found.'));
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.gallery_missing',
+            'Gallery was not found.',
+        ));
     }
 
     $limit = max(1, min(10, $limit));
     $optionsStartedAt = microtime(true);
     $options = gallery_metadata_organizer_options($input);
-    $remainingBefore = gallery_metadata_organizer_remaining_candidate_count($galleryId, $input);
-    $candidateRows = gallery_metadata_organizer_candidate_images_batch($galleryId, $input, $limit);
+    $remainingBefore = gallery_metadata_organizer_remaining_candidate_count(
+        $galleryId,
+        $input,
+    );
+    $candidateRows = gallery_metadata_organizer_candidate_images_batch(
+        $galleryId,
+        $input,
+        $limit,
+    );
     $selectionMs = gallery_metadata_organizer_elapsed_ms($optionsStartedAt);
     if ($remainingBefore > 0 && !$candidateRows) {
-        throw new RuntimeException(t('admin.metadata_organizer.no_valid_candidates_left', 'The organizer found remaining database candidates, but none of them had a valid EXIF date. Re-scan metadata or narrow the date range.'));
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.no_valid_candidates_left',
+            'The organizer found remaining database candidates, but none of them had a valid EXIF date. Re-scan metadata or narrow the date range.',
+        ));
     }
-    $groups = gallery_metadata_organizer_groups_from_images($galleryId, $candidateRows, $options);
+    $groups = gallery_metadata_organizer_groups_from_images(
+        $galleryId,
+        $candidateRows,
+        $options,
+    );
 
-    $nextSortOrder = gallery_metadata_organizer_next_child_sort_order($galleryId);
+    $nextSortOrder =
+        gallery_metadata_organizer_next_child_sort_order($galleryId);
     $createdGalleries = 0;
     $reusedGalleries = 0;
     $requestedImages = 0;
@@ -601,9 +719,16 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
 
         $requestedImages += count($imageIds);
         $createdThisGallery = false;
-        $destinationGallery = gallery_metadata_organizer_find_child_by_title($galleryId, (string) ($group['title'] ?? ''));
+        $destinationGallery = gallery_metadata_organizer_find_child_by_title(
+            $galleryId,
+            (string) ($group['title'] ?? ''),
+        );
         if (!$destinationGallery) {
-            $destinationGallery = gallery_metadata_organizer_create_child_gallery($sourceGallery, $group, $nextSortOrder);
+            $destinationGallery = gallery_metadata_organizer_create_child_gallery(
+                $sourceGallery,
+                $group,
+                $nextSortOrder,
+            );
             $nextSortOrder += 10;
             $createdGalleries++;
             $createdThisGallery = true;
@@ -613,20 +738,30 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
 
         $destinationGalleryId = (int) ($destinationGallery['id'] ?? 0);
         if ($destinationGalleryId <= 0) {
-            $failures[] = (string) ($group['title'] ?? '') . ': destination gallery could not be resolved.';
+            $failures[] =
+                (string) ($group['title'] ?? '')
+                . ': destination gallery could not be resolved.';
             continue;
         }
         $touchedDestinationIds[$destinationGalleryId] = $destinationGalleryId;
 
         try {
-            $moveResult = move_gallery_images($galleryId, $destinationGalleryId, $imageIds, ['defer_maintenance' => true]);
+            $moveResult = move_gallery_images(
+                $galleryId,
+                $destinationGalleryId,
+                $imageIds,
+                ['defer_maintenance' => true],
+            );
         } catch (Throwable $exception) {
             if ($createdThisGallery) {
                 // Rollback of a gallery this failed operation just created. It never held
                 // administrator content, so it is destroyed instead of entering the trash bin.
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
-            $failures[] = (string) ($group['title'] ?? '') . ': ' . $exception->getMessage();
+            $failures[] =
+                (string) ($group['title'] ?? '')
+                . ': '
+                . $exception->getMessage();
             continue;
         }
 
@@ -637,7 +772,8 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
             foreach ((array) ($moveResult['failures'] ?? []) as $failure) {
-                $failures[] = (string) ($group['title'] ?? '') . ': ' . (string) $failure;
+                $failures[] =
+                    (string) ($group['title'] ?? '') . ': ' . (string) $failure;
             }
             continue;
         }
@@ -651,43 +787,65 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
             'title' => (string) ($group['title'] ?? ''),
             'date' => (string) ($group['date'] ?? ''),
             'destination_gallery_id' => $destinationGalleryId,
-            'destination_status' => $createdThisGallery ? 'created' : 'existing',
+            'destination_status' => $createdThisGallery
+                ? 'created'
+                : 'existing',
             'requested' => count($imageIds),
             'moved' => (int) ($moveResult['moved'] ?? 0),
             'image_ids' => array_values(array_map('intval', $imageIds)),
             'originals_moved' => (int) ($moveResult['originals_moved'] ?? 0),
-            'derivatives_moved' => (int) ($moveResult['derivatives_moved'] ?? 0),
+            'derivatives_moved' => (int) (
+                $moveResult['derivatives_moved'] ?? 0
+            ),
             'duration_ms' => $groupMoveMs,
         ];
     }
 
-    $remainingAfter = gallery_metadata_organizer_remaining_candidate_count($galleryId, $input);
+    $remainingAfter = gallery_metadata_organizer_remaining_candidate_count(
+        $galleryId,
+        $input,
+    );
     $done = $remainingAfter <= 0;
     if ($done || $failures) {
         $maintenanceStartedAt = microtime(true);
-        $maintenance = gallery_metadata_organizer_finalize_move_maintenance($galleryId, array_values($touchedDestinationIds));
-        $maintenanceMs = gallery_metadata_organizer_elapsed_ms($maintenanceStartedAt);
+        $maintenance = gallery_metadata_organizer_finalize_move_maintenance(
+            $galleryId,
+            array_values($touchedDestinationIds),
+        );
+        $maintenanceMs = gallery_metadata_organizer_elapsed_ms(
+            $maintenanceStartedAt,
+        );
     }
 
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event($failures ? 'warning' : 'info', 'metadata_organizer.date_apply_batch', 'Admin applied one metadata organizer date batch.', [
-            'gallery_id' => $galleryId,
-            'batch_limit' => $limit,
-            'candidate_rows' => count($candidateRows),
-            'created_galleries' => $createdGalleries,
-            'reused_galleries' => $reusedGalleries,
-            'requested_images' => $requestedImages,
-            'moved_images' => $movedImages,
-            'originals_moved' => $originalsMoved,
-            'derivatives_moved' => $derivativesMoved,
-            'remaining_before' => $remainingBefore,
-            'remaining_after' => $remainingAfter,
-            'duration_ms' => gallery_metadata_organizer_elapsed_ms($requestStartedAt),
-            'selection_ms' => $selectionMs,
-            'move_ms' => $moveMs,
-            'maintenance_ms' => $maintenanceMs,
-            'failures' => array_slice($failures, 0, 20),
-        ], ['category' => 'media', 'severity' => $failures ? 'warning' : 'info']);
+        admin_log_event(
+            $failures ? 'warning' : 'info',
+            'metadata_organizer.date_apply_batch',
+            'Admin applied one metadata organizer date batch.',
+            [
+                'gallery_id' => $galleryId,
+                'batch_limit' => $limit,
+                'candidate_rows' => count($candidateRows),
+                'created_galleries' => $createdGalleries,
+                'reused_galleries' => $reusedGalleries,
+                'requested_images' => $requestedImages,
+                'moved_images' => $movedImages,
+                'originals_moved' => $originalsMoved,
+                'derivatives_moved' => $derivativesMoved,
+                'remaining_before' => $remainingBefore,
+                'remaining_after' => $remainingAfter,
+                'duration_ms' =>
+                    gallery_metadata_organizer_elapsed_ms($requestStartedAt),
+                'selection_ms' => $selectionMs,
+                'move_ms' => $moveMs,
+                'maintenance_ms' => $maintenanceMs,
+                'failures' => array_slice($failures, 0, 20),
+            ],
+            [
+                'category' => 'media',
+                'severity' => $failures ? 'warning' : 'info',
+            ],
+        );
     }
 
     return [
@@ -706,7 +864,8 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
         'selection_ms' => $selectionMs,
         'move_ms' => $moveMs,
         'maintenance_ms' => $maintenanceMs,
-        'duration_ms' => gallery_metadata_organizer_elapsed_ms($requestStartedAt),
+        'duration_ms' =>
+            gallery_metadata_organizer_elapsed_ms($requestStartedAt),
         'maintenance' => $maintenance,
         'group_results' => $groupResults,
         'failures' => $failures,
@@ -731,8 +890,10 @@ function gallery_metadata_organizer_elapsed_ms(float $startedAt): int
  * @param array<int> $destinationGalleryIds Destination galleries touched by the current request.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function gallery_metadata_organizer_finalize_move_maintenance(int $sourceGalleryId, array $destinationGalleryIds = []): array
-{
+function gallery_metadata_organizer_finalize_move_maintenance(
+    int $sourceGalleryId,
+    array $destinationGalleryIds = [],
+): array {
     $result = [
         'ran' => true,
         'thumbnail_cache_cleared' => false,
@@ -744,14 +905,23 @@ function gallery_metadata_organizer_finalize_move_maintenance(int $sourceGallery
     thumbnail_maintenance_summary_cache_clear();
     $result['thumbnail_cache_cleared'] = true;
 
-    $directChildIds = gallery_metadata_organizer_direct_child_ids($sourceGalleryId);
-    $affectedGalleryIds = array_values(array_unique(array_filter(array_merge([$sourceGalleryId], $directChildIds, array_map('intval', $destinationGalleryIds)), static fn (int $galleryId): bool => $galleryId > 0)));
+    $directChildIds =
+        gallery_metadata_organizer_direct_child_ids($sourceGalleryId);
+    $affectedGalleryIds = array_values(array_unique(array_filter(
+        array_merge(
+            [$sourceGalleryId],
+            $directChildIds,
+            array_map('intval', $destinationGalleryIds),
+        ),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
 
     if (public_path_schema_ready()) {
         $result['gallery_public_paths'] = refresh_gallery_public_paths();
 
         foreach ($affectedGalleryIds as $galleryId) {
-            $result['image_public_slugs'] += regenerate_gallery_image_public_slugs($galleryId);
+            $result['image_public_slugs'] +=
+                regenerate_gallery_image_public_slugs($galleryId);
         }
     }
 
@@ -784,22 +954,33 @@ function gallery_metadata_organizer_direct_child_ids(int $sourceGalleryId): arra
  * Apply a date organizer plan by creating or reusing child galleries and moving files.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $input Input value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<string,string|int|float|bool|null> $input Submitted grouping and inclusive date-range values.
+ * @return array{plan:array{schema_ready:true,gallery:array<string,int|float|string|bool|null>,options:array{primary:string,secondary:string,min_date:string,max_date:string},groups:list<array{key:string,date:string,title:string,folder_name:string,destination_gallery_id:int,destination_status:'existing'|'new',destination_folder_path:string,image_count:int,images:list<array{id:int,filename:string,relative_path:string,title:string,visibility:string,exif_taken_at:string,group_date:string}>}>,total_images:int,batch_total_images:int,candidate_images:int,ignored_without_date:int,ignored_before_min:int,ignored_after_max:int,group_count:int,batch:array{offset:int,limit:int,returned:int,next_offset:int,done:bool}},created_galleries:int,reused_galleries:int,requested_images:int,moved_images:int,originals_moved:int,derivatives_moved:int,group_results:list<array{title:string,date:string,destination_gallery_id:int,destination_status:'created'|'existing',requested:int,moved:int}>,failures:list<string>} Result containing the schema-ready plan, created/reused gallery counts, requested/moved file counts, per-group outcomes, and failure messages.
  */
-function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input = []): array
-{
+function gallery_metadata_organizer_apply_date_plan(
+    int $galleryId,
+    array $input = [],
+): array {
     $plan = gallery_metadata_organizer_build_date_plan($galleryId, $input);
     if (empty($plan['schema_ready'])) {
-        throw new RuntimeException(t('admin.metadata_organizer.schema_unavailable', 'Metadata organizer requires scanned EXIF capture-date data in the image database.'));
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.schema_unavailable',
+            'Metadata organizer requires scanned EXIF capture-date data in the image database.',
+        ));
     }
 
-    $sourceGallery = is_array($plan['gallery'] ?? null) ? $plan['gallery'] : find_gallery($galleryId, true);
+    $sourceGallery = is_array($plan['gallery'] ?? null)
+        ? $plan['gallery']
+        : find_gallery($galleryId, true);
     if (!$sourceGallery) {
-        throw new RuntimeException(t('admin.metadata_organizer.gallery_missing', 'Gallery was not found.'));
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.gallery_missing',
+            'Gallery was not found.',
+        ));
     }
 
-    $nextSortOrder = gallery_metadata_organizer_next_child_sort_order($galleryId);
+    $nextSortOrder =
+        gallery_metadata_organizer_next_child_sort_order($galleryId);
     $createdGalleries = 0;
     $reusedGalleries = 0;
     $requestedImages = 0;
@@ -817,9 +998,16 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
 
         $requestedImages += count($imageIds);
         $createdThisGallery = false;
-        $destinationGallery = gallery_metadata_organizer_find_child_by_title($galleryId, (string) ($group['title'] ?? ''));
+        $destinationGallery = gallery_metadata_organizer_find_child_by_title(
+            $galleryId,
+            (string) ($group['title'] ?? ''),
+        );
         if (!$destinationGallery) {
-            $destinationGallery = gallery_metadata_organizer_create_child_gallery($sourceGallery, $group, $nextSortOrder);
+            $destinationGallery = gallery_metadata_organizer_create_child_gallery(
+                $sourceGallery,
+                $group,
+                $nextSortOrder,
+            );
             $nextSortOrder += 10;
             $createdGalleries++;
             $createdThisGallery = true;
@@ -829,19 +1017,28 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
 
         $destinationGalleryId = (int) ($destinationGallery['id'] ?? 0);
         if ($destinationGalleryId <= 0) {
-            $failures[] = (string) ($group['title'] ?? '') . ': destination gallery could not be resolved.';
+            $failures[] =
+                (string) ($group['title'] ?? '')
+                . ': destination gallery could not be resolved.';
             continue;
         }
 
         try {
-            $moveResult = move_gallery_images($galleryId, $destinationGalleryId, $imageIds);
+            $moveResult = move_gallery_images(
+                $galleryId,
+                $destinationGalleryId,
+                $imageIds,
+            );
         } catch (Throwable $exception) {
             if ($createdThisGallery) {
                 // Rollback of a gallery this failed operation just created. It never held
                 // administrator content, so it is destroyed instead of entering the trash bin.
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
-            $failures[] = (string) ($group['title'] ?? '') . ': ' . $exception->getMessage();
+            $failures[] =
+                (string) ($group['title'] ?? '')
+                . ': '
+                . $exception->getMessage();
             continue;
         }
 
@@ -852,7 +1049,8 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
             foreach ((array) ($moveResult['failures'] ?? []) as $failure) {
-                $failures[] = (string) ($group['title'] ?? '') . ': ' . (string) $failure;
+                $failures[] =
+                    (string) ($group['title'] ?? '') . ': ' . (string) $failure;
             }
             continue;
         }
@@ -864,21 +1062,32 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
             'title' => (string) ($group['title'] ?? ''),
             'date' => (string) ($group['date'] ?? ''),
             'destination_gallery_id' => $destinationGalleryId,
-            'destination_status' => $createdThisGallery ? 'created' : 'existing',
+            'destination_status' => $createdThisGallery
+                ? 'created'
+                : 'existing',
             'requested' => count($imageIds),
             'moved' => (int) ($moveResult['moved'] ?? 0),
         ];
     }
 
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event($failures ? 'warning' : 'info', 'metadata_organizer.date_apply', 'Admin applied metadata organizer date plan.', [
-            'gallery_id' => $galleryId,
-            'created_galleries' => $createdGalleries,
-            'reused_galleries' => $reusedGalleries,
-            'requested_images' => $requestedImages,
-            'moved_images' => $movedImages,
-            'failures' => array_slice($failures, 0, 20),
-        ], ['category' => 'media', 'severity' => $failures ? 'warning' : 'info']);
+        admin_log_event(
+            $failures ? 'warning' : 'info',
+            'metadata_organizer.date_apply',
+            'Admin applied metadata organizer date plan.',
+            [
+                'gallery_id' => $galleryId,
+                'created_galleries' => $createdGalleries,
+                'reused_galleries' => $reusedGalleries,
+                'requested_images' => $requestedImages,
+                'moved_images' => $movedImages,
+                'failures' => array_slice($failures, 0, 20),
+            ],
+            [
+                'category' => 'media',
+                'severity' => $failures ? 'warning' : 'info',
+            ],
+        );
     }
 
     // Refresh the source gallery sidecar after all groups were processed.
@@ -903,25 +1112,37 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
 /**
  * Build the flash message for an applied organizer result.
  *
- * @param array $result Apply result value.
- * @return string Text result for the caller.
+ * @param array{created_galleries?:int,reused_galleries?:int,requested_images?:int,moved_images?:int,originals_moved?:int,derivatives_moved?:int,failures?:list<string>} $result Optional date-organizer counters and failure messages used to build the notice.
+ * @return string Localized notice describing created/reused galleries, moved images, or failures.
  */
 function gallery_metadata_organizer_apply_notice(array $result): string
 {
-    $message = t('admin.metadata_organizer.apply_notice', 'Created {created} subgallery/subgalleries, reused {reused}, moved {moved} of {requested} photo(s), including {originals} original file(s) and {derivatives} derivative file(s).', [
-        'created' => (string) (int) ($result['created_galleries'] ?? 0),
-        'reused' => (string) (int) ($result['reused_galleries'] ?? 0),
-        'moved' => (string) (int) ($result['moved_images'] ?? 0),
-        'requested' => (string) (int) ($result['requested_images'] ?? 0),
-        'originals' => (string) (int) ($result['originals_moved'] ?? 0),
-        'derivatives' => (string) (int) ($result['derivatives_moved'] ?? 0),
-    ]);
+    $message = t(
+        'admin.metadata_organizer.apply_notice',
+        'Created {created} subgallery/subgalleries, reused {reused}, moved {moved} of {requested} photo(s), including {originals} original file(s) and {derivatives} derivative file(s).',
+        [
+            'created' => (string) (int) ($result['created_galleries'] ?? 0),
+            'reused' => (string) (int) ($result['reused_galleries'] ?? 0),
+            'moved' => (string) (int) ($result['moved_images'] ?? 0),
+            'requested' => (string) (int) ($result['requested_images'] ?? 0),
+            'originals' => (string) (int) ($result['originals_moved'] ?? 0),
+            'derivatives' => (string) (int) ($result['derivatives_moved'] ?? 0),
+        ],
+    );
 
-    $failures = array_values(array_filter(array_map('strval', (array) ($result['failures'] ?? []))));
+    $failures = array_values(array_filter(array_map(
+        'strval',
+        (array) ($result['failures'] ?? []),
+    )));
     if ($failures) {
-        $message .= ' ' . t('admin.metadata_organizer.apply_warning', 'Warnings: {warnings}', [
-            'warnings' => implode(' | ', array_slice($failures, 0, 5)),
-        ]);
+        $message .= ' '
+        . t(
+            'admin.metadata_organizer.apply_warning',
+            'Warnings: {warnings}',
+            [
+                'warnings' => implode(' | ', array_slice($failures, 0, 5)),
+            ],
+        );
     }
 
     return $message;

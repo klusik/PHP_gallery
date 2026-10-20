@@ -48,25 +48,31 @@ gallery_require_cli_sapi();
 require_once __DIR__ . '/release_lib.php';
 
 $args = array_values(array_slice($argv, 1));
-if ($args === [] || in_array('--help', $args, true) || in_array('-h', $args, true)) {
+if (
+    $args === []
+    || in_array('--help', $args, true)
+    || in_array('-h', $args, true)
+) {
     fwrite(STDOUT, <<<'TEXT'
-PHP Gallery release preparation
+    PHP Gallery release preparation
 
-Usage:
-  php scripts/prepare_release.php <version>
-  php scripts/prepare_release.php <version> --released-at="2026-09-05 21:30:00"
+    Usage:
+      php scripts/prepare_release.php <version>
+      php scripts/prepare_release.php <version> --released-at="2026-09-05 21:30:00"
 
-The command updates only registered mechanical release markers. It does not write
-final release-note prose, build the PDF manual, generate the manifest, run tests,
-commit, or tag. Follow RELEASE.md after preparation.
-TEXT
-    );
+    The command updates only registered mechanical release markers. It does not write
+    final release-note prose, build the PDF manual, generate the manifest, run tests,
+    commit, or tag. Follow RELEASE.md after preparation.
+    TEXT);
     exit($args === [] ? 2 : 0);
 }
 
 $version = array_shift($args);
 if (!is_string($version) || !valid_version($version)) {
-    fwrite(STDERR, "Invalid release version. Use X.Y or X.Y.Z without leading zeroes.\n");
+    fwrite(
+        STDERR,
+        "Invalid release version. Use X.Y or X.Y.Z without leading zeroes.\n",
+    );
     exit(2);
 }
 
@@ -74,9 +80,18 @@ $releasedAt = null;
 foreach ($args as $argument) {
     if (str_starts_with($argument, '--released-at=')) {
         $value = substr($argument, strlen('--released-at='));
-        $releasedAt = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value) ?: null;
-        if ($releasedAt === null || $releasedAt->format('Y-m-d H:i:s') !== $value) {
-            fwrite(STDERR, "Invalid --released-at value. Expected YYYY-MM-DD HH:MM:SS.\n");
+        $releasedAt = \DateTimeImmutable::createFromFormat(
+            '!Y-m-d H:i:s',
+            $value,
+        ) ?: null;
+        if (
+            $releasedAt === null
+            || $releasedAt->format('Y-m-d H:i:s') !== $value
+        ) {
+            fwrite(
+                STDERR,
+                "Invalid --released-at value. Expected YYYY-MM-DD HH:MM:SS.\n",
+            );
             exit(2);
         }
         continue;
@@ -88,7 +103,14 @@ foreach ($args as $argument) {
 $root = project_root();
 $current = detect_cms_version($root);
 if ($current !== $version && version_compare($version, $current, '<=')) {
-    fwrite(STDERR, 'Refusing non-incrementing release version ' . $version . '; current runtime version is ' . $current . ".\n");
+    fwrite(
+        STDERR,
+        'Refusing non-incrementing release version '
+            . $version
+            . '; current runtime version is '
+            . $current
+            . ".\n",
+    );
     exit(2);
 }
 
@@ -103,14 +125,20 @@ try {
         $changed[] = 'PATCH_NOTES.md';
     }
 } catch (Throwable $exception) {
-    fwrite(STDERR, 'Release preparation failed: ' . $exception->getMessage() . "\n");
+    fwrite(
+        STDERR,
+        'Release preparation failed: ' . $exception->getMessage() . "\n",
+    );
     exit(1);
 }
 
 $changed = array_values(array_unique($changed));
 sort($changed, SORT_STRING);
 
-fwrite(STDOUT, 'PHP Gallery release preparation | ' . $current . ' -> ' . $version . "\n");
+fwrite(
+    STDOUT,
+    'PHP Gallery release preparation | ' . $current . ' -> ' . $version . "\n",
+);
 fwrite(STDOUT, str_repeat('=', 72) . "\n");
 if ($changed === []) {
     fwrite(STDOUT, "No mechanical release markers required changes.\n");
@@ -120,10 +148,19 @@ if ($changed === []) {
     }
 }
 fwrite(STDOUT, str_repeat('-', 72) . "\n");
-fwrite(STDOUT, "Preparation is not release qualification. Continue with RELEASE.md.\n");
-fwrite(STDOUT, "Complete PATCH_NOTES.md and release-sensitive documentation, rebuild the manual,\n");
-fwrite(STDOUT, "then regenerate the manifest, pass the cheap preflight, and run one release audit:\n");
+fwrite(
+    STDOUT,
+    "Preparation is not release qualification. Continue with RELEASE.md.\n",
+);
+fwrite(
+    STDOUT,
+    "Complete PATCH_NOTES.md and release-sensitive documentation, rebuild the manual,\n",
+);
+fwrite(
+    STDOUT,
+    "then regenerate the manifest, pass the cheap preflight, and run one release audit:\n",
+);
 fwrite(STDOUT, "  php scripts/generate_manifest.php\n");
-fwrite(STDOUT, "  php scripts/check_release.php " . $version . "\n");
+fwrite(STDOUT, '  php scripts/check_release.php ' . $version . "\n");
 fwrite(STDOUT, "  php scripts/generate_manifest.php --check\n");
 fwrite(STDOUT, "  php scripts/audit.php --profile=release\n");

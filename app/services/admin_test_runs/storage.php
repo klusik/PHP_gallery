@@ -49,10 +49,18 @@ use function Gallery\Core\url_for;
  * Atomically write one JSON diagnostics file.
  *
  * @param array<string,mixed> $payload Structured JSON-safe payload.
+ * @param string $path Destination JSON file path.
+ * @return void Atomically replaces the destination with the encoded payload.
  */
 function admin_test_run_write_json(string $path, array $payload): void
 {
-    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    $json = json_encode(
+        $payload,
+        JSON_PRETTY_PRINT
+            | JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+            | JSON_INVALID_UTF8_SUBSTITUTE,
+    );
     if (!is_string($json)) {
         throw new RuntimeException('Could not encode Admin test-run JSON.');
     }
@@ -69,6 +77,8 @@ function admin_test_run_write_json(string $path, array $payload): void
 
 /**
  * Read one JSON file as an associative array.
+ *
+ * @param string $path JSON file path.
  *
  * @return array<string,mixed>
  */
@@ -87,20 +97,34 @@ function admin_test_run_read_json(string $path): array
 
 /**
  * Recursively remove one application-owned test-run directory.
+ *
+ * @param string $path Application-owned path to remove.
+ * @return void Attempts bounded recursive cleanup using the configured budget.
  */
 function admin_test_run_delete_tree(string $path): void
 {
-    $deadline = microtime(true) + (ADMIN_TEST_RUN_CLEANUP_TIME_BUDGET_MS / 1000.0);
-    admin_test_run_delete_tree_bounded($path, $deadline, ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP);
+    $deadline =
+        microtime(true) + (ADMIN_TEST_RUN_CLEANUP_TIME_BUDGET_MS / 1000.0);
+    admin_test_run_delete_tree_bounded(
+        $path,
+        $deadline,
+        ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP,
+    );
 }
 
 /**
  * Remove a bounded number of entries from one application-owned diagnostics tree.
  *
- * @return array{entries:int,complete:bool}
+ * @param string $path Application-owned file or directory path.
+ * @param float $deadline Absolute microtime deadline for this cleanup attempt.
+ * @param int $entryBudget Maximum number of entries to unlink or remove.
+ * @return array{entries:int,complete:bool} Number of entries removed and whether the requested tree is fully deleted.
  */
-function admin_test_run_delete_tree_bounded(string $path, float $deadline, int $entryBudget): array
-{
+function admin_test_run_delete_tree_bounded(
+    string $path,
+    float $deadline,
+    int $entryBudget,
+): array {
     $entries = 0;
     $entryBudget = max(1, $entryBudget);
     if (!file_exists($path) && !is_link($path)) {
@@ -111,7 +135,11 @@ function admin_test_run_delete_tree_bounded(string $path, float $deadline, int $
         return ['entries' => $ok ? 1 : 0, 'complete' => $ok];
     }
     $stack = [[$path, false]];
-    while ($stack !== [] && $entries < $entryBudget && microtime(true) < $deadline) {
+    while (
+        $stack !== []
+        && $entries < $entryBudget
+        && microtime(true) < $deadline
+    ) {
         [$current, $visited] = array_pop($stack);
         if (!is_dir($current) || is_link($current)) {
             if (@unlink($current)) {
@@ -142,6 +170,8 @@ function admin_test_run_delete_tree_bounded(string $path, float $deadline, int $
 
 /**
  * Remove old completed test-run directories so diagnostics cannot grow without bound.
+ *
+ * @return array{retention_max_count:int,retention_max_bytes:int,deleted_runs:int,deleted_entries:int,bytes_before:int,truncated:bool,elapsed_ms:float} Retention limits, removed run/entry totals, prior size estimate and bounded-cleanup status.
  */
 function admin_test_run_cleanup_old_reports(): array
 {
@@ -171,7 +201,12 @@ function admin_test_run_cleanup_old_reports(): array
             continue;
         }
         $size = 0;
-        foreach (['report.json', 'report.zip', 'meta.json', 'browser.json'] as $file) {
+        foreach ([
+            'report.json',
+            'report.zip',
+            'meta.json',
+            'browser.json',
+        ] as $file) {
             $filePath = $path . DIRECTORY_SEPARATOR . $file;
             if (is_file($filePath)) {
                 $size += max(0, (int) (@filesize($filePath) ?: 0));
@@ -186,7 +221,10 @@ function admin_test_run_cleanup_old_reports(): array
         ];
         $result['bytes_before'] += $size;
     }
-    usort($runs, static fn (array $a, array $b): int => $b['mtime'] <=> $a['mtime']);
+    usort(
+        $runs,
+        static fn(array $a, array $b): int => $b['mtime'] <=> $a['mtime'],
+    );
     $retainedBytes = 0;
     foreach ($runs as $index => $run) {
         $retainedBytes += (int) $run['size_hint'];
@@ -195,11 +233,19 @@ function admin_test_run_cleanup_old_reports(): array
         if ((!$overCount && !$overBytes) || empty($run['finalized'])) {
             continue;
         }
-        if (microtime(true) >= $deadline || (int) $result['deleted_entries'] >= ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP) {
+        if (
+            microtime(true) >= $deadline
+            || (int) $result['deleted_entries']
+                >= ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP
+        ) {
             $result['truncated'] = true;
             break;
         }
-        $deleted = admin_test_run_delete_tree_bounded((string) $run['path'], $deadline, ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP - (int) $result['deleted_entries']);
+        $deleted = admin_test_run_delete_tree_bounded(
+            (string) $run['path'],
+            $deadline,
+            ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP - (int) $result['deleted_entries'],
+        );
         $result['deleted_entries'] += (int) ($deleted['entries'] ?? 0);
         if (!is_dir((string) $run['path'])) {
             $result['deleted_runs']++;
@@ -215,13 +261,19 @@ function admin_test_run_cleanup_old_reports(): array
 /**
  * Remove intermediate request/browser sidecars after final artifacts exist.
  *
- * @return array<string,mixed>
+ * @param string $token Test-run token whose intermediate sidecars are removed.
+ * @return array{attempted:bool,entries_deleted:int,complete:bool,elapsed_ms:float} Cleanup outcome and elapsed duration.
  */
 function admin_test_run_cleanup_intermediates(string $token): array
 {
     $started = microtime(true);
     $deadline = $started + (ADMIN_TEST_RUN_CLEANUP_TIME_BUDGET_MS / 1000.0);
-    $result = ['attempted' => true, 'entries_deleted' => 0, 'complete' => true, 'elapsed_ms' => 0.0];
+    $result = [
+        'attempted' => true,
+        'entries_deleted' => 0,
+        'complete' => true,
+        'elapsed_ms' => 0.0,
+    ];
     foreach ([
         admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'browser.json',
         admin_test_run_requests_directory($token, false),
@@ -229,7 +281,11 @@ function admin_test_run_cleanup_intermediates(string $token): array
         if (!file_exists($path)) {
             continue;
         }
-        $deleted = admin_test_run_delete_tree_bounded($path, $deadline, ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP - (int) $result['entries_deleted']);
+        $deleted = admin_test_run_delete_tree_bounded(
+            $path,
+            $deadline,
+            ADMIN_TEST_RUN_CLEANUP_ENTRY_CAP - (int) $result['entries_deleted'],
+        );
         $result['entries_deleted'] += (int) ($deleted['entries'] ?? 0);
         if (empty($deleted['complete'])) {
             $result['complete'] = false;
@@ -244,6 +300,8 @@ function admin_test_run_cleanup_intermediates(string $token): array
  * Build an optional ZIP containing the final JSON report.
  *
  * @param array<string,mixed> $report Final report payload.
+ * @param string $token Test-run token determining the ZIP destination.
+ * @return void Creates a ZIP when the extension and filesystem allow it.
  */
 function admin_test_run_build_zip(string $token, array $report): void
 {
@@ -253,13 +311,25 @@ function admin_test_run_build_zip(string $token, array $report): void
         return;
     }
     $zip = new ZipArchive();
-    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+    if (
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+        !== true
+    ) {
         return;
     }
     try {
-        $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        $json = json_encode(
+            $report,
+            JSON_PRETTY_PRINT
+                | JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+                | JSON_INVALID_UTF8_SUBSTITUTE,
+        );
         if (is_string($json)) {
-            $zip->addFromString(admin_test_run_download_filename($report, false), $json . "\n");
+            $zip->addFromString(
+                admin_test_run_download_filename($report, false),
+                $json . "\n",
+            );
         }
     } finally {
         $zip->close();
@@ -268,22 +338,45 @@ function admin_test_run_build_zip(string $token, array $report): void
 
 /**
  * Return a filesystem-safe download name for one test-run report.
+ *
+ * @param array<string,mixed> $report Final report metadata.
+ * @param bool $zip Whether the filename should use the ZIP extension.
+ * @return string Sanitized download filename ending in `.zip` or `.json`.
  */
-function admin_test_run_download_filename(array $report, bool $zip = true): string
-{
-    $page = preg_replace('/[^a-z0-9_-]+/i', '-', (string) ($report['target']['page'] ?? 'gallery')) ?: 'gallery';
+function admin_test_run_download_filename(
+    array $report,
+    bool $zip = true,
+): string {
+    $page = preg_replace(
+        '/[^a-z0-9_-]+/i',
+        '-',
+        (string) ($report['target']['page'] ?? 'gallery'),
+    ) ?: 'gallery';
     $created = (string) ($report['created_at'] ?? gmdate('c'));
     $stamp = preg_replace('/[^0-9]/', '', $created) ?: gmdate('YmdHis');
     $stamp = substr($stamp, 0, 14);
-    $token = preg_replace('/[^a-z0-9]+/i', '', (string) ($report['run_id'] ?? '')) ?: 'run';
+    $token = preg_replace(
+        '/[^a-z0-9]+/i',
+        '',
+        (string) ($report['run_id'] ?? ''),
+    ) ?: 'run';
     $token = substr($token, 0, 8);
-    return 'php-gallery-test-run-' . $page . '-' . $stamp . '-' . $token . ($zip ? '.zip' : '.json');
+    return (
+        'php-gallery-test-run-'
+            . $page
+            . '-'
+            . $stamp
+            . '-'
+            . $token
+            . ($zip ? '.zip' : '.json')
+    );
 }
 
 /**
  * Read every completed and active request sidecar for a run.
  *
- * @return array{completed:array<int,array<string,mixed>>,active:array<int,array<string,mixed>>}
+ * @param string $token Test-run token whose request sidecars are read.
+ * @return array{completed:list<array<string,mixed>>,active:list<array<string,mixed>>} Completed and active request records, with token fields removed.
  */
 function admin_test_run_request_records(string $token): array
 {
@@ -301,7 +394,9 @@ function admin_test_run_request_records(string $token): array
         if (!str_ends_with($name, '.json')) {
             continue;
         }
-        $payload = admin_test_run_read_json($directory . DIRECTORY_SEPARATOR . $name);
+        $payload = admin_test_run_read_json(
+            $directory . DIRECTORY_SEPARATOR . $name,
+        );
         if (!$payload) {
             continue;
         }
@@ -312,14 +407,21 @@ function admin_test_run_request_records(string $token): array
             $completed[] = $payload;
         }
     }
-    usort($completed, static fn (array $a, array $b): int => ((float) ($a['request_time_unix'] ?? 0)) <=> ((float) ($b['request_time_unix'] ?? 0)));
+    usort(
+        $completed,
+        static fn(array $a, array $b): int => (
+            (float) ($a['request_time_unix'] ?? 0)
+            <=> (float) ($b['request_time_unix'] ?? 0)
+        ),
+    );
     return ['completed' => $completed, 'active' => $active];
 }
 
 /**
  * Return recent finalized reports for the Admin diagnostics panel.
  *
- * @return array<int,array<string,mixed>>
+ * @param int $limit Maximum number of reports to return, defaulting to ten.
+ * @return list<array{token:string,created_at:string,finalized_at:string,target_page:string,target:string,request_count:int,peak_concurrency:int,all_closed:bool,zip_available:bool}> Current Admin's newest finalized reports.
  */
 function admin_test_run_recent_reports(int $limit = 10): array
 {
@@ -333,7 +435,13 @@ function admin_test_run_recent_reports(int $limit = 10): array
         if (!admin_test_run_token_valid((string) $name)) {
             continue;
         }
-        $report = admin_test_run_read_json($root . DIRECTORY_SEPARATOR . $name . DIRECTORY_SEPARATOR . 'report.json');
+        $report = admin_test_run_read_json(
+            $root
+                . DIRECTORY_SEPARATOR
+                . $name
+                . DIRECTORY_SEPARATOR
+                . 'report.json',
+        );
         if (!$report || !admin_test_run_owned_by_current_admin($report)) {
             continue;
         }
@@ -343,13 +451,28 @@ function admin_test_run_recent_reports(int $limit = 10): array
             'finalized_at' => (string) ($report['finalized_at'] ?? ''),
             'target_page' => (string) ($report['target']['page'] ?? ''),
             'target' => (string) ($report['target']['request_target'] ?? ''),
-            'request_count' => (int) ($report['request_lifecycle']['completed_count'] ?? 0),
-            'peak_concurrency' => (int) ($report['request_concurrency']['peak_concurrent_php_requests'] ?? 0),
-            'all_closed' => !empty($report['request_lifecycle']['all_completed_cleanly']),
-            'zip_available' => is_file($root . DIRECTORY_SEPARATOR . $name . DIRECTORY_SEPARATOR . 'report.zip'),
+            'request_count' => (int) (
+                $report['request_lifecycle']['completed_count'] ?? 0
+            ),
+            'peak_concurrency' => (int) (
+                $report['request_concurrency']['peak_concurrent_php_requests']
+                ?? 0
+            ),
+            'all_closed' =>
+                !empty($report['request_lifecycle']['all_completed_cleanly']),
+            'zip_available' => is_file(
+                $root
+                    . DIRECTORY_SEPARATOR
+                    . $name
+                    . DIRECTORY_SEPARATOR
+                    . 'report.zip',
+            ),
         ];
     }
-    usort($reports, static fn (array $a, array $b): int => strcmp($b['finalized_at'], $a['finalized_at']));
+    usort($reports, static fn(array $a, array $b): int => strcmp(
+        $b['finalized_at'],
+        $a['finalized_at'],
+    ));
     return array_slice($reports, 0, max(1, min(50, $limit)));
 }
 
@@ -362,7 +485,10 @@ function admin_test_run_latest_for_target(string $target): ?array
 {
     $target = admin_test_run_normalize_target($target);
     foreach (admin_test_run_recent_reports(20) as $report) {
-        if (admin_test_run_normalize_target((string) ($report['target'] ?? '')) === $target) {
+        if (
+            admin_test_run_normalize_target((string) ($report['target'] ?? ''))
+            === $target
+        ) {
             return $report;
         }
     }

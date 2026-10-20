@@ -49,27 +49,61 @@ function theme_layout_safe_settings(): array
     $tagGrid = tag_page_gallery_grid_settings();
 
     return [
-        'theme_gps_pin_enabled' => ((string) ($theme['gps_pin_enabled'] ?? '1')) !== '0' ? '1' : '0',
-        'theme_gps_pin_background_enabled' => ((string) ($theme['gps_pin_background_enabled'] ?? '1')) !== '0' ? '1' : '0',
-        'theme_gps_pin_size' => (string) theme_gps_pin_size_value($theme['gps_pin_size'] ?? null),
-        'theme_gps_pin_background_size' => (string) theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null),
-        'theme_gallery_description_layout' => theme_gallery_description_layout(),
+        'theme_gps_pin_enabled' => (string) ($theme['gps_pin_enabled'] ?? '1')
+        !== '0'
+            ? '1'
+            : '0',
+        'theme_gps_pin_background_enabled' => (string) (
+            $theme['gps_pin_background_enabled'] ?? '1'
+        ) !== '0'
+            ? '1'
+            : '0',
+        'theme_gps_pin_size' => (string) theme_gps_pin_size_value(
+            $theme['gps_pin_size'] ?? null,
+        ),
+        'theme_gps_pin_background_size' =>
+            (string) theme_gps_pin_background_size_value(
+                $theme['gps_pin_background_size'] ?? null,
+            ),
+        'theme_gallery_description_layout' =>
+            theme_gallery_description_layout(),
         'theme_breadcrumb_style' => theme_breadcrumb_style(),
-        'theme_gallery_count_badge_enabled' => theme_gallery_count_badge_enabled() ? '1' : '0',
+        'theme_gallery_count_badge_enabled' =>
+            theme_gallery_count_badge_enabled() ? '1' : '0',
         'theme_gallery_count_badge_mode' => theme_gallery_count_badge_mode(),
-        'theme_gallery_count_badge_icons_enabled' => theme_gallery_count_badge_icons_enabled() ? '1' : '0',
+        'theme_gallery_count_badge_icons_enabled' =>
+            theme_gallery_count_badge_icons_enabled() ? '1' : '0',
         'pagination_enabled' => !empty($pagination['enabled']) ? '1' : '0',
-        'pagination_columns' => (string) ($pagination['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS),
-        'pagination_rows' => (string) ($pagination['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS),
-        'home_gallery_grid_columns' => (string) ($homeGrid['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS),
-        'home_gallery_grid_rows' => (string) ($homeGrid['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS),
-        'tag_page_gallery_grid_columns' => (string) ($tagGrid['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS),
-        'tag_page_gallery_grid_rows' => (string) ($tagGrid['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS),
-        'tag_page_gallery_description_layout' => tag_page_gallery_description_layout(),
-        'theme_hero_tag_visible_limit' => (string) theme_hero_tag_visible_limit(),
-        'theme_hero_tag_display_all' => theme_hero_tag_display_all_enabled() ? '1' : '0',
-        'theme_hero_tag_scrollbar_enabled' => theme_hero_tag_scrollbar_enabled() ? '1' : '0',
-        'theme_hero_tag_scrollbar_rows' => (string) theme_hero_tag_scrollbar_rows(),
+        'pagination_columns' => (string) (
+            $pagination['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS
+        ),
+        'pagination_rows' => (string) (
+            $pagination['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS
+        ),
+        'home_gallery_grid_columns' => (string) (
+            $homeGrid['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS
+        ),
+        'home_gallery_grid_rows' => (string) (
+            $homeGrid['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS
+        ),
+        'tag_page_gallery_grid_columns' => (string) (
+            $tagGrid['columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS
+        ),
+        'tag_page_gallery_grid_rows' => (string) (
+            $tagGrid['rows'] ?? CMS_PAGINATION_DEFAULT_ROWS
+        ),
+        'tag_page_gallery_description_layout' =>
+            tag_page_gallery_description_layout(),
+        'theme_hero_tag_visible_limit' =>
+            (string) theme_hero_tag_visible_limit(),
+        'theme_hero_tag_display_all' => theme_hero_tag_display_all_enabled()
+            ? '1'
+            : '0',
+        'theme_hero_tag_scrollbar_enabled' => theme_hero_tag_scrollbar_enabled()
+            ? '1'
+            : '0',
+        'theme_hero_tag_scrollbar_rows' =>
+            (string) theme_hero_tag_scrollbar_rows(),
         'theme_hero_tag_sort_mode' => theme_hero_tag_sort_mode(),
         'theme_lightbox_browsing_mode' => theme_lightbox_browsing_mode(),
     ];
@@ -86,18 +120,28 @@ function theme_layout_safe_settings(): array
  */
 function theme_layout_safe_setting_available(string $id): bool
 {
-    if (in_array($id, [
-        'theme_gps_pin_enabled',
-        'theme_gps_pin_background_enabled',
-        'theme_gps_pin_size',
-        'theme_gps_pin_background_size',
-    ], true)) {
-        return !function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
-            || feature_capability_effective_enabled('gallery_maps');
+    if (in_array(
+        $id,
+        [
+            'theme_gps_pin_enabled',
+            'theme_gps_pin_background_enabled',
+            'theme_gps_pin_size',
+            'theme_gps_pin_background_size',
+        ],
+        true,
+    )) {
+        return (
+            !function_exists(__NAMESPACE__
+                . '\\feature_capability_effective_enabled')
+                || feature_capability_effective_enabled('gallery_maps')
+        );
     }
     if ($id === 'theme_lightbox_browsing_mode') {
-        return !function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
-            || feature_capability_effective_enabled('lightbox_modes');
+        return (
+            !function_exists(__NAMESPACE__
+                . '\\feature_capability_effective_enabled')
+                || feature_capability_effective_enabled('lightbox_modes')
+        );
     }
     return array_key_exists($id, theme_layout_safe_settings());
 }
@@ -121,15 +165,19 @@ function theme_layout_safe_normalize(string $id, mixed $value): string
         throw new InvalidArgumentException('Enter a valid Theme layout value.');
     }
 
-    if (in_array($id, [
-        'theme_gps_pin_enabled',
-        'theme_gps_pin_background_enabled',
-        'theme_gallery_count_badge_enabled',
-        'theme_gallery_count_badge_icons_enabled',
-        'pagination_enabled',
-        'theme_hero_tag_display_all',
-        'theme_hero_tag_scrollbar_enabled',
-    ], true)) {
+    if (in_array(
+        $id,
+        [
+            'theme_gps_pin_enabled',
+            'theme_gps_pin_background_enabled',
+            'theme_gallery_count_badge_enabled',
+            'theme_gallery_count_badge_icons_enabled',
+            'pagination_enabled',
+            'theme_hero_tag_display_all',
+            'theme_hero_tag_scrollbar_enabled',
+        ],
+        true,
+    )) {
         if ($value === true || $value === 1 || $value === '1') {
             return '1';
         }
@@ -142,61 +190,131 @@ function theme_layout_safe_normalize(string $id, mixed $value): string
     $text = trim((string) $value);
     if ($id === 'theme_gallery_count_badge_mode') {
         if (!in_array($text, ['public', 'all', 'both', 'hidden'], true)) {
-            throw new InvalidArgumentException('Choose a supported picture-count display mode.');
+            throw new InvalidArgumentException(
+                'Choose a supported picture-count display mode.',
+            );
         }
         return $text;
     }
     if ($id === 'theme_gps_pin_size') {
-        if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 14 || (int) $text > 48) {
-            throw new InvalidArgumentException('Choose a GPS pin size from 14 to 48 pixels.');
+        if (
+            filter_var($text, FILTER_VALIDATE_INT) === false
+            || (int) $text < 14
+            || (int) $text > 48
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a GPS pin size from 14 to 48 pixels.',
+            );
         }
         return (string) (int) $text;
     }
     if ($id === 'theme_gps_pin_background_size') {
-        if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 0 || (int) $text > 48) {
-            throw new InvalidArgumentException('Choose a GPS pin background size from 0 to 48 pixels.');
+        if (
+            filter_var($text, FILTER_VALIDATE_INT) === false
+            || (int) $text < 0
+            || (int) $text > 48
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a GPS pin background size from 0 to 48 pixels.',
+            );
         }
         return (string) (int) $text;
     }
-    if (in_array($id, ['theme_gallery_description_layout', 'tag_page_gallery_description_layout'], true)) {
+    if (in_array(
+        $id,
+        [
+            'theme_gallery_description_layout',
+            'tag_page_gallery_description_layout',
+        ],
+        true,
+    )) {
         if (!in_array($text, gallery_description_layout_options(), true)) {
-            throw new InvalidArgumentException('Choose a supported gallery-card layout.');
+            throw new InvalidArgumentException(
+                'Choose a supported gallery-card layout.',
+            );
         }
         return $text;
     }
-    if (in_array($id, ['pagination_columns', 'home_gallery_grid_columns', 'tag_page_gallery_grid_columns'], true)) {
-        if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 1 || (int) $text > CMS_PAGINATION_MAX_COLUMNS) {
-            throw new InvalidArgumentException('Choose a supported grid column count.');
+    if (in_array(
+        $id,
+        [
+            'pagination_columns',
+            'home_gallery_grid_columns',
+            'tag_page_gallery_grid_columns',
+        ],
+        true,
+    )) {
+        if (
+            filter_var($text, FILTER_VALIDATE_INT) === false
+            || (int) $text < 1
+            || (int) $text > CMS_PAGINATION_MAX_COLUMNS
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a supported grid column count.',
+            );
         }
         return (string) (int) $text;
     }
-    if (in_array($id, ['pagination_rows', 'home_gallery_grid_rows', 'tag_page_gallery_grid_rows'], true)) {
-        if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 1 || (int) $text > CMS_PAGINATION_MAX_ROWS) {
-            throw new InvalidArgumentException('Choose a supported grid row count.');
+    if (in_array(
+        $id,
+        [
+            'pagination_rows',
+            'home_gallery_grid_rows',
+            'tag_page_gallery_grid_rows',
+        ],
+        true,
+    )) {
+        if (
+            filter_var($text, FILTER_VALIDATE_INT) === false
+            || (int) $text < 1
+            || (int) $text > CMS_PAGINATION_MAX_ROWS
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a supported grid row count.',
+            );
         }
         return (string) (int) $text;
     }
     if ($id === 'theme_hero_tag_visible_limit') {
-        if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 1 || (int) $text > 200) {
-            throw new InvalidArgumentException('Choose a hero-tag visible limit from 1 to 200.');
+        if (
+            filter_var($text, FILTER_VALIDATE_INT) === false
+            || (int) $text < 1
+            || (int) $text > 200
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a hero-tag visible limit from 1 to 200.',
+            );
         }
         return (string) (int) $text;
     }
     if ($id === 'theme_hero_tag_scrollbar_rows') {
-        if (filter_var($text, FILTER_VALIDATE_INT) === false || (int) $text < 1 || (int) $text > 12) {
-            throw new InvalidArgumentException('Choose a hero-tag scrollbar threshold from 1 to 12 rows.');
+        if (
+            filter_var($text, FILTER_VALIDATE_INT) === false
+            || (int) $text < 1
+            || (int) $text > 12
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a hero-tag scrollbar threshold from 1 to 12 rows.',
+            );
         }
         return (string) (int) $text;
     }
     if ($id === 'theme_hero_tag_sort_mode') {
         if (!in_array($text, ['usage', 'alphabetical'], true)) {
-            throw new InvalidArgumentException('Choose a supported hero-tag sort mode.');
+            throw new InvalidArgumentException(
+                'Choose a supported hero-tag sort mode.',
+            );
         }
         return $text;
     }
     if ($id === 'theme_lightbox_browsing_mode') {
-        if (!theme_layout_safe_setting_available($id) || !in_array($text, gallery_lightbox_browsing_mode_options(), true)) {
-            throw new InvalidArgumentException('Choose a supported lightbox browsing mode.');
+        if (
+            !theme_layout_safe_setting_available($id)
+            || !in_array($text, gallery_lightbox_browsing_mode_options(), true)
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a supported lightbox browsing mode.',
+            );
         }
         return $text;
     }
@@ -214,17 +332,29 @@ function theme_layout_safe_normalize(string $id, mixed $value): string
 function theme_layout_safe_save(string $id, mixed $value): void
 {
     if (!theme_layout_safe_setting_available($id)) {
-        throw new InvalidArgumentException('Theme layout setting is unavailable.');
+        throw new InvalidArgumentException(
+            'Theme layout setting is unavailable.',
+        );
     }
     $normalized = theme_layout_safe_normalize($id, $value);
 
     // Compatibility for earlier Theme clients. The original checkbox is now
     // a mode switch and must not reset the independent Show icons preference.
     if ($id === 'theme_gallery_count_badge_enabled') {
-        theme_layout_safe_save('theme_gallery_count_badge_mode', $normalized === '1' ? 'both' : 'hidden');
+        theme_layout_safe_save(
+            'theme_gallery_count_badge_mode',
+            $normalized === '1' ? 'both' : 'hidden',
+        );
         return;
     }
-    if (in_array($id, ['theme_gallery_count_badge_mode', 'theme_gallery_count_badge_icons_enabled'], true)) {
+    if (in_array(
+        $id,
+        [
+            'theme_gallery_count_badge_mode',
+            'theme_gallery_count_badge_icons_enabled',
+        ],
+        true,
+    )) {
         $previous = $id === 'theme_gallery_count_badge_mode'
             ? theme_gallery_count_badge_mode()
             : (theme_gallery_count_badge_icons_enabled() ? '1' : '0');
@@ -261,12 +391,19 @@ function theme_layout_safe_save(string $id, mixed $value): void
     }
     if (str_starts_with($id, 'theme_hero_tag_')) {
         $previous = match ($id) {
-            'theme_hero_tag_visible_limit' => (string) theme_hero_tag_visible_limit(),
-            'theme_hero_tag_display_all' => theme_hero_tag_display_all_enabled() ? '1' : '0',
-            'theme_hero_tag_scrollbar_enabled' => theme_hero_tag_scrollbar_enabled() ? '1' : '0',
-            'theme_hero_tag_scrollbar_rows' => (string) theme_hero_tag_scrollbar_rows(),
+            'theme_hero_tag_visible_limit'
+                => (string) theme_hero_tag_visible_limit(),
+            'theme_hero_tag_display_all' => theme_hero_tag_display_all_enabled()
+                ? '1'
+                : '0',
+            'theme_hero_tag_scrollbar_enabled'
+                => theme_hero_tag_scrollbar_enabled() ? '1' : '0',
+            'theme_hero_tag_scrollbar_rows'
+                => (string) theme_hero_tag_scrollbar_rows(),
             'theme_hero_tag_sort_mode' => theme_hero_tag_sort_mode(),
-            default => throw new InvalidArgumentException('Unknown hero-tag setting.'),
+            default => throw new InvalidArgumentException(
+                'Unknown hero-tag setting.',
+            ),
         };
         set_app_setting($id, $normalized);
         if ($normalized !== $previous) {

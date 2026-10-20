@@ -91,15 +91,22 @@ function db_column_exists(string $table, string $column): bool
         return $cache[$cacheKey];
     }
 
-    if (function_exists(__NAMESPACE__ . '\\schema_inspection_snapshot_column_exists')) {
-        $snapshotExists = schema_inspection_snapshot_column_exists($safeTable, $safeColumn);
+    if (function_exists(__NAMESPACE__
+        . '\\schema_inspection_snapshot_column_exists')) {
+        $snapshotExists = schema_inspection_snapshot_column_exists(
+            $safeTable,
+            $safeColumn,
+        );
         if ($snapshotExists !== null) {
             return $cache[$cacheKey] = $snapshotExists;
         }
     }
 
     try {
-        return $cache[$cacheKey] = database_helpers_model_column_exists($safeTable, $safeColumn);
+        return $cache[$cacheKey] = database_helpers_model_column_exists(
+            $safeTable,
+            $safeColumn,
+        );
     } catch (Throwable) {
         return $cache[$cacheKey] = false;
     }
@@ -125,7 +132,8 @@ function db_table_exists(string $table): bool
         return $cache[$cacheKey];
     }
 
-    if (function_exists(__NAMESPACE__ . '\\schema_inspection_snapshot_table_exists')) {
+    if (function_exists(__NAMESPACE__
+        . '\\schema_inspection_snapshot_table_exists')) {
         $snapshotExists = schema_inspection_snapshot_table_exists($safeTable);
         if ($snapshotExists !== null) {
             return $cache[$cacheKey] = $snapshotExists;
@@ -133,7 +141,8 @@ function db_table_exists(string $table): bool
     }
 
     try {
-        return $cache[$cacheKey] = database_helpers_model_table_exists($safeTable);
+        return $cache[$cacheKey] =
+            database_helpers_model_table_exists($safeTable);
     } catch (Throwable) {
         return $cache[$cacheKey] = false;
     }

@@ -49,8 +49,11 @@ use function Gallery\Models\viewer_maintenance_model_delete_batch;
  * @param int $limit Maximum rows deleted in this maintenance slice.
  * @return int Number of rows removed.
  */
-function viewer_maintenance_delete_batch(string $kind, array $params, int $limit = 1000): int
-{
+function viewer_maintenance_delete_batch(
+    string $kind,
+    array $params,
+    int $limit = 1000,
+): int {
     return viewer_maintenance_model_delete_batch($kind, $params, $limit);
 }
 
@@ -84,13 +87,36 @@ function viewer_security_maintenance_cleanup(): array
     $now = now_sql();
     $oldConsumedCutoff = date('Y-m-d H:i:s', time() - 604800);
     $result = [];
-    $result['email_verification_tokens'] = viewer_maintenance_delete_batch('email_verification_tokens', [$now, $oldConsumedCutoff, $oldConsumedCutoff]);
-    $result['password_reset_tokens'] = viewer_maintenance_delete_batch('password_reset_tokens', [$now, $oldConsumedCutoff, $oldConsumedCutoff]);
-    $result['email_change_requests'] = viewer_maintenance_delete_batch('email_change_requests', [$now, $oldConsumedCutoff, $oldConsumedCutoff]);
-    $result['remember_tokens'] = viewer_maintenance_delete_batch('remember_tokens', [$now, $oldConsumedCutoff]);
-    $result['sessions'] = viewer_maintenance_delete_batch('sessions', [$now, $oldConsumedCutoff]);
-    $result['collection_share_tokens'] = viewer_maintenance_delete_batch('collection_share_tokens', [$now, $oldConsumedCutoff]);
-    $result['security_events'] = viewer_maintenance_delete_batch('security_events', [$now]);
+    $result['email_verification_tokens'] = viewer_maintenance_delete_batch('email_verification_tokens', [
+        $now,
+        $oldConsumedCutoff,
+        $oldConsumedCutoff,
+    ]);
+    $result['password_reset_tokens'] = viewer_maintenance_delete_batch('password_reset_tokens', [
+        $now,
+        $oldConsumedCutoff,
+        $oldConsumedCutoff,
+    ]);
+    $result['email_change_requests'] = viewer_maintenance_delete_batch('email_change_requests', [
+        $now,
+        $oldConsumedCutoff,
+        $oldConsumedCutoff,
+    ]);
+    $result['remember_tokens'] = viewer_maintenance_delete_batch('remember_tokens', [
+        $now,
+        $oldConsumedCutoff,
+    ]);
+    $result['sessions'] = viewer_maintenance_delete_batch('sessions', [
+        $now,
+        $oldConsumedCutoff,
+    ]);
+    $result['collection_share_tokens'] = viewer_maintenance_delete_batch('collection_share_tokens', [
+        $now,
+        $oldConsumedCutoff,
+    ]);
+    $result['security_events'] = viewer_maintenance_delete_batch('security_events', [
+        $now,
+    ]);
     $result['rate_limits'] = viewer_rate_limit_cleanup();
     $result['registration'] = viewer_registration_maintenance_cleanup();
     $result['account_capacity'] = viewer_account_capacity_reconcile();

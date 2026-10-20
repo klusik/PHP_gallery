@@ -88,11 +88,14 @@ $registry = [
         ],
         // Portable runtime suites have one exact-candidate owner across the hosted matrix.
         'portable' => [
-            'node-full', 'winapp',
+            'node-full',
+            'winapp',
         ],
         // Each hosted FULL PHP owner runs the same centrally partitioned PHP regression tree.
         'hosted-full' => [
-            'php-regression', 'runtime-performance', 'php-lint',
+            'php-regression',
+            'runtime-performance',
+            'php-lint',
         ],
         'quick' => [
             'php-fast',
@@ -493,9 +496,12 @@ $registry = [
 ];
 
 $registry['php_fast_tests'] = $phpRegistry['quick_tests'];
-$registry['hosted_full_php_shard_count'] = $phpRegistry['hosted_full_php_shard_count'];
-$registry['performance_probes'] = require __DIR__ . '/audit_performance_registry.php';
-$registry['route_performance_probes'] = require __DIR__ . '/audit_route_probe_registry.php';
+$registry['hosted_full_php_shard_count'] =
+    $phpRegistry['hosted_full_php_shard_count'];
+$registry['performance_probes'] = require
+    __DIR__ . '/audit_performance_registry.php';
+$registry['route_performance_probes'] = require
+    __DIR__ . '/audit_route_probe_registry.php';
 foreach ($phpRegistry['serial_tests'] as $name => $reason) {
     $registry['php_test_requirements'][$name] = array_replace(
         $registry['php_test_requirements'][$name] ?? [],

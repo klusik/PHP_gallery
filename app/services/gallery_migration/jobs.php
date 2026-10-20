@@ -67,12 +67,17 @@ function gallery_migration_job_dir(): string
 
 /**
  * Ensure the job-state directory exists.
+ *
+ * @return void Returns after ensuring the private migration job-state directory exists; throws when creation fails.
  */
 function gallery_migration_ensure_job_dir(): void
 {
     $dir = gallery_migration_job_dir();
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_dir_failed', 'Could not create the gallery migration job directory.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.job_dir_failed',
+            'Could not create the gallery migration job directory.',
+        ));
     }
 }
 
@@ -118,7 +123,10 @@ function gallery_migration_job_path(string $jobId): string
 {
     $jobId = gallery_migration_normalize_job_id($jobId);
     if ($jobId === '') {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.invalid_job', 'Invalid migration job id.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.invalid_job',
+            'Invalid migration job id.',
+        ));
     }
 
     return gallery_migration_job_dir() . '/' . $jobId . '.json';
@@ -127,20 +135,36 @@ function gallery_migration_job_path(string $jobId): string
 /**
  * Persist one migration job state.
  *
- * @param array $job Job value.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $job Mutable durable job state, including job_id used for its file name.
+ * @return void Returns after writing the durable job state; throws when the job ID is invalid or persistence fails.
  */
 function gallery_migration_save_job(array $job): void
 {
     gallery_migration_ensure_job_dir();
-    $jobId = gallery_migration_normalize_job_id((string) ($job['job_id'] ?? ''));
+    $jobId = gallery_migration_normalize_job_id(
+        (string) ($job['job_id'] ?? ''),
+    );
     if ($jobId === '') {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.invalid_job', 'Invalid migration job id.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.invalid_job',
+            'Invalid migration job id.',
+        ));
     }
 
     $job['updated_at'] = now_sql();
     $json = json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($json === false || @file_put_contents(gallery_migration_job_path($jobId), $json, LOCK_EX) === false) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_write_failed', 'Could not save migration job state.'));
+    if (
+        $json === false
+        || @file_put_contents(
+            gallery_migration_job_path($jobId),
+            $json,
+            LOCK_EX,
+        ) === false
+    ) {
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.job_write_failed',
+            'Could not save migration job state.',
+        ));
     }
 }
 
@@ -148,18 +172,24 @@ function gallery_migration_save_job(array $job): void
  * Load one migration job state.
  *
  * @param string $jobId Job id identifier.
- * @return array Structured result data for the caller.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> Decoded durable job state with its manifest, gallery/image maps, package plan, and received-asset ledger.
  */
 function gallery_migration_load_job(string $jobId): array
 {
     $path = gallery_migration_job_path($jobId);
     if (!is_file($path)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_missing', 'Migration job was not found. Start the migration again.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.job_missing',
+            'Migration job was not found. Start the migration again.',
+        ));
     }
 
     $decoded = json_decode((string) file_get_contents($path), true);
     if (!is_array($decoded)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_corrupt', 'Migration job state is unreadable.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.job_corrupt',
+            'Migration job state is unreadable.',
+        ));
     }
 
     return $decoded;
@@ -167,18 +197,20 @@ function gallery_migration_load_job(string $jobId): array
 
 /**
  * Load a compatible existing job without turning resume misses into hard errors.
- *
  * The migration id is derived from the source gallery content. When the admin
  * restarts the same transfer, the same job id is produced and the target
  * gallery can answer which assets it already accepted.
  *
  * @param string $jobId Stable job id for the target gallery and manifest.
  * @param int $targetGalleryId Target gallery id.
- * @param array $manifest Manifest value.
- * @return array<string mixed>|null Existing job, or null when it cannot be safely reused.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $manifest Current transfer manifest compared by migration_id.
+ * @return array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>>|null Durable job matching target gallery and manifest migration ID, or null when it cannot be safely reused.
  */
-function gallery_migration_load_existing_compatible_job(string $jobId, int $targetGalleryId, array $manifest): ?array
-{
+function gallery_migration_load_existing_compatible_job(
+    string $jobId,
+    int $targetGalleryId,
+    array $manifest,
+): ?array {
     try {
         $job = gallery_migration_load_job($jobId);
     } catch (Throwable) {
@@ -190,7 +222,10 @@ function gallery_migration_load_existing_compatible_job(string $jobId, int $targ
     }
 
     $oldManifest = (array) ($job['manifest'] ?? []);
-    if ((string) ($oldManifest['migration_id'] ?? '') !== (string) ($manifest['migration_id'] ?? '')) {
+    if (
+        (string) ($oldManifest['migration_id'] ?? '')
+        !== (string) ($manifest['migration_id'] ?? '')
+    ) {
         return null;
     }
 
@@ -200,12 +235,14 @@ function gallery_migration_load_existing_compatible_job(string $jobId, int $targ
 /**
  * Return a JSON-safe status payload for one target-side migration job.
  *
- * @param array $job Job value.
- * @param ?array $asset Asset value.
- * @return array<string,mixed> Status payload.
+ * @param array<string,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null|array<array-key,int|float|string|bool|null>>>>> $job Durable migration job fields used to calculate progress.
+ * @param array{scope:string,kind:string,source_gallery_id?:int,source_image_id?:int,size?:int,format?:string,filename?:string,relative_path?:string,file_size?:int,checksum_sha256?:string,mime_type?:string}|null $asset Optional manifest asset descriptor whose receipt state is requested.
+ * @return array{ok:true,action:'status',job_id:string,mode:string,target_gallery_id:int,imported_root_gallery_id:int,gallery_ids:list<int>,received:int,total_assets:int,received_packages:int,total_packages:int,received_asset_keys:list<string>,asset_key:string,asset_received:bool,updated_at:string,server_time:string} JSON-safe job progress and optional selected-asset receipt state.
  */
-function gallery_migration_job_status_payload(array $job, ?array $asset = null): array
-{
+function gallery_migration_job_status_payload(
+    array $job,
+    ?array $asset = null,
+): array {
     $manifest = (array) ($job['manifest'] ?? []);
     $received = (array) ($job['assets_received'] ?? []);
     $assetKeys = array_keys($received);
@@ -215,8 +252,17 @@ function gallery_migration_job_status_payload(array $job, ?array $asset = null):
         if (!is_array($package)) {
             continue;
         }
-        $packageKeys = array_values(array_filter((array) ($package['asset_keys'] ?? []), 'is_string'));
-        if ($packageKeys && count(array_filter($packageKeys, static fn (string $key): bool => isset($received[$key]))) === count($packageKeys)) {
+        $packageKeys = array_values(array_filter(
+            (array) ($package['asset_keys'] ?? []),
+            'is_string',
+        ));
+        if (
+            $packageKeys
+            && count(array_filter(
+                $packageKeys,
+                static fn(string $key): bool => isset($received[$key]),
+            )) === count($packageKeys)
+        ) {
             $receivedPackages++;
         }
     }
@@ -227,15 +273,23 @@ function gallery_migration_job_status_payload(array $job, ?array $asset = null):
         'job_id' => (string) ($job['job_id'] ?? ''),
         'mode' => (string) ($job['mode'] ?? ''),
         'target_gallery_id' => (int) ($job['target_gallery_id'] ?? 0),
-        'imported_root_gallery_id' => (int) ($job['imported_root_gallery_id'] ?? 0),
-        'gallery_ids' => array_values(array_map('intval', (array) ($job['gallery_map'] ?? []))),
+        'imported_root_gallery_id' => (int) (
+            $job['imported_root_gallery_id'] ?? 0
+        ),
+        'gallery_ids' => array_values(array_map(
+            'intval',
+            (array) ($job['gallery_map'] ?? []),
+        )),
         'received' => count($received),
-        'total_assets' => count(gallery_migration_manifest_asset_refs($manifest)),
+        'total_assets' => count(gallery_migration_manifest_asset_refs(
+            $manifest,
+        )),
         'received_packages' => $receivedPackages,
         'total_packages' => count((array) ($job['packages'] ?? [])),
         'received_asset_keys' => array_values($assetKeys),
         'asset_key' => $specificKey,
-        'asset_received' => $specificKey !== '' && isset($received[$specificKey]),
+        'asset_received' =>
+            $specificKey !== '' && isset($received[$specificKey]),
         'updated_at' => (string) ($job['updated_at'] ?? ''),
         'server_time' => now_sql(),
     ];
@@ -249,11 +303,18 @@ function gallery_migration_job_status_payload(array $job, ?array $asset = null):
  * @param array<string,int|string>|null $request Optional manifest asset reference whose receipt state is requested.
  * @return array<string,mixed> JSON-safe synchronized job status and optional selected asset receipt state.
  */
-function gallery_migration_job_status_response(string $jobId, int $targetGalleryId, ?array $request = null): array
-{
+function gallery_migration_job_status_response(
+    string $jobId,
+    int $targetGalleryId,
+    ?array $request = null,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return gallery_migration_job_status_response_owned($jobId, $targetGalleryId, $request);
+        return gallery_migration_job_status_response_owned(
+            $jobId,
+            $targetGalleryId,
+            $request,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -271,11 +332,17 @@ function gallery_migration_job_status_response(string $jobId, int $targetGallery
  * @return array<string,mixed> JSON-safe synchronized job status and optional selected asset receipt state.
  * @author Rudolf Klusal
  */
-function gallery_migration_job_status_response_owned(string $jobId, int $targetGalleryId, ?array $request = null): array
-{
+function gallery_migration_job_status_response_owned(
+    string $jobId,
+    int $targetGalleryId,
+    ?array $request = null,
+): array {
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.job_target_mismatch',
+            'Migration job does not belong to this target gallery.',
+        ));
     }
 
     $job = gallery_migration_sync_received_assets($job);
@@ -295,8 +362,10 @@ function gallery_migration_job_status_response_owned(string $jobId, int $targetG
  * @param int $targetGalleryId Receiving parent gallery id.
  * @return array{ok:bool,job_id:string,target_gallery_id:int,target_parent_gallery_id:int,imported_root_gallery_id:int,gallery_ids:list<int>,assets_received:int,total_assets:int,gallery_url:string,edit_url:string} Completed import identities, receipt totals and navigation URLs.
  */
-function gallery_migration_complete_job(string $jobId, int $targetGalleryId): array
-{
+function gallery_migration_complete_job(
+    string $jobId,
+    int $targetGalleryId,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
         return gallery_migration_complete_job_owned($jobId, $targetGalleryId);
@@ -316,17 +385,22 @@ function gallery_migration_complete_job(string $jobId, int $targetGalleryId): ar
  * @return array{ok:bool,job_id:string,target_gallery_id:int,target_parent_gallery_id:int,imported_root_gallery_id:int,gallery_ids:list<int>,assets_received:int,total_assets:int,gallery_url:string,edit_url:string} Completed import identities, receipt totals and navigation URLs.
  * @author Rudolf Klusal
  */
-function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryId): array
-{
+function gallery_migration_complete_job_owned(
+    string $jobId,
+    int $targetGalleryId,
+): array {
     mutation_schema_assert_available(
         gallery_migration_schema_status(),
         'gallery_migration.complete_job',
         'Gallery migration requires the current gallery/image database schema. Run pending migrations first.',
-        'Gallery migration completion is temporarily unavailable because the database schema could not be verified. The resumable job was left intact.'
+        'Gallery migration completion is temporarily unavailable because the database schema could not be verified. The resumable job was left intact.',
     );
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+        throw new RuntimeException(gallery_migration_t(
+            'gallery_migration.error.job_target_mismatch',
+            'Migration job does not belong to this target gallery.',
+        ));
     }
     $manifest = (array) ($job['manifest'] ?? []);
     foreach (gallery_migration_manifest_galleries($manifest) as $entry) {
@@ -334,21 +408,35 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
         if (array_key_exists('cover_selection_source_ids', $galleryMetadata)) {
             $selection = $galleryMetadata['cover_selection_source_ids'];
             $primary = (int) ($galleryMetadata['cover_source_id'] ?? 0);
-            $selectionValid = is_array($selection) && array_is_list($selection) && count($selection) <= 4;
+            $selectionValid =
+                is_array($selection)
+                && array_is_list($selection)
+                && count($selection) <= 4;
             $seen = [];
             if ($selectionValid) {
                 foreach ($selection as $sourceImageId) {
-                    if (!is_int($sourceImageId) || $sourceImageId <= 0 || isset($seen[$sourceImageId])) {
+                    if (
+                        !is_int($sourceImageId)
+                        || $sourceImageId <= 0
+                        || isset($seen[$sourceImageId])
+                    ) {
                         $selectionValid = false;
                         break;
                     }
                     $seen[$sourceImageId] = true;
                 }
             }
-            if (!$selectionValid || ($selection === [] ? $primary !== 0 : $primary !== $selection[0])) {
+            if (
+                !$selectionValid
+                || (
+                    $selection === []
+                        ? $primary !== 0
+                        : $primary !== $selection[0]
+                )
+            ) {
                 throw new RuntimeException(gallery_migration_t(
                     'gallery_migration.error.cover_selection_invalid',
-                    'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                    'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.',
                 ));
             }
             if (gallery_cover_selection_schema_state() !== 'available') {
@@ -357,7 +445,7 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
                     'gallery_migration.error.cover_selection_schema_required',
                     $schemaState === 'missing'
                         ? 'This import contains a multi-photo or automatic title-picture selection. Apply the gallery cover migration before completing the import.'
-                        : 'This import contains a multi-photo or automatic title-picture selection, but its database schema could not be verified. Check database diagnostics before completing the import.'
+                        : 'This import contains a multi-photo or automatic title-picture selection, but its database schema could not be verified. Check database diagnostics before completing the import.',
                 ));
             }
         }
@@ -371,7 +459,7 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
         throw new RuntimeException(gallery_migration_t(
             'gallery_migration.error.incomplete_job',
             'Migration is incomplete: {received} of {total} assets are present on the target.',
-            ['received' => $receivedAssets, 'total' => $totalAssets]
+            ['received' => $receivedAssets, 'total' => $totalAssets],
         ));
     }
 
@@ -379,80 +467,139 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
     $galleryIds = [];
     foreach (gallery_migration_manifest_galleries($manifest) as $entry) {
         $sourceGalleryId = (int) ($entry['source_id'] ?? 0);
-        $mappedGalleryId = gallery_migration_target_gallery_id($job, $sourceGalleryId);
+        $mappedGalleryId = gallery_migration_target_gallery_id(
+            $job,
+            $sourceGalleryId,
+        );
         $galleryIds[] = $mappedGalleryId;
         $metadata = (array) ($entry['gallery'] ?? []);
-        gallery_migration_apply_gallery_metadata($mappedGalleryId, ['gallery' => $metadata], $sourceGalleryId !== (int) ($manifest['source_gallery_id'] ?? 0), true);
-        $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery($mappedGalleryId);
+        gallery_migration_apply_gallery_metadata(
+            $mappedGalleryId,
+            ['gallery' => $metadata],
+            $sourceGalleryId !== (int) ($manifest['source_gallery_id'] ?? 0),
+            true,
+        );
+        $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery(
+            $mappedGalleryId,
+        );
         $coverSourceId = (int) ($metadata['cover_source_id'] ?? 0);
         $rawCoverSelection = $metadata['cover_selection_source_ids'] ?? null;
         if (array_key_exists('cover_selection_source_ids', $metadata)) {
-            if (!$gallery || !array_key_exists('cover_image_ids', $gallery) || !gallery_cover_selection_schema_ready()) {
+            if (
+                !$gallery
+                || !array_key_exists('cover_image_ids', $gallery)
+                || !gallery_cover_selection_schema_ready()
+            ) {
                 throw new RuntimeException(gallery_migration_t(
                     'gallery_migration.error.cover_selection_schema_required',
-                    'This import contains a multi-photo or automatic title-picture selection. Apply the gallery cover migration before completing the import.'
+                    'This import contains a multi-photo or automatic title-picture selection. Apply the gallery cover migration before completing the import.',
                 ));
             }
-            if (!is_array($rawCoverSelection) || !array_is_list($rawCoverSelection)
+            if (
+                !is_array($rawCoverSelection)
+                || !array_is_list($rawCoverSelection)
                 || count($rawCoverSelection) > 4
-                || ($rawCoverSelection === [] ? $coverSourceId !== 0 : $coverSourceId !== $rawCoverSelection[0])) {
+                || (
+                    $rawCoverSelection === []
+                        ? $coverSourceId !== 0
+                        : $coverSourceId !== $rawCoverSelection[0]
+                )
+            ) {
                 throw new RuntimeException(gallery_migration_t(
                     'gallery_migration.error.cover_selection_invalid',
-                    'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                    'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.',
                 ));
             }
             $mappedCoverIds = [];
             foreach ($rawCoverSelection as $sourceImageId) {
-                if (!is_int($sourceImageId) || $sourceImageId <= 0
-                    || !isset($imageMap[(string) $sourceImageId])) {
+                if (
+                    !is_int($sourceImageId)
+                    || $sourceImageId <= 0
+                    || !isset($imageMap[(string) $sourceImageId])
+                ) {
                     throw new RuntimeException(gallery_migration_t(
                         'gallery_migration.error.cover_selection_invalid',
-                        'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                        'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.',
                     ));
                 }
                 $targetImageId = (int) $imageMap[(string) $sourceImageId];
                 $targetImage = find_image($targetImageId, true);
-                if (!$targetImage || (int) ($targetImage['gallery_id'] ?? 0) !== $mappedGalleryId
-                    || str_contains((string) ($targetImage['relative_path'] ?? ''), '/')
-                    || in_array($targetImageId, $mappedCoverIds, true)) {
+                if (
+                    !$targetImage
+                    || (int) ($targetImage['gallery_id'] ?? 0)
+                        !== $mappedGalleryId
+                    || str_contains(
+                        (string) ($targetImage['relative_path'] ?? ''),
+                        '/',
+                    )
+                    || in_array($targetImageId, $mappedCoverIds, true)
+                ) {
                     throw new RuntimeException(gallery_migration_t(
                         'gallery_migration.error.cover_selection_invalid',
-                        'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.'
+                        'The imported gallery has invalid title-picture selection metadata. The resumable import was left intact.',
                     ));
                 }
                 $mappedCoverIds[] = $targetImageId;
             }
             $coverFields = [
                 'cover_image_id' => $mappedCoverIds[0] ?? null,
-                'cover_image_ids' => json_encode($mappedCoverIds, JSON_THROW_ON_ERROR),
+                'cover_image_ids' => json_encode(
+                    $mappedCoverIds,
+                    JSON_THROW_ON_ERROR,
+                ),
             ];
             // The fresh row proves this persistence field exists. Keep the
             // imported photo choice and uploaded-asset precedence atomic.
             if (array_key_exists('cover_image_path', $gallery)) {
                 $coverFields['cover_image_path'] = null;
             }
-            gallery_model_update_fields($mappedGalleryId, $coverFields, now_sql());
+            gallery_model_update_fields(
+                $mappedGalleryId,
+                $coverFields,
+                now_sql(),
+            );
         }
-        if (!array_key_exists('cover_selection_source_ids', $metadata)
-            && $coverSourceId > 0 && !empty($imageMap[(string) $coverSourceId])) {
+        if (
+            !array_key_exists('cover_selection_source_ids', $metadata)
+            && $coverSourceId > 0
+            && !empty($imageMap[(string) $coverSourceId])
+        ) {
             $targetImageId = (int) $imageMap[(string) $coverSourceId];
             $targetImage = find_image($targetImageId, true);
-            if ($targetImage && (int) ($targetImage['gallery_id'] ?? 0) === $mappedGalleryId
-                && !str_contains((string) ($targetImage['relative_path'] ?? ''), '/')) {
+            if (
+                $targetImage
+                && (int) ($targetImage['gallery_id'] ?? 0) === $mappedGalleryId
+                && !str_contains(
+                    (string) ($targetImage['relative_path'] ?? ''),
+                    '/',
+                )
+            ) {
                 $coverFields = ['cover_image_id' => $targetImageId];
-                if (array_key_exists('cover_image_ids', $gallery) && gallery_cover_selection_schema_ready()) {
+                if (
+                    array_key_exists('cover_image_ids', $gallery)
+                    && gallery_cover_selection_schema_ready()
+                ) {
                     $coverFields['cover_image_ids'] = null;
                 }
-                gallery_model_update_fields($mappedGalleryId, $coverFields, now_sql());
+                gallery_model_update_fields(
+                    $mappedGalleryId,
+                    $coverFields,
+                    now_sql(),
+                );
             }
         }
-        $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery($mappedGalleryId);
+        $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery(
+            $mappedGalleryId,
+        );
         if ($gallery) {
             write_gallery_sidecar($gallery);
         }
     }
 
-    if (function_exists('Gallery\\Services\\regenerate_public_paths') && public_path_schema_ready()) {
+    if (
+        function_exists('Gallery\\Services\\regenerate_public_paths')
+        && public_path_schema_ready()
+    ) {
         regenerate_public_paths();
     }
     if (function_exists('Gallery\\Services\\gallery_map_cache_clear_all')) {
@@ -463,15 +610,22 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
     gallery_migration_save_job($job);
 
     $importedRootId = (int) ($job['imported_root_gallery_id'] ?? 0);
-    $importedRoot = $importedRootId > 0 ? (find_gallery($importedRootId, true) ?: find_gallery($importedRootId)) : null;
-    admin_log_event('info', 'gallery_migration.completed', 'Gallery migration job completed.', [
-        'job_id' => (string) ($job['job_id'] ?? ''),
-        'target_gallery_id' => $targetGalleryId,
-        'imported_root_gallery_id' => $importedRootId,
-        'gallery_count' => count($galleryIds),
-        'assets_received' => $receivedAssets,
-        'total_assets' => $totalAssets,
-    ]);
+    $importedRoot = $importedRootId > 0
+        ? (find_gallery($importedRootId, true) ?: find_gallery($importedRootId))
+        : null;
+    admin_log_event(
+        'info',
+        'gallery_migration.completed',
+        'Gallery migration job completed.',
+        [
+            'job_id' => (string) ($job['job_id'] ?? ''),
+            'target_gallery_id' => $targetGalleryId,
+            'imported_root_gallery_id' => $importedRootId,
+            'gallery_count' => count($galleryIds),
+            'assets_received' => $receivedAssets,
+            'total_assets' => $totalAssets,
+        ],
+    );
 
     return [
         'ok' => true,
@@ -483,6 +637,10 @@ function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryI
         'assets_received' => $receivedAssets,
         'total_assets' => $totalAssets,
         'gallery_url' => $importedRoot ? gallery_public_url($importedRoot) : '',
-        'edit_url' => $importedRootId > 0 ? url_for('admin_edit_gallery', ['id' => $importedRootId, 'tab' => 'admin-edit-api']) . '#admin-edit-api' : '',
+        'edit_url' => $importedRootId > 0
+            ? url_for('admin_edit_gallery', [
+                'id' => $importedRootId,
+                'tab' => 'admin-edit-api',
+            ]) . '#admin-edit-api' : '',
     ];
 }

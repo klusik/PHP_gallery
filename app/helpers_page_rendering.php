@@ -114,11 +114,25 @@ require_once __DIR__ . '/request_data.php';
 
 /**
  * Return optional artwork for the shared public header.
+ *
+ * @param string $siteName Original site name supplied by the header caller.
+ * @param ?array<string,mixed> $currentGallery Current gallery row, or null outside a gallery page.
+ * @param bool $publicOnly Whether branding assets must follow public visibility policy.
+ * @param string $bodyClass Body class that determines whether public branding is shown.
+ * @return array{banner_url:string,logo_url:string,separator_url:string} Prepared public header artwork URLs.
  */
-function public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
-{
+function public_header_branding_model(
+    string $siteName,
+    ?array $currentGallery = null,
+    bool $publicOnly = true,
+    string $bodyClass = 'public-page',
+): array {
     if (function_exists('Gallery\Controllers\shared_layout_branding_model')) {
-        return shared_layout_branding_model($currentGallery, $publicOnly, $bodyClass);
+        return shared_layout_branding_model(
+            $currentGallery,
+            $publicOnly,
+            $bodyClass,
+        );
     }
     // $model stores URLs used by render_header without forcing callers to know the branding precedence.
     $model = [
@@ -129,16 +143,38 @@ function public_header_branding_model(string $siteName, ?array $currentGallery =
     if ($bodyClass !== 'public-page') {
         return $model;
     }
-    if ($currentGallery !== null && function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (
+        $currentGallery !== null
+        && function_exists('Gallery\\Services\\gallery_branding_schema_ready')
+        && gallery_branding_schema_ready()
+    ) {
         // Per-gallery artwork overrides Theme fallback artwork on that gallery page.
-        $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
-        $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
-        $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
+        $model['banner_url'] = gallery_branding_asset_url(
+            $currentGallery,
+            'banner',
+            $publicOnly,
+        );
+        $model['logo_url'] = gallery_branding_asset_url(
+            $currentGallery,
+            'logo',
+            $publicOnly,
+        );
+        $model['separator_url'] = gallery_branding_asset_url(
+            $currentGallery,
+            'separator',
+            $publicOnly,
+        );
     }
-    if ($model['banner_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
+    if (
+        $model['banner_url'] === ''
+        && function_exists('Gallery\\Services\\theme_branding_asset_url')
+    ) {
         $model['banner_url'] = theme_branding_asset_url('banner');
     }
-    if ($model['separator_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
+    if (
+        $model['separator_url'] === ''
+        && function_exists('Gallery\\Services\\theme_branding_asset_url')
+    ) {
         $model['separator_url'] = theme_branding_asset_url('separator');
     }
     return $model;
@@ -162,7 +198,12 @@ function favorite_gallery_nav_html(array $items): string
         if ($url === '' || $title === '') {
             continue;
         }
-        $html .= '<a class="nav-favorite-gallery" href="' . e($url) . '">' . e($title) . '</a>';
+        $html .=
+            '<a class="nav-favorite-gallery" href="'
+            . e($url)
+            . '">'
+            . e($title)
+            . '</a>';
     }
     return $html;
 }
@@ -175,10 +216,15 @@ function favorite_gallery_nav_html(array $items): string
  * @param bool $publicOnly Whether branding assets must use public-safe variants.
  * @return void Render the shared header and its navigation.
  */
-function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
-{
+function render_header(
+    string $title,
+    ?array $currentGallery = null,
+    bool $publicOnly = true,
+): void {
     if (!function_exists('Gallery\Views\view_render_header')) {
-        throw new RuntimeException('Shared header view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Shared header view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     $requestQuery = request_data('query');
     $server = request_data('server');
@@ -186,7 +232,15 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     $scriptName = (string) ($server['SCRIPT_NAME'] ?? '/index.php');
     $page = (string) ($requestQuery['page'] ?? 'home');
     $headExtras = cms_head_extras_html();
-    $model = shared_layout_header_model($currentGallery, $publicOnly, $requestQuery, $requestUri, $scriptName, $page, $headExtras);
+    $model = shared_layout_header_model(
+        $currentGallery,
+        $publicOnly,
+        $requestQuery,
+        $requestUri,
+        $scriptName,
+        $page,
+        $headExtras,
+    );
     view_render_header($title, $model, $requestUri, $page);
 }
 
@@ -203,7 +257,8 @@ function set_cms_head_extras(string $html): void
  */
 function append_cms_head_extras(string $html): void
 {
-    $GLOBALS['cms_head_extras'] = (string) ($GLOBALS['cms_head_extras'] ?? '') . $html;
+    $GLOBALS['cms_head_extras'] =
+        (string) ($GLOBALS['cms_head_extras'] ?? '') . $html;
 }
 
 /**
@@ -222,10 +277,11 @@ function cms_head_extras_html(): string
  */
 function append_cms_footer_script(string $script): void
 {
-    $GLOBALS['cms_footer_scripts'] = (array) ($GLOBALS['cms_footer_scripts'] ?? []);
+    $GLOBALS['cms_footer_scripts'] = (array) (
+        $GLOBALS['cms_footer_scripts'] ?? []
+    );
     $GLOBALS['cms_footer_scripts'][] = $script;
 }
-
 
 /**
  * Append raw footer HTML for the next rendered page.
@@ -260,6 +316,8 @@ function cms_footer_scripts_html(): string
 
 /**
  * Read the current application version directly from app/bootstrap.php.
+ *
+ * @return string Parsed application version, or the bootstrap version constant.
  */
 function cms_current_version(): string
 {
@@ -271,8 +329,14 @@ function cms_current_version(): string
     // $bootstrapPath stores an intermediate value used by the surrounding gallery workflow.
     $bootstrapPath = dirname(__DIR__) . '/app/bootstrap.php';
     // $bootstrap stores an intermediate value used by the surrounding gallery workflow.
-    $bootstrap = is_file($bootstrapPath) ? (string) file_get_contents($bootstrapPath) : '';
-    if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match)) {
+    $bootstrap = is_file($bootstrapPath)
+        ? (string) file_get_contents($bootstrapPath)
+        : '';
+    if (preg_match(
+        "/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i",
+        $bootstrap,
+        $match,
+    )) {
         // $version stores an intermediate value used by the surrounding gallery workflow.
         $version = trim((string) $match[1]);
         return $version;
@@ -281,13 +345,19 @@ function cms_current_version(): string
     return $version = CMS_VERSION;
 }
 
-
 /**
  * Return translated strings used by browser-side modules.
+ *
+ * @return array<string,string> Active-language browser strings merged with defaults.
  */
 function cms_browser_i18n_strings(): array
 {
-    if (function_exists('Gallery\\Views\\view_cms_browser_i18n_strings') && function_exists('Gallery\\Controllers\\shared_layout_browser_i18n_model')) {
+    if (
+        function_exists('Gallery\\Views\\view_cms_browser_i18n_strings')
+        && function_exists(
+            'Gallery\\Controllers\\shared_layout_browser_i18n_model',
+        )
+    ) {
         $model = shared_layout_browser_i18n_model();
         return view_cms_browser_i18n_strings((array) ($model['strings'] ?? []));
     }
@@ -297,85 +367,313 @@ function cms_browser_i18n_strings(): array
     $strings = array_merge($defaultStrings, $activeStrings);
 
     return array_merge($strings, [
-        'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
-        'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
-        'admin.bulk.delete_galleries_detail' => t('js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
-        'admin.bulk.gallery_fallback' => t('js.admin.bulk.gallery_fallback', 'Gallery {id}'),
-        'admin.bulk.image_fallback' => t('js.admin.bulk.image_fallback', 'Image {id}'),
-        'admin.bulk.selected_photo_fallback' => t('js.admin.bulk.selected_photo_fallback', 'Selected photo'),
-        'admin.bulk.photo_selected_one' => t('js.admin.bulk.photo_selected_one', '1 photo selected'),
-        'admin.bulk.photo_selected_many' => t('js.admin.bulk.photo_selected_many', '{count} photos selected'),
-        'admin.bulk.select_photos_first' => t('js.admin.bulk.select_photos_first', 'Select one or more photos first.'),
-        'admin.bulk.choose_move_action_summary' => t('js.admin.bulk.choose_move_action_summary', '{count} selected. Choose one of the move actions above.'),
-        'admin.bulk.choose_destination_summary' => t('js.admin.bulk.choose_destination_summary', '{count} selected. Choose the destination gallery.'),
-        'admin.bulk.enter_new_gallery_summary' => t('js.admin.bulk.enter_new_gallery_summary', '{count} selected. Enter the new gallery title.'),
-        'admin.bulk.existing_gallery' => t('js.admin.bulk.existing_gallery', 'existing gallery'),
-        'admin.bulk.new_gallery' => t('js.admin.bulk.new_gallery', 'new gallery'),
-        'admin.bulk.move_summary' => t('js.admin.bulk.move_summary', '{count} selected. Move originals, thumbnails, and generated display files to the {target_type}: {target}.'),
-        'admin.bulk.choose_move_type' => t('js.admin.bulk.choose_move_type', 'Choose whether to move to an existing gallery or a new gallery.'),
-        'admin.bulk.select_photo_move' => t('js.admin.bulk.select_photo_move', 'Select at least one photo to move.'),
-        'admin.bulk.select_photo_delete' => t('js.admin.bulk.select_photo_delete', 'Select at least one photo to delete.'),
-        'admin.bulk.choose_destination' => t('js.admin.bulk.choose_destination', 'Choose the destination gallery.'),
-        'admin.bulk.enter_new_gallery' => t('js.admin.bulk.enter_new_gallery', 'Enter the new gallery title.'),
-        'admin.bulk.move_photo_one' => t('js.admin.bulk.move_photo_one', 'Move this photo?'),
-        'admin.bulk.move_photo_many' => t('js.admin.bulk.move_photo_many', 'Move these photos?'),
-        'admin.bulk.move_photo_detail' => t('js.admin.bulk.move_photo_detail', 'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.'),
-        'admin.bulk.delete_photo_one' => t('js.admin.bulk.delete_photo_one', 'Delete this photo from the gallery?'),
-        'admin.bulk.delete_photo_many' => t('js.admin.bulk.delete_photo_many', 'Delete these photos from the gallery?'),
-        'admin.bulk.delete_photo_detail' => t('js.admin.bulk.delete_photo_detail', 'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.'),
-        'admin.openai.js_missing_form' => t('js.admin.openai.missing_form', 'The editor form could not be found.'),
-        'admin.openai.js_missing_textarea' => t('js.admin.openai.missing_textarea', 'The description field could not be found.'),
-        'admin.openai.js_requires_text' => t('js.admin.openai.requires_text', 'This action needs existing description text first.'),
-        'admin.openai.js_replace_confirm' => t('js.admin.openai.replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the edited item.'),
-        'admin.openai.js_visual_confirm' => t('js.admin.openai.visual_confirm', 'This action will send one or more small generated thumbnails, not the original files, to OpenAI. Continue?'),
-        'admin.openai.js_not_configured' => t('js.admin.openai.not_configured', 'OpenAI text assistance is not configured correctly on this page.'),
-        'admin.openai.js_generating' => t('js.admin.openai.generating', 'Generating OpenAI text suggestion...'),
-        'admin.openai.js_failed' => t('js.admin.openai.failed', 'OpenAI text generation failed.'),
-        'admin.openai.js_empty' => t('js.admin.openai.empty', 'OpenAI returned an empty suggestion.'),
-        'admin.openai.js_generated' => t('js.admin.openai.generated', 'Suggestion inserted. Save the edited item to keep it.'),
-        'admin.openai.js_invalid_json' => t('js.admin.openai.invalid_json', 'The server returned an invalid OpenAI response.'),
-        'admin.openai.js_html_response' => t('js.admin.openai.html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
-        'admin.openai.js_bulk_counting' => t('js.admin.openai.bulk_counting', 'Counting photos for bulk description...'),
-        'admin.openai.js_bulk_no_photos' => t('js.admin.openai.bulk_no_photos', 'This gallery has no photos to describe.'),
-        'admin.openai.js_bulk_confirm' => t('js.admin.openai.bulk_confirm', 'This will generate and save descriptions for {count} photo(s), one OpenAI request per photo. Existing descriptions may be replaced. Type {count} to continue.'),
-        'admin.openai.js_bulk_cancelled' => t('js.admin.openai.bulk_cancelled', 'Bulk photo description cancelled.'),
-        'admin.openai.js_bulk_progress' => t('js.admin.openai.bulk_progress', 'Generating photo descriptions: {done}/{total} complete, {failed} failed.'),
-        'admin.openai.js_bulk_done' => t('js.admin.openai.bulk_done', 'Bulk photo descriptions finished: {done}/{total} saved, {failed} failed.'),
-        'admin.thumbnails.delete_not_configured' => t('js.admin.thumbnails.delete_not_configured', 'Thumbnail deletion is not configured correctly. No files were deleted.'),
-        'admin.thumbnails.delete_prompt_intro' => t('js.admin.thumbnails.delete_prompt_intro', 'This will delete all generated thumbnail files for every gallery.'),
-        'admin.thumbnails.delete_prompt_originals' => t('js.admin.thumbnails.delete_prompt_originals', 'Original photos and gallery records will not be deleted.'),
-        'admin.thumbnails.delete_prompt_regenerate' => t('js.admin.thumbnails.delete_prompt_regenerate', 'The next public/admin view can regenerate thumbnails when needed.'),
-        'admin.thumbnails.delete_prompt_confirm' => t('js.admin.thumbnails.delete_prompt_confirm', 'Type {word} to confirm.'),
-        'admin.thumbnails.delete_cancelled' => t('js.admin.thumbnails.delete_cancelled', 'Thumbnail deletion cancelled. No thumbnail files were deleted.'),
-        'admin.operations.scanning' => t('js.admin.operations.scanning', 'Scanning...'),
-        'admin.operations.scan_detail' => t('js.admin.operations.scan_detail', 'Scanning existing galleries and checking for new gallery folders...'),
-        'admin.operations.working' => t('js.admin.operations.working', 'Working...'),
-        'admin.operations.upload_thumbnail_failed' => t('js.admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.'),
-        'admin.operations.upload_complete' => t('js.admin.operations.upload_complete', 'Upload and thumbnail job complete.'),
-        'admin.operations.uploaded_scanning_complete' => t('js.admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.'),
-        'admin.operations.upload_failed' => t('js.admin.operations.upload_failed', 'Upload failed.'),
+        'admin.bulk.select_gallery_delete' => t(
+            'js.admin.bulk.select_gallery_delete',
+            'Select at least one gallery to delete.',
+        ),
+        'admin.bulk.delete_galleries_title' => t(
+            'js.admin.bulk.delete_galleries_title',
+            'Delete these gallery folders and all subgalleries?',
+        ),
+        'admin.bulk.delete_galleries_detail' => t(
+            'js.admin.bulk.delete_galleries_detail',
+            'This removes the folders from disk and deletes their database records. This cannot be undone.',
+        ),
+        'admin.bulk.gallery_fallback' => t(
+            'js.admin.bulk.gallery_fallback',
+            'Gallery {id}',
+        ),
+        'admin.bulk.image_fallback' => t(
+            'js.admin.bulk.image_fallback',
+            'Image {id}',
+        ),
+        'admin.bulk.selected_photo_fallback' => t(
+            'js.admin.bulk.selected_photo_fallback',
+            'Selected photo',
+        ),
+        'admin.bulk.photo_selected_one' => t(
+            'js.admin.bulk.photo_selected_one',
+            '1 photo selected',
+        ),
+        'admin.bulk.photo_selected_many' => t(
+            'js.admin.bulk.photo_selected_many',
+            '{count} photos selected',
+        ),
+        'admin.bulk.select_photos_first' => t(
+            'js.admin.bulk.select_photos_first',
+            'Select one or more photos first.',
+        ),
+        'admin.bulk.choose_move_action_summary' => t(
+            'js.admin.bulk.choose_move_action_summary',
+            '{count} selected. Choose one of the move actions above.',
+        ),
+        'admin.bulk.choose_destination_summary' => t(
+            'js.admin.bulk.choose_destination_summary',
+            '{count} selected. Choose the destination gallery.',
+        ),
+        'admin.bulk.enter_new_gallery_summary' => t(
+            'js.admin.bulk.enter_new_gallery_summary',
+            '{count} selected. Enter the new gallery title.',
+        ),
+        'admin.bulk.existing_gallery' => t(
+            'js.admin.bulk.existing_gallery',
+            'existing gallery',
+        ),
+        'admin.bulk.new_gallery' => t(
+            'js.admin.bulk.new_gallery',
+            'new gallery',
+        ),
+        'admin.bulk.move_summary' => t(
+            'js.admin.bulk.move_summary',
+            '{count} selected. Move originals, thumbnails, and generated display files to the {target_type}: {target}.',
+        ),
+        'admin.bulk.choose_move_type' => t(
+            'js.admin.bulk.choose_move_type',
+            'Choose whether to move to an existing gallery or a new gallery.',
+        ),
+        'admin.bulk.select_photo_move' => t(
+            'js.admin.bulk.select_photo_move',
+            'Select at least one photo to move.',
+        ),
+        'admin.bulk.select_photo_delete' => t(
+            'js.admin.bulk.select_photo_delete',
+            'Select at least one photo to delete.',
+        ),
+        'admin.bulk.choose_destination' => t(
+            'js.admin.bulk.choose_destination',
+            'Choose the destination gallery.',
+        ),
+        'admin.bulk.enter_new_gallery' => t(
+            'js.admin.bulk.enter_new_gallery',
+            'Enter the new gallery title.',
+        ),
+        'admin.bulk.move_photo_one' => t(
+            'js.admin.bulk.move_photo_one',
+            'Move this photo?',
+        ),
+        'admin.bulk.move_photo_many' => t(
+            'js.admin.bulk.move_photo_many',
+            'Move these photos?',
+        ),
+        'admin.bulk.move_photo_detail' => t(
+            'js.admin.bulk.move_photo_detail',
+            'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.',
+        ),
+        'admin.bulk.delete_photo_one' => t(
+            'js.admin.bulk.delete_photo_one',
+            'Delete this photo from the gallery?',
+        ),
+        'admin.bulk.delete_photo_many' => t(
+            'js.admin.bulk.delete_photo_many',
+            'Delete these photos from the gallery?',
+        ),
+        'admin.bulk.delete_photo_detail' => t(
+            'js.admin.bulk.delete_photo_detail',
+            'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.',
+        ),
+        'admin.openai.js_missing_form' => t(
+            'js.admin.openai.missing_form',
+            'The editor form could not be found.',
+        ),
+        'admin.openai.js_missing_textarea' => t(
+            'js.admin.openai.missing_textarea',
+            'The description field could not be found.',
+        ),
+        'admin.openai.js_requires_text' => t(
+            'js.admin.openai.requires_text',
+            'This action needs existing description text first.',
+        ),
+        'admin.openai.js_replace_confirm' => t(
+            'js.admin.openai.replace_confirm',
+            'Replace the current description text in the editor? This is not saved until you save the edited item.',
+        ),
+        'admin.openai.js_visual_confirm' => t(
+            'js.admin.openai.visual_confirm',
+            'This action will send one or more small generated thumbnails, not the original files, to OpenAI. Continue?',
+        ),
+        'admin.openai.js_not_configured' => t(
+            'js.admin.openai.not_configured',
+            'OpenAI text assistance is not configured correctly on this page.',
+        ),
+        'admin.openai.js_generating' => t(
+            'js.admin.openai.generating',
+            'Generating OpenAI text suggestion...',
+        ),
+        'admin.openai.js_failed' => t(
+            'js.admin.openai.failed',
+            'OpenAI text generation failed.',
+        ),
+        'admin.openai.js_empty' => t(
+            'js.admin.openai.empty',
+            'OpenAI returned an empty suggestion.',
+        ),
+        'admin.openai.js_generated' => t(
+            'js.admin.openai.generated',
+            'Suggestion inserted. Save the edited item to keep it.',
+        ),
+        'admin.openai.js_invalid_json' => t(
+            'js.admin.openai.invalid_json',
+            'The server returned an invalid OpenAI response.',
+        ),
+        'admin.openai.js_html_response' => t(
+            'js.admin.openai.html_response',
+            'The server returned HTML instead of JSON. Check the admin logs or PHP error log.',
+        ),
+        'admin.openai.js_bulk_counting' => t(
+            'js.admin.openai.bulk_counting',
+            'Counting photos for bulk description...',
+        ),
+        'admin.openai.js_bulk_no_photos' => t(
+            'js.admin.openai.bulk_no_photos',
+            'This gallery has no photos to describe.',
+        ),
+        'admin.openai.js_bulk_confirm' => t(
+            'js.admin.openai.bulk_confirm',
+            'This will generate and save descriptions for {count} photo(s), one OpenAI request per photo. Existing descriptions may be replaced. Type {count} to continue.',
+        ),
+        'admin.openai.js_bulk_cancelled' => t(
+            'js.admin.openai.bulk_cancelled',
+            'Bulk photo description cancelled.',
+        ),
+        'admin.openai.js_bulk_progress' => t(
+            'js.admin.openai.bulk_progress',
+            'Generating photo descriptions: {done}/{total} complete, {failed} failed.',
+        ),
+        'admin.openai.js_bulk_done' => t(
+            'js.admin.openai.bulk_done',
+            'Bulk photo descriptions finished: {done}/{total} saved, {failed} failed.',
+        ),
+        'admin.thumbnails.delete_not_configured' => t(
+            'js.admin.thumbnails.delete_not_configured',
+            'Thumbnail deletion is not configured correctly. No files were deleted.',
+        ),
+        'admin.thumbnails.delete_prompt_intro' => t(
+            'js.admin.thumbnails.delete_prompt_intro',
+            'This will delete all generated thumbnail files for every gallery.',
+        ),
+        'admin.thumbnails.delete_prompt_originals' => t(
+            'js.admin.thumbnails.delete_prompt_originals',
+            'Original photos and gallery records will not be deleted.',
+        ),
+        'admin.thumbnails.delete_prompt_regenerate' => t(
+            'js.admin.thumbnails.delete_prompt_regenerate',
+            'The next public/admin view can regenerate thumbnails when needed.',
+        ),
+        'admin.thumbnails.delete_prompt_confirm' => t(
+            'js.admin.thumbnails.delete_prompt_confirm',
+            'Type {word} to confirm.',
+        ),
+        'admin.thumbnails.delete_cancelled' => t(
+            'js.admin.thumbnails.delete_cancelled',
+            'Thumbnail deletion cancelled. No thumbnail files were deleted.',
+        ),
+        'admin.operations.scanning' => t(
+            'js.admin.operations.scanning',
+            'Scanning...',
+        ),
+        'admin.operations.scan_detail' => t(
+            'js.admin.operations.scan_detail',
+            'Scanning existing galleries and checking for new gallery folders...',
+        ),
+        'admin.operations.working' => t(
+            'js.admin.operations.working',
+            'Working...',
+        ),
+        'admin.operations.upload_thumbnail_failed' => t(
+            'js.admin.operations.upload_thumbnail_failed',
+            'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.',
+        ),
+        'admin.operations.upload_complete' => t(
+            'js.admin.operations.upload_complete',
+            'Upload and thumbnail job complete.',
+        ),
+        'admin.operations.uploaded_scanning_complete' => t(
+            'js.admin.operations.uploaded_scanning_complete',
+            'Uploaded {count} images. Scanning complete.',
+        ),
+        'admin.operations.upload_failed' => t(
+            'js.admin.operations.upload_failed',
+            'Upload failed.',
+        ),
         'votes.liked' => t('js.votes.liked', 'Liked'),
         'votes.no_like' => t('js.votes.no_like', 'No like'),
-        'thumbnail_bounds.auto_min' => t('thumbnail_bounds.auto_min', 'Auto min'),
-        'thumbnail_bounds.auto_max' => t('thumbnail_bounds.auto_max', 'Auto max'),
-        'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
+        'thumbnail_bounds.auto_min' => t(
+            'thumbnail_bounds.auto_min',
+            'Auto min',
+        ),
+        'thumbnail_bounds.auto_max' => t(
+            'thumbnail_bounds.auto_max',
+            'Auto max',
+        ),
+        'admin.date_picker.open' => t(
+            'js.admin.date_picker.open',
+            'Open calendar',
+        ),
         'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
-        'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
-        'admin.simbrief.js_missing_form' => t('admin.simbrief.js_missing_form', 'The gallery form could not be found.'),
-        'admin.simbrief.js_missing_textarea' => t('admin.simbrief.js_missing_textarea', 'The description field could not be found.'),
-        'admin.simbrief.js_missing_identifier' => t('admin.simbrief.js_missing_identifier', 'Enter a SimBrief Pilot ID or pilot name first.'),
-        'admin.simbrief.js_replace_confirm' => t('admin.simbrief.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'),
-        'admin.simbrief.js_not_configured' => t('admin.simbrief.js_not_configured', 'SimBrief generation is not configured correctly on this page.'),
-        'admin.simbrief.js_generating' => t('admin.simbrief.js_generating', 'Fetching SimBrief data and generating draft...'),
-        'admin.simbrief.js_failed' => t('admin.simbrief.js_failed', 'SimBrief generation failed.'),
-        'admin.simbrief.js_empty' => t('admin.simbrief.js_empty', 'SimBrief returned flight data, but no description could be generated.'),
-        'admin.simbrief.js_generated' => t('admin.simbrief.js_generated', 'Draft generated. The latest OFP was saved with the gallery and the route map was updated.'),
-        'admin.simbrief.js_ofp_saved' => t('admin.simbrief.js_ofp_saved', 'OFP saved with this gallery.'),
-        'admin.simbrief.js_route_saved' => t('admin.simbrief.js_route_saved', 'Route map updated with {points} OFP point(s).'),
-        'admin.simbrief.js_invalid_json' => t('admin.simbrief.js_invalid_json', 'The server returned an invalid SimBrief response.'),
-        'admin.simbrief.js_html_response' => t('admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
-        'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
-        'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
+        'admin.date_picker.delete' => t(
+            'js.admin.date_picker.delete',
+            'Delete',
+        ),
+        'admin.simbrief.js_missing_form' => t(
+            'admin.simbrief.js_missing_form',
+            'The gallery form could not be found.',
+        ),
+        'admin.simbrief.js_missing_textarea' => t(
+            'admin.simbrief.js_missing_textarea',
+            'The description field could not be found.',
+        ),
+        'admin.simbrief.js_missing_identifier' => t(
+            'admin.simbrief.js_missing_identifier',
+            'Enter a SimBrief Pilot ID or pilot name first.',
+        ),
+        'admin.simbrief.js_replace_confirm' => t(
+            'admin.simbrief.js_replace_confirm',
+            'Replace the current description text in the editor? This is not saved until you save the gallery.',
+        ),
+        'admin.simbrief.js_not_configured' => t(
+            'admin.simbrief.js_not_configured',
+            'SimBrief generation is not configured correctly on this page.',
+        ),
+        'admin.simbrief.js_generating' => t(
+            'admin.simbrief.js_generating',
+            'Fetching SimBrief data and generating draft...',
+        ),
+        'admin.simbrief.js_failed' => t(
+            'admin.simbrief.js_failed',
+            'SimBrief generation failed.',
+        ),
+        'admin.simbrief.js_empty' => t(
+            'admin.simbrief.js_empty',
+            'SimBrief returned flight data, but no description could be generated.',
+        ),
+        'admin.simbrief.js_generated' => t(
+            'admin.simbrief.js_generated',
+            'Draft generated. The latest OFP was saved with the gallery and the route map was updated.',
+        ),
+        'admin.simbrief.js_ofp_saved' => t(
+            'admin.simbrief.js_ofp_saved',
+            'OFP saved with this gallery.',
+        ),
+        'admin.simbrief.js_route_saved' => t(
+            'admin.simbrief.js_route_saved',
+            'Route map updated with {points} OFP point(s).',
+        ),
+        'admin.simbrief.js_invalid_json' => t(
+            'admin.simbrief.js_invalid_json',
+            'The server returned an invalid SimBrief response.',
+        ),
+        'admin.simbrief.js_html_response' => t(
+            'admin.simbrief.js_html_response',
+            'The server returned HTML instead of JSON. Check the admin logs or PHP error log.',
+        ),
+        'lightbox.no_gps_title' => t(
+            'lightbox.no_gps_title',
+            'No GPS EXIF data',
+        ),
+        'lightbox.no_gps_detail' => t(
+            'lightbox.no_gps_detail',
+            'This photo has no coordinates, so the fullscreen map is unavailable for this item.',
+        ),
     ]);
 }
 
@@ -387,11 +685,15 @@ function cms_browser_i18n_strings(): array
 function render_browser_i18n_script(): void
 {
     if (!function_exists('Gallery\Views\view_render_browser_i18n_script')) {
-        throw new RuntimeException('Browser i18n view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Browser i18n view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     $page = (string) (request_data('query')['page'] ?? 'home');
     $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
-    view_render_browser_i18n_script(shared_layout_browser_i18n_asset_url($isAdminPage));
+    view_render_browser_i18n_script(shared_layout_browser_i18n_asset_url(
+        $isAdminPage,
+    ));
 }
 
 /**
@@ -403,11 +705,16 @@ function render_browser_i18n_script(): void
 function render_footer(string $publicWidgetFooterHtml = ''): void
 {
     if (!function_exists('Gallery\Views\view_render_footer')) {
-        throw new RuntimeException('Shared footer view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Shared footer view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     $page = (string) (request_data('query')['page'] ?? 'home');
     $model = shared_layout_footer_model($page);
-    if (in_array($page, ['home', 'gallery'], true) && $publicWidgetFooterHtml !== '') {
+    if (
+        in_array($page, ['home', 'gallery'], true)
+        && $publicWidgetFooterHtml !== ''
+    ) {
         $model['public_widget_footer_html'] = $publicWidgetFooterHtml;
     }
     view_render_footer($page, $model);

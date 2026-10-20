@@ -74,8 +74,20 @@ function telemetry_sql_table_name(string $sql): string
     // $normalizedSql stores a compact query shape used only for table extraction.
     $normalizedSql = preg_replace('/\s+/', ' ', strtolower(trim($sql))) ?? '';
     foreach (['from', 'into', 'update', 'table'] as $marker) {
-        $optionalClause = $marker === 'table' ? '(?:if\\s+(?:not\\s+)?exists\\s+)?' : '';
-        if (preg_match('/\b' . preg_quote($marker, '/') . '\s+' . $optionalClause . '`?([a-z0-9_]+)`?/i', $normalizedSql, $match) === 1) {
+        $optionalClause = $marker === 'table'
+            ? '(?:if\\s+(?:not\\s+)?exists\\s+)?'
+            : '';
+        if (
+            preg_match(
+                '/\b'
+                    . preg_quote($marker, '/')
+                    . '\s+'
+                    . $optionalClause
+                    . '`?([a-z0-9_]+)`?/i',
+                $normalizedSql,
+                $match,
+            ) === 1
+        ) {
             return substr((string) $match[1], 0, 80);
         }
     }
@@ -95,7 +107,9 @@ function telemetry_sql_fingerprint(string $sql): string
 {
     // $shape stores a normalized SQL shape with values removed.
     $shape = preg_replace('/\b0x[0-9a-f]+\b/i', '?', $sql) ?? $sql;
-    $shape = preg_replace('/\'[^\']*\'|"[^"]*"|\b\d+(?:\.\d+)?\b/', '?', $shape) ?? $shape;
+    $shape =
+        preg_replace('/\'[^\']*\'|"[^"]*"|\b\d+(?:\.\d+)?\b/', '?', $shape)
+        ?? $shape;
     $shape = preg_replace('/\s+/', ' ', strtolower(trim($shape))) ?? $shape;
     return substr(hash('sha256', $shape), 0, 16);
 }
@@ -107,7 +121,10 @@ function telemetry_sql_fingerprint(string $sql): string
  */
 function &telemetry_database_observer_state(): array
 {
-    if (!isset($GLOBALS['cms_telemetry_database_observer_state']) || !is_array($GLOBALS['cms_telemetry_database_observer_state'])) {
+    if (
+        !isset($GLOBALS['cms_telemetry_database_observer_state'])
+        || !is_array($GLOBALS['cms_telemetry_database_observer_state'])
+    ) {
         $GLOBALS['cms_telemetry_database_observer_state'] = [
             'evaluated' => false,
             'evaluating' => false,
@@ -140,16 +157,31 @@ function telemetry_database_observer_enabled(): bool
 
     $state['evaluating'] = true;
     try {
-        if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+        if (
+            function_exists(__NAMESPACE__
+                . '\\feature_capability_effective_enabled')
+            && !feature_capability_effective_enabled('telemetry')
+        ) {
             $state['enabled'] = false;
-        } elseif (!function_exists(__NAMESPACE__ . '\\telemetry_schema_ready') || !telemetry_schema_ready()) {
+        } elseif (
+            !function_exists(__NAMESPACE__ . '\\telemetry_schema_ready')
+            || !telemetry_schema_ready()
+        ) {
             $state['enabled'] = false;
         } else {
-            $settings = function_exists(__NAMESPACE__ . '\telemetry_all_settings') ? telemetry_all_settings() : [];
-            $masterEnabled = (string) ($settings['telemetry_enabled'] ?? '0') === '1';
-            $databaseEnabled = (string) ($settings['telemetry_database_enabled'] ?? '1') === '1';
+            $settings = function_exists(__NAMESPACE__
+                . '\telemetry_all_settings')
+                ? telemetry_all_settings()
+                : [];
+            $masterEnabled =
+                (string) ($settings['telemetry_enabled'] ?? '0') === '1';
+            $databaseEnabled =
+                (string) ($settings['telemetry_database_enabled'] ?? '1')
+                === '1';
             $state['enabled'] = $masterEnabled && $databaseEnabled;
-            $threshold = (int) ($settings['telemetry_slow_query_threshold_ms'] ?? 250);
+            $threshold = (int) (
+                $settings['telemetry_slow_query_threshold_ms'] ?? 250
+            );
             $state['slow_threshold_ms'] = max(1, min(60_000, $threshold));
         }
     } catch (Throwable) {
@@ -165,7 +197,8 @@ function telemetry_database_observer_enabled(): bool
 /** Return whether one table belongs to telemetry's own persistence/reporting layer. */
 function telemetry_database_observer_internal_table(string $tableName): bool
 {
-    return $tableName !== '' && str_starts_with(strtolower($tableName), 'telemetry_');
+    return $tableName !== ''
+        && str_starts_with(strtolower($tableName), 'telemetry_');
 }
 
 /**
@@ -178,8 +211,13 @@ function telemetry_database_observer_internal_table(string $tableName): bool
  * @param ?string $error Optional execution error. Never persisted.
  * @return void No return value; effects are recorded in the owned state.
  */
-function telemetry_observe_db_query(string $sql, float $latencyMs, bool $ok, int $rowCount = 0, ?string $error = null): void
-{
+function telemetry_observe_db_query(
+    string $sql,
+    float $latencyMs,
+    bool $ok,
+    int $rowCount = 0,
+    ?string $error = null,
+): void {
     unset($error); // Error text may contain private SQL/driver detail and is never retained.
     if ($sql === '' || !telemetry_database_observer_enabled()) {
         return;
@@ -191,12 +229,21 @@ function telemetry_observe_db_query(string $sql, float $latencyMs, bool $ok, int
         return;
     }
 
-    $routeName = telemetry_short_identifier(request_data('query')['page'] ?? 'unknown', 80) ?? 'unknown';
+    $routeName =
+        telemetry_short_identifier(
+            request_data('query')['page'] ?? 'unknown',
+            80,
+        ) ?? 'unknown';
     $fingerprint = telemetry_sql_fingerprint($sql);
     $state = &telemetry_database_observer_state();
     $latencyRounded = max(0, (int) round($latencyMs));
-    $slow = $latencyRounded >= (int) ($state['slow_threshold_ms'] ?? 250) ? 1 : 0;
-    $rowsAffected = $ok && in_array($operation, ['insert', 'update', 'delete', 'replace'], true) ? max(0, $rowCount) : 0;
+    $slow = $latencyRounded >= (int) ($state['slow_threshold_ms'] ?? 250)
+        ? 1
+        : 0;
+    $rowsAffected = $ok
+    && in_array($operation, ['insert', 'update', 'delete', 'replace'], true)
+        ? max(0, $rowCount)
+        : 0;
 
     $key = implode('|', [$routeName, $operation, $tableName, $fingerprint]);
     if (!isset($state['buffer'][$key])) {
@@ -228,7 +275,8 @@ function telemetry_observe_db_query(string $sql, float $latencyMs, bool $ok, int
 
     if (empty($state['shutdown_registered'])) {
         $state['shutdown_registered'] = true;
-        register_shutdown_function(__NAMESPACE__ . '\\telemetry_flush_db_query_buffer');
+        register_shutdown_function(__NAMESPACE__
+            . '\\telemetry_flush_db_query_buffer');
     }
 }
 
@@ -236,9 +284,21 @@ function telemetry_observe_db_query(string $sql, float $latencyMs, bool $ok, int
  * Compatibility wrapper for older call sites that already provide normalized counters.
  *
  * New central instrumentation should call telemetry_observe_db_query().
+ *
+ * @param string $sql SQL statement used transiently to derive safe buckets.
+ * @param float $latencyMs Execution latency in milliseconds.
+ * @param int $rowsReturned Number of rows returned by a SELECT operation.
+ * @param int $rowsAffected Driver-reported affected rows for non-SELECT operations.
+ * @param bool $failed Whether the operation failed.
+ * @return void Normalizes the legacy counters and forwards the observation.
  */
-function telemetry_record_db_query(string $sql, float $latencyMs, int $rowsReturned = 0, int $rowsAffected = 0, bool $failed = false): void
-{
+function telemetry_record_db_query(
+    string $sql,
+    float $latencyMs,
+    int $rowsReturned = 0,
+    int $rowsAffected = 0,
+    bool $failed = false,
+): void {
     $operation = telemetry_sql_operation($sql);
     $rowCount = $operation === 'select' ? $rowsReturned : $rowsAffected;
     telemetry_observe_db_query($sql, $latencyMs, !$failed, $rowCount, null);
@@ -250,6 +310,8 @@ function telemetry_record_db_query(string $sql, float $latencyMs, int $rowsRetur
  * Failures are deliberately swallowed after a best-effort operational warning so
  * database observability can never change the response status of an otherwise
  * successful request.
+ *
+ * @return void Flushes buffered aggregates with recursive observation suppressed.
  */
 function telemetry_flush_db_query_buffer(): void
 {
@@ -282,14 +344,20 @@ function telemetry_flush_db_query_buffer(): void
     } catch (Throwable $exception) {
         if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
             try {
-                admin_log_event('warning', 'telemetry.database_observer_flush_failed', 'Database telemetry aggregates could not be stored.', [
-                    'aggregate_count' => count($buffer),
-                    'error_kind' => get_class($exception),
-                ], [
-                    'category' => 'telemetry',
-                    'severity' => 'warning',
-                    'route_name' => 'telemetry_db_observer',
-                ]);
+                admin_log_event(
+                    'warning',
+                    'telemetry.database_observer_flush_failed',
+                    'Database telemetry aggregates could not be stored.',
+                    [
+                        'aggregate_count' => count($buffer),
+                        'error_kind' => get_class($exception),
+                    ],
+                    [
+                        'category' => 'telemetry',
+                        'severity' => 'warning',
+                        'route_name' => 'telemetry_db_observer',
+                    ],
+                );
             } catch (Throwable) {
                 // Observability failure remains fail-open even when operational logging is unavailable.
             }
