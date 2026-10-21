@@ -36,6 +36,23 @@ function gallery_pdf_documents_view_model(
     $base = rtrim(\Gallery\Core\request_script_base_path(), '/') . '/index.php';
     $documents = [];
     $editor = $editor && !$publicOnly;
+    if ($editor) {
+        require_once __DIR__ . '/../services/gallery_archive_media.php';
+    }
+    $archiveItems = $editor
+        ? \Gallery\Services\gallery_archive_pdf_items($id)
+        : [];
+    $archiveGallery = $editor
+        ? \Gallery\Services\gallery_archive_media_gallery_enabled(
+            'pdf',
+            $id,
+        )
+        : false;
+    $archiveGlobal = $editor
+        ? \Gallery\Services\gallery_archive_media_global_enabled(
+            'pdf',
+        )
+        : false;
     $user = $publicOnly ? null : \Gallery\Core\current_user();
     $admin =
         is_array($user)
@@ -62,6 +79,7 @@ function gallery_pdf_documents_view_model(
             'filename' => $entry['filename'],
             'size' => $entry['size'],
             'hidden' => $hidden,
+            'archive_in_zip' => isset($archiveItems[(string) $entry['id']]),
             'version' => $entry['sha256'],
             'view_url' =>
                 $base
@@ -91,6 +109,7 @@ function gallery_pdf_documents_view_model(
             'filename' => 'simbrief-ofp.pdf',
             'size' => (int) @filesize($ofpPath),
             'hidden' => $ofpHidden,
+            'archive_in_zip' => isset($archiveItems['ofp']),
             'version' => (string) @hash_file('sha256', $ofpPath),
             'view_url' =>
                 $base
@@ -129,6 +148,8 @@ function gallery_pdf_documents_view_model(
         'browser_config' => $controls['browser_config'],
         'language' => \Gallery\Services\translation_active_language(),
         'documents' => $documents,
+        'archive_gallery' => $archiveGallery,
+        'archive_global' => $archiveGlobal,
     ];
 }
 

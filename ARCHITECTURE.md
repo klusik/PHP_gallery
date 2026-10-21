@@ -21,7 +21,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.139.1';
+const CMS_VERSION = '0.140';
 ```
 
 Update-related code uses:
@@ -30,6 +30,18 @@ Update-related code uses:
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
+
+## Selective media ownership
+
+Thumbnail delivery depends on the existing complete `public-media` owner.
+The compiler requires its full closure to remain contained in
+`public-thumbnails`; this edge adds no PHP files or logical roots. The failed
+archive-media candidate had 98 modules, 4,109 direct file entries, 446 unique
+files and 3,663 duplicate entries, above the unchanged 3,653 duplicate ceiling.
+Sharing the contained owner is expected to remove 44 direct duplicate entries;
+the thumbnail route uses seven transitive modules including its root, within
+its reviewed five-module baseline plus the existing allowance of two. Hosted
+preparation and FULL establish the final metrics. No baseline is raised.
 
 ## Gallery music ownership
 
@@ -79,6 +91,14 @@ non-ASCII/punctuation identifiers keep the legacy regex semantics. All schema,
 source and rule-count inputs stay fresh on every explicit run. No persistent
 source-analysis cache, extra runtime file or logical module is added; inspection
 reuses the already loaded passive Core observer under unchanged closure limits.
+
+The gallery editor prepares one Upload media main tab containing the independent
+image manager and existing music/PDF/presentation/artwork forms. The image
+preloader replaces only its original Images container; it does not own sibling
+media sections. One shared file chooser uses the existing image, PDF and audio
+upload coordinators. The gallery view associates the sticky navigation's Save
+button with the existing guarded settings form through native form ownership.
+No new persistence, schema or upload transport is introduced.
 
 The public gallery controller prepares canonical presentation links only when
 authorized photos and lightbox capability are available. Views render
@@ -471,6 +491,7 @@ from changing the response.
 | `app/session_context.php` | PHP session reads/writes/removal and active-state observation; no session startup or domain policy. |
 | `app/bootstrap/viewer_identity_context.php` | Viewer-specific session, remember-cookie and rotation transport; it does not own administrator identity. |
 | `app/security.php` | Authentication, CSRF, identity/session transport and the existing CSRF hidden-field compatibility output. |
+| `app/models/auth_persistence.php`, `app/services/auth_persistence.php`, `app/controllers/admin_support.php`, `app/views/admin_support.php` | One-time delegated Admin support grants with live DB authorization, strict route allowlisting, CSRF-backed management, and fragment-only bearer handling. |
 | `app/runtime/Kernel.php` | Request dispatch and response completion/observation. Route preparation is not persistence. |
 | `app/helpers_runtime.php` | Existing redirect response adapter; request and flash helpers use the Core adapters. |
 | `app/diagnostics/admin_test_run_early.php` | Bootstrap-free request/fatal observation and bounded owned diagnostics storage before application dependencies exist. |

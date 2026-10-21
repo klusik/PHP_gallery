@@ -89,6 +89,29 @@ function gallery_music_view_model(
         $model['query'] = $query;
         $model['query_limit'] = \Gallery\Services\MUSIC_CATALOG_QUERY_BYTES;
         $model['sources'] = $state['sources'] ?? [];
+        require_once __DIR__ . '/../services/gallery_archive_media.php';
+        $archiveItems =
+            \Gallery\Services\gallery_archive_media_item_preferences(
+                'music',
+                (int) $gallery['id'],
+            );
+        $model['archive_global'] =
+            \Gallery\Services\gallery_archive_media_global_enabled('music');
+        $model['archive_gallery'] =
+            \Gallery\Services\gallery_archive_media_gallery_enabled(
+                'music',
+                (int) $gallery['id'],
+            );
+        foreach ($model['sources'] as &$source) {
+            $source['archive_in_zip'] = isset($archiveItems[$source['id']]);
+        }
+        unset($source);
+        foreach ($model['tracks'] as &$track) {
+            $track['archive_in_zip'] = isset($archiveItems[$track['id']])
+                || isset($archiveItems[$track['source_id'] ?? '']);
+        }
+        unset($track);
+
         $model['unavailable'] = (int) ($state['unavailable'] ?? 0);
         $model['partial'] = (bool) ($state['partial'] ?? false);
         $model['over_limit'] = (bool) ($state['over_limit'] ?? false);

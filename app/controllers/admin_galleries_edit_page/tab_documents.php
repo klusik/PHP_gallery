@@ -53,13 +53,18 @@ use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
  *     separator_image_path?:string|null} $gallery Authorized gallery data
  *     for attachments, presentation and Artwork preparation.
  * @param string $activeEditTab Currently selected main editor tab.
+ * @param string $imagesHtml Trusted image manager or deferred placeholder.
  * @return void Emit the unified Media tab with capability-scoped subtabs.
  */
 function admin_edit_gallery_render_documents_tab(
     array $gallery,
     string $activeEditTab,
+    string $imagesHtml = '',
 ): void {
     $mediaSection = (string) ($_GET['media_section'] ?? '');
+    if ((string) ($_GET['tab'] ?? '') === 'admin-edit-images') {
+        $mediaSection = 'images';
+    }
     if ((string) ($_GET['tab'] ?? '') === 'admin-edit-documents') {
         $mediaSection = 'pdf';
     }
@@ -91,9 +96,44 @@ function admin_edit_gallery_render_documents_tab(
         $documentsHtml = admin_gallery_pdf_documents_html($gallery)
             . admin_edit_gallery_simbrief_legacy_panel_html($gallery);
     }
+    require_once __DIR__ . '/../../services/gallery_archive_media.php';
     \Gallery\Views\view_render_admin_gallery_media_tab([
         'active' => $activeEditTab === 'admin-edit-media',
         'active_section' => $mediaSection,
+        'images_html' => $imagesHtml,
+        'upload_url' => url_for('admin_upload', [
+            'gallery_id' => (int) $gallery['id'],
+        ]),
+        'upload_panel_url' => url_for('admin_upload', [
+            'gallery_id' => (int) $gallery['id'],
+            'panel' => 1,
+        ]),
+        'archive_settings' => [
+            'gallery_id' => (int) $gallery['id'],
+            'action_url' => url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
+                'tab' => 'admin-edit-media',
+            ]),
+            'csrf_html' => csrf_field(),
+            'pdf_gallery' =>
+                \Gallery\Services\gallery_archive_media_gallery_enabled(
+                    'pdf',
+                    (int) $gallery['id'],
+                ),
+            'music_gallery' =>
+                \Gallery\Services\gallery_archive_media_gallery_enabled(
+                    'music',
+                    (int) $gallery['id'],
+                ),
+            'pdf_global' =>
+                \Gallery\Services\gallery_archive_media_global_enabled(
+                    'pdf',
+                ),
+            'music_global' =>
+                \Gallery\Services\gallery_archive_media_global_enabled(
+                    'music',
+                ),
+        ],
         'presentation_html' => $presentationHtml,
         'documents_html' => $documentsHtml,
         'music_html' => $musicHtml,

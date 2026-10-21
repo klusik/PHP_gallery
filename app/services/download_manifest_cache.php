@@ -366,7 +366,7 @@ function download_manifest_cache_path(
  * Validate normalized capability-free cached manifest data.
  *
  * @param array<array-key,mixed>|scalar|object{}|resource|null $payload Decoded candidate shaped as array{files:list<array{name:mixed,size:mixed,image_id:mixed,version:mixed}>,total_files:mixed,total_bytes:mixed}; malformed values are rejected.
- * @return ?array{files:list<array{name:string,size:int,image_id:int,version:string}>,total_files:int,total_bytes:int} Validated normalized manifest metadata, or null when any required field/limit is invalid.
+ * @return ?array{files:list<array{name:string,size:int,image_id:int,version:string,media_type?:string,media_id?:string,source_gallery_id?:int}>,total_files:int,total_bytes:int} Validated photo or optional original-media manifest metadata, or null when invalid.
  */
 function download_manifest_cache_normalize_payload(mixed $payload): ?array
 {
@@ -388,11 +388,24 @@ function download_manifest_cache_normalize_payload(mixed $payload): ?array
         $size = (int) ($file['size'] ?? -1);
         $imageId = (int) ($file['image_id'] ?? 0);
         $version = strtolower((string) ($file['version'] ?? ''));
+        $mediaType = (string) ($file['media_type'] ?? '');
+        $mediaId = (string) ($file['media_id'] ?? '');
+        $sourceGalleryId = (int) ($file['source_gallery_id'] ?? 0);
+        $mediaValid = in_array($mediaType, ['pdf', 'music'], true)
+            && $sourceGalleryId > 0
+            && (
+                ($mediaType === 'pdf' && $mediaId === 'ofp')
+                || preg_match('/^[a-f0-9]{32}$/D', $mediaId) === 1
+            );
         if (
             $name === ''
             || $size < 0
-            || $imageId <= 0
             || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1
+            || (
+                $mediaType === ''
+                    ? $imageId <= 0
+                    : !$mediaValid || $imageId !== 0
+            )
         ) {
             return null;
         }
@@ -400,12 +413,18 @@ function download_manifest_cache_normalize_payload(mixed $payload): ?array
             return null;
         }
         $totalBytes += $size;
-        $files[] = [
+        $row = [
             'name' => $name,
             'size' => $size,
             'image_id' => $imageId,
             'version' => $version,
         ];
+        if ($mediaType !== '') {
+            $row['media_type'] = $mediaType;
+            $row['media_id'] = $mediaId;
+            $row['source_gallery_id'] = $sourceGalleryId;
+        }
+        $files[] = $row;
     }
 
     if (

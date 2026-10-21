@@ -233,29 +233,8 @@ function view_render_public_gallery_card(array $viewModel): void
                         . '</span></span>';
             }
         }
-        if ($showMediaCountBadges && $pdfFileCount > 0) {
-            echo
-                '<span class="subgallery-stack-badge gallery-media-count-badge" role="img" aria-label="'
-                    . e(t(
-                        'gallery.card.pdf_file_count',
-                        '{count} unique PDF files in this gallery and subgalleries',
-                        ['count' => $pdfFileCount],
-                    ))
-                    . '"><svg class="gallery-media-count-icon gallery-media-count-icon-pdf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2.75h8l4 4v14.5H6zM14 2.75v4h4M8.5 12h7M8.5 15h7M8.5 18h4"/></svg><span class="subgallery-stack-count">'
-                    . $pdfFileCount
-                    . '</span></span>';
-        }
-        if ($showMediaCountBadges && $musicFileCount > 0) {
-            echo
-                '<span class="subgallery-stack-badge gallery-media-count-badge" role="img" aria-label="'
-                    . e(t(
-                        'gallery.card.music_file_count',
-                        '{count} unique music files in this gallery and subgalleries',
-                        ['count' => $musicFileCount],
-                    ))
-                    . '"><svg class="gallery-media-count-icon gallery-media-count-icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg><span class="subgallery-stack-count">'
-                    . $musicFileCount
-                    . '</span></span>';
+        if ($showMediaCountBadges) {
+            view_render_gallery_media_count_badges($mediaCounts);
         }
         echo '</span>';
     }
@@ -339,6 +318,55 @@ function view_render_public_gallery_card(array $viewModel): void
 }
 
 /**
+ * Render the shared nonzero PDF/music count badges for cards and hero actions.
+ *
+ * The caller supplies counts from a visitor-authorized projection. Unknown
+ * values are represented as null and deliberately never rendered as zero.
+ *
+ * @param array{pdf?:?int,music?:?int} $counts Known unique content counts.
+ * @param bool $hero Whether badges live in the opened gallery hero action bar.
+ * @return void Emit accessible icons and counts for available media only.
+ */
+function view_render_gallery_media_count_badges(
+    array $counts,
+    bool $hero = false,
+): void {
+    $valueClass = $hero
+        ? 'gallery-hero-count-value'
+        : 'subgallery-stack-count';
+    $badgeClass = $hero
+        ? 'gallery-hero-count-badge'
+        : 'subgallery-stack-badge';
+
+    $pdf = $counts['pdf'] ?? null;
+    if (is_int($pdf) && $pdf > 0) {
+        echo
+            '<span class="' . $badgeClass . ' gallery-media-count-badge"'
+            . ' role="img" aria-label="'
+            . e(t(
+                'gallery.card.pdf_file_count',
+                '{count} unique PDF files in this gallery and subgalleries',
+                ['count' => $pdf],
+            ))
+            . '"><svg class="gallery-media-count-icon gallery-media-count-icon-pdf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2.75h8l4 4v14.5H6zM14 2.75v4h4M8.5 12h7M8.5 15h7M8.5 18h4"/></svg><span class="'
+            . $valueClass . '">' . $pdf . '</span></span>';
+    }
+    $music = $counts['music'] ?? null;
+    if (is_int($music) && $music > 0) {
+        echo
+            '<span class="' . $badgeClass . ' gallery-media-count-badge"'
+            . ' role="img" aria-label="'
+            . e(t(
+                'gallery.card.music_file_count',
+                '{count} unique music files in this gallery and subgalleries',
+                ['count' => $music],
+            ))
+            . '"><svg class="gallery-media-count-icon gallery-media-count-icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg><span class="'
+            . $valueClass . '">' . $music . '</span></span>';
+    }
+}
+
+/**
  * Render one placed Smart Gallery card.
  *
  * @param array<string,mixed> $viewModel Controller-prepared Smart Gallery state.
@@ -380,6 +408,7 @@ function view_render_public_smart_gallery_card(array $viewModel): void
                 'title' => $title,
             ]))
             . '">';
+    echo '<span class="gallery-card-media-count-stack">';
     echo
         '<span class="subgallery-stack-badge" aria-label="'
             . e(t(
@@ -390,6 +419,10 @@ function view_render_public_smart_gallery_card(array $viewModel): void
             . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">'
             . $count
             . '</span></span>';
+    view_render_gallery_media_count_badges(
+        (array) ($viewModel['media_counts'] ?? []),
+    );
+    echo '</span>';
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
     if ($coverPictureHtml !== '') {
         echo $coverPictureHtml;

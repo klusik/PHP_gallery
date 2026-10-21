@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.139.1}
-\newcommand{\manualdate}{20.~Oktober~2026}
+\newcommand{\version}{0.140}
+\newcommand{\manualdate}{21.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -367,6 +367,15 @@ Nehmen Sie sich einige Minuten, um diese Bereiche kennenzulernen:
   \item \ui{Konto}, in dem Zugangsdaten, Wieder\-her\-stel\-lungs-E-Mail und E-Mail-Zustellung verwaltet werden.
 \end{itemize}
 
+\subsection{Temporärer Administratorzugang für Support}
+\index{Administrator!temporärer Supportzugang}
+
+Ein~dauerhaft angemeldeter Administrator kann~unter \ui{Konto} den~Bereich \ui{Temporärer Administratorzugang} öffnen und~einen einmalig nutzbaren Support-Link erzeugen. Der~Link wird nur bei~der Erstellung angezeigt und~läuft genau 24~Stunden nach seiner Ausgabe ab, unabhängig von~der ersten Nutzung. Geben Sie ihn ausschließlich vertraulich an~eine vertrauenswürdige Person weiter. Der~Empfänger verwendet ein~separates Browserprofil und~akzeptiert die~Einladung ausdrücklich. Ein~neues dauerhaftes Administratorkonto entsteht nicht.
+
+Die~Administrationsoberfläche zeigt die~temporäre Berechtigung und~die~Ablaufzeit in~UTC an. Der~Empfänger kann Diagnoseinformationen ansehen und~zugelassene Galerie- und~Medienarbeiten durchführen, aber weder Administratorzugangsdaten noch globale Sicherheitseinstellungen, dauerhafte Tokens oder~Updater-Konfiguration ändern. Der~Eigentümer kann~den~Zugang jederzeit widerrufen; bei~der nächsten Berechtigungsprüfung werden zugehörige Sitzungen verweigert. Dafür ist kein geplanter Hintergrundauftrag nötig.
+
+\securitynote{Ein~unbenutzter Einladungslink ist~ein~geheimes Zugriffsrecht. Veröffentlichen Sie ihn niemals in~Protokollen, Tickets oder~Bildschirmfotos. Die~dauerhafte Administratorsitzung bleibt beim Widerruf erhalten. Führen Sie vor der~Ausgabe die~Datenbankmigrationen aus.}
+
 \subsection{Erste Galerie erstellen}
 \index{g00117@Galerie!e00091@erste Galerie erstellen}
 
@@ -483,7 +492,7 @@ Jedes erzeugte Erstellungsformular und klassische Uploadformular enthält außer
   \item Geben Sie einen besucherfreundlichen Titel ein; übernehmen Sie bei Bedarf einen Titelvorschlag.
   \item Erstellen Sie die nicht veröffentlichte Galerie. Bei verfügbarem JavaScript öffnet sich der vollständige Editor im selben Seitenbereich.
   \item Ergänzen Sie unter \ui{Identität} Beschreibung, Datum oder Datumsbereich, Ausgangssprache, Schlagwörter und optionale SimBrief-Daten.
-  \item Prüfen Sie \ui{Zugriff}, \ui{Anzeige}, \ui{Medien} sowie gegebenenfalls die Werte für Galerieordner und übergeordnete Galerie unter den erweiterten Optionen.
+  \item Prüfen Sie \ui{Zugriff}, \ui{Anzeige}, \ui{Medien hochladen} sowie gegebenenfalls die Werte für Galerieordner und übergeordnete Galerie unter den erweiterten Optionen.
   \item Speichern Sie die Galerie, fügen Sie Fotos hinzu und wählen Sie ein Titelbild, sobald geeignete Fotos vorhanden sind.
   \item Veröffentlichen Sie die fertige Galerie und prüfen Sie anschließend das Ergebnis anonym.
 \end{enumerate}
@@ -499,7 +508,7 @@ Das sichtbare SimBrief-Feld akzeptiert eine Pilot ID oder einen Pilotennamen. Au
 \subsubsection{Im kompakten Editor arbeiten}
 \index{g00125@Galerieeditor!s00214@Seitenbereich}
 
-Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{Anzeige} und \ui{Medien}; anschließend folgen je nach Verfügbarkeit Bild- und Spezialwerkzeuge. Der rechte Seitenbereich hält \ui{Galerie speichern} unten sichtbar, während das Einstellungsformular gescrollt wird. Ein Registerwechsel speichert nicht automatisch. Verwenden Sie nach der Bearbeitung die Schaltfläche und öffnen Sie die Galerie anschließend erneut, wenn Sie die gespeicherten Werte prüfen möchten. Längere Erklärungen stehen hinter per Tastatur erreichbaren Fragezeichen-Schaltflächen, seltenere Optionen unter aufklappbaren \ui{Erweitert}-Bereichen. Ein direkter Administrationseditor verwendet dieselben Felder; ein Browser ohne JavaScript nutzt die normale Formularübermittlung.
+Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{Anzeige} und \ui{Medien hochladen}; anschließend folgen je nach Verfügbarkeit Bild- und Spezialwerkzeuge. Die obere fixierte Navigation hält die Diskette \ui{Speichern} beim Scrollen der Einstellungen und Fotolisten sichtbar. Ein Registerwechsel speichert nicht automatisch. Verwenden Sie nach der Bearbeitung die Schaltfläche und öffnen Sie die Galerie anschließend erneut, wenn Sie die gespeicherten Werte prüfen möchten. Längere Erklärungen stehen hinter per Tastatur erreichbaren Fragezeichen-Schaltflächen, seltenere Optionen unter aufklappbaren \ui{Erweitert}-Bereichen. Ein direkter Administrationseditor verwendet dieselben Felder; ein Browser ohne JavaScript nutzt die normale Formularübermittlung.
 
 \ui{Identität} hält Titel, Beschreibung, Datum, Ausgangssprache, SimBrief und Schlagwörter direkt erreichbar. Der erweiterte Abschnitt enthält Slug, Ordner, übergeordnete Galerie, Sortierreihenfolge und, sofern aktiviert, KI-Galerietext. \ui{API} zeigt einen kopierbaren Uploadendpunkt, Schlüsselbezeichnung und -aktion sowie einen neu erzeugten Schlüssel genau einmal; vorhandene Schlüssel erscheinen nur, wenn welche existieren. Die Neuerzeugung von KI-Metadaten, Migration und die globale API-Verwaltung liegen unter \ui{Erweiterte API-Werkzeuge}. \ui{Zugriff} bündelt Sichtbarkeit, Passwort, Freigabelink-Steuerungen und das NSFW-Kontrollkästchen; längere Richtlinienerklärungen stehen hinter Fragezeichen. \ui{Anzeige} beginnt mit dem Raster und den üblichen Schaltern für Abstimmung und Dateinamen; EXIF/GPS, Galeriekartenformat, Anzahlkennzeichnung, Lightbox-Modus, Picture Game, Vorschaubildgrenzen liegen unter \ui{Erweiterte Anzeigeeinstellungen}; Flugroutentext ist neben SimBrief unter \ui{Identität} verfügbar.
 
@@ -543,7 +552,7 @@ Anonyme Besucher verwenden denselben Link nach normalen Zugriffskontrollen.
 Benötigen Vollbild oder~Ton Aktivierung, wartet der~schwarze Beginn auf
 \ui{Präsentation starten}. Danach füllt der~Ersatz bei~fehlender nativer
 Unterstützung das~Browserfenster; \ui{Abspielen} hilft bei~späteren Tonfehlern.
-Unter \ui{Galerie bearbeiten > Medien > Präsentation} bietet die~transparente
+Unter \ui{Galerie bearbeiten > Medien hochladen > Präsentation} bietet die~transparente
 Karte \ui{Präsentationseinstellungen} öffentliche Schalter, Musik und~beide
 Geschwindigkeiten. Das~Speichern-Symbol verwendet das~geschützte Galerieformular.
 Vorschau und~Teilen verwenden aktuelle, auch ungespeicherte Werte. Neue Links
@@ -592,14 +601,19 @@ Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzept
 
 \index{PDF!Galeriedokumente}
 
-Der~Galerieeditor hat~ein Hauptregister \ui{Medien} mit~den Unterbereichen
-\ui{Musik}, \ui{PDF}, \ui{Präsentation} und~\ui{Gestaltung}. Musik und~PDF
-behalten ihre unabhängigen Formulare; Gestaltung bleibt mit~dem geschützten
-Galerieeinstellungsformular verknüpft. Die~Präsentationskarte liegt unter
-\ui{Medien} > \ui{Präsentation}, allgemeine Dokumente und~das optionale OFP-
-Panel unter \ui{Medien} > \ui{PDF}. Titelbild, Branding und~Hintergrund
-liegen unter \ui{Medien} > \ui{Gestaltung}. Unter \ui{Bilder} nimmt
-\ui{Hochladen} alle für~die~Galerie aktivierten Medientypen an.
+Der~Galerieeditor vereint Fotos und~Medien unter \ui{Medien hochladen},
+mit~\ui{Bilder}, \ui{Musik}, \ui{PDF}, \ui{Präsentation},
+\ui{Gestaltung} und~ZIP-Optionen. Eine Auswahl \ui{Dateien hochladen}
+erkennt aktivierte Foto-, PDF- und~Audioformate automatisch. PDF-Verwaltung,
+Konvertierung und~das optionale OFP-Panel bleiben im~PDF-Bereich.
+Gestaltung und~Präsentationsvorgaben behalten das~Galerieformular.
+Die~fixierte obere Navigation bietet \ui{Speichern} mit~Diskettensymbol
+auch über langen Fotolisten. Uploads und~Fotoreihenfolge speichern weiterhin
+unabhängig. Die~kompakte Uploadansicht verbirgt Hinweise und~Formatunterstützung
+hinter einem rahmenlosen Fragezeichen; Escape oder ein~Klick außerhalb schließt
+die~Hilfe. \ui{Erweitert} enthält iCloud und~Verarbeitung; PDF-Seitenkonvertierung
+muss ausdrücklich aktiviert werden und~ist standardmäßig ausgeschaltet.
+Frühere Bilder-Links bleiben unterstützt.
 
 Administratoren können einer physischen Galerie auch ohne SimBrief-Daten ein allgemeines PDF hinzufügen. Die Galerie speichert das Original und einen kleinen Index mit stabiler Dokument-ID, Dateiname, Titel, Herkunft, exakter Größe und SHA-256-Prüfsumme. Der geschützte gleichursprüngliche Anzeige- und Downloadlink folgt den Sichtbarkeits-, Passwort-, Freigabe- und NSFW-Regeln der Galerie. Der vorhandene SimBrief-OFP-Manifest- und Linkpfad bleibt davon unabhängig.
 
@@ -700,7 +714,7 @@ Identitäten erzeugen neue Einträge; fremde Archive liefern keine vertrauten ID
 
 \subsubsection{Musikspeicher}
 
-Öffnen Sie~\ui{Galerie bearbeiten > Medien > Musik}, um~Audio hochzuladen
+Öffnen Sie~\ui{Galerie bearbeiten > Medien hochladen > Musik}, um~Audio hochzuladen
 und~die~Playlist der~Galerie zu~verwalten. Neue Uploads speichern unveränderliche
 Originale im~geschützten zentralen Repository \filepath{data/music/}; Audio wird
 niemals in~Fotos umgewandelt. Einzelne Songzuordnungen bleiben unabhängige
@@ -851,12 +865,12 @@ Anzeige & Lightbox-Browsingmodus & Designvorgabe übernehmen, klassisches Einzel
 Anzeige & Benutzerdefiniertes Raster & Erste sichtbare Anzeigesteuerung: optionale Spalten und Zeilen für diese Galerie. Ohne ausdrückliches Raster gilt das nächste übergeordnete Raster, das Vererbung an Untergalerien zulässt, danach die Designvorgabe.\\
 Anzeige & Grenzen responsiver Vorschaubilder & Optionale Mindest-/Höchstgrenzen für Vorschaubildgrößen. Beim Speichern können die Galeriegrenzen rekursiv auf Nachkommen kopiert werden; rekursives Speichern ist standardmäßig aus.\\
 Anzeige & Flugroute & Erweiterter manueller Routentext unterstützt die lokale Kennungssuche und ausdrückliche \codeword{NAME@latitude,longitude}-Punkte. SimBrief kann einen OFP, einen Beschreibungsentwurf und aufgelöste Routenkoordinaten speichern.\\
-Medien & Titelbild & Automatisch oder ein ausgewähltes Foto, einschließlich geeigneter Fotos aus Nachkommen, wenn die Auswahl sie anbietet.\\
-Medien & Hochgeladenes Galerievorschaubild & Separates Medium für die Galeriekarte, unabhängig von gewöhnlichen Galeriefotos gespeichert.\\
-Medien & Hintergrundquelle & Designvorgabe übernehmen, einen neuen Hintergrund hochladen, ein vorhandenes Galeriebild wählen oder eine Collage aus öffentlichen Galerien erzeugen.\\
-Medien & Branding-Ressourcen & Optionale galeriespezifische Banner-, Logo- und Trennlinienressourcen überschreiben konfigurierte Designersatzwerte nur für diese Galerie.\\
-Bilder & Scan/Import & Durchsucht den physischen Galerieordner erneut und synchronisiert unterstützte Medien in den Katalog.\\
-Bilder & Alle Vorschaubilder erstellen & Erstellt die Vorschaubilder dieser Galerie neu. Wählen Sie \ui{Untergalerien einschließen}, um ihre Nachkommen einzubeziehen; andere Galeriezweige bleiben außerhalb des Auftrags. Die Browsererzeugung ist standardmäßig ausgewählt, wenn verfügbar; es gibt eine Option zur Servererzeugung.\\
+Medien hochladen & Titelbild & Automatisch oder ein ausgewähltes Foto, einschließlich geeigneter Fotos aus Nachkommen, wenn die Auswahl sie anbietet.\\
+Medien hochladen & Hochgeladenes Galerievorschaubild & Separates Medium für die Galeriekarte, unabhängig von gewöhnlichen Galeriefotos gespeichert.\\
+Medien hochladen & Hintergrundquelle & Designvorgabe übernehmen, einen neuen Hintergrund hochladen, ein vorhandenes Galeriebild wählen oder eine Collage aus öffentlichen Galerien erzeugen.\\
+Medien hochladen & Branding-Ressourcen & Optionale galeriespezifische Banner-, Logo- und Trennlinienressourcen überschreiben konfigurierte Designersatzwerte nur für diese Galerie.\\
+Medien hochladen & Scan/Import & Durchsucht den physischen Galerieordner erneut und synchronisiert unterstützte Medien in den Katalog.\\
+Medien hochladen & Alle Vorschaubilder erstellen & Erstellt die Vorschaubilder dieser Galerie neu. Wählen Sie \ui{Untergalerien einschließen}, um ihre Nachkommen einzubeziehen; andere Galeriezweige bleiben außerhalb des Auftrags. Die Browsererzeugung ist standardmäßig ausgewählt, wenn verfügbar; es gibt eine Option zur Servererzeugung.\\
 Werkzeuge & Organizer, Umbenenner, API & Datumsorganizer, physischer Medienumbenenner, Verwaltung von Upload-API-Schlüsseln, KI-Neuerzeugung und Galeriemigration erscheinen nur bei verfügbaren Schemata/Funktionen.\\
 \bottomrule
 \end{longtable}
@@ -1521,6 +1535,12 @@ Isolierte Positionsblöcke zwischen Sprung und lokaler Rückkehr werden
 in beiden Karten mit Hinweis ausgelassen; Rohdaten bleiben erhalten.
 Entfernte Anfangs- und Endabschnitte sowie Ortswechsel ohne Rückkehr bleiben sichtbar.
 
+Die Hauptaktion wechselt zwischen SimBrief laden und SimBrief entladen.
+Entladen entfernt den vorbereiteten/aktuellen OFP und seine Route
+einschließlich des aktuellen Sitzungsschnappschusses; ältere Flüge und PDFs
+bleiben erhalten. Während Laden und Abschluss ist Entladen gesperrt.
+Nach Aufnahmeende zeigt die Hauptaktion keine historische Route mehr.
+
 Der SimBrief-Identitätsdialog verwendet das dunkle App-Design, prüft Eingaben
 im Fenster und unterstützt Enter/Escape. Häkchen und Flughafenpaar kennzeichnen
 den akzeptierten Plan des nächsten/aktuellen Flugs; fehlgeschlagenes Neuladen
@@ -1571,10 +1591,10 @@ den umgebrochenen Text und die vollständige Schaltflächenzeile an. Text und
 Schaltflächenzeile haben denselben Hintergrund wie das Fenster; die Hauptaktion
 \ui{Update} bleibt hervorgehoben.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.7.1. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.8.0. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.7.1/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.8.0/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.
@@ -1751,7 +1771,7 @@ Der Reiter \ui{Bilder} im Galeriebearbeiter bündelt häufige Fotoarbeiten in ei
 
 Der Titelbild-Stern hat bei unterstütztem Datenbankschema drei Zustände: Ein leerer Stern wählt nur dieses Foto aus (gold); ein erneuter Klick auf den goldenen Stern lässt es ausgewählt und aktiviert das Hinzufügen (blau); ein Klick auf einen weiteren leeren Stern fügt das Foto hinzu, bis zu vier Fotos. Ein Klick auf einen ausgewählten blauen Stern behält nur dieses Foto bei (gold). Jeder Klick wird sofort gespeichert. Die Sterne werden direkt im rechten Admin-Bereich aktualisiert; Registerkarte, Bildlaufposition, andere Formularentwürfe und geladene Fotoreihen bleiben erhalten. Die öffentliche Galerie wird separat aktualisiert. Nach einem Fehler oder einer verlorenen Antwort liest der Editor zuerst den aktuellen Titelbildstatus ein, ohne den Bereich zu ersetzen. Bei geändertem Zustand aktualisiert er die Sterne und danach die öffentliche Galerie; andernfalls prüfen Sie vor einem erneuten Versuch den aktuellen Zustand, da die Speicherung vor einem Fehler beim Erstellen der Antwort erfolgt sein kann.
 
-Unter \ui{Medien} > \ui{Titelbild} wählt \ui{Automatisch (2 Fotos)} bis zu zwei geeignete direkte Fotos und füllt fehlende Plätze mit zugänglichen Untergalerien. \ui{Standard (bisheriges Galerieverhalten)} bewahrt die bisherige Darstellung für Galerien, die noch keinen automatischen oder manuellen Titelbildmodus festgelegt haben. Öffentliche Karten prüfen Sichtbarkeit und Galeriezugriff erneut; unveröffentlichte oder unzugängliche Fotos werden nicht angezeigt.
+Unter \ui{Medien hochladen} > \ui{Titelbild} wählt \ui{Automatisch (2 Fotos)} bis zu zwei geeignete direkte Fotos und füllt fehlende Plätze mit zugänglichen Untergalerien. \ui{Standard (bisheriges Galerieverhalten)} bewahrt die bisherige Darstellung für Galerien, die noch keinen automatischen oder manuellen Titelbildmodus festgelegt haben. Öffentliche Karten prüfen Sichtbarkeit und Galeriezugriff erneut; unveröffentlichte oder unzugängliche Fotos werden nicht angezeigt.
 
 Ist die optionale Funktion \ui{Picture Manager} aktiviert, kann ein normal angemeldeter Administrator Fotos und direkte physische Untergalerien im öffentlichen Galerieraster auswählen. Häkchen wählen einzelne Karten; Umschalt-Klick wählt einen Bereich; Strg-Klick oder Cmd-Klick schaltet die Auswahl einer Karte um; \ui{Alle auswählen}, \ui{Auswahl aufheben} und Strg/Cmd+A unterstützen größere Auswahlen auf der sichtbaren Seite. Smart-Gallery-Karten gehören nicht zu dieser dateibasierten Auswahl. Das Ziehen eines nicht ausgewählten Fotos beginnt mit diesem Foto als Auswahl; das Ziehen einer vorhandenen Fotoauswahl verschiebt die ausgewählten Fotos gemeinsam. Eine sichtbare Untergaleriekarte wird zum Ablageziel; das Ablegen führt denselben validierten Fotoverschiebevorgang aus wie die Zielauswahl. Physische Galeriekarten selbst sind keine Ziehquellen.
 
@@ -2550,6 +2570,12 @@ In modernen Browsern fordert ein öffentlicher Galerie- oder Smart-Gallery-Downl
 
 Erzeugte Galerie-/Gesamt-/Auswahl-ZIP-Dateien verwenden eine aus relevanten Galerie-/Bildmetadaten abgeleitete Inhaltssignatur, sodass ein weiterhin aktuelles Cachearchiv wiederverwendet werden kann und eine geänderte Sammlung eine neue Cachekennung erhält. Diese \emph{Inhaltssignatur} sind Cacheinvalidierungsmetadaten, kein öffentliches HMAC-Downloadautorisierungstoken. Der Downloadcontroller prüft die Autorisierung vor der Archivauslieferung.
 
+\subsection{Optionale PDF- und Musikoriginale in ZIP-Downloads}
+\index{z00278@ZIP!optionale Medien}
+Neue und aktualisierte Installationen laden standardmäßig nur Fotos herunter. Unter Admin-Einstellungen, Medien, gibt es zwei unabhängige globale Schalter für PDF- und Musikoriginale. Der Editor einer physischen Galerie besitzt eigene Schalter und in den PDF-/Musik-Managern können einzelne Originale freigegeben werden. Alle drei Ebenen sind zunächst AUS. Eine globale, Galerie- oder Dateifreigabe erlaubt die Aufnahme; die höhere Ebene übersteuert ausschließlich die ZIP-Auswahl und ändert weder gespeicherte niedrigere Einstellungen noch Berechtigungen für einzelne Downloads.
+
+Die Archivfreigabe umgeht niemals geerbte Zugriffsrechte, Sichtbarkeit, versteckte Dateien, Funktionsschalter, Integritätskontrollen oder Smart-Gallery-Regeln. Ein Smart-ZIP berücksichtigt Medien nur aus Galerien mit tatsächlich passenden und autorisierten Fotos, nicht aus weiteren Quellbäumen. Dateien erhalten die ZIP-Ordner \texttt{PDF/} beziehungsweise \texttt{Music/}, behalten ihre Erweiterungen und werden anhand ihrer Inhaltsidentität dedupliziert. Browser-Manifest, Medienabruf und begrenzter Server-Ersatzweg prüfen die aktuelle Berechtigung erneut; Fortschritt, Abbruch, Größenlimits und ZIP64 bleiben erhalten. Medienzähler zeigen den sichtbaren Bestand, nicht die ZIP-Auswahl.
+
 \subsection{Migration zwischen Galerien}
 \index{g00130@Galeriemigration}
 \index{a00021@API-Migration}
@@ -3034,6 +3060,11 @@ Der generierte Modulplan erklärt gemeinsame Abhängigkeiten und eine kanonische
 Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{index.php} im Repository-Stamm ist ein unterstützter Kompatibilitätseinstieg für andere Hostingstrukturen. Der öffentliche Einstieg lädt \filepath{app/early\_runtime.php} vor \filepath{app/bootstrap.php}; danach erreichen beide Strukturen dieselbe normale Anfragepipeline.
 
 Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
+
+Die Auslieferung von Vorschaubildern verwendet das vorhandene vollständige
+Modul für öffentliche Medien gemeinsam. Die Kompilierung akzeptiert diese
+Abhängigkeit nur, wenn dessen gesamte Dateimenge bereits zum Vorschaumodul
+gehört. Routenlimits und die Prüfung doppelter Dateizuständigkeit bleiben aktiv.
 
 Die Initialisierung liest lokale Konfiguration und stellt den Anfragekontext her: Datenbankzugriff bei Bedarf, Sprache, Sitzungszustand, Sicherheitsvoraussetzungen und gemeinsame Laufzeitdienste. Routing übersetzt anschließend die eingehende URL oder den Ersatzweg mit Abfrageparametern in eine interne Route mit Parametern wie Galeriepfad, Seitennummer, Mediengröße oder Freigabetoken. Dispatch ruft den für diese Route registrierten Controller auf.
 

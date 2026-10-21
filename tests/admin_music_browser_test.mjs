@@ -90,7 +90,7 @@ body.admin-page {
 </style>
 </head><body class="admin-page"><pre id="results"></pre><main id="mount">${markup}</main>
 <script type="module">
-import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261020-merge-selected-survivor-v2';
+import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261021-upload-media-v1';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const ACTION_TIMEOUT_MS = ${ACTION_TIMEOUT_MS};

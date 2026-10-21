@@ -47,6 +47,7 @@ require_once __DIR__ . '/views/admin_test_run_panel.php';
 require_once __DIR__ . '/views/public_search.php';
 require_once __DIR__ . '/views/votes.php';
 require_once __DIR__ . '/views/admin_auth.php';
+require_once __DIR__ . '/views/admin_support.php';
 require_once __DIR__ . '/views/viewer_accounts.php';
 require_once __DIR__ . '/views/public_tags.php';
 require_once __DIR__ . '/views/breadcrumbs.php';

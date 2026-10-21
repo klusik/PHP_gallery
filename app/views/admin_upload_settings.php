@@ -93,30 +93,36 @@ function view_render_admin_upload_support_matrix(array $support): void
 }
 
 /**
- * Render a compact upload support panel for the normal upload page.
+ * Keep format support and its settings link behind a plain help disclosure.
  *
  * @param array{heic?:bool,raw?:bool} $support Whether server support exists for HEIC and DNG conversion.
- * @return void Emit the compact support panel and file-format matrix.
+ * @return void Emit accessible help and the existing file-format matrix.
  */
 function view_render_admin_upload_support_panel(array $support): void
 {
     echo
-        '<section class="panel compact-support"><div class="admin-tab-intro admin-cinematic-intro"><div><p class="admin-kicker">'
-            . e(t('admin.upload.support_kicker', 'Upload'))
-            . '</p><h2>'
+        '<details class="admin-inline-help gallery-upload-support"><summary aria-label="'
             . e(t('admin.upload.support_title', 'Upload support'))
-            . '</h2></div><div class="admin-cinematic-intro-side"><p class="muted">'
+            . '">?</summary><div class="admin-inline-help-content"><h3>'
+            . e(t('admin.upload.support_title', 'Upload support'))
+            . '</h3><p>'
+            . e(t('admin.upload.media_files_help'))
+            . '</p><p>'
+            . e(t('admin.upload.clipboard_hint'))
+            . '</p><p>'
+            . e(t('pdf.upload.attach_help'))
+            . '</p><p class="muted">'
             . e(t(
                 'admin.upload.support_settings_hint',
                 'Format handling and browser pipeline limits are configured on the dedicated upload settings page.',
             ))
-            . '</p><div class="admin-hero-actions"><a class="button secondary" href="'
+            . '</p><a class="button secondary" href="'
             . e(url_for('admin_upload_settings'))
             . '">'
             . e(t('admin.upload.open_upload_settings', 'Upload settings'))
-            . '</a></div></div></div>';
+            . '</a>';
     view_render_admin_upload_support_matrix($support);
-    echo '</section>';
+    echo '</div></details>';
 }
 
 /**

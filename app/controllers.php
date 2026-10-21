@@ -52,6 +52,7 @@ require_once __DIR__ . '/controllers/public_media.php';
 require_once __DIR__ . '/controllers/thumbnail_warmup.php';
 require_once __DIR__ . '/controllers/site_maintenance.php';
 require_once __DIR__ . '/controllers/admin_auth.php';
+require_once __DIR__ . '/controllers/admin_support.php';
 // Load the minimal invite-only viewer account HTTP boundary after the shared mail transport.
 require_once __DIR__ . '/controllers/viewer_accounts.php';
 // Load the narrow viewer account lifecycle HTTP boundary after its shared Phase 1.0 helpers.

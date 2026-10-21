@@ -166,6 +166,9 @@ return [
         // The 98-module allowance is already consumed; this keeps one catalog
         // administration root without adding a transitive dependency edge.
         'Gallery\\Controllers\\cms_admin_music' => 'domain-admin-tags',
+        // Support-grant routes share the already established Admin authentication owner.
+        'Gallery\\Controllers\\cms_admin_support' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_admin_support_redeem' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
@@ -183,6 +186,10 @@ return [
         'gallery-pdf-documents',
     ],
     'module_dependencies' => [
+        // Thumbnail delivery already contains the full public-media closure.
+        // Reuse that byte-delivery owner: no new files or logical roots, while
+        // removing duplicate ownership and retaining the route module budget.
+        'public-thumbnails' => ['public-media'],
         // The full gallery editor already contains the complete metadata owner
         // closure, including cover selection. Reuse that existing domain owner
         // without adding a module, widening PHP closures or duplicating its files.

@@ -308,6 +308,13 @@ function view_render_admin_account(array $viewModel): void
                 'admin.settings.open_centralized',
                 'Open centralized settings',
             ))
+            . '</a><a class="button secondary" href="'
+            . e((string) ($viewModel['support_access_url'] ?? ''))
+            . '">'
+            . e(t(
+                'admin.support.title',
+                'Temporary admin access',
+            ))
             . '</a></div>';
     echo
         '<div class="account-settings-status '

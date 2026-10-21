@@ -58,7 +58,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.139.1
+**Current Version:** 0.140
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -659,6 +659,17 @@ installations require no configuration edit after update.
 - Scheduled maintenance for bounded thumbnail checks, metadata refresh, and
   cleanup work
 - File permission diagnostics
+
+#### Temporary administrator support access
+
+Permanent administrators can issue a one-time 24-hour support link, see whether
+it is unused, active, expired or revoked, and revoke it immediately. Recipients
+confirm a separate, restricted Admin session without gaining permanent login,
+password-reset or settings authority. Invitation and session secrets are hashed
+at rest, and delegated activity is identified by grant ID in audit records.
+
+See [Temporary administrator support access](docs/TEMPORARY_ADMIN_ACCESS.md)
+for owner instructions, security boundaries, expiry and retention policy.
 
 #### Account Settings
 - Username and password management

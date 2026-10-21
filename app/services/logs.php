@@ -312,6 +312,14 @@ function admin_log_event_result(
 
     try {
         $user = current_user();
+        if (is_array($user) && !empty($user['support_access'])) {
+            // Stored user_id is the grant owner, not the delegated actor.
+            $context['support_actor'] = [
+                'type' => 'delegate',
+                'grant_id' => (int) $user['support_grant_id'],
+                'owner_user_id' => (int) $user['id'],
+            ];
+        }
         $values = [
             'user_id' => $user ? (int) $user['id'] : null,
             'level' => $level,

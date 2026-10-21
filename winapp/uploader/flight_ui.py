@@ -367,8 +367,10 @@ class FlightUI:
         plan = self.dispatch
         if (
             plan is None
+            and self.active_dispatch is not None
             and self.recorder is not None
             and self.active_dispatch_directory == self.recorder.directory
+            and self.recorder.is_alive()
         ):
             plan = self.active_dispatch
         loading = self.dispatch_loading and (
@@ -380,12 +382,46 @@ class FlightUI:
         )
         self.simbrief_button_var.set(self.text(
             "simbrief_loading_short" if loading else
-            "simbrief_ready" if plan is not None else "simbrief_load"
+            "simbrief_unload" if plan is not None else "simbrief_load"
         ))
-        prefix = self.text("simbrief_next_flight") + ": " if self.dispatch is not None else ""
+        prefix = self.text(
+            "simbrief_next_flight" if self.dispatch is not None else "simbrief_ready"
+        ) + ": "
         self.simbrief_status_var.set(
             prefix + plan.origin + " → " + plan.destination if plan is not None else ""
         )
+
+    def toggle_simbrief(self) -> None:
+        """Load optional dispatch or explicitly detach the displayed flight plan.
+
+        Returns:
+            None: Clears staged/current dispatch and its route, or opens loading.
+                Historical sessions and existing PDFs remain unchanged. A disk
+                failure retains the accepted plan and reports the error.
+        """
+        if self.load_error or self.lease is None or self.busy():
+            return
+        if self.dispatch_loading:
+            return
+        current = (
+            self.recorder is not None
+            and self.recorder.is_alive()
+            and self.active_dispatch_directory == self.recorder.directory
+            and self.active_dispatch is not None
+        )
+        if self.dispatch is None and not current:
+            self.load_simbrief()
+            return
+        if current:
+            try:
+                (self.recorder.directory / "simbrief.json").unlink(missing_ok=True)
+            except OSError as exc:
+                messagebox.showerror("SimBrief", str(exc), parent=self.dialog_owner())
+                return
+            self.active_dispatch = None
+            self.active_dispatch_directory = None
+        self.dispatch = None
+        self.refresh_dispatch_status()
 
     def load_simbrief(self, change_identity: bool = False, saved: bool = False) -> None:
         """Fetch an optional OFP without blocking Tk or changing recorder state.
@@ -2018,6 +2054,7 @@ class FlightUI:
         operation = self.operation
         self.refresh_telemetry()
         self.accept_simbrief()
+        self.refresh_dispatch_status()
         if self.keep_local_button is not None and self.keep_local_button.winfo_exists():
             self.keep_local_button.configure(text=self.text(
                 "keep_local_revoke" if self.pending_revoke_intent() else "keep_local"

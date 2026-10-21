@@ -313,7 +313,10 @@ export function setupAdminTabsInRoot(root) {
 
         const imageWidget = panelScope.querySelector('[data-gallery-images-preload]');
         const imageTab = tabs.find(tab => tab.dataset.adminTabTarget === 'admin-edit-images');
-        const imagePanel = panels.find(panel => panel.id === 'admin-edit-images');
+        // Upload media keeps the original image container as an independent
+        // preload target; its siblings remain usable during thumbnail loading.
+        const imagePanel = panels.find(panel => panel.id === 'admin-edit-images')
+            || panelScope.querySelector('#admin-edit-media #admin-edit-images');
         if (imageWidget && imageTab && imagePanel) {
             imageTab.setAttribute('aria-disabled', 'true');
             imageTab.setAttribute('tabindex', '-1');
@@ -417,7 +420,7 @@ export function setupAdminTabsInRoot(root) {
             });
             startGalleryImagesPreload(imageWidget, imagePanel, () => {
                 imagePanel.dispatchEvent(new CustomEvent('php-gallery:images-ready', {bubbles: true}));
-                if (imageWidget.dataset.requested === '1') {
+                if (imageTab && imageWidget.dataset.requested === '1') {
                     imageWidget.dataset.requested = '0';
                     activateTab('admin-edit-images');
                 }

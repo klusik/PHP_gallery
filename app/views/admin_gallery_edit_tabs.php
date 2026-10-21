@@ -531,6 +531,31 @@ function view_render_admin_gallery_overview(array $viewModel): void
 }
 
 /**
+ * Keep gallery saving beside the sticky section navigation on every tab.
+ * @param list<array{id:string,label?:string,badge?:int,disabled?:bool}> $tabs
+ *     Controller-prepared editor sections and counts.
+ * @param string $activeId Selected main section.
+ * @param int $galleryId Authorized gallery whose settings form owns Save.
+ * @return void Emit the existing tabs and a natively associated submit button.
+ */
+function view_render_admin_gallery_editor_tabs(
+    array $tabs,
+    string $activeId,
+    int $galleryId,
+): void {
+    ob_start();
+    view_render_admin_tabs($tabs, $activeId);
+    $tabsHtml = (string) ob_get_clean();
+    $saveLabel = t('admin.gallery_editor.save_gallery', 'Save gallery');
+    $saveHtml = '<button type="submit" class="admin-gallery-top-save"'
+        . ' form="admin-gallery-settings-' . $galleryId . '" title="'
+        . e($saveLabel) . '" aria-label="' . e($saveLabel) . '">'
+        . view_music_control_icon('save') . '<span>'
+        . e(t('admin.common.save', 'Save')) . '</span></button>';
+    echo str_replace('</nav>', $saveHtml . '</nav>', $tabsHtml);
+}
+
+/**
  * Render the Identity tab from controller-prepared presentation data.
  *
  * @param array<string, mixed> $viewModel Controller-prepared values and trusted legacy fragments.
@@ -1340,9 +1365,74 @@ function view_render_admin_gallery_editor_form_close(array $viewModel): void
 }
 
 /**
+ * Render independently saved physical-gallery ZIP opt-in switches.
+ *
+ * This fragment lives outside the editor's shared settings form; each POST
+ * retains its own CSRF token. Global ON overrides these saved gallery choices
+ * only for archive inclusion, never for access or attachment visibility.
+ *
+ * @param array{gallery_id:int,action_url:string,csrf_html:string,
+ *     pdf_gallery:bool,music_gallery:bool,pdf_global:bool,
+ *     music_global:bool} $settings Prepared Admin archive preferences.
+ * @return void Emit two accessible standalone preference forms.
+ */
+function view_render_admin_gallery_archive_preferences(
+    array $settings,
+): void {
+    $id = (int) ($settings['gallery_id'] ?? 0);
+    $action = e((string) ($settings['action_url'] ?? ''));
+    $csrf = (string) ($settings['csrf_html'] ?? '');
+    echo '<section class="admin-edit-card gallery-archive-options">'
+        . '<h3>' . e(t('download.archive.title', 'Include originals in ZIP'))
+        . '</h3><p class="muted">'
+        . e(t(
+            'download.archive.hierarchy',
+            'All archive switches are off by default. Global ON overrides'
+                . ' gallery/item preferences only for ZIP inclusion.'
+                . ' Private, hidden and disabled media stay protected.',
+        ))
+        . '</p>';
+    foreach (['pdf', 'music'] as $kind) {
+        $saved = !empty($settings[$kind . '_gallery']);
+        $global = !empty($settings[$kind . '_global']);
+        $label = $kind === 'pdf'
+            ? t('download.archive.gallery_pdf', 'Include gallery PDFs in ZIP')
+            : t('download.archive.gallery_music', 'Include gallery music in ZIP');
+        echo '<form method="post" action="' . $action
+            . '" class="gallery-archive-option">'
+            . $csrf
+            . '<input type="hidden" name="id" value="' . $id . '">'
+            . '<input type="hidden" name="archive_media_action" value="save">'
+            . '<input type="hidden" name="archive_media_kind" value="'
+            . e($kind) . '">'
+            . '<input type="hidden" name="archive_media_scope" value="gallery">'
+            . '<input type="hidden" name="archive_media_enabled" value="0">'
+            . '<label><input type="checkbox" role="switch"'
+            . ' name="archive_media_enabled" value="1"'
+            . ($saved ? ' checked' : '')
+            . '> ' . e($label) . '</label>'
+            . '<button type="submit" class="button secondary">'
+            . e(t('admin.common.save', 'Save')) . '</button></form>';
+        if ($global) {
+            echo '<p class="muted">'
+                . e(t(
+                    'download.archive.global_active',
+                    'Global ZIP inclusion is ON; this gallery preference is'
+                        . ' preserved but overridden while global stays ON.',
+                ))
+                . '</p>';
+        }
+    }
+    echo '</section>';
+}
+
+/**
  * Render one Media tab with only the available nested sections.
  * @param array{active:bool,active_section:string,presentation_html:string,
  *     documents_html:string,music_html:string,artwork_html:string,
+ *     images_html?:string,upload_url?:string,upload_panel_url?:string,
+ *     archive_settings?:array{gallery_id:int,action_url:string,csrf_html:string,
+ *     pdf_gallery:bool,music_gallery:bool,pdf_global:bool,music_global:bool},
  *     settings_form_id:string}
  *     $model Authorized fragments with independent or associated form owners.
  * @return void Emit the scoped Media subtabs and their content panels.
@@ -1350,6 +1440,12 @@ function view_render_admin_gallery_editor_form_close(array $viewModel): void
 function view_render_admin_gallery_media_tab(array $model): void
 {
     $sections = [];
+    if (($model['images_html'] ?? '') !== '') {
+        $sections['images'] = [
+            'label' => t('admin.gallery_editor.tab_images', 'Images'),
+            'html' => $model['images_html'],
+        ];
+    }
     if ($model['music_html'] !== '') {
         $sections['music'] = [
             'label' => t('music.title', 'Music'),
@@ -1378,10 +1474,33 @@ function view_render_admin_gallery_media_tab(array $model): void
         ),
         'html' => $model['artwork_html'],
     ];
+    $html = '<div class="gallery-editor-media" data-admin-subtab-scope>';
+    if (($model['upload_url'] ?? '') !== '') {
+        $html .= '<div class="gallery-media-upload-toolbar"><a class="button"'
+            . ' href="' . e($model['upload_url']) . '"'
+            . ' data-gallery-side-panel-link'
+            . ' data-admin-side-panel-workflow="upload"'
+            . ' data-admin-side-panel-title="'
+            . e(t('admin.upload.upload_files', 'Upload files'))
+            . '" data-gallery-side-panel-url="'
+            . e($model['upload_panel_url'] ?? $model['upload_url']) . '">'
+            . view_music_control_icon('upload') . '<span>'
+            . e(t('admin.upload.upload_files', 'Upload files'))
+            . '</span></a></div>';
+    }
+    if (is_array($model['archive_settings'] ?? null)) {
+        ob_start();
+        view_render_admin_gallery_archive_preferences(
+            $model['archive_settings'],
+        );
+        $sections['archive'] = [
+            'label' => t('download.archive.title', 'Include originals in ZIP'),
+            'html' => (string) ob_get_clean(),
+        ];
+    }
     $activeSection = isset($sections[$model['active_section']])
         ? $model['active_section']
         : (string) array_key_first($sections);
-    $html = '<div class="gallery-editor-media" data-admin-subtab-scope>';
     $html .= '<input type="hidden" name="return_media_section" value="'
         . e($activeSection) . '" form="'
         . e($model['settings_form_id']) . '">';
@@ -1392,7 +1511,9 @@ function view_render_admin_gallery_media_tab(array $model): void
     foreach ($sections as $sectionKey => $section) {
         $panelId = 'admin-gallery-media-' . $sectionKey;
         $selected = $sectionKey === $activeSection;
-        $html .= '<button id="' . $panelId . '-tab" type="button"'
+        $controlId = $sectionKey === 'images'
+            ? 'admin-edit-images-control' : $panelId . '-tab';
+        $html .= '<button id="' . $controlId . '" type="button"'
             . ' role="tab" data-admin-subtab-target="' . $panelId
             . '" aria-controls="' . $panelId . '" aria-selected="'
             . ($selected ? 'true' : 'false') . '" tabindex="'
@@ -1405,9 +1526,11 @@ function view_render_admin_gallery_media_tab(array $model): void
     foreach ($sections as $sectionKey => $section) {
         $panelId = 'admin-gallery-media-' . $sectionKey;
         $selected = $sectionKey === $activeSection;
+        $controlId = $sectionKey === 'images'
+            ? 'admin-edit-images-control' : $panelId . '-tab';
         $html .= '<section id="' . $panelId
-            . '" data-admin-subtab-panel aria-labelledby="' . $panelId
-            . '-tab"' . ($selected ? '' : ' hidden') . '>'
+            . '" data-admin-subtab-panel aria-labelledby="' . $controlId
+            . '"' . ($selected ? '' : ' hidden') . '>'
             . $section['html'] . '</section>';
     }
     $html .= '</div>';

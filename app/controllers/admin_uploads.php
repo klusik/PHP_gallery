@@ -1384,12 +1384,6 @@ function render_admin_upload_side_panel(
         });
         $notices = array_values(array_filter(
             [
-                $prefillGallery
-                    ? t(
-                        'admin.upload.target_preselected',
-                        'Upload target pre-selected: {title}.',
-                        ['title' => (string) $prefillGallery['title']],
-                    ) : '',
                 $error !== ''
                     ? t('admin.upload.failed_value', 'Upload failed: {error}', [
                         'error' => $error,

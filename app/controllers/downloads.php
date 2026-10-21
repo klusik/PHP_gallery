@@ -1161,13 +1161,35 @@ function cms_download_gallery_file(): void
         return;
     }
     $galleryId = cms_download_positive_request_id($_GET, 'gallery_id');
-    $imageId = cms_download_positive_request_id($_GET, 'image_id');
     $snapshot = cms_download_source_snapshot_parameters($_GET);
+    $mediaType = (string) ($_GET['asset_type'] ?? '');
+    $isMedia = $mediaType !== '' || array_key_exists('asset_id', $_GET);
+    $imageId = $isMedia
+        ? null
+        : cms_download_positive_request_id($_GET, 'image_id');
+    $sourceGalleryId = $isMedia
+        ? cms_download_positive_request_id($_GET, 'source_gallery_id')
+        : null;
+    $mediaId = is_string($_GET['asset_id'] ?? null)
+        ? $_GET['asset_id']
+        : '';
     if (
         $galleryId === null
-        || $imageId === null
         || !cms_download_source_version_is_valid($_GET)
         || !$snapshot['valid']
+        || (
+            $isMedia
+                ? (
+                    !in_array($mediaType, ['pdf', 'music'], true)
+                    || $sourceGalleryId === null
+                    || !$snapshot['present']
+                    || !(
+                        ($mediaType === 'pdf' && $mediaId === 'ofp')
+                        || preg_match('/^[a-f0-9]{32}$/D', $mediaId) === 1
+                    )
+                )
+                : $imageId === null
+        )
     ) {
         cms_download_bad_request();
         return;
@@ -1177,7 +1199,14 @@ function cms_download_gallery_file(): void
         $galleryId,
         DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
     );
-    $resolved = gallery_download_authorized_source($galleryId, $imageId);
+    $resolved = $isMedia
+        ? \Gallery\Services\gallery_download_authorized_media(
+            $galleryId,
+            $sourceGalleryId,
+            $mediaType,
+            $mediaId,
+        )
+        : gallery_download_authorized_source($galleryId, $imageId);
     if ($resolved === null) {
         cms_not_found();
         return;
@@ -1187,7 +1216,7 @@ function cms_download_gallery_file(): void
         $resolved,
         DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
         $galleryId,
-        $imageId,
+        $imageId ?? 0,
         $snapshot,
     );
 }
@@ -1518,13 +1547,35 @@ function cms_download_smart_gallery_file(): void
         $_GET,
         'smart_gallery_id',
     );
-    $imageId = cms_download_positive_request_id($_GET, 'image_id');
     $snapshot = cms_download_source_snapshot_parameters($_GET);
+    $mediaType = (string) ($_GET['asset_type'] ?? '');
+    $isMedia = $mediaType !== '' || array_key_exists('asset_id', $_GET);
+    $imageId = $isMedia
+        ? null
+        : cms_download_positive_request_id($_GET, 'image_id');
+    $sourceGalleryId = $isMedia
+        ? cms_download_positive_request_id($_GET, 'source_gallery_id')
+        : null;
+    $mediaId = is_string($_GET['asset_id'] ?? null)
+        ? $_GET['asset_id']
+        : '';
     if (
         $smartGalleryId === null
-        || $imageId === null
         || !cms_download_source_version_is_valid($_GET)
         || !$snapshot['valid']
+        || (
+            $isMedia
+                ? (
+                    !in_array($mediaType, ['pdf', 'music'], true)
+                    || $sourceGalleryId === null
+                    || !$snapshot['present']
+                    || !(
+                        ($mediaType === 'pdf' && $mediaId === 'ofp')
+                        || preg_match('/^[a-f0-9]{32}$/D', $mediaId) === 1
+                    )
+                )
+                : $imageId === null
+        )
     ) {
         cms_download_bad_request();
         return;
@@ -1534,10 +1585,17 @@ function cms_download_smart_gallery_file(): void
         $smartGalleryId,
         DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
     );
-    $resolved = smart_gallery_download_authorized_source(
-        $smartGalleryId,
-        $imageId,
-    );
+    $resolved = $isMedia
+        ? \Gallery\Services\smart_gallery_download_authorized_media(
+            $smartGalleryId,
+            $sourceGalleryId,
+            $mediaType,
+            $mediaId,
+        )
+        : smart_gallery_download_authorized_source(
+            $smartGalleryId,
+            $imageId,
+        );
     if ($resolved === null) {
         cms_not_found();
         return;
@@ -1547,7 +1605,7 @@ function cms_download_smart_gallery_file(): void
         $resolved,
         DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
         $smartGalleryId,
-        $imageId,
+        $imageId ?? 0,
         $snapshot,
     );
 }

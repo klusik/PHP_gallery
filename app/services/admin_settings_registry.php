@@ -1821,6 +1821,34 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'normal',
             [],
         ),
+        'download_archive_pdf_global' => admin_settings_entry(
+            'download_archive_pdf_global',
+            'media',
+            'Include original PDFs in gallery ZIPs globally',
+            'When on, all otherwise authorized and visible PDFs are included in gallery ZIP downloads. Overrides gallery and item archive switches but never privacy, hidden state or the PDF master capability. Off by default.',
+            'download_archive_pdf_global',
+            'checkbox',
+            '0',
+            app_setting('download_archive_pdf_global', '0'),
+            '',
+            [],
+            '',
+            true,
+        ),
+        'download_archive_music_global' => admin_settings_entry(
+            'download_archive_music_global',
+            'media',
+            'Include original music in gallery ZIPs globally',
+            'When on, all otherwise authorized and visible music is included in gallery ZIP downloads. Overrides gallery and assignment preferences for ZIPs only; standalone music download permissions are unchanged. Off by default.',
+            'download_archive_music_global',
+            'checkbox',
+            '0',
+            app_setting('download_archive_music_global', '0'),
+            '',
+            [],
+            '',
+            true,
+        ),
         'music_show_file_extensions' => admin_settings_entry(
             'music_show_file_extensions',
             'media',
@@ -2407,6 +2435,12 @@ function admin_settings_owner_for_id(string $id): string
     if ($id === 'music_show_file_extensions') {
         return 'music_catalog';
     }
+    if (in_array($id, [
+        'download_archive_pdf_global',
+        'download_archive_music_global',
+    ], true)) {
+        return 'gallery_archive_media';
+    }
     if ($id === 'theme_breadcrumb_style') {
         return 'theme_layout_settings';
     }
@@ -2690,6 +2724,8 @@ function admin_settings_normalize_editable_value(
             'exif_gps_maps_default_enabled',
             'dev_mode_enabled',
             'remote_favicon_discovery_enabled',
+            'download_archive_pdf_global',
+            'download_archive_music_global',
         ],
         true,
     )) {
@@ -2708,6 +2744,12 @@ function admin_settings_normalize_editable_value(
  */
 function admin_settings_save_editable_value(string $id, mixed $value): void
 {
+    if (in_array($id, [
+        'download_archive_pdf_global',
+        'download_archive_music_global',
+    ], true)) {
+        require_once __DIR__ . '/gallery_archive_media.php';
+    }
     if (
         $id === 'public_home_search_enabled'
         && function_exists(
@@ -2770,6 +2812,20 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
             'remote_favicon_discovery_enabled',
             (string) $value === '1' ? '1' : '0',
         ),
+        'download_archive_pdf_global' =>
+            gallery_archive_media_save_preference(
+                'pdf',
+                'global',
+                0,
+                (string) $value === '1',
+            ),
+        'download_archive_music_global' =>
+            gallery_archive_media_save_preference(
+                'music',
+                'global',
+                0,
+                (string) $value === '1',
+            ),
         default => throw new InvalidArgumentException(
             'Unknown or non-editable central setting.',
         ),

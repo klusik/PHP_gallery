@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.139.1}
-\newcommand{\manualdate}{20~oktober~2026}
+\newcommand{\version}{0.140}
+\newcommand{\manualdate}{21~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -362,6 +362,15 @@ Efter inloggning kan en återkomstlänk öppna en lokal sida i denna installatio
   \item \ui{Konto}, där inloggningsuppgifter, återställningsadress och e-postleverans hanteras.
 \end{itemize}
 
+\subsection{Tillfällig administratörsåtkomst för support}
+\index{administratör!tillfällig supportåtkomst}
+
+En~permanent administratör kan~öppna \ui{Konto}, välja \ui{Tillfällig administratörsåtkomst} och~skapa en~supportlänk för engångsbruk. Länken visas bara när den~skapas och~upphör att~gälla exakt 24~timmar efter utfärdandet, oavsett när den~används första gången. Dela den~privat med en~betrodd supportperson. Mottagaren använder en~separat webbläsarprofil och~godkänner inbjudan uttryckligen. Inget nytt permanent administratörskonto skapas.
+
+Administrationen visar en~markering för tillfällig åtkomst och~sluttiden i~UTC. Mottagaren får granska diagnostik och~utföra tillåtna galleri- och~medieåtgärder, men~inte ändra administratörslösenord, globala säkerhetsinställningar, långlivade token eller~uppdaterarens inställningar. Ägaren kan~återkalla behörigheten när som helst; anslutna sessioner nekas vid~nästa behörighetskontroll. Ingen schemalagd rensning krävs för att~åtkomsten ska~upphöra.
+
+\securitynote{En~oanvänd inbjudningslänk är~en~hemlig åtkomstnyckel. Publicera den~aldrig i~loggar, ärenden eller~skärmbilder. Den~ursprungliga administratörens permanenta session påverkas inte av~återkallelse. Kör databasmigreringarna innan supportinbjudningar utfärdas.}
+
 \subsection{Skapa ett första galleri}
 \index{g00096@galleri!s00223@skapa det första galleriet}
 
@@ -494,7 +503,7 @@ Det synliga SimBrief-fältet accepterar ett~pilot-ID eller pilotnamn. Enbart sif
 \subsubsection{Arbeta i den kompakta redigeraren}
 \index{g00108@galleriredigerare!s00219@sidopanel}
 
-De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visning} och \ui{Medier}; därefter följer bildverktyg och specialverktyg när de är tillgängliga. Panelen till höger håller \ui{Spara galleri} synlig längst ned medan inställningsformuläret rullas. Att byta flik sparar inte automatiskt. Använd knappen efter redigering och öppna sedan galleriet igen om du vill verifiera de lagrade värdena. Längre förklaringar finns bakom frågeteckenskontroller som kan nås med tangentbordet, och mer sällan använda val ligger under utfällbara \ui{Avancerat}-avsnitt. En direkt administrationsredigerare använder samma fält, medan en webbläsare utan JavaScript använder vanlig formulärinlämning.
+De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visning} och \ui{Ladda upp media}; därefter följer bildverktyg och specialverktyg när de är tillgängliga. Den fasta övre navigeringen håller diskettknappen \ui{Spara} synlig när inställningar eller fotolistan rullas. Att byta flik sparar inte automatiskt. Använd knappen efter redigering och öppna sedan galleriet igen om du vill verifiera de lagrade värdena. Längre förklaringar finns bakom frågeteckenskontroller som kan nås med tangentbordet, och mer sällan använda val ligger under utfällbara \ui{Avancerat}-avsnitt. En direkt administrationsredigerare använder samma fält, medan en webbläsare utan JavaScript använder vanlig formulärinlämning.
 
 \ui{Identitet} håller titel, beskrivning, datum, källspråk, SimBrief och taggar lätt tillgängliga. Dess avancerade avsnitt innehåller URL-namn, mapp, övergalleri, sorteringsordning och AI-galleritext när funktionen är~aktiverad. \ui{API} visar en kopierbar uppladdningsadress, nyckelns etikett och åtgärd samt en nyskapad nyckel endast en gång; befintliga nycklar visas bara när sådana finns. Omgenerering av AI-metadata, migrering och den globala API-hanteraren ligger under \ui{Avancerade API-verktyg}. \ui{Åtkomst} samlar synlighet, lösenord, delningslänkskontroller och NSFW-kryssrutan, med längre policyförklaringar under frågetecken. \ui{Visning} börjar med rutnätet och vanliga växlar för röstning och filnamn; EXIF/GPS, format för gallerikort, antalmarkering, ljuslådeläge, Bildspelet, miniatyrbildsgränser ligger under \ui{Avancerade visningsinställningar}; flygrutttext finns bredvid SimBrief under \ui{Identitet}.
 
@@ -537,7 +546,7 @@ Anonyma besökare använder samma länk efter vanliga åtkomstkontroller.
 Kräver helskärm eller~ljud aktivering väntar den~svarta inledningen på
 \ui{Starta presentationen}. Efter bekräftelse fyller reservläget fönstret
 om~äkta helskärm saknar stöd; \ui{Spela} kan~försöka igen vid~senare ljudfel.
-I~\ui{Redigera galleri > Media > Presentation} finns det~genomskinliga
+I~\ui{Redigera galleri > Ladda upp media > Presentation} finns det~genomskinliga
 kortet \ui{Presentationsinställningar} för~offentliga knappar, musik och~båda
 hastigheterna. Sparaikonen använder det~skyddade galleriformuläret.
 Förhandsvisning och~delning använder aktuella, även osparade val. Nya länkar
@@ -583,14 +592,17 @@ Filväljaren och släppkön i uppladdningspanelen för ett befintligt galleri ac
 
 \index{PDF!galleridokument}
 
-Galleriredigeraren har~en huvudflik \ui{Media} med undersektionerna
-\ui{Musik}, \ui{PDF}, \ui{Presentation} och~\ui{Grafik}. Musik och~PDF
-behåller sina separata formulär; grafikinställningarna är~fortsatt kopplade
-till det skyddade formuläret för galleriets inställningar. Presentationskortet
-finns under \ui{Media} > \ui{Presentation}, allmänna dokument och~den valfria
-OFP-panelen under \ui{Media} > \ui{PDF}. Omslagsbild, varumärke och~bakgrund
-finns under \ui{Media} > \ui{Grafik}. Under \ui{Bilder} accepterar
-\ui{Ladda upp} alla medietyper som är aktiverade för~galleriet.
+Galleriredigeraren samlar foton och~media under \ui{Ladda upp media}, med
+\ui{Bilder}, \ui{Musik}, \ui{PDF}, \ui{Presentation}, \ui{Grafik} och~ZIP-val.
+Ett enda \ui{Ladda upp filer}-val känner automatiskt igen aktiverade foto-,
+PDF- och~ljudformat. PDF-hantering, konvertering och~den valfria OFP-panelen
+ligger kvar i~PDF-delen. Grafik och~presentationsstandarder behåller galleriets
+inställningsformulär. Den~fasta övre navigeringen har~en diskettknapp
+\ui{Spara}, tillgänglig även ovanför långa fotolistor. Uppladdning och~fotoordning
+sparas fortfarande separat. Den~kompakta uppladdningen döljer formatstöd och~hjälp
+bakom ett~frågetecken utan ram; Escape eller klick utanför stänger hjälpen.
+\ui{Avancerat} innehåller iCloud och~bearbetning; PDF-sidkonvertering kräver
+ett~uttryckligt val som är~avmarkerat från början. Äldre Bilder-länkar fungerar.
 
 En administratör kan bifoga ett vanligt PDF-dokument till ett fysiskt galleri även utan SimBrief-data. Galleriet sparar originalfilen och ett litet index med stabilt dokument-ID, filnamn, titel, ursprung, exakt storlek och SHA-256-kontrollsumma. Den skyddade visnings- och nedladdningslänken från samma ursprung följer galleriets regler för synlighet, lösenord, delning och NSFW. SimBriefs befintliga OFP-manifest och länkar är separata.
 
@@ -680,7 +692,7 @@ identiteter ger nya poster; överförda arkiv tillför inga betrodda logiska ID:
 
 \subsubsection{Musiklagring}
 
-Öppna \ui{Redigera galleri > Media > Musik} för~att~ladda upp ljud och~hantera
+Öppna \ui{Redigera galleri > Ladda upp media > Musik} för~att~ladda upp ljud och~hantera
 galleriets spellista. Nya uppladdningar lagrar oföränderliga original i~det
 skyddade centrala arkivet \filepath{data/music/}; ljud omvandlas aldrig till foton.
 Direkta låttilldelningar är~fristående poster. Albumtilldelningar är~levande
@@ -827,8 +839,8 @@ Medier & Titelbild & Automatisk eller ett valt fotografi, inklusive lämpliga fo
 Medier & Uppladdad galleriminiatyrbild & Separat medieresurs för gallerikort, lagrad oberoende av vanliga gallerifotografier.\\
 Medier & Bakgrundskälla & Ärver Tema, laddar upp en ny bakgrund, väljer en befintlig galleribild eller genererar ett kollage från offentliga gallerier.\\
 Medier & Profileringsresurser & Valfria gallerispecifika banderoll-, logotyp- och avdelarresurser åsidosätter Temas reservvärden endast för det galleriet där de har konfigurerats.\\
-Bilder & Skanna/importera & Skannar om den fysiska gallerimappen och synkroniserar medier som stöds med katalogen.\\
-Bilder & Skapa alla miniatyrbilder & Återskapar miniatyrbilder för detta galleri. Välj \ui{Inkludera undergallerier} för att omfatta dess undergallerier; andra gallerigrenar ingår inte i jobbet. Webbläsargenerering väljs som standard när den är tillgänglig, med servergenerering som alternativ.\\
+Ladda upp media & Skanna/importera & Skannar om den fysiska gallerimappen och synkroniserar medier som stöds med katalogen.\\
+Ladda upp media & Skapa alla miniatyrbilder & Återskapar miniatyrbilder för detta galleri. Välj \ui{Inkludera undergallerier} för att omfatta dess undergallerier; andra gallerigrenar ingår inte i jobbet. Webbläsargenerering väljs som standard när den är tillgänglig, med servergenerering som alternativ.\\
 Verktyg & Organiserare, Filnamnsbyte, API & Datumorganiserare, fysiskt mediefilnamnsbyte, hantering av uppladdnings-API-nycklar, AI-omgenerering och gallerimigrering visas bara när deras scheman och funktioner är tillgängliga.\\
 \bottomrule
 \end{longtable}
@@ -1474,6 +1486,12 @@ Isolerade positionsblock mellan hopp och lokal återkomst utelämnas
 på båda kartorna med en synlig not; rådata bevaras. Avlägsna start- och
 slutsegment samt förflyttningar utan återkomst visas fortfarande.
 
+Huvudknappen växlar mellan Läs in SimBrief och Koppla bort SimBrief.
+Frånkoppling tar bort förberedd/aktuell OFP och dess rutt, inklusive aktuell
+sessions sparade OFP; äldre flygningar och befintliga PDF-filer bevaras.
+Under inläsning och slutförande är frånkoppling spärrad. Efter avslutad
+inspelning döljs den historiska rutten på huvudkontrollen.
+
 SimBrief-dialogen använder appens mörka tema, validerar direkt i fönstret
 och stöder Enter/Escape. En bock och ett flygplatspar visar den accepterade planen
 för nästa/aktuell flygning; misslyckad omläsning bevarar den. Inställningar,
@@ -1518,10 +1536,10 @@ Uppdateringsfönstret anpassar storleken till den radbrutna statustexten och hel
 knappraden när bakgrundskontroller ändrar meddelandet. Texten och knappraden har
 samma bakgrund som fönstret; huvudåtgärden \ui{Update} förblir framhävd.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.7.1. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.8.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.7.1/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.8.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.
@@ -1696,7 +1714,7 @@ Fliken \ui{Bilder} i galleriredigeraren samlar vanliga bildåtgärder i en kompa
 
 Titelbildsstjärnan har tre lägen när databasschemat stöder flera foton: en tom stjärna väljer bara det fotot (guld); ett nytt klick på den gyllene stjärnan behåller valet och aktiverar tilläggsläget (blått); ett klick på en annan tom stjärna lägger till fotot, upp till fyra foton. Ett klick på en vald blå stjärna behåller bara det fotot (guld). Varje klick sparas direkt. Stjärnorna uppdateras i den högra Admin-panelen utan att ersätta hela panelen; öppen flik, rullningsposition, andra formulärutkast och inlästa bildrader bevaras. Det offentliga galleriet uppdateras separat. Efter ett fel eller ett förlorat svar hämtar redigeraren först det aktuella titelbildsläget utan att ändra panelen. Om läget har ändrats uppdateras stjärnorna före den offentliga gallerisynkroniseringen; annars ska du kontrollera aktuellt läge innan du försöker igen, eftersom sparandet kan ha lyckats innan svaret byggdes.
 
-Under \ui{Media} > \ui{Titelbild} väljer \ui{Automatiskt (2 foton)} upp till två lämpliga direkta foton och fyller tomma platser med tillgängliga undergallerier. \ui{Standard (galleriets tidigare beteende)} bevarar den äldre visningen för gallerier som inte uttryckligen har valt automatiskt läge eller ett manuellt titelbildsläge. Offentliga kort kontrollerar aktuell synlighet och åtkomst igen; opublicerade eller otillgängliga foton visas inte.
+Under \ui{Ladda upp media} > \ui{Titelbild} väljer \ui{Automatiskt (2 foton)} upp till två lämpliga direkta foton och fyller tomma platser med tillgängliga undergallerier. \ui{Standard (galleriets tidigare beteende)} bevarar den äldre visningen för gallerier som inte uttryckligen har valt automatiskt läge eller ett manuellt titelbildsläge. Offentliga kort kontrollerar aktuell synlighet och åtkomst igen; opublicerade eller otillgängliga foton visas inte.
 
 När den valfria funktionen \ui{Bildhanteraren} är~aktiverad kan en vanlig inloggad administratör välja fotografier och direkta fysiska undergallerier i det offentliga gallerirutnätet. Bockar väljer enskilda kort; Skift-klick väljer ett intervall; Ctrl-klick eller Cmd-klick växlar ett kort; \ui{Markera alla}, \ui{Rensa} och Ctrl/Cmd+A stöder större urval på den synliga sidan. Smarta gallerikort ingår inte i detta filbaserade urval. Att dra ett omarkerat fotografi börjar med det fotografiet som urval, medan dragning av ett befintligt bildurval flyttar de valda fotografierna tillsammans. Ett synligt undergallerikort blir ett släppmål, och släpp där utför samma validerade bildflytt som destinationsväljaren. Fysiska gallerikort kan inte själva dras.
 
@@ -2494,6 +2512,12 @@ I en modern webbläsare begär en hämtning från ett offentligt galleri eller s
 
 Genererade ZIP-filer för gallerier, alla gallerier och urval använder en innehållssignatur som härleds från relevant galleri- och bildmetadata, så att ett fortfarande aktuellt cachelagrat arkiv kan återanvändas och en ändrad samling får en ny cacheidentitet. Denna \emph{innehållssignatur} är metadata för cacheogiltigförklaring, inte en offentlig HMAC-token för hämtningsbehörighet. Hämtningskontrollern kontrollerar behörigheten innan ett arkiv levereras.
 
+\subsection{Valfria originalfiler för PDF och musik i ZIP-hämtningar}
+\index{ZIP!valfria medier}
+Nya och uppgraderade installationer innehåller bara fotografier som standard. Under Admininställningar och Medier finns två oberoende globala reglage för PDF- och musikoriginal. Den fysiska galleriredigeraren har motsvarande inställningar, och enskilda original kan väljas i PDF- och musikhanterarna. Alla tre nivåer är AV från början. Om globalt, galleri eller enskild fil är PÅ får originalet ingå; en högre nivå åsidosätter bara ZIP-valet och ändrar inte sparade lägre inställningar eller behörighet för separat nedladdning.
+
+ZIP-inkludering kringgår aldrig ärvd åtkomst, synlighet, dolda filer, övergripande funktionsreglage, integritetskontroller eller Smart Gallery-regler. Smart ZIP tar bara med original från fysiska gallerier som faktiskt bidrar med behöriga matchande fotografier. Filer hamnar i mapparna \texttt{PDF/} och \texttt{Music/}, behåller sina filändelser och identiskt innehåll dedupliceras. Webbläsarens manifest, filhämtning och serverns begränsade reservväg kontrollerar aktuell behörighet igen; förlopp, avbrytning, storleksgränser och ZIP64 fungerar som tidigare. Medieräknare visar synligt innehåll, inte hur många filer som inkluderas i ZIP.
+
 \subsection{Migrering mellan gallerier}
 \index{g00103@gallerimigrering}
 \index{a00015@API-migrering}
@@ -2967,6 +2991,11 @@ Den genererade modulplanen anger delade beroenden och en kanonisk filordning som
 Vanliga begäranden kommer in genom \filepath{public/index.php}; \filepath{index.php} i kodförrådets rot är en stödd kompatibilitetsingång för andra webbhotellsupplägg. Den offentliga ingången läser in \filepath{app/early\_runtime.php} före \filepath{app/bootstrap.php}, och sedan når båda uppläggen samma vanliga begärandepipeline.
 
 Den lilla begärandelokala kärnan under \filepath{app/runtime/} styr den befintliga livscykeln via Request, Router, RouteRegistry och ModuleLoader innan den anropar den procedurala kontrollern. Den kanoniska rutt- och säkerhetstabellen finns kvar i \filepath{app/bootstrap/dispatch.php}. En granskad genererad plan laddar logiska moduler för vald rutt; produktionen skannar inte källfiler, kompilerar inte beroenden och har ingen reservväg som laddar hela programmet. Befintliga PHP~8.1- och webbhotellskrav räcker fortfarande, utan Composer eller Node-bygge. Äldre CLI-/testverktyg kan använda \filepath{app/bootstrap\_full.php} för hela det procedurala API:et.
+
+Leverans av miniatyrbilder delar den befintliga fullständiga modulen för
+offentliga medier. Kompileringen godtar beroendet endast när hela dess
+filmängd redan ingår i miniatyrmodulens ansvar. Ruttens filgränser och
+kontrollen av dubbelt filansvar gäller fortfarande.
 
 Uppstarten läser lokal konfiguration och etablerar begärans sammanhang: databasåtkomst där det krävs, språk, sessionstillstånd, säkerhetsförutsättningar och gemensamma körningstjänster. Dirigeringen översätter sedan inkommande URL eller frågesträngsreserv till en intern rutt med parametrar såsom gallerisökväg, sidnummer, mediestorlek eller delningstoken. Fördelningen anropar kontrollern som är registrerad för rutten.
 

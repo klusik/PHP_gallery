@@ -893,6 +893,68 @@ function smart_gallery_model_source_summary_rows(
 }
 
 /**
+ * Return physical source membership for a bounded batch of Smart Gallery cards.
+ *
+ * Each source must contribute at least one image to the canonical authorized
+ * rule result. One UNION query replaces per-card reads and never walks the
+ * filesystem or expands attachments from unrelated source galleries.
+ *
+ * @param array<int,array{id:int,rules:array<string,mixed>,sort_mode:string,
+ *     sort_direction:string}> $definitions Validated card rule definitions.
+ * @param list<int> $accessibleGalleryIds Galleries authorized for the audience.
+ * @param bool $publicOnly Whether to require public image visibility.
+ * @param bool $allowNsfw Whether NSFW images are available to this visitor.
+ * @return list<array{smart_gallery_id:int,gallery_id:int}> Canonical source
+ *     memberships, one entry per Smart Gallery and physical source.
+ */
+function smart_gallery_model_card_source_rows(
+    array $definitions,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+): array {
+    if ($accessibleGalleryIds === []) {
+        return [];
+    }
+
+    $statements = [];
+    $params = [];
+    foreach ($definitions as $definition) {
+        $smartId = (int) ($definition['id'] ?? 0);
+        if ($smartId <= 0) {
+            continue;
+        }
+        $query = smart_gallery_model_result_query(
+            $definition['rules'],
+            $accessibleGalleryIds,
+            $publicOnly,
+            $allowNsfw,
+            $definition['sort_mode'],
+            $definition['sort_direction'],
+        );
+        $statements[] = 'SELECT ' . $smartId
+            . ' AS smart_gallery_id, i.gallery_id'
+            . ' FROM images i INNER JOIN galleries g ON g.id=i.gallery_id'
+            . ' WHERE ' . $query['where']
+            . ' GROUP BY i.gallery_id';
+        $params = array_merge($params, $query['params']);
+    }
+
+    if ($statements === []) {
+        return [];
+    }
+    $statement = db()->prepare(implode(' UNION ALL ', $statements));
+    $statement->execute($params);
+    return array_map(
+        static fn(array $row): array => [
+            'smart_gallery_id' => (int) $row['smart_gallery_id'],
+            'gallery_id' => (int) $row['gallery_id'],
+        ],
+        $statement->fetchAll(),
+    );
+}
+
+/**
  * Return whether one image remains a member of one normalized Smart Gallery result set.
  *
  * @param array{
@@ -946,6 +1008,55 @@ function smart_gallery_model_contains_image(
         'SELECT 1 FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
             . $query['where']
             . ' AND i.id = ? LIMIT 1',
+    );
+    $stmt->execute($params);
+    return (bool) $stmt->fetchColumn();
+}
+
+/**
+ * Check one physical gallery's membership in the current Smart image result.
+ *
+ * This bounded existence lookup compiles the identical canonical rule and
+ * public/NSFW predicates as the card and manifest queries, but does not group
+ * every matching source just to authorize one original-media byte request.
+ *
+ * @param array{
+ *     version:int,
+ *     root:array<string,mixed>
+ * } $rules Canonical validated Smart Gallery rule tree.
+ * @param list<int> $accessibleGalleryIds Physical sources authorized now.
+ * @param bool $publicOnly Apply public image visibility policy.
+ * @param bool $allowNsfw Allow matching NSFW images for this visitor.
+ * @param int $sourceGalleryId Physical source being reauthorized.
+ * @return bool Whether this source contributes a currently matching image.
+ */
+function smart_gallery_model_contains_source(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+    int $sourceGalleryId,
+): bool {
+    if (
+        $sourceGalleryId <= 0
+        || !in_array($sourceGalleryId, $accessibleGalleryIds, true)
+    ) {
+        return false;
+    }
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        'capture_date',
+        'desc',
+    );
+    $params = $query['params'];
+    $params[] = $sourceGalleryId;
+    $stmt = db()->prepare(
+        'SELECT 1 FROM images i INNER JOIN galleries g ON g.id=i.gallery_id'
+            . ' WHERE ' . $query['where']
+            . ' AND i.gallery_id = ? LIMIT 1',
     );
     $stmt->execute($params);
     return (bool) $stmt->fetchColumn();

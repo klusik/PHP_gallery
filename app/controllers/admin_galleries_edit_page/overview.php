@@ -144,7 +144,7 @@ function admin_edit_gallery_render_notices(
  * @param string $activeEditTab Tab selected by redirect query state.
  * @param array{media_renamer_feature_enabled:bool} $capabilities Resolved
  *     availability used for the optional rename tab.
- * @param bool $deferredImages Whether Images is unavailable until drawer preload settles.
+ * @param bool $deferredImages Whether photo rows use the drawer preload owner.
  * @return void Emits the editor overview and its tab navigation.
  */
 function admin_edit_gallery_render_overview(
@@ -180,13 +180,8 @@ function admin_edit_gallery_render_overview(
         ],
         [
             'id' => 'admin-edit-media',
-            'label' => t('admin.gallery_editor.tab_media'),
-        ],
-        [
-            'id' => 'admin-edit-images',
-            'label' => t('admin.gallery_editor.tab_images'),
+            'label' => t('admin.gallery_editor.upload_media', 'Upload media'),
             'badge' => $imageCount,
-            'disabled' => $deferredImages,
         ],
     ];
     if (feature_capability_effective_enabled('metadata_organizer')) {
@@ -210,7 +205,7 @@ function admin_edit_gallery_render_overview(
             ),
             'actions' => [
                 [
-                    'label' => t('admin.gallery_editor.upload_photos_here'),
+                    'label' => t('admin.upload.upload_files', 'Upload files'),
                     'url' => url_for('admin_upload', [
                         'gallery_id' => $gallery['id'],
                     ]),
@@ -299,5 +294,9 @@ function admin_edit_gallery_render_overview(
         ),
     ]);
 
-    render_admin_tabs($adminTabs, $activeEditTab);
+    \Gallery\Views\view_render_admin_gallery_editor_tabs(
+        $adminTabs,
+        $activeEditTab,
+        (int) $gallery['id'],
+    );
 }

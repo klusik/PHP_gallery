@@ -17,6 +17,7 @@
  *
  * Author:
  *   Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
@@ -39,18 +40,29 @@ use function Gallery\Services\t;
 /**
  * Render clipboard instructions and a localized live status for an upload selection.
  * @param bool $panelMode True only for the enhanced right-hand upload drawer.
+ * @param bool $showHelp Whether this form needs its own help instead of shared support help.
  * @return void Emit presentation metadata consumed by the clipboard selection module.
  */
-function view_render_admin_upload_clipboard_hint(bool $panelMode = false): void
+function view_render_admin_upload_clipboard_hint(
+    bool $panelMode = false,
+    bool $showHelp = true,
+): void
 {
-    view_render_admin_icloud_source();
-    echo
-        '<p class="muted">'
-            . e(t(
-                'admin.upload.clipboard_hint',
-                'Choose or drop images, or paste from the clipboard with Ctrl+V (Windows/Linux) or Cmd+V (macOS). Focus the upload area to add images; pasting in text fields edits their text.',
-            ))
-            . '</p>';
+    if ($showHelp) {
+        echo
+            '<details class="admin-inline-help gallery-upload-help"><summary aria-label="'
+                . e(t('admin.upload.help', 'Upload help'))
+                . '">?</summary><div class="admin-inline-help-content"><p>'
+                . e(t('admin.upload.media_files_help'))
+                . '</p><p>'
+                . e(t(
+                    'admin.upload.clipboard_hint',
+                    'Choose or drop images, or paste from the clipboard with Ctrl+V (Windows/Linux) or Cmd+V (macOS). Focus the upload area to add images; pasting in text fields edits their text.',
+                ))
+                . '</p><p>'
+                . e(t('pdf.upload.attach_help'))
+                . '</p></div></details>';
+    }
     echo
         '<p class="muted" role="status" data-gallery-upload-selection-status data-added="'
             . e(t(
@@ -248,8 +260,9 @@ function view_render_admin_upload_page(array $viewModel): void
 /**
  * Render the controller-prepared upload workflow inside the Admin side panel.
  *
- * @param array<string,mixed> $viewModel Controller-prepared upload side panel.
- * @return void Emit the notices, support summary, and prepared form markup.
+ * @param array{create_mode?:bool,notices?:list<string>,support_html?:string,
+ *     form_html?:string} $viewModel Prepared mode, notices and trusted fragments.
+ * @return void Emit errors, compact support help, and the prepared form.
  */
 function view_render_admin_upload_side_panel(array $viewModel): void
 {
@@ -269,33 +282,22 @@ function view_render_admin_upload_side_panel(array $viewModel): void
                     'Create a child gallery and upload photos in the same workflow. Photos are optional, so the gallery can still be created empty when needed.',
                 ))
                 . '</p></div>';
-    } else {
-        echo
-            '<div class="admin-side-panel-copy"><p class="admin-kicker">'
-                . e(t('admin.upload.workflow', 'Upload workflow'))
-                . '</p><h2>'
-                . e(t('admin.upload.title', 'Upload photos'))
-                . '</h2><p class="muted">'
-                . e(t(
-                    'admin.upload.existing_panel_help',
-                    'Add photos to an existing gallery without leaving the drawer.',
-                ))
-                . '</p></div>';
     }
     foreach ((array) ($viewModel['notices'] ?? []) as $notice) {
         if ((string) $notice !== '') {
             echo '<div class="notice">' . e((string) $notice) . '</div>';
         }
     }
-    echo (string) ($viewModel['support_html'] ?? '');
     echo (string) ($viewModel['form_html'] ?? '');
+    echo (string) ($viewModel['support_html'] ?? '');
     echo '</div>';
 }
 
 /**
  * Render the controller-prepared browser upload toggle.
  *
- * @param array<string,mixed> $viewModel Controller-prepared browser upload toggle.
+ * @param array{disabled?:bool,class_name?:string,encoded_config?:string}
+ *     $viewModel Prepared browser capability and encoded processing settings.
  * @return void Emit the enabled or disabled browser-preparation checkbox.
  */
 function view_render_admin_upload_browser_checkbox(array $viewModel): void
@@ -314,17 +316,19 @@ function view_render_admin_upload_browser_checkbox(array $viewModel): void
                 'admin.upload.browser_client_upload_label',
                 'Prepare thumbnails and ZIP batches in this browser',
             ))
-            . '</span><span class="muted">'
+            . '</span></label><details class="admin-inline-help"><summary aria-label="'
+            . e(t('admin.upload.browser_client_upload_label'))
+            . '">?</summary><div class="admin-inline-help-content"><p>'
             . e(t(
                 'admin.upload.browser_client_upload_help',
                 'Checked by default. When selected photos are present, browser-side processing is strict: preparation failures stop the upload instead of silently switching thumbnail generation to PHP. Uncheck this option to use the standard server-side path.',
             ))
-            . '</span><span class="muted">'
+            . '</p><p>'
             . e(t(
                 'admin.upload.browser_zip_help',
                 'You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.',
             ))
-            . '</span></label>';
+            . '</p></div></details>';
 }
 
 /**
@@ -360,20 +364,7 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
         echo
             '<section class="admin-side-panel-card'
                 . ' admin-side-panel-upload-card">'
-                . '<div class="admin-side-panel-card-heading"><div>'
-                . '<p class="admin-kicker">'
-                . e(t('admin.upload.existing_gallery', 'Existing gallery'))
-                . '</p><h3>'
-                . e(t(
-                    'admin.upload.upload_existing_title',
-                    'Upload into an existing gallery',
-                ))
-                . '</h3></div><p class="muted">'
-                . e(t(
-                    'admin.upload.upload_existing_help',
-                    'Choose a gallery and upload photos without leaving the drawer.',
-                ))
-                . '</p></div><form method="post" action="'
+                . '<form method="post" action="'
                 . e((string) ($viewModel['action_url'] ?? ''))
                 . '" enctype="multipart/form-data" class="admin-side-panel-form"'
                 . ' data-gallery-upload-form data-pdf-attachment-url="'
@@ -443,35 +434,17 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
             . '</span>'
             . '<input name="images[]" type="file" accept="'
             . e($existingGalleryAccept)
-            . '" multiple><span class="muted">'
-            . e(t(
-                'admin.upload.media_files_help',
-                'Select or drop supported files. Enabled gallery media types'
-                    . ' are shown in the file picker.',
-            ))
-            . '</span></label>';
+            . '" multiple></label>';
+    view_render_admin_upload_clipboard_hint($panelMode, false);
+    echo '<details class="gallery-upload-advanced"><summary>'
+        . e(t('pdf.upload.advanced', 'Advanced'))
+        . '</summary><div class="gallery-upload-advanced-content">';
     if ($pdfEnabled) {
         echo
-            '<fieldset class="gallery-upload-pdf-options"'
-                . ' data-gallery-upload-pdf-options><legend>'
+            '<div class="gallery-upload-pdf-options"'
+                . ' data-gallery-upload-pdf-options><h4>'
                 . e(t('pdf.documents', 'Documents / PDFs'))
-                . '</legend>';
-        echo
-            '<label><span>'
-                . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)'))
-                . '</span><input name="pdf_files[]" type="file"'
-                . ' accept=".pdf,application/pdf" multiple'
-                . ' data-gallery-upload-pdf-input></label>';
-        echo
-            '<p class="muted">'
-                . e(t(
-                    'pdf.upload.attach_help',
-                    'PDFs are attached as original documents. No gallery or page'
-                        . ' images are created unless you enable conversion in Advanced.',
-                ))
-                . '</p><details data-gallery-upload-pdf-advanced><summary>'
-                . e(t('pdf.upload.advanced', 'Advanced'))
-                . '</summary>';
+                . '</h4><div data-gallery-upload-pdf-advanced>';
         echo
             '<label><input type="checkbox" name="pdf_convert_pages" value="1"'
                 . ' data-gallery-upload-pdf-convert> <span>'
@@ -519,9 +492,9 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
                     'Higher DPI increases dimensions, memory, upload size and'
                         . ' processing time. PNG pages are lossless.',
                 ))
-                . '</span></label></details></fieldset>';
+                . '</span></label></div></div>';
     }
-    view_render_admin_upload_clipboard_hint($panelMode);
+    view_render_admin_icloud_source();
     echo
         '<label'
             . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '')
@@ -532,16 +505,12 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
             ))
             . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');
+    echo '</div></details>';
     if ($panelMode) {
         echo
             '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit data-gallery-upload-submit>'
                 . e(t('admin.upload.upload_images', 'Upload'))
-                . '</button><p class="muted">'
-                . e(t(
-                    'admin.upload.progress_top_panel',
-                    'Progress appears at the top of this panel.',
-                ))
-                . '</p></div>';
+                . '</button></div>';
     } else {
         echo
             '<button type="submit" data-gallery-upload-submit>'
@@ -553,7 +522,10 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
 
 /**
  * Render the create-gallery upload form from controller-prepared presentation data.
- * @param array<string,mixed> $viewModel Controller-prepared create-gallery upload form.
+ * @param array{panel_mode?:bool,action_url?:string,csrf_html?:string,
+ *     gallery_fields_html?:string,accept_value?:string,
+ *     browser_checkbox_html?:string} $viewModel Prepared create-gallery
+ *     identity fields, transport controls, accepted images and browser settings.
  * @return void Emit the native/AJAX-compatible upload controls.
  */
 function view_render_admin_upload_new_gallery_form(array $viewModel): void
@@ -585,6 +557,7 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
                     'Choose one or more images.',
                 ))
                 . '</span></label>';
+        view_render_admin_icloud_source();
         view_render_admin_upload_clipboard_hint();
         echo
             '<label><input type="checkbox" name="create_thumbnails" value="1" checked> '
@@ -638,6 +611,7 @@ function view_render_admin_upload_new_gallery_form(array $viewModel): void
                 'Multiple files are supported. The existing upload pipeline and thumbnail generation are reused.',
             ))
             . '</span></label>';
+    view_render_admin_icloud_source();
     view_render_admin_upload_clipboard_hint($panelMode);
     echo
         '<label class="admin-side-panel-thumbnail-toggle"><input type="checkbox" name="create_thumbnails" value="1" checked> <span>'

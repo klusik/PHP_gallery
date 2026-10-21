@@ -191,6 +191,9 @@ remain separate deployment/manual observations.
 WinApp 0.6.0 dispatch regressions cover pilot identity classification, invalid
 provider responses, optional session snapshots, archived JSON/XML imports,
 AIRAC-scoped ambiguous-fix retention and offline dateline map rendering.
+Dispatch UI regressions also cover staged/current unloading, empty route/load
+state, preservation of historical OFP/PDF bytes, blocked loading/finalization,
+unlink failure and hiding a completed flight's route from the main control.
 The renderer suite blocks public tile transport and exercises the real offline
 fallback. Hosted central WinApp coverage owns execution. Manual acceptance must
 also load a real SimBrief OFP, change the saved identity, verify session
@@ -788,7 +791,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.139.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.140. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1405,6 +1408,12 @@ clean-child matrix belongs to `full`/`release`. `quick` retains
 kernel/route contracts and fresh-process include probes, without starting every
 logical module in both loaders on each edit. This changes feedback scope only;
 full release coverage is unchanged.
+
+The archive-media policy regression remains in the automatically discovered
+FULL/release PHP registry. It is not added to the curated quick subset, whose
+existing cardinality limit remains unchanged. The isolated photo manifest
+fixture explicitly enables PDF/music capabilities and primes an empty settings
+snapshot so missing archive preferences exercise the default photo-only path.
 
 ### PHP worker scheduling
 
@@ -2595,6 +2604,22 @@ are best for pure logic, helper functions, and regression checks that do not
 require a browser session. Do not publish a release without the exact-candidate
 hosted release audit and required job results; local full PASS alone is
 insufficient.
+
+### Temporary Admin support-access contract coverage
+
+Run the focused no-database implementation contract after authoring:
+
+```text
+php tests/admin_support_access_test.php
+```
+
+This verifies one-time hash-backed invitation/session storage, UTC expiry,
+revocation and audit semantics, support identity/route restrictions, CSRF
+redemption, no secrets in browser URLs/audit contexts, grant-management UI,
+locale parity and route/runtime references. A real disposable migrated
+MySQL/MariaDB fixture and browser exercise remain part of the later integration
+workflow. The hosted BASIC workflow runs only after implementation and
+repository preparation. See [support-access runbook](docs/TEMPORARY_ADMIN_ACCESS.md).
 
 ### Viewer Phase 0 security-foundation coverage
 
@@ -5681,6 +5706,14 @@ ranking; the registered Node counterpart checks server-owned batch defaults and
 browser retries. Run these through the central audit, not a separate test loop.
 
 ## Clipboard image uploads
+
+Local upload UI acceptance covers the single Upload media main tab, photo
+preloading alongside usable media tools, legacy Images links, a single mixed
+photo/PDF/audio picker, collapsed PDF conversion and plain help dismissal with
+Escape/outside click. Check desktop and narrow layouts plus the top disk Save's
+native gallery-settings form association. Uploads and photo ordering continue
+saving through their existing owners; an unchanged browser URL and open drawer
+must survive completion. This manual acceptance does not replace hosted FULL.
 
 The central quick/full audit includes `admin_upload_clipboard_test.mjs` for
 MIME/picker-policy filtering, optional-format capability hints, original names

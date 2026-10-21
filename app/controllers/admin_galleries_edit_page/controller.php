@@ -193,8 +193,9 @@ function cms_admin_edit_gallery(): void
         ),
     ]);
 
-    // Media owns independent forms; its Artwork inputs associate with settings
-    // using their native form attribute after the shared form closes.
+    // Upload media contains the independent image manager and media forms.
+    // Capture Images separately so its preload replaces only its owned rows.
+    ob_start();
     if ($deferredImages && $imageCount > 0) {
         view_render_admin_gallery_images_placeholder([
             'fallback_url' => url_for('admin_edit_gallery', [
@@ -207,9 +208,18 @@ function cms_admin_edit_gallery(): void
             ),
         ]);
     } else {
-        admin_edit_gallery_render_images_tab($gallery, $images, $activeEditTab);
+        admin_edit_gallery_render_images_tab(
+            $gallery,
+            $images,
+            'admin-edit-images',
+        );
     }
-    admin_edit_gallery_render_documents_tab($gallery, $activeEditTab);
+    $imagesHtml = (string) ob_get_clean();
+    admin_edit_gallery_render_documents_tab(
+        $gallery,
+        $activeEditTab,
+        $imagesHtml,
+    );
     admin_edit_gallery_render_organizer_tab($gallery, $activeEditTab);
     admin_edit_gallery_render_renamer_tab(
         $gallery,

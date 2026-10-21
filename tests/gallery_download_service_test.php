@@ -93,6 +93,90 @@ assert_same(
     'Duplicate suffixes should be deterministic.',
 );
 
+
+// Media originals use the same server fallback fingerprint as browser ZIPs.
+// Only the validated file identity contributes; rotating capabilities do not.
+$pdfUrl = '/index.php?page=download_gallery_file'
+    . '&gallery_id=8&source_gallery_id=8'
+    . '&asset_type=pdf&asset_id=ofp&v=0123456789abcdef'
+    . '&mr=' . str_repeat('a', 64) . '&s=21';
+$pdfManifest = [
+    'files' => [
+        [
+            'name' => 'PDF/flight/plan.pdf',
+            'size' => 21,
+            'url' => $pdfUrl . '&capability=short-lived-token',
+        ],
+    ],
+];
+$mediaFingerprint = \Gallery\Services\gallery_download_legacy_manifest_fingerprint_items(
+    $pdfManifest,
+);
+assert_same(
+    [
+        [
+            'image_id' => 0,
+            'source_version' => '0123456789abcdef',
+            'zip_path' => 'PDF/flight/plan.pdf',
+            'source_bytes' => 21,
+            'media_type' => 'pdf',
+            'media_id' => 'ofp',
+            'source_gallery_id' => 8,
+        ],
+    ],
+    $mediaFingerprint,
+    'Legacy fallback must preserve the original PDF source and ZIP identity.',
+);
+$pdfManifest['files'][0]['url'] = $pdfUrl . '&capability=rotated-token';
+assert_same(
+    $mediaFingerprint,
+    \Gallery\Services\gallery_download_legacy_manifest_fingerprint_items(
+        $pdfManifest,
+    ),
+    'Transport capability rotation must not split one valid ZIP cache key.',
+);
+
+$musicId = str_repeat('b', 32);
+$musicManifest = [
+    'files' => [
+        [
+            'name' => 'Music/flight/track.mp3',
+            'size' => 120,
+            'url' => '/index.php?page=download_gallery_file'
+                . '&gallery_id=8&source_gallery_id=8'
+                . '&asset_type=music&asset_id=' . $musicId
+                . '&v=0123456789abcdef',
+        ],
+    ],
+];
+assert_same(
+    $musicId,
+    \Gallery\Services\gallery_download_legacy_manifest_fingerprint_items(
+        $musicManifest,
+    )[0]['media_id'],
+    'Music fallback must retain gallery-scoped opaque source identity.',
+);
+
+$invalidManifest = $musicManifest;
+$invalidManifest['files'][0]['url'] = str_replace(
+    $musicId,
+    'traversal',
+    (string) $invalidManifest['files'][0]['url'],
+);
+$invalidRejected = false;
+try {
+    \Gallery\Services\gallery_download_legacy_manifest_fingerprint_items(
+        $invalidManifest,
+    );
+} catch (\Gallery\Services\LegacyDownloadBuildException) {
+    $invalidRejected = true;
+}
+assert_same(
+    true,
+    $invalidRejected,
+    'Malformed media IDs must not enter a legacy ZIP fingerprint.',
+);
+
 assert_same(
     true,
     gallery_download_legacy_manifest_is_safe([

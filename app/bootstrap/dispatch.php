@@ -161,6 +161,8 @@ function cms_route_handlers(): array
         'admin_google_start' => '\\Gallery\\Controllers\\cms_admin_google_start',
         'admin_google_callback' => '\\Gallery\\Controllers\\cms_admin_google_callback',
         'admin_logout' => '\\Gallery\\Controllers\\cms_admin_logout',
+        'admin_support' => '\\Gallery\\Controllers\\cms_admin_support',
+        'admin_support_redeem' => '\\Gallery\\Controllers\\cms_admin_support_redeem',
         'admin_theme' => '\\Gallery\\Controllers\\cms_admin_theme',
         'admin_settings' => '\\Gallery\\Controllers\\cms_admin_settings',
         'admin_setup_wizard' => '\\Gallery\\Controllers\\cms_admin_setup_wizard',
@@ -305,6 +307,20 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
     $kernel ??= cms_runtime_kernel();
     $route = $kernel->resolve(new Request($page));
     $kernel->load('request-policy');
+
+    // Validate the live grant before any privileged handler or feature preflight.
+    // This includes AJAX, updates, maintenance and protected data streams.
+    $supportUser = admin_support_assert_session();
+    if (
+        $supportUser !== null
+        && !\Gallery\Services\admin_support_route_allowed(
+            $page,
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')),
+            $_POST,
+        )
+    ) {
+        admin_support_forbid('auth.support_restricted');
+    }
 
     // The preview marker converts otherwise ordinary public GET routes into an Admin-only, no-store read surface.
     if (array_key_exists('preview', $_GET)) {

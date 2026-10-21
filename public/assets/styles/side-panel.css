@@ -263,6 +263,247 @@
 .admin-side-panel-file-drop .muted {
     margin: 0;
 }
+
+/* One compact upload surface shares the media controls' translucent treatment. */
+[data-admin-upload-panel] { position: relative; gap: 0.55rem; }
+[data-admin-upload-panel] .admin-side-panel-upload-card {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+[data-gallery-upload-form] { position: relative; min-width: 0; }
+[data-admin-upload-panel] [data-gallery-upload-form] { gap: 0.65rem; }
+[data-admin-upload-panel] .admin-side-panel-target {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.65rem;
+    margin: 0;
+    padding: 0.3rem 2rem 0.3rem 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+[data-admin-upload-panel] .admin-side-panel-target span {
+    font-size: 0.75rem;
+    text-transform: none;
+}
+[data-admin-upload-panel] .admin-side-panel-target strong { font-size: 0.9rem; }
+[data-gallery-upload-form] [data-gallery-upload-drop-zone] {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.8rem;
+    border: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.4);
+}
+[data-gallery-upload-form] input[type="file"] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 0.82rem;
+}
+[data-gallery-upload-form] input[type="file"]::file-selector-button {
+    min-height: 1.75rem;
+    margin-right: 0.65rem;
+    padding: 0.25rem 0.55rem;
+    border: 0;
+    border-radius: 5px;
+    color: inherit;
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    cursor: pointer;
+    font: inherit;
+}
+[data-gallery-upload-form] .gallery-upload-help {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+[data-gallery-upload-form] .admin-inline-help > summary,
+.admin-inline-help.gallery-upload-support > summary,
+#admin-edit-images .admin-inline-help > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    list-style: none;
+    color: var(--admin-accent, #315f9b);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+[data-gallery-upload-form] .admin-inline-help > summary::-webkit-details-marker,
+.admin-inline-help.gallery-upload-support > summary::-webkit-details-marker { display: none; }
+[data-gallery-upload-form] .admin-inline-help,
+.gallery-upload-support { position: relative; }
+[data-gallery-upload-form] .admin-inline-help-content,
+.gallery-upload-support .admin-inline-help-content {
+    z-index: 20;
+    box-sizing: border-box;
+    width: min(28rem, calc(100vw - 5rem));
+    max-height: min(28rem, 65vh);
+    overflow: auto;
+    font-size: 0.82rem;
+    font-weight: 400;
+    line-height: 1.45;
+}
+.gallery-upload-support { justify-self: end; }
+[data-admin-upload-panel] > .gallery-upload-support {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+[data-gallery-upload-form] .admin-inline-help.gallery-upload-help {
+    position: absolute;
+}
+.gallery-upload-support .support-matrix {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.7rem;
+    table-layout: fixed;
+}
+.gallery-upload-support .support-matrix :is(th, td) {
+    padding: 0.25rem;
+    overflow-wrap: anywhere;
+}
+.gallery-upload-support .support-matrix th:first-child { width: 5.5rem; }
+[data-gallery-upload-selection-status]:empty { display: none; }
+[data-gallery-upload-form] .gallery-upload-advanced {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.82rem;
+}
+[data-gallery-upload-form] .gallery-upload-advanced > summary {
+    width: fit-content;
+    padding: 0.3rem 0;
+    cursor: pointer;
+}
+[data-gallery-upload-form] .gallery-upload-advanced-content {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.5rem 0;
+}
+[data-gallery-upload-form] .gallery-upload-pdf-options {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+[data-gallery-upload-form] .gallery-upload-pdf-options :is(h4, p) {
+    margin: 0.25rem 0;
+}
+[data-gallery-upload-form] .gallery-upload-pdf-options label {
+    margin: 0.4rem 0;
+    font-size: 0.82rem;
+}
+[data-gallery-upload-form] .gallery-upload-advanced-content .admin-side-panel-thumbnail-toggle,
+[data-gallery-upload-form] .browser-upload-toggle {
+    min-height: 1.75rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 0.82rem;
+    font-weight: 400;
+}
+[data-gallery-upload-form] .admin-side-panel-actions {
+    min-height: 0;
+    gap: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    border: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.65);
+    box-shadow: none;
+}
+[data-gallery-upload-form] :is(button, .button),
+#admin-edit-images :is(button, .button),
+#admin-edit-media .gallery-media-upload-toolbar .button,
+.admin-tabs .admin-gallery-top-save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    width: auto;
+    min-width: 0;
+    min-height: 1.75rem;
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    border: 0;
+    border-radius: 5px;
+    color: var(--admin-accent, #315f9b);
+    background: transparent;
+    box-shadow: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+[data-gallery-upload-form] [data-gallery-upload-submit],
+#admin-edit-media .gallery-media-upload-toolbar .button,
+.admin-tabs .admin-gallery-top-save {
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+[data-gallery-upload-form] .admin-side-panel-actions .button.primary {
+    min-width: 0;
+}
+[data-gallery-upload-form] :is(button, .button):hover,
+#admin-edit-images :is(button, .button):hover,
+#admin-edit-media .gallery-media-upload-toolbar .button:hover,
+.admin-tabs .admin-gallery-top-save:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.admin-tabs:has(.admin-gallery-top-save) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.admin-tabs:has(.admin-gallery-top-save) .admin-tab-list {
+    flex: 1;
+    min-width: 0;
+}
+.admin-tabs .admin-gallery-top-save { flex: 0 0 auto; }
+.admin-gallery-top-save svg,
+.gallery-media-upload-toolbar svg { width: 1rem; height: 1rem; }
+#admin-edit-media .gallery-media-upload-toolbar { margin-bottom: 0.5rem; }
+#admin-edit-media #admin-edit-images {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+#admin-edit-media #admin-edit-images .admin-image-bulk-primary > label:has(select) {
+    white-space: nowrap;
+}
+#admin-edit-media .gallery-editor-media-tabs {
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0;
+    background: transparent;
+}
+@media (max-width: 600px) {
+    .admin-tabs:has(.admin-gallery-top-save) { flex-wrap: wrap; }
+    .admin-tabs:has(.admin-gallery-top-save) .admin-tab-list { flex-basis: 100%; }
+    [data-gallery-upload-form] :is(button, .button),
+    .admin-tabs .admin-gallery-top-save,
+    #admin-edit-media .gallery-media-upload-toolbar .button {
+        min-height: 2.75rem;
+    }
+}
 /* #118: local, unsubmitted screenshot previews in the Admin upload drawer. */
 .admin-side-panel .gallery-upload-queue {
     min-width: 0;
@@ -1577,14 +1818,14 @@ body.has-admin-side-panel {
     gap: 0.4rem;
     font-size: 0.78rem;
 }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-summary { display: none; }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero { padding: 0.7rem 0.9rem; gap: 0.5rem; }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero h1 { font-size: 1.15rem; margin: 0; }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero p,
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero [aria-label="Page summary"] { display: none; }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-hero .admin-hero-actions { display: none; }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) #admin-edit-images { padding: 0.8rem; }
-.admin-side-panel-edit-workspace:has(#admin-edit-images.is-active) .admin-edit-gallery-savebar { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-summary { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-hero { padding: 0.7rem 0.9rem; gap: 0.5rem; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-hero h1 { font-size: 1.15rem; margin: 0; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-hero p,
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-hero [aria-label="Page summary"] { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-hero .admin-hero-actions { display: none; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) #admin-edit-images { padding: 0.8rem; }
+.admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-savebar { display: none; }
 .admin-gallery-images .admin-image-bulk-primary select { width: auto; max-width: 13rem; }
 .admin-gallery-images .admin-image-bulk-primary button,
 .admin-gallery-images .admin-image-bulk-primary select,

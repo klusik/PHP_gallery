@@ -16,6 +16,7 @@
  *   - Exercise route-appropriate response bodies without a database or web server
  *   - Verify logged-in anonymous preview requests use the same dispatcher safety boundary
  *   - Keep fixture secrets confined to the simulated inspection failure
+ *   - Assert the dispatcher runs the delegated-Admin session preflight
  *
  * Author:
  *   Rudolf Klusal
@@ -28,7 +29,7 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-08-12
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -43,6 +44,27 @@ namespace Gallery\Core {
     {
         $user = $GLOBALS['nsfw_policy_fixture_user'] ?? null;
         return is_array($user) ? $user : null;
+    }
+
+    /**
+     * Mirror the support-session authorization boundary for public NSFW probes.
+     *
+     * This child fixture never authenticates delegated Admin users. Reject
+     * unexpected support sessions rather than silently treating them as safe.
+     * Actual grant validation is covered by the dedicated Admin support tests.
+     *
+     * @return ?array Null because this fixture contains no delegated identity.
+     */
+    function admin_support_assert_session(): ?array
+    {
+        if (array_key_exists('admin_support', $_SESSION ?? [])) {
+            throw new \LogicException(
+                'NSFW fixture cannot authorize delegated Admin sessions.',
+            );
+        }
+        $GLOBALS['nsfw_policy_fixture_support_checks'] =
+            (int) ($GLOBALS['nsfw_policy_fixture_support_checks'] ?? 0) + 1;
+        return null;
     }
 }
 
@@ -240,6 +262,7 @@ namespace {
         ? ['id' => 91, 'role' => 'admin']
         : null;
     $GLOBALS['nsfw_policy_fixture_handler_reached'] = false;
+    $GLOBALS['nsfw_policy_fixture_support_checks'] = 0;
     $GLOBALS['nsfw_policy_fixture_logs'] = [];
     if ($anonymousPreview) {
         $_GET['view_as'] = 'anonymous';
@@ -269,6 +292,8 @@ namespace {
         'body' => $body,
         'handler_reached' =>
             (bool) $GLOBALS['nsfw_policy_fixture_handler_reached'],
+        'support_preflight_checks' =>
+            (int) $GLOBALS['nsfw_policy_fixture_support_checks'],
         'anonymous_preview_active' => admin_anonymous_preview_active(),
         'log' => $GLOBALS['nsfw_policy_fixture_logs'][0] ?? [],
     ];

@@ -19,6 +19,7 @@
  *   - Verify protected media, thumbnails, lightbox metadata, and map metadata fail before handler output
  *   - Verify Admin diagnostics distinguish confirmed missing schema from unknown inspection state
  *   - Verify logged-in anonymous preview requests follow the same fail-closed public policy
+ *   - Verify isolated dispatcher requests invoke the delegated-Admin preflight
  *   - Verify repeated NSFW capability checks query each required object only once per request
  *   - Remain executable with plain PHP in an isolated process
  *
@@ -34,7 +35,7 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-08-12
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -167,6 +168,11 @@ function nsfw_policy_assert_dispatch_blocked(
         $anonymousPreview,
     );
     nsfw_policy_assert_same(
+        1,
+        $result['support_preflight_checks'] ?? null,
+        $route . ' delegated-Admin preflight',
+    );
+    nsfw_policy_assert_same(
         503,
         $result['status'] ?? null,
         $route . ' unknown HTTP status',
@@ -295,6 +301,11 @@ nsfw_policy_assert_same(
 // A complete existing installation still reaches the established public route handler.
 $availableDispatch = nsfw_policy_dispatch_fixture('available', 'public_media');
 nsfw_policy_assert_same(
+    1,
+    $availableDispatch['support_preflight_checks'] ?? null,
+    'available schema delegated-Admin preflight',
+);
+nsfw_policy_assert_same(
     200,
     $availableDispatch['status'] ?? null,
     'complete schema dispatcher status',
@@ -349,6 +360,11 @@ nsfw_policy_assert_same(
     'missing Admin migration guidance',
 );
 $missingDispatch = nsfw_policy_dispatch_fixture('missing', 'public_media');
+nsfw_policy_assert_same(
+    1,
+    $missingDispatch['support_preflight_checks'] ?? null,
+    'missing schema delegated-Admin preflight',
+);
 nsfw_policy_assert_same(
     200,
     $missingDispatch['status'] ?? null,

@@ -1,5 +1,283 @@
 # Patch notes
 
+## Version 0.140
+
+Added temporary, revocable Admin support access, explicit PDF and music opt-in
+for gallery ZIP downloads, and matching media counts on Smart Galleries.
+Combined gallery image and attachment tools under Upload media with one mixed
+file picker and a Save action in the sticky navigation. Updated the Windows
+companion to 0.8.0 with explicit SimBrief unloading for the staged or current
+flight while preserving historical flight evidence and existing reports.
+
+### Highlights
+
+#### Temporary administrator support access
+
+- Added Account → Temporary admin access for permanent administrators to issue
+  a single-use support invitation, inspect its state, and revoke it.
+  [#275](https://github.com/klusik/PHP_gallery/issues/275)
+- Limited each grant to 24 hours from issuance, without renewal or extension
+  after redemption. Displayed unused, active, expired, and revoked states and
+  the UTC expiry in the management interface.
+- Added explicit invitation acceptance in a separate browser session, followed
+  by a visible temporary-access notice throughout Admin. Kept the invitation
+  secret available only in its original issuance response.
+- Restricted delegated sessions to reviewed diagnostic and content operations.
+  Denied account/password recovery, invitation management, permanent credential
+  issuance, global settings changes, OAuth management, updates, installation,
+  migrations, and routes outside the allowlist.
+- Rechecked the live grant and permanent owner's administrator role at the
+  authorization boundary. Revocation, expiry, invalid session authority, or a
+  database failure removed delegated authority on the next check.
+
+#### Optional original PDFs and music in ZIP downloads
+
+- Added independent PDF and music inclusion switches globally, per physical
+  source gallery, and per original item. Kept all new preferences off by
+  default, preserving photo-only ZIPs after installation or upgrade until an
+  administrator explicitly opted in.
+  [#276](https://github.com/klusik/PHP_gallery/issues/276)
+- Applied the same opted-in originals to progressive browser ZIPs, bounded
+  server ZIP fallbacks, Smart Gallery archives, and the Admin all-gallery
+  export. Included eligible attached OFP PDFs through their original identity.
+- Allowed a global, gallery, or item ON preference to include an otherwise
+  eligible original. Preserved saved lower-level choices while a broader ON
+  preference took precedence; switching a broader scope off exposed those
+  retained choices again.
+- Kept archive preferences separate from standalone PDF downloads and the
+  existing music downloadability switch. Existing standalone permissions did
+  not implicitly opt upgraded installations into ZIP inclusion.
+- Rechecked current gallery access, hidden state, media capabilities, original
+  identity, and Smart result membership when serving original bytes, including
+  requests using an already issued download capability.
+
+#### Smart Gallery media-count parity
+
+- Added the shared compact PDF and music badges to public Smart Gallery cards
+  and opened Smart Gallery action bars, using the same icons as physical
+  galleries. [#276](https://github.com/klusik/PHP_gallery/issues/276)
+- Derived sources from physical galleries that actually contributed authorized
+  matching photographs to the canonical Smart result. Kept attachment unions
+  independent of the current paginated photo page or opened source filter.
+- Counted unique recorded SHA-256 content separately for PDFs and music across
+  eligible sources. Omitted zero counts and unavailable or incomplete values;
+  ZIP inclusion preferences did not affect the badges.
+- Removed the redundant panel background around root and nested Smart Gallery
+  attachment cards while preserving their article and grid structure.
+
+#### One Upload media workflow and a persistent Save action
+
+- Combined the former Images and Media main tabs into Upload media, with local
+  Images, Music, PDF, Presentation, Artwork, and ZIP preference sections.
+- Added one Upload files entry and mixed photo/PDF/audio picker using the
+  existing selection queue and protected upload owners. Advertised only formats
+  supported by the enabled media capabilities.
+- Simplified the upload drawer to its target, file selection, queue, and Upload
+  action. Moved format, clipboard, and settings guidance into compact question
+  mark help that closed with Escape or an outside click.
+- Grouped PDF conversion, iCloud, and image-preparation options under Advanced.
+  Kept PDF conversion unchecked: ordinary PDF selection attached the original
+  without generating gallery page images.
+- Added a disk Save action beside the sticky editor navigation, associated
+  with the existing gallery-settings form. Preserved immediate saving through
+  the existing upload and photo-ordering operations.
+- Preserved old Images and Documents links, bounded image preloading, drawer
+  requests, and language selection. Kept attachment tools usable while the
+  independent image container loaded.
+
+#### WinApp 0.8.0: unload SimBrief from the current flight
+
+- Changed the main SimBrief action from Load SimBrief to Unload SimBrief after
+  a plan was accepted, with its airport pair displayed below the action.
+- Added explicit unloading of a staged plan or the active recording's plan.
+  Removed the current flight's saved OFP snapshot and route on successful
+  unloading so recording and newly generated reports could continue without it.
+- Preserved older sessions and existing PDF bytes. Retained the accepted plan
+  on a snapshot-removal failure and prevented changes during loading or flight
+  finalization.
+- Hid a completed recording's route from the main control and offered explicit
+  loading for the next flight. Retained identity settings for reloading or
+  replacing a plan, and avoided recorder-liveness checks when no active plan
+  was attached.
+
+### Technical Details
+
+#### Authentication, session boundaries, and audit
+
+- Added the `admin_support` and `admin_support_redeem` routes through
+  `app/controllers/admin_support.php`, with presentation in
+  `app/views/admin_support.php` and existing Admin navigation/layout owners.
+- Extended `app/models/auth_persistence.php` and
+  `app/services/auth_persistence.php` for issuance, atomic one-time redemption,
+  live session validation, revocation, expiry, listing, and bounded cleanup.
+  Kept persistence in the model and route policy in the authentication service.
+- Generated independent 32-byte random invitation and session verifiers and
+  stored only their SHA-256 hashes in grant storage. Used a conditional SQL
+  update to admit a single redeemer; rolled back redemption when its required
+  lifecycle audit write failed.
+- Delivered the invitation in a URL fragment, removed it with
+  `history.replaceState`, and redeemed it only through an explicit
+  CSRF-protected POST. Added manual token entry for clients without JavaScript.
+- Regenerated the PHP session ID, cleared previous session state, and revoked
+  the durable-login cookie when establishing delegated access. Refused to
+  silently replace an already authenticated browser session.
+- Required the existing database-backed anonymous authentication rate limiter
+  before redemption. Refused redemption when rate-limit storage was unavailable;
+  refused grant issuance, redemption, or delegated validation when required
+  database operations could not establish authority.
+- Added dispatcher preflight in `app/bootstrap/dispatch.php` and live grant
+  checks in `app/security.php`, including explicit public read and Admin
+  operation allowlists. Returned HTTP 403 for refused delegated requests, with
+  a structured error for JSON callers.
+- Added grant lifecycle events and bounded normal-use recording to at most one
+  event per hour. Added `support_actor` metadata with grant, owner, and delegate
+  attribution to ordinary Admin logs without bearer values. Kept database
+  exceptions and token hashes out of displayed support-storage errors.
+- Applied `no-store`, `no-referrer`, and `noindex` response policies to support
+  management/acceptance. Used `support_access_token` for submitted secrets so
+  existing browser diagnostics redacted their values.
+
+#### Database and compatibility
+
+- Added migration
+  `database/migrations/202610210001_admin_support_access.php` with
+  `admin_support_grants` and `admin_support_grant_events`. Added unique token
+  and session hashes, indexed ownership/lifecycle fields, UTC timestamps, and
+  cascading grant-event cleanup. Linked each grant to its permanent `users`
+  owner without creating a new user account.
+- Required the new migration before support access became usable. Missing
+  tables and unknown/unavailable database state did not grant fallback access;
+  invalid delegated sessions lost their authority. Kept revocation as an
+  owner-scoped update of the grant plus its audit record, without requiring
+  invitation redemption or a new session.
+- Retained grant history until 90 days after expiry and limited owner-page
+  cleanup to 50 expired grant rows per invocation. Kept expiry enforcement
+  independent of cron and cleanup execution; limited the displayed owner list
+  to the latest 50 grants.
+- Stored ZIP opt-in settings in existing `app_settings` keys:
+  `download_archive_pdf_global`, `download_archive_music_global`, and the
+  corresponding gallery and item maps. Added no archive-preference migration;
+  treated missing, corrupt, or non-boolean optional maps as no opt-in.
+- Used available attachment projections for optional Smart media counts.
+  Missing or unknown schema, failed reads, and dirty/missing snapshots left
+  counts unknown and omitted their badges. Disabled media capabilities omitted
+  the corresponding count and editor subsection without enabling ingestion.
+- Preserved original media storage, existing standalone download policy,
+  permanent legacy Images/Documents bookmark aliases, and the guarded form
+  owners. The upload consolidation introduced no new schema or transport.
+
+#### Download services and Smart result ownership
+
+- Added `app/services/gallery_archive_media.php` for preference evaluation,
+  protected original resolution, integrity checks, and media deduplication.
+  Extended `app/services/downloads.php` and `app/controllers/downloads.php` to
+  carry opaque media identities through existing physical and Smart endpoints.
+- Added optional media descriptors containing kind, source gallery, original
+  item ID, version, and size. Preserved the photo-only manifest shape and
+  required the existing short-lived progressive capability for byte delivery.
+- Placed originals under `PDF/` or `Music/`, followed by their normalized source
+  gallery path and original filename. Preserved extensions, rejected unsafe
+  storage paths/symlinks, and resolved case-insensitive archive-name collisions
+  without sending private absolute paths to the browser.
+- Deduplicated original media by content within each type and handled music
+  identities shared through songs and album assignments. Preserved configured
+  archive file/byte ceilings, progress, cancellation, and existing ZIP writers.
+- Bound manifest revisions, server fallback fingerprints, and all-gallery ZIP
+  signatures to the selected original identities. Revalidated source versions,
+  sizes, permissions, and preferences to reject changed sources or stale
+  results; capability-token rotation did not create a different content key.
+- Extended `app/models/smart_galleries.php` and
+  `app/services/smart_galleries.php` with actual matching-source membership and
+  batched projection-backed counts. Avoided filesystem scanning and content
+  hashing during public badge rendering.
+- Reused the contained `public-media` runtime owner from `public-thumbnails`
+  and updated `scripts/runtime_module_roots.php`, retaining existing module
+  closure limits and inventory baselines.
+
+#### Frontend and Windows companion
+
+- Updated gallery editor controllers and `app/views/admin_gallery_edit_tabs.php`
+  to prepare Upload media sections and native form ownership for the sticky
+  Save control. Kept image preloading scoped to its original container.
+- Updated `app/views/admin_uploads.php`,
+  `public/assets/gallery-modules/admin-upload-selection.js`, and related Admin
+  styles for the compact picker, Advanced controls, and help dismissal.
+  Retained existing clipboard, queue, retry, and attachment submission owners.
+- Added accessible saved-state archive controls to global media settings,
+  gallery preferences, and original PDF/music items. Retained independent
+  standalone controls and lower-level saved choices.
+- Shared `view_render_gallery_media_count_badges()` through
+  `app/views/public_gallery_cards.php` for physical and Smart card/hero output,
+  and removed the extra Smart attachment `panel` class in
+  `app/views/public_gallery_pages.php`.
+- Added `FlightUI.toggle_simbrief()` in `winapp/uploader/flight_ui.py`, wired
+  the main action in `winapp/gallery_watch_upload.pyw`, and updated status
+  refresh for staged, active, and completed flights. Advanced the independent
+  `winapp/VERSION` from 0.7.1 to 0.8.0.
+- Updated English, Czech, German, and Swedish interface strings and the four
+  maintained manual source editions for the support, archive, upload, and
+  SimBrief workflows.
+
+#### Tests and permanent documentation
+
+- Added `tests/admin_support_access_test.php` with isolated service/model
+  adapters and implementation-contract assertions for one-time hash-backed
+  invitations, UTC expiry, revocation, session identity, allowlisted operations,
+  CSRF/rate-limit boundaries, safe browser handling, UI, and locale parity.
+- Extended `tests/nsfw_schema_policy_test.php` and dispatcher fixtures to
+  exercise support-session preflight in available, missing, and unknown-schema
+  public route probes without weakening the existing NSFW policy assertions.
+- Added `tests/gallery_archive_media_policy_test.php` for default-off settings,
+  independent PDF/music switches, global/gallery/item precedence, retained
+  lower-level choices, OFP opt-in, corrupt maps, standalone-policy separation,
+  and transitive music deduplication.
+- Extended `tests/gallery_download_service_test.php` for original-media server
+  fallback fingerprints, rotating capability stability, source identity, and
+  malformed media-ID rejection. Updated the manifest fixture to exercise the
+  photo-only default with enabled PDF/music capabilities and no saved opt-in.
+- Updated deferred-image, PDF workflow, music browser, and editor fixtures for
+  the consolidated media navigation, single picker, and Advanced PDF controls.
+- Extended `winapp/tests/test_flight_ui.py` for staged/current unloading,
+  retained historical OFP/PDF bytes, removal failure, loading/finalization
+  guards, and completed-route hiding; updated the main-action wiring fixture.
+- Added `docs/TEMPORARY_ADMIN_ACCESS.md` and `docs/GALLERY_ARCHIVE_MEDIA.md`.
+  Updated architecture, code ownership, database, testing, upload, media,
+  compatibility, WinApp, and all four manual sources with the current behavior.
+
+### User Impact
+
+#### For visitors
+
+- Added eligible original PDFs and music to gallery ZIPs only where an
+  administrator explicitly enabled inclusion, while retaining existing access,
+  visibility, and media-capability restrictions.
+- Added consistent Smart Gallery media badges without presenting incomplete
+  projections as zero or treating ZIP permission as an inventory count.
+- Simplified Smart attachment-card presentation while retaining the existing
+  photo browsing and standalone media download workflows.
+
+#### For administrators and support recipients
+
+- Added revocable, time-limited support invitations without sharing the
+  permanent administrator password or creating a permanent account.
+- Made delegated sessions visibly identifiable and restricted their operations;
+  retained owner control over revocation and auditable grant state.
+- Added explicit control over which original media entered ZIP archives and
+  preserved existing photo-only behavior until opt-in.
+- Consolidated upload and attachment tools, reduced drawer clutter, retained
+  ordinary PDF-original attachment, and kept gallery Save beside navigation.
+- Required the support-access migration before issuing invitations; missing or
+  unavailable authority storage left the feature unusable instead of granting
+  access through a compatibility fallback.
+
+#### For Windows companion users and maintainers
+
+- Added explicit detachment of an optional SimBrief plan without discarding the
+  recording, older flight sessions, or existing PDF reports. Restored a clear
+  load action for the next flight.
+- Expanded regression and operational documentation for the new boundaries
+  while preserving established runtime limits and separate CMS/WinApp versions.
+
 ## Version 0.139.1
 
 Fixed missing PDF and music counts after an upgrade by initializing media

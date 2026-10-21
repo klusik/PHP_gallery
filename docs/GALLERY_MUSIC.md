@@ -2,8 +2,10 @@
 
 ## Shared originals and live gallery playlists
 
-**Edit gallery → Media** combines presentation, PDF documents and a compact
-gallery music manager. Add individual catalog songs or a complete album from
+**Edit gallery → Upload media** combines photographs, presentation, PDF documents
+and a compact gallery music manager. **Upload files** detects photos, PDFs and
+audio in one selection; Music keeps playlist management rather than a second
+upload picker. Add individual catalog songs or a complete album from
 its searchable chooser. An album is a **live playlist**: later membership and
 ordering changes in Music Manager appear in every gallery using it. Direct
 songs remain independent items. Gallery controls move or remove source groups

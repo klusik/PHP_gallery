@@ -302,12 +302,15 @@ namespace Gallery\Controllers {
     /** Render a lightweight documents fixture control.
      * @param array{id:int|string} $gallery Gallery identity.
      * @param string $activeEditTab Initial tab.
-     * @return void Emit a marker without enumerating images.
+     * @param string $imagesHtml Captured production image manager or placeholder.
+     * @return void Emit the supplied image fragment and a documents marker.
      */
     function admin_edit_gallery_render_documents_tab(
         array $gallery,
         string $activeEditTab,
+        string $imagesHtml = '',
     ): void {
+        echo $imagesHtml;
         echo
             '<section data-documents><input name="fixture_documents"></section>';
     }

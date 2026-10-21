@@ -2,6 +2,21 @@
 
 ## Scope and ownership
 
+**Edit gallery → Upload media → Upload files** is the shared entry for photos,
+PDF originals and music. A single picker/drop queue detects the media kind and
+uses the existing protected image, PDF and audio owners. Media capabilities
+still determine accepted formats. The Images, Music, PDF, Presentation, Artwork
+and ZIP preferences are local sections of Upload media, not separate main tabs.
+Former Images query/hash links continue opening the image manager.
+
+The upload drawer shows its target, one file selector, the selected-file queue
+and Upload. Format support, clipboard guidance and settings links live under a
+plain `?`; click outside or press Escape to close help. Advanced contains PDF
+conversion, iCloud and image preparation options. PDF conversion remains unchecked
+by default. The sticky editor navigation includes a disk Save button associated
+with the existing gallery-settings form. Uploads and photo ordering retain their
+own immediate-save behavior.
+
 The right-hand existing-gallery and create-with-upload drawers collect paste,
 picker and drop inputs in one document-local queue. The native `images[]`
 FileList is the submit authority. Stable occurrence IDs support intentional

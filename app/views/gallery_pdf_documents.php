@@ -87,9 +87,10 @@ function view_render_gallery_pdf_destination(bool $upload): void
  * Render the inline editor list or public document disclosure and conversion controls.
  * @param array{gallery_id:int,admin:bool,editor:bool,action_url:string,
  *     csrf_html:string,operation_key:string,dpi:int,browser_config:string,
- *     language:string,documents:list<array{id:string,title:string,
- *     filename:string,size:int,hidden:bool,version:string,view_url:string,
- *     download_url:string}>} $model Safe documents with source versions for
+ *     language:string,archive_global?:bool,archive_gallery?:bool,
+ *     documents:list<array{id:string,title:string,filename:string,size:int,
+ *     hidden:bool,version:string,view_url:string,download_url:string,
+ *     archive_in_zip?:bool}>} $model Safe documents with source versions for
  *     page-count cache identity.
  * @return void Emit an inline editor table/forms or public media disclosure,
  *     with attachment actions independent of the gallery settings form.
@@ -207,6 +208,38 @@ function view_render_gallery_pdf_documents(array $model): void
                 . '">'
                 . view_gallery_pdf_icon('download')
                 . '</a>';
+        if ($model['editor'] && $model['admin']) {
+            $archiveAllowed = !empty($document['archive_in_zip']);
+            $archiveOverride = !empty($model['archive_global'])
+                || !empty($model['archive_gallery']);
+            $archiveLabel = $archiveAllowed
+                ? t('download.archive.item_exclude', 'Exclude from gallery ZIP')
+                : t('download.archive.item_include', 'Include in gallery ZIP');
+            echo '<form method="post" action="'
+                . e((string) $model['action_url'])
+                . '" class="gallery-archive-item-form">'
+                . $model['csrf_html']
+                . '<input type="hidden" name="id" value="'
+                . (int) $model['gallery_id']
+                . '"><input type="hidden" name="archive_media_action"'
+                . ' value="save"><input type="hidden"'
+                . ' name="archive_media_scope" value="item">'
+                . '<input type="hidden" name="archive_media_kind"'
+                . ' value="pdf"><input type="hidden"'
+                . ' name="archive_media_item_id" value="'
+                . e((string) $document['id'])
+                . '"><input type="hidden" name="archive_media_enabled"'
+                . ' value="' . ($archiveAllowed ? '0' : '1') . '">'
+                . '<button type="submit" class="gallery-pdf-icon"'
+                . ' aria-label="' . e($archiveLabel)
+                . '" title="' . e($archiveLabel)
+                . ($archiveOverride ? ' (global/gallery override)' : '')
+                . '" aria-pressed="' . ($archiveAllowed ? 'true' : 'false')
+                . '">' . view_gallery_pdf_icon(
+                    $archiveAllowed ? 'download' : 'locked',
+                )
+                . '</button></form>';
+        }
         if ($model['admin']) {
             echo
                 '<button type="button" class="gallery-pdf-icon"'
@@ -415,43 +448,6 @@ function view_render_gallery_pdf_documents(array $model): void
         }
     }
     echo '</tbody></table>';
-    if ($model['admin'] && $model['editor']) {
-        echo
-            '<form method="post" enctype="multipart/form-data" action="'
-                . e($model['action_url'])
-                . '" class="gallery-pdf-upload-form"'
-                . ' data-pdf-attachment-form>'
-                . $model['csrf_html'];
-        echo
-            '<input type="hidden" name="pdf_action" value="upload">'
-                . '<input type="hidden" name="id" value="'
-                . $model['gallery_id']
-                . '">';
-        echo
-            '<label>'
-                . e(t('pdf.title', 'Document title'))
-                . '<input name="pdf_title" maxlength="200"></label><label>'
-                . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)'))
-                . '<input type="file" name="pdf_file"'
-                . ' accept=".pdf,application/pdf" required></label>';
-        echo
-            '<details class="gallery-pdf-upload-advanced"><summary>'
-                . e(t('pdf.upload.advanced', 'Advanced'))
-                . '</summary>';
-        view_render_gallery_pdf_destination(true);
-        view_render_gallery_pdf_resolution($model['dpi'], true);
-        echo '</details>';
-        echo
-            '<button type="submit" class="gallery-pdf-icon" title="'
-                . e(t('pdf.upload'))
-                . '" aria-label="'
-                . e(t('pdf.upload'))
-                . '">'
-                . view_gallery_pdf_icon('upload')
-                . '</button>'
-                . '<output data-pdf-status role="status" aria-live="polite">'
-                . '</output></form>';
-    }
     view_media_panel_end($model['editor']);
     echo '</section>';
 }
@@ -459,7 +455,7 @@ function view_render_gallery_pdf_documents(array $model): void
 /**
  * Return a decorative text-sized SVG for one gallery PDF action.
  * @param string $action View, download, convert, upload, replace, cancel,
- *     delete, show or hide action identifier.
+ *     delete, locked, show or hide action identifier.
  * @return string Static SVG markup; accessible names belong to the enclosing control.
  */
 function view_gallery_pdf_icon(string $action): string
@@ -469,6 +465,8 @@ function view_gallery_pdf_icon(string $action): string
         'replace'
             => '<path d="M4 10a8 8 0 0 1 14-4l2 2M20 3v5h-5M20 14a8 8 0 0 1-14 4l-2-2M4 21v-5h5"/>',
         'cancel' => '<path d="m6 6 12 12M6 18 18 6"/>',
+        'locked' => '<rect x="5" y="10" width="14" height="11" rx="2"/>'
+            . '<path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
         'download' => '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
         'convert'
             => '<path d="M4 4h11v6M4 4v16h16v-9M14 3l6 6h-6M8 13h8m-8 4h5"/>',

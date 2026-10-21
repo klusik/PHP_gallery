@@ -24,7 +24,7 @@ let focusSequence = 0;
 let filenameSequence = 0;
 
 /**
- * Install delegated paste and focus tracking once, including future panel fragments.
+ * Install delegated paste, focus tracking and compact upload-help dismissal.
  * @return {void} Leaves submission, validation and mutation completion with their existing owners.
  */
 export function setupGalleryUploadClipboard() {
@@ -36,6 +36,26 @@ export function setupGalleryUploadClipboard() {
     };
     document.addEventListener('focusin', rememberForm);
     document.addEventListener('pointerdown', rememberForm);
+    // Native details retain keyboard/no-JS support. Scope dismissal to these
+    // upload help popovers so Escape closes help before the containing drawer.
+    document.addEventListener('click', event => {
+        document.querySelectorAll('.gallery-upload-help[open], .gallery-upload-support[open], [data-gallery-upload-form] .admin-inline-help[open]').forEach(help => {
+            if (event.target instanceof Node && !help.contains(event.target)) {
+                help.open = false;
+            }
+        });
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        const help = Array.from(document.querySelectorAll(
+            '.gallery-upload-help[open], .gallery-upload-support[open], [data-gallery-upload-form] .admin-inline-help[open]',
+        )).find(element => element.getClientRects().length > 0);
+        if (!help) return;
+        event.preventDefault();
+        event.stopPropagation();
+        help.open = false;
+        help.querySelector('summary')?.focus();
+    }, true);
     document.addEventListener('paste', event => {
         if (event.defaultPrevented || clipboardTextEditor(event.target)) return;
         const form = clipboardUploadForm(event.target);

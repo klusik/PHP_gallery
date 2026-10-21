@@ -685,6 +685,7 @@ function render_smart_gallery_card(
             'slug' => (string) $smartGallery['slug'],
         ]),
         'count' => $count,
+        'media_counts' => (array) ($cardContext['media_counts'] ?? []),
         'card_layout' => (string) ($presentation['card_layout'] ?? 'vertical'),
         'cover_picture_html' => $coverPictureHtml,
         'has_placement' => array_key_exists('placement', $smartGallery),

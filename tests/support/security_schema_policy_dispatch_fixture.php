@@ -42,6 +42,19 @@ namespace Gallery\Core {
     {
         return null;
     }
+
+    /**
+     * Model the dispatcher without a delegated PHP session.
+     *
+     * This narrowly scoped fixture bypasses only the unused support-principal
+     * input; the real public schema authorization guard still executes.
+     *
+     * @return ?array Null because the fixture has no delegated Admin principal.
+     */
+    function admin_support_assert_session(): ?array
+    {
+        return null;
+    }
 }
 
 namespace Gallery\Services {

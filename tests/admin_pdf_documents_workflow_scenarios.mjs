@@ -436,8 +436,10 @@ const editorSources = await Promise.all(editorSourcePaths.map(path =>
 const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
     editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
 assert.match(overviewSource,
-    /'id' => 'admin-edit-media',\s*'label' => t\('admin\.gallery_editor\.tab_media'/,
-    'The gallery editor must expose the unified localized Media tab.');
+    /'id' => 'admin-edit-media',\s*'label' => t\('admin\.gallery_editor\.upload_media'/,
+    'The gallery editor must expose the unified localized Upload media tab.');
+assert.doesNotMatch(overviewSource, /'id'\s*=>\s*'admin-edit-images'/,
+    'Images must not remain a separate main editor tab.');
 assert.doesNotMatch(overviewSource, /'id'\s*=>\s*'admin-edit-documents'/,
     'Documents must not remain a second main gallery-editor tab.');
 assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\/tab_documents\.php'/,
@@ -446,8 +448,8 @@ assert.match(editorSource,
     /if \(\(string\) \(\$_GET\['tab'\]\s*\?\?\s*''\) === 'admin-edit-documents'\)\s*\{\s*\$redirectParams\s*=\s*\[\s*'id' => \(int\) \$gallery\['id'\],\s*'tab' => 'admin-edit-media',\s*'media_section' => 'pdf'/,
     'A legacy Documents page request must redirect to Media with its PDF subsection selected.');
 assert.match(editActionsSource,
-    /if \(\$tab === 'admin-edit-documents'\)\s*\{\s*return 'admin-edit-media';/,
-    'The legacy Documents URL must normalize to the unified Media tab.');
+    /if \(in_array\(\$tab, \['admin-edit-documents', 'admin-edit-images'\], true\)\)\s*\{\s*return 'admin-edit-media';/,
+    'Legacy Documents and Images URLs must normalize to Upload media.');
 assert.match(editActionsSource,
     /if \(\$tab === 'admin-edit-documents'\)\s*\{\s*\$params\['media_section'\]\s*=\s*'pdf';/,
     'The Documents alias must retain the PDF subsection when it normalizes.');
@@ -527,7 +529,7 @@ assert.match(mediaView, /view_render_admin_tab_panel\(\s*'admin-edit-media'/,
     'The unified media view must own the single native main-tab identity.');
 assert.match(mediaView, /class="admin-subtabs gallery-editor-media-tabs"\s*'\s*\.\s*' data-admin-subtabs role="tablist"/,
     'Documents must contain the existing shared nested-tab owner for local media sections.');
-for (const sectionKey of ['music', 'pdf', 'presentation', 'artwork']) {
+for (const sectionKey of ['images', 'music', 'pdf', 'presentation', 'artwork']) {
     assert.ok(mediaView.includes("$sections['" + sectionKey + "'] ="),
         'The production media tab view must retain the ' + sectionKey + ' subsection.');
 }
@@ -551,7 +553,7 @@ assert.match(mediaView,
 assert.doesNotMatch(apiSource, /admin_gallery_pdf_documents_html|admin_edit_gallery_simbrief_legacy_panel_html/,
     'The API tab must not render PDF or SimBrief document forms.');
 const closeSettingsFormAt = editorSource.search(/\bview_render_admin_gallery_editor_form_close\(\s*\[/);
-const renderDocumentsAt = editorSource.search(/\badmin_edit_gallery_render_documents_tab\(\s*\$gallery,\s*\$activeEditTab\s*,?\s*\);/);
+const renderDocumentsAt = editorSource.search(/\badmin_edit_gallery_render_documents_tab\(\s*\$gallery,\s*\$activeEditTab,\s*\$imagesHtml\s*,?\s*\);/);
 assert.ok(closeSettingsFormAt >= 0 && renderDocumentsAt > closeSettingsFormAt,
     'Independent PDF upload/conversion forms must render after the shared settings form closes.');
 assert.match(pdfPostSource,

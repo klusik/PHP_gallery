@@ -222,6 +222,21 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /**
+     * Keep both media capabilities available in the photo-only manifest fixture.
+     *
+     * @param string $key Canonical capability requested by the archive service.
+     * @return bool True for PDF/music; unrelated fixture capabilities stay off.
+     */
+    function feature_capability_effective_enabled(string $key): bool
+    {
+        return in_array($key, ['gallery_pdf_documents', 'gallery_music'], true);
+    }
+
+    // No optional media preferences are saved in this database-free fixture.
+    $GLOBALS['cms_app_settings_cache'] = [];
+    $GLOBALS['cms_app_settings_cache_loaded'] = true;
+
     /** Test double for find_gallery(). */
     function find_gallery(int $id): ?array
     {
