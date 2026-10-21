@@ -200,6 +200,77 @@ function visualPreviewWorkflowAssertNoStore(
     );
 }
 
+/** Classify changed owned gallery files without returning their contents or hashes.
+ * @param array<string,array{size:int,modified:int,sha256:string}> $before
+ *     Relative-path snapshot captured before the restricted requests.
+ * @param array<string,array{size:int,modified:int,sha256:string}> $after
+ *     Relative-path snapshot captured after the restricted requests.
+ * @param string $ownershipToken Token scoped to this owned disposable fixture.
+ * @return list<array{path:string,changes:list<string>}> Safe changed relative
+ *     paths and change classes; token, absolute paths, and file data are omitted.
+ */
+function visualPreviewWorkflowGalleryFileChanges(
+    array $before,
+    array $after,
+    string $ownershipToken,
+): array {
+    $paths = array_values(array_unique([
+        ...array_keys($before),
+        ...array_keys($after),
+    ]));
+    sort($paths, SORT_STRING);
+    $changes = [];
+    foreach ($paths as $path) {
+        if (
+            !is_string($path)
+            || preg_match(
+                '~^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\.\.(?:/|$))[^\\\\\x00-\x1F]+$~uD',
+                $path,
+            ) !== 1
+        ) {
+            $changes[] = [
+                'path' => '[unsafe-relative-path]',
+                'changes' => ['unsafe_path_key'],
+            ];
+            continue;
+        }
+        $beforeFile = $before[$path] ?? null;
+        $afterFile = $after[$path] ?? null;
+        if ($beforeFile === null || $afterFile === null) {
+            $changes[] = [
+                'path' => str_replace(
+                    $ownershipToken,
+                    '[fixture-token]',
+                    $path,
+                ),
+                'changes' => [$beforeFile === null ? 'added' : 'removed'],
+            ];
+            continue;
+        }
+        $fileChanges = [];
+        if ($beforeFile['size'] !== $afterFile['size']) {
+            $fileChanges[] = 'size_changed';
+        }
+        if ($beforeFile['modified'] !== $afterFile['modified']) {
+            $fileChanges[] = 'modified_time_changed';
+        }
+        if (!hash_equals($beforeFile['sha256'], $afterFile['sha256'])) {
+            $fileChanges[] = 'content_changed';
+        }
+        if ($fileChanges !== []) {
+            $changes[] = [
+                'path' => str_replace(
+                    $ownershipToken,
+                    '[fixture-token]',
+                    $path,
+                ),
+                'changes' => $fileChanges,
+            ];
+        }
+    }
+    return $changes;
+}
+
 if (!getenv('GALLERY_WORKFLOW_FIXTURE')) {
     $required = getenv('GALLERY_WORKFLOW_REQUIRED') === '1';
     echo
@@ -1345,17 +1416,6 @@ try {
             $canonicalSeedPath,
         )))
         . '/';
-    $ordinaryProtectedPage = $anonymous->request(
-        '/index.php?page=gallery&public_path=seed/protected',
-    );
-    check(
-        $ordinaryProtectedPage['status'] === 200
-            && str_contains(
-                $ordinaryProtectedPage['body'],
-                'name="gallery_password"',
-            ),
-        'A normal anonymous visitor must retain the existing password gate outside visual preview.',
-    );
     $previewFallbackRoute = static function (
         string $location,
         string $target,
@@ -2179,9 +2239,38 @@ try {
     $after = visualPreviewWorkflowSnapshot($origin, $token);
     $afterInstalledCssState = $cssAssetState($installedCssPath);
     $afterOverridesCssState = $cssAssetState($overridesCssPath);
+    // Report only the owned snapshot section names, never row values or content.
+    $snapshotFields = [
+        'telemetry_events',
+        'telemetry_sessions',
+        'telemetry_hourly_metrics',
+        'thumbnail_variants',
+        'image_metadata',
+        'gallery_files',
+        'public_widgets_sha256',
+    ];
+    $changedSnapshotFields = [];
+    foreach ($snapshotFields as $field) {
+        if ($before[$field] !== $after[$field]) {
+            $changedSnapshotFields[] = $field;
+        }
+    }
+    $galleryFileChanges = visualPreviewWorkflowGalleryFileChanges(
+        $before['gallery_files'],
+        $after['gallery_files'],
+        $token,
+    );
     $stageDiagnostic =
         'gallery_snapshot_same='
         . ($before === $after ? '1' : '0')
+        . ';snapshot_changed_fields='
+        . ($changedSnapshotFields === []
+            ? 'none'
+            : implode(',', $changedSnapshotFields))
+        . ';gallery_file_changes='
+        . ($galleryFileChanges === []
+            ? 'none'
+            : json_encode($galleryFileChanges, JSON_UNESCAPED_SLASHES))
         . ';installed_css_before='
         . $cssAssetStateLabel($initialInstalledCssState)
         . ';installed_css_after='
@@ -2205,6 +2294,21 @@ try {
     );
     echo
         "PASS visual preview public assets remain read-only with unchanged telemetry, gallery files, and stylesheet assets\n";
+
+    // This ordinary unmarked gallery visit may admit the attachment-usage
+    // worker, which creates persistent per-gallery source lock files; keep it
+    // outside the preview-only no-write snapshot interval above.
+    $ordinaryProtectedPage = $anonymous->request(
+        '/index.php?page=gallery&public_path=seed/protected',
+    );
+    check(
+        $ordinaryProtectedPage['status'] === 200
+            && str_contains(
+                $ordinaryProtectedPage['body'],
+                'name="gallery_password"',
+            ),
+        'A normal anonymous visitor must retain the existing password gate outside visual preview.',
+    );
 
     $stage = 'stylesheet import fixture preparation';
     $stageDiagnostic =

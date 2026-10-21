@@ -8,12 +8,12 @@
  * Module Type: Refactored Module
  *
  * Purpose:
- *   Provides tag parsing, persistence, metadata, and public tag lookup services.
+ *   Coordinates tag parsing, model persistence, metadata, and public tag lookup.
  *
  * Responsibilities:
- *   - Keep behavior compatible with the previous combined implementation
- *   - Expose focused functions for one feature responsibility
- *   - Avoid coupling unrelated workflows into one large source file
+ *   - Normalize shared tag names and coordinate tag persistence through models
+ *   - Expose focused functions for tag metadata and suggestion workflows
+ *   - Keep transactions and SQL in the canonical tag model
  *
  * Author:
  *   Rudolf Klusal
@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use FilesystemIterator;
+use InvalidArgumentException;
 use PDOException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -57,7 +58,6 @@ use function Gallery\Models\tag_model_all_rows_by_id;
 use function Gallery\Models\tag_model_attach_entity_tag;
 use function Gallery\Models\tag_model_clear_entity_tags;
 use function Gallery\Models\tag_model_contained_for_gallery;
-use function Gallery\Models\tag_model_create;
 use function Gallery\Models\tag_model_delete_row;
 use function Gallery\Models\tag_model_delete_with_assignments;
 use function Gallery\Models\tag_model_description_column_ready;
@@ -65,9 +65,11 @@ use function Gallery\Models\tag_model_find_by_id;
 use function Gallery\Models\tag_model_find_by_slug;
 use function Gallery\Models\tag_model_gallery_context;
 use function Gallery\Models\tag_model_global_suggestion_rows;
-use function Gallery\Models\tag_model_id_by_slug;
-use function Gallery\Models\tag_model_matches_media_type;
+use function Gallery\Models\tag_model_image_catalog;
+use function Gallery\Models\tag_model_ids_match_image_category;
 use function Gallery\Models\tag_model_merge_duplicate;
+use function Gallery\Models\tag_model_find_or_create_by_slug_candidates;
+use function Gallery\Models\tag_model_mutate_image_tag_atomically;
 use function Gallery\Models\tag_model_public_galleries;
 use function Gallery\Models\tag_model_slug_exists_except;
 use function Gallery\Models\tag_model_suggestion_usage_rows;
@@ -142,6 +144,35 @@ function tag_slug(string $name): string
 }
 
 /**
+ * Build the ordered global-slug candidates for one canonical tag name.
+ *
+ * @param string $name Canonical normalized tag name.
+ * @param string $mediaType Validated category: image, music, or pdf.
+ * @return list<string> Unique-slug candidates in the established collision order.
+ */
+function tag_slug_candidates(string $name, string $mediaType): array
+{
+    $baseSlug = tag_slug($name);
+    $firstSlug = $mediaType === 'image'
+        ? $baseSlug
+        : $mediaType . '-' . $baseSlug;
+    $candidates = [$firstSlug];
+    for (
+        $suffix = 2;
+        $suffix <= TAG_MEDIA_SLUG_MAX_ATTEMPTS;
+        $suffix++
+    ) {
+        $suffixText = '-' . $mediaType . '-' . $suffix;
+        $candidates[] = substr(
+            $baseSlug,
+            0,
+            TAG_MEDIA_SLUG_MAX_BYTES - strlen($suffixText),
+        ) . $suffixText;
+    }
+    return $candidates;
+}
+
+/**
  * Return an existing tag ID or create a new tag row.
  *
  * @param string $name Name value.
@@ -165,38 +196,9 @@ function find_or_create_tag(string $name, string $mediaType = 'image'): int
     if ($name === '') {
         return 0;
     }
-    // Variable $slug keeps legacy image slugs while separating new categories.
-    $baseSlug = tag_slug($name);
-    $slug = $baseSlug;
-    if ($mediaType !== 'image') {
-        $slug = $mediaType . '-' . $baseSlug;
-    }
-    $suffix = 1;
-    while (($existing = tag_model_id_by_slug($slug)) > 0) {
-        if (tag_model_matches_media_type(
-            $existing,
-            $mediaType,
-            tag_media_type_schema_ready(),
-        )) {
-            return $existing;
-        }
-        // Category suffixes resolve rare global-slug collisions without
-        // renaming any existing image tag or changing its public URL.
-        $suffix++;
-        if ($suffix > TAG_MEDIA_SLUG_MAX_ATTEMPTS) {
-            return 0;
-        }
-        $suffixText = '-' . $mediaType . '-' . $suffix;
-        $slug = substr(
-            $baseSlug,
-            0,
-            TAG_MEDIA_SLUG_MAX_BYTES - strlen($suffixText),
-        )
-            . $suffixText;
-    }
-    return tag_model_create(
+    return tag_model_find_or_create_by_slug_candidates(
         $name,
-        $slug,
+        tag_slug_candidates($name, $mediaType),
         now_sql(),
         $mediaType,
         tag_media_type_schema_ready(),
@@ -288,6 +290,88 @@ function sync_entity_tags(
         $schemaState === 'available',
     );
     return true;
+}
+
+/**
+ * Apply one targeted, idempotent tag change to a physical image.
+ *
+ * @param int $imageId Stable physical image identifier.
+ * @param int $expectedGalleryId Physical source gallery observed for this mutation.
+ * @param string $operation Requested assignment change: add or remove.
+ * @param int|null $tagId Existing image tag identifier for an add/remove.
+ * @param string|null $tagName New or canonical image tag name for an add.
+ * @return array{changed_tag:array{id:int,name:string,slug:string},already_present:bool,tags:list<array{id:int,name:string,slug:string}>} Acknowledged tag and authoritative direct image-tag state.
+ * @throws \DomainException When the image was moved from the expected physical gallery.
+ * @throws \InvalidArgumentException When input or typed tag storage is invalid.
+ * @throws \RuntimeException When tag schema is unknown or persistence fails.
+ */
+function mutate_image_tag(
+    int $imageId,
+    int $expectedGalleryId,
+    string $operation,
+    ?int $tagId = null,
+    ?string $tagName = null,
+): array {
+    $schemaState = tag_media_type_schema_state();
+    if (
+        $imageId < 1
+        || $expectedGalleryId < 1
+        || !in_array($operation, ['add', 'remove'], true)
+    ) {
+        throw new InvalidArgumentException('Invalid image tag mutation.');
+    }
+    if ($schemaState === 'unknown') {
+        throw new \RuntimeException('Image tag storage is unavailable.');
+    }
+    $newTag = null;
+    if ($operation === 'add' && $tagId === null) {
+        $canonicalName = sanitize_tag_name((string) $tagName);
+        if ($canonicalName === '') {
+            throw new InvalidArgumentException('Select a valid image tag.');
+        }
+        $newTag = [
+            'name' => $canonicalName,
+            'slug_candidates' => tag_slug_candidates(
+                $canonicalName,
+                'image',
+            ),
+            'created_at' => now_sql(),
+        ];
+    }
+    return tag_model_mutate_image_tag_atomically(
+        $imageId,
+        $expectedGalleryId,
+        $operation,
+        $tagId,
+        $newTag,
+        $schemaState === 'available',
+    );
+}
+
+/**
+ * Return selectable image tags for an authorized quick-tag control.
+ *
+ * @return list<array{id:int,name:string,slug:string}> Image-tag choices, or
+ *     an empty list while the media-type schema is unknown.
+ */
+function image_tag_catalog(): array
+{
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return [];
+    }
+    try {
+        return array_map(
+            static fn(array $row): array => [
+                'id' => (int) $row['id'],
+                'name' => (string) $row['name'],
+                'slug' => (string) $row['slug'],
+            ],
+            tag_model_image_catalog($schemaState === 'available'),
+        );
+    } catch (PDOException) {
+        return [];
+    }
 }
 
 /**

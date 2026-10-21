@@ -9,7 +9,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {completeAdminMutation} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 
 /**
  * State and the latest desired value for one gallery's serialized preference writes.

@@ -12,8 +12,9 @@
  *
  * Responsibilities:
  *   - Render the Smart Gallery admin list and editor workspace
+ *   - Render direct-photo-tag rules within the existing nested rule editor
  *   - Render presentation override controls and placement management
- *   - Render prepared Smart Gallery image cards
+ *   - Render prepared Smart Gallery image cards and quick-tag popup controls
  *   - Render the public Smart Gallery page shell
  *
  * Author:
@@ -32,7 +33,7 @@
  *     thumbnail policy, viewer ownership checks, and lightbox policy remain in controllers/services.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -212,6 +213,10 @@ function view_render_smart_gallery_editor(array $viewModel): void
         'from',
         'to',
         'missing_reference',
+        'legacy_tag_field',
+        'photo_tag_field',
+        'legacy_tag_scope_help',
+        'photo_tag_scope_help',
     ] as $key) {
         $ruleLabels[$key] = t('smart_gallery.rules.' . $key);
     }
@@ -240,6 +245,8 @@ function view_render_smart_gallery_editor(array $viewModel): void
             . e((string) ($viewModel['catalog_json'] ?? '{}'))
             . '" data-smart-gallery-tags="'
             . e((string) ($viewModel['tags_json'] ?? '[]'))
+            . '" data-smart-gallery-photo-tags="'
+            . e((string) ($viewModel['photo_tags_json'] ?? '[]'))
             . '" data-smart-gallery-galleries="'
             . e((string) ($viewModel['galleries_json'] ?? '[]'))
             . '">';
@@ -856,7 +863,24 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
 /**
  * Render prepared Smart Gallery image cards.
  *
- * @param array<string,mixed> $viewModel Controller-prepared card state.
+ * @param array{
+ *     grid_class:string,
+ *     cards:list<array{
+ *         url:string,image_id:int,source_gallery_id:int,
+ *         quick_tag_enabled:bool,
+ *         quick_photo_tags:list<array{id:int,name:string,slug:string}>,
+ *         attributes_html:string,favourite_attribute_html:string,
+ *         thumbnail_html:string,favourite_html:string,collection_html:string,
+ *         vote_html:string,
+ *         source_gallery:?array{
+ *             id:int,title:string,breadcrumb:string,
+ *             breadcrumb_compact:string,url:string
+ *         },
+ *         metadata_visible:bool,title:string,description:string,tags_html:string
+ *     }>,
+ *     quick_tag_enabled:bool
+ * } $viewModel Controller-prepared Smart Gallery grid and physical-source
+ *     photo records, including direct tags and per-image edit eligibility.
  * @return void Writes the prepared image-card grid.
  */
 function view_render_smart_gallery_image_cards(array $viewModel): void
@@ -918,10 +942,18 @@ function view_render_smart_gallery_image_cards(array $viewModel): void
             if ((string) ($card['description'] ?? '') !== '') {
                 echo '<p>' . e((string) $card['description']) . '</p>';
             }
-            echo (string) ($card['tags_html'] ?? '');
+            if (trim((string) ($card['tags_html'] ?? '')) !== '') {
+                echo '<div class="public-photo-tag-footer">'
+                    . (string) $card['tags_html']
+                    . '</div>';
+            }
             echo '</div>';
         }
-        echo '</div></article>';
+        echo '</div>';
+        echo '<div class="public-photo-action-row">';
+        view_render_quick_photo_tag_button($card);
+        echo '</div>';
+        echo '</article>';
     }
     echo '</section>';
 }
@@ -1176,6 +1208,12 @@ function view_render_public_smart_gallery(array $viewModel): void
     ]);
     echo '</section>';
 
+    $smartGalleryId = (int) ($viewModel['smart_gallery_id'] ?? 0);
+    echo '<div data-smart-gallery-query data-smart-gallery-id="'
+        . $smartGalleryId
+        . '"><div data-smart-gallery-results data-smart-gallery-id="'
+        . $smartGalleryId
+        . '">';
     view_render_smart_gallery_source_summary(
         (array) ($viewModel['source_summary'] ?? []),
     );
@@ -1201,5 +1239,7 @@ function view_render_public_smart_gallery(array $viewModel): void
         echo '</div>';
     }
     echo (string) ($viewModel['pagination_html'] ?? '');
+    echo '</div></div>';
+    view_render_quick_photo_tag_popover($viewModel);
     echo (string) ($viewModel['lightbox_html'] ?? '');
 }

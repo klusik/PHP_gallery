@@ -80,6 +80,48 @@ foreach ([
     );
 }
 stage4_expect(
+    str_contains($helper, "'image_tags'")
+        && str_contains($helper, "'tag_ids'")
+        && str_contains($helper, "'tag_names'"),
+    'Targeted photo-tag mutation must expose its authoritative direct-tag postcondition.',
+);
+$inlineImageController = stage4_source(
+    'app/controllers/admin_public_inline.php',
+);
+$quickTagStart = strpos(
+    $inlineImageController,
+    'function admin_public_update_image_quick_tag',
+);
+$quickTagEnd = $quickTagStart === false
+    ? false
+    : strpos($inlineImageController, 'function cms_admin_public_update_image', $quickTagStart);
+$quickTagAction = $quickTagStart !== false && $quickTagEnd !== false
+    ? substr($inlineImageController, $quickTagStart, $quickTagEnd - $quickTagStart)
+    : '';
+stage4_expect(
+    $quickTagAction !== ''
+        && str_contains($quickTagAction, "'image.tag'")
+        && str_contains($quickTagAction, "'image_tags'")
+        && str_contains($quickTagAction, "'source_gallery_id'")
+        && str_contains($quickTagAction, 'mutate_image_tag(')
+        && !str_contains($quickTagAction, 'sync_entity_tags(')
+        && !str_contains($quickTagAction, 'image_editor_update_fields('),
+    'Photo quick-tag must use one targeted physical-image mutation and authoritative tag snapshot.',
+);
+$quickTagRoute = strpos(
+    $inlineImageController,
+    'if (in_array($action, [\'quick_tag_add\', \'quick_tag_remove\'], true))',
+);
+$adminGate = strpos($inlineImageController, 'require_admin();');
+$csrfGate = strpos($inlineImageController, 'verify_csrf();', $adminGate ?: 0);
+stage4_expect(
+    $quickTagRoute !== false
+        && $adminGate !== false
+        && $csrfGate !== false
+        && $quickTagRoute > $csrfGate,
+    'Photo quick-tag dispatch must remain behind the canonical Admin and CSRF gates.',
+);
+stage4_expect(
     str_contains($helper, "'postcondition' => " . '$postcondition'),
     'Gallery/tag contexts must serialize explicit null postconditions instead of omitting the field.',
 );

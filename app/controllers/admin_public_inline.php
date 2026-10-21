@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -59,6 +59,7 @@ use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_log_event_result;
 use function Gallery\Services\ai_image_analysis_latest_metadata_for_image;
 use function Gallery\Services\ai_image_analysis_metadata_pretty_json;
 use function Gallery\Services\ai_image_analysis_schema_ready;
@@ -77,6 +78,7 @@ use function Gallery\Services\gallery_visibility_values;
 use function Gallery\Services\gallery_editor_quick_access_state;
 use function Gallery\Services\image_has_gps;
 use function Gallery\Services\image_editor_update_fields;
+use function Gallery\Services\mutate_image_tag;
 use function Gallery\Services\nsfw_guard_schema_ready;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\regenerate_public_paths;
@@ -529,6 +531,215 @@ function cms_admin_public_update_gallery(): void
 }
 
 /**
+ * Apply one narrow, authenticated image-tag change from the public viewer.
+ * Unexpected persistence failures use the Admin log receipt API and a bounded
+ * PHP error-log fallback if that diagnostic write also fails.
+ *
+ * @param array{id:int|string,gallery_id:int|string} $image Physical image row resolved by the server.
+ * @return void Emit the canonical JSON mutation response without rendering an editor.
+ */
+function admin_public_update_image_quick_tag(array $image): void
+{
+    $imageId = (int) ($image['id'] ?? 0);
+    $galleryId = (int) ($image['gallery_id'] ?? 0);
+    $action = (string) ($_POST['action'] ?? '');
+    $operation = $action === 'quick_tag_add' ? 'add' : 'remove';
+    $mutation = admin_mutation_descriptor(
+        'image.tag',
+        'image',
+        $operation,
+        [$imageId],
+    );
+    if (
+        !\Gallery\Core\admin_wants_json()
+        || !feature_capability_effective_enabled('inline_administration')
+        || \Gallery\Core\admin_anonymous_preview_active()
+    ) {
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t('admin.quick_tags.forbidden', 'Photo tagging is unavailable.'),
+            'image_tag_forbidden',
+            $mutation,
+        ), 403);
+        return;
+    }
+
+    $expectedGalleryId = filter_var(
+        $_POST['source_gallery_id'] ?? null,
+        FILTER_VALIDATE_INT,
+    );
+    if (
+        $imageId < 1
+        || $galleryId < 1
+        || $expectedGalleryId === false
+        || (int) $expectedGalleryId !== $galleryId
+    ) {
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t(
+                'admin.quick_tags.stale_image',
+                'This photo changed galleries. Refresh and try again.',
+            ),
+            'image_tag_stale_source',
+            $mutation,
+        ), 409);
+        return;
+    }
+    $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
+    if (!$gallery) {
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t('admin.quick_tags.stale_image', 'This photo is unavailable.'),
+            'image_tag_source_unavailable',
+            $mutation,
+        ), 404);
+        return;
+    }
+    $tagIdValue = filter_var(
+        $_POST['tag_id'] ?? null,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]],
+    );
+    $tagId = $tagIdValue === false ? null : (int) $tagIdValue;
+    $tagName = trim((string) ($_POST['tag_name'] ?? ''));
+    $validTagSelection = $operation === 'remove'
+        ? $tagId !== null && $tagName === ''
+        : (($tagId !== null) !== ($tagName !== ''));
+    if (
+        !in_array($action, ['quick_tag_add', 'quick_tag_remove'], true)
+        || !$validTagSelection
+    ) {
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t('admin.quick_tags.invalid', 'Select a valid photo tag.'),
+            'image_tag_invalid_input',
+            $mutation,
+        ), 422);
+        return;
+    }
+
+    try {
+        $result = mutate_image_tag(
+            $imageId,
+            $galleryId,
+            $operation,
+            $tagId,
+            $tagName !== '' ? $tagName : null,
+        );
+        $tags = (array) $result['tags'];
+        $tagIds = array_map(
+            static fn(array $tag): int => (int) $tag['id'],
+            $tags,
+        );
+        $tagNames = array_map(
+            static fn(array $tag): string => (string) $tag['name'],
+            $tags,
+        );
+        $contextUrl = gallery_public_url($gallery);
+        $message = $operation === 'remove'
+            ? t('admin.quick_tags.removed', 'Photo tag removed.')
+            : (!empty($result['already_present'])
+                ? t(
+                    'admin.quick_tags.already_present',
+                    'Photo already has this tag.',
+                )
+                : t('admin.quick_tags.added', 'Photo tag added.'));
+        $payload = admin_mutation_success_envelope(
+            $message,
+            $mutation,
+            null,
+            [admin_mutation_public_gallery_context(
+                $galleryId,
+                $contextUrl,
+                admin_mutation_postcondition('image_tags', [
+                    'image_id' => $imageId,
+                    'tag_ids' => $tagIds,
+                    'tag_names' => $tagNames,
+                ]),
+            )],
+            ['redirect_url' => $contextUrl],
+        );
+        $payload['changed_tag'] = $result['changed_tag'];
+        $payload['already_present'] = (bool) $result['already_present'];
+        $payload['direct_tags'] = $tags;
+        admin_public_inline_json_response($payload);
+    } catch (\DomainException) {
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t(
+                'admin.quick_tags.stale_image',
+                'This photo changed galleries. Refresh and try again.',
+            ),
+            'image_tag_stale_source',
+            $mutation,
+        ), 409);
+    } catch (\InvalidArgumentException) {
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t('admin.quick_tags.invalid', 'Select a valid photo tag.'),
+            'image_tag_invalid_input',
+            $mutation,
+        ), 422);
+    } catch (Throwable $exception) {
+        $failureContext = [
+            'gallery_id' => $galleryId,
+            'source_gallery_id' => (int) $expectedGalleryId,
+            'image_id' => $imageId,
+            'operation' => $operation,
+            'failure_type' => $exception::class,
+        ];
+        if ($exception instanceof \PDOException) {
+            $sqlState = (string) $exception->getCode();
+            // SQLSTATE is a fixed-width, five-character protocol code.
+            if (preg_match('/^[A-Z0-9]{5}$/D', $sqlState) === 1) {
+                $failureContext['sqlstate'] = $sqlState;
+            }
+            $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+            if ($driverCode > 0) {
+                $failureContext['driver_code'] = $driverCode;
+            }
+        }
+        $logReceipt = admin_log_event_result(
+            'error',
+            'image.public_quick_tag_failed',
+            'The targeted public photo-tag mutation failed.',
+            $failureContext,
+            [
+                'category' => 'other',
+                'severity' => 'error',
+                'subject_type' => 'image',
+                'subject_id' => $imageId,
+                'route_name' => 'admin_public_update_image',
+            ],
+        );
+        if (empty($logReceipt['ok'])) {
+            // Owner: this Admin mutation boundary reports failures of its own
+            // canonical diagnostic write. Reason: the Admin log shares the
+            // same database dependency that may have failed during tagging.
+            // Protected: keep tag text, CSRF/session data, SQL and raw
+            // exception messages out of the host log. Support: hosting PHP
+            // error logs are the permanent fallback when Admin-log storage is
+            // unavailable; no retirement is planned for that condition.
+            $receiptCode = (string) (
+                $logReceipt['failure_code'] ?? 'admin_log_write_failed'
+            );
+            if (!in_array($receiptCode, [
+                'log_schema_unavailable',
+                'no_supported_log_fields',
+                'log_insert_refused',
+                'log_insert_exception',
+                'log_service_exception',
+            ], true)) {
+                $receiptCode = 'admin_log_write_failed';
+            }
+            error_log(
+                '[PHP Gallery] Quick photo-tag failure could not be recorded '
+                    . 'in Admin logs (' . $receiptCode . ').',
+            );
+        }
+        admin_public_inline_json_response(admin_mutation_error_envelope(
+            t('admin.quick_tags.unavailable', 'Photo tag could not be saved.'),
+            'image_tag_persistence_failed',
+            $mutation,
+        ), 503);
+    }
+}
+
+/**
  * Apply an authenticated public-editor image update and report its outcome.
  *
  * @return void Emit a JSON response or redirect after handling the update.
@@ -554,6 +765,10 @@ function cms_admin_public_update_image(): void
     $visibility = (string) $image['visibility'];
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
+    if (in_array($action, ['quick_tag_add', 'quick_tag_remove'], true)) {
+        admin_public_update_image_quick_tag($image);
+        return;
+    }
     if ($action === 'delete') {
         // $galleryId stores the image owner so inline deletion uses the same
         // filesystem-safe mutation service as bulk and duplicate-detector deletes.

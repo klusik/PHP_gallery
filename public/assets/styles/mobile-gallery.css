@@ -550,6 +550,49 @@
     }
 }
 
+/* Keep touch navigation targets large while removing the opaque theme button fill.
+ * Type: CSS lengths, color and alpha values. Units: rem and color alpha.
+ * Scope: mobile normal and fullscreen lightbox previous/next controls.
+ * Consumers: `.lightbox-nav` buttons after mobile layout sizing rules.
+ * Rationale: the shared 3rem minimum remains a 48px target and the same glass
+ * surface keeps navigation visually aligned with the other viewer controls.
+ */
+.lightbox.is-mobile-device button.lightbox-nav,
+.lightbox.is-mobile-fullscreen button.lightbox-nav {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--lightbox-navigation-hit-size, 3rem);
+    min-width: var(--lightbox-navigation-hit-size, 3rem);
+    height: var(--lightbox-navigation-hit-size, 3rem);
+    min-height: var(--lightbox-navigation-hit-size, 3rem);
+    padding: 0;
+    border: 1px solid var(--lightbox-action-border, rgba(255, 253, 248, 0.22));
+    border-radius: var(--lightbox-action-radius, 0.375rem);
+    background: var(--lightbox-action-surface, rgba(12, 14, 18, 0.48));
+    color: #fffdf8;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.78);
+    -webkit-backdrop-filter: blur(8px) saturate(1.12);
+    backdrop-filter: blur(8px) saturate(1.12);
+}
+
+.lightbox.is-mobile-device button.lightbox-nav:hover,
+.lightbox.is-mobile-device button.lightbox-nav:focus-visible,
+.lightbox.is-mobile-fullscreen button.lightbox-nav:hover,
+.lightbox.is-mobile-fullscreen button.lightbox-nav:focus-visible {
+    border-color: rgba(255, 253, 248, 0.48);
+    background: var(--lightbox-action-hover, rgba(12, 14, 18, 0.72));
+    color: #fffdf8;
+}
+
+.lightbox.is-mobile-device button.lightbox-nav:focus-visible,
+.lightbox.is-mobile-fullscreen button.lightbox-nav:focus-visible {
+    outline: 2px solid rgba(255, 253, 248, 0.92);
+    outline-offset: 2px;
+}
+
 @media (max-width: 380px) {
     .public-page .gallery-image-grid {
         gap: 0.32rem;

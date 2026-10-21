@@ -12,6 +12,7 @@
  *
  * Responsibilities:
  *   - Keep behavior compatible with the previous combined implementation
+ *   - Prepare bounded tag previews for physical and Smart photo cards
  *   - Expose focused functions for one feature responsibility
  *   - Avoid coupling unrelated workflows into one large source file
  *
@@ -29,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -58,6 +59,13 @@ use function Gallery\Views\view_render_public_tag_admin_actions;
 use function Gallery\Views\view_render_public_tag_admin_delete_form;
 use function Gallery\Views\view_render_public_tag_page;
 use function Gallery\Views\view_render_tag_list;
+
+// Bound clickable tags shown in compact photo-card previews.
+// Type: integer. Units: linked photo-tag preview entries.
+// Scope: physical-gallery and Smart Gallery photo-card tag previews only.
+// Consumers: render_photo_card_tag_preview() for photo-card view models.
+// Rationale: three links and one passive ellipsis keep photo overlays compact.
+const PHOTO_CARD_TAG_PREVIEW_LIMIT = 3;
 
 /**
  * Tag and voting controllers.
@@ -269,6 +277,22 @@ function tag_list_view_model(array $tags, ?string $label = null): array
 function render_tag_list(array $tags, ?string $label = null): void
 {
     view_render_tag_list(tag_list_view_model($tags, $label));
+}
+
+/**
+ * Render the bounded direct-tag preview used by public photo cards.
+ * @param list<array{name?:string,slug?:string}> $tags All direct tags assigned to the photo.
+ * @return void Emits up to three linked tags and an ellipsis when more exist.
+ */
+function render_photo_card_tag_preview(array $tags): void
+{
+    if ($tags === []) {
+        return;
+    }
+
+    $viewModel = tag_list_view_model($tags);
+    $viewModel['photo_card_preview_limit'] = PHOTO_CARD_TAG_PREVIEW_LIMIT;
+    view_render_tag_list($viewModel);
 }
 
 /**

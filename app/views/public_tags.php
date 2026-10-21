@@ -12,7 +12,8 @@
  *
  * Responsibilities:
  *   - Render tag landing-page structure from prepared presentation data
- *   - Render tag chips without feature-policy or request lookups
+ *   - Render tag chips and passive photo-card preview ellipses without
+ *     feature-policy or request lookups
  *   - Render Admin tag controls from controller-prepared URLs and labels
  *
  * Author:
@@ -29,7 +30,7 @@
  *   - Do not call controllers, models, or domain services from this view.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -166,8 +167,14 @@ function view_render_public_tag_admin_delete_form(array $viewModel): void
 /**
  * Render clickable or read-only tag pills.
  *
- * @param array<string, mixed> $viewModel Prepared tag-list presentation model.
- * @return void Emits tag pills and an optional inline disclosure control.
+ * @param array{
+ *     items?:list<array{name?:string,href?:string|null}>,
+ *     label?:string|null,
+ *     inline_disclosure?:bool,
+ *     visible_limit?:int,
+ *     photo_card_preview_limit?:int
+ * } $viewModel Prepared tag-list presentation and optional card-preview state.
+ * @return void Emits tag pills, an optional disclosure, or a passive preview ellipsis.
  */
 function view_render_tag_list(array $viewModel): void
 {
@@ -177,6 +184,10 @@ function view_render_tag_list(array $viewModel): void
     }
 
     $inlineDisclosure = !empty($viewModel['inline_disclosure']);
+    $photoCardPreviewLimit = (int) (
+        $viewModel['photo_card_preview_limit'] ?? 0
+    );
+    $photoCardPreview = $photoCardPreviewLimit > 0;
     $containerTag = $inlineDisclosure ? 'div' : 'p';
     echo '<' . $containerTag . ' class="tag-list">';
     if (array_key_exists('label', $viewModel) && $viewModel['label'] !== null) {
@@ -189,15 +200,22 @@ function view_render_tag_list(array $viewModel): void
                 . '</span>';
     }
     $visibleLimit = max(1, (int) ($viewModel['visible_limit'] ?? 20));
-    $visibleItems = $inlineDisclosure
-        ? array_slice($items, 0, $visibleLimit)
-        : $items;
-    $overflowItems = $inlineDisclosure
-        ? array_slice($items, $visibleLimit)
-        : [];
+    $visibleItems = $photoCardPreview
+        ? array_slice($items, 0, $photoCardPreviewLimit)
+        : ($inlineDisclosure
+            ? array_slice($items, 0, $visibleLimit)
+            : $items);
+    $overflowItems = $photoCardPreview
+        ? array_slice($items, $photoCardPreviewLimit)
+        : ($inlineDisclosure
+            ? array_slice($items, $visibleLimit)
+            : []);
     $hasOverflow = $overflowItems !== [];
     foreach ($visibleItems as $index => $item) {
-        if ($hasOverflow && $index === (count($visibleItems) - 1)) {
+        if (!$photoCardPreview
+            && $hasOverflow
+            && $index === (count($visibleItems) - 1)
+        ) {
             echo '<div class="gallery-card-tag-tail">';
         }
         $href = $item['href'] ?? null;
@@ -220,7 +238,9 @@ function view_render_tag_list(array $viewModel): void
                     . '</span>';
         }
     }
-    if ($overflowItems !== []) {
+    if ($photoCardPreview && $overflowItems !== []) {
+        echo '<span class="tag tag-more" aria-hidden="true">…</span>';
+    } elseif ($overflowItems !== []) {
         $showAllLabel = e(t('gallery.show_all_tags', 'Display all tags'));
         $showFewerLabel = e(t('gallery.show_fewer_tags', 'Show fewer tags'));
         echo '<details class="hero-tag-disclosure" data-hero-tags-disclosure>';

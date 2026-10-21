@@ -6,6 +6,7 @@
  * Purpose: Expose Smart Gallery administration, preview, public listing and rating endpoints.
  * Responsibilities:
  *   - Normalize requests and coordinate existing rule, access and presentation services.
+ *   - Keep photo-card tag previews separate from complete quick-tag state.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: app/controllers/smart_galleries.php
@@ -35,6 +36,7 @@ use function Gallery\Core\admin_mutation_postcondition;
 use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\admin_wants_json;
+use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -52,6 +54,7 @@ use function Gallery\Core\image_alt_text;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_picker_source_rows;
 use function Gallery\Services\download_capability_issue;
 use function Gallery\Services\pagination_current_page;
@@ -96,6 +99,9 @@ use function Gallery\Services\public_thumbnail_render_picture_html;
 use function Gallery\Services\public_thumbnail_rendering_mode;
 use function Gallery\Services\public_thumbnail_rendering_modes;
 use function Gallery\Services\admin_tag_rows;
+use function Gallery\Services\image_tag_catalog;
+use function Gallery\Services\tag_media_type_schema_state;
+use function Gallery\Services\weighted_tag_suggestions_for_gallery;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\current_viewer;
@@ -1098,6 +1104,7 @@ function smart_gallery_admin_editor_view_model(
         'csrf_html' => csrf_field(),
         'catalog_json' => (string) json_encode($catalog),
         'tags_json' => (string) json_encode(admin_tag_rows('name', 'asc')),
+        'photo_tags_json' => (string) json_encode(image_tag_catalog()),
         'galleries_json' => (string) json_encode(gallery_picker_source_rows(
             true,
         )),
@@ -1313,7 +1320,36 @@ function smart_gallery_capture_html(callable $renderer): string
  * @param array<int,array<int,array<string,mixed>>> $tags Tags keyed by image id.
  * @param int $offset Zero-based offset of the first displayed image.
  * @param bool $interactive Whether visitor actions are available for these cards.
- * @return array<string,mixed> Controller-prepared card view model.
+ * @param array<int,list<array{id:int,name:string,slug:string}>> $quickTags Direct photo tags keyed by image ID.
+ * @param bool $quickTagEnabled Whether authorized administrators may quick-tag these photos.
+ * @return array{
+ *     grid_class:string,
+ *     cards:list<array{
+ *         url:string,
+ *         image_id:int,
+ *         source_gallery_id:int,
+ *         quick_tag_enabled:bool,
+ *         quick_photo_tags:list<array{id:int,name:string,slug:string}>,
+ *         attributes_html:string,
+ *         favourite_attribute_html:string,
+ *         thumbnail_html:string,
+ *         favourite_html:string,
+ *         collection_html:string,
+ *         vote_html:string,
+ *         source_gallery:array{
+ *             id:int,
+ *             title:string,
+ *             breadcrumb:string,
+ *             breadcrumb_compact:string,
+ *             url:string
+ *         }|null,
+ *         metadata_visible:bool,
+ *         title:string,
+ *         description:string,
+ *         tags_html:string
+ *     }>,
+ *     quick_tag_enabled:bool
+ * } Prepared grid class and ordered image-card view models for the renderer.
  */
 function smart_gallery_image_cards_view_model(
     array $images,
@@ -1323,6 +1359,8 @@ function smart_gallery_image_cards_view_model(
     array $tags,
     int $offset,
     bool $interactive,
+    array $quickTags = [],
+    bool $quickTagEnabled = false,
 ): array {
     $viewerPrincipal = $interactive ? current_viewer() : null;
     $viewerFavouriteControlsEnabled =
@@ -1421,6 +1459,8 @@ function smart_gallery_image_cards_view_model(
                 $offset + $index,
                 $bundle,
                 $sourceGalleryContext,
+                $quickTagEnabled,
+                $quickTags[$imageId] ?? [],
             );
         }
 
@@ -1478,12 +1518,16 @@ function smart_gallery_image_cards_view_model(
             $tagsHtml = smart_gallery_capture_html(static function () use (
                 $imageTags,
             ): void {
-                render_tag_list($imageTags);
+                render_photo_card_tag_preview($imageTags);
             });
         }
 
         $cards[] = [
             'url' => $url,
+            'image_id' => $imageId,
+            'source_gallery_id' => (int) ($source['id'] ?? 0),
+            'quick_tag_enabled' => $quickTagEnabled,
+            'quick_photo_tags' => $quickTags[$imageId] ?? [],
             'attributes_html' => $attributesHtml,
             'favourite_attribute_html' => $viewerFavouriteAvailableForImage
                 ? ' data-viewer-favourite="'
@@ -1529,6 +1573,7 @@ function smart_gallery_image_cards_view_model(
             'grid_columns_enabled' => true,
         ]),
         'cards' => $cards,
+        'quick_tag_enabled' => $quickTagEnabled,
     ];
 }
 
@@ -1731,6 +1776,38 @@ function cms_smart_gallery(): void
     $tags = !empty($presentation['metadata_visible'])
         ? tags_for_entities('image', $imageIds)
         : [];
+    $quickTagUser = current_user();
+    $quickTagEnabled =
+        is_array($quickTagUser)
+        && ($quickTagUser['role'] ?? '') === 'admin'
+        && !admin_anonymous_preview_active()
+        && feature_capability_effective_enabled('inline_administration')
+        && tag_media_type_schema_state() !== 'unknown';
+    $quickTags = [];
+    if ($quickTagEnabled) {
+        $quickTagRows = !empty($presentation['metadata_visible'])
+            ? $tags
+            : tags_for_entities('image', $imageIds);
+        foreach ($quickTagRows as $imageId => $rows) {
+            $quickTags[(int) $imageId] = array_map(
+                static fn(array $tag): array => [
+                    'id' => (int) ($tag['id'] ?? 0),
+                    'name' => (string) ($tag['name'] ?? ''),
+                    'slug' => (string) ($tag['slug'] ?? ''),
+                ],
+                $rows,
+            );
+        }
+    }
+    $quickTagCatalog = !$quickTagEnabled
+        ? []
+        : ($sourceGalleryId > 0
+            ? weighted_tag_suggestions_for_gallery($sourceGalleryId)
+            : image_tag_catalog());
+    $quickTagUrl = $quickTagEnabled
+        ? url_for('admin_public_update_image')
+        : '';
+    $quickTagCsrf = $quickTagEnabled ? csrf_token() : '';
     if ($testRunActive)
         admin_test_run_mark('smart_gallery_tags_end', [
             'entities' => count($tags),
@@ -1789,6 +1866,9 @@ function cms_smart_gallery(): void
             $gallery,
             $mapAvailable,
             $mapUrl,
+            $quickTagEnabled,
+            $quickTagUrl,
+            $quickTagCsrf,
         ): void {
             render_lightbox(
                 !empty($presentation['voting_enabled']),
@@ -1797,6 +1877,10 @@ function cms_smart_gallery(): void
                 (string) $gallery['title'],
                 (string) $presentation['lightbox_browsing_mode'],
                 !empty($presentation['slideshow_enabled']),
+                [],
+                (bool) $quickTagEnabled,
+                $quickTagUrl,
+                $quickTagCsrf,
             );
         })
         : '';
@@ -1913,6 +1997,8 @@ function cms_smart_gallery(): void
         $tags,
         $offset,
         true,
+        $quickTags,
+        (bool) $quickTagEnabled,
     );
     $sourceContextCardCount = 0;
     foreach ((array) ($cardsViewModel['cards'] ?? []) as $card) {
@@ -1921,6 +2007,7 @@ function cms_smart_gallery(): void
     }
 
     \Gallery\Views\view_render_public_smart_gallery([
+        'smart_gallery_id' => (int) $gallery['id'],
         'title' => (string) $gallery['title'],
         'breadcrumbs' => \Gallery\Services\breadcrumb_view_model(
             [
@@ -1942,6 +2029,10 @@ function cms_smart_gallery(): void
         'source_summary' => $sourceSummaryView,
         'source_filter_gallery_id' => $sourceGalleryId,
         'pagination_html' => $paginationHtml,
+        'quick_tag_enabled' => (bool) $quickTagEnabled,
+        'quick_tag_url' => $quickTagUrl,
+        'quick_tag_csrf' => $quickTagCsrf,
+        'quick_tag_catalog' => $quickTagCatalog,
         'lightbox_enabled' => $lightboxEnabled,
         'lightbox_endpoint' => url_for(
             'smart_gallery_lightbox_data',
@@ -2141,6 +2232,26 @@ function cms_smart_gallery_lightbox_data(): void
         static fn(array $image): int => (int) $image['id'],
         $images,
     );
+    $quickTagUser = current_user();
+    $quickTagEnabled =
+        is_array($quickTagUser)
+        && ($quickTagUser['role'] ?? '') === 'admin'
+        && !admin_anonymous_preview_active()
+        && feature_capability_effective_enabled('inline_administration')
+        && tag_media_type_schema_state() !== 'unknown';
+    $quickTagsById = [];
+    if ($quickTagEnabled) {
+        foreach (tags_for_entities('image', $imageIds) as $taggedImageId => $rows) {
+            $quickTagsById[(int) $taggedImageId] = array_map(
+                static fn(array $tag): array => [
+                    'id' => (int) ($tag['id'] ?? 0),
+                    'name' => (string) ($tag['name'] ?? ''),
+                    'slug' => (string) ($tag['slug'] ?? ''),
+                ],
+                $rows,
+            );
+        }
+    }
     $votes = !empty($presentation['voting_enabled'])
         ? current_votes_for_images($imageIds)
         : [];
@@ -2198,6 +2309,8 @@ function cms_smart_gallery_lightbox_data(): void
             $votingAllowed,
             $votes,
             !empty($presentation['source_gallery_visible']),
+            $quickTagEnabled,
+            $quickTagsById[(int) $image['id']] ?? [],
         );
         if (
             is_array($viewerFavouriteStates)

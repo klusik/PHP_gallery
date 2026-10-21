@@ -247,6 +247,15 @@ $registry = [
         'gallery_workflow_integration_test.php' => [
             'timeout' => 180,
         ],
+        // Purpose: Bound the authenticated direct-photo-tag HTTP persistence workflow.
+        // Type: integer.
+        // Units: seconds.
+        // Scope: PHP child deadline for image_quick_tag_workflow_test.php.
+        // Consumers: Central audit worker running the shared gallery-workflow fixture suite.
+        // Rationale: Allow the disposable fixture bootstrap, three bounded Admin HTTP mutations and teardown while remaining well below the general audit timeout.
+        'image_quick_tag_workflow_test.php' => [
+            'timeout' => 120,
+        ],
         'breadcrumb_workflow_integration_test.php' => [
             'timeout' => 180,
         ],

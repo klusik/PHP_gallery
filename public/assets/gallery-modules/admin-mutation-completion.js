@@ -10,10 +10,11 @@
  *
  * Responsibilities:
  *   - Validate and normalize the canonical mutation envelope
- *   - Match affected public contexts by stable gallery or tag identity
+ *   - Match affected public contexts by stable gallery, tag, or Smart Gallery identity
  *   - Fetch authoritative server-rendered HTML with no-store/cache-busting semantics
  *   - Replace only the owned server-rendered public fragments
  *   - Verify typed postconditions with bounded retries
+ *   - Refresh Smart Gallery membership after direct image-tag changes
  *   - Reject stale or out-of-order refresh responses
  *   - Report synchronization failures without hiding a successful server mutation
  *
@@ -32,7 +33,7 @@
  *   - Enhanced persistent workflows must preserve the canonical server envelope end to end.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-10-21
  */
 
 // Shared-hosting deployments can expose a short read-after-write lag between the
@@ -40,6 +41,95 @@
 // retry budget bounded, but long enough that the coordinator does not report a
 // false synchronization failure while a manual reload a moment later is already fresh.
 export const ADMIN_MUTATION_RETRY_DELAYS_MS = Object.freeze([0, 150, 450, 1000, 2000]);
+
+/**
+ * @typedef {object} MutationQueryRoot
+ * @property {(selector:string)=>Element|null} querySelector Finds one matching node.
+ * @property {{Event?:typeof Event}|null=} defaultView Owning window event constructor.
+ * @property {(event:Event)=>boolean=} dispatchEvent Dispatches a document event.
+ */
+/**
+ * @typedef {object} MutationPostconditionCandidate
+ * @property {string} type Allowlisted rendered-state assertion discriminator.
+ * @property {number=} gallery_id Physical gallery identity used by gallery assertions.
+ * @property {number=} tag_id Public tag identity used by tag assertions.
+ * @property {number=} image_id Photo identity used by photo assertions.
+ * @property {number[]=} image_ids Photo identities used by ordered/multi-photo assertions.
+ * @property {number=} smart_gallery_id Dynamic Smart Gallery identity.
+ * @property {number[]=} tag_ids Direct image tag identities.
+ * @property {string=} revision Rendered aggregate revision.
+ * @property {string=} updated_at Rendered row timestamp.
+ * @property {string=} visibility Expected visibility value.
+ * @property {string=} placement Expected gallery placement.
+ * @property {boolean=} enabled Expected feature state.
+ * @property {boolean=} present Expected entity membership state.
+ * @property {number=} count Expected aggregate count.
+ * @property {number=} placement_order Expected ordered position.
+ */
+/**
+ * @typedef {object} MutationContextCandidate
+ * @property {string=} type Affected public context discriminator.
+ * @property {(number|string)=} gallery_id Physical gallery identity when type is gallery.
+ * @property {(number|string)=} tag_id Public tag identity when type is tag.
+ * @property {(number|string)=} smart_gallery_id Smart Gallery identity when applicable.
+ * @property {string=} render_url Server-rendered refresh URL.
+ * @property {string=} render_mode Whether to preserve view state or use canonical URL.
+ * @property {(MutationPostconditionCandidate|null)=} postcondition Typed refreshed-state assertion.
+ */
+/**
+ * @typedef {object} NormalizedMutationContext
+ * @property {'gallery'|'gallery_index'|'tag'|'smart_gallery'} type Context owner.
+ * @property {number|null} gallery_id Physical gallery id, or null for other types.
+ * @property {number|null} tag_id Public tag id, or null for other types.
+ * @property {number|null} smart_gallery_id Smart Gallery id, or null for other types.
+ * @property {string} render_url Authoritative server-rendered refresh URL.
+ * @property {'canonical'|'preserve_view'} render_mode URL/view-state policy.
+ * @property {MutationPostconditionCandidate|null} postcondition Optional typed postcondition.
+ */
+/**
+ * @typedef {object} MutationPanelMetadata
+ * @property {string} workflow Admin panel refresh workflow identifier.
+ * @property {string} refresh_url Authoritative panel refresh URL.
+ * @property {boolean} keep_open Whether a successful refresh preserves the panel.
+ */
+/**
+ * @typedef {object} MutationPanelGuard
+ * @property {number} operationToken Sequence number of the protected mutation.
+ * @property {()=>boolean} isCurrent Whether this mutation still owns the panel.
+ * @property {AbortSignal|null} signal Abort state supplied to panel fetches.
+ */
+/**
+ * @typedef {(panel:MutationPanelMetadata,envelope:MutationEnvelopeCandidate,guard:MutationPanelGuard)=>Promise<boolean|void>} MutationPanelRefresh
+ */
+/**
+ * @typedef {object} MutationEnvelopeCandidate
+ * @property {boolean} ok Successful mutation marker.
+ * @property {{type:string,entity:string,action:string,entity_ids?:number[]}} mutation Canonical mutation identity.
+ * @property {MutationContextCandidate[]} contexts Affected public contexts.
+ * @property {MutationPanelMetadata=} panel Optional Admin panel refresh metadata.
+ * @property {Record<string, unknown>=} fallback Opaque server-owned fallback metadata preserved by the coordinator.
+ */
+/**
+ * @typedef {object} PublicFragmentReplacementOptions
+ * @property {MutationQueryRoot=} documentRoot Live document root.
+ * @property {NormalizedMutationContext=} context Context whose fragment is replaced.
+ * @property {()=>void=} beforeReplace Lifecycle teardown invoked before replacement.
+ */
+/**
+ * @typedef {object} CompleteAdminMutationOptions
+ * @property {MutationQueryRoot=} documentRoot Live document root.
+ * @property {string=} currentUrl Current browser URL.
+ * @property {number[]=} retryDelays Bounded retry delays in milliseconds.
+ * @property {(delayMs:number)=>Promise<void>=} wait Retry delay adapter.
+ * @property {typeof fetch=} fetchImpl HTTP fetch implementation.
+ * @property {(html:string)=>MutationQueryRoot=} parseHtml Server HTML parser.
+ * @property {((attempt:number)=>string|number)=} nonce Cache-busting nonce factory.
+ * @property {MutationPanelRefresh=} refreshPanel Admin panel refresh adapter.
+ * @property {((parsed:MutationQueryRoot,context:NormalizedMutationContext)=>boolean|Promise<boolean>)=} replacePublicContext Public fragment replacement adapter.
+ * @property {((context:NormalizedMutationContext,envelope:Record<string,unknown>)=>void)=} afterPublicReplace Post-replacement lifecycle hook.
+ * @property {((result:Record<string, unknown>)=>void)=} reportSynchronizationError Synchronization failure reporter.
+ * @property {((result:Record<string, unknown>)=>void)=} emitCompletion Completion event adapter.
+ */
 
 let mutationOperationSequence = 0;
 let mutationRefreshSequence = 0;
@@ -105,21 +195,22 @@ function normalizeMutationPanel(panel) {
 /**
  * Normalize one affected public context.
  *
- * @param {*} context Context candidate.
- * @return {Record<string, *>|null} Normalized context or null when unusable.
+ * @param {MutationContextCandidate|null} context Context candidate.
+ * @return {NormalizedMutationContext|null} Normalized context or null when unusable.
  */
 function normalizeMutationContext(context) {
     if (!context || typeof context !== 'object') {
         return null;
     }
     const type = String(context.type || 'gallery');
-    if (!['gallery', 'gallery_index', 'tag'].includes(type)) {
+    if (!['gallery', 'gallery_index', 'tag', 'smart_gallery'].includes(type)) {
         return null;
     }
     return {
         type,
         gallery_id: type === 'gallery' ? positiveInteger(context.gallery_id) : null,
         tag_id: type === 'tag' ? positiveInteger(context.tag_id) : null,
+        smart_gallery_id: type === 'smart_gallery' ? positiveInteger(context.smart_gallery_id) : null,
         render_url: String(context.render_url || ''),
         render_mode: String(context.render_mode || 'preserve_view') === 'canonical' ? 'canonical' : 'preserve_view',
         postcondition: context.postcondition && typeof context.postcondition === 'object'
@@ -155,7 +246,7 @@ function normalizedIdList(values) {
 /**
  * Return the stable public gallery id rendered by a document/root.
  *
- * @param {*} root Document-like root exposing querySelector().
+ * @param {MutationQueryRoot|null} root Document-like root exposing querySelector().
  * @return {number} Stable gallery id, or zero outside a concrete gallery page.
  */
 export function publicGalleryIdFromRoot(root) {
@@ -180,6 +271,22 @@ export function publicTagIdFromRoot(root) {
     return positiveInteger(value);
 }
 
+/**
+ * Return the stable Smart Gallery id rendered for the current public query.
+ *
+ * @param {MutationQueryRoot|null} root Document-like root exposing querySelector().
+ * @return {number} Stable Smart Gallery id, or zero outside a Smart Gallery query.
+ */
+export function publicSmartGalleryIdFromRoot(root) {
+    const query = root && typeof root.querySelector === 'function'
+        ? root.querySelector('[data-smart-gallery-query][data-smart-gallery-id]')
+        : null;
+    const value = query?.dataset?.smartGalleryId
+        ?? query?.getAttribute?.('data-smart-gallery-id')
+        ?? 0;
+    return positiveInteger(value);
+}
+
 
 /**
  * Return whether a document/root is the public root gallery index.
@@ -198,8 +305,8 @@ export function publicGalleryIndexFromRoot(root) {
  * The root gallery index has no entity row, so URL/path equality is used only for
  * that special context after confirming no concrete gallery hero is rendered.
  *
- * @param {Record<string, *>} context Mutation context.
- * @param {*} root Current document-like root.
+ * @param {NormalizedMutationContext|MutationContextCandidate} context Mutation context.
+ * @param {MutationQueryRoot|null} root Current document-like root.
  * @param {string} currentUrl Current browser URL.
  * @param {string} baseUrl Base URL used for relative URL parsing in tests/browser.
  * @return {boolean} True when the context owns the currently visible public page.
@@ -214,6 +321,10 @@ export function mutationContextMatchesCurrentDocument(context, root, currentUrl 
     }
     if (normalized.type === 'tag') {
         return normalized.tag_id > 0 && publicTagIdFromRoot(root) === normalized.tag_id;
+    }
+    if (normalized.type === 'smart_gallery') {
+        return normalized.smart_gallery_id > 0
+            && publicSmartGalleryIdFromRoot(root) === normalized.smart_gallery_id;
     }
     if (publicGalleryIdFromRoot(root) > 0 || publicTagIdFromRoot(root) > 0) {
         return false;
@@ -288,8 +399,9 @@ export function mergeAdminMutationRenderViewState(renderUrl, currentUrl) {
  * identity proves it is still the same entity. Rename/move migrations may opt into
  * canonical mode so the returned render_url is used even while the browser URL stays unchanged.
  *
- * @param {Record<string, *>} context Mutation context.
+ * @param {NormalizedMutationContext|MutationContextCandidate} context Mutation context.
  * @param {string} currentUrl Current browser URL.
+ * @param {MutationQueryRoot|null} root Current document-like root used for persisted render metadata.
  * @return {string} Authoritative render source for the refresh.
  */
 export function resolveAdminMutationContextRenderUrl(context, currentUrl, root = null) {
@@ -321,6 +433,9 @@ export function resolveAdminMutationContextRenderUrl(context, currentUrl, root =
         if (persistedRenderUrl !== '') {
             return mergeAdminMutationRenderViewState(persistedRenderUrl, currentUrl);
         }
+    }
+    if (normalized.type === 'smart_gallery') {
+        return currentUrl;
     }
     return currentUrl || mergeAdminMutationRenderViewState(normalized.render_url, currentUrl);
 }
@@ -456,6 +571,48 @@ export function evaluateAdminMutationPostcondition(postcondition, root) {
     }
     if (type === 'image_present') {
         return imageIds.length > 0 && imageIds.every((id) => Boolean(publicGalleryImageById(root, id)));
+    }
+    if (type === 'image_tags') {
+        const expectedTagIds = normalizedIdList(postcondition.tag_ids || []).sort((left, right) => left - right);
+        const imageTagButton = imageId > 0
+            ? root.querySelector(`[data-quick-photo-tag-card][data-image-id="${imageId}"]`)
+            : null;
+        if (!imageTagButton || !Array.isArray(postcondition.tag_ids)) return false;
+        let renderedTags = [];
+        try { renderedTags = JSON.parse(imageTagButton.dataset.quickPhotoTags || '[]'); } catch { return false; }
+        const renderedTagIds = normalizedIdList(renderedTags.map((tag) => tag?.id)).sort((left, right) => left - right);
+        return expectedTagIds.length === postcondition.tag_ids.length
+            && renderedTagIds.length === expectedTagIds.length
+            && expectedTagIds.every((id, index) => id === renderedTagIds[index]);
+    }
+    if (type === 'smart_gallery_image_tags') {
+        if (
+            smartGalleryId <= 0
+            || publicSmartGalleryIdFromRoot(root) !== smartGalleryId
+            || imageId <= 0
+            || !Array.isArray(postcondition.tag_ids)
+        ) {
+            return false;
+        }
+        const imageCard = root.querySelector(
+            `[data-quick-photo-tag-card][data-image-id="${imageId}"]`,
+        );
+        if (!imageCard) {
+            return true;
+        }
+        let renderedTags = [];
+        try {
+            renderedTags = JSON.parse(imageCard.dataset.quickPhotoTags || '[]');
+        } catch {
+            return false;
+        }
+        const expectedTagIds = normalizedIdList(postcondition.tag_ids)
+            .sort((left, right) => left - right);
+        const renderedTagIds = normalizedIdList(renderedTags.map((tag) => tag?.id))
+            .sort((left, right) => left - right);
+        return expectedTagIds.length === postcondition.tag_ids.length
+            && renderedTagIds.length === expectedTagIds.length
+            && expectedTagIds.every((id, index) => id === renderedTagIds[index]);
     }
     if (type === 'image_absent') {
         return imageIds.length > 0 && imageIds.every((id) => !publicGalleryImageById(root, id));
@@ -845,6 +1002,9 @@ export function adminMutationContextKey(context) {
     if (normalized.type === 'tag') {
         return `tag:${normalized.tag_id || 0}`;
     }
+    if (normalized.type === 'smart_gallery') {
+        return `smart_gallery:${normalized.smart_gallery_id || 0}`;
+    }
     return 'gallery_index';
 }
 
@@ -964,8 +1124,8 @@ export function adminMutationRefreshIsCurrent(token) {
  * Lifecycle teardown/rebind remains injectable because those bindings live in
  * other modules. This function owns only deterministic fragment replacement.
  *
- * @param {*} parsed Fresh server-rendered Document-like root.
- * @param {object} options Replacement dependencies and lifecycle hooks.
+ * @param {MutationQueryRoot|null} parsed Fresh server-rendered Document-like root.
+ * @param {PublicFragmentReplacementOptions} options Replacement dependencies and lifecycle hooks.
  * @return {boolean} True when at least one owned fragment changed.
  */
 export function replaceOwnedPublicGalleryFragments(parsed, options = {}) {
@@ -1019,10 +1179,12 @@ export function replaceOwnedPublicGalleryFragments(parsed, options = {}) {
         }
     }
 
-    const fragmentPairs = [
-        ['[data-public-subgallery-section]', '[data-public-subgallery-section]'],
-        ['[data-gallery-image-list]', '[data-gallery-image-list]'],
-    ];
+    const fragmentPairs = options.context?.type === 'smart_gallery'
+        ? [['[data-smart-gallery-results]', '[data-smart-gallery-results]']]
+        : [
+            ['[data-public-subgallery-section]', '[data-public-subgallery-section]'],
+            ['[data-gallery-image-list]', '[data-gallery-image-list]'],
+        ];
     fragmentPairs.forEach(([currentSelector, freshSelector]) => {
         const current = liveDocument.querySelector(currentSelector);
         const fresh = parsed.querySelector(freshSelector);
@@ -1100,14 +1262,34 @@ function copyElementIdentity(current, fresh) {
 /**
  * Complete one successful Admin mutation through panel and public-context synchronization.
  *
- * @param {Record<string, *>} rawEnvelope Canonical successful mutation envelope.
- * @param {object} options Workflow adapters and browser dependencies.
+ * @param {MutationEnvelopeCandidate} rawEnvelope Canonical successful mutation envelope.
+ * @param {CompleteAdminMutationOptions} options Workflow adapters and browser dependencies.
  * @return {Promise<Record<string, *>>} Synchronization result.
  */
 export async function completeAdminMutation(rawEnvelope, options = {}) {
     const envelope = normalizeAdminMutationEnvelope(rawEnvelope);
     const liveDocument = options.documentRoot || globalThis.document;
     const currentUrl = String(options.currentUrl || globalThis.window?.location?.href || '');
+    if (envelope.mutation.type === 'image.tag') {
+        const smartGalleryId = publicSmartGalleryIdFromRoot(liveDocument);
+        const imageTags = envelope.contexts
+            .map((context) => context.postcondition)
+            .find((postcondition) => postcondition?.type === 'image_tags');
+        if (smartGalleryId > 0 && imageTags) {
+            envelope.contexts.push({
+                type: 'smart_gallery',
+                smart_gallery_id: smartGalleryId,
+                render_url: currentUrl,
+                render_mode: 'preserve_view',
+                postcondition: {
+                    type: 'smart_gallery_image_tags',
+                    smart_gallery_id: smartGalleryId,
+                    image_id: positiveInteger(imageTags.image_id),
+                    tag_ids: normalizedIdList(imageTags.tag_ids || []),
+                },
+            });
+        }
+    }
     const wait = options.wait || ((delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs)));
     const retryDelays = Array.isArray(options.retryDelays) && options.retryDelays.length > 0
         ? options.retryDelays
@@ -1233,6 +1415,22 @@ export async function completeAdminMutation(rawEnvelope, options = {}) {
                 diagnostics.push(adminMutationDiagnosticRecord(envelope, operation, context, attempt + 1, lastStatus, renderSource));
                 continue;
             }
+            if (
+                context.type === 'smart_gallery'
+                && publicSmartGalleryIdFromRoot(fetched.document)
+                    !== positiveInteger(context.smart_gallery_id)
+            ) {
+                lastStatus = 'wrong-context';
+                diagnostics.push(adminMutationDiagnosticRecord(
+                    envelope,
+                    operation,
+                    context,
+                    attempt + 1,
+                    lastStatus,
+                    renderSource,
+                ));
+                continue;
+            }
             if (context.postcondition && !evaluateAdminMutationPostcondition(context.postcondition, fetched.document)) {
                 // Structurally valid HTML can still be a stale cache/read replica response.
                 // Never install it into the live DOM merely to discover that it is stale.
@@ -1242,7 +1440,10 @@ export async function completeAdminMutation(rawEnvelope, options = {}) {
                 continue;
             }
 
-            const replace = options.replacePublicContext || ((parsed) => replaceOwnedPublicGalleryFragments(parsed, {documentRoot: liveDocument}));
+            const replace = options.replacePublicContext || ((parsed, matchedContext) => replaceOwnedPublicGalleryFragments(parsed, {
+                documentRoot: liveDocument,
+                context: matchedContext,
+            }));
             const replaced = Boolean(replace(fetched.document, context, envelope));
             if (replaced && context.render_mode === 'canonical' && context.type === 'gallery' && liveDocument && typeof liveDocument.querySelector === 'function') {
                 const liveHero = liveDocument.querySelector(`.hero[data-public-gallery-id="${positiveInteger(context.gallery_id)}"]`);
@@ -1258,6 +1459,12 @@ export async function completeAdminMutation(rawEnvelope, options = {}) {
             }
             if (replaced && typeof options.afterPublicReplace === 'function') {
                 options.afterPublicReplace(context, envelope);
+            }
+            if (replaced && context.type === 'smart_gallery') {
+                const EventConstructor = liveDocument.defaultView?.Event || globalThis.Event;
+                if (typeof EventConstructor === 'function') {
+                    liveDocument.dispatchEvent(new EventConstructor('publicGalleryPhotoOrderChanged'));
+                }
             }
             if (!replaced) {
                 lastStatus = 'fragment-not-owned';

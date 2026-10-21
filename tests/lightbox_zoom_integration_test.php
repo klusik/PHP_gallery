@@ -204,11 +204,11 @@ foreach ([
 lightbox_zoom_integration_assert(
     str_contains(
         $publicEntrypointSource,
-        'lightbox-deferred.js?v=20261018-presentation-confirm-v1',
+        'lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1',
     )
         && str_contains(
             $authenticatedEntrypointSource,
-            'lightbox-deferred.js?v=20261018-presentation-confirm-v1',
+            'lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1',
         ),
     'Anonymous and authenticated browser entrypoints must invalidate the deferred lightbox cache together.',
 );

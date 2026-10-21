@@ -12,6 +12,7 @@
  *
  * Responsibilities:
  *   - Render lightbox presentation from controller-prepared data
+ *   - Render authorized quick-tag controls for the active physical photo source
  *   - Escape all attribute payloads at the presentation boundary
  *   - Keep gallery policy, image lookup, GPS resolution, and vote persistence outside the view
  *
@@ -29,7 +30,7 @@
  *   - Translation and escaping are presentation-only helpers used by this view.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -184,9 +185,10 @@ function view_render_lightbox_source_nodes(array $nodes): void
  * @param array{voting_allowed?:bool, maps_allowed?:bool,
  *     slideshow_allowed?:bool, browsing_mode?:string, gallery_map_url?:string,
  *     gallery_map_title?:string, viewer_favourite_html?:string,
+ *     quick_tag_enabled?:bool,quick_tag_url?:string,quick_tag_csrf?:string,
  *     presentation?:array{autoplay?:bool,music?:bool,interval?:string,transition?:string}} $viewModel
- *     Prepared visibility flags, browsing mode, map labels/URL and escaped
- *     favourite markup.
+ *     Prepared visibility flags, browsing mode, map labels/URL, escaped
+ *     favourite markup and authorized quick-tag endpoint context.
  * @return void Emits the existing viewer shell and permitted runtime controls.
  */
 function view_render_lightbox(array $viewModel): void
@@ -212,6 +214,30 @@ function view_render_lightbox(array $viewModel): void
     $galleryMapUrl = (string) ($viewModel['gallery_map_url'] ?? '');
     $galleryMapTitle = (string) ($viewModel['gallery_map_title'] ?? '');
     $viewerFavouriteHtml = (string) ($viewModel['viewer_favourite_html'] ?? '');
+    $quickTagToolbarHtml = !empty($viewModel['quick_tag_enabled'])
+        ? '<button type="button" class="lightbox-quick-photo-tag-button"'
+            . ' data-quick-photo-tag-trigger data-quick-photo-tag-viewer'
+            . ' data-quick-tag-available="0" data-quick-tag-url="'
+            . e((string) ($viewModel['quick_tag_url'] ?? ''))
+            . '" data-quick-tag-csrf="'
+            . e((string) ($viewModel['quick_tag_csrf'] ?? ''))
+            . '" aria-label="'
+            . e(t('quick_photo_tags.add', 'Add photo tags'))
+            . '" aria-haspopup="dialog" aria-expanded="false" title="'
+            . e(t('quick_photo_tags.add', 'Add photo tags'))
+            . '" hidden>'
+            . view_admin_menu_icon('tags')
+            . '<span class="visually-hidden">'
+            . e(t('quick_photo_tags.add', 'Add photo tags'))
+            . '</span></button>'
+        : '';
+    $quickTagHudHtml = $quickTagToolbarHtml === ''
+        ? ''
+        : str_replace(
+            'lightbox-quick-photo-tag-button',
+            'lightbox-quick-photo-tag-button lightbox-hud',
+            $quickTagToolbarHtml,
+        );
 
     $votePanelHtml = $votingAllowed
         ? '<div class="lightbox-vote-panel" data-lightbox-vote-panel hidden></div>'
@@ -406,6 +432,7 @@ function view_render_lightbox(array $viewModel): void
             . e(t('lightbox.picture_strip_label', 'Nearby photos'))
             . '" hidden><div class="lightbox-strip-track" data-lightbox-strip-track></div></div><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span>'
             . $zoomControlsHtml
+            . $quickTagToolbarHtml
             . '<button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="'
             . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen'))
             . '" title="'
@@ -454,6 +481,7 @@ function view_render_lightbox(array $viewModel): void
             . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen'))
             . '">F</button>';
     echo $slideshowHudHtml;
+    echo $quickTagHudHtml;
     echo $slideshowSpeedHtml;
     echo view_music_player_controls(true);
     echo

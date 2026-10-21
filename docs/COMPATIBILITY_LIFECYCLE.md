@@ -102,6 +102,44 @@ qualification and deployment acceptance. SQL and filesystem writes cannot
 form one transaction, so the physical index remains playback authority and
 bounded reconciliation repairs derived links without authorizing stale bytes.
 
+## Quick-tag Escape handling in native fullscreen
+
+Owners: `quick-photo-tags.js` and the public lightbox fullscreen owner. The
+observed macOS Chrome workflow allowed native fullscreen to consume Escape
+while the quick-tag row was open, bypassing the page handler. In JavaScript
+fullscreen, Chrome's Keyboard Lock API can capture Escape while the row is open;
+the owner releases the lock when the row closes, and unlocks after any pending
+request settles. Safari 26.4 supports
+`requestFullscreen({keyboardLock: 'browser'})` for quick-tag-capable viewer
+entry; Escape reaches the page while the browser retains a 1.5-second
+hold-Escape fullscreen exit and automatically releases the lock on fullscreen
+exit or tab switch. See the [Chrome Keyboard Lock documentation](https://developer.chrome.com/docs/capabilities/web-apis/keyboard-lock)
+and [WebKit's Safari 26.4 notes](https://webkit.org/blog/17862/webkit-features-for-safari-26-4/).
+
+Where the lock is unsupported or rejected, keep native browser behavior:
+fullscreen may exit first, which closes the row without automatically
+re-entering fullscreen. Do not add a permission-prompt workflow. This fallback
+preserves access to browser fullscreen exit and remains supported unless
+measured browser coverage and verified alternatives justify retirement. Browser
+fixtures exercise the API path and page-dispatched keys, but cannot prove
+OS/browser-reserved physical Escape handling. The user reports that ordinary
+quick-tag behavior works on Chrome for Mac. The earlier fullscreen Escape
+regression is observed; post-fix physical Escape behavior in Chrome and Safari,
+and deployed browser usage, remain unknown.
+
+## Deferred lightbox first-photo initialization
+
+Owners: `lightbox-deferred.js` and `lightbox.js`. The deferred entry reveals
+the canonical loading shell before importing and setting up the full viewer.
+During that interval the overlay can be visible with no committed photo ID;
+setup-time photo-order reconciliation must leave that shell alone until the
+normal navigation owns the first photo. The production lightbox fixture now
+loads through the deferred entry with the real loader markup and covers this
+ordering. Its focused Chromium regression passed; the hosted full workflow
+remains the qualification authority. Keep the empty-identity guard scoped to
+the initial-loading shell so ordinary active-photo reconciliation remains
+unchanged.
+
 ## Visitor-started automatic stable-update continuation
 
 Owners: request maintenance, lightweight updater job lookup, deferred updater

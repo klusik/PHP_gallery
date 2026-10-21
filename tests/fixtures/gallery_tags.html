@@ -4,13 +4,13 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: tests/fixtures/gallery_tags.html
 Module Type: Browser Test Fixture
-Purpose: Check progressive gallery tag presentation before and after module startup.
-Responsibilities: Measure card geometry and exercise native tag-panel disclosure.
+Purpose: Check gallery tag layout, quick photo-tagging, and Smart Gallery refresh behavior.
+Responsibilities: Measure card geometry and exercise interactive tag and viewer lifecycle.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery tag rendering regression</title></head>
-<body class="public-page"><main><!-- PRODUCTION_GALLERY_TAGS_MARKUP --></main><pre id="results"></pre>
+<body class="public-page"><main><!-- PRODUCTION_GALLERY_TAGS_MARKUP --></main><div id="quick-tag-fixture"></div><pre id="results"></pre>
 <script type="module">
 let assertions = 0;
 
@@ -41,6 +41,21 @@ function resolveAnimationFrame(resolve) {
 async function settle() {
     await new Promise(resolveAnimationFrame);
     await new Promise(resolveAnimationFrame);
+}
+
+/**
+ * Wait for the focused gallery card's own transform transition to finish.
+ * @param {HTMLElement} card Gallery card whose focus transform affects measurements.
+ * @return {Promise<void>} Resolves after its active transform transition and layout settle.
+ */
+async function waitForCardTransformTransition(card) {
+    const transitions = card.getAnimations().filter(animation =>
+        animation instanceof CSSTransition && animation.transitionProperty === 'transform'
+    );
+    await Promise.all(transitions.map(animation =>
+        animation.finished.catch(() => undefined)
+    ));
+    await settle();
 }
 
 /**
@@ -499,6 +514,7 @@ async function runFixture() {
     check(nativeHeroCollapse.ok && !heroDetails.open, 'native hero summary also closes without the module');
 
     summary.focus({preventScroll: true});
+    await waitForCardTransformTransition(capped);
     const beforeModuleExpand = await fetch('/__key?key=Enter');
     check(beforeModuleExpand.ok, 'trusted Enter key reaches the server-rendered native summary before disclosure module startup');
     await settle();
@@ -509,6 +525,7 @@ async function runFixture() {
     const beforeModuleCollapse = await fetch('/__key?key=Enter');
     check(beforeModuleCollapse.ok, 'second trusted Enter key reaches the server-rendered native summary before disclosure module startup');
     await settle();
+    await waitForCardTransformTransition(capped);
     check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'native keyboard collapse restores pre-script geometry');
 
     displayAll.scrollIntoView({block: 'center'});
@@ -575,8 +592,10 @@ async function runFixture() {
     summary.click();
     const clickedCloseFinished = await waitForDisclosureClose(details);
     await settle();
+    await waitForCardTransformTransition(capped);
     check(clickedCloseFinished && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'animated summary collapse finishes and restores the original compact card geometry');
     summary.focus({preventScroll: true});
+    await waitForCardTransformTransition(capped);
     const keyboard = await fetch('/__key?key=Enter');
     check(keyboard.ok, 'trusted Enter key reaches native summary');
     await settle();
@@ -596,6 +615,7 @@ async function runFixture() {
     await settle();
     check(escapeStartedClosing, 'Escape synchronously starts closing the public-info panel and restores accessible summary focus');
     const escapedCloseFinished = await waitForDisclosureClose(details);
+    await waitForCardTransformTransition(capped);
     check(escapedCloseFinished && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'Escape finishes closing the public-info panel and restores the original card geometry');
     const refreshedHero = heroRoot.cloneNode(true);
     heroRoot.replaceWith(refreshedHero);
@@ -611,13 +631,779 @@ async function runFixture() {
     const outsideCloseFinished = await waitForDisclosureClose(details);
     check(outsideCloseFinished, 'outside click dismisses the shared panel');
     check(document.documentElement.scrollWidth <= 390, 'narrow viewport has no horizontal page overflow');
+    await runQuickPhotoTagInteractions();
+    await runSmartPhotoTagRefresh();
     document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' gallery tag assertions; rows1 card=' + beforeInit.card[0] + 'x' + beforeInit.card[1] + ' cap=' + cappedContent.clientHeight + 'px scroll=' + cappedContent.scrollHeight + 'px; rows5 cap=' + fiveContent.clientHeight + 'px scroll=' + fiveContent.scrollHeight + 'px; hero rows1 cap=' + refreshedHeroContent.clientHeight + 'px scroll=' + refreshedHeroContent.scrollHeight + 'px; JS geometry deltas card/rows5/hero=0; display-all pre/post-init delta=0; initial=' + displayAllInitialContext + '; pre-init=' + displayAllModuleContext;
   } catch (error) {
       document.getElementById('results').textContent = 'BROWSER FAIL ' + error.message + '\n' + error.stack;
   }
 }
+
 /**
- * Display a bounded fixture failure without exposing application state.
+ * Exercise canonical Smart Gallery result refresh after direct-tag mutations.
+ * @returns {Promise<void>} Resolves after leave/enter membership and view-state checks pass.
+ */
+async function runSmartPhotoTagRefresh() {
+    const {completeAdminMutation} = await import(
+        '/public/assets/gallery-modules/admin-mutation-completion.js'
+    );
+    const host = document.createElement('section');
+    host.innerHTML = smartGalleryResultMarkup(4, '', 'Page 2 of 4');
+    document.body.append(host);
+    let orderRefreshes = 0;
+    const refreshRequests = [];
+    host.addEventListener('publicGalleryPhotoOrderChanged', () => { orderRefreshes += 1; });
+
+    /**
+     * Return one authoritative server-rendered Smart result response.
+     * @param {string} markup Fresh Smart Gallery HTML.
+     * @returns {{ok:true,status:200,text:function():Promise<string>}} Fetch-compatible response.
+     */
+    function renderResponse(markup) {
+        return {
+            ok: true,
+            status: 200,
+            /**
+             * Return the rendered response body markup.
+             * @returns {Promise<string>} Resolves with the rendered response markup.
+             */
+            async text() {
+                return markup;
+            },
+        };
+    }
+
+    /**
+     * Build the canonical typed mutation envelope returned by quick photo tags.
+     * @param {number[]} tagIds Authoritative direct image tag ids.
+     * @returns {{
+     *     ok:true,
+     *     mutation:{type:string,entity:string,action:string,entity_ids:number[]},
+     *     contexts:Array<{type:string,gallery_id:number,render_url:string,
+     *     postcondition:{type:string,image_id:number,tag_ids:number[]}}>
+     * }} Valid mutation envelope.
+     */
+    function envelope(tagIds) {
+        return {
+            ok: true,
+            mutation: {type: 'image.tag', entity: 'image', action: 'remove', entity_ids: [702]},
+            contexts: [{
+                type: 'gallery', gallery_id: 31, render_url: '/gallery/source',
+                postcondition: {type: 'image_tags', image_id: 702, tag_ids: tagIds},
+            }],
+        };
+    }
+
+    try {
+        const leave = await completeAdminMutation(envelope([]), {
+            documentRoot: host,
+            currentUrl: 'https://gallery.test/smart/favorites?page=2&sort=title',
+            retryDelays: [0],
+            fetchImpl: async (url, options) => {
+                refreshRequests.push({url: new URL(url), options});
+                return renderResponse(smartGalleryResultMarkup(3, '', 'Page 2 of 3'));
+            },
+        });
+        check(leave.synchronized, 'photo-tag removal refreshes the visible Smart Gallery context');
+        check(
+            !host.querySelector('[data-image-id="702"]'),
+            'photo leaving the direct-tag query disappears from results',
+        );
+        check(
+            host.querySelector('[data-result-count]')?.textContent === '3',
+            'leave refresh installs the authoritative count',
+        );
+        check(
+            host.querySelector('[data-pagination]')?.textContent === 'Page 2 of 3',
+            'leave refresh updates pagination while retaining page state',
+        );
+        check(
+            refreshRequests[0]?.options.cache === 'no-store'
+                && refreshRequests[0].url.searchParams.has('_panel_refresh'),
+            'Smart membership refresh uses canonical no-store cache-busted HTML',
+        );
+        check(
+            orderRefreshes === 1,
+            'Smart result replacement notifies the active lightbox order owner',
+        );
+
+        const enterEnvelope = envelope([9]);
+        enterEnvelope.mutation.action = 'add';
+        const enter = await completeAdminMutation(enterEnvelope, {
+            documentRoot: host,
+            currentUrl: 'https://gallery.test/smart/favorites?page=2&sort=title',
+            retryDelays: [0],
+            fetchImpl: async (url, options) => {
+                refreshRequests.push({url: new URL(url), options});
+                return renderResponse(smartGalleryResultMarkup(
+                    4,
+                    '[{"id":9,"name":"danik","slug":"danik"}]',
+                    'Page 2 of 4',
+                ));
+            },
+        });
+        check(enter.synchronized, 'photo-tag addition verifies the direct-tag postcondition');
+        check(
+            host.querySelector('[data-image-id="702"]'),
+            'matching photo enters the rendered Smart Gallery results',
+        );
+        check(
+            host.querySelector('[data-result-count]')?.textContent === '4',
+            'enter refresh installs the new result count',
+        );
+        check(
+            host.querySelector('[data-pagination]')?.textContent === 'Page 2 of 4',
+            'enter refresh preserves the current page and filter URL',
+        );
+        check(
+            orderRefreshes === 2,
+            'each canonical Smart Gallery replacement refreshes viewer navigation',
+        );
+        const unrelatedPage = document.createElement('section');
+        let unrelatedFetches = 0;
+        const unrelated = await completeAdminMutation(envelope([9]), {
+            documentRoot: unrelatedPage,
+            currentUrl: 'https://gallery.test/about',
+            retryDelays: [0],
+            fetchImpl: async () => { unrelatedFetches += 1; return renderResponse(''); },
+        });
+        check(
+            unrelated.synchronized && unrelatedFetches === 0,
+            'photo-tag mutations do not refresh unrelated pages',
+        );
+    } finally {
+        host.remove();
+    }
+}
+
+/**
+ * Render a minimal authoritative Smart Gallery query for mutation-coordinator coverage.
+ * @param {number} count Current direct-rule result count.
+ * @param {string} tags Serialized direct tags for optional matching photo.
+ * @param {string} pageLabel Current pagination state.
+ * @returns {string} Self-contained Smart Gallery result markup.
+ */
+function smartGalleryResultMarkup(count, tags, pageLabel) {
+    const photo = tags === ''
+        ? ''
+        : `<article data-lightbox-source data-image-id="702"`
+            + ` data-lightbox-index="1" data-quick-photo-tag-card`
+            + ` data-quick-photo-tags='${tags}'></article>`;
+    return `<div data-smart-gallery-query data-smart-gallery-id="515">`
+        + `<div data-smart-gallery-results data-smart-gallery-id="515">`
+        + `<output data-result-count>${count}</output>`
+        + `<nav data-pagination>${pageLabel}</nav>`
+        + `<div data-lightbox-config data-lightbox-total="${count}"`
+        + ` data-lightbox-endpoint="/smart/favorites/lightbox"></div>`
+        + `<section data-gallery-image-list>${photo}</section>`
+        + `<nav data-pagination>${pageLabel}</nav></div></div>`;
+}
+
+/**
+ * Exercise the compact add-only quick row, viewer shortcuts, and remembered state.
+ * @returns {Promise<void>} Resolves after interaction invariants pass.
+ */
+async function runQuickPhotoTagInteractions() {
+    const fixture = document.getElementById('quick-tag-fixture');
+    fixture.innerHTML = [
+        '<button data-quick-photo-tag-trigger data-quick-photo-tag-card',
+        ' data-image-id="701" data-source-gallery-id="31"',
+        ' data-quick-tag-enabled="1" data-quick-photo-tags="[]"></button>',
+        '<button data-quick-photo-tag-trigger data-quick-photo-tag-card',
+        ' data-image-id="702" data-source-gallery-id="32"',
+        ' data-quick-tag-enabled="1" data-quick-photo-tags="[]"></button>',
+        '<section data-lightbox class="lightbox" hidden>',
+        '<button class="lightbox-quick-photo-tag-button"',
+        ' data-quick-photo-tag-trigger data-quick-photo-tag-viewer',
+        ' hidden data-quick-tag-available="0" aria-expanded="false"></button>',
+        '<button class="lightbox-quick-photo-tag-button lightbox-hud"',
+        ' data-quick-photo-tag-trigger data-quick-photo-tag-viewer',
+        ' hidden data-quick-tag-available="0" aria-expanded="false"></button>',
+        '</section>',
+        '<section data-quick-photo-tag-popover hidden role="dialog"',
+        ' aria-label="Photo tags" data-quick-tag-url="/__quick_tag"',
+        ' data-quick-tag-csrf="fixture"',
+        ' data-quick-photo-tag-catalog=',
+        '\'[ {&quot;id&quot;:9,&quot;name&quot;:&quot;danik&quot;,',
+        '&quot;slug&quot;:&quot;danik&quot;},{&quot;id&quot;:10,',
+        '&quot;name&quot;:&quot;robert&quot;,&quot;slug&quot;:&quot;robert&quot;} ]\'',
+        ' aria-describedby="quick-status">',
+        '<input data-quick-photo-tag-input role="combobox"',
+        ' aria-expanded="false" aria-controls="quick-options">',
+        '<div id="quick-options" data-quick-photo-tag-options',
+        ' role="listbox" hidden></div>',
+        '<button data-quick-photo-tag-add>Add</button>',
+        '<button type="button" data-quick-photo-tag-close aria-label="Close photo tags">×</button>',
+        '<div id="quick-status" data-quick-photo-tag-status',
+        ' aria-live="polite"></div></section>',
+        '<button data-outside>Outside</button>',
+    ].join('');
+    const viewer = fixture.querySelector('[data-lightbox]');
+    viewer.hidden = false;
+    viewer.dataset.currentImageId = '702';
+    viewer.dataset.currentSourceGalleryId = '32';
+    viewer.dataset.currentQuickTagEnabled = '1';
+    viewer.dataset.currentQuickPhotoTags = '[]';
+    const {setupQuickPhotoTags} = await import('/public/assets/gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5');
+    setupQuickPhotoTags(document);
+    const cards = fixture.querySelectorAll('[data-quick-photo-tag-card]');
+    const popover = fixture.querySelector('[data-quick-photo-tag-popover]');
+    const input = fixture.querySelector('[data-quick-photo-tag-input]');
+    const closeControl = fixture.querySelector('[data-quick-photo-tag-close]');
+    const options = fixture.querySelector('[data-quick-photo-tag-options]');
+    const status = popover.querySelector('[data-quick-photo-tag-status]');
+    const viewerButtons = [...viewer.querySelectorAll('[data-quick-photo-tag-viewer]')];
+    const toolbarButton = viewer.querySelector(
+        '[data-quick-photo-tag-viewer]:not(.lightbox-hud)',
+    );
+    const hudButton = viewer.querySelector(
+        '[data-quick-photo-tag-viewer].lightbox-hud',
+    );
+    /**
+     * Build the real image-tag postcondition attached to a physical-gallery mutation.
+     * @param {string} imageId Physical photo identifier from the submitted form.
+     * @param {string} galleryId Expected physical source-gallery identifier.
+     * @param {Array<{id:number,name:string,slug:string}>} directTags Confirmed photo tag snapshot.
+     * @returns {Array<{type:'gallery',gallery_id:number,render_url:string,render_mode:'preserve_view',postcondition:{type:'image_tags',image_id:number,tag_ids:number[],tag_names:string[]}}>} Canonical physical gallery context.
+     */
+    const imageTagContexts = (imageId, galleryId, directTags) => [{
+        type: 'gallery',
+        gallery_id: Number(galleryId),
+        render_url: '/fixture/gallery/' + galleryId,
+        render_mode: 'preserve_view',
+        postcondition: {
+            type: 'image_tags',
+            image_id: Number(imageId),
+            tag_ids: directTags.map((tag) => tag.id),
+            tag_names: directTags.map((tag) => tag.name),
+        },
+    }];
+    check(
+        viewerButtons.every((button) => !button.hidden
+            && button.dataset.imageId === '702'
+            && button.dataset.sourceGalleryId === '32'),
+        'quick-tag setup hydrates an already-active viewer after deferred loading',
+    );
+    viewer.addEventListener('quickPhotoTagFocus', () => {
+        viewer.classList.add('is-ui-visible');
+    });
+    const added = [];
+    let concurrentNoop = false;
+    let errorOnlyResponse = false;
+    let serverFailureResponse = false;
+    let invalidMutationResponse = false;
+    let requestContractChecked = false;
+    sessionStorage.removeItem('gallery.quickPhotoTag.lastAdded');
+    const originalFetch = window.fetch;
+    window.fetch = async (url, options) => {
+        const body = options.body;
+        if (!requestContractChecked) {
+            requestContractChecked = true;
+            const headers = new Headers(options.headers);
+            check(
+                url === '/__quick_tag' && options.method === 'POST',
+                'quick tagging posts to the prepared Admin mutation URL',
+            );
+            check(
+                options.credentials === 'same-origin',
+                'quick-tag requests retain the authenticated same-origin session',
+            );
+            check(
+                body instanceof FormData
+                    && body.get('csrf_token') === 'fixture'
+                    && !body.has('_token'),
+                'quick-tag request sends the exact csrf_token field accepted by verify_csrf',
+            );
+            check(headers.get('Accept') === 'application/json'
+                && headers.get('X-Requested-With') === 'XMLHttpRequest',
+            'quick-tag requests ask for the canonical JSON envelope',
+            );
+        }
+        const imageId = body.get('image_id');
+        const source = cards[Number(imageId) === 701 ? 0 : 1];
+        const tags = JSON.parse(source.dataset.quickPhotoTags);
+        const tagId = Number(body.get('tag_id') || 9);
+        const catalog = JSON.parse(popover.dataset.quickPhotoTagCatalog);
+        const name = body.get('tag_name')
+            || catalog.find((tag) => Number(tag.id) === tagId)?.name
+            || 'danik';
+        if (errorOnlyResponse) {
+            errorOnlyResponse = false;
+            return {
+                ok: false,
+                status: 400,
+                /**
+                 * Decode the canonical CSRF refusal shape, which supplies `error` without `message`.
+                 * @returns {Promise<Record<string, string|boolean>>} Server error envelope.
+                 */
+                async json() {
+                    return {
+                        ok: false,
+                        error: 'The CSRF token is invalid.',
+                        error_code: 'security.invalid_csrf',
+                    };
+                },
+            };
+        }
+        if (serverFailureResponse) {
+            serverFailureResponse = false;
+            return {
+                ok: false,
+                status: 500,
+                /**
+                 * Decode a central-server exception envelope with its safe reference.
+                 * @returns {Promise<Record<string, string|boolean>>} Server error and correlation reference.
+                 */
+                async json() {
+                    return {
+                        ok: false,
+                        error: 'Internal server error.',
+                        reference: '761324E019E6821F',
+                    };
+                },
+            };
+        }
+        if (concurrentNoop && body.get('action') === 'quick_tag_add' && name === 'robert') {
+            concurrentNoop = false;
+            return {
+                ok: true,
+                /**
+                 * Decode the concurrent duplicate-add response as JSON.
+                 * @returns {Promise<Record<string, unknown>>} Resolves with the duplicate-add mutation response.
+                 */
+                async json() {
+                    return {
+                        ok: true,
+                        already_present: true,
+                        direct_tags: [...tags, {id: 10, name: 'robert', slug: 'robert'}],
+                        mutation: {
+                            type: 'image.tag',
+                            entity: 'image',
+                            action: 'add',
+                            entity_ids: [Number(imageId)],
+                        },
+                        contexts: imageTagContexts(
+                            imageId,
+                            body.get('source_gallery_id'),
+                            [...tags, {id: 10, name: 'robert', slug: 'robert'}],
+                        ),
+                    };
+                },
+            };
+        }
+        if (body.get('action') === 'quick_tag_add' && tags.some((tag) => tag.id === tagId)) {
+            return {
+                ok: true,
+                /**
+                 * Decode the already-applied tag response as JSON.
+                 * @returns {Promise<Record<string, unknown>>} Resolves with the existing-tag mutation response.
+                 */
+                async json() {
+                    return {
+                        ok: true,
+                        already_present: true,
+                        direct_tags: tags,
+                        mutation: {
+                            type: 'image.tag',
+                            entity: 'image',
+                            action: 'add',
+                            entity_ids: [Number(imageId)],
+                        },
+                        contexts: imageTagContexts(
+                            imageId,
+                            body.get('source_gallery_id'),
+                            tags,
+                        ),
+                    };
+                },
+            };
+        }
+        const nextTags = [...tags, {id: tagId, name, slug: name}];
+        if (invalidMutationResponse) {
+            invalidMutationResponse = false;
+            return {
+                ok: true,
+                /** Decode a mismatched server mutation descriptor as JSON.
+                 * @returns {Promise<Record<string, unknown>>} Resolves with an invalid remove envelope.
+                 */
+                async json() {
+                    return {
+                        ok: true,
+                        direct_tags: nextTags,
+                        changed_tag: {id: tagId, name, slug: name},
+                        mutation: {
+                            type: 'image.tag',
+                            entity: 'image',
+                            action: 'remove',
+                            entity_ids: [Number(imageId)],
+                        },
+                        contexts: imageTagContexts(
+                            imageId,
+                            body.get('source_gallery_id'),
+                            nextTags,
+                        ),
+                    };
+                },
+            };
+        }
+        if (body.get('action') === 'quick_tag_add') added.push({imageId, galleryId: body.get('source_gallery_id')});
+        return {
+            ok: true,
+            /**
+             * Decode the changed-tag response as JSON.
+             * @returns {Promise<Record<string, unknown>>} Resolves with the changed-tag mutation response.
+             */
+            async json() {
+                return {
+                    ok: true,
+                    direct_tags: nextTags,
+                    changed_tag: {id: tagId, name, slug: name},
+                    already_present: false,
+                    mutation: {
+                        type: 'image.tag',
+                        entity: 'image',
+                        action: 'add',
+                        entity_ids: [Number(imageId)],
+                    },
+                    contexts: imageTagContexts(
+                        imageId,
+                        body.get('source_gallery_id'),
+                        nextTags,
+                    ),
+                };
+            },
+        };
+    };
+    try {
+        cards[0].click();
+        check(
+            !popover.hidden && document.activeElement === input,
+            'card tag control opens and focuses the compact editor',
+        );
+        closeControl.click();
+        check(popover.hidden && document.activeElement === cards[0]
+            && added.length === 0,
+        'the adjacent close control dismisses unsaved input, restores trigger focus, and sends no mutation');
+        cards[0].click();
+        cards[0].click();
+        check(popover.hidden, 'the same photo icon toggles its popover closed');
+        cards[0].click();
+        check(!popover.hidden, 'the same photo icon can reopen its popover');
+        cards[1].click();
+        check(
+            !popover.hidden && popover.dataset.activeImageId === '702',
+            'a different photo icon rebinds the open popover to that photo',
+        );
+        cards[0].click();
+        check(
+            !popover.hidden && popover.dataset.activeImageId === '701',
+            'returning to the first photo rebinds the popover safely',
+        );
+        check(options.hidden && !popover.querySelector('[data-quick-photo-tag-current]')
+            && !popover.querySelector('[data-quick-photo-tag-remove]'),
+        'quick editor opens as one row without detail-management controls or a suggestion block');
+        const emptyTab = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        input.dispatchEvent(emptyTab);
+        check(!emptyTab.defaultPrevented, 'Tab traverses normally when no completion is active');
+        input.value = 'dan';
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+        const optionNames = [...options.querySelectorAll('[role="option"]')]
+            .map((option) => option.textContent);
+        check(
+            optionNames[0] === 'danik',
+            'quick-tag options rank the prefix match first: ' + optionNames.join(', '),
+        );
+        input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab', bubbles: true, cancelable: true}));
+        check(input.value === 'danik', 'Tab accepts highlighted completion');
+        input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true}));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        check(added.length === 1 && added[0].imageId === '701' && added[0].galleryId === '31', 'add submits the physical image and source gallery identity');
+        check(
+            cards[0].classList.contains('is-active'),
+            'successful add updates the direct-tag icon state',
+        );
+        check(
+            JSON.parse(sessionStorage.getItem('gallery.quickPhotoTag.lastAdded')).name === 'danik',
+            'successful add stores the next-photo default',
+        );
+        check(popover.hidden,
+            'confirmed successful Enter save closes the same popup after mutation synchronization');
+        cards[0].click();
+        concurrentNoop = true;
+        input.value = 'robert';
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+        input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true}));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        check(popover.hidden,
+            'server-confirmed already-present add closes the current popup without toggling the tag');
+        check(
+            JSON.parse(sessionStorage.getItem('gallery.quickPhotoTag.lastAdded')).name === 'danik',
+            'concurrent already-present no-op does not replace the last added tag',
+        );
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+        viewer.hidden = false;
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 702,
+                sourceGalleryId: 32,
+                quickTagEnabled: true,
+                quickPhotoTags: '[]',
+                slideshow: false,
+            },
+        }));
+        check(
+            viewerButtons.every((button) => !button.hidden
+                && button.dataset.imageId === '702'
+                && button.dataset.sourceGalleryId === '32'),
+            'viewer tag controls follow the active physical source',
+        );
+        check(
+            toolbarButton.getAttribute('aria-label') === 'Add photo tags',
+            'empty active-photo state uses its add label',
+        );
+        cards[1].dataset.quickPhotoTags = '[{"id":9,"name":"danik"}]';
+        const cardTagsBeforeStaleEvent = cards[0].dataset.quickPhotoTags;
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 701,
+                sourceGalleryId: 31,
+                quickTagEnabled: true,
+                quickPhotoTags: '[]',
+                slideshow: false,
+            },
+        }));
+        check(
+            cards[0].dataset.quickPhotoTags === cardTagsBeforeStaleEvent
+                && viewerButtons.every((button) => button.dataset.imageId === '702'),
+            'stale active-photo metadata cannot repaint a card or replace current viewer controls',
+        );
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 702,
+                sourceGalleryId: 31,
+                quickTagEnabled: true,
+                quickPhotoTags: '[]',
+                slideshow: false,
+            },
+        }));
+        check(
+            cards[0].dataset.quickPhotoTags === cardTagsBeforeStaleEvent
+                && viewerButtons.every((button) => button.dataset.sourceGalleryId === '32'),
+            'same-image events from another source gallery cannot replace the active photo state',
+        );
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 702,
+                sourceGalleryId: 32,
+                quickTagEnabled: true,
+                quickPhotoTags: '[{"id":9,"name":"danik"}]',
+                slideshow: false,
+            },
+        }));
+        check(
+            toolbarButton.getAttribute('aria-label') === 'Add another photo tag'
+                && hudButton.getAttribute('aria-label') === 'Add another photo tag',
+            'direct-tag state updates toolbar and fullscreen accessible labels',
+        );
+        cards[1].dataset.quickPhotoTags = '[]';
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 702,
+                sourceGalleryId: 32,
+                quickTagEnabled: true,
+                quickPhotoTags: '[]',
+                slideshow: false,
+            },
+        }));
+        cards[1].remove();
+        check(!cards[1].isConnected,
+            'lazy viewer mutation coverage proceeds without a rendered physical photo card');
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 't', bubbles: true, cancelable: true}));
+        check(!popover.hidden && popover.parentElement === viewer && document.activeElement === input, 'T opens the same popover on the viewer surface');
+        check(input.value === 'danik' && options.hidden, 'remembered tag is prepared in the single input without opening suggestions');
+        input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true}));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        check(added.length === 2 && added[1].imageId === '702' && added[1].galleryId === '32', 'T then Enter applies the remembered tag to the active source photo');
+        check(
+            JSON.parse(viewer.dataset.currentQuickPhotoTags).some((tag) => tag.name === 'danik'),
+            'a confirmed mutation advances the active lightbox tag snapshot',
+        );
+        check(popover.hidden,
+            'confirmed T then Enter save closes the current viewer editor');
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 't',
+            bubbles: true,
+            cancelable: true,
+        }));
+        input.value = 'unconfirmed';
+        invalidMutationResponse = true;
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        check(
+            !popover.hidden
+                && input.value === 'unconfirmed'
+                && status.textContent.includes('did not confirm'),
+            'mismatched remove envelope keeps the editor open with typed input',
+        );
+        check(
+            JSON.parse(viewer.dataset.currentQuickPhotoTags).some((tag) => tag.name === 'danik')
+                && JSON.parse(sessionStorage.getItem('gallery.quickPhotoTag.lastAdded')).name === 'danik',
+            'mismatched mutation action cannot replace the confirmed viewer snapshot or remembered tag',
+        );
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 't', bubbles: true, cancelable: true}));
+        check(!popover.hidden,
+            'T can reopen the viewer editor after a confirmed save');
+        let otherHandlerReached = false;
+        document.addEventListener('keydown', () => { otherHandlerReached = true; }, {capture: true, once: true});
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+        check(popover.hidden && !viewer.hidden && !otherHandlerReached, 'Escape closes quick tags before viewer shortcuts');
+        viewer.classList.add('is-fullscreen');
+        viewer.classList.remove('is-ui-visible');
+        hudButton.hidden = true;
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'T', bubbles: true, cancelable: true}));
+        check(
+            popover.hidden && !viewer.classList.contains('is-ui-visible'),
+            'ineligible fullscreen T neither opens a popup nor reveals its HUD',
+        );
+        hudButton.hidden = false;
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'T', bubbles: true, cancelable: true}));
+        check(
+            !popover.hidden
+                && popover.parentElement === viewer
+                && viewer.classList.contains('is-ui-visible'),
+            'fullscreen T reveals HUD before opening its anchored editor',
+        );
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+        check(document.activeElement === hudButton, 'fullscreen Escape restores focus to the visible HUD control');
+        viewer.classList.remove('is-fullscreen');
+        viewer.hidden = true;
+        cards[0].click();
+        check(!popover.hidden && popover.parentElement === document.body, 'card reopen reparents the shared popover out of the closed lightbox');
+        fixture.querySelector('[data-outside]').click();
+        check(popover.hidden, 'outside activation closes the compact row without intercepting the clicked control');
+        cards[0].click();
+        input.value = 'fresh-error';
+        errorOnlyResponse = true;
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        check(
+            status.textContent === 'The CSRF token is invalid.',
+            'canonical error-only JSON is shown instead of the generic save fallback: '
+                + status.textContent,
+        );
+        check(
+            JSON.parse(sessionStorage.getItem('gallery.quickPhotoTag.lastAdded')).name === 'danik',
+            'a rejected response does not replace the successfully added session default',
+        );
+        serverFailureResponse = true;
+        input.value = 'server-failure';
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        check(
+            status.textContent.includes('HTTP 500')
+                && status.textContent.includes('761324E019E6821F')
+                && !status.querySelector('a,script'),
+            'HTTP 500 keeps the safe server reference in plain localized status text',
+        );
+        check(
+            JSON.parse(sessionStorage.getItem('gallery.quickPhotoTag.lastAdded')).name === 'danik',
+            'an unconfirmed server failure does not replace the last successful tag',
+        );
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+        viewer.hidden = false;
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 702,
+                sourceGalleryId: 32,
+                quickTagEnabled: true,
+                quickPhotoTags: '[]',
+                slideshow: false,
+            },
+        }));
+        input.focus();
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 't',
+            bubbles: true,
+            cancelable: true,
+        }));
+        check(popover.hidden, 'T is ignored when a text field has focus');
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 't',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+        }));
+        check(popover.hidden, 'modified T does not open the photo tag dialog');
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 't',
+            isComposing: true,
+            bubbles: true,
+            cancelable: true,
+        }));
+        check(popover.hidden, 'IME composition does not open the photo tag dialog');
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 't',
+            bubbles: true,
+            cancelable: true,
+        }));
+        check(!popover.hidden, 'T remains available from normal viewer browsing');
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagSlideshowChanged', {bubbles: true, detail: {active: true}}));
+        check(popover.hidden && viewerButtons.every((button) => button.hidden), 'slideshow closes quick tags and hides its controls');
+        viewer.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: 702,
+                sourceGalleryId: 32,
+                quickTagEnabled: true,
+                quickPhotoTags: viewer.dataset.currentQuickPhotoTags,
+                slideshow: false,
+            },
+        }));
+        check(
+            toolbarButton.getAttribute('aria-label') === 'Add another photo tag',
+            'returning from slideshow preserves the authoritative post-mutation tag state: '
+                + toolbarButton.getAttribute('aria-label') + ' / '
+                + viewer.dataset.currentQuickPhotoTags,
+        );
+    } finally {
+        window.fetch = originalFetch;
+        fixture.replaceChildren();
+        sessionStorage.removeItem('gallery.quickPhotoTag.lastAdded');
+    }
+}
+
+/** Display a bounded fixture failure without exposing application state.
  * @param {Error} error Browser assertion failure.
  * @return {void} Writes the failure and stack to the fixture result node.
  */

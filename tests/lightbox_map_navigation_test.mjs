@@ -67,10 +67,14 @@ function fixture() {
     const opened = [];
     const navigated = [];
     const timers = [];
-    const overlay = new Element();
+    const overlay = new Element({currentImageId: '1'});
     const split = new Element();
     split.hidden = true;
     const mapOverlay = new Element();
+    const lightboxConfig = new Element({
+        lightboxEndpoint: '/index.php?page=gallery_lightbox_data&id=7',
+        lightboxTotal: '200',
+    });
     const context = vm.createContext({
         AbortController, DOMException, URL, HTMLElement: Element, Element,
         controller: new AbortController(), mapPhotoNavigationController: null,
@@ -79,11 +83,18 @@ function fixture() {
         cards: Array.from({length: 200}, (_, i) => i === 0 ? visible : null),
         lightboxNavigation: createLightboxNavigationLifecycle(),
         lightboxEndpoint: '/index.php?page=gallery_lightbox_data&id=7', lightboxTotal: 200, lightboxWindowSize: 60,
+        lightboxOrderRefreshGeneration: 0,
         overlay, lightboxMapSplit: split, lightboxMapSplitCanvas: null, fullscreen: false,
         clearLightboxSplitMapRuntime() {}, clearFullscreenMapImageFit() {}, scheduleLightboxZoomReclamp() {},
+        /**
+         * Accept active-photo counter updates without rendering presentation markup.
+         * @return {void} Keeps this navigation fixture limited to order ownership.
+         */
+        updateLightboxCounters() {},
         document: {
             querySelectorAll: selector => selector === '[data-lightbox-image]' ? [visible] : [],
-            querySelector: () => mapOverlay,
+            querySelector: selector => selector === '[data-lightbox-config]'
+                ? lightboxConfig : mapOverlay,
             createElement: () => new Element(),
             body: {classList: {remove() {}}},
         },

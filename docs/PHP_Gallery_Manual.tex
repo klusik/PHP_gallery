@@ -883,6 +883,38 @@ From the~Trash panel, choose \ui{Restore}, \ui{Delete permanently}, or~\ui{Empty
 
 A~Smart Gallery is~a~saved query, not~a~folder. Open \ui{Admin > Galleries > Smart Galleries}, add conditions, and~combine them with nested \ui{AND}, \ui{OR}, and~\ui{NOT} groups. Fields cover source galleries and~descendants, tags, capture dates, EXIF/GPS, text, AI metadata, duplicate state, file characteristics, and~private editorial ratings.
 
+Use the~existing \ui{Tag} condition when a~rule should include photo tags and~tags
+assigned to~the~physical gallery or~an~applicable ancestor. Add a~\ui{Photo tag}
+condition to~match only tags assigned directly to~each photo. Its~operators for
+one tag, its~absence, any or~all selected tags, and~untagged photos ignore
+gallery, music, and~PDF assignments. The~all-tags condition requires every
+selected tag on~the~same photo. Existing saved \ui{Tag} rules keep their~previous
+results and~the~rule format does not~need a~version change. Where the~typed tag
+schema is~available, photo-only conditions accept image-category tags; confirmed
+legacy schemas without that column still use direct image assignments, while
+an~unknown schema blocks the~condition safely.
+
+When inline administration is~enabled for~a~signed-in administrator, a~single-row
+quick-add field appears on~eligible photo cards and~in~the~normal lightbox/fullscreen
+viewer. It~adds one direct photo tag. The~last successfully added tag is~prefilled in
+the~same field for~the~next photo, but~opening a~photo never applies it~automatically.
+Eligible photo cards also show a~passive preview of~the~first three direct tags.
+If~more tags exist, a~fourth non-clickable \texttt{…} chip indicates that others
+are~omitted; a~small horizontal gap separates the~chips.
+Suggestions appear only while typing; use \ui{Enter} or~the~small add control to~apply
+the~selected or~new tag. The~adjacent close control or~clicking the~same tag button again
+dismisses the~row without applying the~current input. The~row does~not~show a~tag list or~removal controls; use
+the~existing photo-edit pencil to~inspect or~remove tags. Press \ui{T} while viewing a~photo
+to~focus the~add field. The~row closes after the~server confirms the~add and~the~view synchronizes;
+a~rejected, unconfirmed, or~saved-but-unrefreshed result keeps it~open with the~entered value.
+In~the~ordinary lightbox, \ui{Escape} closes
+the~row. In~native fullscreen, browsers that support page handling of~\ui{Escape} let the~first
+press close the~row while the~viewer remains fullscreen; the~next press exits fullscreen.
+If~that support is~unavailable or~rejected, native fullscreen may~exit first and~the~row closes
+with it. Quick adding is~not~available in~slideshow/presentation mode or
+document/PDF viewers. In~a~Smart Gallery, a~tag change applies to~the~authorized physical
+source photo and~the~saved rule results update dynamically.
+
 Use \ui{Preview} to~see the~current match count and~real matching photo cards, then save and~optionally publish. Images and~files remain in~their physical galleries, so~metadata or~rating changes alter membership immediately. The~editorial rating is~private and~independent from visitor voting. Administrators may~also use \ui{Save search as~Smart Gallery} from public search.
 
 Choose \ui{Unlisted} for~URL-only access, \ui{Root gallery} to~show the~Smart Gallery on~the~homepage, or~\ui{Subgallery placement} to~let physical galleries attach it. In~each physical gallery editor, select whether an~attachment belongs \ui{Above gallery content} or~\ui{Below gallery content} and~give it~an~order value. Above attachments render first, then ordinary subgalleries and~photos, then Below attachments. Equal order values are~resolved consistently by~Smart Gallery ID. Existing attachments default to~Below with order~0.

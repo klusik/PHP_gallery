@@ -372,6 +372,7 @@
 
 /* Cards use the same saved tag limit and measured row scrollbar as gallery headers. */
 .public-page .gallery-card-tags {
+    --gallery-card-chip-inline-padding: 0.38rem;
     position: relative;
     display: grid;
     gap: .3rem;
@@ -825,22 +826,76 @@
 }
 
 /* Keeps photo metadata tags aligned with the compact hero tags. */
-.image-stage > .image-meta-overlay .tag-list {
-    gap: 0.28rem;
+.image-stage > .image-meta-overlay .public-photo-tag-footer .tag-list {
+    display: flex;
+    gap: 4px;
     max-height: 1.45rem;
     margin: 0.28rem 0 0;
     overflow: hidden;
 }
 
-.image-stage > .image-meta-overlay .tag {
-    padding: 0.1rem 0.42rem;
-    border-color: var(--accent);
-    border-radius: var(--radius, 16px);
-    background: var(--panel);
+.public-page .gallery-image-grid .public-photo-tag-footer .tag {
+    padding: 0.08rem 0.38rem;
+}
+
+/* Keep photo, card, and hero tag pills on one shared compact visual treatment. */
+.public-page .gallery-image-grid .public-photo-tag-footer .tag,
+.public-page .gallery-card-tags .gallery-card-tag-preview > .tag,
+.public-page .hero .tag {
+    border: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--panel) 62%, transparent);
     color: var(--accent-dark);
     font-size: 0.76rem;
     line-height: 1.35;
     white-space: nowrap;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+/* Match gallery-card and hero tag spacing to the photo metadata row. */
+.public-page .gallery-card-body .gallery-card-tags[data-hero-tags]
+    .gallery-card-tag-preview {
+    gap: 4px;
+    margin-inline-start: calc(
+        0px - var(--gallery-card-chip-inline-padding) - 1px
+    );
+}
+
+.public-page .gallery-card-body .gallery-card-tags .gallery-card-tag-preview
+    > .tag {
+    padding: 0.08rem var(--gallery-card-chip-inline-padding);
+    background: color-mix(in srgb, var(--panel) 62%, transparent);
+    font-size: 0.76rem;
+}
+
+.public-page .hero .tag-list {
+    gap: 4px;
+}
+
+.public-page .hero .tag-list > .tag {
+    padding: 0.08rem 0.38rem;
+}
+
+/* Keep the hero's outer frame while removing the nested tag-row panel. */
+.public-page .hero .hero-tags[data-hero-tags] {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Keep a tag-only photo footer to its chips instead of stretching a blank panel across the image. */
+.image-stage > .image-meta-overlay:has(> .public-photo-tag-footer:only-child) {
+    left: 0.5rem;
+    right: auto;
+    width: fit-content;
+    max-width: calc(100% - 3.25rem);
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
 }
 
 /* Gives the metadata overlay more room on narrow screens where the vote badge is less likely to overlap. */

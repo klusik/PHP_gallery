@@ -833,6 +833,203 @@ td {
     z-index: 16;
 }
 
+.quick-photo-tag-trigger-card {
+    position: absolute;
+    top: 0.55rem;
+    left: 7.9rem;
+}
+
+.quick-photo-tag-trigger.is-empty {
+    opacity: 0.72;
+}
+
+.quick-photo-tag-trigger.is-active {
+    color: var(--panel);
+}
+
+.quick-photo-tag-trigger.is-active::after {
+    position: absolute;
+    top: 0.18rem;
+    right: 0.18rem;
+    width: 0.34rem;
+    height: 0.34rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 82%, transparent);
+    border-radius: 50%;
+    background: var(--accent);
+    content: '';
+}
+
+.quick-photo-tag-trigger svg,
+.lightbox-quick-photo-tag-button svg,
+.public-page .public-reorder-handle svg {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.public-page .image-card.has-public-reorder-handle .public-reorder-handle,
+.public-page .image-card .public-admin-card-action-button,
+.public-page .image-card .public-admin-edit-button-card {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius, 16px);
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    line-height: 1;
+}
+
+.public-page .image-card.has-public-reorder-handle .public-reorder-handle,
+.public-page .image-card .public-admin-card-action-button,
+.public-page .image-card .public-admin-edit-button-card {
+    color: var(--panel, #fffdf8);
+    filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.9));
+}
+
+.public-page .image-card .public-admin-card-action-button span[aria-hidden="true"],
+.public-page .image-card .public-admin-edit-button-card span[aria-hidden="true"] {
+    font-size: 1.125rem;
+}
+
+.public-page .image-card .public-admin-visibility-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.public-page .image-card .public-admin-visibility-eye {
+    font-size: 1.125rem;
+}
+
+.public-page .image-card.has-public-reorder-handle .public-reorder-handle:hover,
+.public-page .image-card.has-public-reorder-handle .public-reorder-handle:focus-visible,
+.public-page .image-card.has-public-reorder-handle .public-reorder-handle.is-dragging,
+.public-page .image-card .public-admin-card-action-button:hover,
+.public-page .image-card .public-admin-card-action-button:focus-visible,
+.public-page .image-card .public-admin-edit-button-card:hover,
+.public-page .image-card .public-admin-edit-button-card:focus-visible {
+    border-color: color-mix(in srgb, var(--panel) 58%, transparent);
+    background: color-mix(in srgb, var(--ink) 42%, transparent);
+    color: var(--panel, #fffdf8);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+    filter: none;
+    outline: none;
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+}
+
+.public-page .image-card .public-admin-card-action-button:focus-visible,
+.public-page .image-card.has-public-reorder-handle .public-reorder-handle:focus-visible,
+.public-page .image-card .public-admin-edit-button-card:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 76%, var(--panel));
+    outline-offset: 2px;
+}
+
+.quick-photo-tag-popover {
+    position: fixed;
+    z-index: 60;
+    width: min(17rem, calc(100vw - 1rem));
+    max-height: calc(100dvh - 1rem);
+    padding: 0.28rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 58%, var(--ink));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--panel, #fffdf8) 80%, transparent);
+    color: var(--ink, #241b15);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    backdrop-filter: blur(14px) saturate(1.2);
+}
+
+.quick-photo-tag-popover[hidden] {
+    display: none !important;
+}
+
+.quick-photo-tag-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.quick-photo-tag-entry button {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 2rem;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--panel) 74%, transparent);
+    color: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.quick-photo-tag-entry input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 0;
+    height: 2rem;
+    min-height: 2rem;
+    padding: 0 0.5rem;
+    font-size: 0.88rem;
+}
+
+.quick-photo-tag-options {
+    display: grid;
+    position: absolute;
+    top: calc(100% + 0.2rem);
+    right: 0;
+    left: 0;
+    max-height: min(7rem, calc(100dvh - 3rem));
+    overflow: auto;
+    border: 1px solid color-mix(in srgb, var(--panel) 58%, var(--ink));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--panel, #fffdf8) 84%, transparent);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.quick-photo-tag-options[hidden] {
+    display: none !important;
+}
+
+.quick-photo-tag-options [role="option"] {
+    min-height: 1.75rem;
+    padding: 0.22rem 0.45rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    font-size: 0.84rem;
+}
+
+.quick-photo-tag-options [aria-selected="true"] {
+    background: color-mix(in srgb, var(--accent, #a5481c) 14%, var(--panel));
+}
+
+.quick-photo-tag-status {
+    min-height: 1em;
+    margin: 0.12rem 0.2rem 0;
+    font-size: 0.72rem;
+    line-height: 1.1;
+}
+
+.quick-photo-tag-status:empty {
+    display: none;
+}
+
 .public-admin-visibility-menu summary {
     list-style: none;
 }
@@ -1020,9 +1217,11 @@ td {
 .public-page .gallery-card .public-admin-edit-button-card,
 .public-page .gallery-card .public-admin-delete-form-card,
 .public-page .gallery-card .public-admin-visibility-menu-card,
+.public-page .gallery-card .quick-photo-tag-trigger-card,
 .public-page .image-card .public-admin-edit-button-card,
 .public-page .image-card .public-admin-delete-form-card,
-.public-page .image-card .public-admin-visibility-menu-card {
+.public-page .image-card .public-admin-visibility-menu-card,
+.public-page .image-card .quick-photo-tag-trigger-card {
     opacity: 0.96;
 }
 
@@ -1030,9 +1229,11 @@ td {
     .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-edit-button-card,
     .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-delete-form-card,
     .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-visibility-menu-card,
+    .public-page .gallery-card:not(:hover):not(:focus-within) .quick-photo-tag-trigger-card,
     .public-page .image-card:not(:hover):not(:focus-within) .public-admin-edit-button-card,
     .public-page .image-card:not(:hover):not(:focus-within) .public-admin-delete-form-card,
-    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-visibility-menu-card {
+    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-visibility-menu-card,
+    .public-page .image-card:not(:hover):not(:focus-within) .quick-photo-tag-trigger-card {
         opacity: 0.76;
     }
 }
@@ -1057,27 +1258,22 @@ td {
 }
 
 /* Moves edit/delete card icons below the public reorder handle on compact cards. */
-.public-page .gallery-card.has-public-reorder-handle .public-admin-delete-form-card,
-.public-page .image-card.has-public-reorder-handle .public-admin-delete-form-card {
+.public-page .gallery-card.has-public-reorder-handle .public-admin-delete-form-card {
     top: 3.05rem;
 }
 
 .public-page .gallery-card.has-public-reorder-handle .public-admin-edit-button-card,
-.public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card,
-.public-page .gallery-card.has-public-reorder-handle .public-admin-visibility-menu-card,
-.public-page .image-card.has-public-reorder-handle .public-admin-visibility-menu-card {
+.public-page .gallery-card.has-public-reorder-handle .public-admin-visibility-menu-card {
     top: 3.05rem;
 }
 
 @media (max-width: 640px) {
     .public-page .gallery-card.has-public-reorder-handle .public-admin-delete-form-card,
-    .public-page .image-card.has-public-reorder-handle .public-admin-delete-form-card,
     .public-page .gallery-card.has-public-reorder-handle .public-admin-edit-button-card,
-    .public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card,
-    .public-page .gallery-card.has-public-reorder-handle .public-admin-visibility-menu-card,
-    .public-page .image-card.has-public-reorder-handle .public-admin-visibility-menu-card {
+    .public-page .gallery-card.has-public-reorder-handle .public-admin-visibility-menu-card {
         top: 3.25rem;
     }
+
 }
 
 /* Lets the browser skip offscreen public cards until they approach the viewport. */
@@ -1393,17 +1589,6 @@ td {
     background: var(--accent);
     color: #fffdf8;
     border-color: var(--accent-dark);
-}
-
-.public-page .image-card.has-picture-manager-select .public-photo-reorder-handle {
-    left: 2.65rem;
-    max-width: calc(100% - 3.05rem);
-}
-
-.public-page .image-card.has-picture-manager-select .public-admin-delete-form-card,
-.public-page .image-card.has-picture-manager-select .public-admin-edit-button-card,
-.public-page .image-card.has-picture-manager-select .public-admin-visibility-menu-card {
-    top: 2.65rem;
 }
 
 .image-card.is-picture-manager-selected {
@@ -2362,6 +2547,310 @@ body.gallery-download-modal-open {
 
 .public-page .gallery-card.has-picture-manager-select .public-admin-delete-form-card,
 .public-page .gallery-card.has-picture-manager-select .public-admin-edit-button-card,
-.public-page .gallery-card.has-picture-manager-select .public-admin-visibility-menu-card {
+.public-page .gallery-card.has-picture-manager-select .public-admin-visibility-menu-card,
+.public-page .gallery-card.has-picture-manager-select .quick-photo-tag-trigger-card {
     top: 2.65rem;
+}
+
+/* Keep gallery-card Admin and selection actions in the same compact toolbar. */
+.public-page .gallery-card > .public-gallery-card-action-row {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    max-width: calc(100% - 1rem);
+    flex-wrap: nowrap;
+    pointer-events: none;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > *,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card {
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    pointer-events: auto;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .picture-manager-gallery-select-button {
+    order: 0;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle {
+    order: 1;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-form-card {
+    order: 2;
+    display: flex;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card {
+    order: 3;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-visibility-menu-card {
+    order: 4;
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-button,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-form-card > .public-admin-delete-button,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card,
+.public-page .gallery-card .public-gallery-card-action-row > .picture-manager-gallery-select-button,
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-visibility-menu-card > .public-admin-visibility-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius, 16px);
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    color: var(--panel, #fffdf8);
+    filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.9));
+    line-height: 1;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle svg {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row .public-admin-visibility-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row .public-admin-visibility-eye {
+    font-size: 1.125rem;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-form-card > .public-admin-delete-button span[aria-hidden="true"],
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card span[aria-hidden="true"],
+.public-page .gallery-card .public-gallery-card-action-row > .picture-manager-gallery-select-button span[aria-hidden="true"] {
+    font-size: 1.125rem;
+    line-height: 1;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-form-card > .public-admin-delete-button:hover,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-form-card > .public-admin-delete-button:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card:hover,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .picture-manager-gallery-select-button:hover,
+.public-page .gallery-card .public-gallery-card-action-row > .picture-manager-gallery-select-button:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle:hover,
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-visibility-menu-card > .public-admin-visibility-trigger:hover,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-visibility-menu-card > .public-admin-visibility-trigger:focus-visible {
+    border-color: color-mix(in srgb, var(--panel) 58%, transparent);
+    background: color-mix(in srgb, var(--ink) 42%, transparent);
+    color: var(--panel, #fffdf8);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+    filter: none;
+    outline: none;
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle.is-dragging {
+    border-color: color-mix(in srgb, var(--panel) 58%, transparent);
+    background: var(--accent);
+    color: var(--panel, #fffdf8);
+    filter: none;
+}
+
+.public-page .gallery-card.is-picture-manager-selected .public-gallery-card-action-row > .picture-manager-gallery-select-button,
+.public-page .gallery-card.is-picture-manager-selected .public-gallery-card-action-row > .picture-manager-gallery-select-button:hover {
+    border-color: var(--accent-dark);
+    background: var(--accent);
+    color: #fffdf8;
+    filter: none;
+}
+
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-delete-form-card > .public-admin-delete-button:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-edit-button-card:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .picture-manager-gallery-select-button:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .public-gallery-card-reorder-handle:focus-visible,
+.public-page .gallery-card .public-gallery-card-action-row > .public-admin-visibility-menu-card > .public-admin-visibility-trigger:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 76%, var(--panel));
+    outline-offset: 2px;
+}
+
+/* Keep every public photo action in one compact toolbar without changing drag ownership. */
+.public-page .image-card > .public-photo-action-row {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.12rem;
+    max-width: calc(100% - 1rem);
+    flex-wrap: nowrap;
+    pointer-events: none;
+}
+
+.public-page .image-card .public-photo-action-row > *,
+.public-page .image-card .public-photo-action-row .public-admin-edit-button-card {
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    pointer-events: auto;
+}
+
+.public-page .image-card .public-photo-action-row > .picture-manager-select-button {
+    order: 0;
+}
+
+.public-page .image-card .public-photo-action-row > .public-photo-reorder-handle {
+    order: 1;
+}
+
+.public-page .image-card .public-photo-action-row > .public-admin-delete-form-card {
+    order: 2;
+    display: flex;
+}
+
+.public-page .image-card .public-photo-action-row > .public-admin-edit-button-card {
+    order: 3;
+}
+
+.public-page .image-card .public-photo-action-row > .public-admin-visibility-menu-card {
+    order: 4;
+    position: relative;
+}
+
+.public-page .image-card .public-photo-action-row > .quick-photo-tag-trigger-card {
+    order: 5;
+}
+
+.public-page .image-card .public-photo-action-row .public-reorder-handle,
+.public-page .image-card .public-photo-action-row .picture-manager-select-button,
+.public-page .image-card .public-photo-action-row .public-admin-card-action-button,
+.public-page .image-card .public-photo-action-row .public-admin-edit-button-card {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--panel, #fffdf8);
+    filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.9));
+    line-height: 1;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+.public-page .image-card .public-photo-action-row svg,
+.public-page .image-card .public-photo-action-row .admin-menu-icon {
+    display: block;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.public-page .image-card .public-photo-action-row .public-reorder-handle {
+    max-width: none;
+    gap: 0;
+    cursor: grab;
+    font-size: 1rem;
+    font-weight: 400;
+    touch-action: none;
+    user-select: none;
+}
+
+.public-page .image-card .public-photo-action-row .public-photo-reorder-handle span:last-child {
+    display: none;
+}
+
+.public-page .image-card .public-photo-action-row .public-admin-card-action-button span[aria-hidden="true"],
+.public-page .image-card .public-photo-action-row .public-admin-edit-button-card span[aria-hidden="true"],
+.public-page .image-card .public-photo-action-row .picture-manager-select-button span[aria-hidden="true"],
+.public-page .image-card .public-photo-action-row .public-admin-visibility-eye {
+    font-size: 1.125rem;
+    line-height: 1;
+}
+
+.public-page .image-card .public-photo-action-row .public-admin-visibility-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.public-page .image-card .public-photo-action-row .public-reorder-handle:hover,
+.public-page .image-card .public-photo-action-row .public-reorder-handle:focus-visible,
+.public-page .image-card .public-photo-action-row .public-admin-card-action-button:hover,
+.public-page .image-card .public-photo-action-row .public-admin-card-action-button:focus-visible,
+.public-page .image-card .public-photo-action-row .public-admin-edit-button-card:hover,
+.public-page .image-card .public-photo-action-row .public-admin-edit-button-card:focus-visible,
+.public-page .image-card .public-photo-action-row .picture-manager-select-button:hover,
+.public-page .image-card .public-photo-action-row .picture-manager-select-button:focus-visible {
+    border-color: color-mix(in srgb, var(--panel) 58%, transparent);
+    background: color-mix(in srgb, var(--ink) 42%, transparent);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+    filter: none;
+    outline: none;
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    backdrop-filter: blur(10px) saturate(1.2);
+}
+
+.public-page .image-card .public-photo-action-row :focus:not(:focus-visible) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+}
+
+.public-page .image-card .public-photo-action-row .public-reorder-handle:focus-visible,
+.public-page .image-card .public-photo-action-row .public-admin-card-action-button:focus-visible,
+.public-page .image-card .public-photo-action-row .public-admin-edit-button-card:focus-visible,
+.public-page .image-card .public-photo-action-row .picture-manager-select-button:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 76%, var(--panel));
+    outline-offset: 2px;
+}
+
+.public-page .image-card .public-photo-action-row .public-reorder-handle.is-dragging {
+    border-color: color-mix(in srgb, var(--panel) 58%, transparent);
+    background: var(--accent);
+    color: var(--panel, #fffdf8);
+    filter: none;
+}
+
+.public-page .image-card.is-picture-manager-selected .public-photo-action-row .picture-manager-select-button,
+.public-page .image-card.is-picture-manager-selected .public-photo-action-row .picture-manager-select-button:hover {
+    border-color: var(--accent-dark);
+    background: var(--accent);
+    color: #fffdf8;
+    filter: none;
 }

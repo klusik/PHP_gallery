@@ -1155,6 +1155,8 @@ function view_render_footer(string $page = 'home', array $model = []): void
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/gallery-download.js',
             dirname(__DIR__, 2)
+                . '/public/assets/gallery-modules/quick-photo-tags.js',
+            dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/zip-stream-writer.js',
         ] : [
             $scriptPath,
@@ -1179,6 +1181,8 @@ function view_render_footer(string $page = 'home', array $model = []): void
                 . '/public/assets/gallery-modules/lightbox-votes.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/tag-suggestions.js',
+            dirname(__DIR__, 2)
+                . '/public/assets/gallery-modules/quick-photo-tags.js',
             dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/viewer-favourites.js',

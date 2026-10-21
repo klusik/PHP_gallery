@@ -30,9 +30,10 @@
  *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261018-presentation-confirm-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1';
 
 const optionalPublicModules = {
+    quickPhotoTags: './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5',
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
     backToTop: './gallery-modules/back-to-top.js?v=20261014-floating-scroll-v1',
     publicHomeSearch: './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4',
@@ -114,6 +115,11 @@ function bootPublicGalleryBrowserFeatures() {
     }
 
     runWhenDomReady(() => {
+        setupOptionalPublicFeature(
+            optionalPublicModules.quickPhotoTags,
+            'setupQuickPhotoTags',
+            '[data-quick-photo-tag-popover]'
+        );
         setupOptionalPublicFeature(optionalPublicModules.votes, 'setupVoteForms', '[data-vote-form]');
         setupOptionalPublicFeature(optionalPublicModules.backToTop, 'setupBackToTopButton', '[data-back-to-top-button]');
         setupOptionalPublicFeature(optionalPublicModules.publicHomeSearch, 'setupPublicHomeSearch', '[data-public-home-search]');

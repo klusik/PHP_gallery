@@ -105,6 +105,9 @@ return [
         'gallery_workflow_browser_test.php' => 'Uses the externally supplied shared disposable HTTP/database fixture; serialize its live Chromium session against fixture mutations.',
         'public_widget_persistence_browser_test.php' => 'Publishes and deletes a token-owned widget in the shared disposable HTTP/database fixture; isolate its real Chromium session from parallel widget mutations.',
         'gallery_workflow_integration_test.php' => 'Authenticated workflows mutate the externally supplied shared disposable HTTP/database fixture.',
+        'image_quick_tag_workflow_test.php' =>
+            'Authenticated quick-tag workflows temporarily change the shared disposable '
+            . 'HTTP/database fixture; serialize with other gallery mutations.',
         'public_visual_preview_workflow_test.php' => 'Preview requests and temporary visibility states use the externally supplied disposable HTTP/database fixture.',
         'theme_visual_background_workflow_test.php' => 'Composite CSS and Theme background HTTP saves mutate the externally supplied disposable HTTP/database and filesystem fixture.',
         'breadcrumb_workflow_integration_test.php' => 'Breadcrumb Theme/gallery saves and Trash restore mutate the shared disposable HTTP/database fixture.',

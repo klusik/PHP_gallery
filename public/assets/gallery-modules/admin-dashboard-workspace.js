@@ -12,9 +12,9 @@
  * The existing tab, bulk-action and mutation modules retain ownership of navigation and writes.
  */
 import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
-import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261016-three-state-covers-v1';
-import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261016-three-state-covers-v1';
-import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261016-readability-v1';
+import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261021-smart-photo-tags-v2';
+import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261021-smart-photo-tags-v2';
+import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261021-smart-photo-tags-v2';
 
 /**
  * Purpose: Bound one read so a stalled connection exposes an explicit retry.

@@ -883,6 +883,43 @@ Välj \ui{Återställ}, \ui{Radera permanent} eller \ui{Töm Papperskorg} i papp
 
 Ett smart galleri är en sparad fråga, inte en mapp. Öppna \ui{Administration > Gallerier > Smarta gallerier}, lägg till villkor och kombinera dem med nästlade grupper av \ui{AND}, \ui{OR} och \ui{NOT}. Fälten omfattar källgallerier och undergallerier, taggar, tagningsdatum, EXIF/GPS, text, AI-metadata, dubblettstatus, filegenskaper och privata redaktionella betyg.
 
+Använd det befintliga villkoret \ui{Tagg} när regeln ska omfatta både fototaggar
+och taggar som tilldelats fotots fysiska galleri eller ett tillämpligt övergalleri.
+Villkoret \ui{Fototagg} matchar endast taggar som tilldelats direkt till varje
+fotografi. Dess operatorer för en tagg, frånvaro av en tagg, valfri tagg eller
+alla valda taggar samt foton utan direkta taggar ignorerar galleri-, musik- och
+PDF-tilldelningar. Alla valda taggar måste vara kopplade till samma foto.
+Befintliga sparade \ui{Tagg}-regler behåller sina tidigare resultat och
+regelversionen ändras inte. När det typade taggschemat finns godtas bara taggar
+i kategorin ”image”. Bekräftat äldre schema utan den kolumnen fortsätter att
+använda direkta bildkopplingar, medan ett okänt schematillstånd blockerar
+villkoret säkert.
+
+När inlineadministration är aktiverad för en inloggad administratör visas ett
+enradigt snabbfält för direkt fototaggning på behöriga fotokort och i den vanliga
+ljuslådan/helsärmsvisaren. Den senast tillagda taggen fylls i samma fält för nästa
+foto, men att öppna ett foto tilldelar den aldrig automatiskt. Förslag visas bara
+medan du skriver; välj eller skapa en tagg och använd \ui{Enter} eller den lilla
+lägg till-knappen. Den intilliggande stängningsknappen eller ett nytt klick på samma
+taggknapp stänger raden utan att använda den aktuella texten. Raden visar ingen
+tagglista eller borttagningskontroller. Använd
+den befintliga pennan för fotoredigering för att visa eller ta bort taggar. Tryck
+på \ui{T} när du visar ett foto för att fokusera snabbfältet. Raden stängs först när
+servern har bekräftat tilläggningen och vyn har synkroniserats; vid avvisning,
+obekräftat resultat eller misslyckad uppdatering förblir den öppen med den inskrivna
+texten. I den vanliga ljuslådan stänger \ui{Escape} raden.
+I inbyggt helskärmsläge stänger första trycket raden och behåller visaren i helskärm
+när webbläsaren stöder att sidan hanterar \ui{Escape}; nästa tryck lämnar helskärmen.
+Om stödet saknas eller avvisas kan helskärmen avslutas först och raden stängs då med
+den. Snabbtillägg är inte
+tillgängligt i bildspel/presentationer eller dokument-/PDF-visare. I ett smart
+galleri ändrar åtgärden det behöriga fysiska källfotot, och reglernas resultat
+uppdateras dynamiskt.
+
+Behöriga fotokort visar även en passiv förhandsvisning av de tre första direkta
+taggarna. Om fler finns visar en fjärde icke-klickbar \texttt{…}-bricka att
+resten är utelämnade; brickorna har ett litet horisontellt mellanrum.
+
 Använd \ui{Förhandsgranska} för att se aktuellt antal träffar och riktiga bildkort som matchar, och spara sedan och publicera vid behov. Bilder och filer ligger kvar i sina fysiska gallerier, så ändringar av metadata eller betyg ändrar medlemskapet omedelbart. Det redaktionella betyget är privat och oberoende av besökarnas röstning. Administratörer kan även använda \ui{Spara sökning som smart galleri} från den offentliga sökningen.
 
 Välj \ui{Olistat} för åtkomst endast via URL, \ui{Rotgalleri} för att visa det smarta galleriet på startsidan eller \ui{Placering som undergalleri} för att låta fysiska gallerier koppla in det. I varje fysisk galleriredigerare väljer du om kopplingen hör hemma \ui{Ovanför galleriinnehållet} eller \ui{Nedanför galleriinnehållet} och anger ett ordningsvärde. Kopplingar ovanför visas först, sedan vanliga undergallerier och fotografier, och sist kopplingar nedanför. Lika ordningsvärden avgörs konsekvent med det smarta galleriets ID. Befintliga kopplingar får som standard placeringen nedanför med ordning~0.

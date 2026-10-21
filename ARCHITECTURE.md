@@ -1351,6 +1351,7 @@ Current model modules:
 | `app/models/public_search.php` | Legacy/no-phase compatibility search SQL and schema-sensitive joined row retrieval. |
 | `app/models/public_search_progressive.php` | Primary/media public-search candidate and bounded hydration SQL. |
 | `app/models/public_search_progressive/deferred.php` | Descriptive/deep gallery, translation, tag-description, and AI candidate SQL. |
+| `app/models/tags.php` | Canonical tag lookup, typed tag persistence, and targeted transactional photo-tag assignment updates. |
 
 ## Controller Layer
 
@@ -2301,7 +2302,11 @@ and defaults for `theme_hero_tag_visible_limit` (default 20, range 1 to 200),
 values after the existing Admin and CSRF checks and bumps
 `theme_public_content_revision` when this public rendering policy changes.
 
-`app/services/tag_metadata.php` owns hero usage sorting. Usage is the sum of
+`app/services/tag_metadata.php` owns tag policy, normalization, candidate slug
+generation, and hero usage sorting. `app/models/tags.php` owns tag SQL and
+transactional assignment persistence; `tag_model_mutate_image_tag_atomically()`
+locks and validates the expected physical owner, applies a targeted add/remove,
+reads back the direct tags, and commits or rolls back. Usage is the sum of
 direct `gallery_tags` and `image_tags` assignments, restricted to tag IDs
 required by the current hero. The service sorts direct and contained groups
 independently, with usage descending and natural case-insensitive name ordering
@@ -4360,6 +4365,17 @@ app/controllers/admin_logs.php
 Logs support category, severity, status, subject, request id, route, method,
 AJAX flag and fingerprint fields. This gives enough structure for an admin
 diagnostics UI without requiring an external log server.
+
+The targeted public photo-tag mutation reports persistence failures as
+`image.public_quick_tag_failed`. Its constant-message Admin event records only
+the validated physical gallery/image IDs, add/remove operation, exception
+class, and bounded PDO SQLSTATE/driver code when applicable; its subject and
+route identify the physical image and `admin_public_update_image` endpoint.
+It omits tag names, request tokens, raw SQL/PDO text, and credentials. The
+controller checks the `admin_log_event_result()` receipt and writes a fixed
+failure prefix plus the validated receipt code to PHP's configured error log
+only when Admin-log persistence fails. This preserves an operator-visible
+signal without changing the mutation response or exposing request secrets.
 
 ## Public Assets
 

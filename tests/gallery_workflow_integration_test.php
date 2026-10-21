@@ -7,7 +7,8 @@
  * Purpose: Exercise authenticated workflows against disposable application data.
  * Responsibilities:
  *   - Verify HTTP outcomes against database and original-file postconditions.
- *   - Exercise Smart music, independent media masters and storage accounting
+ *   - Exercise direct-photo Smart Gallery tag isolation and Smart music.
+ *   - Exercise independent media masters and storage accounting.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  * Real authenticated HTTP journeys with database and original-file postconditions.
@@ -274,6 +275,529 @@ try {
     );
     echo "PASS gallery workflow multipart upload metadata and original hash\n";
 
+    $stage = 'real Smart Gallery direct photo-tag scope';
+    // Three owned photos form exact same-photo vectors: both image tags, one
+    // image tag, and only deliberately mismatched music/PDF assignments.
+    $tagPhotoNames = [
+        'scope-second-' . $token . '.jpg',
+        'scope-third-' . $token . '.jpg',
+    ];
+    foreach ($tagPhotoNames as $tagPhotoName) {
+        $tagUpload = [
+            'csrf_token' => $csrf,
+            'gallery_id' => (string) $id,
+            'upload_mode' => 'existing',
+            'images[]' => new CURLFile(
+                $sample,
+                'image/jpeg',
+                $tagPhotoName,
+            ),
+            'operation_key' => $admin->operationKey(
+                '/index.php?page=admin_upload&gallery_id=' . $id,
+            ),
+        ];
+        envelope(
+            $admin->request(
+                '/index.php?page=admin_upload',
+                $tagUpload,
+                true,
+            ),
+            'Upload a photo-tag scope fixture',
+        );
+    }
+    $tagPhotoTwo = row(
+        $pdo,
+        'SELECT id FROM images WHERE gallery_id = ? AND filename = ?',
+        [$id, $tagPhotoNames[0]],
+    );
+    $tagPhotoThree = row(
+        $pdo,
+        'SELECT id FROM images WHERE gallery_id = ? AND filename = ?',
+        [$id, $tagPhotoNames[1]],
+    );
+    $tagPhotoIds = [
+        (int) $image['id'],
+        (int) ($tagPhotoTwo['id'] ?? 0),
+        (int) ($tagPhotoThree['id'] ?? 0),
+    ];
+    check(
+        min($tagPhotoIds) > 0
+            && count(array_unique($tagPhotoIds)) === count($tagPhotoIds),
+        'The real scope fixture must resolve three distinct physical photos.',
+    );
+
+    $tagRows = [];
+    foreach ([
+        ['Scope alpha', 'image'],
+        ['Scope beta', 'image'],
+        ['Scope inherited', 'image'],
+        ['Scope direct gallery', 'image'],
+        ['Scope music mismatch', 'music'],
+        ['Scope PDF mismatch', 'pdf'],
+    ] as $tagIndex => [$tagName, $mediaType]) {
+        $tagSlug = 'scope-' . $token . '-' . ($tagIndex + 1);
+        $pdo->prepare(
+            'INSERT INTO tags (name, slug, media_type, created_at, updated_at) '
+                . 'VALUES (?, ?, ?, NOW(), NOW())',
+        )->execute([$tagName, $tagSlug, $mediaType]);
+        $tagRows[$tagName] = (int) $pdo->lastInsertId();
+    }
+    $assignImageTag = $pdo->prepare(
+        'INSERT INTO image_tags (image_id, tag_id) VALUES (?, ?)',
+    );
+    foreach ([
+        [$tagPhotoIds[0], $tagRows['Scope alpha']],
+        [$tagPhotoIds[0], $tagRows['Scope beta']],
+        [$tagPhotoIds[1], $tagRows['Scope alpha']],
+        [$tagPhotoIds[2], $tagRows['Scope music mismatch']],
+        [$tagPhotoIds[2], $tagRows['Scope PDF mismatch']],
+    ] as [$tagImageId, $tagId]) {
+        $assignImageTag->execute([$tagImageId, $tagId]);
+    }
+    $pdo->prepare(
+        'INSERT INTO gallery_tags (gallery_id, tag_id) VALUES (?, ?)',
+    )->execute([
+        (int) $seed['root_id'],
+        $tagRows['Scope inherited'],
+    ]);
+    $pdo->prepare(
+        'INSERT INTO gallery_tags (gallery_id, tag_id) VALUES (?, ?)',
+    )->execute([
+        $id,
+        $tagRows['Scope direct gallery'],
+    ]);
+
+    $photoTagCases = [
+        'photo tag has one' => [
+            'field' => 'photo_tag',
+            'operator' => 'has_tag',
+            'value' => $tagRows['Scope alpha'],
+            'expected' => [$tagPhotoIds[0], $tagPhotoIds[1]],
+        ],
+        'photo tag not one' => [
+            'field' => 'photo_tag',
+            'operator' => 'not_has_tag',
+            'value' => $tagRows['Scope alpha'],
+            'expected' => [$tagPhotoIds[2]],
+        ],
+        'photo tag any' => [
+            'field' => 'photo_tag',
+            'operator' => 'has_any_tags',
+            'value' => [
+                $tagRows['Scope alpha'],
+                $tagRows['Scope beta'],
+            ],
+            'expected' => [$tagPhotoIds[0], $tagPhotoIds[1]],
+        ],
+        'photo tag all on same photo' => [
+            'field' => 'photo_tag',
+            'operator' => 'has_all_tags',
+            'value' => [
+                $tagRows['Scope alpha'],
+                $tagRows['Scope beta'],
+            ],
+            'expected' => [$tagPhotoIds[0]],
+        ],
+        'photo tag untagged ignores wrong categories' => [
+            'field' => 'photo_tag',
+            'operator' => 'untagged',
+            'expected' => [$tagPhotoIds[2]],
+        ],
+        'photo tag ignores inherited gallery assignment' => [
+            'field' => 'photo_tag',
+            'operator' => 'has_tag',
+            'value' => $tagRows['Scope inherited'],
+            'expected' => [],
+        ],
+        'photo tag negative ignores inherited gallery assignment' => [
+            'field' => 'photo_tag',
+            'operator' => 'not_has_tag',
+            'value' => $tagRows['Scope inherited'],
+            'expected' => $tagPhotoIds,
+        ],
+        'photo tag ignores direct gallery assignment' => [
+            'field' => 'photo_tag',
+            'operator' => 'has_tag',
+            'value' => $tagRows['Scope direct gallery'],
+            'expected' => [],
+        ],
+        'photo tag negative ignores direct gallery assignment' => [
+            'field' => 'photo_tag',
+            'operator' => 'not_has_tag',
+            'value' => $tagRows['Scope direct gallery'],
+            'expected' => $tagPhotoIds,
+        ],
+        'nested photo tag logic' => [
+            'node' => [
+                'type' => 'group',
+                'operator' => 'AND',
+                'children' => [
+                    [
+                        'type' => 'condition',
+                        'field' => 'photo_tag',
+                        'operator' => 'has_tag',
+                        'value' => $tagRows['Scope alpha'],
+                    ],
+                    [
+                        'type' => 'group',
+                        'operator' => 'NOT',
+                        'children' => [[
+                            'type' => 'condition',
+                            'field' => 'photo_tag',
+                            'operator' => 'has_tag',
+                            'value' => $tagRows['Scope beta'],
+                        ]],
+                    ],
+                ],
+            ],
+            'expected' => [$tagPhotoIds[1]],
+        ],
+        'legacy tag keeps inherited gallery semantics' => [
+            'field' => 'tag',
+            'operator' => 'has_tag',
+            'value' => $tagRows['Scope inherited'],
+            'expected' => $tagPhotoIds,
+        ],
+        'legacy tag keeps direct gallery semantics' => [
+            'field' => 'tag',
+            'operator' => 'has_tag',
+            'value' => $tagRows['Scope direct gallery'],
+            'expected' => $tagPhotoIds,
+        ],
+    ];
+    $scopeSmartId = 0;
+    $scopeSmartRoute =
+        '/index.php?page=smart_gallery&slug=photo-tag-scope-workflow';
+    foreach ($photoTagCases as $caseName => $case) {
+        $photoCondition = $case['node'] ?? [
+            'type' => 'condition',
+            'field' => $case['field'],
+            'operator' => $case['operator'],
+        ];
+        if (array_key_exists('value', $case)) {
+            $photoCondition['value'] = $case['value'];
+        }
+        $scopeRule = [
+            'version' => 1,
+            'root' => [
+                'type' => 'group',
+                'operator' => 'AND',
+                'children' => [
+                    [
+                        'type' => 'condition',
+                        'field' => 'gallery',
+                        'operator' => 'equals',
+                        'value' => $id,
+                    ],
+                    [
+                        'type' => 'group',
+                        'operator' => 'OR',
+                        'children' => array_map(
+                            static fn(string $filename): array => [
+                                'type' => 'condition',
+                                'field' => 'filename',
+                                'operator' => 'equals',
+                                'value' => $filename,
+                            ],
+                            [
+                                (string) $image['filename'],
+                                ...$tagPhotoNames,
+                            ],
+                        ),
+                    ],
+                    $photoCondition,
+                ],
+            ],
+        ];
+        $scopeSave = [
+            'csrf_token' => $csrf,
+            'action' => 'save',
+            'title' => 'Photo tag scope workflow',
+            'slug' => 'photo-tag-scope-workflow',
+            'enabled' => '1',
+            'visibility' => 'public',
+            'placement_mode' => 'unlisted',
+            'sort_mode' => 'capture_date',
+            'sort_direction' => 'desc',
+            'presentation_override_enabled' => '1',
+            'presentation_lightbox_enabled' => '1',
+            'rules_json' => json_encode(
+                $scopeRule,
+                JSON_THROW_ON_ERROR,
+            ),
+        ];
+        if ($scopeSmartId > 0) {
+            $scopeSave['id'] = $scopeSmartId;
+        }
+        $scopeSaveResult = envelope(
+            $admin->request(
+                '/index.php?page=admin_smart_galleries'
+                    . ($scopeSmartId > 0
+                        ? '&id=' . $scopeSmartId
+                        : ''),
+                $scopeSave,
+                true,
+            ),
+            'Save ' . $caseName,
+        );
+        $scopeSmartId = (int) ($scopeSaveResult['smart_gallery_id']
+            ?? $scopeSmartId);
+        check($scopeSmartId > 0, 'Photo-tag Smart Gallery did not persist.');
+        $scopeSmartRow = row(
+            $pdo,
+            'SELECT rule_version FROM smart_galleries WHERE id = ?',
+            [$scopeSmartId],
+        );
+        check(
+            (int) ($scopeSmartRow['rule_version'] ?? 0) === 1,
+            'Photo-tag rules must remain in saved rule version 1.',
+        );
+
+        $scopePage = $anonymous->request($scopeSmartRoute);
+        $scopeDocument = new DOMDocument();
+        check(
+            $scopePage['status'] === 200
+                && @$scopeDocument->loadHTML($scopePage['body']),
+            'Photo-tag Smart Gallery failed to render through the public query.',
+        );
+        $scopeXpath = new DOMXPath($scopeDocument);
+        $scopePhotoNodes = $scopeXpath->query(
+            '//*[@data-lightbox-image and @data-image-id]',
+        );
+        $actualPhotoIds = [];
+        foreach ($scopePhotoNodes as $scopePhotoNode) {
+            if (!$scopePhotoNode instanceof DOMElement) {
+                continue;
+            }
+            $actualPhotoIds[] = (int) $scopePhotoNode->getAttribute(
+                'data-image-id',
+            );
+        }
+        $actualPhotoIds = array_values(array_unique($actualPhotoIds));
+        sort($actualPhotoIds, SORT_NUMERIC);
+        $expectedPhotoIds = $case['expected'];
+        sort($expectedPhotoIds, SORT_NUMERIC);
+        $scopedPhotoNames = array_combine(
+            $tagPhotoIds,
+            [
+                (string) $image['filename'],
+                ...$tagPhotoNames,
+            ],
+        );
+        // Keep fixture names useful while withholding the ownership token.
+        $safeScopedPhotoNames = array_map(
+            static fn(string $filename): string => str_replace(
+                $token,
+                '[fixture-token]',
+                $filename,
+            ),
+            $scopedPhotoNames,
+        );
+        $actualPhotoLabels = array_map(
+            static fn(int $photoId): string => (string) $photoId
+                . ':'
+                . ($safeScopedPhotoNames[$photoId] ?? 'outside-scope'),
+            $actualPhotoIds,
+        );
+        $expectedPhotoLabels = array_map(
+            static fn(int $photoId): string => (string) $photoId
+                . ':'
+                . ($safeScopedPhotoNames[$photoId] ?? 'outside-scope'),
+            $expectedPhotoIds,
+        );
+        check(
+            $actualPhotoIds === $expectedPhotoIds,
+            'Photo-tag case returned incorrect real photo membership: '
+                . $caseName
+                . '; expected=' . json_encode($expectedPhotoLabels)
+                . '; actual=' . json_encode($actualPhotoLabels)
+                . '; scoped=' . json_encode($safeScopedPhotoNames),
+        );
+    }
+    $savedPhotoRule = row(
+        $pdo,
+        'SELECT rules_json FROM smart_galleries WHERE id = ?',
+        [$scopeSmartId],
+    );
+    $wrongCategoryRule = [
+        'version' => 1,
+        'root' => [
+            'type' => 'condition',
+            'field' => 'photo_tag',
+            'operator' => 'has_any_tags',
+            'value' => [
+                $tagRows['Scope music mismatch'],
+                $tagRows['Scope PDF mismatch'],
+            ],
+        ],
+    ];
+    $wrongCategoryResponse = $admin->request(
+        '/index.php?page=admin_smart_galleries',
+        array_replace($scopeSave, [
+            'rules_json' => json_encode(
+                $wrongCategoryRule,
+                JSON_THROW_ON_ERROR,
+            ),
+        ]),
+        true,
+    );
+    check(
+        $wrongCategoryResponse['status'] === 422
+            && is_array($wrongCategoryResponse['json'])
+            && ($wrongCategoryResponse['json']['ok'] ?? true) === false
+            && row(
+                $pdo,
+                'SELECT rules_json FROM smart_galleries WHERE id = ?',
+                [$scopeSmartId],
+            ) === $savedPhotoRule,
+        'Non-image tag IDs must be rejected without replacing the saved rule.',
+    );
+
+    $stage = 'real quick-tag mutation refreshes saved Smart Gallery membership';
+    $alphaRule = [
+        'version' => 1,
+        'root' => [
+            'type' => 'group',
+            'operator' => 'AND',
+            'children' => [
+                [
+                    'type' => 'condition',
+                    'field' => 'gallery',
+                    'operator' => 'equals',
+                    'value' => $id,
+                ],
+                [
+                    'type' => 'condition',
+                    'field' => 'photo_tag',
+                    'operator' => 'has_tag',
+                    'value' => $tagRows['Scope alpha'],
+                ],
+            ],
+        ],
+    ];
+    envelope(
+        $admin->request(
+            '/index.php?page=admin_smart_galleries'
+                . '&id=' . $scopeSmartId,
+            array_replace($scopeSave, [
+                'rules_json' => json_encode(
+                    $alphaRule,
+                    JSON_THROW_ON_ERROR,
+                ),
+            ]),
+            true,
+        ),
+        'Save mutable photo-tag Smart Gallery rule',
+    );
+    $readPhotoTagMembership = static function () use (
+        $anonymous,
+        $scopeSmartRoute,
+    ): array {
+        $page = $anonymous->request($scopeSmartRoute);
+        $document = new DOMDocument();
+        check(
+            $page['status'] === 200 && @$document->loadHTML($page['body']),
+            'Mutable photo-tag Smart Gallery failed to render.',
+        );
+        $xpath = new DOMXPath($document);
+        $lightbox = $xpath->query('//*[@data-lightbox-config]')->item(0);
+        check(
+            $lightbox instanceof DOMElement,
+            'Mutable Smart Gallery lightbox count is missing.',
+        );
+        $nodes = $xpath->query(
+            '//*[@data-lightbox-image and @data-image-id]',
+        );
+        $ids = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMElement) {
+                $ids[] = (int) $node->getAttribute('data-image-id');
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        sort($ids, SORT_NUMERIC);
+        return [
+            'ids' => $ids,
+            'total' => (int) $lightbox->getAttribute('data-lightbox-total'),
+        ];
+    };
+    $expectedAlphaIds = [$tagPhotoIds[0], $tagPhotoIds[1]];
+    sort($expectedAlphaIds, SORT_NUMERIC);
+    $beforeQuickRemove = $readPhotoTagMembership();
+    check(
+        $beforeQuickRemove['ids'] === $expectedAlphaIds
+            && $beforeQuickRemove['total'] === 2,
+        'Saved photo_tag rule must initially expose both direct alpha assignments.',
+    );
+    $quickTagFields = [
+        'csrf_token' => $csrf,
+        'image_id' => $tagPhotoIds[0],
+        'source_gallery_id' => $id,
+    ];
+    envelope(
+        $admin->request(
+            '/index.php?page=admin_public_update_image',
+            $quickTagFields + [
+                'action' => 'quick_tag_remove',
+                'tag_id' => $tagRows['Scope alpha'],
+            ],
+            true,
+        ),
+        'Remove direct tag through quick photo-tag API',
+    );
+    $afterQuickRemove = $readPhotoTagMembership();
+    check(
+        $afterQuickRemove['ids'] === [$tagPhotoIds[1]]
+            && $afterQuickRemove['total'] === 1,
+        'Quick tag removal must refresh saved rule membership and count.',
+    );
+    envelope(
+        $admin->request(
+            '/index.php?page=admin_public_update_image',
+            $quickTagFields + [
+                'action' => 'quick_tag_remove',
+                'tag_id' => $tagRows['Scope alpha'],
+            ],
+            true,
+        ),
+        'Repeat absent quick photo-tag removal',
+    );
+    check(
+        $readPhotoTagMembership() === $afterQuickRemove,
+        'Repeating removal of an absent direct tag must remain idempotent.',
+    );
+    envelope(
+        $admin->request(
+            '/index.php?page=admin_public_update_image',
+            $quickTagFields + [
+                'action' => 'quick_tag_add',
+                'tag_id' => $tagRows['Scope alpha'],
+            ],
+            true,
+        ),
+        'Restore direct tag through quick photo-tag API',
+    );
+    $afterQuickAdd = $readPhotoTagMembership();
+    check(
+        $afterQuickAdd['ids'] === $expectedAlphaIds
+            && $afterQuickAdd['total'] === 2,
+        'Quick tag addition must restore saved rule membership and count.',
+    );
+    envelope(
+        $admin->request(
+            '/index.php?page=admin_smart_galleries',
+            [
+                'csrf_token' => $csrf,
+                'action' => 'delete',
+                'id' => $scopeSmartId,
+            ],
+            true,
+        ),
+        'Remove photo-tag scope Smart Gallery',
+    );
+    echo
+        "PASS gallery workflow direct photo-tag scope, typed isolation and legacy behavior\n";
+
     $stage = 'real Smart Gallery source music union';
     // PCM header/sample dimensions and IDs are exact audio-format vectors.
     $audioSamples = str_repeat("\x80", 8);
@@ -310,39 +834,81 @@ try {
             . '/galleries/'
             . $sourceRow['folder_path']
             . '/.gallery-music';
+        $musicFolderExists = file_exists($musicFolder)
+            || is_link($musicFolder);
         check(
-            !file_exists($musicFolder) && mkdir($musicFolder, 0700),
-            'Smart audio seed must own an initially absent sidecar.',
+            !is_link($musicFolder)
+                && (is_dir($musicFolder)
+                    || (!$musicFolderExists && mkdir($musicFolder, 0700))),
+            'Smart audio seed requires an owned, non-symlink sidecar directory.',
         );
-        $musicFolders[] = $musicFolder;
-        $musicTracks = [];
-        foreach ($originals as $position => [$bytes, $name, $hidden]) {
-            $trackId = sprintf('%032x', $position + 1);
-            $file = $musicFolder . '/' . $trackId . '.bin';
-            check(
-                file_put_contents($file, $bytes) === strlen($bytes),
-                'Could not seed exact source audio.',
-            );
-            $musicFiles[] = $file;
-            $musicTracks[] = [
-                'id' => $trackId,
-                'filename' => $name,
-                'title' => $name,
-                'mime' => 'audio/wav',
-                'size' => strlen($bytes),
-                'sha256' => hash('sha256', $bytes),
-                'hidden' => $hidden,
-                'downloadable' => $hidden,
-            ];
+        $musicLockPath = $musicFolder . '/.lock';
+        check(
+            !is_link($musicLockPath),
+            'Smart audio seed refuses a symlink coordination lock.',
+        );
+        $musicLock = fopen($musicLockPath, 'c');
+        check(
+            is_resource($musicLock),
+            'Smart audio seed could not open the persistent coordination lock.',
+        );
+        // Public Smart Gallery reads earlier in this fixture can start attachment
+        // reconciliation, which owns this same persistent sidecar lock.
+        $musicLockAcquired = flock($musicLock, LOCK_EX);
+        if (!$musicLockAcquired) {
+            fclose($musicLock);
         }
-        $indexFile = $musicFolder . '/index.json';
-        file_put_contents($indexFile, json_encode([
-            'format' => 'gallery_music_v1',
-            'revision' => str_repeat('a', 32),
-            'enabled' => false,
-            'tracks' => $musicTracks,
-        ], JSON_THROW_ON_ERROR));
-        $musicFiles[] = $indexFile;
+        check(
+            $musicLockAcquired,
+            'Smart audio seed could not acquire the coordination lock.',
+        );
+        try {
+            $musicEntries = scandir($musicFolder);
+            $existingMusicEntries = is_array($musicEntries)
+                ? array_values(array_diff($musicEntries, ['.', '..']))
+                : [];
+            check(
+                is_array($musicEntries)
+                    && ($existingMusicEntries === []
+                        || $existingMusicEntries === ['.lock'])
+                    && is_file($musicLockPath)
+                    && !is_link($musicLockPath),
+                'Smart audio seed requires no prior media/index payload; '
+                    . 'the persistent regular coordination lock may remain.',
+            );
+            $musicFolders[] = $musicFolder;
+            $musicTracks = [];
+            foreach ($originals as $position => [$bytes, $name, $hidden]) {
+                $trackId = sprintf('%032x', $position + 1);
+                $file = $musicFolder . '/' . $trackId . '.bin';
+                check(
+                    file_put_contents($file, $bytes) === strlen($bytes),
+                    'Could not seed exact source audio.',
+                );
+                $musicFiles[] = $file;
+                $musicTracks[] = [
+                    'id' => $trackId,
+                    'filename' => $name,
+                    'title' => $name,
+                    'mime' => 'audio/wav',
+                    'size' => strlen($bytes),
+                    'sha256' => hash('sha256', $bytes),
+                    'hidden' => $hidden,
+                    'downloadable' => $hidden,
+                ];
+            }
+            $indexFile = $musicFolder . '/index.json';
+            file_put_contents($indexFile, json_encode([
+                'format' => 'gallery_music_v1',
+                'revision' => str_repeat('a', 32),
+                'enabled' => false,
+                'tracks' => $musicTracks,
+            ], JSON_THROW_ON_ERROR));
+            $musicFiles[] = $indexFile;
+        } finally {
+            flock($musicLock, LOCK_UN);
+            fclose($musicLock);
+        }
     }
     $conditions = [];
     foreach (array_keys($musicSources) as $sourceId) {
@@ -1383,10 +1949,20 @@ try {
         'total_batches' => '1',
         'zip_batch' => new CURLFile($archive, 'application/zip', 'batch.zip'),
     ];
+    $beforePreparedBatchImages = countRows($pdo, 'images');
+    $beforePreparedBatchJpgFiles = glob($folder . '/*.jpg');
+    check(
+        is_array($beforePreparedBatchJpgFiles),
+        'Could not enumerate fixture JPGs before prepared upload.',
+    );
     // Intentionally discard the accepted response: the retry gets no client-side result from the first call.
     $admin->request('/index.php?page=admin_upload_browser_batch', $batch, true);
+    $afterPreparedBatchJpgFiles = glob($folder . '/*.jpg');
     check(
-        countRows($pdo, 'images') === ($beforeImages + 2),
+        countRows($pdo, 'images') === ($beforePreparedBatchImages + 1)
+            && is_array($afterPreparedBatchJpgFiles)
+            && count($afterPreparedBatchJpgFiles)
+                === count($beforePreparedBatchJpgFiles) + 1,
         'First prepared batch did not persist exactly one image.',
     );
     $accepted = row(
@@ -1402,8 +1978,9 @@ try {
         ),
         'Retry',
     );
+    $afterPreparedBatchRetryJpgFiles = glob($folder . '/*.jpg');
     check(
-        countRows($pdo, 'images') === ($beforeImages + 2),
+        countRows($pdo, 'images') === ($beforePreparedBatchImages + 1),
         'Retry duplicated upload rows.',
     );
     check(
@@ -1415,7 +1992,9 @@ try {
         'Retry changed upload identity.',
     );
     check(
-        count(glob($folder . '/*.jpg') ?: []) === 2,
+        is_array($afterPreparedBatchRetryJpgFiles)
+            && count($afterPreparedBatchRetryJpgFiles)
+                === count($afterPreparedBatchJpgFiles),
         'Retry duplicated original files.',
     );
     echo
@@ -1659,6 +2238,7 @@ try {
 
     $stage = 'recoverable subtree delete and restore';
     $beforeDelete = countRows($pdo, 'galleries');
+    $imagesBeforeSubtreeDelete = countRows($pdo, 'images');
     $delete = [
         'csrf_token' => $csrf,
         'gallery_ids' => [$id],
@@ -1754,14 +2334,14 @@ try {
         'Restored subtree relationship mismatch.',
     );
     check(
-        countRows($pdo, 'images') === ($beforeImages + 2)
+        countRows($pdo, 'images') === $imagesBeforeSubtreeDelete
             && hash_file('sha256', $original) === hash_file('sha256', $sample),
         'Restored original mismatch.',
     );
     $admin->request('/index.php?page=admin_trash_restore', $restore, true);
     check(
         countRows($pdo, 'galleries') === $beforeDelete
-            && countRows($pdo, 'images') === ($beforeImages + 2),
+            && countRows($pdo, 'images') === $imagesBeforeSubtreeDelete,
         'Repeat restore duplicated persistence.',
     );
     echo "PASS gallery workflow trash subtree restoration and repeat control\n";

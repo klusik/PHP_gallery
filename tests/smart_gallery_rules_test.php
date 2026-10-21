@@ -123,6 +123,135 @@ namespace Gallery\Services {
         'All-tags matching requires every selected tag across both supported relations.',
     );
 
+    $photoRuleCatalog = smart_gallery_rule_catalog();
+    smart_gallery_test_assert(
+        ($photoRuleCatalog['photo_tag']['operators'] ?? []) === [
+            'has_tag',
+            'not_has_tag',
+            'has_any_tags',
+            'has_all_tags',
+            'untagged',
+        ],
+        'Photo tag scope exposes the complete legacy operator set separately.',
+    );
+    $photoTagRule = static fn(string $operator, int|array|null $value = null): array => [
+        'version' => 1,
+        'root' => [
+            'type' => 'condition',
+            'field' => 'photo_tag',
+            'operator' => $operator,
+            ...($operator === 'untagged' ? [] : ['value' => $value]),
+        ],
+    ];
+    $photoHasTag = \Gallery\Models\smart_gallery_model_compile_rules(
+        $photoTagRule('has_tag', 7),
+    );
+    smart_gallery_test_assert(
+        str_contains($photoHasTag['sql'], 'image_tags')
+            && str_contains($photoHasTag['sql'], "sg_pt.media_type = 'image'")
+            && !str_contains($photoHasTag['sql'], 'gallery_tags')
+            && !str_contains($photoHasTag['sql'], 'music_song_tags')
+            && $photoHasTag['params'] === [7],
+        'Photo-tag has uses only the candidate image assignment and image category.',
+    );
+    foreach (['not_has_tag', 'untagged'] as $negativeOperator) {
+        $photoNegative = \Gallery\Models\smart_gallery_model_compile_rules(
+            $photoTagRule(
+                $negativeOperator,
+                $negativeOperator === 'untagged' ? null : 7,
+            ),
+        );
+        smart_gallery_test_assert(
+            str_contains($photoNegative['sql'], 'image_tags')
+                && !str_contains($photoNegative['sql'], 'gallery_tags')
+                && !str_contains($photoNegative['sql'], 'music_song_tags'),
+            'Photo-tag negative and untagged operators ignore non-photo relations.',
+        );
+    }
+    $photoAny = \Gallery\Models\smart_gallery_model_compile_rules(
+        $photoTagRule('has_any_tags', [7, 9]),
+    );
+    smart_gallery_test_assert(
+        $photoAny['params'] === [7, 9]
+            && str_contains($photoAny['sql'], 'sg_pt.media_type = \'image\''),
+        'Photo-tag has-any uses one parameterized direct-assignment set.',
+    );
+    $photoAll = \Gallery\Models\smart_gallery_model_compile_rules(
+        $photoTagRule('has_all_tags', [7, 9]),
+    );
+    smart_gallery_test_assert(
+        $photoAll['params'] === [7, 9]
+            && substr_count($photoAll['sql'], 'sg_it.image_id = i.id') === 2
+            && !str_contains($photoAll['sql'], 'gallery_tags'),
+        'Photo-tag has-all requires each tag on the same candidate photo.',
+    );
+    $legacyPhotoRule = $photoTagRule('has_tag', 7);
+    $legacyPhotoRule['_photo_tag_media_type_ready'] = false;
+    $legacyPhoto = \Gallery\Models\smart_gallery_model_compile_rules(
+        $legacyPhotoRule,
+    );
+    smart_gallery_test_assert(
+        str_contains($legacyPhoto['sql'], 'image_tags')
+            && !str_contains($legacyPhoto['sql'], 'JOIN tags')
+            && !str_contains($legacyPhoto['sql'], 'gallery_tags'),
+        'Confirmed legacy tag schemas retain image_tags-only photo scope.',
+    );
+    smart_gallery_test_assert(
+        smart_gallery_photo_tag_ids([
+            'type' => 'condition',
+            'field' => 'photo_tag',
+            'operator' => 'untagged',
+        ]) === [],
+        'Direct-photo untagged does not require a selected tag ID.',
+    );
+
+    $nestedPhotoNegation = [
+        'type' => 'group',
+        'operator' => 'NOT',
+        'children' => [[
+            'type' => 'group',
+            'operator' => 'AND',
+            'children' => [
+                [
+                    'type' => 'condition',
+                    'field' => 'photo_tag',
+                    'operator' => 'not_has_tag',
+                    'value' => 7,
+                ],
+                [
+                    'type' => 'condition',
+                    'field' => 'photo_tag',
+                    'operator' => 'untagged',
+                ],
+            ],
+        ]],
+    ];
+    smart_gallery_test_assert(
+        smart_gallery_rule_tree_uses_field(
+            $nestedPhotoNegation,
+            'photo_tag',
+        ),
+        'Nested NOT trees must retain photo-tag schema requirements.',
+    );
+    smart_gallery_test_rejected(
+        static fn(): ?bool => smart_gallery_photo_tag_media_type_ready_for_rules(
+            $nestedPhotoNegation,
+            'unknown',
+        ),
+        'Unknown tag-category state must reject the entire nested photo-tag query before negative predicates compile.',
+    );
+    smart_gallery_test_assert(
+        smart_gallery_photo_tag_media_type_ready_for_rules(
+            $nestedPhotoNegation,
+            'missing',
+        ) === false
+            && smart_gallery_photo_tag_media_type_ready_for_rules(
+                $nestedPhotoNegation,
+                'available',
+            ) === true,
+        'Only confirmed legacy absence may compile without typed image-category checks.',
+    );
+
     $nested = [
         'version' => 1,
         'root' => [
