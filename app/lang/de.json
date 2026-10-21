@@ -4117,7 +4117,7 @@
     "admin.upload.support_title": "Upload-Unterstützung",
     "admin.upload.target_gallery": "Zielgalerie",
     "admin.upload.target_preselected": "Upload-Ziel vorausgewählt: {title}.",
-    "admin.upload.title": "Fotos hochladen",
+    "admin.upload.title": "Dateien hochladen",
     "admin.upload.type": "Typ",
     "admin.upload.upload_existing_help": "Wählen Sie eine Galerie aus und laden Sie Fotos hoch, ohne die Seitenleiste zu verlassen.",
     "admin.upload.upload_existing_title": "In eine vorhandene Galerie hochladen",
@@ -7622,7 +7622,7 @@
     "admin.features.gallery_pdf_documents.description": "Galerie-PDFs einschließlich SimBrief-Originalen hochladen, anzeigen und konvertieren. Deaktivieren erhält Dateien und Einstellungen.",
     "admin.features.gallery_music.label": "Galeriemusik",
     "admin.features.gallery_music.description": "Musik für Galerien und Smart-Galerien hochladen und abspielen. Deaktivieren erhält Dateien, Wiedergabelisten und Diashow-Einstellungen.",
-    "admin.upload.media_files_label": "Dateien",
+    "admin.upload.media_files_label": "Dateien auswählen oder ablegen",
     "admin.upload.media_files_help": "Unterstützte Dateien auswählen oder ablegen. Der Dateidialog zeigt aktivierte Galerie-Medientypen.",
     "admin.storage.pdf_originals": "PDF-Originale",
     "admin.storage.pdf_originals_hint": "{count} Galeriedokument(e), einschließlich SimBrief-PDFs.",
@@ -7847,5 +7847,8 @@
     "admin.settings.item.download_archive_pdf_global": "Original-PDFs global in Galerie-ZIPs aufnehmen",
     "admin.settings.item.download_archive_pdf_global.hint": "Alle anderweitig zugänglichen und sichtbaren PDFs aufnehmen, unabhängig von Galerie- und Dateieinstellungen. Standardmäßig aus. Private und versteckte Dokumente bleiben geschützt.",
     "admin.settings.item.download_archive_music_global": "Original-Musik global in Galerie-ZIPs aufnehmen",
-    "admin.settings.item.download_archive_music_global.hint": "Alle anderweitig zugänglichen und sichtbaren Musikdateien aufnehmen, unabhängig von Galerie- und Dateieinstellungen. Standardmäßig aus. Berechtigungen zum Einzel-Download bleiben unverändert."
+    "admin.settings.item.download_archive_music_global.hint": "Alle anderweitig zugänglichen und sichtbaren Musikdateien aufnehmen, unabhängig von Galerie- und Dateieinstellungen. Standardmäßig aus. Berechtigungen zum Einzel-Download bleiben unverändert.",
+    "admin.gallery_editor.upload_media": "Medien hochladen",
+    "admin.upload.upload_files": "Dateien hochladen",
+    "admin.upload.help": "Hilfe zum Hochladen"
 }

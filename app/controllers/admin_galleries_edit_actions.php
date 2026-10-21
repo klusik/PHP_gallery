@@ -286,12 +286,12 @@ function cms_admin_scan_images(): void
  * Normalize an edit-gallery admin tab identifier.
  *
  * @param string $tab Requested query/hash tab identity.
- * @return string Registered available tab, with the legacy documents alias
- *     normalized to Media, or empty for an unknown identity.
+ * @return string Registered tab, with former Images/Documents aliases
+ *     normalized to Upload media, or empty for an unknown identity.
  */
 function admin_edit_gallery_tab_id(string $tab): string
 {
-    if ($tab === 'admin-edit-documents') {
+    if (in_array($tab, ['admin-edit-documents', 'admin-edit-images'], true)) {
         return 'admin-edit-media';
     }
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
@@ -301,7 +301,6 @@ function admin_edit_gallery_tab_id(string $tab): string
         'admin-edit-display',
         'admin-edit-media',
         'admin-edit-api',
-        'admin-edit-images',
         'admin-edit-organizer',
         'admin-edit-renamer',
     ];
@@ -312,7 +311,7 @@ function admin_edit_gallery_tab_id(string $tab): string
  * Return an edit-gallery admin URL with an optional tab fragment.
  *
  * @param int $galleryId Gallery identifier.
- * @param string $tab Requested registered tab or legacy documents alias.
+ * @param string $tab Registered tab or former Images/Documents identity.
  * @return string Canonical edit URL with validated Media section when submitted.
  */
 function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
@@ -326,11 +325,13 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
     }
     if ($tab === 'admin-edit-documents') {
         $params['media_section'] = 'pdf';
+    } elseif ($tab === 'admin-edit-images') {
+        $params['media_section'] = 'images';
     } elseif ($resolvedTab === 'admin-edit-media') {
         $section = (string) ($_POST['return_media_section'] ?? '');
         if (in_array(
             $section,
-            ['music', 'pdf', 'presentation', 'artwork'],
+            ['images', 'music', 'pdf', 'presentation', 'artwork', 'archive'],
             true,
         )) {
             $params['media_section'] = $section;

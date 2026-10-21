@@ -1189,7 +1189,7 @@ return [
         'Ladda upp och spela musik i gallerier och smarta gallerier. '
             . 'Avstängning bevarar filer, spellistor och '
             . 'bildspelsinställningar.',
-    'admin.upload.media_files_label' => 'Filer',
+    'admin.upload.media_files_label' => 'Välj eller släpp filer',
     'admin.upload.media_files_help' =>
         'Välj eller släpp filer som stöds. Filväljaren visar aktiverade '
             . 'medietyper för gallerier.',
@@ -1453,4 +1453,7 @@ return [
     'admin.support.separate_session' => 'Logga ut eller använd en annan webbläsarprofil innan du godkänner supportåtkomsten.',
     'admin.support.rate_limited' => 'För många försök. Försök igen senare.',
     'admin.support.invalid_invitation' => 'Den här inbjudan är ogiltig, redan använd, utgången eller återkallad.',
+    'admin.gallery_editor.upload_media' => 'Ladda upp media',
+    'admin.upload.upload_files' => 'Ladda upp filer',
+    'admin.upload.help' => 'Hjälp för uppladdning',
 ];

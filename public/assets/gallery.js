@@ -69,7 +69,7 @@ import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
-import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-merge-selected-survivor-v2';
+import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261021-upload-media-v1';
 import {
     setupGalleryMusicPlayback,
 } from './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
@@ -125,7 +125,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261020-shift-range-v1';
+} from './gallery-modules/admin-operations.js?v=20261021-upload-media-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

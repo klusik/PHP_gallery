@@ -8,7 +8,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261016-cover-in-place-v1';
+import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261021-upload-media-v1';
 import {beginAdminPanelOpen, deactivateAdminPanel} from '/public/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20261012-pdf-files-v1';
 

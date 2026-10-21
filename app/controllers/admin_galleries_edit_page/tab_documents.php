@@ -53,13 +53,18 @@ use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
  *     separator_image_path?:string|null} $gallery Authorized gallery data
  *     for attachments, presentation and Artwork preparation.
  * @param string $activeEditTab Currently selected main editor tab.
+ * @param string $imagesHtml Trusted image manager or deferred placeholder.
  * @return void Emit the unified Media tab with capability-scoped subtabs.
  */
 function admin_edit_gallery_render_documents_tab(
     array $gallery,
     string $activeEditTab,
+    string $imagesHtml = '',
 ): void {
     $mediaSection = (string) ($_GET['media_section'] ?? '');
+    if ((string) ($_GET['tab'] ?? '') === 'admin-edit-images') {
+        $mediaSection = 'images';
+    }
     if ((string) ($_GET['tab'] ?? '') === 'admin-edit-documents') {
         $mediaSection = 'pdf';
     }
@@ -95,6 +100,14 @@ function admin_edit_gallery_render_documents_tab(
     \Gallery\Views\view_render_admin_gallery_media_tab([
         'active' => $activeEditTab === 'admin-edit-media',
         'active_section' => $mediaSection,
+        'images_html' => $imagesHtml,
+        'upload_url' => url_for('admin_upload', [
+            'gallery_id' => (int) $gallery['id'],
+        ]),
+        'upload_panel_url' => url_for('admin_upload', [
+            'gallery_id' => (int) $gallery['id'],
+            'panel' => 1,
+        ]),
         'archive_settings' => [
             'gallery_id' => (int) $gallery['id'],
             'action_url' => url_for('admin_edit_gallery', [

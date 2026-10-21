@@ -1249,7 +1249,7 @@ return [
     'admin.features.gallery_music.description' =>
         'Upload and play gallery and Smart Gallery music. Disabling '
             . 'preserves existing files, playlists and slideshow settings.',
-    'admin.upload.media_files_label' => 'Files',
+    'admin.upload.media_files_label' => 'Choose or drop files',
     'admin.upload.media_files_help' =>
         'Select or drop supported files. Enabled gallery media types are '
             . 'shown in the file picker.',
@@ -1516,4 +1516,7 @@ return [
     'admin.support.separate_session' => 'Sign out or use another browser profile before accepting support access.',
     'admin.support.rate_limited' => 'Too many attempts. Please try again later.',
     'admin.support.invalid_invitation' => 'This invitation is invalid, used, expired or revoked.',
+    'admin.gallery_editor.upload_media' => 'Upload media',
+    'admin.upload.upload_files' => 'Upload files',
+    'admin.upload.help' => 'Upload help',
 ];

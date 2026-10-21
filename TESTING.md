@@ -5704,6 +5704,14 @@ browser retries. Run these through the central audit, not a separate test loop.
 
 ## Clipboard image uploads
 
+Local upload UI acceptance covers the single Upload media main tab, photo
+preloading alongside usable media tools, legacy Images links, a single mixed
+photo/PDF/audio picker, collapsed PDF conversion and plain help dismissal with
+Escape/outside click. Check desktop and narrow layouts plus the top disk Save's
+native gallery-settings form association. Uploads and photo ordering continue
+saving through their existing owners; an unchanged browser URL and open drawer
+must survive completion. This manual acceptance does not replace hosted FULL.
+
 The central quick/full audit includes `admin_upload_clipboard_test.mjs` for
 MIME/picker-policy filtering, optional-format capability hints, original names
 and bytes, distinct generated screenshot names, multi-image extraction,

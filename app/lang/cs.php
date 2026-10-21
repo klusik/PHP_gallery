@@ -1244,7 +1244,7 @@ return [
     'admin.features.gallery_music.description' =>
         'Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí '
             . 'zachová soubory, playlisty a nastavení slideshow.',
-    'admin.upload.media_files_label' => 'Soubory',
+    'admin.upload.media_files_label' => 'Vybrat nebo přetáhnout soubory',
     'admin.upload.media_files_help' =>
         'Vyberte nebo přetáhněte podporované soubory. Dialog nabízí '
             . 'zapnuté typy médií galerie.',
@@ -1511,4 +1511,7 @@ return [
     'admin.support.separate_session' => 'Před přijetím dočasného přístupu se odhlaste nebo použijte jiný profil prohlížeče.',
     'admin.support.rate_limited' => 'Příliš mnoho pokusů. Zkuste to později.',
     'admin.support.invalid_invitation' => 'Pozvánka je neplatná, použitá, vypršela nebo byla odvolána.',
+    'admin.gallery_editor.upload_media' => 'Nahrát média',
+    'admin.upload.upload_files' => 'Nahrát soubory',
+    'admin.upload.help' => 'Nápověda k nahrávání',
 ];

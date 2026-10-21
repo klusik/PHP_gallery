@@ -448,43 +448,6 @@ function view_render_gallery_pdf_documents(array $model): void
         }
     }
     echo '</tbody></table>';
-    if ($model['admin'] && $model['editor']) {
-        echo
-            '<form method="post" enctype="multipart/form-data" action="'
-                . e($model['action_url'])
-                . '" class="gallery-pdf-upload-form"'
-                . ' data-pdf-attachment-form>'
-                . $model['csrf_html'];
-        echo
-            '<input type="hidden" name="pdf_action" value="upload">'
-                . '<input type="hidden" name="id" value="'
-                . $model['gallery_id']
-                . '">';
-        echo
-            '<label>'
-                . e(t('pdf.title', 'Document title'))
-                . '<input name="pdf_title" maxlength="200"></label><label>'
-                . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)'))
-                . '<input type="file" name="pdf_file"'
-                . ' accept=".pdf,application/pdf" required></label>';
-        echo
-            '<details class="gallery-pdf-upload-advanced"><summary>'
-                . e(t('pdf.upload.advanced', 'Advanced'))
-                . '</summary>';
-        view_render_gallery_pdf_destination(true);
-        view_render_gallery_pdf_resolution($model['dpi'], true);
-        echo '</details>';
-        echo
-            '<button type="submit" class="gallery-pdf-icon" title="'
-                . e(t('pdf.upload'))
-                . '" aria-label="'
-                . e(t('pdf.upload'))
-                . '">'
-                . view_gallery_pdf_icon('upload')
-                . '</button>'
-                . '<output data-pdf-status role="status" aria-live="polite">'
-                . '</output></form>';
-    }
     view_media_panel_end($model['editor']);
     echo '</section>';
 }

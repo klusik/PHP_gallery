@@ -439,24 +439,6 @@ function view_render_gallery_music(array $model): void
     }
     echo '</tbody></table>';
     if ($model['editor']) {
-        view_render_gallery_music_form_start($model, 'gallery-music-upload');
-        echo
-            '<label>'
-                . e(t('music.upload'))
-                . '<input type="file" name="music_file"'
-                . ' accept=".mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.flac,.webm,.weba"'
-                . ' required></label>'
-                . '<p>'
-                . e(t('music.upload_help'))
-                . '</p>'
-                . '<button type="submit" class="music-icon" name="music_action"'
-                . ' value="upload" title="'
-                . e(t('music.upload'))
-                . '" aria-label="'
-                . e(t('music.upload'))
-                . '">'
-                . view_music_control_icon('upload')
-                . '</button><output data-music-status role="status"></output></form>';
         view_render_gallery_music_form_start($model, 'gallery-music-settings');
         echo
             '<label class="gallery-presentation-setting">'

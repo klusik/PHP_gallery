@@ -37,7 +37,7 @@ import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } fr
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261016-cover-in-place-v1';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261021-upload-media-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-shift-range-v1';
@@ -52,7 +52,7 @@ import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation,
 import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20261012-pdf-files-v1';
 import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning, adminOperationOwnsInput} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
-import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261008-issue118-v3';
+import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261021-upload-media-v1';
 import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261017-music-v3';
 
 /**

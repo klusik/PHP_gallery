@@ -31,11 +31,17 @@ remain unknown until deployment acceptance. Hosted regression coverage must
 include legacy/v2 reads, live album changes, interrupted migration, access,
 shared-file retention, accounting and in-place editor actions.
 
-The former `admin-edit-documents` tab remains a permanent bookmark alias for
-Media/PDF. The gallery editor URL owner preserves the drawer request and active
-language when normalizing it. Existing bookmark usage is unknown; removing the
-alias is not authorized. Artwork and presentation controls retain native form
-association with the guarded settings form after moving into Media.
+The former `admin-edit-documents` and `admin-edit-images` tabs remain permanent
+bookmark aliases for Upload media/PDF and Upload media/Images. The gallery editor
+URL owner preserves the drawer request and active language; the shared browser
+tab owner resolves old Images hashes. Existing bookmark usage is unknown;
+removing these aliases is not authorized. The image preload retains its original
+container and bounded transport inside Upload media, so loading photos does not
+disable music/PDF tools. Artwork and presentation controls retain native form
+association with the guarded settings form, including the top disk Save button.
+The existing mixed-file uploader, PDF opt-in conversion and exact retry owners
+remain authoritative. Live upload/browser acceptance is recorded separately from
+hosted BASIC source checks; deployed usage remains unknown.
 
 ## Optional public attachment usage projection
 

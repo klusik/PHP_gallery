@@ -490,7 +490,7 @@ Each generated create or~classic-upload form also carries a~private operation id
   \item Enter a~visitor-friendly title; optionally accept a~title suggestion.
   \item Create the~Unpublished gallery. The~full editor opens in~the~same panel when JavaScript is~available.
   \item Add the~description, date or~date range, source language, tags, and~optional SimBrief data in~\ui{Identity}.
-  \item Review \ui{Access}, \ui{Display}, \ui{Media}, and~the~gallery folder/parent values in~Advanced where relevant.
+  \item Review \ui{Access}, \ui{Display}, \ui{Upload media}, and~the~gallery folder/parent values in~Advanced where relevant.
   \item Save the~gallery, add photographs, and~choose a~cover after suitable photographs exist.
   \item Publish when ready, then preview the~result anonymously.
 \end{enumerate}
@@ -506,7 +506,7 @@ The~visible SimBrief field accepts a~Pilot ID or~pilot name. Digits alone are~tr
 \subsubsection{Working in~the~compact editor}
 \index{gallery editor!side panel}
 
-The~ordinary work areas are~\ui{Identity}, \ui{API}, \ui{Access}, \ui{Display}, and~\ui{Media}; image and~specialized tools follow as~available. The~right-side panel keeps \ui{Save gallery} visible at~its bottom while the~settings form scrolls. Changing tabs does~not~save automatically. Use the~button after editing, then reopen the~gallery if~you~want to~verify the~stored values. Longer explanations sit behind keyboard-accessible question-mark controls, and~less frequent choices sit under \ui{Advanced} disclosures. A~direct Admin editor follows the~same fields, while a~browser without JavaScript uses the~normal form submission.
+The~ordinary work areas are~\ui{Identity}, \ui{API}, \ui{Access}, \ui{Display}, and~\ui{Upload media}; image and~specialized tools follow as~available. The~sticky top navigation keeps the~disk \ui{Save} button visible while the~settings form or~photo list scrolls. Changing tabs does~not~save automatically. Use the~button after editing, then reopen the~gallery if~you~want to~verify the~stored values. Longer explanations sit behind keyboard-accessible question-mark controls, and~less frequent choices sit under \ui{Advanced} disclosures. A~direct Admin editor follows the~same fields, while a~browser without JavaScript uses the~normal form submission.
 
 \ui{Identity} keeps title, description, date, source language, SimBrief, and~tags readily available. Its Advanced section includes slug, folder, parent, sort order, and~AI gallery text when enabled. \ui{API} displays a~copyable upload endpoint, the~key label/action, and~a~newly generated key only once; existing keys appear only when there are~any. AI metadata regeneration, migration, and~the~global API manager live under \ui{Advanced API tools}. \ui{Access} groups visibility, password, share-link controls, and~the~NSFW checkbox, with longer policy explanations under question marks. \ui{Display} starts with the~grid and~common voting/filename switches; EXIF/GPS, gallery-card format, count badge, lightbox mode, Picture Game, thumbnail bounds are~under \ui{Advanced display settings}; flight-route text is~available beside SimBrief under \ui{Identity}.
 
@@ -549,7 +549,7 @@ Anonymous visitors can~use~the~same link after ordinary access checks.
 If~native fullscreen or~sound needs activation, the~black opening waits for
 \ui{Start presentation}. After confirmation, unsupported native fullscreen
 retains the~browser viewport; \ui{Play} can~retry later audio failures.
-Use~\ui{Edit gallery > Media > Presentation} and~its~transparent
+Use~\ui{Edit gallery > Upload media > Presentation} and~its~transparent
 \ui{Presentation settings} card to~choose public button visibility, music,
 photo speed and~transition speed. The~Save icon uses the~ordinary guarded
 gallery form. Preview and~Share use current selections, including unsaved ones.
@@ -594,14 +594,18 @@ The~existing-gallery Upload photos chooser and~drop queue also accept PDFs. By~d
 
 \index{PDF!gallery documents}
 
-The~gallery editor has~one main \ui{Media} tab with nested \ui{Music},
-\ui{PDF}, \ui{Presentation}, and~\ui{Artwork} sections. Music and~PDF keep
-their independent forms; Artwork controls remain associated with the guarded
-gallery settings form. The~Presentation card is~under \ui{Media} >
-\ui{Presentation}; general documents and~the~optional OFP panel are~under
-\ui{Media} > \ui{PDF}. The~cover, branding, and~background controls are~under
-\ui{Media} > \ui{Artwork}. In~\ui{Images}, \ui{Upload} accepts all media
-types currently enabled for~the~gallery.
+The~gallery editor combines photos and~media in~\ui{Upload media}, with
+\ui{Images}, \ui{Music}, \ui{PDF}, \ui{Presentation}, \ui{Artwork}
+and~ZIP preferences. Its~single \ui{Upload files} picker accepts enabled
+photo, PDF and~audio formats together and~routes each original automatically.
+PDF replacement, deletion and~conversion remain in~\ui{PDF}; the~optional
+OFP panel remains there too. Artwork and~presentation defaults retain their
+gallery settings form. The~sticky top navigation includes a~disk
+\ui{Save} button, available above long photo lists. Uploads and~photo
+ordering still save independently. The~compact upload drawer hides support
+and~instructions under a~plain question mark; Escape or~an~outside click
+closes help. \ui{Advanced} contains iCloud and~processing options; PDF page
+conversion remains an~unchecked opt-in. Former Images links remain supported.
 
 An~administrator can~attach a~general PDF to~a~physical gallery even when it~has no~SimBrief data. The~gallery keeps the~original file and~a~small index with its stable document ID, filename, title, provenance, exact size and~SHA-256 digest. The~protected same-origin viewer and~download link follows the~gallery's visibility, password, share-link and~NSFW access rules. SimBrief OFPs keep their existing manifest and~links.
 
@@ -686,7 +690,7 @@ catalog entries; transferred archives never supply trusted logical IDs.
 
 \subsubsection{Music storage}
 
-Open~\ui{Edit gallery > Media > Music} to~upload audio and~manage this gallery's
+Open~\ui{Edit gallery > Upload media > Music} to~upload audio and~manage this gallery's
 playlist. New uploads store immutable originals in~the~protected central
 \filepath{data/music/} repository; audio never enters image conversion.
 Direct song assignments remain independent items. Album assignments are~live
@@ -830,12 +834,12 @@ Display & Lightbox browsing mode & Inherit Theme, classic single image, picture 
 Display & Custom grid & First visible Display control: optional columns and~rows for~this gallery. Without an~explicit grid, the~nearest parent grid that permits subgallery inheritance applies, then Theme.\\
 Display & Responsive thumbnail bounds & Optional minimum/maximum thumbnail-size guardrails. A~save can~copy gallery bounds recursively to~descendants; recursive save is~off by~default.\\
 Display & Flight route & Advanced manual route text supports local identifier lookup and~explicit \codeword{NAME@latitude,longitude} points. SimBrief can~save an~OFP, description draft, and~resolved route coordinates.\\
-Media & Title picture & Automatic or~a~selected photograph, including eligible photographs from descendants when the~picker offers them.\\
-Media & Uploaded gallery thumbnail & Separate gallery-card media asset stored independently from ordinary gallery photographs.\\
-Media & Background source & Inherit Theme, upload a~new background, choose an~existing gallery image, or~generate a~collage from public galleries.\\
-Media & Branding assets & Optional gallery-specific banner/logo/separator assets override Theme fallbacks only for~that gallery where configured.\\
-Images & Scan/import & Re-scans the~physical gallery folder and~synchronizes supported media into the~catalog.\\
-Images & Create all thumbnails & Rebuilds thumbnails for~this gallery. Select \ui{Include subgalleries} to~cover its descendants; other gallery branches remain outside the~job. Browser generation is~selected by~default when available, with a~server-generation option.\\
+Upload media & Title picture & Automatic or~a~selected photograph, including eligible photographs from descendants when the~picker offers them.\\
+Upload media & Uploaded gallery thumbnail & Separate gallery-card media asset stored independently from ordinary gallery photographs.\\
+Upload media & Background source & Inherit Theme, upload a~new background, choose an~existing gallery image, or~generate a~collage from public galleries.\\
+Upload media & Branding assets & Optional gallery-specific banner/logo/separator assets override Theme fallbacks only for~that gallery where configured.\\
+Upload media & Scan/import & Re-scans the~physical gallery folder and~synchronizes supported media into the~catalog.\\
+Upload media & Create all thumbnails & Rebuilds thumbnails for~this gallery. Select \ui{Include subgalleries} to~cover its descendants; other gallery branches remain outside the~job. Browser generation is~selected by~default when available, with a~server-generation option.\\
 Tools & Organizer, Renamer, API & Date organizer, physical Media Renamer, upload API key management, AI regeneration, and~gallery migration appear only when their schemas/features are~available.\\
 \bottomrule
 \end{longtable}
@@ -1708,7 +1712,7 @@ The~gallery editor's \ui{Images} tab keeps common photo work in~one compact list
 
 The~title-picture star has three states when the~database supports multi-photo covers: an~outline star selects that photo alone (gold); clicking the~gold star again keeps it selected and~arms accumulation (blue); clicking another outline star adds it to~the~selection, up~to~four photos. Clicking any selected blue star keeps only that photo (gold). Each click saves immediately. The~right drawer updates the~stars in~place, preserving its~open tab, scroll position, other form drafts, and~loaded image rows; the~public gallery preview refreshes separately. After a~lost or~failed response, the~editor first reads the~authoritative cover state without changing the~panel. If the~state changed, it reconciles the~stars before refreshing the~public gallery; otherwise read the~current state before retrying, because persistence may have succeeded before response construction failed.
 
-Under \ui{Media} > \ui{Title picture}, \ui{Automatic (2 photos)} chooses up~to~two suitable direct photos and~fills missing positions from accessible child galleries. The~original/default mode preserves legacy behavior for~galleries that have not explicitly selected Automatic or~a~manual cover. Public cards recheck current visibility and~gallery access; unpublished or~inaccessible photos are~not~revealed.
+Under \ui{Upload media} > \ui{Title picture}, \ui{Automatic (2 photos)} chooses up~to~two suitable direct photos and~fills missing positions from accessible child galleries. The~original/default mode preserves legacy behavior for~galleries that have not explicitly selected Automatic or~a~manual cover. Public cards recheck current visibility and~gallery access; unpublished or~inaccessible photos are~not~revealed.
 
 When the~optional \ui{Picture Manager} feature is~enabled, a~normal signed-in administrator can~select photographs and~direct physical subgalleries in~the~public gallery grid. Checkmarks select individual cards; Shift-click selects a~range; Ctrl-click or~Cmd-click toggles a~card; \ui{Select all}, \ui{Clear}, and~Ctrl/Cmd+A support larger visible-page selections. Smart Gallery cards are~not~part of~this file-based selection. Dragging an~unselected photo starts with that photo as~the~selection, while dragging an~existing photo selection moves the~selected photographs together. A~visible child-gallery card becomes a~drop target, and~dropping there performs the~same validated photo move as~the~destination picker. Physical gallery cards themselves are~not~drag sources.
 

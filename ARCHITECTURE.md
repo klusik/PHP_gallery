@@ -92,6 +92,14 @@ source and rule-count inputs stay fresh on every explicit run. No persistent
 source-analysis cache, extra runtime file or logical module is added; inspection
 reuses the already loaded passive Core observer under unchanged closure limits.
 
+The gallery editor prepares one Upload media main tab containing the independent
+image manager and existing music/PDF/presentation/artwork forms. The image
+preloader replaces only its original Images container; it does not own sibling
+media sections. One shared file chooser uses the existing image, PDF and audio
+upload coordinators. The gallery view associates the sticky navigation's Save
+button with the existing guarded settings form through native form ownership.
+No new persistence, schema or upload transport is introduced.
+
 The public gallery controller prepares canonical presentation links only when
 authorized photos and lightbox capability are available. Views render
 translucent

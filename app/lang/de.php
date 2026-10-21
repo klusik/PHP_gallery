@@ -1190,7 +1190,7 @@ return [
         'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
             . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
             . 'Diashow-Einstellungen.',
-    'admin.upload.media_files_label' => 'Dateien',
+    'admin.upload.media_files_label' => 'Dateien auswählen oder ablegen',
     'admin.upload.media_files_help' =>
         'Unterstützte Dateien auswählen oder ablegen. Der Dateidialog '
             . 'zeigt aktivierte Galerie-Medientypen.',
@@ -1459,4 +1459,7 @@ return [
     'admin.support.separate_session' => 'Melden Sie sich ab oder verwenden Sie ein anderes Browserprofil, bevor Sie den Support-Zugang annehmen.',
     'admin.support.rate_limited' => 'Zu viele Versuche. Bitte versuchen Sie es später erneut.',
     'admin.support.invalid_invitation' => 'Diese Einladung ist ungültig, bereits benutzt, abgelaufen oder widerrufen.',
+    'admin.gallery_editor.upload_media' => 'Medien hochladen',
+    'admin.upload.upload_files' => 'Dateien hochladen',
+    'admin.upload.help' => 'Hilfe zum Hochladen',
 ];

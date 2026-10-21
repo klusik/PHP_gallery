@@ -4117,7 +4117,7 @@
     "admin.upload.support_title": "Upload support",
     "admin.upload.target_gallery": "Target gallery",
     "admin.upload.target_preselected": "Upload target pre-selected: {title}.",
-    "admin.upload.title": "Upload photos",
+    "admin.upload.title": "Upload files",
     "admin.upload.type": "Type",
     "admin.upload.upload_existing_help": "Choose a gallery and upload photos without leaving the drawer.",
     "admin.upload.upload_existing_title": "Upload into an existing gallery",
@@ -7622,7 +7622,7 @@
     "admin.features.gallery_pdf_documents.description": "Upload, display and convert gallery PDFs, including SimBrief originals. Disabling preserves existing files and settings.",
     "admin.features.gallery_music.label": "Gallery music",
     "admin.features.gallery_music.description": "Upload and play gallery and Smart Gallery music. Disabling preserves existing files, playlists and slideshow settings.",
-    "admin.upload.media_files_label": "Files",
+    "admin.upload.media_files_label": "Choose or drop files",
     "admin.upload.media_files_help": "Select or drop supported files. Enabled gallery media types are shown in the file picker.",
     "admin.storage.pdf_originals": "PDF originals",
     "admin.storage.pdf_originals_hint": "{count} gallery document(s), including SimBrief PDFs.",
@@ -7847,5 +7847,8 @@
     "admin.settings.item.download_archive_pdf_global": "Include original PDFs in gallery ZIPs globally",
     "admin.settings.item.download_archive_pdf_global.hint": "Include all otherwise authorized visible PDFs in gallery archives, overriding gallery/item ZIP choices only. Disabled by default. Private and hidden documents remain protected.",
     "admin.settings.item.download_archive_music_global": "Include original music in gallery ZIPs globally",
-    "admin.settings.item.download_archive_music_global.hint": "Include all otherwise authorized visible music in gallery archives, overriding gallery/item ZIP choices only. Disabled by default. Standalone music download permissions remain unchanged."
+    "admin.settings.item.download_archive_music_global.hint": "Include all otherwise authorized visible music in gallery archives, overriding gallery/item ZIP choices only. Disabled by default. Standalone music download permissions remain unchanged.",
+    "admin.gallery_editor.upload_media": "Upload media",
+    "admin.upload.upload_files": "Upload files",
+    "admin.upload.help": "Upload help"
 }

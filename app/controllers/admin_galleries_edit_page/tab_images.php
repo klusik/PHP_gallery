@@ -69,32 +69,7 @@ function admin_edit_gallery_render_images_tab(
     bool $rowsOnly = false,
     bool $deferred = false,
 ): void {
-    $actions = [
-        [
-            'label' => t(
-                'admin.gallery_editor.upload_photos_here',
-                'Upload',
-            ),
-            'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
-            'class' => 'button',
-            'attributes' => [
-                'data-gallery-side-panel-link' => true,
-                'data-admin-side-panel-workflow' => 'upload',
-                'data-admin-side-panel-kicker' => t(
-                    'admin.gallery_editor.upload_workflow',
-                    'Upload workflow',
-                ),
-                'data-admin-side-panel-title' => t(
-                    'admin.gallery_editor.upload_photos',
-                    'Upload',
-                ),
-                'data-gallery-side-panel-url' => url_for('admin_upload', [
-                    'gallery_id' => $gallery['id'],
-                    'panel' => 1,
-                ]),
-            ],
-        ],
-    ];
+    $actions = [];
     if (feature_capability_effective_enabled('duplicate_photo_detector')) {
         $actions[] = [
             'label' => t(

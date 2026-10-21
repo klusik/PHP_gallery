@@ -4117,7 +4117,7 @@
     "admin.upload.support_title": "Podpora nahrávání",
     "admin.upload.target_gallery": "Cílová galerie",
     "admin.upload.target_preselected": "Cílová galerie je předvybraná: {title}.",
-    "admin.upload.title": "Nahrát fotografie",
+    "admin.upload.title": "Nahrát soubory",
     "admin.upload.type": "Typ",
     "admin.upload.upload_existing_help": "Vyberte galerii a nahrajte fotografie bez opuštění panelu.",
     "admin.upload.upload_existing_title": "Nahrát do existující galerie",
@@ -7622,7 +7622,7 @@
     "admin.features.gallery_pdf_documents.description": "Nahrávání, zobrazení a převod PDF galerií včetně originálů SimBrief. Vypnutí zachová existující soubory a nastavení.",
     "admin.features.gallery_music.label": "Hudba galerií",
     "admin.features.gallery_music.description": "Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí zachová soubory, playlisty a nastavení slideshow.",
-    "admin.upload.media_files_label": "Soubory",
+    "admin.upload.media_files_label": "Vybrat nebo přetáhnout soubory",
     "admin.upload.media_files_help": "Vyberte nebo přetáhněte podporované soubory. Dialog nabízí zapnuté typy médií galerie.",
     "admin.storage.pdf_originals": "Originály PDF",
     "admin.storage.pdf_originals_hint": "{count} dokumentů galerií včetně PDF ze SimBrief.",
@@ -7847,5 +7847,8 @@
     "admin.settings.item.download_archive_pdf_global": "Globálně přidávat originální PDF do ZIP galerií",
     "admin.settings.item.download_archive_pdf_global.hint": "Přidávat všechna jinak oprávněně přístupná a viditelná PDF, bez ohledu na nastavení galerie či položky. Výchozí stav je vypnuto. Soukromé a skryté dokumenty zůstávají chráněné.",
     "admin.settings.item.download_archive_music_global": "Globálně přidávat originální hudbu do ZIP galerií",
-    "admin.settings.item.download_archive_music_global.hint": "Přidávat všechnu jinak oprávněně přístupnou a viditelnou hudbu, bez ohledu na nastavení galerie či položky. Výchozí stav je vypnuto. Povolení samostatného stažení se nemění."
+    "admin.settings.item.download_archive_music_global.hint": "Přidávat všechnu jinak oprávněně přístupnou a viditelnou hudbu, bez ohledu na nastavení galerie či položky. Výchozí stav je vypnuto. Povolení samostatného stažení se nemění.",
+    "admin.gallery_editor.upload_media": "Nahrát média",
+    "admin.upload.upload_files": "Nahrát soubory",
+    "admin.upload.help": "Nápověda k nahrávání"
 }

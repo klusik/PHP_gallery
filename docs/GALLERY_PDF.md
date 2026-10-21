@@ -10,8 +10,9 @@ preferences remain stored. Existing indexed page photographs retain their normal
 photo behavior, and incomplete-child publication guards remain enforced.
 SimBrief descriptions/routes can still refresh with PDF OFF; no PDF is fetched,
 and an old original's manifest reference remains available on re-enable.
-When both PDF and music are OFF, the shared editor media tab and its empty panel
-are omitted. An old selected-tab URL falls back to Identity.
+Disabled PDF/music capabilities omit only their own Upload media subsections.
+Images and the shared upload entry remain available; neither disabled type is
+advertised by the picker or admitted by its protected attachment owner.
 
 Public gallery cards show compact, right-aligned PDF and music count icons below
 the existing photo-count icon when each count is nonzero, with tight spacing
@@ -36,13 +37,14 @@ general maintenance. The separate Maintenance Center task remains available for
 explicit reconciliation, including after later manual filesystem edits;
 supported application mutations maintain their projections normally.
 
-In **Admin → Edit gallery**, the **Documents / PDFs** tab owns manual PDF
-upload, the attached-document table, browser PDF-to-PNG conversion, and any
-historical SimBrief OFP PDF/dispatch panel. These forms are independent of the
-shared Identity/Access/Display/Media settings form. The **API** tab contains
-only upload API/automation configuration and its existing advanced tools.
-After a non-JavaScript PDF or OFP upload, the editor returns to Documents /
-PDFs.
+In **Admin → Edit gallery → Upload media**, **Upload files** accepts mixed
+photos, PDFs and audio in one selection. **PDF** owns the attached-document
+table, replacement/deletion, browser PDF-to-PNG conversion and the historical
+SimBrief OFP/dispatch panel. These forms remain independent of the shared
+gallery-settings form. The **API** tab retains upload API/automation tools.
+Legacy Documents and Images links resolve to Upload media with their original
+section. PDF-only uploads attach originals; conversion requires the unchecked
+opt-in under Advanced.
 
 The gallery presents documents in a compact table with title, original byte
 size,

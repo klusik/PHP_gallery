@@ -4117,7 +4117,7 @@
     "admin.upload.support_title": "Uppladdningsstöd",
     "admin.upload.target_gallery": "Målgalleri",
     "admin.upload.target_preselected": "Uppladdningsmål förvalt: {title}.",
-    "admin.upload.title": "Ladda upp foton",
+    "admin.upload.title": "Ladda upp filer",
     "admin.upload.type": "Typ",
     "admin.upload.upload_existing_help": "Välj ett galleri och ladda upp foton utan att lämna panelen.",
     "admin.upload.upload_existing_title": "Ladda upp till ett befintligt galleri",
@@ -7622,7 +7622,7 @@
     "admin.features.gallery_pdf_documents.description": "Ladda upp, visa och konvertera galleri-PDF:er, inklusive SimBrief-original. Avstängning bevarar filer och inställningar.",
     "admin.features.gallery_music.label": "Gallerimusik",
     "admin.features.gallery_music.description": "Ladda upp och spela musik i gallerier och smarta gallerier. Avstängning bevarar filer, spellistor och bildspelsinställningar.",
-    "admin.upload.media_files_label": "Filer",
+    "admin.upload.media_files_label": "Välj eller släpp filer",
     "admin.upload.media_files_help": "Välj eller släpp filer som stöds. Filväljaren visar aktiverade medietyper för gallerier.",
     "admin.storage.pdf_originals": "PDF-original",
     "admin.storage.pdf_originals_hint": "{count} galleridokument, inklusive SimBrief-PDF:er.",
@@ -7847,5 +7847,8 @@
     "admin.settings.item.download_archive_pdf_global": "Inkludera original-PDF:er globalt i galleri-ZIP",
     "admin.settings.item.download_archive_pdf_global.hint": "Inkludera alla i övrigt tillgängliga och synliga PDF-filer oavsett inställningar för galleri och fil. Av som standard. Privata och dolda dokument förblir skyddade.",
     "admin.settings.item.download_archive_music_global": "Inkludera originalmusik globalt i galleri-ZIP",
-    "admin.settings.item.download_archive_music_global.hint": "Inkludera all i övrigt tillgänglig och synlig musik oavsett inställningar för galleri och fil. Av som standard. Behörighet för separat nedladdning ändras inte."
+    "admin.settings.item.download_archive_music_global.hint": "Inkludera all i övrigt tillgänglig och synlig musik oavsett inställningar för galleri och fil. Av som standard. Behörighet för separat nedladdning ändras inte.",
+    "admin.gallery_editor.upload_media": "Ladda upp media",
+    "admin.upload.upload_files": "Ladda upp filer",
+    "admin.upload.help": "Hjälp för uppladdning"
 }
