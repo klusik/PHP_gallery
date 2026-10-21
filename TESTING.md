@@ -2596,6 +2596,22 @@ require a browser session. Do not publish a release without the exact-candidate
 hosted release audit and required job results; local full PASS alone is
 insufficient.
 
+### Temporary Admin support-access contract coverage
+
+Run the focused no-database implementation contract after authoring:
+
+```text
+php tests/admin_support_access_test.php
+```
+
+This verifies one-time hash-backed invitation/session storage, UTC expiry,
+revocation and audit semantics, support identity/route restrictions, CSRF
+redemption, no secrets in browser URLs/audit contexts, grant-management UI,
+locale parity and route/runtime references. A real disposable migrated
+MySQL/MariaDB fixture and browser exercise remain part of the later integration
+workflow. The hosted BASIC workflow runs only after implementation and
+repository preparation. See [support-access runbook](docs/TEMPORARY_ADMIN_ACCESS.md).
+
 ### Viewer Phase 0 security-foundation coverage
 
 Phase 0 viewer foundations deliberately have no HTTP route, so focused tests

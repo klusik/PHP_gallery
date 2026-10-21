@@ -249,6 +249,7 @@ function view_admin_menu_structure(array $model = []): array
                     'url' => url_for('admin_update'),
                     'highlight' => $updatePending,
                     'icon' => 'update',
+                    'permanent_only' => true,
                 ],
             ],
         ],
@@ -260,6 +261,7 @@ function view_admin_menu_structure(array $model = []): array
                     'page' => 'admin_account',
                     'url' => url_for('admin_account'),
                     'icon' => 'profile',
+                    'permanent_only' => true,
                 ],
                 [
                     'label' => t(
@@ -270,6 +272,17 @@ function view_admin_menu_structure(array $model = []): array
                     'url' => url_for('admin_viewer_invitations'),
                     'feature' => 'viewer_accounts',
                     'icon' => 'viewers',
+                    'permanent_only' => true,
+                ],
+                [
+                    'label' => t(
+                        'admin.support.title',
+                        'Temporary admin access',
+                    ),
+                    'page' => 'admin_support',
+                    'url' => url_for('admin_support'),
+                    'icon' => 'support',
+                    'permanent_only' => true,
                 ],
                 [
                     'label' => t('admin.menu.logout', 'Logout'),
@@ -686,6 +699,12 @@ function view_render_admin_sidebar(string $currentPage, array $model = []): void
         echo '<h2>' . e((string) $group['label']) . '</h2>';
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
+            if (
+                !empty($model['support_access'])
+                && !empty($item['permanent_only'])
+            ) {
+                continue;
+            }
             $featureKey = (string) ($item['feature'] ?? '');
             $featureStates = is_array($model['feature_enabled'] ?? null)
                 ? $model['feature_enabled']

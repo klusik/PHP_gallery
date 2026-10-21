@@ -660,6 +660,17 @@ installations require no configuration edit after update.
   cleanup work
 - File permission diagnostics
 
+#### Temporary administrator support access
+
+Permanent administrators can issue a one-time 24-hour support link, see whether
+it is unused, active, expired or revoked, and revoke it immediately. Recipients
+confirm a separate, restricted Admin session without gaining permanent login,
+password-reset or settings authority. Invitation and session secrets are hashed
+at rest, and delegated activity is identified by grant ID in audit records.
+
+See [Temporary administrator support access](docs/TEMPORARY_ADMIN_ACCESS.md)
+for owner instructions, security boundaries, expiry and retention policy.
+
 #### Account Settings
 - Username and password management
 - Optional recovery email for password reset

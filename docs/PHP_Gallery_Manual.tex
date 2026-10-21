@@ -364,6 +364,15 @@ Spend a~few minutes identifying these areas:
   \item \ui{Account}, where credentials, recovery email, and~mail delivery are~managed.
 \end{itemize}
 
+\subsection{Temporary administrator support access}
+\index{Admin!temporary support access}
+
+A~permanent administrator can~open \ui{Account}, choose \ui{Temporary admin access}, and~generate a~single-use support link. The~link is~shown only at~creation and~expires exactly 24~hours after issuance, regardless of~when the~recipient first accepts it. Share it~privately with a~trusted support person. The~recipient should use a~separate browser profile and~explicitly accept the~invitation; no~new permanent administrator account is~created.
+
+The~Admin header displays a~temporary-access notice and~UTC expiry. The~recipient can~inspect diagnostics and~work on~permitted gallery/media tasks, but cannot~change administrator credentials, global security settings, persistent tokens or~updater configuration. The~owner can~revoke the~grant at~any time; the~next authorization check refuses every associated session. Expiration and~revocation require no~scheduled cleanup.
+
+\securitynote{The~unused invitation link is~a~bearer credential. Never publish it~in~logs, tickets or~screenshots. Existing permanent Admin sessions remain unaffected by~revocation. Apply pending database migrations before issuing support invitations.}
+
 \subsection{Create a~first gallery}
 \index{gallery!creating the first gallery}
 

@@ -166,6 +166,9 @@ return [
         // The 98-module allowance is already consumed; this keeps one catalog
         // administration root without adding a transitive dependency edge.
         'Gallery\\Controllers\\cms_admin_music' => 'domain-admin-tags',
+        // Support-grant routes share the already established Admin authentication owner.
+        'Gallery\\Controllers\\cms_admin_support' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_admin_support_redeem' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',

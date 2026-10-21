@@ -321,6 +321,40 @@ function current_user(): ?array
 {
     static $cache = false;
     static $cachedUser = null;
+    // Never trust a cached Admin identity for delegated sessions.
+    // A grant is live only when its database row remains live.
+    $supportGrant = null;
+    if (array_key_exists('admin_support', $_SESSION)) {
+        $supportSession = $_SESSION['admin_support'];
+        try {
+            require_once __DIR__ . '/models/auth_persistence.php';
+            require_once __DIR__ . '/services/auth_persistence.php';
+            $supportGrant = is_array($supportSession)
+                ? \Gallery\Services\admin_support_validate_session(
+                    (int) ($supportSession['grant_id'] ?? 0),
+                    (int) ($supportSession['owner_id'] ?? 0),
+                    (string) ($supportSession['nonce'] ?? ''),
+                )
+                : null;
+        } catch (\Throwable) {
+            // Missing migration, schema uncertainty and DB failures fail closed.
+            $supportGrant = null;
+        }
+        if (
+            $supportGrant === null
+            || (int) ($_SESSION['user_id'] ?? 0)
+                !== (int) $supportGrant['owner_user_id']
+        ) {
+            unset(
+                $_SESSION['admin_support'],
+                $_SESSION['user_id'],
+                $_SESSION['csrf_token'],
+            );
+            admin_auth_clear_remember_cookie();
+            $cache = true;
+            return $cachedUser = null;
+        }
+    }
     if ($cache !== false) {
         return $cachedUser;
     }
@@ -342,6 +376,12 @@ function current_user(): ?array
     $user = \Gallery\Services\auth_account_session_user(
         (int) $_SESSION['user_id'],
     );
+
+    if ($supportGrant !== null && is_array($user)) {
+        $user['support_access'] = true;
+        $user['support_grant_id'] = (int) $supportGrant['id'];
+        $user['support_expires_at'] = (string) $supportGrant['expires_at'];
+    }
 
     // $cache stores an intermediate value used by the surrounding gallery workflow.
     $cache = true;
@@ -382,6 +422,58 @@ function require_admin(): void
             'return' => current_login_return_target(),
         ]));
     }
+}
+
+/**
+ * Emit an authorization refusal without exposing any support-access credential.
+ *
+ * @param string $code Stable error identifier suitable for JSON consumers.
+ * @return void Sends HTTP 403 and terminates the request.
+ */
+function admin_support_forbid(string $code): void
+{
+    http_response_code(403);
+    header('Cache-Control: private, no-store, max-age=0');
+    header('Referrer-Policy: no-referrer');
+    header('X-Robots-Tag: noindex, nofollow, noarchive');
+    $message = t(
+        'admin.support.access_denied',
+        'Temporary administrator access is unavailable or not permitted.',
+    );
+    if (security_request_wants_json()) {
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode([
+            'ok' => false,
+            'error' => $message,
+            'error_code' => $code,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } else {
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo $message;
+    }
+    exit();
+}
+
+/**
+ * Recheck delegated status at the authorization boundary of a request.
+ *
+ * @return ?array Valid delegated Admin identity, or null for ordinary visitors.
+ *     Refuses the request when a present grant has lapsed or failed.
+ */
+function admin_support_assert_session(): ?array
+{
+    if (!array_key_exists('admin_support', $_SESSION)) {
+        return null;
+    }
+    $user = current_user();
+    if (
+        !is_array($user)
+        || empty($user['support_access'])
+        || (string) ($user['role'] ?? '') !== 'admin'
+    ) {
+        admin_support_forbid('auth.support_expired');
+    }
+    return $user;
 }
 
 /**

@@ -277,6 +277,8 @@ cross-layer leakage is immediately release-blocking.
 | Task | Files |
 | --- | --- |
 | Login/logout | `app/controllers/admin_auth.php`, `app/security.php` |
+| Temporary support grant issue/redeem/revoke | `app/controllers/admin_support.php`, `app/services/auth_persistence.php`, `app/models/auth_persistence.php`, `app/views/admin_support.php`; [runbook](docs/TEMPORARY_ADMIN_ACCESS.md) |
+| Delegated session and route protection | `app/security.php`, `app/bootstrap/dispatch.php`, `scripts/runtime_module_roots.php` |
 | Durable login | `app/services/auth_persistence.php`, migration `202605310001_admin_persistent_auth_and_google_login.php` |
 | Login throttling | `app/services/auth_throttle.php`, migration `202605110001_auth_rate_limits.php` |
 | Password reset | `app/controllers/admin_auth.php`, migration `202605060004_password_reset_tokens.php` |

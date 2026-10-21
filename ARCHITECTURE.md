@@ -471,6 +471,7 @@ from changing the response.
 | `app/session_context.php` | PHP session reads/writes/removal and active-state observation; no session startup or domain policy. |
 | `app/bootstrap/viewer_identity_context.php` | Viewer-specific session, remember-cookie and rotation transport; it does not own administrator identity. |
 | `app/security.php` | Authentication, CSRF, identity/session transport and the existing CSRF hidden-field compatibility output. |
+| `app/models/auth_persistence.php`, `app/services/auth_persistence.php`, `app/controllers/admin_support.php`, `app/views/admin_support.php` | One-time delegated Admin support grants with live DB authorization, strict route allowlisting, CSRF-backed management, and fragment-only bearer handling. |
 | `app/runtime/Kernel.php` | Request dispatch and response completion/observation. Route preparation is not persistence. |
 | `app/helpers_runtime.php` | Existing redirect response adapter; request and flash helpers use the Core adapters. |
 | `app/diagnostics/admin_test_run_early.php` | Bootstrap-free request/fatal observation and bounded owned diagnostics storage before application dependencies exist. |

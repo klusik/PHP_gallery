@@ -89,6 +89,7 @@ function view_admin_menu_icon(string $icon): string
         'integrity' => '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3m-4 9 3 3 5-6"/>',
         'navigation' => '<circle cx="12" cy="12" r="9"/><path d="m16 8-3 5-5 3 3-5 5-3"/>',
         'update' => '<path d="M20 9a8 8 0 0 0-14-4L3 8m0-5v5h5m-4 7a8 8 0 0 0 14 4l3-3m0 5v-5h-5"/>',
+        'support' => '<path d="M12 2l8 4v6c0 5-4 8-8 10-4-2-8-5-8-10V6l8-4Z"/><path d="M9 12l2 2 4-4"/>',
         'profile' => '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
         'viewers' => '<circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M16 4a3 3 0 0 1 0 6m3 4a6 6 0 0 1 3 5v2"/>',
         'logout' => '<path d="M9 3H3v18h6m0-9h12m-5-5 5 5-5 5"/>',

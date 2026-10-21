@@ -362,6 +362,15 @@ Efter inloggning kan en återkomstlänk öppna en lokal sida i denna installatio
   \item \ui{Konto}, där inloggningsuppgifter, återställningsadress och e-postleverans hanteras.
 \end{itemize}
 
+\subsection{Tillfällig administratörsåtkomst för support}
+\index{administratör!tillfällig supportåtkomst}
+
+En~permanent administratör kan~öppna \ui{Konto}, välja \ui{Tillfällig administratörsåtkomst} och~skapa en~supportlänk för engångsbruk. Länken visas bara när den~skapas och~upphör att~gälla exakt 24~timmar efter utfärdandet, oavsett när den~används första gången. Dela den~privat med en~betrodd supportperson. Mottagaren använder en~separat webbläsarprofil och~godkänner inbjudan uttryckligen. Inget nytt permanent administratörskonto skapas.
+
+Administrationen visar en~markering för tillfällig åtkomst och~sluttiden i~UTC. Mottagaren får granska diagnostik och~utföra tillåtna galleri- och~medieåtgärder, men~inte ändra administratörslösenord, globala säkerhetsinställningar, långlivade token eller~uppdaterarens inställningar. Ägaren kan~återkalla behörigheten när som helst; anslutna sessioner nekas vid~nästa behörighetskontroll. Ingen schemalagd rensning krävs för att~åtkomsten ska~upphöra.
+
+\securitynote{En~oanvänd inbjudningslänk är~en~hemlig åtkomstnyckel. Publicera den~aldrig i~loggar, ärenden eller~skärmbilder. Den~ursprungliga administratörens permanenta session påverkas inte av~återkallelse. Kör databasmigreringarna innan supportinbjudningar utfärdas.}
+
 \subsection{Skapa ett första galleri}
 \index{g00096@galleri!s00223@skapa det första galleriet}
 

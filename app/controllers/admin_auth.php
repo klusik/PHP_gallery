@@ -976,6 +976,7 @@ function cms_admin_login(): void
                     );
                 }
                 session_regenerate_id(true);
+                unset($_SESSION['admin_support']);
                 $_SESSION['user_id'] = (int) $user['id'];
                 if (
                     !empty($_POST['remember_login'])
@@ -1354,7 +1355,7 @@ function cms_admin_logout(): void
     )) {
         admin_auth_revoke_current_persistent_login_for_request();
     }
-    unset($_SESSION['user_id']);
+    unset($_SESSION['user_id'], $_SESSION['admin_support']);
     unset($_SESSION['csrf_token']);
     session_regenerate_id(true);
     redirect_to(url_for('home'));
@@ -1622,6 +1623,7 @@ function cms_admin_account(): void
                     );
                 }
                 session_regenerate_id(true);
+                unset($_SESSION['admin_support']);
                 $_SESSION['user_id'] = (int) $user['id'];
                 if (
                     $newPassword !== ''
@@ -1790,6 +1792,7 @@ function cms_admin_account(): void
         'csrf_html' => csrf_field(),
         'site_name' => site_name(),
         'central_settings_url' => admin_settings_url('advanced'),
+        'support_access_url' => url_for('admin_support'),
         'account_email' => $accountEmail,
         'email_schema_available' => $emailSchemaAvailable,
         'email_schema_unknown' =>

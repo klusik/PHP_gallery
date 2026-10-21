@@ -501,7 +501,23 @@ function view_render_header(
                 : [],
         );
         echo '<main class="site-main admin-content">';
-        view_render_missing_admin_email_notice($user, $page);
+        if (!empty($user['support_access'])) {
+            echo '<div class="notice" role="status" '
+                . 'data-admin-support-banner="1">';
+            echo '<strong>' . e(t(
+                'admin.support.banner',
+                'Temporary administrator access',
+            )) . '</strong> ';
+            echo e(t(
+                'admin.support.banner_detail',
+                'Restricted access; it can be revoked without notice. Expires (UTC):',
+            )) . ' ';
+            echo '<time>' . e(
+                (string) ($user['support_expires_at'] ?? ''),
+            ) . '</time></div>';
+        } else {
+            view_render_missing_admin_email_notice($user, $page);
+        }
     } else {
         echo '<main class="site-main">';
     }

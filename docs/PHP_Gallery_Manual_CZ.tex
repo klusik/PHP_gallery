@@ -361,6 +361,15 @@ Věnujte několik minut seznámení s~těmito oblastmi:
   \item \ui{Účet}, kde se spravují přihlašovací údaje, e-mail pro obnovu a~doručování pošty.
 \end{itemize}
 
+\subsection{Dočasný přístup administrátora pro podporu}
+\index{a00020@administrace!dočasný přístup}
+
+Správce s~trvalým účtem může v~nabídce \ui{Účet} otevřít \ui{Dočasný přístup administrátora} a~vygenerovat jednorázový odkaz pro technickou podporu. Odkaz se~zobrazí pouze při vytvoření a~jeho platnost skončí přesně 24~hodin po~vydání, bez~ohledu na~okamžik prvního použití. Předávejte jej soukromě pouze důvěryhodné osobě. Příjemce použije oddělený profil prohlížeče a~pozvánku výslovně přijme. Nevzniká žádný nový trvalý administrátorský účet.
+
+Administrace zobrazuje upozornění na~dočasný přístup a~čas vypršení v~UTC. Příjemce může kontrolovat diagnostiku a~provádět povolené úpravy galerií a~médií, nesmí však měnit přihlašovací údaje správce, globální bezpečnostní nastavení, trvalé tokeny ani~aktualizace. Vlastník může přístup kdykoli odvolat; všechny navazující relace přestanou při další autorizační kontrole platit. K~vypršení ani~odvolání není potřeba plánovaný úkol.
+
+\securitynote{Nepoužitý odkaz je~tajný přístupový údaj. Nikdy jej nevkládejte do~logů, issue ani~snímků obrazovky. Trvalá relace původního správce zůstane při odvolání zachována. Před vydáváním pozvánek proveďte databázové migrace.}
+
 \subsection{Vytvořte první galerii}
 \index{g00040@galerie!v00266@vytvoření první galerie}
 

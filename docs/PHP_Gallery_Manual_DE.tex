@@ -367,6 +367,15 @@ Nehmen Sie sich einige Minuten, um diese Bereiche kennenzulernen:
   \item \ui{Konto}, in dem Zugangsdaten, Wieder\-her\-stel\-lungs-E-Mail und E-Mail-Zustellung verwaltet werden.
 \end{itemize}
 
+\subsection{Temporärer Administratorzugang für Support}
+\index{Administrator!temporärer Supportzugang}
+
+Ein~dauerhaft angemeldeter Administrator kann~unter \ui{Konto} den~Bereich \ui{Temporärer Administratorzugang} öffnen und~einen einmalig nutzbaren Support-Link erzeugen. Der~Link wird nur bei~der Erstellung angezeigt und~läuft genau 24~Stunden nach seiner Ausgabe ab, unabhängig von~der ersten Nutzung. Geben Sie ihn ausschließlich vertraulich an~eine vertrauenswürdige Person weiter. Der~Empfänger verwendet ein~separates Browserprofil und~akzeptiert die~Einladung ausdrücklich. Ein~neues dauerhaftes Administratorkonto entsteht nicht.
+
+Die~Administrationsoberfläche zeigt die~temporäre Berechtigung und~die~Ablaufzeit in~UTC an. Der~Empfänger kann Diagnoseinformationen ansehen und~zugelassene Galerie- und~Medienarbeiten durchführen, aber weder Administratorzugangsdaten noch globale Sicherheitseinstellungen, dauerhafte Tokens oder~Updater-Konfiguration ändern. Der~Eigentümer kann~den~Zugang jederzeit widerrufen; bei~der nächsten Berechtigungsprüfung werden zugehörige Sitzungen verweigert. Dafür ist kein geplanter Hintergrundauftrag nötig.
+
+\securitynote{Ein~unbenutzter Einladungslink ist~ein~geheimes Zugriffsrecht. Veröffentlichen Sie ihn niemals in~Protokollen, Tickets oder~Bildschirmfotos. Die~dauerhafte Administratorsitzung bleibt beim Widerruf erhalten. Führen Sie vor der~Ausgabe die~Datenbankmigrationen aus.}
+
 \subsection{Erste Galerie erstellen}
 \index{g00117@Galerie!e00091@erste Galerie erstellen}
 

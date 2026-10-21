@@ -433,6 +433,7 @@ Current migration sequence:
 | `202610200001_tag_media_types.php` | Adds image/music/reserved-PDF media categories without changing existing tag IDs, slugs or assignments. |
 | `202610200002_music_catalog.php` | Adds logical songs, stable physical links, albums, song tags, revision state and pending snapshot reconciliation. |
 | `202610200003_music_repository.php` | Adds immutable shared audio assets, direct asset references and derived live gallery/album usage links. |
+| `202610210001_admin_support_access.php` | Adds single-use, revocable, UTC-expiring temporary Admin grants with hashed invitation/session authority and owner/delegate lifecycle audit. |
 
 ## Entity Relationship Overview
 
@@ -529,6 +530,21 @@ app/services/auth_persistence.php
 app/services/google_auth.php
 app/services/auth_throttle.php
 ```
+
+### Temporary administrator support grants
+
+The `admin_support_grants` table stores only the SHA-256 invitation and session
+hashes, the permanent `users.id` owner, creation-time UTC expiry, redemption
+state and revocation. An atomic conditional `UPDATE` establishes the sole
+redeemer. `admin_support_grant_events` references the grant with
+`ON DELETE CASCADE` and records issuance, acceptance, bounded normal use,
+revocation and expiry without plaintext bearer authority.
+
+Grant/session identity is separate from persistent login and never introduces a
+new `users` row. Owner-page cleanup removes at most 50 expired grants beyond
+the 90-day audit retention threshold per visit. Authentication and authorization
+fail closed while the new schema is absent. See
+[Temporary administrator support access](docs/TEMPORARY_ADMIN_ACCESS.md).
 
 ### Viewer identity and security foundation tables
 

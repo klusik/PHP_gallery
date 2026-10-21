@@ -429,6 +429,7 @@ function shared_layout_admin_chrome_model(): array
         'feature_enabled' => $featureEnabled,
         'admin_legacy_upload_navigation_enabled' =>
             admin_legacy_upload_navigation_enabled(),
+        'support_access' => !empty((current_user() ?? [])['support_access']),
         'theme_widgets_active' =>
             ($_GET['widgets'] ?? null) === '1'
                 || array_key_exists('widget_action', $_POST),
