@@ -907,3 +907,36 @@
     #admin-edit-renamer .admin-media-renamer-pattern-form { grid-template-columns: minmax(0, 1fr) auto; }
     #admin-edit-renamer .admin-media-renamer-pattern-form > button { grid-column: 1 / -1; justify-self: start; }
 }
+
+/* Gallery ZIP inclusion options are independent from media mutation forms. */
+#admin-edit-media .gallery-archive-options {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    min-width: 0;
+}
+
+#admin-edit-media .gallery-archive-options h3,
+#admin-edit-media .gallery-archive-options p {
+    margin: 0;
+}
+
+#admin-edit-media .gallery-archive-option {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+#admin-edit-media .gallery-archive-option label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+#admin-edit-media .gallery-archive-item-form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}

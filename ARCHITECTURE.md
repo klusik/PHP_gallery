@@ -31,6 +31,18 @@ const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
 
+## Selective media ownership
+
+Thumbnail delivery depends on the existing complete `public-media` owner.
+The compiler requires its full closure to remain contained in
+`public-thumbnails`; this edge adds no PHP files or logical roots. The failed
+archive-media candidate had 98 modules, 4,109 direct file entries, 446 unique
+files and 3,663 duplicate entries, above the unchanged 3,653 duplicate ceiling.
+Sharing the contained owner is expected to remove 44 direct duplicate entries;
+the thumbnail route uses seven transitive modules including its root, within
+its reviewed five-module baseline plus the existing allowance of two. Hosted
+preparation and FULL establish the final metrics. No baseline is raised.
+
 ## Gallery music ownership
 
 Attachment accounting uses the SQL-only model

@@ -1406,6 +1406,12 @@ kernel/route contracts and fresh-process include probes, without starting every
 logical module in both loaders on each edit. This changes feedback scope only;
 full release coverage is unchanged.
 
+The archive-media policy regression remains in the automatically discovered
+FULL/release PHP registry. It is not added to the curated quick subset, whose
+existing cardinality limit remains unchanged. The isolated photo manifest
+fixture explicitly enables PDF/music capabilities and primes an empty settings
+snapshot so missing archive preferences exercise the default photo-only path.
+
 ### PHP worker scheduling
 
 Hosted `hosted-full` partitions the sorted, discovered PHP regression basenames

@@ -1116,6 +1116,15 @@ function view_render_public_smart_gallery(array $viewModel): void
             . '<div class="hero-meta"><div class="hero-actions" aria-label="'
             . e(t('gallery.actions', 'Gallery actions'))
             . '">';
+    $mediaCounts = (array) ($viewModel['media_counts'] ?? []);
+    if (
+        (int) ($mediaCounts['pdf'] ?? 0) > 0
+        || (int) ($mediaCounts['music'] ?? 0) > 0
+    ) {
+        echo '<div class="gallery-hero-media-counts">';
+        view_render_gallery_media_count_badges($mediaCounts, true);
+        echo '</div>';
+    }
     $download = $viewModel['download'] ?? null;
     if (is_array($download)) {
         echo

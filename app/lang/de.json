@@ -7834,5 +7834,18 @@
     "admin.support.storage_unavailable": "Der Speicher für Support-Zugänge ist nicht verfügbar. Führen Sie die Datenbankmigrationen aus und versuchen Sie es erneut.",
     "admin.support.separate_session": "Melden Sie sich ab oder verwenden Sie ein anderes Browserprofil, bevor Sie den Support-Zugang annehmen.",
     "admin.support.rate_limited": "Zu viele Versuche. Bitte versuchen Sie es später erneut.",
-    "admin.support.invalid_invitation": "Diese Einladung ist ungültig, bereits benutzt, abgelaufen oder widerrufen."
+    "admin.support.invalid_invitation": "Diese Einladung ist ungültig, bereits benutzt, abgelaufen oder widerrufen.",
+    "download.archive.title": "Originaldateien in Galerie-ZIP aufnehmen",
+    "download.archive.hierarchy": "Alle Archivschalter sind standardmäßig deaktiviert. Global EIN überschreibt Galerie- und Dateieinstellungen ausschließlich für die ZIP-Aufnahme. Private, versteckte und deaktivierte Medien bleiben geschützt.",
+    "download.archive.gallery_pdf": "Galerie-PDFs ins ZIP aufnehmen",
+    "download.archive.gallery_music": "Galerie-Musik ins ZIP aufnehmen",
+    "download.archive.global_active": "Die globale ZIP-Aufnahme ist aktiviert. Diese lokale Einstellung bleibt gespeichert, wird aber derzeit übersteuert.",
+    "download.archive.item_include": "In Galerie-ZIP aufnehmen",
+    "download.archive.item_exclude": "Nicht in Galerie-ZIP aufnehmen",
+    "download.archive.saved": "ZIP-Aufnahme-Einstellung gespeichert.",
+    "download.archive.save_failed": "Die ZIP-Einstellung konnte nicht gespeichert werden. Laden Sie den Medieneditor neu.",
+    "admin.settings.item.download_archive_pdf_global": "Original-PDFs global in Galerie-ZIPs aufnehmen",
+    "admin.settings.item.download_archive_pdf_global.hint": "Alle anderweitig zugänglichen und sichtbaren PDFs aufnehmen, unabhängig von Galerie- und Dateieinstellungen. Standardmäßig aus. Private und versteckte Dokumente bleiben geschützt.",
+    "admin.settings.item.download_archive_music_global": "Original-Musik global in Galerie-ZIPs aufnehmen",
+    "admin.settings.item.download_archive_music_global.hint": "Alle anderweitig zugänglichen und sichtbaren Musikdateien aufnehmen, unabhängig von Galerie- und Dateieinstellungen. Standardmäßig aus. Berechtigungen zum Einzel-Download bleiben unverändert."
 }

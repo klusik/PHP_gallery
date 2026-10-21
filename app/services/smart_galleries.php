@@ -2792,6 +2792,131 @@ function smart_gallery_map_payload(
 }
 
 /**
+ * Count known PDF/music attachment digests in canonical Smart source sets.
+ *
+ * Source membership must come from the result predicate, never from a
+ * physical-gallery subtree or all Smart rule references. The stored usage
+ * snapshot already enforces hidden state and contains SHA-256 fingerprints,
+ * so this performs neither filesystem access nor hashing on visitor requests.
+ * Dirty/missing projections remain unknown (null), not zero. Gallery archive
+ * inclusion switches are deliberately unrelated to inventory counts.
+ *
+ * @param array<int,list<int>> $sourceIdsBySmart Smart ID to matching physical
+ *     source IDs; callers supply only source galleries containing results.
+ * @return array<int,array{pdf:?int,music:?int}> Public media counts per Smart
+ *     Gallery. Null means the applicable feature or snapshot is unavailable.
+ */
+function smart_gallery_attachment_usage_counts(
+    array $sourceIdsBySmart,
+): array {
+    $result = [];
+    $authorized = [];
+    $allSources = smart_gallery_all_source_gallery_rows();
+    foreach ($sourceIdsBySmart as $smartId => $sourceIds) {
+        $smartId = (int) $smartId;
+        if ($smartId <= 0) {
+            continue;
+        }
+        $result[$smartId] = ['pdf' => null, 'music' => null];
+        foreach (array_unique(array_map('intval', $sourceIds)) as $sourceId) {
+            $source = $allSources[$sourceId] ?? null;
+            if (
+                $sourceId <= 0
+                || !is_array($source)
+                || !gallery_is_public_listed($source)
+                || !visitor_can_access_gallery_without_admin_bypass($source)
+            ) {
+                continue;
+            }
+            $authorized[$smartId][$sourceId] = true;
+        }
+    }
+    if ($result === []) {
+        return [];
+    }
+
+    $galleryIds = [];
+    foreach ($authorized as $sourceIds) {
+        foreach (array_keys($sourceIds) as $sourceId) {
+            $galleryIds[$sourceId] = $sourceId;
+        }
+    }
+    if ($galleryIds === []) {
+        return $result;
+    }
+
+    if (
+        !function_exists(__NAMESPACE__ . '\\presentation_gallery_attachment_usage_schema_status')
+        || !function_exists(__NAMESPACE__ . '\\presentation_schema_render_available')
+        || !presentation_schema_render_available(
+            presentation_gallery_attachment_usage_schema_status(),
+            'smart_gallery.media_counts',
+        )
+    ) {
+        return $result;
+    }
+
+    foreach (['pdf' => 'gallery_pdf_documents', 'music' => 'gallery_music'] as $kind => $capability) {
+        if (!feature_capability_effective_enabled($capability)) {
+            continue;
+        }
+        if (
+            $kind === 'music'
+            && (
+                !function_exists(
+                    __NAMESPACE__ . '\\presentation_gallery_attachment_usage_music_schema_status',
+                )
+                || !presentation_schema_render_available(
+                    presentation_gallery_attachment_usage_music_schema_status(),
+                    'smart_gallery.media_counts.music',
+                )
+            )
+        ) {
+            continue;
+        }
+        try {
+            $projection = \Gallery\Models\gallery_model_attachment_usage_rows(
+                array_values($galleryIds),
+                $kind,
+            );
+        } catch (\Throwable $exception) {
+            // Optional counters fail closed when a snapshot cannot be read.
+            error_log('Smart Gallery media usage snapshot is unavailable.');
+            continue;
+        }
+        $digestsBySource = [];
+        foreach ($projection['items'] as $item) {
+            $digest = $item['sha256'] ?? null;
+            if (
+                !empty($item['hidden'])
+                || !is_string($digest)
+                || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1
+            ) {
+                continue;
+            }
+            $digestsBySource[(int) $item['gallery_id']][$digest] = true;
+        }
+        foreach ($authorized as $smartId => $sourceIds) {
+            $ready = true;
+            $digests = [];
+            foreach (array_keys($sourceIds) as $sourceId) {
+                if (($projection['states'][$sourceId] ?? '') !== 'ready') {
+                    $ready = false;
+                    break;
+                }
+                foreach ($digestsBySource[$sourceId] ?? [] as $digest => $_) {
+                    $digests[$digest] = true;
+                }
+            }
+            if ($ready) {
+                $result[$smartId][$kind] = count($digests);
+            }
+        }
+    }
+    return $result;
+}
+
+/**
  * Load public/Admin card counts and cover rows in bounded SQL batches.
  *
  * Each batch is one UNION statement regardless of the number of Smart Gallery
@@ -2801,7 +2926,7 @@ function smart_gallery_map_payload(
  *
  * @param list<array<string,scalar|null|array<array-key,scalar|null>>> $smartGalleries Smart Gallery definitions whose card summaries are requested.
  * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
- * @return array<int,array{valid:bool,count:int,cover:array<string,scalar|null>|null,source_gallery:array<string,scalar|null>|null}> Card validity, result count, cover image and cover source keyed by Smart Gallery ID.
+ * @return array<int,array{valid:bool,count:int,cover:array<string,scalar|null>|null,source_gallery:array<string,scalar|null>|null,media_counts?:array{pdf:?int,music:?int}}> Card validity, photo and optional known media counts, cover and source keyed by Smart Gallery ID.
  */
 function smart_gallery_card_summaries(
     array $smartGalleries,
@@ -2836,6 +2961,7 @@ function smart_gallery_card_summaries(
             !$publicOnly
             || !nsfw_guard_schema_ready()
             || visitor_can_access_nsfw_content();
+        $sourcesBySmart = [];
         foreach (array_chunk(
             $missing,
             SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE,
@@ -2886,6 +3012,29 @@ function smart_gallery_card_summaries(
                     'source_gallery' => null,
                 ];
             }
+            foreach ($definitions as $definition) {
+                $sourcesBySmart[(int) $definition['id']] = [];
+            }
+            foreach (\Gallery\Models\smart_gallery_model_card_source_rows(
+                $definitions,
+                $accessibleGalleryIds,
+                $publicOnly,
+                $allowNsfw,
+            ) as $membership) {
+                $smartId = (int) $membership['smart_gallery_id'];
+                $sourceId = (int) $membership['gallery_id'];
+                $sourcesBySmart[$smartId][$sourceId] = $sourceId;
+            }
+        }
+
+        $mediaCounts = smart_gallery_attachment_usage_counts(
+            array_map(
+                'array_values',
+                $sourcesBySmart,
+            ),
+        );
+        foreach ($mediaCounts as $smartId => $counts) {
+            $cached[$smartId]['media_counts'] = $counts;
         }
 
         $coverIds = [];

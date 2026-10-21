@@ -44,6 +44,7 @@ namespace Gallery\Controllers;
 require_once __DIR__ . '/gallery_pdf_documents.php';
 require_once __DIR__ . '/gallery_music.php';
 require_once __DIR__ . '/admin_galleries_edit_page/pdf_documents.php';
+require_once __DIR__ . '/admin_galleries_edit_page/archive_media.php';
 require_once __DIR__ . '/admin_galleries_edit_page/capabilities.php';
 // POST action dispatch, media rename, AI reprocess, and the generic gallery save.
 require_once __DIR__ . '/admin_galleries_edit_page/post_actions.php';

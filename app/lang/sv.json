@@ -7834,5 +7834,18 @@
     "admin.support.storage_unavailable": "Lagringen för supportåtkomst är inte tillgänglig. Kör databasmigreringarna och försök igen.",
     "admin.support.separate_session": "Logga ut eller använd en annan webbläsarprofil innan du godkänner supportåtkomsten.",
     "admin.support.rate_limited": "För många försök. Försök igen senare.",
-    "admin.support.invalid_invitation": "Den här inbjudan är ogiltig, redan använd, utgången eller återkallad."
+    "admin.support.invalid_invitation": "Den här inbjudan är ogiltig, redan använd, utgången eller återkallad.",
+    "download.archive.title": "Inkludera originalfiler i galleriets ZIP",
+    "download.archive.hierarchy": "Alla arkivinställningar är av som standard. Globalt PÅ åsidosätter val för galleri och fil endast för ZIP-innehåll. Privata, dolda och avaktiverade medier förblir skyddade.",
+    "download.archive.gallery_pdf": "Inkludera galleriets PDF-filer i ZIP",
+    "download.archive.gallery_music": "Inkludera galleriets musik i ZIP",
+    "download.archive.global_active": "Global ZIP-inkludering är aktiv. Detta lokala val sparas men åsidosätts tills vidare.",
+    "download.archive.item_include": "Inkludera i galleriets ZIP",
+    "download.archive.item_exclude": "Uteslut från galleriets ZIP",
+    "download.archive.saved": "Inställningen för ZIP-inkludering har sparats.",
+    "download.archive.save_failed": "ZIP-inställningen kunde inte sparas. Läs in medieredigeraren igen.",
+    "admin.settings.item.download_archive_pdf_global": "Inkludera original-PDF:er globalt i galleri-ZIP",
+    "admin.settings.item.download_archive_pdf_global.hint": "Inkludera alla i övrigt tillgängliga och synliga PDF-filer oavsett inställningar för galleri och fil. Av som standard. Privata och dolda dokument förblir skyddade.",
+    "admin.settings.item.download_archive_music_global": "Inkludera originalmusik globalt i galleri-ZIP",
+    "admin.settings.item.download_archive_music_global.hint": "Inkludera all i övrigt tillgänglig och synlig musik oavsett inställningar för galleri och fil. Av som standard. Behörighet för separat nedladdning ändras inte."
 }

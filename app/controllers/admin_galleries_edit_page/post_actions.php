@@ -92,6 +92,10 @@ function admin_edit_gallery_handle_post(
     } else {
         verify_csrf();
     }
+    if ((string) ($_POST['archive_media_action'] ?? '') !== '') {
+        admin_edit_gallery_handle_archive_media_action($gallery);
+        return;
+    }
     // $returnTab stores the tab fragment used after saving the gallery editor form.
     $returnTab = admin_return_tab_from_post('admin-edit-identity');
     // This editor is shared with core photo settings. Gate attachment actions,

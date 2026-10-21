@@ -2490,6 +2490,12 @@ V~moderním prohlížeči stahování veřejné či chytré galerie nejprve vyž
 
 Generované ZIP galerií, všech galerií a~výběrů používají podpis obsahu odvozený z~příslušných metadat galerií a~obrázků, takže stále aktuální archiv z~mezipaměti lze použít znovu a~změněná sbírka vytváří novou identitu mezipaměti. Tento \emph{podpis obsahu} jsou metadata zneplatnění mezipaměti, nikoli veřejný autorizační token HMAC pro stahování. Oprávnění před poskytnutím archivu kontroluje řadič stahování.
 
+\subsection{Volitelné originální PDF a~hudební soubory v~archivu ZIP}
+\index{z00279@ZIP!volitelná média}
+Nové i~aktualizované instalace ve~výchozím stavu stahují pouze fotografie. V~nastavení administrace v~kategorii Média jsou dva nezávislé globální přepínače pro~originální PDF a~hudbu. Editor fyzické galerie nabízí vlastní přepínače a~správci PDF a~hudby také volby pro~jednotlivé soubory. Všechny tři úrovně jsou standardně vypnuté. Zařazení do~ZIP je povoleno, pokud je~zapnutá globální, galerijní nebo položková volba. Vyšší úroveň má přednost pouze při~vytváření archivu; uložená nižší nastavení i~oprávnění k~samostatnému stažení PDF či~hudby zůstávají beze změny.
+
+Zařazení do~ZIP nikdy neobchází zděděná přístupová oprávnění, viditelnost a~skrytí souborů, hlavní přepínače funkcí, kontroly integrity ani~pravidla chytré galerie. Chytrý archiv zahrnuje originální média pouze ze~zdrojových galerií, jejichž fotografie skutečně odpovídají povolenému výsledku. Soubory se~ukládají do~složek \texttt{PDF/} a~\texttt{Music/}, zachovávají si~přípony a~identický obsah se~deduplikuje. Manifest v~prohlížeči, stažení bajtů i~náhradní archiv na~serveru znovu kontrolují oprávnění; limity, průběh, zrušení a~ZIP64 zůstávají zachované. Počítadla médií označují viditelný obsah, nikoli počet souborů povolených do~ZIP.
+
 \subsection{Migrace mezi galeriemi}
 \index{m00088@migrace galerie}
 \index{m00087@migrace API}
@@ -2960,6 +2966,11 @@ Generovaný plán modulů deklaruje sdílené závislosti a~jedno kanonické po�
 Běžné požadavky vstupují přes \filepath{public/index.php}; \filepath{index.php} v~kořeni repozitáře je podporovaný kompatibilní vstup pro jiná uspořádání hostingu. Veřejný vstup načítá \filepath{app/early\_runtime.php} před \filepath{app/bootstrap.php} a~obě uspořádání pak dosahují stejného běžného postupu zpracování požadavku.
 
 Malé jádro pro aktuální požadavek v~\filepath{app/runtime/} řídí existující životní cyklus pomocí Request, Router, RouteRegistry a~ModuleLoader a~poté volá procedurální kontroler. Kanonická tabulka tras a~zabezpečení zůstává v~\filepath{app/bootstrap/dispatch.php}. Revidovaný generovaný plán načítá logické moduly podle vybrané trasy; produkce neskenuje zdrojové soubory, nekompiluje závislosti a~nemá náhradní načtení celé aplikace. Stávající PHP~8.1 a~sdílený hosting zůstávají dostačující bez Composeru či sestavení pomocí Node. Starší CLI a~testy mohou pro úplné procedurální API používat \filepath{app/bootstrap\_full.php}.
+
+Doručování náhledů sdílí stávající úplný modul veřejných médií.
+Kompilace přijme tuto závislost pouze tehdy, když celá jeho množina souborů
+již patří vlastníkovi náhledů. Limity souborů trasy i~kontrola duplicitního
+vlastnictví zůstávají vynucené.
 
 Inicializace čte místní konfiguraci a~ustavuje kontext požadavku: přístup k~databázi, kde je potřebný, jazyk, stav relace, bezpečnostní předpoklady a~sdílené běhové služby. Směrování poté převádí příchozí URL nebo náhradní podobu s~parametry dotazu na interní trasu a~parametry, například cestu galerie, číslo stránky, velikost média nebo token sdílení. Dispečer zavolá řadič registrovaný pro tuto trasu.
 

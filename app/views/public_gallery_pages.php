@@ -176,7 +176,7 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
         );
 
     echo
-        '<section class="panel public-smart-gallery-attachment-panel public-smart-gallery-attachment-'
+        '<section class="public-smart-gallery-attachment-panel public-smart-gallery-attachment-'
             . e($placement)
             . '" data-smart-gallery-attachment-group="'
             . e($placement)
@@ -288,30 +288,7 @@ function view_render_public_gallery_hero(array $viewModel): void
         $musicFileCount = max(0, (int) ($mediaCounts['music'] ?? 0));
         if ($pdfFileCount > 0 || $musicFileCount > 0) {
             echo '<div class="gallery-hero-media-counts">';
-            if ($pdfFileCount > 0) {
-                echo
-                    '<span class="gallery-hero-count-badge gallery-media-count-badge" role="img" aria-label="'
-                        . e(t(
-                            'gallery.card.pdf_file_count',
-                            '{count} unique PDF files in this gallery and subgalleries',
-                            ['count' => $pdfFileCount],
-                        ))
-                        . '"><svg class="gallery-media-count-icon gallery-media-count-icon-pdf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2.75h8l4 4v14.5H6zM14 2.75v4h4M8.5 12h7M8.5 15h7M8.5 18h4"/></svg><span class="gallery-hero-count-value">'
-                        . $pdfFileCount
-                        . '</span></span>';
-            }
-            if ($musicFileCount > 0) {
-                echo
-                    '<span class="gallery-hero-count-badge gallery-media-count-badge" role="img" aria-label="'
-                        . e(t(
-                            'gallery.card.music_file_count',
-                            '{count} unique music files in this gallery and subgalleries',
-                            ['count' => $musicFileCount],
-                        ))
-                        . '"><svg class="gallery-media-count-icon gallery-media-count-icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg><span class="gallery-hero-count-value">'
-                        . $musicFileCount
-                        . '</span></span>';
-            }
+            view_render_gallery_media_count_badges($mediaCounts, true);
             echo '</div>';
         }
         $count = max(0, (int) ($viewModel['branch_image_count'] ?? 0));

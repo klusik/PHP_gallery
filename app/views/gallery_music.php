@@ -19,6 +19,56 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
+ * Render an independent per-song/album archive preference control.
+ *
+ * The existing music download flag controls standalone downloads only. This
+ * control is explicit ZIP opt-in, with higher-level global/gallery overrides
+ * preserving the saved item preference. Kept outside music's AJAX forms.
+ *
+ * @param array{gallery_id:int,editor:bool,action_url:string,csrf_html:string,
+ *     archive_gallery?:bool,archive_global?:bool} $model Editor identity.
+ * @param string $itemId Stable direct, album or projected track identifier.
+ * @param bool $allowed Stored item-level ZIP archive preference.
+ * @return void Emit a CSRF-guarded Archive inclusion toggle.
+ */
+function view_render_gallery_music_archive_toggle(
+    array $model,
+    string $itemId,
+    bool $allowed,
+): void {
+    if (
+        empty($model['editor'])
+        || preg_match('/^[a-f0-9]{32}$/D', $itemId) !== 1
+    ) {
+        return;
+    }
+    $label = $allowed
+        ? t('download.archive.item_exclude', 'Exclude from gallery ZIP')
+        : t('download.archive.item_include', 'Include in gallery ZIP');
+    $override = !empty($model['archive_global'])
+        || !empty($model['archive_gallery']);
+    echo '<form method="post" action="'
+        . e((string) $model['action_url'])
+        . '" class="gallery-archive-item-form">'
+        . (string) $model['csrf_html']
+        . '<input type="hidden" name="id" value="'
+        . (int) $model['gallery_id']
+        . '"><input type="hidden" name="archive_media_action" value="save">'
+        . '<input type="hidden" name="archive_media_scope" value="item">'
+        . '<input type="hidden" name="archive_media_kind" value="music">'
+        . '<input type="hidden" name="archive_media_item_id" value="'
+        . e($itemId)
+        . '"><input type="hidden" name="archive_media_enabled" value="'
+        . ($allowed ? '0' : '1')
+        . '"><button class="music-icon" type="submit" aria-label="'
+        . e($label) . '" title="' . e($label)
+        . ($override ? ' (global/gallery override)' : '')
+        . '" aria-pressed="' . ($allowed ? 'true' : 'false')
+        . '">' . view_music_control_icon($allowed ? 'download' : 'locked')
+        . '</button></form>';
+}
+
+/**
  * Render a bounded playlist disclosure with the always-visible miniplayer.
  * @param array{gallery_id:int, editor:bool, action_url:string,
  *     csrf_html:string, revision:string, write_revision?:string,
@@ -212,7 +262,13 @@ function view_render_gallery_music(array $model): void
                 $source['downloadable'],
                 false,
             );
-            echo '</form></div></th></tr>';
+            echo '</form>';
+            view_render_gallery_music_archive_toggle(
+                $model,
+                (string) $sourceId,
+                !empty($source['archive_in_zip']),
+            );
+            echo '</div></th></tr>';
         }
         if ($model['editor'] && $source !== null
             && $source['type'] === 'direct') {
@@ -269,7 +325,17 @@ function view_render_gallery_music(array $model): void
                 false,
             );
             echo '</form>';
+            view_render_gallery_music_archive_toggle(
+                $model,
+                (string) $track['id'],
+                !empty($track['archive_in_zip']),
+            );
         } elseif ($model['editor']) {
+            view_render_gallery_music_archive_toggle(
+                $model,
+                (string) $track['id'],
+                !empty($track['archive_in_zip']),
+            );
             echo '<span class="visually-hidden">'
                 . e(t('music.download')) . '</span>';
         } elseif ($track['download_url'] !== '') {
@@ -362,7 +428,13 @@ function view_render_gallery_music(array $model): void
                 $source['downloadable'],
                 false,
             );
-            echo '</form></div></th></tr>';
+            echo '</form>';
+            view_render_gallery_music_archive_toggle(
+                $model,
+                (string) $sourceId,
+                !empty($source['archive_in_zip']),
+            );
+            echo '</div></th></tr>';
         }
     }
     echo '</tbody></table>';

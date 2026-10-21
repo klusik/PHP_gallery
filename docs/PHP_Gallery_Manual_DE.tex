@@ -2559,6 +2559,12 @@ In modernen Browsern fordert ein öffentlicher Galerie- oder Smart-Gallery-Downl
 
 Erzeugte Galerie-/Gesamt-/Auswahl-ZIP-Dateien verwenden eine aus relevanten Galerie-/Bildmetadaten abgeleitete Inhaltssignatur, sodass ein weiterhin aktuelles Cachearchiv wiederverwendet werden kann und eine geänderte Sammlung eine neue Cachekennung erhält. Diese \emph{Inhaltssignatur} sind Cacheinvalidierungsmetadaten, kein öffentliches HMAC-Downloadautorisierungstoken. Der Downloadcontroller prüft die Autorisierung vor der Archivauslieferung.
 
+\subsection{Optionale PDF- und Musikoriginale in ZIP-Downloads}
+\index{z00278@ZIP!optionale Medien}
+Neue und aktualisierte Installationen laden standardmäßig nur Fotos herunter. Unter Admin-Einstellungen, Medien, gibt es zwei unabhängige globale Schalter für PDF- und Musikoriginale. Der Editor einer physischen Galerie besitzt eigene Schalter und in den PDF-/Musik-Managern können einzelne Originale freigegeben werden. Alle drei Ebenen sind zunächst AUS. Eine globale, Galerie- oder Dateifreigabe erlaubt die Aufnahme; die höhere Ebene übersteuert ausschließlich die ZIP-Auswahl und ändert weder gespeicherte niedrigere Einstellungen noch Berechtigungen für einzelne Downloads.
+
+Die Archivfreigabe umgeht niemals geerbte Zugriffsrechte, Sichtbarkeit, versteckte Dateien, Funktionsschalter, Integritätskontrollen oder Smart-Gallery-Regeln. Ein Smart-ZIP berücksichtigt Medien nur aus Galerien mit tatsächlich passenden und autorisierten Fotos, nicht aus weiteren Quellbäumen. Dateien erhalten die ZIP-Ordner \texttt{PDF/} beziehungsweise \texttt{Music/}, behalten ihre Erweiterungen und werden anhand ihrer Inhaltsidentität dedupliziert. Browser-Manifest, Medienabruf und begrenzter Server-Ersatzweg prüfen die aktuelle Berechtigung erneut; Fortschritt, Abbruch, Größenlimits und ZIP64 bleiben erhalten. Medienzähler zeigen den sichtbaren Bestand, nicht die ZIP-Auswahl.
+
 \subsection{Migration zwischen Galerien}
 \index{g00130@Galeriemigration}
 \index{a00021@API-Migration}
@@ -3043,6 +3049,11 @@ Der generierte Modulplan erklärt gemeinsame Abhängigkeiten und eine kanonische
 Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{index.php} im Repository-Stamm ist ein unterstützter Kompatibilitätseinstieg für andere Hostingstrukturen. Der öffentliche Einstieg lädt \filepath{app/early\_runtime.php} vor \filepath{app/bootstrap.php}; danach erreichen beide Strukturen dieselbe normale Anfragepipeline.
 
 Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
+
+Die Auslieferung von Vorschaubildern verwendet das vorhandene vollständige
+Modul für öffentliche Medien gemeinsam. Die Kompilierung akzeptiert diese
+Abhängigkeit nur, wenn dessen gesamte Dateimenge bereits zum Vorschaumodul
+gehört. Routenlimits und die Prüfung doppelter Dateizuständigkeit bleiben aktiv.
 
 Die Initialisierung liest lokale Konfiguration und stellt den Anfragekontext her: Datenbankzugriff bei Bedarf, Sprache, Sitzungszustand, Sicherheitsvoraussetzungen und gemeinsame Laufzeitdienste. Routing übersetzt anschließend die eingehende URL oder den Ersatzweg mit Abfrageparametern in eine interne Route mit Parametern wie Galeriepfad, Seitennummer, Mediengröße oder Freigabetoken. Dispatch ruft den für diese Route registrierten Controller auf.
 

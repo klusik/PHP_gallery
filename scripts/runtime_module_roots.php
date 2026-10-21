@@ -186,6 +186,10 @@ return [
         'gallery-pdf-documents',
     ],
     'module_dependencies' => [
+        // Thumbnail delivery already contains the full public-media closure.
+        // Reuse that byte-delivery owner: no new files or logical roots, while
+        // removing duplicate ownership and retaining the route module budget.
+        'public-thumbnails' => ['public-media'],
         // The full gallery editor already contains the complete metadata owner
         // closure, including cover selection. Reuse that existing domain owner
         // without adding a module, widening PHP closures or duplicating its files.

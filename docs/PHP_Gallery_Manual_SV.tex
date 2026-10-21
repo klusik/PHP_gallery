@@ -2503,6 +2503,12 @@ I en modern webbläsare begär en hämtning från ett offentligt galleri eller s
 
 Genererade ZIP-filer för gallerier, alla gallerier och urval använder en innehållssignatur som härleds från relevant galleri- och bildmetadata, så att ett fortfarande aktuellt cachelagrat arkiv kan återanvändas och en ändrad samling får en ny cacheidentitet. Denna \emph{innehållssignatur} är metadata för cacheogiltigförklaring, inte en offentlig HMAC-token för hämtningsbehörighet. Hämtningskontrollern kontrollerar behörigheten innan ett arkiv levereras.
 
+\subsection{Valfria originalfiler för PDF och musik i ZIP-hämtningar}
+\index{ZIP!valfria medier}
+Nya och uppgraderade installationer innehåller bara fotografier som standard. Under Admininställningar och Medier finns två oberoende globala reglage för PDF- och musikoriginal. Den fysiska galleriredigeraren har motsvarande inställningar, och enskilda original kan väljas i PDF- och musikhanterarna. Alla tre nivåer är AV från början. Om globalt, galleri eller enskild fil är PÅ får originalet ingå; en högre nivå åsidosätter bara ZIP-valet och ändrar inte sparade lägre inställningar eller behörighet för separat nedladdning.
+
+ZIP-inkludering kringgår aldrig ärvd åtkomst, synlighet, dolda filer, övergripande funktionsreglage, integritetskontroller eller Smart Gallery-regler. Smart ZIP tar bara med original från fysiska gallerier som faktiskt bidrar med behöriga matchande fotografier. Filer hamnar i mapparna \texttt{PDF/} och \texttt{Music/}, behåller sina filändelser och identiskt innehåll dedupliceras. Webbläsarens manifest, filhämtning och serverns begränsade reservväg kontrollerar aktuell behörighet igen; förlopp, avbrytning, storleksgränser och ZIP64 fungerar som tidigare. Medieräknare visar synligt innehåll, inte hur många filer som inkluderas i ZIP.
+
 \subsection{Migrering mellan gallerier}
 \index{g00103@gallerimigrering}
 \index{a00015@API-migrering}
@@ -2976,6 +2982,11 @@ Den genererade modulplanen anger delade beroenden och en kanonisk filordning som
 Vanliga begäranden kommer in genom \filepath{public/index.php}; \filepath{index.php} i kodförrådets rot är en stödd kompatibilitetsingång för andra webbhotellsupplägg. Den offentliga ingången läser in \filepath{app/early\_runtime.php} före \filepath{app/bootstrap.php}, och sedan når båda uppläggen samma vanliga begärandepipeline.
 
 Den lilla begärandelokala kärnan under \filepath{app/runtime/} styr den befintliga livscykeln via Request, Router, RouteRegistry och ModuleLoader innan den anropar den procedurala kontrollern. Den kanoniska rutt- och säkerhetstabellen finns kvar i \filepath{app/bootstrap/dispatch.php}. En granskad genererad plan laddar logiska moduler för vald rutt; produktionen skannar inte källfiler, kompilerar inte beroenden och har ingen reservväg som laddar hela programmet. Befintliga PHP~8.1- och webbhotellskrav räcker fortfarande, utan Composer eller Node-bygge. Äldre CLI-/testverktyg kan använda \filepath{app/bootstrap\_full.php} för hela det procedurala API:et.
+
+Leverans av miniatyrbilder delar den befintliga fullständiga modulen för
+offentliga medier. Kompileringen godtar beroendet endast när hela dess
+filmängd redan ingår i miniatyrmodulens ansvar. Ruttens filgränser och
+kontrollen av dubbelt filansvar gäller fortfarande.
 
 Uppstarten läser lokal konfiguration och etablerar begärans sammanhang: databasåtkomst där det krävs, språk, sessionstillstånd, säkerhetsförutsättningar och gemensamma körningstjänster. Dirigeringen översätter sedan inkommande URL eller frågesträngsreserv till en intern rutt med parametrar såsom gallerisökväg, sidnummer, mediestorlek eller delningstoken. Fördelningen anropar kontrollern som är registrerad för rutten.
 

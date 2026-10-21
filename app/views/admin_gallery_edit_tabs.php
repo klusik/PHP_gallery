@@ -1340,6 +1340,68 @@ function view_render_admin_gallery_editor_form_close(array $viewModel): void
 }
 
 /**
+ * Render independently saved physical-gallery ZIP opt-in switches.
+ *
+ * This fragment lives outside the editor's shared settings form; each POST
+ * retains its own CSRF token. Global ON overrides these saved gallery choices
+ * only for archive inclusion, never for access or attachment visibility.
+ *
+ * @param array{gallery_id:int,action_url:string,csrf_html:string,
+ *     pdf_gallery:bool,music_gallery:bool,pdf_global:bool,
+ *     music_global:bool} $settings Prepared Admin archive preferences.
+ * @return void Emit two accessible standalone preference forms.
+ */
+function view_render_admin_gallery_archive_preferences(
+    array $settings,
+): void {
+    $id = (int) ($settings['gallery_id'] ?? 0);
+    $action = e((string) ($settings['action_url'] ?? ''));
+    $csrf = (string) ($settings['csrf_html'] ?? '');
+    echo '<section class="admin-edit-card gallery-archive-options">'
+        . '<h3>' . e(t('download.archive.title', 'Include originals in ZIP'))
+        . '</h3><p class="muted">'
+        . e(t(
+            'download.archive.hierarchy',
+            'All archive switches are off by default. Global ON overrides'
+                . ' gallery/item preferences only for ZIP inclusion.'
+                . ' Private, hidden and disabled media stay protected.',
+        ))
+        . '</p>';
+    foreach (['pdf', 'music'] as $kind) {
+        $saved = !empty($settings[$kind . '_gallery']);
+        $global = !empty($settings[$kind . '_global']);
+        $label = $kind === 'pdf'
+            ? t('download.archive.gallery_pdf', 'Include gallery PDFs in ZIP')
+            : t('download.archive.gallery_music', 'Include gallery music in ZIP');
+        echo '<form method="post" action="' . $action
+            . '" class="gallery-archive-option">'
+            . $csrf
+            . '<input type="hidden" name="id" value="' . $id . '">'
+            . '<input type="hidden" name="archive_media_action" value="save">'
+            . '<input type="hidden" name="archive_media_kind" value="'
+            . e($kind) . '">'
+            . '<input type="hidden" name="archive_media_scope" value="gallery">'
+            . '<input type="hidden" name="archive_media_enabled" value="0">'
+            . '<label><input type="checkbox" role="switch"'
+            . ' name="archive_media_enabled" value="1"'
+            . ($saved ? ' checked' : '')
+            . '> ' . e($label) . '</label>'
+            . '<button type="submit" class="button secondary">'
+            . e(t('admin.common.save', 'Save')) . '</button></form>';
+        if ($global) {
+            echo '<p class="muted">'
+                . e(t(
+                    'download.archive.global_active',
+                    'Global ZIP inclusion is ON; this gallery preference is'
+                        . ' preserved but overridden while global stays ON.',
+                ))
+                . '</p>';
+        }
+    }
+    echo '</section>';
+}
+
+/**
  * Render one Media tab with only the available nested sections.
  * @param array{active:bool,active_section:string,presentation_html:string,
  *     documents_html:string,music_html:string,artwork_html:string,
@@ -1382,6 +1444,13 @@ function view_render_admin_gallery_media_tab(array $model): void
         ? $model['active_section']
         : (string) array_key_first($sections);
     $html = '<div class="gallery-editor-media" data-admin-subtab-scope>';
+    if (is_array($model['archive_settings'] ?? null)) {
+        ob_start();
+        view_render_admin_gallery_archive_preferences(
+            $model['archive_settings'],
+        );
+        $html .= (string) ob_get_clean();
+    }
     $html .= '<input type="hidden" name="return_media_section" value="'
         . e($activeSection) . '" form="'
         . e($model['settings_form_id']) . '">';

@@ -7834,5 +7834,18 @@
     "admin.support.storage_unavailable": "Support-access storage is unavailable. Apply database migrations and try again.",
     "admin.support.separate_session": "Sign out or use another browser profile before accepting support access.",
     "admin.support.rate_limited": "Too many attempts. Please try again later.",
-    "admin.support.invalid_invitation": "This invitation is invalid, used, expired or revoked."
+    "admin.support.invalid_invitation": "This invitation is invalid, used, expired or revoked.",
+    "download.archive.title": "Include originals in gallery ZIP",
+    "download.archive.hierarchy": "All archive switches are off by default. Global ON overrides gallery and item choices only for ZIP inclusion. Private, hidden and disabled media remain protected.",
+    "download.archive.gallery_pdf": "Include gallery PDFs in ZIP",
+    "download.archive.gallery_music": "Include gallery music in ZIP",
+    "download.archive.global_active": "Global ZIP inclusion is enabled. This lower-level choice is preserved but temporarily overridden.",
+    "download.archive.item_include": "Include in gallery ZIP",
+    "download.archive.item_exclude": "Exclude from gallery ZIP",
+    "download.archive.saved": "Archive inclusion preference saved.",
+    "download.archive.save_failed": "Archive preference could not be saved. Reload the media editor.",
+    "admin.settings.item.download_archive_pdf_global": "Include original PDFs in gallery ZIPs globally",
+    "admin.settings.item.download_archive_pdf_global.hint": "Include all otherwise authorized visible PDFs in gallery archives, overriding gallery/item ZIP choices only. Disabled by default. Private and hidden documents remain protected.",
+    "admin.settings.item.download_archive_music_global": "Include original music in gallery ZIPs globally",
+    "admin.settings.item.download_archive_music_global.hint": "Include all otherwise authorized visible music in gallery archives, overriding gallery/item ZIP choices only. Disabled by default. Standalone music download permissions remain unchanged."
 }

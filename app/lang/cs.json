@@ -7834,5 +7834,18 @@
     "admin.support.storage_unavailable": "Úložiště dočasných oprávnění není dostupné. Proveďte databázové migrace a zkuste to znovu.",
     "admin.support.separate_session": "Před přijetím dočasného přístupu se odhlaste nebo použijte jiný profil prohlížeče.",
     "admin.support.rate_limited": "Příliš mnoho pokusů. Zkuste to později.",
-    "admin.support.invalid_invitation": "Pozvánka je neplatná, použitá, vypršela nebo byla odvolána."
+    "admin.support.invalid_invitation": "Pozvánka je neplatná, použitá, vypršela nebo byla odvolána.",
+    "download.archive.title": "Přidat originální soubory do ZIP galerie",
+    "download.archive.hierarchy": "Ve výchozím stavu jsou všechny přepínače vypnuté. Globální povolení má přednost před nastavením galerie i souboru pouze při zařazení do ZIP. Soukromé, skryté a zakázané soubory zůstávají chráněné.",
+    "download.archive.gallery_pdf": "Přidávat PDF z galerie do ZIP",
+    "download.archive.gallery_music": "Přidávat hudbu z galerie do ZIP",
+    "download.archive.global_active": "Globální přidávání do ZIP je zapnuté. Toto lokální nastavení se zachová, ale zatím nemá přednost.",
+    "download.archive.item_include": "Přidávat do ZIP galerie",
+    "download.archive.item_exclude": "Nepřidávat do ZIP galerie",
+    "download.archive.saved": "Nastavení přidávání do ZIP bylo uloženo.",
+    "download.archive.save_failed": "Nastavení ZIP se nepodařilo uložit. Obnovte editor médií.",
+    "admin.settings.item.download_archive_pdf_global": "Globálně přidávat originální PDF do ZIP galerií",
+    "admin.settings.item.download_archive_pdf_global.hint": "Přidávat všechna jinak oprávněně přístupná a viditelná PDF, bez ohledu na nastavení galerie či položky. Výchozí stav je vypnuto. Soukromé a skryté dokumenty zůstávají chráněné.",
+    "admin.settings.item.download_archive_music_global": "Globálně přidávat originální hudbu do ZIP galerií",
+    "admin.settings.item.download_archive_music_global.hint": "Přidávat všechnu jinak oprávněně přístupnou a viditelnou hudbu, bez ohledu na nastavení galerie či položky. Výchozí stav je vypnuto. Povolení samostatného stažení se nemění."
 }

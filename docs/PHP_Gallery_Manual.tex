@@ -2511,6 +2511,12 @@ On~a~modern browser, a~public gallery or~Smart Gallery download first requests a
 
 Generated gallery/all/selection ZIPs use a~content signature derived from~the~relevant gallery/image metadata so~a~still-current cached archive can~be~reused and~a~changed collection produces a~new cache identity. This \emph{content signature} is~cache invalidation metadata, not~a~public HMAC download authorization token. Authorization is~checked by~the~download controller before an~archive is~served.
 
+\subsection{Optional original PDF and~music files in~ZIP downloads}
+\index{ZIP!optional media}
+New and~upgraded installations include photographs only. In~Admin Settings, the~Media category provides two independent global switches for~PDF and~music originals. The~physical gallery editor provides corresponding gallery switches and~individual original-file preferences in~the~PDF and~music managers. All~three levels default to~OFF; inclusion is~permitted when the~global, source-gallery, or~item switch is~ON. A~higher-level switch overrides lower-level ZIP preferences without changing the~saved lower-level choices or~standalone music/PDF download permissions.
+
+Archive inclusion never bypasses inherited gallery access, visibility or~hidden state, feature master switches, file-integrity checks or~Smart Gallery rules. Smart ZIPs include originals only from~physical galleries contributing at~least one authorized matching photograph; they do~not sweep unrelated source trees. Eligible files use~the~\texttt{PDF/} and~\texttt{Music/} ZIP folders, preserve original extensions, and~are~deduplicated by~recorded content identity. Browser manifests, individual media delivery and~bounded server ZIP fallback recheck current authorization; progress, cancellation, size limits and~ZIP64 continue to~apply. Media-count badges remain inventory counts, not~the~number of~items selected for~an~archive.
+
 \subsection{Gallery-to-gallery migration}
 \index{gallery migration}
 \index{API migration}
@@ -2987,6 +2993,11 @@ The~generated module plan declares shared dependencies and~one canonical file or
 Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. The~public entry loads \filepath{app/early\_runtime.php} before \filepath{app/bootstrap.php}, then both layouts reach the~same normal request pipeline.
 
 The~small request-local kernel under \filepath{app/runtime/} coordinates the~existing request lifecycle through Request, Router, RouteRegistry, and~ModuleLoader before invoking the~procedural controller. The~canonical route and~security table remains in~\filepath{app/bootstrap/dispatch.php}. A~reviewed generated plan loads logical modules for~the~selected route; production performs no~source scan or~dependency compilation and~has~no~load-all fallback. Existing PHP~8.1 and~shared-hosting requirements remain sufficient, without Composer or~a~Node build. Legacy CLI/test consumers may~use \filepath{app/bootstrap\_full.php} for~the~complete procedural API.
+
+Thumbnail delivery reuses the~existing complete public-media module.
+Compilation accepts this dependency only while its~full file closure already
+belongs to~the~thumbnail owner. Route file limits and~the~duplicate-ownership
+ratchet remain enforced.
 
 Bootstrap reads local configuration and~establishes the~request context: database access where required, language, session state, security prerequisites, and~shared runtime services. Routing then translates the~incoming URL or~query-style fallback into an~internal route plus parameters such as~a~gallery path, page number, media size, or~share token. Dispatch calls the~controller registered for~that route.
 

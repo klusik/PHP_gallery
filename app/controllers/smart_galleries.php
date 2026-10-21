@@ -1842,6 +1842,9 @@ function cms_smart_gallery(): void
         static fn(array $item): int => (int) $item['gallery_id'],
         $sourceSummary['items'],
     );
+    $smartMediaCounts = \Gallery\Services\smart_gallery_attachment_usage_counts([
+        (int) $gallery['id'] => $sourceIds,
+    ]);
     $pdfSources = \Gallery\Services\feature_capability_effective_enabled(
         'gallery_pdf_documents',
     )
@@ -1932,6 +1935,7 @@ function cms_smart_gallery(): void
         ),
         'description' => (string) $gallery['description'],
         'total' => $total,
+        'media_counts' => (array) ($smartMediaCounts[(int) $gallery['id']] ?? []),
         'download' => $download,
         'map_available' => $mapAvailable,
         'map_url' => $mapUrl,

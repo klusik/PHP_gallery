@@ -91,9 +91,36 @@ function admin_edit_gallery_render_documents_tab(
         $documentsHtml = admin_gallery_pdf_documents_html($gallery)
             . admin_edit_gallery_simbrief_legacy_panel_html($gallery);
     }
+    require_once __DIR__ . '/../../services/gallery_archive_media.php';
     \Gallery\Views\view_render_admin_gallery_media_tab([
         'active' => $activeEditTab === 'admin-edit-media',
         'active_section' => $mediaSection,
+        'archive_settings' => [
+            'gallery_id' => (int) $gallery['id'],
+            'action_url' => url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
+                'tab' => 'admin-edit-media',
+            ]),
+            'csrf_html' => csrf_field(),
+            'pdf_gallery' =>
+                \Gallery\Services\gallery_archive_media_gallery_enabled(
+                    'pdf',
+                    (int) $gallery['id'],
+                ),
+            'music_gallery' =>
+                \Gallery\Services\gallery_archive_media_gallery_enabled(
+                    'music',
+                    (int) $gallery['id'],
+                ),
+            'pdf_global' =>
+                \Gallery\Services\gallery_archive_media_global_enabled(
+                    'pdf',
+                ),
+            'music_global' =>
+                \Gallery\Services\gallery_archive_media_global_enabled(
+                    'music',
+                ),
+        ],
         'presentation_html' => $presentationHtml,
         'documents_html' => $documentsHtml,
         'music_html' => $musicHtml,
