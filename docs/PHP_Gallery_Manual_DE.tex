@@ -1535,6 +1535,12 @@ Isolierte Positionsblöcke zwischen Sprung und lokaler Rückkehr werden
 in beiden Karten mit Hinweis ausgelassen; Rohdaten bleiben erhalten.
 Entfernte Anfangs- und Endabschnitte sowie Ortswechsel ohne Rückkehr bleiben sichtbar.
 
+Die Hauptaktion wechselt zwischen SimBrief laden und SimBrief entladen.
+Entladen entfernt den vorbereiteten/aktuellen OFP und seine Route
+einschließlich des aktuellen Sitzungsschnappschusses; ältere Flüge und PDFs
+bleiben erhalten. Während Laden und Abschluss ist Entladen gesperrt.
+Nach Aufnahmeende zeigt die Hauptaktion keine historische Route mehr.
+
 Der SimBrief-Identitätsdialog verwendet das dunkle App-Design, prüft Eingaben
 im Fenster und unterstützt Enter/Escape. Häkchen und Flughafenpaar kennzeichnen
 den akzeptierten Plan des nächsten/aktuellen Flugs; fehlgeschlagenes Neuladen
@@ -1585,10 +1591,10 @@ den umgebrochenen Text und die vollständige Schaltflächenzeile an. Text und
 Schaltflächenzeile haben denselben Hintergrund wie das Fenster; die Hauptaktion
 \ui{Update} bleibt hervorgehoben.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.7.1. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.8.0. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.7.1/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.8.0/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.

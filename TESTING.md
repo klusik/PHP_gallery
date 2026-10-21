@@ -191,6 +191,9 @@ remain separate deployment/manual observations.
 WinApp 0.6.0 dispatch regressions cover pilot identity classification, invalid
 provider responses, optional session snapshots, archived JSON/XML imports,
 AIRAC-scoped ambiguous-fix retention and offline dateline map rendering.
+Dispatch UI regressions also cover staged/current unloading, empty route/load
+state, preservation of historical OFP/PDF bytes, blocked loading/finalization,
+unlink failure and hiding a completed flight's route from the main control.
 The renderer suite blocks public tile transport and exercises the real offline
 fallback. Hosted central WinApp coverage owns execution. Manual acceptance must
 also load a real SimBrief OFP, change the saved identity, verify session

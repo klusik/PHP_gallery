@@ -1486,6 +1486,12 @@ Isolerade positionsblock mellan hopp och lokal återkomst utelämnas
 på båda kartorna med en synlig not; rådata bevaras. Avlägsna start- och
 slutsegment samt förflyttningar utan återkomst visas fortfarande.
 
+Huvudknappen växlar mellan Läs in SimBrief och Koppla bort SimBrief.
+Frånkoppling tar bort förberedd/aktuell OFP och dess rutt, inklusive aktuell
+sessions sparade OFP; äldre flygningar och befintliga PDF-filer bevaras.
+Under inläsning och slutförande är frånkoppling spärrad. Efter avslutad
+inspelning döljs den historiska rutten på huvudkontrollen.
+
 SimBrief-dialogen använder appens mörka tema, validerar direkt i fönstret
 och stöder Enter/Escape. En bock och ett flygplatspar visar den accepterade planen
 för nästa/aktuell flygning; misslyckad omläsning bevarar den. Inställningar,
@@ -1530,10 +1536,10 @@ Uppdateringsfönstret anpassar storleken till den radbrutna statustexten och hel
 knappraden när bakgrundskontroller ändrar meddelandet. Texten och knappraden har
 samma bakgrund som fönstret; huvudåtgärden \ui{Update} förblir framhävd.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.7.1. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.8.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.7.1/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.8.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.

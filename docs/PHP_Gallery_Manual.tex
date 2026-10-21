@@ -1487,6 +1487,10 @@ Detached jump-and-return position blocks are omitted from~both maps
 with a~visible notice; raw samples remain unchanged. Distant starting
 or~ending segments and~relocations without a~local return stay visible.
 
+The~main screen offers Load SimBrief or~Unload SimBrief. Unload clears
+the~staged/current OFP and~its route, including the~current session snapshot;
+older sessions and~existing PDFs remain intact. Loading/finalization blocks
+unloading. Stopped flights no~longer show their route on~the~main control.
 The~SimBrief identity sheet uses the~dark app theme, validates input inline
 and~accepts Enter/Escape. A~checked loaded state and~airport pair identify
 the~staged/current flight's accepted plan; failed reloads preserve it. Flight
@@ -1534,9 +1538,9 @@ The~update notice resizes to~fit its wrapped status text and~complete button row
 when background checks change the~message. Text and~action-row backgrounds match
 the~window; the~primary \ui{Update} action remains distinct.
 
-The~independent uploader source targets 0.7.1. A~separately requested installer
+The~independent uploader source targets 0.8.0. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.7.1/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.8.0/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.

@@ -5840,7 +5840,7 @@ class WatcherApp:
         )
         self.finish_flight_button.grid(row=0, column=0, sticky="w")
         ttk.Button(flight_actions, textvariable=self.flights.simbrief_button_var,
-            command=self.flights.load_simbrief,
+            command=self.flights.toggle_simbrief,
         ).grid(row=0, column=1, padx=(6, 0))
         icon_button(flight_actions, "settings",
             lambda: self.flights.load_simbrief(change_identity=True),

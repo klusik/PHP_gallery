@@ -888,7 +888,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.finish_flight_button.grid.assert_called_once_with(row=0, column=0, sticky="w")
         simbrief = widgets.Button.call_args_list[1]
         self.assertIs(actions, simbrief.args[0])
-        self.assertEqual(app.flights.load_simbrief, simbrief.kwargs["command"])
+        self.assertEqual(app.flights.toggle_simbrief, simbrief.kwargs["command"])
 
     def test_watcher_run_reports_inventory_and_camera_startup_state(self) -> None:
         """Keep the original endpoint and SimConnect startup diagnostics visible.

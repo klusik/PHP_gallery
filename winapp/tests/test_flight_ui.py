@@ -1029,7 +1029,7 @@ class FlightUITests(unittest.TestCase):
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
         ui.dispatch = plan
         ui.refresh_dispatch_status()
-        ui.simbrief_button_var.set.assert_called_with("simbrief_ready")
+        ui.simbrief_button_var.set.assert_called_with("simbrief_unload")
         ui.simbrief_status_var.set.assert_called_with("simbrief_next_flight: LKPR → EDDF")
         ui.dispatch_results.put(("123", None, None, "offline"))
         with patch.object(flight_ui.messagebox, "showerror"):
@@ -1042,6 +1042,109 @@ class FlightUITests(unittest.TestCase):
         ui.refresh_dispatch_status()
         ui.simbrief_button_var.set.assert_called_with("simbrief_load")
         ui.simbrief_status_var.set.assert_called_with("")
+
+    def test_unload_staged_dispatch_then_offer_explicit_loading(self) -> None:
+        """Clear a staged route before recording without starting a fetch.
+
+        Returns:
+            None: Unloading restores the empty route and load action; only a
+                subsequent explicit click calls the provider-loading owner.
+        """
+        ui = self._ui(self._host())
+        ui.dispatch = Mock()
+        ui.lease = Mock()
+        with patch.object(ui, "load_simbrief") as load:
+            ui.toggle_simbrief()
+            self.assertIsNone(ui.dispatch)
+            ui.simbrief_button_var.set.assert_called_with("simbrief_load")
+            ui.simbrief_status_var.set.assert_called_with("")
+            load.assert_not_called()
+            ui.toggle_simbrief()
+            load.assert_called_once_with()
+
+    def test_unload_current_dispatch_preserves_history_and_reports(self) -> None:
+        """Detach only current OFP evidence and prevent finish reattachment.
+
+        Returns:
+            None: Current simbrief.json disappears, historical OFP and PDF bytes
+                survive, and finish cannot save the unloaded in-memory plan.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            current = directory / "current"
+            current.mkdir()
+            historical = directory / "old"
+            historical.mkdir()
+            for target in (current, historical):
+                (target / "simbrief.json").write_text("saved OFP", encoding="utf-8")
+            pdf = current / "report.pdf"
+            pdf.write_bytes(b"retained PDF")
+            ui = self._ui(self._host())
+            ui.recorder = SimpleNamespace(directory=current, is_alive=lambda: True)
+            ui.lease = Mock()
+            plan = Mock(origin="LKPR", destination="EDDF")
+            ui.active_dispatch = plan
+            ui.active_dispatch_directory = current
+            ui.refresh_dispatch_status()
+            ui.simbrief_button_var.set.assert_called_with("simbrief_unload")
+            ui.toggle_simbrief()
+            self.assertFalse((current / "simbrief.json").exists())
+            self.assertIsNone(ui.active_dispatch)
+            self.assertIsNone(ui.active_dispatch_directory)
+            ui.simbrief_status_var.set.assert_called_with("")
+            ui.attach_loaded_dispatch(current)
+            plan.save.assert_not_called()
+            self.assertEqual("saved OFP", (historical / "simbrief.json").read_text())
+            self.assertEqual(b"retained PDF", pdf.read_bytes())
+
+    def test_unload_failure_and_busy_loading_preserve_dispatch(self) -> None:
+        """Keep accepted evidence on unlink failure or while another owner works.
+
+        Returns:
+            None: Failed removal keeps the route; loading and finalization admit
+                no dispatch changes and report no false successful unload.
+        """
+        ui = self._ui(self._host())
+        ui.recorder = SimpleNamespace(directory=ui.directory, is_alive=lambda: True)
+        ui.lease = Mock()
+        plan = Mock()
+        ui.active_dispatch = plan
+        ui.active_dispatch_directory = ui.directory
+        with patch.object(Path, "unlink", side_effect=OSError("locked")), \
+                patch.object(flight_ui.messagebox, "showerror") as error:
+            ui.toggle_simbrief()
+        error.assert_called_once()
+        self.assertIs(plan, ui.active_dispatch)
+        for loading, busy in ((True, False), (False, True)):
+            ui.dispatch_loading = loading
+            with patch.object(ui, "busy", return_value=busy), \
+                    patch.object(Path, "unlink") as unlink:
+                ui.toggle_simbrief()
+            unlink.assert_not_called()
+            self.assertIs(plan, ui.active_dispatch)
+
+    def test_stopped_dispatch_is_hidden_and_retained_when_loading_next(self) -> None:
+        """Do not present a completed session's route as the next flight's OFP.
+
+        Returns:
+            None: Stopped evidence stays historical and the main action loads a
+                new plan instead of deleting the completed session's snapshot.
+        """
+        ui = self._ui(self._host())
+        ui.recorder = SimpleNamespace(directory=ui.directory, is_alive=lambda: False)
+        ui.lease = Mock()
+        plan = Mock()
+        ui.active_dispatch = plan
+        ui.active_dispatch_directory = ui.directory
+        ui.refresh_dispatch_status()
+        ui.simbrief_button_var.set.assert_called_with("simbrief_load")
+        ui.simbrief_status_var.set.assert_called_with("")
+        with patch.object(ui, "load_simbrief") as load, \
+                patch.object(Path, "unlink") as unlink:
+            ui.toggle_simbrief()
+        load.assert_called_once_with()
+        unlink.assert_not_called()
+        self.assertIs(plan, ui.active_dispatch)
 
     def test_sorting_uses_utc_time_and_numeric_counts_without_rebuilding_tree(self) -> None:
         """Sort actual flight times and counts while preserving native tree state.
