@@ -32,6 +32,36 @@ pages as part of a focused change.
 - Do not underline Admin UI text, labels, links, or controls. Use color,
   spacing, icons, and borders to communicate hierarchy and interaction.
 
+## Public search and pagination
+
+Public search and pagination follow the same compact visual language as the
+media panels and public header actions. Their shared surface tokens belong to
+`public/assets/styles/public-shared.css`; search layout belongs to
+`public/assets/styles/public.css`. Keep changes scoped to public pages.
+
+- Use a translucent Theme panel surface, a quiet foreground-derived border,
+  and rounding capped at 8 px while respecting smaller Theme radii. Text,
+  borders and accents follow the selected Theme, including dark themes.
+- Pagination controls have a 32 px minimum target on desktop. Indicate the
+  current page with a restrained accent tint and a muted 1 px inset line;
+  keep the label in the normal foreground color. Disabled
+  controls remain visibly muted; the page count has a small readable surface
+  over photographic backgrounds.
+- Keep search flat and compact, with the scope switch and clear action in
+  the same row on desktop. The selected scope has a subtle accent tint. The
+  clear action has a transparent resting surface and is absent when hidden.
+  Result panels use the same border and radius with a denser readable surface.
+  Desktop search is 32 px high, including its border and visible clear action.
+  On the administrator's home-page creation toolbar, keep the adjacent create
+  action at the same height, including when search is disabled. The mobile
+  interaction minimum remains at least 44 px.
+- Show a visible keyboard outline on pagination links, the scope option and
+  the clear action. Search focus highlights the field boundary and accent line.
+- At viewport widths up to 640 px, use 44 px minimum interaction targets and
+  place the scope option on its own row. Pagination wraps naturally without
+  horizontal scrolling. These changes preserve the existing search behavior,
+  native checkbox semantics, page URLs and no-JavaScript pagination.
+
 ## Controls and layout
 
 - Use short labels with small `?` context-help controls for longer explanations.
@@ -39,6 +69,14 @@ pages as part of a focused change.
   and Escape, and expose an accessible name and relationship to its content.
 - Use standard switches for binary settings. An autosaved setting has no second
   Save button; show its saving, saved, and failure state where users can see it.
+- Progressively replace visible checkbox boxes with small switches when their
+  owning interface is edited. Apply this direction across public and Admin
+  interfaces, preserving native input behavior, labels, keyboard operation,
+  checked/disabled state and form submission. Use a compact 26 by 14 px track
+  with an 8 px thumb as the public search reference; the surrounding label
+  provides the comfortable click/tap target. Keep the active tint restrained,
+  including in dark themes. Respect forced-color settings with a visible native
+  control. Keep each migration within its owning feature's scope.
 - Group work into logical tabs or sections. Use a fluid grid that gives each
   control the space it needs; keep items inline when they fit and do not impose
   a two-column cap.

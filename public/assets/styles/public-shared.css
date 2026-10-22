@@ -72,6 +72,19 @@
     min-width: 0;
 }
 
+/* Shared public search/navigation surface, owned here for both CSS consumers.
+   Type: CSS lengths/colors. Units: px, rem, color. Scope: public pages.
+   Consumers: public pagination and the public-home search toolbar.
+   Rationale: 32px desktop controls match header actions; 44px mobile targets
+   retain touch comfort. A capped 8px radius keeps Theme rounding restrained. */
+.public-page {
+    --public-control-height: 32px;
+    --public-control-radius: min(var(--radius, 16px), 8px);
+    --public-control-surface: color-mix(in srgb, var(--panel) 72%, transparent);
+    --public-control-hover: color-mix(in srgb, var(--accent) 5%, var(--panel));
+    --public-control-border: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
 /* Styles public pagination controls for gallery and photo listings. */
 .public-page .pagination {
     display: flex;
@@ -86,30 +99,38 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 2.35rem;
-    min-height: 2.35rem;
-    padding: 0.45rem 0.75rem;
-    border: 1px solid rgba(122, 83, 45, 0.22);
-    border-radius: var(--radius, 16px);
-    background: rgba(255, 250, 240, 0.78);
-    color: var(--text);
-    font-weight: 700;
+    min-width: var(--public-control-height);
+    min-height: var(--public-control-height);
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--public-control-border);
+    border-radius: var(--public-control-radius);
+    background: var(--public-control-surface);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    color: var(--ink);
+    font-size: 0.82rem;
+    font-weight: 600;
     line-height: 1;
     text-decoration: none;
 }
 
-.public-page .pagination-link:hover,
-.public-page .pagination-link:focus-visible {
+.public-page a.pagination-link:hover {
     border-color: color-mix(in srgb, var(--accent-dark) 45%, transparent);
-    background: rgba(255, 250, 240, 0.94);
-    outline: none;
+    background: var(--public-control-hover);
+}
+
+.public-page a.pagination-link:focus-visible {
+    outline: 2px solid var(--accent-dark);
+    outline-offset: 2px;
 }
 
 /* Styles the current pagination page. */
 .public-page .pagination-link.is-current {
-    background: var(--accent);
-    color: #fffdf8;
-    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+    color: var(--ink);
+    border-color: color-mix(in srgb, var(--accent-dark) 28%, transparent);
+    box-shadow: inset 0 -1px 0
+        color-mix(in srgb, var(--accent-dark) 55%, transparent);
 }
 
 /* Styles disabled pagination controls. */
@@ -126,9 +147,18 @@
 
 /* Styles the current page text next to pagination controls. */
 .public-page .pagination-status {
-    color: var(--muted);
-    font-size: 0.92rem;
-    font-weight: 700;
+    padding: 0.3rem 0.55rem;
+    border-radius: var(--public-control-radius);
+    background: var(--public-control-surface);
+    color: var(--ink);
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+@media (max-width: 640px) {
+    .public-page {
+        --public-control-height: 44px;
+    }
 }
 
 /* Public floating page-edge controls. The shared group occupies the existing

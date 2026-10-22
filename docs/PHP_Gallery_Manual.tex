@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.141.1}
+\newcommand{\version}{0.141.2}
 \newcommand{\manualdate}{22 October 2026}
 
 \hypersetup{
@@ -1458,6 +1458,13 @@ The~EN/CS/DE/SV Admin interface strings are translated, but authored titles and~
 \subsection{Search, tags, and~navigation}
 \index{search}
 \index{tags}
+
+Search and~pagination use compact translucent controls in~the~selected Theme,
+with a~32~px desktop search bar.
+The~current page has~a~subtle accent tint and~line; keyboard focus remains
+visible. On~narrow screens, the~search scope moves below the~field and~touch
+targets grow. A~small switch selects the~search scope. Search scope and~page
+navigation work as~before.
 
 Search can~look across the~whole public site or~stay within the~current gallery and~its children. A~visitor looking at~\emph{Family archive} can~search only that branch for~a~person's name, while a~visitor on~the~home page can~search across every public collection. The~current search service begins at~two visible query characters, returns a~bounded mixture of~gallery and~photo results, and~ranks stronger title/name/tag matches ahead of~weaker text matches. The~default request returns up~to~12 merged results and~the~service clamps a~request to~at~most~30 results.
 

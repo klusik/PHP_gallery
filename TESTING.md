@@ -1,5 +1,16 @@
 # Testing Guide
 
+## Public search and root creation toolbar
+
+`public_home_creation_browser_test.mjs` loads production public styles and the
+existing root-creation drawer coordinator. Its toolbar fixture requires the
+approved 32 px desktop search/create height, equal adjacent heights, no height
+jump when the search clear action becomes visible, containment at a 320 px
+toolbar width, and stable creation controls when search is disabled. It also
+retains the existing canonical creation/mutation checks. Hosted required
+Chromium owns this regression; mobile search controls retain at least 44 px
+interaction targets under the public design contract.
+
 ## Central music and live gallery playlists
 
 `music_repository_database_test.php` uses owned disposable SQL rows and tracked
@@ -791,7 +802,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.141.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.141.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

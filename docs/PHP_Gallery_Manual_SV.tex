@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.141.1}
+\newcommand{\version}{0.141.2}
 \newcommand{\manualdate}{22~oktober~2026}
 
 \hypersetup{
@@ -1466,6 +1466,13 @@ Administrationsgränssnittet har översättningar i~EN/CS/DE/SV, men~egen titel 
 \subsection{Sökning, taggar och navigering}
 \index{s00240@sökning}
 \index{t00241@taggar}
+
+Sökning och~sidnavigering använder kompakta genomskinliga kontroller
+i~valt tema; sökfältet är~32~px högt på~datorer.
+Den~aktuella sidan markeras med~en~diskret accentton och~linje;
+tangentbordsfokus förblir synligt. På~smala skärmar flyttas sökområdet under
+fältet och~tryckytorna blir större. Sökområde och~sidnavigering fungerar
+som~tidigare. En~liten skjutreglageknapp väljer sökområdet.
 
 Sökning kan omfatta hela den offentliga webbplatsen eller begränsas till aktuellt galleri och dess undergallerier. En besökare som tittar på \emph{Familjearkiv} kan söka efter ett personnamn bara i den grenen, medan en besökare på startsidan kan söka i alla offentliga samlingar. Den aktuella söktjänsten börjar vid två synliga tecken i frågan, ger en begränsad blandning av galleri- och bildresultat och rangordnar starkare träffar på titel, namn och taggar före svagare textträffar. Standardbegäran ger upp till 12 sammanslagna resultat, och tjänsten begränsar en begäran till högst 30 resultat.
 
