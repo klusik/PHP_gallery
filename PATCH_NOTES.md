@@ -1,5 +1,44 @@
 # Patch notes
 
+## Version 0.141.1
+
+Aligned hero tag pills on public gallery cards with the card text and kept their
+borders within the tag scroll viewport. Photo-row tag spacing remained unchanged.
+
+### Highlights
+
+#### Public gallery card tag alignment
+
+- Removed the negative tag-row margin so hero tag pills aligned with card
+  headings and descriptions and stayed inside the scroll viewport.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/styles/public-shared.css` for hero tag spacing. Photo-row
+  tag spacing and pill sizes remained unchanged.
+- Updated `app/core-manifest.json`.
+
+#### Release metadata
+
+- Added immutable origin and predecessor records for `v_0.141.1` in
+  `.github/release-origins/v_0.141.1.json` and
+  `.github/release-predecessors/v_0.141.1.json`, referencing
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+
+- Made hero tag pills on public gallery cards align with the card text and
+  remain within their scroll viewport. Photo-row tag spacing did not change.
+
+#### For administrators
+
+- No administrator behavior changed.
+
 ## Version 0.141
 
 Added direct photo-tag rules for Smart Galleries and compact photo tagging while

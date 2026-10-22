@@ -853,13 +853,11 @@
     backdrop-filter: blur(6px);
 }
 
-/* Match gallery-card and hero tag spacing to the photo metadata row. */
+/* Align the whole first pill with the card heading and description so its
+   border stays inside the tag scroll viewport. Keep photo-row tag spacing. */
 .public-page .gallery-card-body .gallery-card-tags[data-hero-tags]
     .gallery-card-tag-preview {
     gap: 4px;
-    margin-inline-start: calc(
-        0px - var(--gallery-card-chip-inline-padding) - 1px
-    );
 }
 
 .public-page .gallery-card-body .gallery-card-tags .gallery-card-tag-preview
