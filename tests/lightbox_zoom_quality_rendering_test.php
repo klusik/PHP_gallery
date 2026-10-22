@@ -22,7 +22,62 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core {
+    /** Escape the canonical view fixture's scalar output using production semantics.
+     * @param ?string $value Value supplied to the HTML view.
+     * @return string Escaped string safe for the fixture's HTML assertions.
+     */
+    function e(?string $value): string
+    {
+        return htmlspecialchars(
+            (string) $value,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
+    }
+}
+
+namespace Gallery\Services {
+    /** Resolve a deterministic translation fallback for the isolated view fixture.
+     * @param string $key Translation key requested by the shared lightbox view.
+     * @param string|array|null $fallback Optional view fallback or interpolation map.
+     * @param array<string,scalar|null> $parameters Placeholder values.
+     * @return string The supplied fallback or key with placeholder values applied.
+     */
+    function t(
+        string $key,
+        string|array|null $fallback = null,
+        array $parameters = [],
+    ): string {
+        if (is_array($fallback)) {
+            $parameters = $fallback;
+            $fallback = null;
+        }
+        $text = is_string($fallback) ? $fallback : $key;
+        foreach ($parameters as $name => $value) {
+            $text = str_replace('{' . $name . '}', (string) $value, $text);
+        }
+        return $text;
+    }
+}
+
+namespace Gallery\Controllers {
+    /** Supply an empty viewer-favourite slot for the lightbox wrapper fixture.
+     * @return string No personalized control is rendered in this test principal.
+     */
+    function render_viewer_favourite_lightbox_form_html(): string
+    {
+        return '';
+    }
+}
+
+namespace {
+
 require_once __DIR__ . '/support/php_source.php';
+require_once dirname(__DIR__) . '/app/views/admin_ui.php';
+require_once dirname(__DIR__) . '/app/views/public_gallery_lightbox.php';
+require_once dirname(__DIR__) . '/app/services/gallery_lightbox_mode.php';
+require_once dirname(__DIR__) . '/app/controllers/public_gallery_lightbox.php';
 
 $root = dirname(__DIR__);
 $rendererControllerSource = (string) file_get_contents($root
@@ -112,7 +167,7 @@ lightbox_zoom_quality_rendering_assert(
 lightbox_zoom_quality_rendering_assert(
     php_source_contains(
         $galleryPageSource,
-        '$lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle)',
+        '$lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle, null, $quickTagEnabled',
     ),
     'Physical gallery cards must pass the already-resolved thumbnail bundle.',
 );
@@ -129,6 +184,29 @@ lightbox_zoom_quality_rendering_assert(
             '($card[\'attributes_html\'] ?? \'\')',
         ),
     'Smart Gallery cards must preserve bundle-backed global lightbox attributes across the controller/view boundary.',
+);
+lightbox_zoom_quality_rendering_assert(
+    php_source_contains(
+        $rendererControllerSource,
+        "'quick_tag_enabled' => \$quickTagEnabled",
+    )
+        && php_source_contains(
+            $rendererControllerSource,
+            "'quick_tag_url' => \$quickTagUrl",
+        )
+        && php_source_contains(
+            $rendererControllerSource,
+            "'quick_tag_csrf' => \$quickTagCsrf",
+        )
+        && php_source_contains(
+            $galleryPageSource,
+            '$quickTagEnabled, $quickTagUrl, $quickTagCsrf',
+        )
+        && php_source_contains(
+            $smartGalleryControllerSource,
+            '$quickTagEnabled, $quickTagUrl, $quickTagCsrf',
+        ),
+    'Physical and Smart Gallery controllers must pass their prepared quick-tag authorization context through the shared lightbox wrapper.',
 );
 lightbox_zoom_quality_rendering_assert(
     php_source_contains(
@@ -153,4 +231,63 @@ lightbox_zoom_quality_rendering_assert(
     'Lazy candidate URLs must be produced only after gallery access is accepted.',
 );
 
+ob_start();
+\Gallery\Controllers\render_lightbox(
+    false,
+    false,
+    '',
+    'Fixture Gallery',
+    'single',
+    false,
+    [],
+    true,
+    '/admin?action=quick&mode=image',
+    'fixture-token',
+);
+$authorizedLightboxHtml = (string) ob_get_clean();
+lightbox_zoom_quality_rendering_assert(
+    substr_count(
+        $authorizedLightboxHtml,
+        'data-quick-photo-tag-viewer',
+    ) === 2
+        && str_contains(
+            $authorizedLightboxHtml,
+            'class="lightbox-quick-photo-tag-button lightbox-hud"',
+        )
+        && str_contains(
+            $authorizedLightboxHtml,
+            'data-quick-tag-url="/admin?action=quick&amp;mode=image"',
+        )
+        && str_contains(
+            $authorizedLightboxHtml,
+            'data-quick-tag-csrf="fixture-token"',
+        ),
+    'The real shared PHP lightbox renderer must emit configured toolbar and HUD quick-tag buttons for an authorized view model.',
+);
+
+ob_start();
+\Gallery\Controllers\render_lightbox(
+    false,
+    false,
+    '',
+    'Fixture Gallery',
+    'single',
+    false,
+    [],
+    false,
+);
+$disabledLightboxHtml = (string) ob_get_clean();
+lightbox_zoom_quality_rendering_assert(
+    !str_contains(
+        $disabledLightboxHtml,
+        'data-quick-photo-tag-viewer',
+    )
+        && !str_contains(
+            $disabledLightboxHtml,
+            'data-quick-tag-url=',
+        ),
+    'The real shared PHP lightbox renderer must omit quick-tag controls and endpoint configuration when disabled.',
+);
+
 echo "Lightbox zoom quality rendering checks passed.\n";
+}

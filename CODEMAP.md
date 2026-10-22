@@ -466,7 +466,8 @@ app/services/gallery_description_layout.php.
 
 | Task | Files |
 | --- | --- |
-| Tag creation and syncing | `app/services/tag_metadata.php`, `app/services/tags.php` |
+| Tag policy and orchestration | `app/services/tag_metadata.php`, `app/services/tags.php` |
+| Tag persistence and targeted photo-tag transactions | `app/models/tags.php` |
 | Admin tag management | `app/controllers/admin_tags.php` |
 | Public tag pages | `app/controllers/public_tags.php` |
 | Tag suggestions | `app/services/tag_metadata.php`, `app/controllers/admin_gallery_renderers.php` |

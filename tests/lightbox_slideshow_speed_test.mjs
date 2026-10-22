@@ -219,6 +219,7 @@ class SpeedPanel {
  */
 function fixture() {
     const panel = new SpeedPanel();
+    const quickTagPopover = {hidden: true};
     const confirm = {disabled: false, focus: () => {}};
     const consent = {hidden: true, querySelector: () => confirm};
     const classes = new Set(['is-ui-visible']);
@@ -234,13 +235,15 @@ function fixture() {
         consent, confirm,
         syncLightboxSlideshowControls: () => {},
         lightboxPresentationIntro: null, stageLink: null,
+        quickTagPopover,
         performance: {now: () => 0},
         lightboxDefaultTransitionDuration: 160,
         overlay: {
             hidden: false, dataset: {},
             querySelector: selector => selector === '[data-presentation-consent]'
                 ? consent : selector === '[data-presentation-confirm]'
-                    ? confirm : panel,
+                    ? confirm : selector === '[data-quick-photo-tag-popover]:not([hidden])'
+                        ? (quickTagPopover.hidden ? null : quickTagPopover) : panel,
             classList: {contains: name => classes.has(name),
                 remove: (...names) => names.forEach(name => classes.delete(name)),
                 add: (...names) => names.forEach(name => classes.add(name))},
@@ -476,7 +479,7 @@ test('elapsed timers waiting for decode cannot advance after repeated input or s
     assert.equal(context.currentLightboxTransitionDuration(), 160, 'Manual navigation retains its existing transition.');
 });
 
-test('HUD hides fully after inactivity despite focus/hover, but remains visible during a drag', () => {
+test('HUD hides after inactivity despite focus/hover, but stays visible for a drag or active tag editor', () => {
     const context = fixture();
     assert.equal(context.shouldKeepLightboxHudVisible(), false);
     context.document.activeElement = new Slider('transition', '1');
@@ -501,6 +504,11 @@ test('HUD hides fully after inactivity despite focus/hover, but remains visible 
     assert.equal(context.shouldKeepLightboxHudVisible(), false);
     expire(context);
     assert.equal(context.overlay.classList.contains('is-ui-visible'), false);
+    context.lightboxSlideshowActive = false;
+    context.quickTagPopover.hidden = false;
+    assert.equal(context.shouldKeepLightboxHudVisible(), true,
+        'An actually open quick-tag editor keeps the fullscreen HUD available.');
+    context.quickTagPopover.hidden = true;
     context.overlay.hidden = true;
     context.scheduleLightboxSlideshowNext();
     assert.equal(context.loads.length, 0);

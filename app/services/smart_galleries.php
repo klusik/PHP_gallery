@@ -31,6 +31,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
+use function Gallery\Models\tag_model_ids_match_image_category;
 use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\slugify;
@@ -1404,6 +1405,16 @@ function smart_gallery_rule_catalog(): array
                 'untagged',
             ],
         ],
+        'photo_tag' => [
+            'kind' => 'reference',
+            'operators' => [
+                'has_tag',
+                'not_has_tag',
+                'has_any_tags',
+                'has_all_tags',
+                'untagged',
+            ],
+        ],
         'capture_date' => [
             'kind' => 'date',
             'operators' => [
@@ -1496,7 +1507,112 @@ function smart_gallery_validate_rules(array $rules): array
     }
     $count = 0;
     $root = smart_gallery_validate_rule_node($rules['root'], 0, $count);
+    $photoTagIds = smart_gallery_photo_tag_ids($root);
+    if ($photoTagIds !== []) {
+        $tagSchemaState = tag_media_type_schema_state();
+        if (
+            $tagSchemaState === 'unknown'
+            || !tag_model_ids_match_image_category(
+                $photoTagIds,
+                $tagSchemaState === 'available',
+            )
+        ) {
+            throw new InvalidArgumentException(
+                'Photo tag rules require existing image-category tags.',
+            );
+        }
+        // A confirmed missing media_type column is the permanent pre-#270
+        // schema: its tag taxonomy was image-only, and image_tags remains the
+        // assignment boundary. Unknown inspection never takes this fallback.
+    }
     return ['version' => SMART_GALLERY_RULE_VERSION, 'root' => $root];
+}
+
+/**
+ * Check whether a normalized rule tree uses one allowlisted field.
+ *
+ * @param array<string,mixed> $node Normalized rule group or condition.
+ * @param string $field Rule field name to find.
+ * @return bool True when the field appears at any nested level.
+ */
+function smart_gallery_rule_tree_uses_field(
+    array $node,
+    string $field,
+): bool {
+    if (($node['type'] ?? '') === 'group') {
+        foreach ((array) ($node['children'] ?? []) as $child) {
+            if (
+                is_array($child)
+                && smart_gallery_rule_tree_uses_field($child, $field)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return ($node['field'] ?? '') === $field;
+}
+
+/**
+ * Resolve the compiler media-type capability for a nested photo-tag rule tree.
+ *
+ * @param array<string,mixed> $root Normalized rule tree root.
+ * @param string $schemaState Confirmed category-column state: available, missing, or unknown.
+ * @return bool|null True for typed image filtering, false for confirmed legacy schema, or null when no photo_tag condition exists.
+ * @throws InvalidArgumentException When photo_tag rules rely on unknown category storage.
+ */
+function smart_gallery_photo_tag_media_type_ready_for_rules(
+    array $root,
+    string $schemaState,
+): ?bool {
+    if (!smart_gallery_rule_tree_uses_field($root, 'photo_tag')) {
+        return null;
+    }
+    if (!in_array($schemaState, ['available', 'missing'], true)) {
+        throw new InvalidArgumentException(
+            'Photo tag rules require known tag category storage.',
+        );
+    }
+    // Only confirmed pre-category schemas retain the legacy direct-assignment fallback.
+    return $schemaState === 'available';
+}
+
+/**
+ * Collect selected tag IDs from direct photo-tag rule conditions.
+ *
+ * @param array<string,mixed> $node Normalized rule group or condition.
+ * @return list<int> Unique positive image-tag identifiers.
+ */
+function smart_gallery_photo_tag_ids(array $node): array
+{
+    if (($node['type'] ?? '') === 'group') {
+        $ids = [];
+        foreach ((array) ($node['children'] ?? []) as $child) {
+            if (is_array($child)) {
+                array_push($ids, ...smart_gallery_photo_tag_ids($child));
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+    if (($node['field'] ?? '') !== 'photo_tag') {
+        return [];
+    }
+    if (($node['operator'] ?? '') === 'untagged') {
+        return [];
+    }
+    $value = $node['value'] ?? null;
+    $values = is_array($value) ? $value : [$value];
+    $ids = [];
+    foreach ($values as $candidate) {
+        $id = (int) $candidate;
+        if ($id < 1) {
+            throw new InvalidArgumentException(
+                'Select existing image-category photo tags.',
+            );
+        }
+        $ids[] = $id;
+    }
+    return array_values(array_unique($ids));
 }
 
 /** Validate one nested rule node while enforcing complexity limits.
@@ -2280,6 +2396,16 @@ function smart_gallery_query_semantics(
     $rules = smart_gallery_rules_from_json(
         (string) ($gallery['rules_json'] ?? ''),
     );
+    $photoTagMediaTypeReady =
+        smart_gallery_photo_tag_media_type_ready_for_rules(
+            $rules['root'],
+            tag_media_type_schema_state(),
+        );
+    if ($photoTagMediaTypeReady !== null) {
+        // This compiler-only capability marker is never serialized into rules_json.
+        $rules['_photo_tag_media_type_ready'] =
+            $photoTagMediaTypeReady;
+    }
     $ids = $accessibleGalleryIds ?? smart_gallery_accessible_gallery_ids(
         $publicOnly,
     );

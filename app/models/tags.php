@@ -12,6 +12,7 @@
  *
  * Responsibilities:
  *   - Persist canonical media-typed tag rows and entity assignments
+ *   - Own atomic direct image-tag mutation transactions and row locking
  *   - Provide bulk tag reads and usage aggregates
  *   - Provide tag suggestion source rows without owning scoring policy
  *   - Support admin tag maintenance and duplicate merges atomically
@@ -32,15 +33,17 @@
  *   - Public listing predicates are built only from boolean schema capability flags.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-10-21
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Models;
 
+use DomainException;
 use InvalidArgumentException;
 use PDO;
+use PDOException;
 use Throwable;
 use function Gallery\Core\db;
 
@@ -70,6 +73,81 @@ function tag_model_id_by_slug(string $slug): int
     $stmt = db()->prepare('SELECT id FROM tags WHERE slug = ?');
     $stmt->execute([$slug]);
     return (int) ($stmt->fetchColumn() ?: 0);
+}
+
+/**
+ * Find a matching tag or insert it using precomputed slug candidates.
+ *
+ * @param string $name Canonical display name for the shared tag row.
+ * @param list<string> $slugCandidates Ordered canonical slugs to try.
+ * @param string $now Timestamp used for created_at and updated_at.
+ * @param string $mediaType Validated tag category: image, music, or pdf.
+ * @param bool $mediaTypeReady Whether tags.media_type was confirmed available.
+ * @return int Existing or inserted tag ID, or zero when no candidate is usable.
+ * @throws InvalidArgumentException When a slug candidate is malformed.
+ * @throws PDOException When storage fails and no concurrent matching row exists.
+ */
+function tag_model_find_or_create_by_slug_candidates(
+    string $name,
+    array $slugCandidates,
+    string $now,
+    string $mediaType,
+    bool $mediaTypeReady,
+): int {
+    if (
+        $name === ''
+        || $slugCandidates === []
+        || !in_array($mediaType, ['image', 'music', 'pdf'], true)
+        || (!$mediaTypeReady && $mediaType !== 'image')
+    ) {
+        return 0;
+    }
+    foreach ($slugCandidates as $slug) {
+        if (!is_string($slug) || $slug === '') {
+            throw new InvalidArgumentException(
+                'Invalid tag slug candidate.',
+            );
+        }
+        $existingId = tag_model_id_by_slug($slug);
+        if ($existingId > 0) {
+            if (tag_model_matches_media_type(
+                $existingId,
+                $mediaType,
+                $mediaTypeReady,
+            )) {
+                return $existingId;
+            }
+            continue;
+        }
+        try {
+            return tag_model_create(
+                $name,
+                $slug,
+                $now,
+                $mediaType,
+                $mediaTypeReady,
+            );
+        } catch (PDOException $exception) {
+            // Another writer may have claimed this globally unique slug after
+            // the read. Reuse a same-category winner or try the next candidate.
+            try {
+                $racedId = tag_model_id_by_slug($slug);
+            } catch (Throwable) {
+                throw $exception;
+            }
+            if ($racedId < 1) {
+                throw $exception;
+            }
+            if (tag_model_matches_media_type(
+                $racedId,
+                $mediaType,
+                $mediaTypeReady,
+            )) {
+                return $racedId;
+            }
+        }
+    }
+    return 0;
 }
 
 /**
@@ -146,7 +224,7 @@ function tag_model_clear_entity_tags(string $type, int $id): void
  * @param int $tagId Tag identifier to attach.
  * @param string $mediaType Expected category image or music; defaults to image.
  * @param bool $mediaTypeReady Whether the category column is confirmed available; defaults to true.
- * @return void Attach the tag unless the assignment already exists.
+ * @return bool True only when this call inserted the assignment.
  */
 function tag_model_attach_entity_tag(
     string $type,
@@ -154,7 +232,7 @@ function tag_model_attach_entity_tag(
     int $tagId,
     string $mediaType = 'image',
     bool $mediaTypeReady = true,
-): void
+): bool
 {
     [$table, $idColumn] = tag_model_assignment_target($type);
     $expectedType = $type === 'music_song' ? 'music' : 'image';
@@ -172,6 +250,224 @@ function tag_model_attach_entity_tag(
             . ', tag_id) VALUES (?, ?)',
     );
     $stmt->execute([$id, $tagId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Add or remove one direct image-tag assignment without replacing other tags.
+ *
+ * @param int $imageId Stable physical image identifier.
+ * @param int $tagId Existing image-category tag identifier.
+ * @param string $operation Requested targeted change: add or remove.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available.
+ * @return bool True only when this call changed the direct assignment.
+ * @throws InvalidArgumentException When the image, tag, operation, or category is invalid.
+ */
+function tag_model_mutate_image_tag(
+    int $imageId,
+    int $tagId,
+    string $operation,
+    bool $mediaTypeReady,
+): bool {
+    if (
+        $imageId < 1
+        || $tagId < 1
+        || !in_array($operation, ['add', 'remove'], true)
+        || !tag_model_matches_media_type($tagId, 'image', $mediaTypeReady)
+    ) {
+        throw new InvalidArgumentException('Invalid image tag mutation.');
+    }
+    if ($operation === 'add') {
+        return tag_model_attach_entity_tag(
+            'image',
+            $imageId,
+            $tagId,
+            'image',
+            $mediaTypeReady,
+        );
+    }
+    $stmt = db()->prepare(
+        'DELETE FROM image_tags WHERE image_id = ? AND tag_id = ?',
+    );
+    $stmt->execute([$imageId, $tagId]);
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Apply one image-tag mutation and read its authoritative state atomically.
+ *
+ * @param int $imageId Stable physical image identifier.
+ * @param int $expectedGalleryId Physical gallery identity held by the caller.
+ * @param string $operation Targeted assignment change: add or remove.
+ * @param int|null $tagId Existing image-category tag ID, when selected.
+ * @param array{name:string,slug_candidates:list<string>,created_at:string}|null $newTag Canonical new tag details for a name-based add.
+ * @param bool $mediaTypeReady Whether tags.media_type was confirmed available.
+ * @return array{changed_tag:array{id:int,name:string,slug:string},already_present:bool,tags:list<array{id:int,name:string,slug:string}>} Changed tag and committed direct image-tag state.
+ * @throws DomainException When the image no longer belongs to the expected gallery.
+ * @throws InvalidArgumentException When the operation or selected tag is invalid.
+ * @throws Throwable When persistence fails; an owned transaction is rolled back.
+ */
+function tag_model_mutate_image_tag_atomically(
+    int $imageId,
+    int $expectedGalleryId,
+    string $operation,
+    ?int $tagId,
+    ?array $newTag,
+    bool $mediaTypeReady,
+): array {
+    if (
+        $imageId < 1
+        || $expectedGalleryId < 1
+        || !in_array($operation, ['add', 'remove'], true)
+        || ($operation === 'remove' && ($tagId === null || $newTag !== null))
+        || ($operation === 'add' && $tagId !== null && $newTag !== null)
+    ) {
+        throw new InvalidArgumentException('Invalid image tag mutation.');
+    }
+    $connection = db();
+    $ownsTransaction = !$connection->inTransaction();
+    if ($ownsTransaction) {
+        $connection->beginTransaction();
+    }
+    try {
+        if (!tag_model_lock_image_owner($imageId, $expectedGalleryId)) {
+            throw new DomainException(
+                'The image no longer belongs to the expected gallery.',
+            );
+        }
+        if ($operation === 'add' && $tagId === null && $newTag !== null) {
+            $tagId = tag_model_find_or_create_by_slug_candidates(
+                $newTag['name'],
+                $newTag['slug_candidates'],
+                $newTag['created_at'],
+                'image',
+                $mediaTypeReady,
+            );
+        }
+        if ($tagId === null || $tagId < 1) {
+            throw new InvalidArgumentException('Select a valid image tag.');
+        }
+        $tag = tag_model_find_by_id($tagId);
+        if (
+            !is_array($tag)
+            || !tag_model_matches_media_type(
+                $tagId,
+                'image',
+                $mediaTypeReady,
+            )
+        ) {
+            throw new InvalidArgumentException(
+                'Tag media type does not match image.',
+            );
+        }
+        $before = tag_model_tags_for_entity(
+            'image',
+            $imageId,
+            $mediaTypeReady,
+        );
+        $alreadyPresent = in_array(
+            $tagId,
+            array_map(
+                static fn(array $row): int => (int) $row['id'],
+                $before,
+            ),
+            true,
+        );
+        $changed = false;
+        if ($operation === 'remove' || !$alreadyPresent) {
+            $changed = tag_model_mutate_image_tag(
+                $imageId,
+                $tagId,
+                $operation,
+                $mediaTypeReady,
+            );
+        }
+        if ($operation === 'add') {
+            // INSERT IGNORE may lose a race after the pre-mutation snapshot.
+            $alreadyPresent = !$changed;
+        }
+        $rows = tag_model_tags_for_entity(
+            'image',
+            $imageId,
+            $mediaTypeReady,
+        );
+        if ($ownsTransaction) {
+            $connection->commit();
+        }
+    } catch (Throwable $exception) {
+        if ($ownsTransaction && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $exception;
+    }
+
+    return [
+        'changed_tag' => [
+            'id' => $tagId,
+            'name' => (string) $tag['name'],
+            'slug' => (string) $tag['slug'],
+        ],
+        'already_present' => $alreadyPresent,
+        'tags' => array_map(
+            static fn(array $row): array => [
+                'id' => (int) $row['id'],
+                'name' => (string) $row['name'],
+                'slug' => (string) $row['slug'],
+            ],
+            $rows,
+        ),
+    ];
+}
+
+/**
+ * Lock a physical image row and confirm it still belongs to the expected gallery.
+ *
+ * @param int $imageId Stable physical image identifier.
+ * @param int $expectedGalleryId Gallery identity observed by the caller.
+ * @return bool True while the row is locked and still owned by that gallery.
+ */
+function tag_model_lock_image_owner(
+    int $imageId,
+    int $expectedGalleryId,
+): bool {
+    if ($imageId < 1 || $expectedGalleryId < 1) {
+        return false;
+    }
+    $stmt = db()->prepare(
+        'SELECT gallery_id FROM images WHERE id = ? FOR UPDATE',
+    );
+    $stmt->execute([$imageId]);
+    return (int) $stmt->fetchColumn() === $expectedGalleryId;
+}
+
+/**
+ * Return whether every selected tag is an existing image-category tag.
+ *
+ * @param list<int> $tagIds Unique positive tag identifiers to validate.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available.
+ * @return bool True when all IDs exist and belong to the image category.
+ */
+function tag_model_ids_match_image_category(
+    array $tagIds,
+    bool $mediaTypeReady,
+): bool {
+    $tagIds = array_values(array_unique($tagIds));
+    if ($tagIds === []) {
+        return true;
+    }
+    foreach ($tagIds as $tagId) {
+        if (!is_int($tagId) || $tagId < 1) {
+            return false;
+        }
+    }
+    $marks = implode(',', array_fill(0, count($tagIds), '?'));
+    $sql = 'SELECT COUNT(*) FROM tags WHERE id IN (' . $marks . ')';
+    if ($mediaTypeReady) {
+        $sql .= " AND media_type = 'image'";
+    }
+    $stmt = db()->prepare($sql);
+    $stmt->execute($tagIds);
+    return (int) $stmt->fetchColumn() === count($tagIds);
 }
 
 /**
@@ -378,6 +674,22 @@ function tag_model_all_names(bool $mediaTypeReady = true): array
         'strval',
         $stmt->fetchAll(PDO::FETCH_COLUMN),
     ));
+}
+
+/**
+ * Return the small selectable image-tag catalog for an authorized editor.
+ *
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available.
+ * @return list<array{id:int|string,name:string,slug:string}> Image tags ordered by name and ID.
+ */
+function tag_model_image_catalog(bool $mediaTypeReady): array
+{
+    $sql = $mediaTypeReady
+        ? "SELECT id, name, slug FROM tags WHERE media_type = 'image' ORDER BY name, id"
+        : 'SELECT id, name, slug FROM tags ORDER BY name, id';
+    $stmt = db()->prepare($sql);
+    $stmt->execute();
+    return $stmt->fetchAll() ?: [];
 }
 
 /**

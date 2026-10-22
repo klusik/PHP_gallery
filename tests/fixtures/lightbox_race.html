@@ -4,14 +4,19 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: tests/fixtures/lightbox_race.html
 Module Type: Browser Test Fixture
-Purpose: Exercise real lightbox navigation, image decoding, resource cleanup, and zoom input.
+Purpose: Exercise lightbox navigation, image decoding, cleanup, zoom, and sparse tag state.
 Responsibilities:
   - Supply sparse gallery cards and actual delayed local SVG media.
   - Record browser-visible outcomes for out-of-order async completions.
+  - Verify lazy source records retain physical owner and direct-tag permissions.
+  - Exercise quick photo tagging through the real lightbox active-image lifecycle.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><title>Lightbox race fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/public.css">
+<link rel="stylesheet" href="/public/assets/styles/lightbox.css">
 <style>
     [hidden] { display: none !important; }
     [data-lightbox] { position: fixed; inset: 0; background: white; }
@@ -21,21 +26,39 @@ License: MIT License (see LICENSE file in repository)
 <body>
 <pre id="results">RUNNING</pre>
 <div data-lightbox-config data-lightbox-endpoint="/metadata" data-lightbox-total="30" data-lightbox-window-size="12"></div>
-<a id="card-a" href="/photo/a" data-lightbox-image data-image-id="1" data-gallery-id="7" data-lightbox-index="0" data-page-url="/photo/a" data-title="Photo A">Photo A</a>
-<a id="card-b" href="/photo/b" data-lightbox-image data-image-id="2" data-gallery-id="7" data-lightbox-index="1" data-page-url="/photo/b" data-title="Photo B">Photo B</a>
-<a id="card-c" href="/photo/c" data-lightbox-image data-image-id="3" data-gallery-id="7" data-lightbox-index="2" data-page-url="/photo/c" data-title="Photo C">Photo C</a>
+<a id="card-a" href="/photo/a" data-lightbox-image data-image-id="1" data-gallery-id="7" data-source-gallery-id="70" data-quick-tag-enabled="1" data-quick-photo-tags="[]" data-lightbox-index="0" data-page-url="/photo/a" data-title="Photo A">Photo A</a>
+<a id="card-b" href="/photo/b" data-lightbox-image data-image-id="2" data-gallery-id="7" data-source-gallery-id="70" data-quick-tag-enabled="1" data-quick-photo-tags="[]" data-lightbox-index="1" data-page-url="/photo/b" data-title="Photo B">Photo B</a>
+<a id="card-c" href="/photo/c" data-lightbox-image data-image-id="3" data-gallery-id="7" data-source-gallery-id="70" data-quick-tag-enabled="1" data-quick-photo-tags="[]" data-lightbox-index="2" data-page-url="/photo/c" data-title="Photo C">Photo C</a>
 <div data-lightbox hidden>
-    <button data-lightbox-action="close">Close</button>
-    <button data-lightbox-action="next">Next</button>
-    <button data-lightbox-action="zoom-in" aria-label="Zoom in">Zoom in</button>
-    <figure><a class="lightbox-stage-link" data-lightbox-stage><div class="lightbox-zoom-surface" data-lightbox-zoom-surface><img data-lightbox-img alt="Photo"></div></a></figure>
+    <div class="lightbox-toolbar">
+        <button class="lightbox-close" data-lightbox-action="close">Close</button>
+        <button data-lightbox-action="next">Next</button>
+        <button data-lightbox-action="zoom-in" aria-label="Zoom in">Zoom in</button>
+        <button type="button" class="lightbox-quick-photo-tag-button" data-quick-photo-tag-trigger data-quick-photo-tag-viewer data-quick-tag-available="0" data-quick-tag-enabled="1" data-quick-tag-url="/__quick_tag" data-quick-tag-csrf="fixture" aria-label="Add photo tags" aria-haspopup="dialog" aria-expanded="false" hidden>
+            <svg class="admin-menu-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11V3"/><circle cx="7.5" cy="7.5" r="1"/></svg>
+            <span class="visually-hidden">Add photo tags</span>
+        </button>
+        <button data-lightbox-action="fullscreen">Fullscreen</button>
+    </div>
+    <button type="button" class="lightbox-quick-photo-tag-button lightbox-hud" data-quick-photo-tag-trigger data-quick-photo-tag-viewer data-quick-tag-available="0" data-quick-tag-enabled="1" data-quick-tag-url="/__quick_tag" data-quick-tag-csrf="fixture" aria-label="Add photo tags" aria-haspopup="dialog" aria-expanded="false" hidden>
+        <svg class="admin-menu-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3h8l10 10-8 8L3 11V3"/><circle cx="7.5" cy="7.5" r="1"/></svg>
+        <span class="visually-hidden">Add photo tags</span>
+    </button>
+    <figure><a class="lightbox-stage-link" data-lightbox-stage><span class="lightbox-initial-loader" data-lightbox-initial-loader data-lightbox-loading-count-template="Preparing photo {current} of {total}" role="status" aria-live="polite" hidden><span data-lightbox-initial-loader-label>Preparing gallery...</span><span class="lightbox-initial-loader-track" aria-hidden="true"><span class="lightbox-initial-loader-fill" data-lightbox-initial-loader-fill></span></span><span data-lightbox-initial-loader-count></span></span><div class="lightbox-zoom-surface" data-lightbox-zoom-surface><img data-lightbox-img alt="Photo"></div></a></figure>
     <div class="lightbox-meta"><h2 data-lightbox-title></h2><p data-lightbox-description></p><span data-lightbox-counter></span></div>
 </div>
+<section class="quick-photo-tag-popover" data-quick-photo-tag-popover data-quick-tag-url="/__quick_tag" data-quick-tag-csrf="fixture" data-quick-photo-tag-catalog='[{"id":44,"name":"danik","slug":"danik"}]' role="dialog" aria-label="Photo tags" hidden>
+    <div class="quick-photo-tag-entry"><label class="visually-hidden" for="quick-photo-tag-input">Search or add a photo tag</label><input id="quick-photo-tag-input" data-quick-photo-tag-input type="text" autocomplete="off" aria-autocomplete="list" aria-controls="quick-photo-tag-options" aria-expanded="false" placeholder="Search or add a photo tag"><button type="button" data-quick-photo-tag-add aria-label="Add photo tag">+</button><button type="button" data-quick-photo-tag-close aria-label="Close photo tags">×</button></div>
+    <div class="quick-photo-tag-options" id="quick-photo-tag-options" data-quick-photo-tag-options role="listbox" hidden></div>
+    <p class="quick-photo-tag-status" data-quick-photo-tag-status id="quick-photo-tag-status" role="status" aria-live="polite"></p>
+</section>
 <script type="module">
-    import {setupGalleryLightbox, teardownGalleryLightbox} from '/public/assets/gallery-modules/lightbox.js';
+    import {setupGalleryLightbox, teardownGalleryLightbox} from '/public/assets/gallery-modules/lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1';
+    import {setupQuickPhotoTags} from '/public/assets/gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
 
     const result = document.querySelector('#results');
     const errors = [];
+    window.quickTagFixtureErrors = errors;
     const originalFetch = window.fetch.bind(window);
     const metadataPending = [];
     const trackedMediaFetchCounts = new Map();
@@ -45,6 +68,97 @@ License: MIT License (see LICENSE file in repository)
     const decodeGateSources = new Set();
     const decodeGateCounts = new Map();
     const createdDetachedImages = [];
+    const quickTagSubmissions = [];
+    const quickTagInput = document.querySelector('[data-quick-photo-tag-input]');
+    const quickTagPopover = document.querySelector('[data-quick-photo-tag-popover]');
+    const quickTagViewer = document.querySelector('[data-lightbox]');
+    const quickTagKeyboardLock = {
+        supported: false,
+        attempts: 0,
+        acquired: 0,
+        rejected: 0,
+        releases: 0,
+    };
+    window.quickTagDeferNextKeyboardLock = false;
+    window.quickTagDeferredKeyboardLockResolver = null;
+    window.quickTagRejectNextKeyboardLock = false;
+    window.quickTagDeferredKeyboardLockRejector = null;
+    window.quickTagDeferredKeyboardLockSettled = false;
+    const keyboard = navigator.keyboard;
+    if (keyboard && typeof keyboard.lock === 'function') {
+        const nativeKeyboardLock = keyboard.lock.bind(keyboard);
+        const nativeKeyboardUnlock = typeof keyboard.unlock === 'function'
+            ? keyboard.unlock.bind(keyboard) : null;
+        try {
+            Object.defineProperty(keyboard, 'lock', {
+                configurable: true,
+                /** Record the production lock call before delegating to the browser API.
+                 * @param {Array<string>} keys Browser key codes requested by the viewer.
+                 * @returns {Promise<void>} Resolves or rejects with the browser lock request.
+                 */
+                value(keys) {
+                    quickTagKeyboardLock.attempts += 1;
+                    if (window.quickTagRejectNextKeyboardLock) {
+                        window.quickTagRejectNextKeyboardLock = false;
+                        return new Promise((resolve, reject) => {
+                            window.quickTagDeferredKeyboardLockRejector = () => {
+                                window.quickTagDeferredKeyboardLockSettled = true;
+                                reject(new Error('Controlled fixture rejection.'));
+                            };
+                        }).catch((error) => {
+                            quickTagKeyboardLock.rejected += 1;
+                            throw error;
+                        });
+                    }
+                    const deferResolution = window.quickTagDeferNextKeyboardLock;
+                    window.quickTagDeferNextKeyboardLock = false;
+                    return nativeKeyboardLock(keys).then(() => {
+                        quickTagKeyboardLock.acquired += 1;
+                        if (!deferResolution) return;
+                        return new Promise((resolve) => {
+                            window.quickTagDeferredKeyboardLockResolver = () => {
+                                window.quickTagDeferredKeyboardLockSettled = true;
+                                resolve();
+                            };
+                        });
+                    }).catch((error) => {
+                        quickTagKeyboardLock.rejected += 1;
+                        throw error;
+                    });
+                },
+            });
+            if (nativeKeyboardUnlock) {
+                Object.defineProperty(keyboard, 'unlock', {
+                    configurable: true,
+                    /** Count production releases before delegating to the browser API.
+                     * @returns {void} Releases the browser's current keyboard lock.
+                     */
+                    value() {
+                        quickTagKeyboardLock.releases += 1;
+                        return nativeKeyboardUnlock();
+                    },
+                });
+            }
+            quickTagKeyboardLock.supported = true;
+        } catch {
+            quickTagKeyboardLock.supported = false;
+        }
+    }
+    const nativeRequestFullscreen = typeof quickTagViewer.requestFullscreen === 'function'
+        ? quickTagViewer.requestFullscreen.bind(quickTagViewer) : null;
+    if (nativeRequestFullscreen) {
+        quickTagViewer.requestFullscreen = (options) => {
+            window.quickTagFullscreenOptions = options || null;
+            return nativeRequestFullscreen(options);
+        };
+    }
+    const quickTagSessionKey = 'gallery.quickPhotoTag.lastAdded';
+    // Wait beyond the desktop HUD auto-hide timer before asserting that an open editor keeps it visible.
+    // Type: integer. Units: milliseconds. Scope: quick-tag fullscreen lifecycle fixture.
+    // Consumers: the visible-HUD assertion below. Rationale: exceed the production 1,800ms desktop hide delay.
+    const QUICK_TAG_HUD_AUTO_HIDE_WAIT_MS = 1900;
+    // Fixture synchronization phases coordinate trusted keys from the owned browser runner.
+    window.quickTagInputPhase = '';
     const NativeImage = window.Image;
     const mediaSvg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="slateblue"/></svg>');
     const previewSources = new Map();
@@ -166,8 +280,20 @@ License: MIT License (see LICENSE file in repository)
      * @return {Record<string, unknown>} Sparse endpoint fixture item.
      */
     function metadataItem(index, id, title, preview, full) {
-        return {id, index, gallery_id: 7, title, page_url: `/photo/${id}`, full_src: full, preview_src: preview,
-            width: 800, height: 600};
+        return {
+            id,
+            index,
+            gallery_id: 7,
+            source_gallery_id: 70,
+            quick_tag_enabled: true,
+            quick_photo_tags: [{id: 44, name: 'danik', slug: 'danik'}],
+            title,
+            page_url: `/photo/${id}`,
+            full_src: full,
+            preview_src: preview,
+            width: 800,
+            height: 600,
+        };
     }
 
     /** Resolve the held real production metadata fetch with one selected sparse card.
@@ -194,6 +320,32 @@ License: MIT License (see LICENSE file in repository)
 
     window.fetch = (input, options = {}) => {
         const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if (url.pathname === '/__quick_tag') {
+            const body = options.body;
+            const imageId = Number(body.get('image_id'));
+            const galleryId = Number(body.get('source_gallery_id'));
+            const tag = {id: 44, name: 'danik', slug: 'danik'};
+            quickTagSubmissions.push({action: body.get('action'), imageId, galleryId, tagId: body.get('tag_id')});
+            return Promise.resolve(new Response(JSON.stringify({
+                ok: true,
+                direct_tags: [tag],
+                changed_tag: tag,
+                already_present: false,
+                mutation: {type: 'image.tag', entity: 'image', action: 'add', entity_ids: [imageId]},
+                contexts: [{
+                    type: 'gallery',
+                    gallery_id: galleryId,
+                    render_url: `/gallery/${galleryId}`,
+                    render_mode: 'preserve_view',
+                    postcondition: {
+                        type: 'image_tags',
+                        image_id: imageId,
+                        tag_ids: [tag.id],
+                        tag_names: [tag.name],
+                    },
+                }],
+            }), {headers: {'Content-Type': 'application/json'}}));
+        }
         if (url.pathname === metadataPath) {
             return new Promise(resolve => metadataPending.push({
                 offset: Number(url.searchParams.get('offset')),
@@ -249,6 +401,9 @@ License: MIT License (see LICENSE file in repository)
         setupGalleryLightbox();
 
         cardA.click();
+        check(!overlay.hidden && overlay.classList.contains('is-initial-loading')
+            && String(overlay.dataset.currentImageId || '') === '',
+        'the deferred click exposes its loading shell without claiming an active photo before full setup');
         await waitForImageRequest(mediaKey(previewSources.get('A')));
         await releaseImage(mediaKey(previewSources.get('A')));
         await waitForDecodeGate(mediaKey(previewSources.get('A')));
@@ -336,6 +491,15 @@ License: MIT License (see LICENSE file in repository)
         await waitFor(() => metadataPending.some(request => request.imageId === 25 && !request.settled), 'Sparse map target 25 request did not start.');
         resolveMetadata(25, metadataItem(24, 25, 'Sparse Photo 25', mediaSvg, mediaSvg));
         await waitFor(() => activePresentation().title === 'Sparse Photo 25', 'Newer sparse target did not render.');
+        const sparseTagSource = document.querySelector('[data-lightbox-source][data-image-id="25"]');
+        check(
+            quickTagViewer.dataset.currentImageId === '25'
+                && quickTagViewer.dataset.currentSourceGalleryId === '70'
+                && quickTagViewer.dataset.currentQuickTagEnabled === '1'
+                && JSON.parse(quickTagViewer.dataset.currentQuickPhotoTags || '[]')[0]?.id === 44
+                && sparseTagSource === null,
+            'lazy source metadata stays detached while its active overlay retains physical owner and direct quick-tag state',
+        );
         resolveMetadata(13, metadataItem(12, 13, 'Sparse Photo 13', mediaSvg, mediaSvg));
         await new Promise(resolve => setTimeout(resolve, 60));
         check(activePresentation().title === 'Sparse Photo 25', 'late sparse metadata must not resume the stale target');
@@ -396,6 +560,216 @@ License: MIT License (see LICENSE file in repository)
 
         document.querySelector('[data-lightbox-action="close"]').click();
 
+        cardA.click();
+        await waitFor(() => activePresentation().title === 'Photo A'
+            && activePresentation().image?.dataset.lightboxImageId === '1',
+        'Quick-tag viewer did not reopen physical photo A after image race coverage.');
+
+        // Load quick-tag behavior after the viewer has already published its active physical source.
+        setupQuickPhotoTags();
+        const quickTagViewerButtons = [...quickTagViewer.querySelectorAll(
+            '[data-quick-photo-tag-viewer]',
+        )];
+        await waitFor(() => quickTagViewerButtons.length === 2
+            && quickTagViewerButtons.every(button => !button.hidden
+                && button.dataset.quickTagAvailable === '1'),
+        'Late quick-tag module setup did not hydrate the already-active viewer controls.');
+        sessionStorage.setItem(quickTagSessionKey, JSON.stringify({id: 44, name: 'danik', slug: 'danik'}));
+        window.quickTagInputPhase = 'normal-t';
+        await waitFor(() => !quickTagPopover.hidden, 'Trusted Shift+T did not open quick tags on the active normal photo.');
+        check(quickTagViewer.dataset.currentImageId === '1'
+            && quickTagViewer.dataset.currentSourceGalleryId === '70'
+            && quickTagPopover.parentElement === quickTagViewer
+            && document.activeElement === quickTagInput
+            && quickTagInput.value === 'danik',
+        'real lightbox active-photo event opens the normal quick-tag editor for its physical source and remembered tag');
+        check(quickTagSubmissions.length === 0, 'opening the viewer quick-tag editor never applies its remembered tag');
+        window.quickTagInputPhase = 'normal-enter';
+        await waitFor(() => quickTagSubmissions.length === 1, 'Enter did not submit the remembered tag for the normal active photo.');
+        check(quickTagSubmissions[0].action === 'quick_tag_add'
+            && quickTagSubmissions[0].imageId === 1
+            && quickTagSubmissions[0].galleryId === 70
+            && quickTagSubmissions[0].tagId === '44',
+        'normal viewer tag add targets the current physical image and source gallery');
+        await waitFor(() => quickTagPopover.hidden,
+            'Confirmed successful normal-viewer add did not close its current editor.');
+        check(quickTagInput.value === '',
+            'confirmed normal-viewer save clears the prepared input before closing');
+        window.quickTagInputPhase = 'normal-reopen-t';
+        await waitFor(() => !quickTagPopover.hidden,
+            'T did not reopen the editor after a confirmed normal-viewer save.');
+        window.quickTagInputPhase = 'normal-escape';
+        await waitFor(() => quickTagPopover.hidden, 'Escape did not close the quick-tag editor first.');
+        check(!quickTagViewer.hidden, 'first Escape leaves the normal lightbox open');
+        window.quickTagInputPhase = 'normal-next';
+        await waitFor(() => quickTagViewer.dataset.currentImageId === '2', 'Next did not advance the real active source photo.');
+        window.quickTagInputPhase = 'normal-next-t';
+        await waitFor(() => !quickTagPopover.hidden, 'Shift+T did not open quick tags for the next active source.');
+        check(quickTagViewer.dataset.currentSourceGalleryId === '70'
+            && quickTagInput.value === 'danik'
+            && quickTagSubmissions.length === 1,
+        'remembered tag is offered for the next viewer photo without applying it on open');
+        window.quickTagInputPhase = 'normal-next-escape';
+        await waitFor(() => quickTagPopover.hidden, 'Escape did not close the next-photo editor.');
+        window.quickTagInputPhase = 'fullscreen-f';
+        await waitFor(() => document.fullscreenElement === quickTagViewer
+            || quickTagViewer.classList.contains('is-css-fullscreen')
+            || quickTagViewer.classList.contains('is-fullscreen'),
+        'F did not enter native or application fullscreen mode.');
+        window.quickTagFullscreenMode = document.fullscreenElement === quickTagViewer
+            ? 'native' : 'application';
+        if (quickTagFullscreenMode === 'native' && nativeRequestFullscreen
+            && quickTagViewer.dataset.currentQuickTagEnabled === '1') {
+            check(window.quickTagFullscreenOptions?.keyboardLock === 'browser',
+                'authorized native viewer requests browser-specific fullscreen key routing');
+        }
+        window.quickTagInputPhase = 'fullscreen-t';
+        await waitFor(() => !quickTagPopover.hidden, 'Shift+T did not open quick tags in fullscreen.');
+        const hudTagButton = quickTagViewer.querySelector('.lightbox-quick-photo-tag-button.lightbox-hud');
+        const quickPopoverRect = quickTagPopover.getBoundingClientRect();
+        check(quickTagFullscreenMode === 'native'
+            ? document.fullscreenElement === quickTagViewer
+            : quickTagViewer.classList.contains('is-css-fullscreen')
+                || quickTagViewer.classList.contains('is-fullscreen'),
+        'fullscreen mode is recorded as native or application-managed without conflating the two');
+        check(hudTagButton instanceof HTMLElement && !hudTagButton.hidden
+            && quickTagPopover.parentElement === quickTagViewer
+            && quickPopoverRect.left >= 0 && quickPopoverRect.top >= 0
+            && quickPopoverRect.right <= innerWidth && quickPopoverRect.bottom <= innerHeight,
+        `fullscreen quick tags use the visible HUD and remain inside the active viewer viewport: ${JSON.stringify({
+            mode: quickTagFullscreenMode,
+            nativeFullscreen: document.fullscreenElement === quickTagViewer,
+            hudHidden: hudTagButton?.hidden ?? null,
+            popupParent: quickTagPopover.parentElement?.className || '',
+            rect: {
+                left: quickPopoverRect.left,
+                top: quickPopoverRect.top,
+                right: quickPopoverRect.right,
+                bottom: quickPopoverRect.bottom,
+            },
+            viewport: {width: innerWidth, height: innerHeight},
+        })}`);
+        window.quickTagInputPhase = 'fullscreen-hud-held-open';
+        await new Promise(resolve => setTimeout(resolve, QUICK_TAG_HUD_AUTO_HIDE_WAIT_MS));
+        check(quickTagViewer.classList.contains('is-ui-visible'),
+            'the open quick-tag editor keeps its fullscreen HUD visible past the normal auto-hide delay');
+        window.quickTagInputPhase = 'fullscreen-enter';
+        await waitFor(() => quickTagSubmissions.length === 2, 'Enter did not submit the remembered tag in fullscreen.');
+        check(quickTagSubmissions[1].imageId === 2 && quickTagSubmissions[1].galleryId === 70,
+            'fullscreen tag mutation remains bound to the active physical source image');
+        await waitFor(() => quickTagPopover.hidden,
+            'Confirmed successful fullscreen add did not close its current editor.');
+        window.quickTagDeferNextKeyboardLock = true;
+        window.quickTagInputPhase = 'fullscreen-reopen-t';
+        await waitFor(() => !quickTagPopover.hidden,
+            'T did not reopen the fullscreen editor after a confirmed save.');
+        if (quickTagKeyboardLock.supported) {
+            await waitFor(() => quickTagKeyboardLock.acquired > 0
+                || quickTagKeyboardLock.rejected > 0,
+            'Keyboard Lock request did not settle before the trusted Escape test.');
+        }
+        if (quickTagDeferredKeyboardLockResolver && !quickTagDeferredKeyboardLockSettled) {
+            const releasesBeforeRebind = quickTagKeyboardLock.releases;
+            quickTagPopover.querySelector('[data-quick-photo-tag-close]').click();
+            check(quickTagPopover.hidden && document.activeElement === hudTagButton
+                && quickTagSubmissions.length === 2,
+            'the × control closes unsaved input, restores HUD focus, and sends no write');
+            window.quickTagInputPhase = 'fullscreen-stale-reopen-t';
+            await waitFor(() => !quickTagPopover.hidden,
+                'T did not bind a new popup while the prior lock request was pending.');
+            window.quickTagDeferredKeyboardLockResolver();
+            await waitFor(() => quickTagDeferredKeyboardLockSettled,
+                'The intentionally delayed Keyboard Lock promise did not settle.');
+            check(quickTagKeyboardLock.releases === releasesBeforeRebind
+                && !quickTagPopover.hidden,
+            'stale lock completion is retained for the newer popup instead of unlocking it');
+        }
+        if (quickTagKeyboardLock.supported) {
+            const releasesBeforeStaleRejectCase = quickTagKeyboardLock.releases;
+            quickTagPopover.querySelector('[data-quick-photo-tag-close]').click();
+            check(quickTagPopover.hidden,
+                'closing the resolved lock owner hides the editor before testing rejection recovery');
+            await waitFor(() => quickTagKeyboardLock.releases > releasesBeforeStaleRejectCase,
+                'Closing the resolved lock owner did not release Keyboard Lock.');
+            window.quickTagRejectNextKeyboardLock = true;
+            window.quickTagInputPhase = 'fullscreen-reject-t';
+            await waitFor(() => !quickTagPopover.hidden
+                && typeof window.quickTagDeferredKeyboardLockRejector === 'function',
+            'The deferred rejection lock request did not start.');
+            const attemptsBeforeRejection = quickTagKeyboardLock.attempts;
+            const failuresBeforeRejection = quickTagKeyboardLock.rejected;
+            quickTagPopover.querySelector('[data-quick-photo-tag-close]').click();
+            check(quickTagPopover.hidden && document.activeElement === hudTagButton,
+                '× closes the rejected-request owner and restores focus to its trigger');
+            window.quickTagInputPhase = 'fullscreen-stale-reject-reopen-t';
+            await waitFor(() => !quickTagPopover.hidden,
+                'A new popup did not open while the old lock request was pending.');
+            window.quickTagDeferredKeyboardLockRejector();
+            await waitFor(() => quickTagKeyboardLock.rejected > failuresBeforeRejection
+                && quickTagKeyboardLock.attempts > attemptsBeforeRejection,
+            'A stale rejected request did not reconcile the newer popup lock owner.');
+            check(!quickTagPopover.hidden,
+                'stale lock rejection leaves the newer quick-tag editor open');
+        }
+        const quickTagEscapeLockAcquired = quickTagKeyboardLock.acquired > 0;
+        window.quickTagInputPhase = 'fullscreen-escape';
+        await waitFor(() => quickTagPopover.hidden,
+            'Escape or the browser fullscreen-exit fallback did not dismiss the fullscreen quick-tag editor.');
+        if (quickTagEscapeLockAcquired) {
+            check(!quickTagViewer.hidden && document.fullscreenElement === quickTagViewer,
+                'an acquired native Escape lock lets the first Escape close only the editor');
+            check(quickTagKeyboardLock.releases > 0,
+                'closing the fullscreen editor releases its acquired Keyboard Lock');
+        }
+        else {
+            check(!quickTagViewer.hidden,
+                'a denied or unavailable native Escape lock still dismisses the popup with browser fullscreen exit');
+        }
+        window.quickTagInputPhase = 'fullscreen-hud-auto-hide-restored';
+        if (document.fullscreenElement === quickTagViewer) {
+            await waitFor(() => !quickTagViewer.classList.contains('is-ui-visible'),
+                'Closing quick tags did not restore the normal fullscreen HUD auto-hide.');
+        }
+        else {
+            window.quickTagInputPhase = 'viewer-close';
+            await waitFor(() => quickTagViewer.hidden,
+                'The viewer did not close after the browser exited fullscreen.');
+        }
+        if (quickTagViewer.hidden) {
+            window.quickTagInputPhase = 'quick-tag-done';
+        }
+        else {
+        window.quickTagInputPhase = 'fullscreen-outside-t';
+        await waitFor(() => !quickTagPopover.hidden,
+            'T did not reopen quick tags before testing outside-click dismissal.');
+        window.quickTagInputPhase = 'fullscreen-outside-hud-hold';
+        await new Promise(resolve => setTimeout(resolve, QUICK_TAG_HUD_AUTO_HIDE_WAIT_MS));
+        check(quickTagViewer.classList.contains('is-ui-visible'),
+            'the fullscreen HUD stays visible while quick tags remain open');
+        quickTagViewer.querySelector('[data-lightbox-title]').dispatchEvent(
+            new MouseEvent('click', {bubbles: true}),
+        );
+        check(quickTagPopover.hidden && quickTagViewer.classList.contains('is-ui-visible')
+            && document.activeElement !== hudTagButton,
+            'outside click closes the editor and rearms the HUD without restoring focus to its trigger');
+        window.quickTagInputPhase = 'fullscreen-outside-hud-auto-hide';
+        await waitFor(() => !quickTagViewer.classList.contains('is-ui-visible'),
+            'Outside-click dismissal did not restore the fullscreen HUD auto-hide.');
+        window.quickTagInputPhase = 'fullscreen-exit';
+        await waitFor(() => quickTagViewer.hidden === false
+            && document.fullscreenElement !== quickTagViewer
+            && !quickTagViewer.classList.contains('is-css-fullscreen')
+            && !quickTagViewer.classList.contains('is-fullscreen'),
+        'Second Escape did not exit fullscreen while preserving the lightbox.');
+        window.quickTagInputPhase = 'viewer-close';
+        await waitFor(() => quickTagViewer.hidden, 'Third Escape did not close the lightbox after leaving fullscreen.');
+        }
+        if (document.fullscreenElement === quickTagViewer) await document.exitFullscreen();
+        window.quickTagInputPhase = 'quick-tag-done';
+        document.dispatchEvent(new CustomEvent('quickPhotoTagSlideshowChanged', {detail: {active: true}}));
+        check([...quickTagViewer.querySelectorAll('[data-quick-photo-tag-viewer]')].every(button => button.hidden),
+            'slideshow state hides both viewer tag controls');
+
         const requestedPaths = (await imageStats()).map(item => item.path);
         check(!requestedPaths.some(source => source.startsWith('/media/b/full.svg')),
             'navigation and zoom must not request neighboring photos original sources');
@@ -404,7 +778,7 @@ License: MIT License (see LICENSE file in repository)
         check(requestedPaths.some(source => source.startsWith('/media/c/full.svg')),
             'explicit zoom must request the authorized active-card original');
         check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
-        result.textContent = 'BROWSER PASS: real A/B/C image load and decode race, same-task active-original assignment with repeated-zoom Fetch reuse, out-of-order sparse map and next-control metadata windows, close/reopen stale decode invalidation, detached-load cancellation, settled-cache release, and no neighboring originals.';
+        result.textContent = `BROWSER PASS: native lightbox quick-tag keyboard flow, remembered photo tag, fullscreen HUD and active-source targeting, plus real A/B/C image load/decode races, sparse metadata windows, close/reopen invalidation, detached-load cancellation and bounded original requests. Keyboard Lock: ${JSON.stringify(quickTagKeyboardLock)}.`;
     } catch (error) {
         result.textContent = `BROWSER FAIL: ${error.stack}\n${errors.join('\n')}`;
     } finally {

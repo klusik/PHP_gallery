@@ -561,9 +561,12 @@ function smart_gallery_model_all_source_galleries(): array
  *             0:int|float|string,
  *             1:int|float|string
  *         }|null
- *     }
+ *     },
+ *     _photo_tag_media_type_ready?:bool
  * } $rules Validated versioned rules. Group children recurse through the same
  *     group and condition forms; value is omitted for value-free operators.
+ *     `_photo_tag_media_type_ready` is internal to compilation and never
+ *     persisted.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
@@ -613,9 +616,12 @@ function smart_gallery_model_count_images(
  *             0:int|float|string,
  *             1:int|float|string
  *         }|null
- *     }
+ *     },
+ *     _photo_tag_media_type_ready?:bool
  * } $rules Validated versioned rules. Group children recurse through the same
  *     group and condition forms; value is omitted for value-free operators.
+ *     `_photo_tag_media_type_ready` is an internal compiler capability marker
+ *     set by the service and is never persisted.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
@@ -976,9 +982,12 @@ function smart_gallery_model_card_source_rows(
  *             0:int|float|string,
  *             1:int|float|string
  *         }|null
- *     }
+ *     },
+ *     _photo_tag_media_type_ready?:bool
  * } $rules Validated versioned rules. Group children recurse through the same
  *     group and condition forms; value is omitted for value-free operators.
+ *     `_photo_tag_media_type_ready` is internal to compilation and never
+ *     persisted.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
@@ -1331,17 +1340,27 @@ function smart_gallery_model_set_image_rating(
  *             0:int|float|string,
  *             1:int|float|string
  *         }|null
- *     }
+ *     },
+ *     _photo_tag_media_type_ready?:bool
  * } $rules Validated versioned rules. Group children recurse through the same
  *     group and condition forms; value is omitted for value-free operators.
+ *     `_photo_tag_media_type_ready` is internal to compilation and never
+ *     persisted.
  * @return array{sql:string,params:list<int|float|string|null>} Parameterized predicate and ordered values for the normalized rule document.
  */
 function smart_gallery_model_compile_rules(array $rules): array
 {
     $params = [];
+    $photoTagMediaTypeReady = array_key_exists(
+        '_photo_tag_media_type_ready',
+        $rules,
+    )
+        ? (bool) $rules['_photo_tag_media_type_ready']
+        : true;
     $sql = smart_gallery_model_compile_node(
         (array) ($rules['root'] ?? []),
         $params,
+        $photoTagMediaTypeReady,
     );
     return ['sql' => $sql, 'params' => $params];
 }
@@ -1364,9 +1383,14 @@ function smart_gallery_model_compile_rules(array $rules): array
  * } $node Validated group or condition node; child groups recurse in this
  *     structure.
  * @param list<int|float|string|null> $params Ordered database values appended while compiling.
+ * @param bool $photoTagMediaTypeReady Whether tags.media_type is confirmed available for photo-only predicates.
  * @return string Parenthesized SQL predicate containing placeholders for values.
  */
-function smart_gallery_model_compile_node(array $node, array &$params): string
+function smart_gallery_model_compile_node(
+    array $node,
+    array &$params,
+    bool $photoTagMediaTypeReady,
+): string
 {
     if (($node['type'] ?? '') === 'group') {
         $parts = [];
@@ -1374,6 +1398,7 @@ function smart_gallery_model_compile_node(array $node, array &$params): string
             $parts[] = smart_gallery_model_compile_node(
                 (array) $child,
                 $params,
+                $photoTagMediaTypeReady,
             );
         }
         if ($parts === [])
@@ -1387,7 +1412,11 @@ function smart_gallery_model_compile_node(array $node, array &$params): string
             );
         return '(' . implode(' ' . $operator . ' ', $parts) . ')';
     }
-    return smart_gallery_model_compile_condition($node, $params);
+    return smart_gallery_model_compile_condition(
+        $node,
+        $params,
+        $photoTagMediaTypeReady,
+    );
 }
 
 /** Compile one allowlisted condition into a parameterized SQL predicate.
@@ -1397,11 +1426,13 @@ function smart_gallery_model_compile_node(array $node, array &$params): string
  *     value?:int|float|string|list<int>|array{0:int|float|string,1:int|float|string}|null
  * } $condition Validated allowlisted field condition.
  * @param list<int|float|string|null> $params Ordered database values appended while compiling.
+ * @param bool $photoTagMediaTypeReady Whether tags.media_type is confirmed available for photo-only predicates.
  * @return string SQL predicate for the allowlisted field and operator.
  */
 function smart_gallery_model_compile_condition(
     array $condition,
     array &$params,
+    bool $photoTagMediaTypeReady,
 ): string {
     $field = (string) ($condition['field'] ?? '');
     $operator = (string) ($condition['operator'] ?? '');
@@ -1457,6 +1488,37 @@ function smart_gallery_model_compile_condition(
         $marks = implode(',', array_fill(0, count($ids), '?'));
         array_push($params, ...$ids, ...$ids);
         $exists = "(EXISTS (SELECT 1 FROM image_tags sg_it WHERE sg_it.image_id = i.id AND sg_it.tag_id IN ($marks)) OR EXISTS (SELECT 1 FROM gallery_tags sg_gt JOIN galleries sg_tag_gallery ON sg_tag_gallery.id = sg_gt.gallery_id WHERE sg_gt.tag_id IN ($marks) AND (g.folder_path = sg_tag_gallery.folder_path OR g.folder_path LIKE CONCAT(sg_tag_gallery.folder_path, '/%'))))";
+        return $operator === 'not_has_tag' ? '(NOT ' . $exists . ')' : $exists;
+    }
+    if ($field === 'photo_tag') {
+        $tagJoin = $photoTagMediaTypeReady
+            ? " JOIN tags sg_pt ON sg_pt.id = sg_it.tag_id AND sg_pt.media_type = 'image'"
+            : '';
+        if ($operator === 'untagged') {
+            return 'NOT EXISTS (SELECT 1 FROM image_tags sg_it'
+                . $tagJoin
+                . ' WHERE sg_it.image_id = i.id)';
+        }
+        $ids = is_array($value)
+            ? array_values(array_map('intval', $value))
+            : [(int) $value];
+        if ($operator === 'has_all_tags') {
+            $predicates = [];
+            foreach ($ids as $tagId) {
+                $params[] = $tagId;
+                $predicates[] = 'EXISTS (SELECT 1 FROM image_tags sg_it'
+                    . $tagJoin
+                    . ' WHERE sg_it.image_id = i.id'
+                    . ' AND sg_it.tag_id = ?)';
+            }
+            return '(' . implode(' AND ', $predicates) . ')';
+        }
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        array_push($params, ...$ids);
+        $exists = 'EXISTS (SELECT 1 FROM image_tags sg_it'
+            . $tagJoin
+            . ' WHERE sg_it.image_id = i.id'
+            . " AND sg_it.tag_id IN ($marks))";
         return $operator === 'not_has_tag' ? '(NOT ' . $exists . ')' : $exists;
     }
     if ($field === 'gps') {

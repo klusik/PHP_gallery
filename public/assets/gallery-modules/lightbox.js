@@ -10,6 +10,8 @@
  *
  * Responsibilities:
  *   - Attach behavior to existing server-rendered markup
+ *   - Preserve direct-photo-tag source metadata across sparse lightbox navigation
+ *   - Reconcile active-image order when Smart Gallery membership is refreshed
  *   - Keep DOM interaction predictable and readable
  *   - Avoid unnecessary layout work in performance-sensitive paths
  *
@@ -27,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-19
+ *   2026-10-21
  */
 
 /**
@@ -69,7 +71,7 @@ function i18n(key, fallback, parameters = {}) {
     });
     return text;
 }
-export { setupTagSuggestions } from './tag-suggestions.js?v=20261003-scoped-i18n-v2';
+export { setupTagSuggestions } from './tag-suggestions.js?v=20261021-shared-photo-tag-normalization-v1';
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=20261006-lightbox-navigation-v1';
@@ -113,6 +115,7 @@ export function startGalleryPresentation() {
  * @returns {void} Retire the current launch callback, resources and controller.
  */
 export function teardownGalleryLightbox() {
+    window.dispatchEvent(new Event('quickPhotoTagViewerClosed'));
     galleryLightboxState.present = null;
     if (typeof galleryLightboxState.cleanup === 'function') {
         galleryLightboxState.cleanup();
@@ -150,11 +153,12 @@ export function setupGalleryLightbox() {
     // Capture link intent once before viewer navigation replaces its URL.
     const presentationOptions = galleryPresentationOptions(overlay);
     // lightboxConfig stores the server-rendered async metadata settings.
-    const lightboxConfig = document.querySelector('[data-lightbox-config]');
+    let lightboxConfig = document.querySelector('[data-lightbox-config]');
     // lightboxEndpoint stores the JSON endpoint used when a requested image is not in the DOM yet.
-    const lightboxEndpoint = lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxEndpoint || '' : '';
+    let lightboxEndpoint = lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxEndpoint || '' : '';
     // lightboxTotal stores the visitor-visible number of images in the full lightbox order.
-    const lightboxTotal = Math.max(0, Number.parseInt(lightboxConfig?.dataset.lightboxTotal || '0', 10) || 0);
+    let lightboxTotal = Math.max(0, Number.parseInt(lightboxConfig?.dataset.lightboxTotal || '0', 10) || 0);
+    let lightboxOrderRefreshGeneration = 0;
     // lightboxWindowSize stores how many metadata records are fetched per async request.
     const lightboxWindowSize = Math.max(12, Math.min(80, Number.parseInt(lightboxConfig?.dataset.lightboxWindowSize || '60', 10) || 60));
     // lightboxMapsEnabled stores whether this gallery branch may expose EXIF GPS maps.
@@ -272,38 +276,83 @@ export function setupGalleryLightbox() {
         }
     }
 
-        /**
-     * Refreshes the lightbox order after an admin reorders visible photo cards or replaces public gallery content.
+    /**
+     * Refresh the viewer order and active index after public result replacement.
      *
-     * Navigation must read the current DOM order so Next and Previous match the
-     * saved gallery order without requiring a full page reload. Paginated pages
-     * use a sparse client-side cache, so non-visible images are fetched only when
-     * the user approaches them in the viewer.
-     *
-     * This is an explicit cache reset at setup, close, or an authoritative order
-     * change. In-viewer map navigation must use cards directly: detached metadata
-     * is owned by that sparse cache and cannot be reconstructed from the DOM.
+     * @return {void} Rebuilds current query order while retaining the active photo when possible.
      */
     function refreshLightboxOrderFromDom() {
         cancelMapPhotoNavigation();
+        lightboxOrderRefreshGeneration += 1;
+        const refreshGeneration = lightboxOrderRefreshGeneration;
+        lightboxConfig = document.querySelector('[data-lightbox-config]');
+        lightboxEndpoint = lightboxConfig instanceof HTMLElement
+            ? lightboxConfig.dataset.lightboxEndpoint || ''
+            : '';
+        lightboxTotal = Math.max(
+            0,
+            Number.parseInt(lightboxConfig?.dataset.lightboxTotal || '0', 10) || 0,
+        );
         const nextVisibleCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
         const nextSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
-        if (nextSourceCards.length > 0) {
-            cards = nextSourceCards;
-            return;
-        }
-        if (lightboxEndpoint && lightboxTotal > nextVisibleCards.length) {
+        const nextRecords = nextSourceCards.length > 0 ? nextSourceCards : nextVisibleCards;
+        if (lightboxEndpoint && lightboxTotal > nextRecords.length) {
             const sparseCards = Array.from({length: lightboxTotal}, () => null);
-            nextVisibleCards.forEach((card, fallbackIndex) => {
+            nextRecords.forEach((card, fallbackIndex) => {
                 const index = lightboxIndexForCard(card, fallbackIndex);
                 if (index >= 0 && index < sparseCards.length) {
                     sparseCards[index] = card;
                 }
             });
             cards = sparseCards;
+        } else {
+            cards = nextRecords;
+        }
+        if (!(overlay instanceof HTMLElement) || overlay.hidden) return;
+        if (cards.length === 0) {
+            close();
             return;
         }
-        cards = nextVisibleCards;
+        const activeId = String(overlay.dataset.currentImageId || '');
+        // Deferred activation exposes the loader before this owner is initialized.
+        // Its empty identity is not an active viewer navigation to reconcile.
+        if (activeId === '' && overlay.classList.contains('is-initial-loading')) {
+            return;
+        }
+        const activeIndex = cards.findIndex((card) => String(card?.dataset?.imageId || '') === activeId);
+        if (activeIndex >= 0) {
+            updateLightboxCounters(`${activeIndex + 1} / ${cards.length}`);
+            if (activeIndex !== lightboxNavigation.index) {
+                openAt(activeIndex, {revealHud: false, forceImmediateSwap: true});
+            }
+            return;
+        }
+        const nearestIndex = Math.max(0, Math.min(lightboxNavigation.index, cards.length - 1));
+        if (lightboxEndpoint && activeId !== '') {
+            fetchLightboxTargetIndex(Number(activeId), controller.signal)
+                .then((targetIndex) => {
+                    if (
+                        refreshGeneration !== lightboxOrderRefreshGeneration
+                        || overlay.hidden
+                        || String(overlay.dataset.currentImageId || '') !== activeId
+                    ) {
+                        return;
+                    }
+                    const safeIndex = targetIndex >= 0 ? targetIndex : nearestIndex;
+                    openAt(safeIndex, {revealHud: false, forceImmediateSwap: true});
+                })
+                .catch(() => {
+                    if (
+                        refreshGeneration === lightboxOrderRefreshGeneration
+                        && !overlay.hidden
+                        && String(overlay.dataset.currentImageId || '') === activeId
+                    ) {
+                        openAt(nearestIndex, {revealHud: false, forceImmediateSwap: true});
+                    }
+                });
+            return;
+        }
+        openAt(nearestIndex, {revealHud: false, forceImmediateSwap: true});
     }
 
         /**
@@ -344,6 +393,11 @@ export function setupGalleryLightbox() {
         card.dataset.lightboxIndex = String(index);
         card.dataset.imageId = String(imageId);
         card.dataset.galleryId = String(item.gallery_id ?? '');
+        card.dataset.sourceGalleryId = String(item.source_gallery_id ?? item.gallery_id ?? '');
+        card.dataset.quickTagEnabled = item.quick_tag_enabled === true ? '1' : '0';
+        card.dataset.quickPhotoTags = JSON.stringify(
+            Array.isArray(item.quick_photo_tags) ? item.quick_photo_tags : [],
+        );
         card.dataset.fullSrc = String(item.full_src || '');
         card.dataset.previewSrc = String(item.preview_src || item.full_src || '');
         if (Array.isArray(item.quality_sources)) {
@@ -352,7 +406,6 @@ export function setupGalleryLightbox() {
         card.dataset.pageUrl = String(item.page_url || '');
         card.dataset.galleryUrl = String(item.gallery_url || '');
         if (String(item.source_gallery_title || '').trim() !== '' && String(item.source_gallery_url || '').trim() !== '') {
-            card.dataset.sourceGalleryId = String(item.source_gallery_id ?? '');
             card.dataset.sourceGalleryTitle = String(item.source_gallery_title || '');
             card.dataset.sourceGalleryBreadcrumb = String(item.source_gallery_breadcrumb || item.source_gallery_title || '');
             card.dataset.sourceGalleryUrl = String(item.source_gallery_url || '');
@@ -4504,7 +4557,24 @@ export function setupGalleryLightbox() {
         }
         updateLightboxCounters(`${normalizedIndex + 1} / ${cards.length}`);
         overlay.dataset.currentImageId = card.dataset.imageId || '';
+        overlay.dataset.currentSourceGalleryId = card.dataset.sourceGalleryId
+            || card.dataset.galleryId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
+        overlay.dataset.currentQuickTagEnabled = card.dataset.quickTagEnabled || '0';
+        overlay.dataset.currentQuickPhotoTags = card.dataset.quickPhotoTags || '[]';
+        overlay.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: Number(overlay.dataset.currentImageId || 0),
+                sourceGalleryId: Number(overlay.dataset.currentSourceGalleryId || 0),
+                quickTagEnabled: card.dataset.quickTagEnabled === '1',
+                quickPhotoTags: card.dataset.quickPhotoTags || '[]',
+                slideshow: lightboxSlideshowActive,
+                presentation: overlay.classList.contains('is-presentation-exclusive')
+                    || overlay.classList.contains('is-presentation-intro')
+                    || overlay.classList.contains('is-presentation-launch'),
+            },
+        }));
         syncLightboxVote(card, lightboxVotePanel);
         const mapPoint = lightboxMapPointForCard(card);
         syncLightboxMapControls(mapPoint);
@@ -4720,6 +4790,23 @@ export function setupGalleryLightbox() {
      */
     function syncLightboxSlideshowControls() {
         overlay.classList.toggle('is-slideshow', lightboxSlideshowActive);
+        overlay.dispatchEvent(new CustomEvent('quickPhotoTagSlideshowChanged', {
+            bubbles: true,
+            detail: {active: lightboxSlideshowActive},
+        }));
+        overlay.dispatchEvent(new CustomEvent('quickPhotoTagActiveImageChanged', {
+            bubbles: true,
+            detail: {
+                imageId: Number(overlay.dataset.currentImageId || 0),
+                sourceGalleryId: Number(overlay.dataset.currentSourceGalleryId || 0),
+                quickTagEnabled: overlay.dataset.currentQuickTagEnabled === '1',
+                quickPhotoTags: overlay.dataset.currentQuickPhotoTags || '[]',
+                slideshow: lightboxSlideshowActive,
+                presentation: overlay.classList.contains('is-presentation-exclusive')
+                    || overlay.classList.contains('is-presentation-intro')
+                    || overlay.classList.contains('is-presentation-launch'),
+            },
+        }));
         if (lightboxSlideshowSpeedControls instanceof HTMLElement) {
             lightboxSlideshowSpeedControls.hidden = !lightboxSlideshowActive;
         }
@@ -5043,6 +5130,7 @@ export function setupGalleryLightbox() {
      * @return {void} Clears active presentation and reusable resources while retaining the selected index.
      */
     function close() {
+        window.dispatchEvent(new Event('quickPhotoTagViewerClosed'));
         overlay.classList.remove('is-presentation-exclusive');
         if (lightboxBenchmarkDiagnosticsEnabled) {
             lightboxBenchmarkDiagnosticsState.closeCalls += 1;
@@ -5541,6 +5629,7 @@ export function setupGalleryLightbox() {
     document.addEventListener('touchmove', preventMobileLightboxPageGesture, {passive: false, capture: true, signal: controller.signal});
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
+    overlay.addEventListener('quickPhotoTagFocus', showLightboxHud, {signal: controller.signal});
     window.addEventListener('resize', () => {
         if (controller.signal.aborted || overlay.hidden || lightboxNavigation.index < 0) {
             return;
@@ -5736,6 +5825,8 @@ export function setupGalleryLightbox() {
 
         /**
      * Enter native fullscreen or retain the device's complete CSS viewer shell.
+     * Eligible photo-tag viewers request the browser's fullscreen keyboard
+     * handling option where a browser implements that extension.
      * @returns {Promise<boolean>} True for native entry or the supported mobile
      *     shell; false when desktop needs its viewport fallback and activation.
      */
@@ -5755,7 +5846,9 @@ export function setupGalleryLightbox() {
                 return true;
             }
             if (overlay.requestFullscreen) {
-                await overlay.requestFullscreen();
+                const fullscreenOptions = overlay.dataset.currentQuickTagEnabled === '1'
+                    ? {keyboardLock: 'browser'} : undefined;
+                await overlay.requestFullscreen(fullscreenOptions);
                 if (overlay.hidden) {
                     // Close may win while native permission is still pending.
                     // Release only this viewer's late native entry.
@@ -5857,14 +5950,21 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Keep fullscreen controls visible during a slider drag or ordinary split-map navigation.
+     * Keep fullscreen controls visible during active viewer interactions.
      *
-     * @return {boolean} True for an active slider drag or split-map navigation outside slideshow.
+     * @return {boolean} True while controls serve an active tag editor, slider drag or split-map navigation outside slideshow.
      */
     function shouldKeepLightboxHudVisible() {
+        const quickTagPopoverOpen = overlay.querySelector(
+            '[data-quick-photo-tag-popover]:not([hidden])',
+        ) !== null;
+        const splitMapNavigation = !lightboxSlideshowActive
+            && !overlay.classList.contains('is-mobile-fullscreen')
+            && overlay.classList.contains('is-map-split');
+        const slideshowSpeedDragging = lightboxSlideshowActive
+            && lightboxSlideshowSpeedPointerActive;
         return isLightboxFullscreen() && (
-            (!lightboxSlideshowActive && !overlay.classList.contains('is-mobile-fullscreen') && overlay.classList.contains('is-map-split'))
-            || (lightboxSlideshowActive && lightboxSlideshowSpeedPointerActive)
+            quickTagPopoverOpen || splitMapNavigation || slideshowSpeedDragging
         );
     }
 

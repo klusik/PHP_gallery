@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.140}
-\newcommand{\manualdate}{21.~října~2026}
+\newcommand{\version}{0.141}
+\newcommand{\manualdate}{22.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -876,6 +876,42 @@ V~panelu Koše zvolte \ui{Obnovit}, \ui{Trvale odstranit} nebo \ui{Vyprázdnit K
 \index{v00252@virtuální galerie}
 
 Chytrá galerie je uložený dotaz, nikoli složka. Otevřete \ui{Administrace > Galerie > Chytré galerie}, přidejte podmínky a~kombinujte je pomocí vnořených skupin \ui{AND}, \ui{OR} a~\ui{NOT}. Pole zahrnují zdrojové galerie a~potomky, štítky, data pořízení, EXIF/GPS, text, metadata AI, stav duplicit, vlastnosti souborů a~soukromé redakční hodnocení.
+
+Stávající podmínku \ui{Štítek} použijte, pokud se~má pravidlo vztahovat na~štítky
+fotografií i~štítky přiřazené jejich fyzické galerii nebo použitelné nadřazené
+galerii. Podmínka \ui{Štítek fotografie} vybírá pouze štítky přiřazené přímo
+jednotlivým fotografiím. Její operátory pro jeden štítek, jeho nepřítomnost,
+libovolný či všechny vybrané štítky a~fotografii bez přímého štítku ignorují
+štítky galerií, hudby a~PDF. Podmínka pro všechny štítky vyžaduje, aby byly
+přiřazeny téže fotografii. Stávající uložená pravidla \ui{Štítek} zachovají
+dosavadní výsledky a~verze formátu pravidel se~nemění. Pokud schéma podporuje
+typy štítků, přijímá tato podmínka pouze štítky kategorie obrázků. Potvrzené
+starší schéma bez tohoto sloupce dál používá přímé obrazové vazby; neznámý stav
+schématu podmínku bezpečně zablokuje.
+
+Je-li pro přihlášeného správce povolena inline administrace, zobrazí se na~způsobilých
+kartách fotografií a~v~běžném prohlížeči na~celou obrazovku jednořádkové pole pro rychlé
+přidání přímého štítku. Naposledy úspěšně přidaný štítek se~předvyplní do~stejného pole
+pro další fotografii, ale pouhé otevření fotografie jej nikdy nepřidá. Návrhy se~zobrazují
+pouze při psaní; vybraný nebo nový štítek přidáte klávesou \ui{Enter} či malým tlačítkem
+pro přidání. Řádek zavřete sousedním tlačítkem zavření nebo opětovným kliknutím na stejné
+tlačítko štítku; tím se zadaný text nepoužije. Řádek nezobrazuje seznam štítků ani ovládání pro jejich odebrání; k~prohlížení
+nebo odebrání štítků použijte stávající tužku pro úpravu fotografie. Stisknutím \ui{T}
+při prohlížení fotografie přejdete do pole pro přidání. Řádek se zavře až po potvrzeném
+uložení serverem a~synchronizaci zobrazení; při odmítnutí,
+nepotvrzeném výsledku nebo neúspěšném obnovení zůstane otevřený se zadanou hodnotou.
+V~běžném světelném boxu zavře řádek klávesa \ui{Escape}. V~nativním režimu celé obrazovky
+první stisk zavře řádek a~ponechá prohlížeč otevřený, pokud prohlížeč podporuje předání
+klávesy stránce; druhý stisk režim celé obrazovky ukončí. Není-li tato podpora dostupná
+nebo je-li odmítnuta, může režim celé obrazovky ukončit již první stisk a~řádek se zavře s~ním.
+Rychlé přidávání není dostupné při
+prezentaci ani v~prohlížečích dokumentů/PDF. Ve~chytré galerii mění štítek oprávněnou
+zdrojovou fotografii ve~fyzické galerii a~výsledky uloženého pravidla se~dynamicky
+aktualizují.
+
+Karty fotografií navíc zobrazují pasivní náhled prvních tří přímých štítků.
+Pokud jich je více, čtvrtý neaktivní štítek \texttt{…} naznačuje vynechané položky;
+mezi štítky je malá vodorovná mezera.
 
 Pomocí \ui{Náhled} zobrazte aktuální počet shod a~skutečné karty odpovídajících fotografií, poté galerii uložte a~případně zveřejněte. Obrázky i~soubory zůstávají ve svých fyzických galeriích, takže změny metadat nebo hodnocení okamžitě mění jejich příslušnost. Redakční hodnocení je soukromé a~nezávislé na hlasování návštěvníků. Správci mohou také ve veřejném vyhledávání použít \ui{Uložit vyhledávání jako chytrou galerii}.
 

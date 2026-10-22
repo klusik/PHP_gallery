@@ -190,6 +190,8 @@ use function Gallery\Services\admin_log_event;
  * @param ?int $lightboxIndex Lightbox index value.
  * @param ?array<string,mixed> $thumbnailBundle Optional request-local thumbnail bundle.
  * @param ?array{id?:int|string,title?:string,breadcrumb?:string,url?:string} $sourceGalleryContext Optional Smart Gallery physical-source context.
+ * @param bool $quickTagEnabled Whether the administrator quick-tag control is allowed for this photo.
+ * @param list<array{id:int,name:string,slug:string}> $quickPhotoTags Direct image-tag snapshot for the photo.
  * @return string Text result for the caller.
  */
 function lightbox_image_data_attributes(
@@ -207,6 +209,8 @@ function lightbox_image_data_attributes(
     ?int $lightboxIndex = null,
     ?array $thumbnailBundle = null,
     ?array $sourceGalleryContext = null,
+    bool $quickTagEnabled = false,
+    array $quickPhotoTags = [],
 ): string {
     // $qualityCandidates stores only already-authorized thumbnail/media URLs with bounded source dimensions.
     $qualityCandidates = lightbox_zoom_quality_candidates(
@@ -233,7 +237,9 @@ function lightbox_image_data_attributes(
         'image_height' => (int) ($image['height'] ?? 0),
         'voting_allowed' => $votingAllowed,
         'map_point' => $imageMapPoint,
-        'source_gallery_id' => (int) ($sourceGalleryContext['id'] ?? 0),
+        'source_gallery_id' => (int) (
+            $sourceGalleryContext['id'] ?? $gallery['id'] ?? 0
+        ),
         'source_gallery_title' => (string) (
             $sourceGalleryContext['title'] ?? ''
         ),
@@ -243,6 +249,8 @@ function lightbox_image_data_attributes(
             ?? ''
         ),
         'source_gallery_url' => (string) ($sourceGalleryContext['url'] ?? ''),
+        'quick_tag_enabled' => $quickTagEnabled,
+        'quick_photo_tags' => $quickPhotoTags,
     ]);
 }
 
@@ -287,6 +295,8 @@ function render_lightbox_vote_template(
  * @param array{id:int|string,title?:string,slug?:string,folder_path?:string} $gallery Gallery whose access and URL context applies to the images.
  * @param bool $mapsAllowed Maps allowed value.
  * @param array<int,int> $votesById Vote values keyed by image ID.
+ * @param array<int,list<array{id:int,name:string,slug:string}>> $quickTagsById Direct image tags keyed by image ID.
+ * @param bool $quickTagEnabled Whether authorized administrators may quick-tag these photos.
  * @return void Renders hidden source metadata for eligible images.
  */
 function render_lightbox_source_nodes(
@@ -294,6 +304,8 @@ function render_lightbox_source_nodes(
     array $gallery,
     bool $mapsAllowed,
     array $votesById,
+    array $quickTagsById = [],
+    bool $quickTagEnabled = false,
 ): void {
     $nodes = [];
     foreach ($allImages as $image) {
@@ -340,6 +352,11 @@ function render_lightbox_source_nodes(
                 $imageMapPoint,
                 $sourceAttribute,
                 $votingAllowed,
+                null,
+                null,
+                null,
+                $quickTagEnabled,
+                $quickTagsById[(int) $image['id']] ?? [],
             ),
             'vote_form_html' => render_vote_form_html(
                 (int) $image['id'],
@@ -363,6 +380,10 @@ function render_lightbox_source_nodes(
  * @param bool $slideshowAllowed Whether slideshow controls and keyboard activation are available.
  * @param array{autoplay?:bool,music?:bool,interval?:string,transition?:string} $presentation
  *     Gallery presentation defaults; omitted fields preserve existing behavior.
+ * @param bool $quickTagEnabled Whether the authorized inline Admin may tag source photos;
+ *     defaults false so an unprepared viewer cannot expose a write control.
+ * @param string $quickTagUrl Narrow Admin photo-tag mutation endpoint URL; empty when disabled.
+ * @param string $quickTagCsrf Current session CSRF token; empty when disabled.
  * @return void Emit the authorized viewer with bounded playback defaults.
  */
 function render_lightbox(
@@ -373,6 +394,9 @@ function render_lightbox(
     string $lightboxBrowsingMode = 'single',
     bool $slideshowAllowed = true,
     array $presentation = [],
+    bool $quickTagEnabled = false,
+    string $quickTagUrl = '',
+    string $quickTagCsrf = '',
 ): void {
     // $lightboxBrowsingMode stores the effective public mode already resolved by the gallery controller.
     $lightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize(
@@ -389,5 +413,8 @@ function render_lightbox(
         'slideshow_allowed' => $slideshowAllowed,
         'presentation' => $presentation,
         'viewer_favourite_html' => $viewerFavouriteHtml,
+        'quick_tag_enabled' => $quickTagEnabled,
+        'quick_tag_url' => $quickTagUrl,
+        'quick_tag_csrf' => $quickTagCsrf,
     ]);
 }

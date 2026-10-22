@@ -67,7 +67,7 @@ import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbr
 import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261012-gallery-pdf-documents';
 import {
     setupGalleryPdfDocuments,
-} from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
+} from './gallery-modules/admin-pdf-documents.js?v=20261021-smart-photo-tags-v2';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
 import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261021-upload-media-v1';
 import {
@@ -76,23 +76,23 @@ import {
 import {
     setupGalleryMediaPanels,
 } from './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1';
-import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261016-three-state-covers-v1';
+import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20261002-settings-workspace-v1';
-import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261016-readability-v1';
-import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261016-readability-v1';
+import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261021-smart-photo-tags-v2';
+import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20261002-theme-language-v1';
-import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261016-three-state-covers-v1';
+import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20261016-readability-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20261003-admin-scoped-i18n-v1';
 import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4';
-import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperative-galleries.js?v=20261016-three-state-covers-v1';
+import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperative-galleries.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
@@ -105,7 +105,8 @@ import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-v
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261018-presentation-confirm-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1';
+import { setupQuickPhotoTags } from './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -125,7 +126,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261021-upload-media-v1';
+} from './gallery-modules/admin-operations.js?v=20261021-smart-photo-tags-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -217,6 +218,7 @@ function bootGalleryBrowserFeatures() {
     setupHeroTagDisclosure();
     setupFaviconCropper();
     setupTagSuggestions();
+    setupQuickPhotoTags();
     setupGalleryLightbox();
     setupSimbriefOfpViewer();
     setupGalleryPdfDocuments();

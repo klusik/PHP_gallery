@@ -23,6 +23,38 @@
 // Rationale: The endpoint accepts at most 180 safe characters, enough to identify each predicate without response content.
 const publicWidgetHomeDiagnosticMaximumCharacters = 180;
 
+// Purpose: Bound the response prefix read only after the owned lightbox image fails to decode.
+// Type: integer.
+// Units: bytes.
+// Scope: Same-origin public media URLs in this browser fixture's timeout diagnostics.
+// Consumers: probePublicWidgetImageSource() Range request and safe response-type classifier.
+// Rationale: The file format signatures and HTML/JSON prefixes fit in this bounded sample without retaining or reporting media content.
+const publicWidgetImageProbePrefixBytes = 64;
+
+// Purpose: Bound route basename characters retained in safe media-load diagnostics.
+// Type: integer.
+// Units: characters.
+// Scope: The final asset-path segment for preview/original URLs in this fixture.
+// Consumers: probePublicWidgetImageSource() result serialization.
+// Rationale: A short filename identifies a route family while preventing user-provided names from dominating the existing 180-character result field.
+const publicWidgetImageProbeBasenameMaximumCharacters = 16;
+
+// Purpose: Bound the safe image-route timeout diagnostic returned to the disposable fixture endpoint.
+// Type: integer.
+// Units: characters.
+// Scope: The additional preview/original response-type details on image-load failure.
+// Consumers: The route probe summary appended by the public Gallery image wait.
+// Rationale: The workflow result endpoint accepts at most 180 safe characters, so the complete diagnostic is clipped to its existing contract.
+const publicWidgetImageDiagnosticMaximumCharacters = 180;
+
+// Purpose: Bound one same-origin media-route probe used only after image-load timeout.
+// Type: integer.
+// Units: milliseconds.
+// Scope: Each preview/original diagnostic request in this fixture.
+// Consumers: probePublicWidgetImageSource() abort timer.
+// Rationale: The original image wait already exhausted its 20-second budget; diagnostics must not hold fixture cleanup or CI reporting beyond a short network opportunity.
+const publicWidgetImageProbeTimeoutMs = 1500;
+
 (
 /** Run the focused widget persistence journey in the owned HTTP fixture. @return {Promise<void>} Writes a bounded fixture result with sanitized resource status and image decode state on media-load failures. */
 async () => {
@@ -34,13 +66,124 @@ async () => {
     try {
         const expect = value => { if (!value) throw new Error('Assertion failed'); };
         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        /** Identify a timed-out same-origin photo source without retaining response content.
+         * @param {string} source Server-rendered preview or original URL.
+         * @param {string} label Safe source role used in the bounded diagnostic.
+         * @returns {Promise<string>} Allowlisted route, basename, status, MIME and content-signature tokens.
+         */
+        async function probePublicWidgetImageSource(source, label) {
+            let sourceUrl;
+            try {
+                sourceUrl = new URL(source, location.href);
+            } catch (_) {
+                return label + '-invalid-url';
+            }
+            if (sourceUrl.origin !== location.origin) return label + '-external';
+
+            const pageAction = sourceUrl.searchParams.get('page') || '';
+            const cleanMedia = /\/media\/?$/i.test(sourceUrl.pathname);
+            const cleanThumbnail = /\/thumb(?:\/|$)/i.test(sourceUrl.pathname);
+            const route = pageAction === 'media'
+                ? 'page-media'
+                : pageAction === 'thumbnail' || pageAction === 'thumb'
+                    ? 'page-thumb'
+                    : cleanMedia
+                        ? 'clean-media'
+                        : cleanThumbnail
+                            ? 'clean-thumb'
+                            : 'route';
+            const assetPath = cleanMedia
+                ? sourceUrl.pathname.replace(/\/media\/?$/i, '')
+                : sourceUrl.pathname;
+            const rawBasename = assetPath.split('/').filter(Boolean).at(-1) || 'none';
+            const safeBasename = rawBasename
+                .replace(/[^A-Za-z0-9._-]/g, '_')
+                .toLowerCase();
+            const extensionMatch = safeBasename.match(/\.([A-Za-z0-9]{1,8})$/);
+            const extension = extensionMatch ? extensionMatch[1].toLowerCase() : 'none';
+            const basename = safeBasename
+                .replace(/\.[A-Za-z0-9]{1,8}$/, '')
+                .slice(0, publicWidgetImageProbeBasenameMaximumCharacters);
+            const controller = new AbortController();
+            const timeout = setTimeout(
+                () => controller.abort(),
+                publicWidgetImageProbeTimeoutMs,
+            );
+            let status = 0;
+            let contentType = 'none';
+            let bodyType = 'unread';
+            try {
+                const response = await fetch(sourceUrl.href, {
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                    headers: {
+                        Range: `bytes=0-${publicWidgetImageProbePrefixBytes - 1}`,
+                    },
+                    signal: controller.signal,
+                });
+                status = response.status;
+                const rawContentType = (response.headers.get('content-type') || '')
+                    .split(';', 1)[0]
+                    .trim()
+                    .toLowerCase();
+                const contentTypeLabels = {
+                    'application/json': 'json',
+                    'image/gif': 'gif',
+                    'image/jpeg': 'jpeg',
+                    'image/png': 'png',
+                    'image/svg+xml': 'svg',
+                    'image/webp': 'webp',
+                    'text/html': 'html',
+                };
+                contentType = contentTypeLabels[rawContentType] || 'other';
+                const reader = response.body?.getReader();
+                let prefix = new Uint8Array();
+                if (reader) {
+                    try {
+                        const firstChunk = await reader.read();
+                        if (firstChunk.value) {
+                            prefix = firstChunk.value.slice(
+                                0,
+                                publicWidgetImageProbePrefixBytes,
+                            );
+                        }
+                    } finally {
+                        await reader.cancel().catch(() => {});
+                    }
+                }
+                const textPrefix = new TextDecoder().decode(prefix).trimStart().toLowerCase();
+                const signature = String.fromCharCode(...prefix.slice(0, 12));
+                if (prefix.length === 0) bodyType = 'empty';
+                else if (signature.startsWith('\u0089PNG\r\n\u001a\n')) bodyType = 'png';
+                else if (signature.startsWith('\u00ff\u00d8\u00ff')) bodyType = 'jpeg';
+                else if (/^gif8[79]a/.test(signature)) bodyType = 'gif';
+                else if (
+                    signature.startsWith('RIFF')
+                    && signature.slice(8, 12) === 'WEBP'
+                ) {
+                    bodyType = 'webp';
+                }
+                else if (/<svg(?:\s|>)/.test(textPrefix.slice(0, 64))) bodyType = 'svg';
+                else if (/^(?:<!doctype\s+html|<html(?:\s|>))/.test(textPrefix)) bodyType = 'html';
+                else if (/^(?:\{|\[)/.test(textPrefix)) bodyType = 'json';
+                else if (rawContentType.startsWith('image/')) bodyType = 'image';
+                else bodyType = 'other';
+            } catch (_) {
+                bodyType = 'probe-failed';
+            } finally {
+                clearTimeout(timeout);
+            }
+            return `${label}-${route}-${basename}-${extension}-${status}-${contentType}-${bodyType}`;
+        }
+
         const until = async (predicate, deadline = Date.now() + 20000, timeoutDetail = null) => {
             while (Date.now() < deadline) {
                 const value = predicate();
                 if (value) return value;
                 await delay(50);
             }
-            const detail = typeof timeoutDetail === 'function' ? timeoutDetail() : '';
+            const detail = typeof timeoutDetail === 'function' ? await timeoutDetail() : '';
             throw new Error('Timed out' + (detail ? ': ' + detail : ''));
         };
         const credentials = JSON.parse(document.querySelector('#credentials').textContent);
@@ -727,25 +870,7 @@ async () => {
         await until(() => {
             const image = currentLightboxImage();
             return image?.isConnected && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
-        }, undefined, () => {
-            const describeResource = source => {
-                if (!source) return 'absent';
-                try {
-                    const sourceUrl = new URL(source, liveGalleryWindow.location.href);
-                    const resource = liveGalleryWindow.performance.getEntriesByName(sourceUrl.href).at(-1);
-                    const page = sourceUrl.searchParams.get('page') || '';
-                    const size = sourceUrl.searchParams.get('size') || '';
-                    const kind = page === 'media' ? 'media'
-                        : (size !== '' || /\/thumb(?:\/|$)/i.test(sourceUrl.pathname) ? 'thumb' : 'route');
-                    const safeSize = /^(?:small|medium|large|original|[0-9]{1,5})$/i.test(size) ? size : 'other';
-                    const status = Number(resource?.responseStatus || 0);
-                    const encoded = Math.min(99999999, Math.max(0, Number(resource?.encodedBodySize || 0)));
-                    const decoded = Math.min(99999999, Math.max(0, Number(resource?.decodedBodySize || 0)));
-                    return kind + '-' + safeSize + '-s' + status + '-e' + encoded + '-d' + decoded;
-                } catch (_) {
-                    return 'invalid-url';
-                }
-            };
+        }, undefined, async () => {
             const classifyLiveSource = source => {
                 if (!source) return 'absent';
                 try {
@@ -765,12 +890,19 @@ async () => {
             const complete = Boolean(liveLightboxImage?.isConnected && liveLightboxImage.complete);
             const width = Math.min(99999, Math.max(0, Number(liveLightboxImage?.naturalWidth || 0)));
             const height = Math.min(99999, Math.max(0, Number(liveLightboxImage?.naturalHeight || 0)));
-            return 'p-' + describeResource(preview)
-                + ' f-' + describeResource(full)
+            const sourceProbes = [];
+            if (preview) {
+                sourceProbes.push(await probePublicWidgetImageSource(preview, 'p'));
+            }
+            if (full && full !== preview) {
+                sourceProbes.push(await probePublicWidgetImageSource(full, 'f'));
+            }
+            return (sourceProbes.join(' ')
                 + ' live-' + classifyLiveSource(currentSource)
                 + ' attr-' + classifyLiveSource(assignedSource)
                 + ' done-' + Number(complete)
-                + ' w' + width + '-h' + height;
+                + ' w' + width + '-h' + height)
+                .slice(0, publicWidgetImageDiagnosticMaximumCharacters);
         });
         const lightboxHitTarget = element => {
             const bounds = element.getBoundingClientRect();

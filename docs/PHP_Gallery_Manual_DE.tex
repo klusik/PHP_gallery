@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.140}
-\newcommand{\manualdate}{21.~Oktober~2026}
+\newcommand{\version}{0.141}
+\newcommand{\manualdate}{22.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -912,6 +912,50 @@ Wählen Sie im Papierkorb-Seitenbereich \ui{Wiederherstellen}, \ui{Endgültig l�
 \index{v00260@virtuelle Galerien}
 
 Eine Smart Gallery ist eine gespeicherte Abfrage, kein Ordner. Öffnen Sie \ui{Administration > Galerien > Smart Galleries}, fügen Sie Bedingungen hinzu und kombinieren Sie diese mit verschachtelten Gruppen \ui{AND}, \ui{OR} und \ui{NOT}. Die Felder umfassen Quellgalerien und deren Nachkommen, Schlagwörter, Aufnahmedaten, EXIF/GPS, Text, KI-Metadaten, Duplikatstatus, Dateieigenschaften und private redaktionelle Bewertungen.
+
+Verwenden Sie die bestehende Bedingung \ui{Schlagwort}, wenn die Regel sowohl
+Foto-Schlagwörter als auch Schlagwörter der physischen Galerie oder einer
+zutreffenden übergeordneten Galerie berücksichtigen soll. Die Bedingung
+\ui{Foto-Schlagwort} berücksichtigt ausschließlich Schlagwörter, die direkt dem
+jeweiligen Foto zugeordnet sind. Ihre Operatoren für ein Schlagwort, dessen
+Fehlen, beliebige oder alle ausgewählten Schlagwörter und Fotos ohne direkte
+Schlagwörter ignorieren Galerie-, Musik- und PDF-Zuordnungen. Bei „alle
+Schlagwörter“ müssen sämtliche ausgewählten Schlagwörter demselben Foto
+zugeordnet sein. Bestehende gespeicherte \ui{Schlagwort}-Regeln behalten ihre
+bisherigen Ergebnisse; eine Änderung der Regelversion ist nicht erforderlich.
+Wenn das typisierte Schlagwortschema verfügbar ist, akzeptiert die Fotobedingung
+nur Schlagwörter der Kategorie „image“. Bei nachweislich älteren Schemas ohne
+diese Spalte bleiben direkte Bildzuordnungen nutzbar; bei unbekanntem
+Schemazustand wird die Bedingung sicher gesperrt.
+
+Wenn die Inline-Administration für einen angemeldeten Administrator aktiviert
+ist, erscheint auf geeigneten Fotokarten und im normalen Lightbox-/Vollbildmodus
+eine einzeilige Schnellzugabe für direkte Foto-Schlagwörter. Das zuletzt
+erfolgreich hinzugefügte Schlagwort wird für das nächste Foto in dasselbe Feld
+eingetragen, aber das Öffnen eines Fotos wendet es nie automatisch an. Vorschläge
+erscheinen nur während der Eingabe; das ausgewählte oder neue Schlagwort wird mit
+\ui{Enter} oder der kleinen Schaltfläche zum Hinzufügen übernommen. Die Zeile zeigt
+weder eine Schlagwortliste noch Entfernen-Steuerungen. Mit der benachbarten
+Schließen-Schaltfläche oder einem erneuten Klick auf dieselbe Tag-Schaltfläche
+schließen Sie die Zeile, ohne den aktuellen Text anzuwenden. Zum Anzeigen oder Entfernen
+von Schlagwörtern verwenden Sie den vorhandenen Fotoeditor mit Stiftsymbol. Drücken
+Sie beim Betrachten eines Fotos \ui{T}, um das Eingabefeld zu fokussieren. Die Zeile
+wird erst geschlossen, wenn der Server das Hinzufügen bestätigt und die Ansicht
+synchronisiert ist; bei abgelehnten oder unbestätigten Anfragen sowie nach einem
+fehlgeschlagenen Ansicht-Refresh bleibt sie mit dem eingegebenen Wert geöffnet.
+In der normalen Lightbox schließt \ui{Escape} die Zeile. Im nativen Vollbildmodus
+schließt der erste Tastendruck die Zeile und lässt den Viewer im Vollbild, wenn der
+Browser Escape an die Seite weiterleiten kann; der nächste Tastendruck beendet das
+Vollbild. Ist diese Unterstützung nicht verfügbar oder wird sie abgelehnt, kann der
+native Vollbildmodus zuerst enden und die Zeile wird mit ihm geschlossen. Die
+Schnellzugabe ist in Diashows/Präsentationen und Dokument-/PDF-Ansichten nicht
+verfügbar. In einer Smart Gallery wird das berechtigte physische Quellfoto bearbeitet;
+die Ergebnisse der gespeicherten Regel werden dynamisch aktualisiert.
+
+Geeignete Fotokarten zeigen zusätzlich eine passive Vorschau der ersten drei
+direkten Schlagwörter. Gibt es weitere, weist ein viertes nicht anklickbares
+\texttt{…}-Element auf ausgelassene Schlagwörter hin; zwischen den Elementen
+liegt ein kleiner horizontaler Abstand.
 
 Mit \ui{Vorschau} sehen Sie die aktuelle Trefferzahl und die tatsächlich passenden Fotokarten; speichern Sie anschließend und veröffentlichen Sie die Galerie bei Bedarf. Bilder und Dateien bleiben in ihren physischen Galerien, sodass Metadaten- oder Bewertungsänderungen die Zugehörigkeit sofort verändern. Die redaktionelle Bewertung ist privat und unabhängig von Besucherabstimmungen. Administratoren können außerdem in der öffentlichen Suche \ui{Suche als Smart Gallery speichern} verwenden.
 

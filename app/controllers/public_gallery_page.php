@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-14
+ *   2026-10-21
  */
 
 declare(strict_types=1);
@@ -156,6 +156,8 @@ use function Gallery\Services\t;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
+use function Gallery\Services\tag_media_type_schema_state;
+use function Gallery\Services\weighted_tag_suggestions_for_gallery;
 use function Gallery\Services\sort_public_hero_tag_groups;
 use function Gallery\Services\smart_gallery_attachment_groups;
 use function Gallery\Services\smart_gallery_card_summaries;
@@ -573,6 +575,34 @@ function cms_gallery(): void
         'image_tag_lookup',
         static fn(): array => tags_for_entities('image', $imageIds),
     );
+    // Quick-tag state is exposed only to an active inline administrator.
+    $quickTagUser = current_user();
+    $quickTagEnabled =
+        is_array($quickTagUser)
+        && ($quickTagUser['role'] ?? '') === 'admin'
+        && !admin_anonymous_preview_active()
+        && feature_capability_effective_enabled('inline_administration')
+        && tag_media_type_schema_state() !== 'unknown';
+    $quickTagCatalog = $quickTagEnabled
+        ? weighted_tag_suggestions_for_gallery((int) $gallery['id'])
+        : [];
+    $quickTagUrl = $quickTagEnabled
+        ? url_for('admin_public_update_image')
+        : '';
+    $quickTagCsrf = $quickTagEnabled ? csrf_token() : '';
+    $quickPhotoTagsById = [];
+    if ($quickTagEnabled) {
+        foreach ($imageTagsById as $taggedImageId => $imageTags) {
+            $quickPhotoTagsById[(int) $taggedImageId] = array_map(
+                static fn(array $tag): array => [
+                    'id' => (int) ($tag['id'] ?? 0),
+                    'name' => (string) ($tag['name'] ?? ''),
+                    'slug' => (string) ($tag['slug'] ?? ''),
+                ],
+                $imageTags,
+            );
+        }
+    }
     // Variable $votesById stores this steps working value.
     $votesById = public_render_profile_span('image_vote_lookup', static fn(): array => current_votes_for_images(
         $imageIds,
@@ -959,6 +989,8 @@ function cms_gallery(): void
         $pictureManagerEnabled,
         $lightboxExcludesRestrictedNsfw,
         $lightboxFeatureEnabled,
+        $quickTagEnabled,
+        $quickPhotoTagsById,
         $publicMediaManifest,
         $publicThumbnailRenderingMode,
         $viewerFavouriteControlsEnabled,
@@ -1078,6 +1110,9 @@ function cms_gallery(): void
                     $votingAllowed,
                     $lightboxIndex >= 0 ? $lightboxIndex : null,
                     $thumbnailBundle,
+                    null,
+                    $quickTagEnabled,
+                    $quickPhotoTagsById[(int) $image['id']] ?? [],
                 )
                 : '';
             $viewerFavouriteAvailableForImage =
@@ -1132,7 +1167,7 @@ function cms_gallery(): void
             );
             $voteHtml = (string) ob_get_clean();
             ob_start();
-            render_tag_list($imageTags);
+            render_photo_card_tag_preview($imageTags);
             $tagsHtml = (string) ob_get_clean();
             ob_start();
             render_public_image_admin_edit_link($image);
@@ -1150,6 +1185,11 @@ function cms_gallery(): void
             \Gallery\Views\view_render_public_gallery_image_card([
                 'class' => $imageCardClass,
                 'image_id' => (int) $image['id'],
+                'source_gallery_id' => (int) $gallery['id'],
+                'quick_tag_enabled' => $quickTagEnabled,
+                'quick_photo_tags' => $quickPhotoTagsById[
+                    (int) $image['id']
+                ] ?? [],
                 'visibility' => (string) ($image['visibility'] ?? ''),
                 'nsfw' => (int) ($image['nsfw_enabled'] ?? 0) === 1,
                 'updated_at' => (string) ($image['updated_at'] ?? ''),
@@ -1217,6 +1257,9 @@ function cms_gallery(): void
             $lightboxBrowsingMode,
             true,
             \Gallery\Services\gallery_presentation_settings($gallery),
+            (bool) $quickTagEnabled,
+            $quickTagUrl,
+            $quickTagCsrf,
         );
         $lightboxHtml = (string) ob_get_clean();
     }
@@ -1277,6 +1320,10 @@ function cms_gallery(): void
         'bottom_smart_group_html' => $bottomSmartGroupHtml,
         'back_to_top_html' => $backToTopHtml,
         'lightbox_html' => $lightboxHtml,
+        'quick_tag_enabled' => (bool) $quickTagEnabled,
+        'quick_tag_url' => $quickTagUrl,
+        'quick_tag_csrf' => $quickTagCsrf,
+        'quick_tag_catalog' => $quickTagCatalog,
         'render_profile_html' => $renderProfileHtml,
         'public_widgets' => \Gallery\Services\public_widget_public_plan(
             'gallery',

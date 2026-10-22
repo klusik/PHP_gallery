@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {i18n} from './admin-core.js?v=20260512-modular-admin-v1';
-import {completeAdminMutation} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 
 /** Persistent drafts belong to the stable deferred region, not its replaceable workspace. */
 const drafts = new WeakMap();

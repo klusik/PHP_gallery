@@ -18,17 +18,45 @@
  */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {readFile, writeFile} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runHeadlessBrowserFixture} from './support/headless_browser_fixture.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const executable = process.argv[2];
+// Purpose: Bound each fixture synchronization step while real viewer transitions settle.
+// Type: integer.
+// Units: milliseconds.
+// Scope: one expected quick-tag keyboard phase in this browser fixture.
+// Consumers: interact() phase wait deadline.
+// Rationale: the loopback fixture is deterministic, but fullscreenchange and image decode are asynchronous.
+const interactionDeadlineMs = 12000;
+// Purpose: Pace synchronization with the fixture without generating excessive DevTools traffic.
+// Type: integer.
+// Units: milliseconds.
+// Scope: quick-tag phase polling in the owned browser fixture.
+// Consumers: interact() phase observation cadence.
+// Rationale: a short interval keeps input close to each fixture checkpoint while remaining bounded.
+const interactionPollMs = 20;
 if (!executable || executable.startsWith('--')) {
     console.log('SKIP lightbox race browser test: supply the path to an installed Chrome/Edge executable.');
     process.exit(0);
 }
+
+/**
+ * JSON-compatible value returned by one evaluated fixture expression.
+ * @typedef {null|boolean|number|string|Array<LightboxRaceJsonValue>|Record<string,LightboxRaceJsonValue>} LightboxRaceJsonValue
+ */
+
+/**
+ * Browser protocol operations consumed by the trusted-key fixture driver.
+ * @typedef {object} LightboxRaceBrowserControls
+ * @property {function(string):Promise<LightboxRaceJsonValue|undefined>} evaluate Evaluates one synchronous page expression and returns its JSON value.
+ * @property {function():Promise<string>} captureScreenshot Captures the current owned page as a base64 PNG.
+ * @property {function('keyDown'|'keyUp',string):Promise<void>} key Sends one trusted browser key transition.
+ */
 
 const imageResponses = [];
 const failedImagePaths = new Set();
@@ -143,9 +171,75 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const fixtureUrl = `http://127.0.0.1:${server.address().port}/`;
 try {
-    /** Run the isolated synthetic-media page in the confined Chromium profile. */
-    const {result, exitCode} = await runHeadlessBrowserFixture(executable, fixtureUrl, 'lightbox-race-profile-', {timeoutMs: 45000});
+    let fullscreenScreenshotPath = '';
+    let fullscreenEvidence = null;
+    /** Send trusted keyboard input when the production fixture reaches each active-viewer checkpoint.
+     * @param {LightboxRaceBrowserControls} controls Protocol utilities used to inspect the fixture and dispatch trusted keys.
+     * @returns {Promise<void>} Resolves after the fixture reaches its terminal success marker.
+     */
+    async function interact(controls) {
+        const {evaluate, captureScreenshot, key} = controls;
+        const actions = new Map([
+            ['normal-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['normal-enter', async () => { await key('keyDown', 'Enter'); await key('keyUp', 'Enter'); }],
+            ['normal-reopen-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['normal-escape', async () => { await key('keyDown', 'Escape'); await key('keyUp', 'Escape'); }],
+            ['normal-next', async () => evaluate('document.querySelector(\'[data-lightbox-action="next"]\').click()')],
+            ['normal-next-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['normal-next-escape', async () => { await key('keyDown', 'Escape'); await key('keyUp', 'Escape'); }],
+            ['fullscreen-f', async () => { await key('keyDown', 'f'); await key('keyUp', 'f'); }],
+            ['fullscreen-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['fullscreen-enter', async () => { await key('keyDown', 'Enter'); await key('keyUp', 'Enter'); }],
+            ['fullscreen-reopen-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['fullscreen-stale-reopen-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['fullscreen-reject-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['fullscreen-stale-reject-reopen-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['fullscreen-escape', async () => { await key('keyDown', 'Escape'); await key('keyUp', 'Escape'); }],
+            ['fullscreen-outside-t', async () => { await key('keyDown', 'Shift'); await key('keyDown', 't'); await key('keyUp', 't'); await key('keyUp', 'Shift'); }],
+            ['fullscreen-exit', async () => { await key('keyDown', 'Escape'); await key('keyUp', 'Escape'); }],
+            ['viewer-close', async () => { await key('keyDown', 'Escape'); await key('keyUp', 'Escape'); }],
+        ]);
+        const completed = new Set();
+        const deadline = Date.now() + interactionDeadlineMs;
+        while (Date.now() < deadline) {
+            const phase = await evaluate('window.quickTagInputPhase || ""');
+            if (phase === 'quick-tag-done') return;
+            const action = actions.get(phase);
+            if (action && !completed.has(phase)) {
+                completed.add(phase);
+                await action();
+                if (phase === 'fullscreen-t') {
+                    fullscreenEvidence = await evaluate(`({
+                        mode: document.fullscreenElement === document.querySelector('[data-lightbox]') ? 'native' : 'application',
+                        fullscreenElement: document.fullscreenElement?.className || '',
+                        viewerClasses: document.querySelector('[data-lightbox]')?.className || '',
+                        popupParent: document.querySelector('[data-quick-photo-tag-popover]')?.parentElement?.className || '',
+                        popup: (() => { const rect = document.querySelector('[data-quick-photo-tag-popover]').getBoundingClientRect(); return {left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom}; })(),
+                        viewport: {width: innerWidth, height: innerHeight},
+                    })`);
+                    const screenshot = await captureScreenshot();
+                    fullscreenScreenshotPath = path.join(os.tmpdir(), 'php-gallery-lightbox-quick-tag-fullscreen.png');
+                    await writeFile(fullscreenScreenshotPath, Buffer.from(screenshot, 'base64'));
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, interactionPollMs));
+        }
+        const diagnostics = await evaluate(`({phase: window.quickTagInputPhase, readyState: document.readyState,
+            result: document.querySelector('#results')?.textContent || '',
+            errors: window.quickTagFixtureErrors || [],
+            viewerHidden: document.querySelector('[data-lightbox]')?.hidden ?? null,
+            activeTitle: document.querySelector('[data-lightbox-title]')?.textContent || ''})`);
+        throw new Error(`Fixture did not complete trusted keyboard phases: ${[...completed].join(', ')}; diagnostics=${JSON.stringify(diagnostics)}`);
+    }
+
+    /** Run the isolated synthetic-media page in the owned Chromium profile. */
+    const {result, exitCode} = await runHeadlessBrowserFixture(executable, fixtureUrl, 'lightbox-race-profile-', {
+        timeoutMs: 45000,
+        viewport: {width: 1280, height: 900},
+        interact,
+    });
     console.log(result || 'Browser left the lightbox race fixture without a result.');
+    console.log(`Fullscreen evidence: ${JSON.stringify(fullscreenEvidence)}; screenshot: ${fullscreenScreenshotPath || 'not captured'}`);
     assert.equal(exitCode, 0, 'Browser process must finish successfully');
     assert.ok(result?.includes('BROWSER PASS'), 'Lightbox race fixture must complete all assertions');
 } finally {

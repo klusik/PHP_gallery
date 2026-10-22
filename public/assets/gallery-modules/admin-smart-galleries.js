@@ -29,7 +29,7 @@
  * @typedef {{type:'condition',field:string,operator:string,value?:string|number|Array<string|number>}} SmartRuleCondition
  * @typedef {{type:'group',operator:string,children:Array<SmartRuleNode>}} SmartRuleGroup
  * @typedef {SmartRuleCondition|SmartRuleGroup} SmartRuleNode
- * @typedef {{form:HTMLFormElement,hidden:HTMLInputElement,root:HTMLElement,rules:SmartRuleNode,catalog:Record<string,{label:string,kind:string,operators:string[],operator_labels?:Record<string,string>}>,tags:Array<{id:number|string,name:string}>,galleries:Array<{id:number|string,title:string,folder_path?:string}>,labels:Record<string,string>}} SmartRuleEditor
+ * @typedef {{form:HTMLFormElement,hidden:HTMLInputElement,root:HTMLElement,rules:SmartRuleNode,catalog:Record<string,{label:string,kind:string,operators:string[],operator_labels?:Record<string,string>}>,tags:Array<{id:number|string,name:string}>,photoTags:Array<{id:number|string,name:string}>,galleries:Array<{id:number|string,title:string,folder_path?:string}>,labels:Record<string,string>}} SmartRuleEditor
  */
 
 /** Return a human-readable label for one stable identifier. */
@@ -106,8 +106,22 @@ function renderNode(editor, node, container, depth = 0, parentRule = null, posit
     } else {
         const fields = Object.keys(editor.catalog);
         const operators = editor.catalog[node.field]?.operators || [];
-        const fieldLabels = Object.fromEntries(fields.map((field) => [field, editor.catalog[field].label]));
+        const fieldLabels = Object.fromEntries(fields.map((field) => [field, field === 'tag'
+            ? ruleText(editor, 'legacy_tag_field', 'Tag (photo or gallery)')
+            : (field === 'photo_tag'
+                ? ruleText(editor, 'photo_tag_field', 'Photo tag (direct photo assignments)')
+                : editor.catalog[field].label)]));
         element.innerHTML = `<span class="smart-rule-number" aria-hidden="true">${position + 1}</span><label class="smart-rule-control"><span>${escapeHtml(ruleText(editor, 'field', 'Photo property'))}</span><select data-rule-field>${selectHtml(fields, node.field, fieldLabels)}</select></label><label class="smart-rule-control"><span>${escapeHtml(ruleText(editor, 'comparison', 'Comparison'))}</span><select data-rule-operator>${selectHtml(operators, node.operator, editor.catalog[node.field]?.operator_labels)}</select></label><div class="smart-rule-control smart-rule-value-control"><span>${escapeHtml(ruleText(editor, 'value', 'Value'))}</span><span data-rule-value></span></div><button type="button" class="button secondary smart-rule-remove" data-rule-remove aria-label="${escapeHtml(ruleText(editor, 'remove_condition', 'Remove condition'))}" title="${escapeHtml(ruleText(editor, 'remove_condition', 'Remove condition'))}">&#215;</button>`;
+        if (node.field === 'tag' || node.field === 'photo_tag') {
+            const scopeHelp = document.createElement('small');
+            scopeHelp.className = 'smart-rule-tag-scope';
+            scopeHelp.textContent = ruleText(editor,
+                node.field === 'photo_tag' ? 'photo_tag_scope_help' : 'legacy_tag_scope_help',
+                node.field === 'photo_tag'
+                    ? 'Uses only tags assigned directly to this photo.'
+                    : 'Includes direct photo tags and matching gallery or ancestor-gallery tags.');
+            element.querySelector('.smart-rule-control').appendChild(scopeHelp);
+        }
         element.querySelector('[data-rule-field]').addEventListener('change', (event) => {
             node.field = event.target.value; node.operator = editor.catalog[node.field].operators[0]; node.value = ''; renderEditor(editor);
         });
@@ -133,7 +147,8 @@ function renderValue(editor, node, container) {
         const note = document.createElement('span'); note.className = 'smart-rule-value-unused';
         note.textContent = ruleText(editor, 'no_value', 'No value needed'); container.appendChild(note); return;
     }
-    const source = node.field === 'tag' ? editor.tags : (node.field === 'gallery' ? editor.galleries : null);
+    const source = node.field === 'photo_tag' ? editor.photoTags
+        : (node.field === 'tag' ? editor.tags : (node.field === 'gallery' ? editor.galleries : null));
     if (source) {
         const multiple = ['has_any_tags','has_all_tags'].includes(node.operator);
         const select = document.createElement('select'); select.multiple = multiple; select.setAttribute('aria-label', ruleText(editor, 'value', 'Value'));
@@ -241,7 +256,7 @@ export function setupAdminSmartGalleries(root = document) {
         if (!(hidden instanceof HTMLInputElement) || !(builder instanceof HTMLElement)) return;
         let documentRules;
         try { documentRules = JSON.parse(hidden.value); } catch { documentRules = {version: 1, root: {type: 'group', operator: 'AND', children: []}}; }
-        const editor = {form, hidden, root: builder, rules: documentRules.root, catalog: JSON.parse(form.dataset.smartGalleryCatalog), tags: JSON.parse(form.dataset.smartGalleryTags), galleries: JSON.parse(form.dataset.smartGalleryGalleries), labels: JSON.parse(form.dataset.smartGalleryRuleLabels || '{}')};
+        const editor = {form, hidden, root: builder, rules: documentRules.root, catalog: JSON.parse(form.dataset.smartGalleryCatalog), tags: JSON.parse(form.dataset.smartGalleryTags), photoTags: JSON.parse(form.dataset.smartGalleryPhotoTags || '[]'), galleries: JSON.parse(form.dataset.smartGalleryGalleries), labels: JSON.parse(form.dataset.smartGalleryRuleLabels || '{}')};
         renderEditor(editor);
     });
 }

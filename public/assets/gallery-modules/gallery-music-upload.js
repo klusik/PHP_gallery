@@ -10,7 +10,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
-import {normalizeAdminMutationEnvelope} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
+import {normalizeAdminMutationEnvelope} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 
 /**
  * Identify audio before image decoding, using MIME hints or supported

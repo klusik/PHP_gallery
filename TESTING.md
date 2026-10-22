@@ -116,7 +116,7 @@ galleries do not trigger count reads.
 The same fixture renders the opened-gallery hero and checks independent
 nonzero PDF/music counts before the photo badge, disabled-count suppression,
 and the unchanged photo badge when media counts are unavailable. The existing
-gallery-tag browser fixture checks compact card spacing and horizontal hero
+gallery-tag browser fixture also checks compact card spacing and horizontal hero
 placement with production styles on a narrow viewport.
 
 `admin_storage_refresh_test.php` additionally captures lifecycle diagnostics to
@@ -791,7 +791,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.140. Release verification uses the
+This guide applies to PHP Gallery Version 0.141. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -877,6 +877,11 @@ preservation and removal of the notice token from later navigation.
 canonical Home redirect; unknown values and mismatched markers remain subject
 to canonical cleanup. The HTTP workflow follows the resulting destination and
 checks its private no-store document response.
+The strict no-write snapshot interval excludes the unchanged ordinary
+password-gated gallery visit: a successful unmarked gallery response may
+schedule attachment-usage reconciliation at shutdown, which intentionally
+creates persistent per-gallery source lock files. That ordinary-access check
+runs immediately after snapshot equality is confirmed.
 `tests/theme_custom_css_rendering_test.php` covers server-rendered labels and
 readiness hooks. These source tests do not substitute for the required
 hosted candidate matrix or any separately requested manual browser
@@ -4564,6 +4569,94 @@ predicate, stable ordering, bounded page/lightbox windows, route policy,
 side-panel enhancement, preview renderer reuse, download authorization
 structure, and normal-gallery slideshow default.
 
+The registered `gallery_workflow_integration_test.php` exercises photo-tag
+membership through a disposable migrated MySQL/MariaDB database and the real
+public Smart Gallery route. Its owned image rows distinguish direct image tags
+from direct physical-gallery and inherited-ancestor tags, plus deliberately
+mismatched music/PDF categories. Strict membership failures report the sorted
+expected and actual image IDs alongside the three scoped IDs for diagnosis;
+it checks all five operators, same-photo `has_all_tags`, nested `AND`/`NOT`,
+version-1 persistence, and unchanged legacy `tag` inheritance. It also removes
+and restores a direct tag through the authenticated quick-tag API while keeping
+the same saved rule, then checks that public result membership and lightbox
+total change with the assignment. Repeated rule saves include the existing
+Smart Gallery ID in the edit URL, matching the Admin controller's GET-based
+update selection so each case updates the same rule and public route. The
+post-mutation alpha-rule save uses the same URL identity; otherwise that case
+would create another gallery while the assertion continued reading the prior
+rule.
+Later upload-replay and subtree-restore assertions take fresh pre-operation
+image-row baselines after the photo-tag fixtures have added rows. The prepared
+upload also snapshots the existing JPG file count and requires exactly one new
+row and file, then no increase on replay; subtree restore must return to its
+pre-delete row count.
+`image_quick_tag_workflow_test.php` exercises authenticated targeted mutation,
+CSRF and inline-administration refusals, stale physical-gallery ownership,
+duplicate-add idempotence, targeted removals, direct-tag preservation, and the
+canonical mutation postcondition against real rows. Before checking for the
+disposable HTTP/database fixture, it also calls the production tag model with
+an in-memory PDO double that fails the targeted `image_tags` insert after the
+model creates a typed tag; the regression asserts that the model begins and
+rolls back its transaction and restores both tag and prior-assignment state.
+This model-level rollback case does not exercise the controller's HTTP 503 or
+Admin-log persistence path. The HTTP fixture retains real authorization, CSRF,
+ownership, category, idempotency, and targeted-mutation assertions, but requires
+the disposable workflow database and was not executed locally because that
+harness is unavailable. The controller's bounded failure-log envelope is
+covered by the existing Stage 4 source contract, not by this model double.
+The relational workflow
+also repeats removal after the assignment is absent and confirms the saved
+Smart Gallery result remains unchanged.
+The existing registered `gallery_tags_browser_test.mjs` exercises the
+production quick-photo-tag module against card and active-viewer controls. It
+covers the compact single-row add field, remembered-tag prefill, context-ranked
+suggestions while typing, Tab/Enter acceptance, successful-add memory without
+duplicate/no-op replacement, physical source identity, canonical error-only API
+envelopes, safe server-error references, and retaining the last successful tag
+after an unconfirmed failure. Its later assertions cover T-to-focus in normal
+and fullscreen viewers, direct-tag state, fullscreen HUD, Escape dismissal,
+close/toggle controls without mutation, save-and-refresh close behavior, lock
+fallback/ownership and focus restoration. In the current run, this fixture
+stopped at its earlier hero-geometry assertion before reaching those quick-tag
+assertions. A focused run passed 148 assertions after temporarily bypassing
+only that earlier row check; the fixture was restored, so this is not a pass of
+the registered full fixture.
+
+The same browser fixture waits for the focused card's own CSS transform
+transition to finish before taking geometry snapshots after focus or collapse.
+This keeps the strict, rounded snapshots independent of the fractional
+`focus-within` translation while preserving the original geometry assertions.
+
+The registered `lightbox_race_browser_test.mjs` exercises sparse lightbox
+metadata and the production quick-tag/lightbox modules. The fixture now loads
+the production deferred viewer entry with its canonical initial-loader markup,
+asserts that the visible loading shell has no active photo identity, and then
+opens the first photo after full viewer setup. This covers the race where an
+already-visible loading shell could be mistaken for a committed photo during
+setup-time order reconciliation. Its focused run passed
+the deferred Keyboard Lock resolve/reject ownership cases, scoped acquire and
+release, fullscreen request option, save-and-refresh close behavior, input
+retention on unconfirmed or unsynchronized results, and popup dismissal. Browser
+fixtures cannot establish physical Mac keyboard handling; post-fix physical
+Chrome and Safari Escape behavior remains manual coverage.
+
+The existing gallery-tags fixture also authors canonical Smart Gallery
+enter/leave refresh, result-count/page/cache-buster updates, viewer-order
+notification, and unrelated-page no-fetch assertions. Those assertions were
+not reached in the current run because of the earlier hero-geometry failure.
+Detailed
+tag inspection/removal stays in the existing photo-edit pencil workflow; the
+browser fixture does not assert removal controls in the quick-add row. The
+photo-card preview separately shows at most the first three direct tags and a
+noninteractive fourth `…` indicator when more tags exist, with the
+four-pixel horizontal chip gap preserved. The
+backend API's targeted removal action remains covered by
+`image_quick_tag_workflow_test.php` against real rows, including direct-tag
+preservation and the canonical mutation postcondition.
+The registered `lightbox_race_browser_test.mjs` also checks that sparse
+lightbox metadata retains the physical source-gallery ID, quick-tag permission
+and direct-tag state when breadcrumb context is absent.
+
 Then require a fresh hosted `full` qualification for the prepared SHA. Manually
 create a tag-plus-rating collection, preview and publish it, verify multiple
 pages, then move one image between three and five stars and confirm membership
@@ -6357,9 +6450,12 @@ bounded continuation and resume, stale-ticket rejection, completion without a
 repeat scan, busy-source backoff, failed terminal scans without a completion
 receipt, and retirement after failed initial dispatch. This is adapter-backed
 service coverage, not a real database or HTTP worker test.
-The real gallery workflow retires its owned audio seeds while preserving a
-persistent source-lock inode created by automatic reconciliation; any other
-remaining sidecar entry still fails the fixture.
+The real gallery workflow seeds audio under the canonical persistent sidecar
+lock because earlier public Smart Gallery reads may admit attachment
+reconciliation. Setup accepts an absent sidecar or one containing only a
+regular `.lock`; it holds that lock while verifying no payload/index exists and
+writing fixture-owned tracks. Cleanup preserves the lock inode and rejects any
+other remaining sidecar entry.
 `tests/gallery_pdf_conversion_lifecycle_test.php` and
 `tests/admin_pdf_conversion_stream_scenarios.mjs` cover conversion marker
 ownership,

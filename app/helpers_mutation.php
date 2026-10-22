@@ -134,8 +134,8 @@ function admin_mutation_panel_metadata(
  * The cover_selection type observes gallery_id plus the cover-selection revision.
  *
  * @param string $type Supported postcondition type.
- * @param array{gallery_id?:int|string,tag_id?:int|string,smart_gallery_id?:int|string,image_id?:int|string,image_ids?:list<int|string>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:'top'|'bottom',placement_order?:int} $data Type-specific values; cover_selection requires a positive gallery_id and opaque public revision.
- * @return array{type:string,gallery_id?:int,tag_id?:int,smart_gallery_id?:int,image_id?:int,image_ids?:list<int>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:string,placement_order?:int} Observable fields admitted by the closed vocabulary.
+ * @param array{gallery_id?:int|string,tag_id?:int|string,smart_gallery_id?:int|string,image_id?:int|string,image_ids?:list<int|string>,tag_ids?:list<int|string>,tag_names?:list<string>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:'top'|'bottom',placement_order?:int} $data Type-specific values; cover_selection requires a positive gallery_id and opaque public revision.
+ * @return array{type:string,gallery_id?:int,tag_id?:int,smart_gallery_id?:int,image_id?:int,image_ids?:list<int>,tag_ids?:list<int>,tag_names?:list<string>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:string,placement_order?:int} Observable fields admitted by the closed vocabulary.
  */
 function admin_mutation_postcondition(string $type, array $data = []): array
 {
@@ -158,6 +158,7 @@ function admin_mutation_postcondition(string $type, array $data = []): array
         'gallery_image_count',
         'gallery_image_revision',
         'smart_gallery_presence',
+        'image_tags',
         'tag_identity',
     ];
     if (!in_array($type, $supportedTypes, true)) {
@@ -203,6 +204,32 @@ function admin_mutation_postcondition(string $type, array $data = []): array
             }
         }
         $postcondition['image_ids'] = $imageIds;
+    }
+    if ($type === 'image_tags' && isset($data['tag_ids'])) {
+        $tagIds = [];
+        foreach ((array) $data['tag_ids'] as $tagId) {
+            $normalizedTagId = (int) $tagId;
+            if (
+                $normalizedTagId > 0
+                && !in_array($normalizedTagId, $tagIds, true)
+            ) {
+                $tagIds[] = $normalizedTagId;
+            }
+        }
+        $postcondition['tag_ids'] = $tagIds;
+    }
+    if ($type === 'image_tags' && isset($data['tag_names'])) {
+        $tagNames = [];
+        foreach ((array) $data['tag_names'] as $tagName) {
+            $normalizedTagName = trim((string) $tagName);
+            if (
+                $normalizedTagName !== ''
+                && !in_array($normalizedTagName, $tagNames, true)
+            ) {
+                $tagNames[] = $normalizedTagName;
+            }
+        }
+        $postcondition['tag_names'] = $tagNames;
     }
 
     if (isset($data['visibility'])) {

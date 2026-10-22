@@ -172,32 +172,43 @@ function view_render_public_gallery_card(array $viewModel): void
                 . e(t('gallery.visibility.unpublished', 'unpublished'))
                 . '</span>';
     }
-    if ($showReorderHandle) {
-        echo
-            '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="'
-                . e(t(
-                    'gallery.reorder.drag_subgallery_aria',
-                    'Drag subgallery to reorder visible subgalleries',
-                ))
-                . '" title="'
-                . e(t(
-                    'gallery.reorder.drag_subgallery_title',
-                    'Drag to reorder this visible subgallery',
-                ))
-                . '"><span aria-hidden="true">↕</span><span>'
-                . e(t('gallery.reorder.move_gallery', 'Move gallery'))
-                . '</span></button>';
-    }
-
-    if ($pictureManagerEnabled) {
-        echo
-            '<button type="button" class="picture-manager-select-button picture-manager-gallery-select-button" data-picture-manager-select aria-pressed="false" aria-label="'
-                . e(t('picture_manager.select_gallery', 'Select gallery'))
-                . '" title="'
-                . e(t('picture_manager.select_gallery', 'Select gallery'))
-                . '"><span aria-hidden="true">✓</span><span class="visually-hidden">'
-                . e(t('picture_manager.select_gallery', 'Select gallery'))
-                . '</span></button>';
+    $adminControlsHtml = (string) ($viewModel['admin_controls_html'] ?? '');
+    $hasCardActions = $showReorderHandle
+        || $pictureManagerEnabled
+        || trim($adminControlsHtml) !== '';
+    if ($hasCardActions) {
+        echo '<div class="public-gallery-card-action-row">';
+        if ($pictureManagerEnabled) {
+            $selectLabel = t('picture_manager.select_gallery', 'Select gallery');
+            echo
+                '<button type="button" class="picture-manager-select-button picture-manager-gallery-select-button" data-picture-manager-select aria-pressed="false" aria-label="'
+                    . e($selectLabel)
+                    . '" title="'
+                    . e($selectLabel)
+                    . '"><span aria-hidden="true">✓</span><span class="visually-hidden">'
+                    . e($selectLabel)
+                    . '</span></button>';
+        }
+        if ($showReorderHandle) {
+            $moveLabel = t('gallery.reorder.move_gallery', 'Move gallery');
+            echo
+                '<button type="button" class="public-reorder-handle public-gallery-reorder-handle public-gallery-card-reorder-handle" data-public-reorder-handle aria-label="'
+                    . e(t(
+                        'gallery.reorder.drag_subgallery_aria',
+                        'Drag subgallery to reorder visible subgalleries',
+                    ))
+                    . '" title="'
+                    . e(t(
+                        'gallery.reorder.drag_subgallery_title',
+                        'Drag to reorder this visible subgallery',
+                    ))
+                    . '">' . view_admin_menu_icon('move')
+                    . '<span class="visually-hidden">'
+                    . e($moveLabel)
+                    . '</span></button>';
+        }
+        echo $adminControlsHtml;
+        echo '</div>';
     }
 
     echo
@@ -313,7 +324,6 @@ function view_render_public_gallery_card(array $viewModel): void
         }
     }
     echo '</div>';
-    echo (string) ($viewModel['admin_controls_html'] ?? '');
     echo '</article>';
 }
 

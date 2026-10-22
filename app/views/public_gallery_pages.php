@@ -481,7 +481,20 @@ function view_render_public_gallery_nsfw_image_card(array $viewModel): void
 /**
  * Render one normal public photo card.
  *
- * @param array<string,mixed> $viewModel Controller-prepared photo-card state.
+ * @param array{
+ *     class:string,image_id:int,source_gallery_id:int,
+ *     quick_tag_enabled:bool,
+ *     quick_photo_tags:list<array{id:int,name:string,slug:string}>,
+ *     visibility:string,nsfw:bool,updated_at:string,
+ *     picture_manager_enabled:bool,display_index:int,preview_url:string,
+ *     share_filename:string,display_title:string,lightbox_attributes:string,
+ *     viewer_favourite_available:bool,viewer_favourite:bool,
+ *     reorder_enabled:bool,image_url:string,thumbnail_html:string,
+ *     map_available:bool,favourite_html:string,collection_html:string,
+ *     vote_html:string,has_public_meta:bool,description:string,tags_html:string,
+ *     admin_controls_html:string,quick_tag_url?:string,quick_tag_csrf?:string
+ * } $viewModel Controller-prepared public photo card fields, including the
+ *     physical image identity, direct tags, access state and inline controls.
  * @return void Render semantic photo-card markup.
  */
 function view_render_public_gallery_image_card(array $viewModel): void
@@ -519,8 +532,19 @@ function view_render_public_gallery_image_card(array $viewModel): void
                 . (!empty($viewModel['viewer_favourite']) ? '1' : '0')
                 . '"';
     }
-    echo '>';
+    echo '><div class="public-photo-action-row">';
 
+    if (!empty($viewModel['picture_manager_enabled'])) {
+        $selectLabel = t('picture_manager.select_photo', 'Select photo');
+        echo
+            '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="'
+                . e($selectLabel)
+                . '" title="'
+                . e($selectLabel)
+                . '"><span aria-hidden="true">✓</span><span class="visually-hidden">'
+                . e($selectLabel)
+                . '</span></button>';
+    }
     if (!empty($viewModel['reorder_enabled'])) {
         echo
             '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="'
@@ -533,21 +557,13 @@ function view_render_public_gallery_image_card(array $viewModel): void
                     'public.reorder.drag_photo_title',
                     'Drag to reorder this visible photo',
                 ))
-                . '"><span aria-hidden="true">↕</span><span>'
+                . '">' . view_admin_menu_icon('move') . '<span class="visually-hidden">'
                 . e(t('public.reorder.move_photo', 'Move photo'))
                 . '</span></button>';
     }
-    if (!empty($viewModel['picture_manager_enabled'])) {
-        $selectLabel = t('picture_manager.select_photo', 'Select photo');
-        echo
-            '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="'
-                . e($selectLabel)
-                . '" title="'
-                . e($selectLabel)
-                . '"><span aria-hidden="true">✓</span><span class="visually-hidden">'
-                . e($selectLabel)
-                . '</span></button>';
-    }
+    echo (string) ($viewModel['admin_controls_html'] ?? '');
+    view_render_quick_photo_tag_button($viewModel);
+    echo '</div>';
 
     echo '<div class="image-stage">';
     echo
@@ -579,12 +595,144 @@ function view_render_public_gallery_image_card(array $viewModel): void
         if ($description !== '') {
             echo '<p>' . e($description) . '</p>';
         }
-        echo (string) ($viewModel['tags_html'] ?? '');
+        if (trim((string) ($viewModel['tags_html'] ?? '')) !== '') {
+            echo '<div class="public-photo-tag-footer">'
+                . (string) $viewModel['tags_html']
+                . '</div>';
+        }
         echo '</div>';
     }
     echo '</div>';
-    echo (string) ($viewModel['admin_controls_html'] ?? '');
     echo '</article>';
+}
+
+/**
+ * Render the compact direct-photo-tag action when this photo is editable.
+ *
+ * @param array{image_id?:int,source_gallery_id?:int,quick_tag_enabled?:bool,
+ *     quick_photo_tags?:list<array{id:int,name:string,slug?:string}>,
+ *     quick_tag_url?:string,quick_tag_csrf?:string} $viewModel Prepared photo
+ *     identity, direct image-tag state, and authorized inline mutation details.
+ * @return void Emits nothing when this principal cannot edit the photo.
+ */
+function view_render_quick_photo_tag_button(array $viewModel): void
+{
+    if (empty($viewModel['quick_tag_enabled'])) {
+        return;
+    }
+    $imageId = max(0, (int) ($viewModel['image_id'] ?? 0));
+    if ($imageId <= 0) {
+        return;
+    }
+    $tags = array_values(array_filter(
+        (array) ($viewModel['quick_photo_tags'] ?? []),
+        static fn(mixed $tag): bool => is_array($tag)
+            && (int) ($tag['id'] ?? 0) > 0
+            && trim((string) ($tag['name'] ?? '')) !== '',
+    ));
+    $labelKey = $tags === []
+        ? 'quick_photo_tags.add'
+        : 'quick_photo_tags.edit';
+    $labelFallback = $tags === [] ? 'Add photo tags' : 'Edit photo tags';
+    $label = t($labelKey, $labelFallback);
+    $tagsJson = json_encode(
+        $tags,
+        JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+    );
+
+    echo
+        '<button type="button" class="public-admin-card-action-button'
+            . ' quick-photo-tag-trigger quick-photo-tag-trigger-card'
+            . ($tags === [] ? ' is-empty' : ' is-active')
+            . '" data-quick-photo-tag-trigger data-quick-photo-tag-card'
+            . ' data-image-id="'
+            . $imageId
+            . '" data-source-gallery-id="'
+            . max(0, (int) ($viewModel['source_gallery_id'] ?? 0))
+            . '" data-quick-tag-enabled="1" data-quick-tag-url="'
+            . e((string) ($viewModel['quick_tag_url'] ?? ''))
+            . '" data-quick-tag-csrf="'
+            . e((string) ($viewModel['quick_tag_csrf'] ?? ''))
+            . '" data-quick-photo-tags="'
+            . e($tagsJson)
+            . '" aria-pressed="'
+            . ($tags === [] ? 'false' : 'true')
+            . '" aria-haspopup="dialog" aria-expanded="false" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '">'
+            . view_admin_menu_icon('tags')
+            . '<span class="visually-hidden">'
+            . e($label)
+            . '</span></button>';
+}
+
+/**
+ * Render the shared quick-tag popover and its image-only suggestion catalog.
+ *
+ * @param array{quick_tag_enabled?:bool,quick_tag_url?:string,
+ *     quick_tag_csrf?:string,
+ *     quick_tag_catalog?:list<array{id:int,name:string,slug:string}>} $viewModel
+ *     Page-level authorization and image-tag catalog prepared by the controller.
+ * @return void Emits the inert popover only for an authorized inline editor.
+ */
+function view_render_quick_photo_tag_popover(array $viewModel): void
+{
+    if (empty($viewModel['quick_tag_enabled'])) {
+        return;
+    }
+    $catalog = array_values(array_filter(
+        (array) ($viewModel['quick_tag_catalog'] ?? []),
+        static fn(mixed $tag): bool => is_array($tag)
+            && (int) ($tag['id'] ?? 0) > 0
+            && trim((string) ($tag['name'] ?? '')) !== '',
+    ));
+    $catalogJson = json_encode(
+        $catalog,
+        JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+    );
+    $inputLabel = t('quick_photo_tags.input', 'Search or add a photo tag');
+    $title = t('quick_photo_tags.title', 'Photo tags');
+    $addLabel = t('quick_photo_tags.add', 'Add photo tags');
+    $closeLabel = t('quick_photo_tags.close', 'Close photo tags');
+
+    echo
+        '<section class="quick-photo-tag-popover" data-quick-photo-tag-popover'
+            . ' data-quick-tag-url="'
+            . e((string) ($viewModel['quick_tag_url'] ?? ''))
+            . '" data-quick-tag-csrf="'
+            . e((string) ($viewModel['quick_tag_csrf'] ?? ''))
+            . '" data-quick-photo-tag-catalog="'
+            . e($catalogJson)
+            . '" role="dialog" aria-label="'
+            . e($title)
+            . '"'
+            . ' aria-describedby="quick-photo-tag-status" hidden>'
+            . '<div class="quick-photo-tag-entry"><label class="visually-hidden"'
+            . ' for="quick-photo-tag-input">'
+            . e($inputLabel)
+            . '</label><input id="quick-photo-tag-input" type="text"'
+            . ' data-quick-photo-tag-input autocomplete="off"'
+            . ' aria-autocomplete="list" aria-controls="quick-photo-tag-options"'
+            . ' aria-expanded="false" placeholder="'
+            . e($inputLabel)
+            . '"><button type="button" data-quick-photo-tag-add'
+            . ' aria-label="'
+            . e($addLabel)
+            . '" title="'
+            . e($addLabel)
+            . '">+</button><button type="button" data-quick-photo-tag-close'
+            . ' aria-label="'
+            . e($closeLabel)
+            . '" title="'
+            . e($closeLabel)
+            . '">×</button></div>'
+            . '<div class="quick-photo-tag-options" id="quick-photo-tag-options"'
+            . ' data-quick-photo-tag-options role="listbox" hidden></div>'
+            . '<p class="quick-photo-tag-status" data-quick-photo-tag-status'
+            . ' id="quick-photo-tag-status" role="status" aria-live="polite"></p>'
+            . '</section>';
 }
 
 /**
@@ -686,6 +834,7 @@ function view_render_public_gallery_detail(array $viewModel): void
     view_render_public_gallery_image_section(
         (array) ($viewModel['image_section'] ?? []),
     );
+    view_render_quick_photo_tag_popover($viewModel);
     echo (string) ($viewModel['bottom_smart_group_html'] ?? '');
     if (!empty($viewModel['has_list_content'])) {
         echo '</div>';

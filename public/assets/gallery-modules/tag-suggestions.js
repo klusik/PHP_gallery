@@ -6,13 +6,14 @@
  * Module Type: Browser Module
  *
  * Purpose:
- *   Provides reusable admin tag entry, selected tag pills, and context-ranked suggestions.
+ *   Provides shared tag normalization, entry, selected pills, and context-ranked suggestions.
  *
  * Responsibilities:
  *   - Preserve the existing comma-separated form payload expected by PHP
  *   - Render selected tags as removable pills immediately after selection
  *   - Render context-ranked tag suggestions without waiting for input focus
  *   - Keep suggestion matching local, predictable, and independent of network calls
+ *   - Export canonical comparison and ranking helpers for quick photo tagging
  *
  * Author:
  *   Rudolf Klusal
@@ -28,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-28
+ *   2026-10-21
  */
 
 import { i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
@@ -41,6 +42,7 @@ import { i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
  * comma-separated text that the PHP save routes already expect.
  *
  * @param {ParentNode} root DOM scope that may contain tag inputs.
+ * @return {void} Enhances eligible tag inputs in the supplied DOM scope.
  */
 export function setupTagSuggestions(root = document) {
     const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
@@ -223,7 +225,7 @@ function createHiddenPayloadInput(input, originalName, initialTags) {
  * @param {string} value Raw tag name.
  * @return {string} Safe lowercase tag name.
  */
-function normalizeTagName(value) {
+export function normalizeTagName(value) {
     return String(value || '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -340,7 +342,7 @@ function currentFragment(input) {
  * @param {string} fragment Current normalized fragment.
  * @return {number} Lower score is better. -1 means not a match.
  */
-function suggestionScore(name, fragment) {
+export function suggestionScore(name, fragment) {
     const normalized = normalizeTagName(name);
     if (fragment === '') {
         return 0;

@@ -8,14 +8,15 @@
  * Module Type: Regression Test
  *
  * Purpose:
- *   Protect the administrator-only dual photo-counter presentation and its
- *   independent Theme mode/icon settings without a live database.
+ *   Protect the administrator-only dual photo-counter presentation, its
+ *   independent Theme mode/icon settings, and photo-card tag previews.
  *
  * Responsibilities:
  *   - Cover first-upgrade defaults, eight mode/icon combinations and inheritance
  *   - Preserve legacy show/hide overrides and the public-visitor privacy boundary
  *   - Verify accessible Admin eye/stacked-photo HTML and equal-count collapse
  *   - Reject malformed settings and protect hidden-mode icon persistence
+ *   - Bound only photo-card tag links while preserving full tag inputs
  *
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -27,6 +28,15 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    /** Report that public tag browsing is active in the tag-preview fixture.
+     * @param string $capability Feature key requested by the preview helper.
+     * @return bool Whether the fixture exposes clickable tag names.
+     */
+    function feature_capability_effective_enabled(string $capability): bool
+    {
+        return $capability === 'public_tag_browsing';
+    }
+
     /**
      * Fetch a transient Theme value or the requested canonical default.
      *
@@ -163,6 +173,16 @@ namespace Gallery\Services {
 }
 
 namespace Gallery\Core {
+    /** Build a deterministic URL for the public tag-preview fixture.
+     * @param string $route Named route requested by the tag renderer.
+     * @param array<string,string|int> $params Route parameters.
+     * @return string Fixture URL for the requested tag.
+     */
+    function url_for(string $route, array $params = []): string
+    {
+        return '/' . $route . '/' . (string) ($params['slug'] ?? '');
+    }
+
     /** Return the explicitly selected fixture session.
      * @return array{id:int}|null Authenticated user or public visitor.
      */
@@ -198,6 +218,7 @@ namespace {
     require_once __DIR__ . '/../app/views/public_tags.php';
     require_once __DIR__ . '/../app/views/public_gallery_pages.php';
     require_once __DIR__ . '/../app/controllers/public_gallery_cards.php';
+    require_once __DIR__ . '/../app/controllers/public_tags.php';
 
     /** Reject an invalid counter contract without continuing to later cases. */
     $check = static function (bool $condition, string $message): void {
@@ -228,6 +249,82 @@ namespace {
         ], $overrides));
         return (string) ob_get_clean();
     };
+
+    $renderPhotoTagPreview = static function (array $tags): string {
+        ob_start();
+        \Gallery\Controllers\render_photo_card_tag_preview($tags);
+        return (string) ob_get_clean();
+    };
+
+    $photoTags = [
+        ['name' => 'Daník & <Friends>', 'slug' => 'danik-friends'],
+        ['name' => 'Robert', 'slug' => 'robert'],
+        ['name' => 'Marie', 'slug' => 'marie'],
+        ['name' => 'Petr', 'slug' => 'petr'],
+        ['name' => 'Lucie', 'slug' => 'lucie'],
+    ];
+    $photoPreviewLimit = \Gallery\Controllers\PHOTO_CARD_TAG_PREVIEW_LIMIT;
+    $check(
+        $photoPreviewLimit === 3,
+        'Photo-card preview policy retains the requested three-tag limit.',
+    );
+    // These values straddle empty, below, exact-limit, and overflow states.
+    foreach (
+        [
+            0,
+            1,
+            $photoPreviewLimit,
+            $photoPreviewLimit + 1,
+            $photoPreviewLimit + 2,
+        ] as $tagCount
+    ) {
+        $previewHtml = $renderPhotoTagPreview(
+            array_slice($photoTags, 0, $tagCount),
+        );
+        preg_match_all(
+            '/<a class="tag" href="([^"]*)" title="([^"]*)">([^<]*)<\/a>/u',
+            $previewHtml,
+            $links,
+            PREG_SET_ORDER,
+        );
+        $expectedLinkCount = min($tagCount, $photoPreviewLimit);
+        $check(
+            count($links) === $expectedLinkCount
+                && ($tagCount === 0
+                    ? $previewHtml === ''
+                    : str_starts_with($previewHtml, '<p class="tag-list">')),
+            'Photo-card tag previews preserve only the first three links.',
+        );
+        foreach ($links as $index => $link) {
+            $expectedTag = $photoTags[$index];
+            $check(
+                $link[1] === '/tag/' . $expectedTag['slug']
+                    && $link[3] === htmlspecialchars(
+                        $expectedTag['name'],
+                        ENT_QUOTES | ENT_SUBSTITUTE,
+                        'UTF-8',
+                    ),
+                'Visible photo-tag links retain order and escaped Unicode names.',
+            );
+        }
+        $hasMore = $tagCount > $photoPreviewLimit;
+        $ellipsis = '<span class="tag tag-more" aria-hidden="true">…</span>';
+        $check(
+            substr_count($previewHtml, $ellipsis) === ($hasMore ? 1 : 0)
+                && !str_contains($previewHtml, '<details')
+                && !str_contains($previewHtml, '<button'),
+            'Photo-card overflow is one passive ellipsis with no expander control.',
+        );
+        $check(
+            !str_contains($previewHtml, 'Petr')
+                || $tagCount <= $photoPreviewLimit,
+            'Hidden photo tags are not rendered in the card preview.',
+        );
+    }
+    $check(
+        count($photoTags) === 5,
+        'Rendering a short card preview leaves the full assigned tag list available.',
+    );
 
     $heroHtml = $renderHero();
     $heroPdfPosition = strpos($heroHtml, 'gallery-media-count-icon-pdf');

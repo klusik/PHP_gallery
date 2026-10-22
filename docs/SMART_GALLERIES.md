@@ -384,3 +384,86 @@ Smart image rules, public tag searches and image facets explicitly consume only
 `image` tags. Music-song tag assignments use the shared taxonomy's `music`
 category and never contribute to image/gallery tags, counts or cards. Existing
 tag IDs, URLs and globally unique slugs remain stable; `pdf` stays reserved.
+
+## Photo-tag rule scope
+
+The existing `tag` rule deliberately matches a selected tag assigned directly
+to a photo or assigned to its physical gallery or an applicable ancestor
+gallery. Its negative operators and `untagged` operator keep those same
+photo-or-gallery semantics. Existing saved rule documents remain version 1 and
+retain this behavior.
+
+The separate `photo_tag` field selects only assignments in `image_tags` for the
+candidate image ID. It does not read `gallery_tags`, including parent galleries,
+or tag assignments for music, PDFs, or other media. It accepts the same
+operators as `tag`, with direct-photo meanings: `has_tag` and `not_has_tag`
+test one assignment; `has_any_tags` matches one or more selected tags;
+`has_all_tags` requires every selected tag on the same photo; and `untagged`
+means no qualifying direct photo-tag assignment. Selected tag IDs are validated
+as image tags before rule execution. The shared versioned rule format and
+parameterized SQL compiler remain authoritative; no separate tag taxonomy or
+rule-version migration is introduced.
+
+When `tags.media_type` is available, `photo_tag` predicates require the `image`
+category as well as the direct `image_tags` relationship. A positively
+confirmed absence of that column identifies the legacy untyped taxonomy: the
+`image_tags` relation still limits matches to image assignments, so direct
+photo-tag rules remain available on that supported schema. An unknown or
+indeterminate schema state fails closed; it cannot authorize photo-tag rule
+validation or execution. This distinction follows the permanent legacy-image
+compatibility policy in [the lifecycle contract](COMPATIBILITY_LIFECYCLE.md).
+
+Both tag fields feed the canonical Smart Gallery result query. Direct photo-tag
+changes therefore alter result membership, counts, preview, pagination,
+lightbox records, and other views that consume the saved rules without copying
+or moving images. Existing source-gallery access and image visibility checks
+still constrain every result.
+
+## Quick photo tagging
+
+Eligible photo cards show a passive direct-tag preview with the first three tags.
+When a photo has more, a fourth, non-clickable `…` chip indicates that tags are
+omitted. The chips have a small horizontal gap; use the existing
+photo-edit pencil for detailed tag management.
+
+Authorized inline administrators get a single-row quick-add field on eligible
+physical-photo cards and in the normal photo lightbox/fullscreen viewer. It
+accepts one direct image tag for the active physical photo. The last tag added
+successfully is prefetched into the same field for the next photo, but opening a
+photo never applies it automatically. Suggestions appear only while the
+administrator is typing; Enter or the small add control submits the selected or
+new tag. The adjacent close control or clicking the same tag button again
+dismisses the row without applying the current input. A confirmed successful
+add and synchronized view close the row; a rejected, unconfirmed, or
+saved-but-unrefreshed result keeps it open with the entered value and status.
+The row does not display a tag list or removal controls. Use the
+existing photo-edit pencil to inspect or remove tags. The `T` shortcut focuses
+the add field for the active photo; it is unavailable in slideshow/presentation
+mode and document/PDF viewers. Escape closes the row in the ordinary lightbox.
+In native fullscreen, browsers that support page handling of Escape let the
+first Escape close the row while the viewer remains fullscreen; the next Escape
+exits fullscreen. If that support is unavailable or rejected, native fullscreen
+may exit first and the row closes with it. In a Smart Gallery viewer, the field
+edits the authorized physical source photo, not the virtual gallery.
+
+The public card and lightbox view models batch direct-tag state for the visible
+photo set and disclose the tagging controls only to a signed-in administrator
+when inline administration is enabled and anonymous-preview mode is inactive.
+Lightbox navigation uses the active image/source record, including for lazy
+Smart Gallery windows, so an old thumbnail position cannot redirect an edit.
+The mutation re-resolves the physical photo and its source gallery on the
+server, checks the supplied source-gallery identity as a stale-owner
+precondition, and applies current authorization and CSRF checks.
+
+Quick additions use the existing `admin_public_update_image` controller with
+`quick_tag_add`, a physical `image_id`, the source `source_gallery_id`, and
+either an existing `tag_id` or a new `tag_name`. The same endpoint retains its
+targeted `quick_tag_remove` action for authorized photo-edit workflows.
+Persistence targets one `image_tags` relationship in a transaction; it does not
+replace the photo's complete tag list or update unrelated image metadata. New
+names use the canonical image-tag normalization and taxonomy.
+Duplicate additions and removals of absent assignments are idempotent. The
+success response uses the canonical `image.tag` mutation envelope and includes
+the resulting direct tag IDs/names; the existing image-tags impact context
+invalidates tag/search and Smart Gallery derived state. This keeps subsequent
+membership, counts, previews, and ordered results current without a page reload.

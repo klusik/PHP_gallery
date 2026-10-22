@@ -1,5 +1,166 @@
 # Patch notes
 
+## Version 0.141
+
+Added direct photo-tag rules for Smart Galleries and compact photo tagging while
+browsing cards, the lightbox, and normal fullscreen. Kept existing photo-or-gallery
+tag rules intact, refreshed dynamic results after tag changes, and added explicit
+feedback for rejected, unconfirmed, or saved-but-unrefreshed requests.
+
+### Highlights
+
+#### Smart Galleries selected by individual photo tags
+
+- Added the separate Photo tag rule field for tags assigned directly to each
+  photograph. Excluded containing-gallery and ancestor-gallery assignments, music
+  tags, and other media assignments from this scope.
+  [#279](https://github.com/klusik/PHP_gallery/issues/279)
+- Added direct-photo meanings for `has_tag`, `not_has_tag`, `has_any_tags`,
+  `has_all_tags`, and `untagged`, including nested `AND`, `OR`, and `NOT` groups.
+  Required every selected tag to belong to the same photo for `has_all_tags`.
+- Preserved the existing `tag` field, its inherited gallery-tag behavior, and
+  version-1 saved rule documents. Kept Photo tag and Photo or gallery tag choices
+  distinct in the localized rule editor.
+- Connected direct-tag selection to the canonical access-aware result query for
+  counts, previews, ordered pages, lazy lightbox windows, and downloads. Kept
+  photographs in their physical source galleries without copying or moving files.
+
+#### Quick tagging from photo cards and the viewer
+
+- Added a compact tag button beside the existing photo-card administration
+  controls and in the normal lightbox toolbar and fullscreen HUD. Distinguished
+  empty and assigned direct-tag states with accessible labels and icon styling.
+- Added one anchored input row with an add action and a close control. Supported
+  existing image-tag suggestions, new normalized names, pointer selection, Tab
+  completion, and Enter submission without loading the full photo editor.
+- Remembered the last successfully added tag in the current browser tab and
+  prepared it when opening the next photo, including after gallery navigation or
+  reload. Opening a photo never applied the remembered tag automatically.
+- Added the `T` shortcut for the active photo and kept input keystrokes within the
+  open row. Excluded slideshow, presentation, document/PDF viewers, anonymous
+  preview, and contexts without active inline administrator permission.
+- Kept the quick row focused on adding one tag. Retained detailed inspection and
+  removal through the existing photo-edit pencil. Limited passive card previews
+  to three direct tags plus a non-clickable ellipsis for additional assignments.
+- Closed the row after a confirmed add and synchronized view. Preserved entered
+  text and visible status after rejection, an unconfirmed response, or a saved
+  change whose view refresh failed.
+
+#### Dynamic result refresh and viewer lifecycle
+
+- Refreshed the visible Smart Gallery result fragment after direct image-tag
+  mutations, including membership changes, counts, pagination, and photo order,
+  without a full-page navigation.
+- Bound viewer edits to the active physical image and source gallery, including
+  lazy Smart Gallery records. Rejected stale asynchronous responses and prevented
+  photo navigation from redirecting an in-flight edit to another image.
+- Added optional browser Escape-lock handling while a quick-tag row was open in
+  native fullscreen. Released the lock when its owner closed or changed. Retained
+  native fullscreen exit when the API was unsupported or refused; fullscreen
+  could exit first and close the row in that case.
+- Fixed first-photo initialization through the deferred lightbox entry so an
+  early photo-order reconciliation left the visible loading shell intact until
+  the initial image was committed.
+
+### Technical Details
+
+#### Backend and mutation boundaries
+
+- Extended `app/controllers/admin_public_inline.php` through the existing
+  `admin_public_update_image` route with `quick_tag_add` and `quick_tag_remove`.
+  Retained authenticated Admin and CSRF checks, required active inline
+  administration, and refused anonymous-preview mutations.
+- Required the supplied `source_gallery_id` to match the server-resolved photo
+  owner. Rechecked ownership under a row lock before persistence and returned a
+  conflict for moved photos instead of applying a stale edit.
+- Added `mutate_image_tag()` in `app/services/tag_metadata.php` and transactional
+  assignment ownership in `app/models/tags.php`. Applied targeted, idempotent
+  add/remove operations, preserved other assignments and image metadata, and
+  rolled back newly created tags if their assignment failed.
+- Moved canonical find-or-create persistence into the tag model while retaining
+  service-owned normalization and ordered slug candidates. Reused existing
+  same-category tags after a concurrent global-slug claim.
+- Returned the canonical `image.tag` mutation envelope with authoritative direct
+  tags and an `image_tags` postcondition. Extended
+  `public/assets/gallery-modules/admin-mutation-completion.js` to verify and
+  replace the current Smart Gallery fragment through its stable identity.
+- Recorded persistence failures as `image.public_quick_tag_failed` with bounded
+  image/gallery IDs, operation, exception class, and applicable SQLSTATE/driver
+  codes. Omitted tag text, raw SQL, exception messages, credentials, tokens, and
+  private paths. Added a fixed-message PHP error-log fallback when Admin-log
+  persistence also failed.
+
+#### Database and compatibility
+
+- Extended `app/services/smart_galleries.php` and
+  `app/models/smart_galleries.php` with validated `photo_tag` conditions and
+  parameterized `EXISTS`/`NOT EXISTS` predicates over `image_tags`. Reused the
+  existing taxonomy and tables without adding a schema migration.
+- Required image-category tags when `tags.media_type` was available. Retained
+  direct-image assignment support when that column was conclusively missing on
+  the supported legacy untyped schema. Refused photo-tag rule execution and tag
+  mutations when schema inspection was unknown; an unavailable optional tag
+  catalog returned no suggestions instead of authorizing a write.
+- Kept source visibility and gallery-access restrictions in the shared Smart
+  Gallery query. Disabling inline administration removed quick-tag controls and
+  refused their mutations without changing saved Smart Gallery rule semantics.
+
+#### Frontend and localization
+
+- Added `public/assets/gallery-modules/quick-photo-tags.js` and reused comparison
+  and ranking helpers from `public/assets/gallery-modules/tag-suggestions.js`.
+  Limited displayed suggestions to four and showed them only while typing.
+- Batched direct-tag state into card and initial/lazy viewer view models instead
+  of querying tags separately for each rendered photo. Bound popup ownership,
+  focus restoration, HUD interaction, and delayed responses to the active photo.
+- Verified successful responses against the requested image, physical gallery,
+  mutation action, and direct-tag postcondition before accepting their state.
+  Kept transport failures, malformed responses, and ambiguous server errors
+  visibly unconfirmed rather than claiming that storage had not changed.
+- Updated card, lightbox, fullscreen, and narrow-screen styling and supplied
+  matching controls, hints, validation, and status text in English, Czech,
+  German, and Swedish. Updated shared module revision URLs for the changed
+  browser import chain.
+
+#### Tests and permanent documentation
+
+- Added `tests/image_quick_tag_workflow_test.php` and
+  `tests/support/image_quick_tag_failure_model.php` for authorization, CSRF,
+  disabled capabilities, stale physical owners, media-category rejection,
+  idempotence, assignment preservation, and production-model rollback.
+- Extended `tests/smart_gallery_rules_test.php` and the relational gallery
+  workflow for direct-photo versus gallery/ancestor/music scope, negative
+  operators, nested groups, legacy schema behavior, and dynamic membership.
+- Extended `tests/fixtures/gallery_tags.html` and the lightbox browser fixtures
+  for remembered tags, completion, keyboard ownership, responsive popup geometry,
+  delayed responses, refresh outcomes, active-photo identity, and fullscreen
+  lock lifecycle. Added the production deferred entry to the lightbox fixture.
+- Updated `docs/SMART_GALLERIES.md`, architecture, code ownership, testing, and
+  compatibility references together with all four maintained TeX manual sources.
+  Recorded physical browser-reserved Escape behavior as separate manual coverage;
+  synthetic browser key events did not establish that operating-system behavior.
+
+### User Impact
+
+#### For visitors
+
+- Added more precise dynamic collections when administrators selected Photo tag
+  rules, such as photographs individually tagged with one or both people.
+  Gallery-wide or music assignments no longer broadened that explicitly chosen
+  scope; existing saved Photo or gallery tag rules retained their behavior.
+- Kept public results subject to existing photo visibility and source-gallery
+  access, and added compact direct-tag previews on eligible photo cards.
+- Improved the deferred lightbox's initial loading transition.
+
+#### For administrators
+
+- Enabled repeated photo tagging while browsing, including `T` then Enter for a
+  remembered tag in the normal viewer, without reopening the full Admin editor.
+- Updated visible Smart Gallery results after acknowledged tag changes and kept
+  failures recoverable through retained input and explicit verification status.
+- Preserved unrelated image metadata, physical storage, existing tag rules, and
+  detailed tag removal through the photo editor.
+
 ## Version 0.140
 
 Added temporary, revocable Admin support access, explicit PDF and music opt-in

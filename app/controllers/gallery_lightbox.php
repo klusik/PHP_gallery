@@ -43,6 +43,9 @@ use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
+use function Gallery\Services\tags_for_entities;
+use function Gallery\Services\tag_media_type_schema_state;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\current_viewer;
 use function Gallery\Services\current_votes_for_images;
@@ -126,7 +129,9 @@ function cms_release_gallery_lightbox_session_lock(): void
  * @param bool $votingAllowed True when vote controls should be available.
  * @param array<int,int> $votesById Current viewer vote state keyed by image id.
  * @param bool $includeSourceGalleryContext Whether physical-source context should be exposed to the lightbox UI.
- * @return array{id:int,index:int,gallery_id:int,full_src:string,preview_src:string,quality_sources:list<array{src:string,width:int,height:int,kind:string}>,page_url:string,gallery_url:string,title:string,description:string,score:int,user_vote:int,width:int,height:int,map_point:?array{lat:float,lng:float},voting_allowed:bool,vote_form_html:string,source_gallery_id?:int,source_gallery_title?:string,source_gallery_breadcrumb?:string,source_gallery_url?:string} JSON-ready item payload.
+ * @param bool $quickTagEnabled Whether the active administrator may quick-tag this source image.
+ * @param list<array{id:int,name:string,slug:string}> $quickPhotoTags Direct image-tag snapshot for this source image.
+ * @return array{id:int,index:int,gallery_id:int,full_src:string,preview_src:string,quality_sources:list<array{src:string,width:int,height:int,kind:string}>,page_url:string,gallery_url:string,title:string,description:string,score:int,user_vote:int,width:int,height:int,map_point:?array{lat:float,lng:float},voting_allowed:bool,vote_form_html:string,source_gallery_id?:int,source_gallery_title?:string,source_gallery_breadcrumb?:string,source_gallery_url?:string,quick_tag_enabled:bool,quick_photo_tags:list<array{id:int,name:string,slug:string}>} JSON-ready item payload.
  */
 function gallery_lightbox_json_item(
     array $image,
@@ -136,6 +141,8 @@ function gallery_lightbox_json_item(
     bool $votingAllowed,
     array $votesById,
     bool $includeSourceGalleryContext = false,
+    bool $quickTagEnabled = false,
+    array $quickPhotoTags = [],
 ): array {
     $thumbnailBundle = public_render_profile_with_thumbnail_purpose('lazy lightbox bundle discovery', static fn(): array => thumbnail_bundle(
         $image,
@@ -161,6 +168,7 @@ function gallery_lightbox_json_item(
         'id' => $imageId,
         'index' => $index,
         'gallery_id' => (int) $gallery['id'],
+        'source_gallery_id' => (int) $gallery['id'],
         'full_src' => $mediaUrl,
         'preview_src' => $previewUrl,
         'quality_sources' => lightbox_zoom_quality_candidates(
@@ -185,6 +193,8 @@ function gallery_lightbox_json_item(
             $vote,
             $votingAllowed,
         ),
+        'quick_tag_enabled' => $quickTagEnabled,
+        'quick_photo_tags' => $quickPhotoTags,
     ];
     if ($includeSourceGalleryContext) {
         $sourceContext = is_array(
@@ -298,6 +308,26 @@ function cms_gallery_lightbox_data(): void
         $images,
     );
     $votesById = current_votes_for_images($imageIds);
+    $quickTagUser = current_user();
+    $quickTagEnabled =
+        is_array($quickTagUser)
+        && ($quickTagUser['role'] ?? '') === 'admin'
+        && !$anonymousPreview
+        && feature_capability_effective_enabled('inline_administration')
+        && tag_media_type_schema_state() !== 'unknown';
+    $quickTagsById = [];
+    if ($quickTagEnabled) {
+        foreach (tags_for_entities('image', $imageIds) as $taggedImageId => $rows) {
+            $quickTagsById[(int) $taggedImageId] = array_map(
+                static fn(array $tag): array => [
+                    'id' => (int) ($tag['id'] ?? 0),
+                    'name' => (string) ($tag['name'] ?? ''),
+                    'slug' => (string) ($tag['slug'] ?? ''),
+                ],
+                $rows,
+            );
+        }
+    }
     $viewerPrincipal = current_viewer();
     $viewerFavouriteStates = $viewerPrincipal !== null
     && viewer_favourites_storage_available()
@@ -341,6 +371,9 @@ function cms_gallery_lightbox_data(): void
             $mapsAllowed,
             $votingAllowed,
             $votesById,
+            false,
+            $quickTagEnabled,
+            $quickTagsById[(int) $image['id']] ?? [],
         );
         if (
             is_array($viewerFavouriteStates)
