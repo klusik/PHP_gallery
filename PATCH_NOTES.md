@@ -1,5 +1,64 @@
 # Patch notes
 
+## Version 0.141.3
+
+Improved public gallery search suggestions with progressive selection, safer query
+updates, and compact accessible result rows.
+
+### Highlights
+
+#### Public gallery search suggestions
+
+- Preselected the highest-ranked suggestion as progressive results arrived.
+  Kept explicit choices attached to the same result when ordering changed.
+- Added keyboard and pointer selection; Enter opened the selected result.
+  Escape and focus moving outside the search dismissed suggestions.
+- Cleared old results and selection immediately when the query changed, preventing
+  late responses from restoring stale suggestions.
+- Added combobox accessibility attributes while keeping keyboard focus in the
+  input. Compact rows showed more suggestions and retained 44 px mobile touch
+  targets.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/public-home-search.js` for progressive
+  selection, query invalidation, dismissal, and accessible suggestions.
+- Updated `public/assets/gallery.js` and `public/assets/public-gallery.js` to use
+  the new search-module cache revision.
+- Updated `public/assets/styles/public.css` for compact suggestion rows and
+  subtitle truncation.
+
+#### Tests
+
+- Added browser regression coverage in
+  `tests/fixtures/public_theme_width_composition.html` for selection, result
+  reordering, keyboard and pointer interaction, ARIA option IDs, and stale
+  responses.
+- Updated `tests/public_search_progressive_stage7_test.php` and `TESTING.md`.
+- Synchronized the search documentation in `README.md` and the English, Czech,
+  German, and Swedish manuals.
+
+#### Release metadata
+
+- Added immutable origin and predecessor records for `v_0.141.3` in
+  `.github/release-origins/v_0.141.3.json` and
+  `.github/release-predecessors/v_0.141.3.json`, referencing
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+
+- Made public search suggestions easier to navigate and more compact. Query
+  changes cleared outdated suggestions immediately.
+
+#### For administrators
+
+- No administrator behavior changed.
+
 ## Version 0.141.2
 
 Restyled public search and pagination as compact, theme-aware controls while
