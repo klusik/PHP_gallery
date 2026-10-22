@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 0.141.2
+
+Restyled public search and pagination as compact, theme-aware controls while
+preserving their behavior and keeping the desktop toolbar height stable.
+
+### Highlights
+
+#### Public search and pagination controls
+
+- Restyled search and pagination with translucent surfaces, restrained borders
+  and radii, subtle current-page accents, and visible keyboard focus.
+- Presented the search-scope checkbox as a compact switch while retaining
+  native checkbox behavior. Kept the scope and pagination behavior unchanged.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/styles/public-shared.css` and
+  `public/assets/styles/public.css` for the compact controls, responsive scope
+  option placement, and stable toolbar height when the clear action appeared.
+- Set desktop control minimum heights to 32 px and mobile touch targets to
+  44 px; updated `app/core-manifest.json`.
+
+#### Tests
+
+- Updated `tests/fixtures/public_home_creation.html` to cover desktop toolbar
+  geometry, equal search and create heights, clear-action height stability,
+  and containment at a 320 px toolbar width.
+- Updated `TESTING.md` and the English, Czech, German, and Swedish manuals with
+  the design changes.
+
+#### Release metadata
+
+- Added immutable origin and predecessor records for `v_0.141.2` in
+  `.github/release-origins/v_0.141.2.json` and
+  `.github/release-predecessors/v_0.141.2.json`, referencing
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+
+- Made public search and pagination controls more compact and theme-aware.
+  Search scope and pagination behavior did not change.
+
+#### For administrators
+
+- No administrator behavior changed.
+
 ## Version 0.141.1
 
 Aligned hero tag pills on public gallery cards with the card text and kept their
