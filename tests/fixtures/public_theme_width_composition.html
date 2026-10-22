@@ -409,6 +409,119 @@ License: MIT License (see LICENSE file in repository)
             check(searchResult?.textContent.includes('Fixture match for ' + query)
                 && searchResult.getAttribute('href') === '/fixture/gallery/search-result',
             'The production Home search renders the loopback result associated with the typed query.');
+            check(searchResult.classList.contains('is-selected')
+                && searchInput.getAttribute('aria-activedescendant') === searchResult.id,
+            'The first result is selected and announced without leaving the input.');
+
+            const searchWindow = homeDocument.defaultView;
+            const nativeSearchFetch = searchWindow.fetch;
+            const phases = new Map();
+            // Ignore abort deliberately: generation guards must reject late bodies too.
+            searchWindow.fetch = url => new Promise(resolve => {
+                const request = new URL(url);
+                phases.set(request.searchParams.get('phase'), resolve);
+            });
+            searchInput.value = 'A320';
+            searchInput.dispatchEvent(new searchWindow.Event('input', {bubbles: true}));
+            check(!searchInput.hasAttribute('aria-activedescendant')
+                && !searchRoot.querySelector('.is-selected'),
+            'Changing the query invalidates the old selection before debounce.');
+            await waitForCondition(homeDocument, () => phases.size === 4,
+                'the controlled progressive search requests');
+            const first = {key: 'first', title: 'A320', label: 'Gallery',
+                type: 'gallery', url: '/a320', rank: 100};
+            const second = {key: 'second', title: 'A320 cockpit', label: 'Photo',
+                type: 'photo', url: '/cockpit', rank: 90};
+            phases.get('primary')({ok: true, json: async () => ({results: [first, second]})});
+            await waitForCondition(homeDocument,
+                () => searchRoot.querySelectorAll('[role="option"]').length === 2,
+                'the first controlled results');
+            const top = {...first, key: 'top', title: 'A320 family', url: '/family', rank: 200};
+            phases.get('media')({ok: true, json: async () => ({results: [top]})});
+            await waitForCondition(homeDocument,
+                () => searchRoot.querySelector('.is-selected')?.getAttribute(
+                    'data-public-home-search-result-key') === 'top',
+                'automatic selection to follow a newly ranked first result');
+            searchInput.dispatchEvent(new searchWindow.KeyboardEvent('keydown',
+                {key: 'ArrowDown', bubbles: true, cancelable: true}));
+            check(searchRoot.querySelector('.is-selected')?.getAttribute(
+                'data-public-home-search-result-key') === 'first',
+            'ArrowDown selects the next result while input focus is retained.');
+            phases.get('descriptive')({ok: true, json: async () => ({results: [
+                {...second, rank: 300},
+            ]})});
+            await waitForCondition(homeDocument,
+                () => searchRoot.querySelector('[role="option"]')?.getAttribute(
+                    'data-public-home-search-result-key') === 'second',
+                'the manual selection to survive result reordering');
+            check(searchRoot.querySelector('.is-selected')?.getAttribute(
+                'data-public-home-search-result-key') === 'first',
+            'A manual selection follows its stable result identity after reordering.');
+            const hovered = searchRoot.querySelector('[role="option"]');
+            hovered.dispatchEvent(new searchWindow.PointerEvent('pointermove', {bubbles: true}));
+            let openedUrl = '';
+            hovered.addEventListener('click', event => {
+                event.preventDefault();
+                openedUrl = hovered.getAttribute('href');
+            }, {once: true});
+            searchInput.dispatchEvent(new searchWindow.KeyboardEvent('keydown',
+                {key: 'Enter', bubbles: true, cancelable: true}));
+            check(openedUrl === '/cockpit', 'Enter activates the pointer-selected result.');
+            phases.get('deep')({ok: true, json: async () => ({results: []})});
+            await waitForCondition(homeDocument,
+                () => searchRoot.getAttribute('aria-busy') === 'false',
+                'the controlled search to settle');
+            const optionIds = Array.from(searchRoot.querySelectorAll('[role="option"]'),
+                option => option.id);
+            check(new Set(optionIds).size === optionIds.length,
+                'Reordered options retain unique active-descendant IDs.');
+            phases.clear();
+            searchInput.value = 'old';
+            searchInput.dispatchEvent(new searchWindow.Event('input', {bubbles: true}));
+            await waitForCondition(homeDocument, () => phases.size === 4,
+                'the old query requests');
+            let releaseBody;
+            phases.get('primary')({ok: true, json: () => new Promise(resolve => {
+                releaseBody = resolve;
+            })});
+            await waitForCondition(homeDocument, () => typeof releaseBody === 'function',
+                'the old JSON body to begin parsing');
+            const oldMedia = phases.get('media');
+            phases.clear();
+            searchInput.value = 'new';
+            searchInput.dispatchEvent(new searchWindow.Event('input', {bubbles: true}));
+            let staleResultInserted = false;
+            const staleObserver = new searchWindow.MutationObserver(records => {
+                for (const record of records) {
+                    for (const node of record.addedNodes) {
+                        if (node instanceof searchWindow.Element
+                            && (node.matches('[role="option"]')
+                                || node.querySelector('[role="option"]'))) {
+                            staleResultInserted = true;
+                        }
+                    }
+                }
+            });
+            staleObserver.observe(searchRoot, {childList: true, subtree: true});
+            oldMedia({ok: true, json: async () => ({results: [first]})});
+            await waitForCondition(homeDocument, () => phases.size === 4,
+                'the new query requests');
+            staleObserver.disconnect();
+            check(!staleResultInserted && !searchRoot.querySelector('[role="option"]'),
+                'An old response arriving during debounce cannot restore results.');
+            for (const resolve of phases.values()) {
+                resolve({ok: true, json: async () => ({results: []})});
+            }
+            await waitForCondition(homeDocument,
+                () => searchRoot.getAttribute('aria-busy') === 'false',
+                'the newer empty result');
+            releaseBody({results: [first]});
+            // A paint opportunity drains the released fetch/JSON chain before inspection.
+            await settleDocument(homeDocument);
+            check(!searchRoot.querySelector('[role="option"]')
+                && !searchInput.hasAttribute('aria-activedescendant'),
+            'An old JSON body cannot overwrite a newer empty result or selection.');
+            searchWindow.fetch = nativeSearchFetch;
             const clearSearch = searchRoot.querySelector('[data-public-home-search-clear]');
             if (!(clearSearch instanceof homeDocument.defaultView.HTMLButtonElement)) {
                 throw new Error('The production Home search clear button is missing.');

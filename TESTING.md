@@ -11,6 +11,15 @@ retains the existing canonical creation/mutation checks. Hosted required
 Chromium owns this regression; mobile search controls retain at least 44 px
 interaction targets under the public design contract.
 
+The production Home journey in `public_theme_width_composition_browser_test.mjs`
+also controls progressive search responses to cover automatic top selection,
+immediate invalidation before debounce, a higher-ranked late result, keyboard
+and pointer selection, stable manual selection across reordering, unique ARIA
+option IDs, and Enter activation. Search remains focused in the combobox.
+Manual review: type a changing query, use Up/Down and Enter, dismiss with Escape
+or an outside click, and inspect compact rows in light/dark themes and at
+320/390 px widths. Verify that IME confirmation never opens a suggestion.
+
 ## Central music and live gallery playlists
 
 `music_repository_database_test.php` uses owned disposable SQL rows and tracked

@@ -86,6 +86,13 @@ and Trash. Back up those stores together and use the normal migration runner.
 Search defaults on only without a saved preference and when its capability is
 available.
 
+Public search preselects the highest-ranked suggestion as results arrive.
+Press Enter to open it, use Up/Down or move the pointer to choose another
+result, and keep typing to reset selection to the new query's top match.
+An explicit choice follows its result when progressive phases reorder the
+list. Compact theme-aware rows show more suggestions within the same panel;
+long descriptions are truncated and mobile touch targets remain 44 px tall.
+
 Custom CSS remains installation-owned, is preserved by ordinary saves and is
 excluded from deployment. Updates use configurable stable-release discovery
 (five minutes by default); automatic OurAirports imports use weekly freshness

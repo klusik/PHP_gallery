@@ -81,7 +81,7 @@ import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
-import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
+import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20261022-search-keyboard-v2';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20261002-settings-workspace-v1';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261021-smart-photo-tags-v2';
