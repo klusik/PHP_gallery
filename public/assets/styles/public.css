@@ -1934,7 +1934,7 @@ button:disabled,
 
 /* Root creation shares the search row without depending on gallery cards or search availability. */
 .public-page .public-home-toolbar {
-    --public-home-control-height: 3rem;
+    --public-home-control-height: var(--public-control-height);
     display: flex;
     align-items: stretch;
     gap: 0.55rem;
@@ -1964,17 +1964,26 @@ button:disabled,
     margin: 0.55rem 0 0.9rem;
 }
 
-.public-home-search-shell {
+.public-page .public-home-search-shell {
+    /* The two border pixels sit outside the inner controls: keep the whole
+       desktop shell at the shared 32px height even with a visible clear action. */
+    --public-search-inner-height: calc(var(--public-control-height) - 2px);
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    min-height: 2.05rem;
-    padding: 0.18rem 0.42rem;
-    border: 1px solid color-mix(in srgb, var(--border, #d7dee8) 78%, transparent);
-    border-radius: min(var(--radius, 16px), 999px);
-    background: color-mix(in srgb, var(--panel, #ffffff) 88%, transparent);
-    box-shadow: 0 10px 24px color-mix(in srgb, #0f172a 8%, transparent);
+    gap: 0.45rem;
+    min-height: var(--public-control-height);
+    padding: 0 0.35rem 0 0.6rem;
+    border: 1px solid var(--public-control-border);
+    border-radius: var(--public-control-radius);
+    background: var(--public-control-surface);
+    box-shadow: none;
+    -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
+}
+
+.public-page .public-home-search-shell:focus-within {
+    border-color: var(--accent-dark);
+    box-shadow: inset 0 -1px 0 var(--accent-dark);
 }
 
 .public-home-search-icon {
@@ -1986,14 +1995,18 @@ button:disabled,
     line-height: 1;
 }
 
-.public-home-search-input {
+.public-page .public-home-search-input {
     flex: 1 1 auto;
     width: 100%;
-    min-height: 1.55rem;
+    min-width: 0;
+    min-height: var(--public-search-inner-height);
+    padding: 0.2rem 0;
     border: 0;
     outline: 0;
     background: transparent;
-    color: var(--text, #172033);
+    border-radius: 0;
+    box-shadow: none;
+    color: var(--ink);
     font: inherit;
     font-size: 0.82rem;
 }
@@ -2002,60 +2015,102 @@ button:disabled,
     color: color-mix(in srgb, var(--muted, #65758b) 86%, transparent);
 }
 
-.public-home-search-clear {
+.public-page .public-home-search-clear {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    width: 1.45rem;
-    height: 1.45rem;
-    min-width: 1.45rem;
-    min-height: 1.45rem;
+    width: var(--public-control-height);
+    height: var(--public-search-inner-height);
+    min-width: var(--public-control-height);
+    min-height: var(--public-search-inner-height);
     padding: 0;
     border: 0;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--muted, #65758b) 12%, transparent);
+    border-radius: var(--public-control-radius);
+    background: transparent;
     color: var(--muted, #65758b);
     font-size: 1rem;
     line-height: 1;
     cursor: pointer;
 }
 
-.public-home-search-clear:hover,
-.public-home-search-clear:focus-visible {
-    background: color-mix(in srgb, var(--accent, #3b82f6) 16%, transparent);
+.public-page .public-home-search-clear:hover {
+    background: var(--public-control-hover);
     color: var(--accent-dark, #1d4ed8);
 }
 
+.public-page .public-home-search-clear:focus-visible,
+.public-page .public-home-search-context:has(input:focus-visible) {
+    outline: 2px solid var(--accent-dark);
+    outline-offset: 2px;
+}
 
-.public-home-search-context {
+/* Authoritative hiding wins over the flex display used by the clear control. */
+.public-page .public-home-search-clear[hidden] {
+    display: none;
+}
+
+.public-page .public-home-search-context {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
     gap: 0.32rem;
     max-width: min(42vw, 21rem);
-    min-height: 1.45rem;
-    padding: 0 0.48rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--muted, #65758b) 8%, transparent);
-    color: var(--muted, #65758b);
-    font-size: 0.68rem;
+    min-height: var(--public-search-inner-height);
+    padding: 0.2rem 0.48rem;
+    border-radius: var(--public-control-radius);
+    background: transparent;
+    color: var(--ink);
+    font-size: 0.72rem;
     line-height: 1.15;
     white-space: nowrap;
     user-select: none;
+    cursor: pointer;
 }
 
-.public-home-search-context:hover {
-    background: color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent);
-    color: var(--text, #172033);
+.public-page .public-home-search-context:hover,
+.public-page .public-home-search-context:has(input:checked) {
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
-.public-home-search-context input {
+/* Compact switch geometry: the 26x14px track holds an 8px thumb, with
+   3px edge clearance at either end. The surrounding label owns the larger
+   interaction target. Keep the native checkbox for keyboard/form behavior. */
+.public-page .public-home-search-context input {
+    appearance: none;
+    -webkit-appearance: none;
     flex: 0 0 auto;
-    width: 0.82rem;
-    height: 0.82rem;
+    width: 26px;
+    height: 14px;
+    min-height: 0;
     margin: 0;
-    accent-color: var(--accent, #3b82f6);
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--ink) 10%, transparent);
+    background-image: radial-gradient(
+        circle at 6px center, var(--ink) 4px, transparent 4.5px
+    );
+    cursor: pointer;
+}
+
+.public-page .public-home-search-context input:checked {
+    border-color: color-mix(in srgb, var(--accent-dark) 50%, transparent);
+    background-color: color-mix(in srgb, var(--accent) 16%, var(--panel));
+    background-image: radial-gradient(
+        circle at 18px center, var(--ink) 4px, transparent 4.5px
+    );
+}
+
+/* System colors own the control in forced-color environments so its checked
+   state remains visible when the browser suppresses background images. */
+@media (forced-colors: active) {
+    .public-page .public-home-search-context input,
+    .public-page .public-home-search-context input:checked {
+        appearance: auto;
+        -webkit-appearance: auto;
+        background-image: none;
+    }
 }
 
 .public-home-search-context span {
@@ -2063,16 +2118,17 @@ button:disabled,
     text-overflow: ellipsis;
 }
 
-.public-home-search-results {
+.public-page .public-home-search-results {
     position: absolute;
     left: 0;
     right: 0;
     top: calc(100% + 0.28rem);
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--border, #d7dee8) 82%, transparent);
-    border-radius: min(var(--radius, 16px), 18px);
+    border: 1px solid var(--public-control-border);
+    border-radius: var(--public-control-radius);
     background: color-mix(in srgb, var(--panel, #ffffff) 96%, transparent);
     box-shadow: 0 18px 45px color-mix(in srgb, #0f172a 16%, transparent);
+    -webkit-backdrop-filter: blur(18px);
     backdrop-filter: blur(18px);
 }
 
@@ -2155,23 +2211,26 @@ button:disabled,
     }
 
 
-    .public-home-search-shell {
-        flex-wrap: wrap;
-        border-radius: min(var(--radius, 16px), 18px);
+    .public-page .public-home-search-shell {
+        --public-search-inner-height: var(--public-control-height);
+        display: grid;
+        grid-template-columns: 1.35rem minmax(0, 1fr) auto;
     }
 
-    .public-home-search-input {
+    .public-page .public-home-search-input {
         flex-basis: calc(100% - 4.2rem);
+        min-height: var(--public-control-height);
     }
 
-    .public-home-search-context {
+    .public-page .public-home-search-context {
+        grid-column: 1 / -1;
         order: 4;
         width: 100%;
         max-width: none;
         justify-content: center;
-        min-height: 1.35rem;
+        min-height: var(--public-control-height);
         margin: 0.05rem 0 0;
-        font-size: 0.66rem;
+        font-size: 0.72rem;
     }
 
     .public-home-search-results {

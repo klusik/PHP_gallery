@@ -38,6 +38,15 @@ const originalDocument = document;
 const fixtureCreate = '/fixture-create';
 const fixtureEditor = '/fixture-editor?id=77';
 
+/**
+ * Bound the desktop toolbar to the owner's requested compact design.
+ * Type: number. Units: CSS pixels. Scope: root creation browser fixture.
+ * Consumers: adjacent creation/search height and clear-action stability checks.
+ * Rationale: 32px matches public header actions and pagination; reject both
+ * undersized controls and a return to the previous taller desktop toolbar.
+ */
+const DESKTOP_TOOLBAR_HEIGHT_PX = 32;
+
 /** Require a fixture observation. @param {boolean} condition Expected behavior. @param {string} message Failure context. @return {void} Throws when unmet. */
 function check(condition, message) { assertions++; if (!condition) throw new Error(message); }
 /** Obtain a required element with a bounded error. @param {string} selector Owned selector. @param {ParentNode} root Search scope. @return {HTMLElement} Fixture control. */
@@ -121,7 +130,19 @@ try {
     const plusBounds = plus.getBoundingClientRect();
     const searchBounds = shell.getBoundingClientRect();
     check(plusBounds.right <= searchBounds.left && Math.abs(plusBounds.top - searchBounds.top) <= 1, 'Root plus appears directly before search in the same row');
-    check(Math.abs(plusBounds.height - searchBounds.height) <= 1 && plusBounds.height >= 40, 'Plus and production search shell share a usable height');
+    check(
+        Math.abs(plusBounds.height - searchBounds.height) <= 1
+            && Math.abs(plusBounds.height - DESKTOP_TOOLBAR_HEIGHT_PX) <= 1,
+        'Plus and production search share the approved compact desktop height'
+    );
+    const clear = element('.public-home-search-clear');
+    clear.hidden = false;
+    check(
+        Math.abs(shell.getBoundingClientRect().height - searchBounds.height) <= 1
+            && Math.abs(plus.getBoundingClientRect().height - plusBounds.height) <= 1,
+        'Showing the clear action keeps the compact toolbar height stable'
+    );
+    clear.hidden = true;
     toolbar.style.width = '320px';
     const narrowToolbar = toolbar.getBoundingClientRect();
     const narrowPlus = plus.getBoundingClientRect();

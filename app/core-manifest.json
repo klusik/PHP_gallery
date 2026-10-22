@@ -1,6 +1,6 @@
 {
     "version": "0.141.1",
-    "generated_at": "2026-10-22T07:57:08+00:00",
+    "generated_at": "2026-10-22T09:54:08+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -897,8 +897,8 @@
         "public/assets/styles/lightbox.css": "sha256:b1fc2fb1e3d8aa28bc43c7f7cc401967256970aec4f0028c41957c687624b0de",
         "public/assets/styles/mobile-gallery.css": "sha256:27922ccd8208fc595f85c2c8a067445f2c7297c2f0bd37bb6cd3e0d9c09c2adb",
         "public/assets/styles/public-content-widgets.css": "sha256:1524fe9e4f17767f9e711402c09b35634f666c870356093771c18878f819055d",
-        "public/assets/styles/public-shared.css": "sha256:5f5f161d9207bc4d62f0f9105d3d96274f4d09c13c374f3fa03f2496db29a2f3",
-        "public/assets/styles/public.css": "sha256:e97f42353845967cfdeab290a07046b8cc5222b3cbe7aa14b29d84c3f33d3dd4",
+        "public/assets/styles/public-shared.css": "sha256:7b2fbb82915d2b71ae8cb7662d507f55c6a24029bcef2fca24b6fae4fe1fd0c4",
+        "public/assets/styles/public.css": "sha256:0315f15d116e4476f55e194ef49cf29dd39c1f9d5e68f19a419ae51763e26305",
         "public/assets/styles/side-panel.css": "sha256:a9c69de60c3c58838da970e9c667a6de581502d2d12dcd66c23737c981940d3d",
         "public/assets/styles/utilities.css": "sha256:c9f66407d4cdf88eddf508d47a0bcd528f82478837654ea868e71c34c29f90dd",
         "public/assets/telemetry.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",

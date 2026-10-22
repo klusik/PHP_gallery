@@ -1459,6 +1459,13 @@ The~EN/CS/DE/SV Admin interface strings are translated, but authored titles and~
 \index{search}
 \index{tags}
 
+Search and~pagination use compact translucent controls in~the~selected Theme,
+with a~32~px desktop search bar.
+The~current page has~a~subtle accent tint and~line; keyboard focus remains
+visible. On~narrow screens, the~search scope moves below the~field and~touch
+targets grow. A~small switch selects the~search scope. Search scope and~page
+navigation work as~before.
+
 Search can~look across the~whole public site or~stay within the~current gallery and~its children. A~visitor looking at~\emph{Family archive} can~search only that branch for~a~person's name, while a~visitor on~the~home page can~search across every public collection. The~current search service begins at~two visible query characters, returns a~bounded mixture of~gallery and~photo results, and~ranks stronger title/name/tag matches ahead of~weaker text matches. The~default request returns up~to~12 merged results and~the~service clamps a~request to~at~most~30 results.
 
 Searchable evidence includes public gallery/photo titles and~descriptions, image filenames, gallery and~photo tags and~their public descriptions, active maintained-language content where its schema is~available, and~internal AI searchable text when AI metadata is~ready. Access filtering happens as~part of~the~query: private, inaccessible, or~non-public image content is~not~returned merely because its text matches. A~branch search also constrains the~listing context to~that gallery subtree rather than~searching the~whole catalog and~hiding unrelated matches afterward.
