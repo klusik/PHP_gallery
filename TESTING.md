@@ -11,6 +11,15 @@ retains the existing canonical creation/mutation checks. Hosted required
 Chromium owns this regression; mobile search controls retain at least 44 px
 interaction targets under the public design contract.
 
+The production Home journey in `public_theme_width_composition_browser_test.mjs`
+also controls progressive search responses to cover automatic top selection,
+immediate invalidation before debounce, a higher-ranked late result, keyboard
+and pointer selection, stable manual selection across reordering, unique ARIA
+option IDs, and Enter activation. Search remains focused in the combobox.
+Manual review: type a changing query, use Up/Down and Enter, dismiss with Escape
+or an outside click, and inspect compact rows in light/dark themes and at
+320/390 px widths. Verify that IME confirmation never opens a suggestion.
+
 ## Central music and live gallery playlists
 
 `music_repository_database_test.php` uses owned disposable SQL rows and tracked
@@ -802,7 +811,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.141.2. Release verification uses the
+This guide applies to PHP Gallery Version 0.141.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

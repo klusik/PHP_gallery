@@ -208,6 +208,53 @@ function setupOnePublicSearch(root) {
     let saveSmartGalleryUrl = '';
     let saveSmartGalleryLabel = '';
     let renderedResultKeys = new Set();
+    let selectedKey = '';
+    let manualSelection = false;
+    let dismissed = false;
+
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
+    const listId = `${input.id}-suggestions`;
+    input.setAttribute('aria-controls', listId);
+
+    /**
+     * Follow the current top result or retain an explicit choice by identity.
+     * @param {boolean} scroll Whether keyboard navigation should reveal the row.
+     * @return {void} Updates the visual selection and combobox active descendant.
+     */
+    const syncSelection = (scroll = false) => {
+        const links = Array.from(results.querySelectorAll(
+            '[data-public-home-search-result-key]',
+        ));
+        let selected = manualSelection
+            ? links.find(link => link.getAttribute(
+                'data-public-home-search-result-key',
+            ) === selectedKey)
+            : null;
+        if (!selected) {
+            selected = links[0];
+            manualSelection = false;
+        }
+        selectedKey = selected?.getAttribute(
+            'data-public-home-search-result-key',
+        ) || '';
+        for (const link of links) {
+            link.classList.toggle('is-selected', link === selected);
+            link.setAttribute('aria-selected', link === selected ? 'true' : 'false');
+        }
+        const expanded = !dismissed && !results.hidden
+            && root.classList.contains('has-results');
+        input.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        if (selected && expanded) {
+            input.setAttribute('aria-activedescendant', selected.id);
+            if (scroll) {
+                selected.scrollIntoView({block: 'nearest'});
+            }
+        } else {
+            input.removeAttribute('aria-activedescendant');
+        }
+    };
 
     /**
      * Set clear visibility.
@@ -256,6 +303,7 @@ function setupOnePublicSearch(root) {
      * Handle hide results.
      *
      * Used by browser-side gallery behavior.
+     * @return {void} Clears the popup and its accessible selection.
      */
     const hideResults = () => {
         results.hidden = true;
@@ -263,6 +311,9 @@ function setupOnePublicSearch(root) {
         renderedResultKeys = new Set();
         root.classList.remove('has-results', 'is-loading');
         root.setAttribute('aria-busy', 'false');
+        selectedKey = '';
+        manualSelection = false;
+        syncSelection();
     };
 
     /**
@@ -271,9 +322,10 @@ function setupOnePublicSearch(root) {
      * Used by browser-side gallery behavior.
      *
      * @param {string} message Message value.
+     * @return {void} Shows status without an actionable stale result.
      */
     const renderStatus = (message) => {
-        results.hidden = false;
+        results.hidden = dismissed;
         results.innerHTML = '';
         const status = document.createElement('div');
         status.className = 'public-home-search-status';
@@ -282,7 +334,8 @@ function setupOnePublicSearch(root) {
         status.setAttribute('aria-live', 'polite');
         status.textContent = message;
         results.append(status);
-        root.classList.add('has-results');
+        root.classList.toggle('has-results', !dismissed);
+        syncSelection();
     };
 
     /**
@@ -324,13 +377,16 @@ function setupOnePublicSearch(root) {
             return;
         }
 
-        results.hidden = false;
+        results.hidden = dismissed;
         let list = results.querySelector('[data-public-home-search-result-list]');
         if (!(list instanceof HTMLElement)) {
             results.innerHTML = '';
             list = document.createElement('div');
             list.className = 'public-home-search-result-list';
             list.setAttribute('data-public-home-search-result-list', '');
+            list.id = listId;
+            list.setAttribute('role', 'listbox');
+            list.setAttribute('aria-label', results.getAttribute('aria-label') || 'Search');
             results.append(list);
         }
 
@@ -342,7 +398,7 @@ function setupOnePublicSearch(root) {
         }
 
         const nextKeys = new Set();
-        for (const item of visibleItems) {
+        for (const [index, item] of visibleItems.entries()) {
             const key = publicSearchResultIdentity(item);
             nextKeys.add(key);
             let link = existing.get(key);
@@ -388,6 +444,10 @@ function setupOnePublicSearch(root) {
             }
 
             list.append(link);
+            // IDs reflect the committed order; the selection itself uses stable keys.
+            link.id = `${listId}-${index}`;
+            link.setAttribute('role', 'option');
+            link.tabIndex = -1;
             if (isNew && !renderedResultKeys.has(key)) {
                 link.classList.add('is-new');
                 window.requestAnimationFrame(() => {
@@ -405,7 +465,7 @@ function setupOnePublicSearch(root) {
         }
         renderedResultKeys = nextKeys;
 
-        let saveLink = list.querySelector('[data-public-search-save-smart-gallery]');
+        let saveLink = results.querySelector('[data-public-search-save-smart-gallery]');
         if (saveSmartGalleryUrl !== '') {
             if (!(saveLink instanceof HTMLAnchorElement)) {
                 saveLink = document.createElement('a');
@@ -414,7 +474,7 @@ function setupOnePublicSearch(root) {
             }
             saveLink.href = saveSmartGalleryUrl;
             saveLink.textContent = saveSmartGalleryLabel || 'Save search as Smart Gallery';
-            list.append(saveLink);
+            results.append(saveLink);
         } else if (saveLink instanceof HTMLElement) {
             saveLink.remove();
         }
@@ -433,7 +493,8 @@ function setupOnePublicSearch(root) {
         } else if (status instanceof HTMLElement) {
             status.remove();
         }
-        root.classList.add('has-results');
+        root.classList.toggle('has-results', !dismissed);
+        syncSelection();
     };
     /**
      * Build one search URL while preserving the active gallery context restriction.
@@ -670,6 +731,8 @@ function setupOnePublicSearch(root) {
         const generation = activeGeneration;
         activeQuery = query;
         visibleItems = [];
+        selectedKey = '';
+        manualSelection = false;
         renderedResultKeys = new Set();
         pendingPhases = new Set(['primary', 'media', 'descriptive', 'deep']);
         completedPhases = new Set();
@@ -693,12 +756,50 @@ function setupOnePublicSearch(root) {
     };
 
     input.addEventListener('input', () => {
-        window.clearTimeout(timer);
+        // Invalidate before debounce, including responses still parsing JSON.
+        activeGeneration += 1;
+        activeQuery = '';
+        visibleItems = [];
+        dismissed = false;
+        abortSearchWork();
+        hideResults();
         setClearVisibility();
         timer = window.setTimeout(runSearch, delayMs);
     });
 
     input.addEventListener('keydown', (event) => {
+        // Legacy IME keyboards report the structural "Process" key code 229.
+        if (event.isComposing || event.keyCode === 229) {
+            return;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const links = Array.from(results.querySelectorAll(
+                '[data-public-home-search-result-key]',
+            ));
+            if (links.length === 0) {
+                return;
+            }
+            event.preventDefault();
+            dismissed = false;
+            results.hidden = false;
+            root.classList.add('has-results');
+            const current = links.findIndex(link => link.getAttribute(
+                'data-public-home-search-result-key',
+            ) === selectedKey);
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            const next = Math.max(0, Math.min(links.length - 1, current + step));
+            selectedKey = links[next].getAttribute('data-public-home-search-result-key');
+            manualSelection = true;
+            syncSelection(true);
+        }
+        if (event.key === 'Enter' && !dismissed
+            && root.classList.contains('has-results')) {
+            const selected = results.querySelector('.is-selected');
+            if (selected instanceof HTMLAnchorElement) {
+                event.preventDefault();
+                selected.click();
+            }
+        }
         if (event.key === 'Escape') {
             input.value = '';
             activeGeneration += 1;
@@ -710,6 +811,18 @@ function setupOnePublicSearch(root) {
             abortSearchWork();
             setClearVisibility();
             hideResults();
+        }
+    });
+
+    results.addEventListener('pointermove', (event) => {
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+        const link = event.target.closest('[data-public-home-search-result-key]');
+        if (link && results.contains(link)) {
+            selectedKey = link.getAttribute('data-public-home-search-result-key');
+            manualSelection = true;
+            syncSelection();
         }
     });
 
@@ -732,6 +845,7 @@ function setupOnePublicSearch(root) {
     if (contextCheckbox instanceof HTMLInputElement) {
         contextCheckbox.addEventListener('change', () => {
             if (input.value.trim().length >= minLength) {
+                dismissed = false;
                 window.clearTimeout(timer);
                 runSearch();
             }
@@ -743,12 +857,26 @@ function setupOnePublicSearch(root) {
             return;
         }
         root.classList.remove('has-results');
+        dismissed = true;
+        results.hidden = true;
+        syncSelection();
+    });
+
+    root.addEventListener('focusout', (event) => {
+        if (event.relatedTarget instanceof Node && !root.contains(event.relatedTarget)) {
+            dismissed = true;
+            results.hidden = true;
+            root.classList.remove('has-results');
+            syncSelection();
+        }
     });
 
     input.addEventListener('focus', () => {
+        dismissed = false;
         if (results.childElementCount > 0) {
             root.classList.add('has-results');
             results.hidden = false;
+            syncSelection();
         }
     });
 

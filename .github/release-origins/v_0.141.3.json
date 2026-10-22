@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "version": "0.141.3",
+  "release_branch": "release/v_0.141.3",
+  "selected_develop_sha": "9ab0a6ac77d0f49a29fb2eda94eaba72bba30b04",
+  "initial_main_sha": "0991bb910e576d2d932b7e900d74f9a66143d94c",
+  "previous_stable_tag": "v_0.141.2",
+  "previous_stable_sha": "0991bb910e576d2d932b7e900d74f9a66143d94c"
+}

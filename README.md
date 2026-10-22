@@ -58,7 +58,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.141.2
+**Current Version:** 0.141.3
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -85,6 +85,13 @@ preserves existing appearance across database values, sidecars, Smart Galleries
 and Trash. Back up those stores together and use the normal migration runner.
 Search defaults on only without a saved preference and when its capability is
 available.
+
+Public search preselects the highest-ranked suggestion as results arrive.
+Press Enter to open it, use Up/Down or move the pointer to choose another
+result, and keep typing to reset selection to the new query's top match.
+An explicit choice follows its result when progressive phases reorder the
+list. Compact theme-aware rows show more suggestions within the same panel;
+long descriptions are truncated and mobile touch targets remain 44 px tall.
 
 Custom CSS remains installation-owned, is preserved by ordinary saves and is
 excluded from deployment. Updates use configurable stable-release discovery

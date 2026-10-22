@@ -110,10 +110,10 @@ public_search_progressive_stage7_assert(
     'Compatibility public-search service must remain free of SQL/PDO access.',
 );
 public_search_progressive_stage7_assert(
-    str_contains($galleryEntrySource, '20260913-progressive-search-v4')
+    str_contains($galleryEntrySource, '20261022-search-keyboard-v2')
         && str_contains(
             $publicGalleryEntrySource,
-            '20260913-progressive-search-v4',
+            '20261022-search-keyboard-v2',
         ),
     'Stage 7 browser module cache-busting revision must be synchronized across both public entrypoints.',
 );

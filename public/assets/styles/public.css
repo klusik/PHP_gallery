@@ -2134,19 +2134,22 @@ button:disabled,
 
 .public-home-search-result-list {
     display: grid;
-    gap: 0.08rem;
+    gap: 0.12rem;
     max-height: min(26rem, 62vh);
     overflow: auto;
-    padding: 0.36rem;
+    padding: 0.25rem;
+    overscroll-behavior: contain;
 }
 
 .public-home-search-result {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.55rem;
-    align-items: start;
-    padding: 0.58rem 0.66rem;
-    border-radius: min(var(--radius, 16px), 12px);
+    grid-template-columns: auto minmax(0, 1fr) 1.4rem;
+    gap: 0.45rem;
+    align-items: center;
+    min-height: 2.35rem;
+    box-sizing: border-box;
+    padding: 0.3rem 0.5rem;
+    border-radius: min(var(--public-control-radius), 8px);
     color: inherit;
     text-decoration: none;
 }
@@ -2161,19 +2164,32 @@ button:disabled,
     transform: translateY(-0.22rem);
 }
 
-.public-home-search-result:hover,
+.public-home-search-result.is-selected,
 .public-home-search-result:focus-visible {
     background: color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent);
     outline: none;
+    box-shadow: inset 2px 0 var(--accent, #3b82f6);
+}
+
+.public-home-search-result::after {
+    content: '\21B5';
+    color: var(--accent, #3b82f6);
+    font-size: 0.9rem;
+    text-align: center;
+    opacity: 0;
+}
+
+.public-home-search-result.is-selected::after {
+    opacity: 1;
 }
 
 .public-home-search-result-kind {
-    min-width: 3.8rem;
-    padding: 0.15rem 0.42rem;
-    border-radius: 999px;
+    min-width: 3.2rem;
+    padding: 0.13rem 0.32rem;
+    border-radius: 5px;
     background: color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent);
     color: var(--accent-dark, #1d4ed8);
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 800;
     line-height: 1.2;
     text-align: center;
@@ -2181,7 +2197,7 @@ button:disabled,
 
 .public-home-search-result-text {
     display: grid;
-    gap: 0.14rem;
+    gap: 0.06rem;
     min-width: 0;
 }
 
@@ -2197,12 +2213,18 @@ button:disabled,
 .public-home-search-result-text small,
 .public-home-search-status {
     color: var(--muted, #65758b);
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     line-height: 1.35;
 }
 
 .public-home-search-status {
-    padding: 0.7rem 0.85rem;
+    padding: 0.4rem 0.75rem;
+}
+
+.public-home-search-result-text small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 @media (max-width: 640px) {
@@ -2239,8 +2261,8 @@ button:disabled,
     }
 
     .public-home-search-result {
-        grid-template-columns: 1fr;
-        gap: 0.3rem;
+        min-height: 44px;
+        gap: 0.35rem;
     }
 
     .public-home-search-result-kind {
