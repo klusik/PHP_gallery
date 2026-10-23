@@ -107,6 +107,19 @@ if ($definition['auth_mode'] === 'admin') {
     $_COOKIE['workflow_' . $fixtureToken] = $sessionId;
 }
 
+// Explicit diagnostic opt-in uses the same in-memory phases as Admin Test Run.
+// No cookie, live-site log, configuration or persistent runtime cache is created.
+if (getenv('PHP_GALLERY_LOADER_TRACE') === '1') {
+    require_once $projectRoot . '/app/diagnostics/admin_test_run_early.php';
+    $GLOBALS['gallery_admin_test_run_early'] = [
+        'enabled' => true,
+        'adopted' => false,
+        'request_time_unix' => microtime(true),
+        'marks' => [],
+        'phases' => [],
+        'open_phases' => [],
+    ];
+}
 $startedAt = hrtime(true);
 $includedBefore = get_included_files();
 $bodyBytes = 0;
@@ -228,6 +241,19 @@ register_shutdown_function(static function () use (
             'response_body_bytes' => $bodyBytes,
             'response_body_sha256' => $bodyHash,
             'fatal_error' => $fatal,
+            'loader_phases' => array_values(array_filter(
+                $GLOBALS['gallery_admin_test_run_early']['phases'] ?? [],
+                static fn(array $phase): bool => str_starts_with(
+                    $phase['name'], 'runtime_loader.',
+                ),
+            )),
+            'opcache' => [
+                'extension_loaded' => extension_loaded('Zend OPcache'),
+                'enabled' => function_exists('opcache_get_status')
+                    && opcache_get_status(false) !== false,
+                'enable_cli' => ini_get('opcache.enable_cli'),
+                'validate_timestamps' => ini_get('opcache.validate_timestamps'),
+            ],
         ];
         // Validate content after capturing resource metrics so image inspection stays outside the measured lifecycle.
         $metric['response_contract_matches'] = \PhpGallery\Audit\route_response_body_matches(

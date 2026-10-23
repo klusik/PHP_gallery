@@ -631,6 +631,162 @@ namespace {
             'Path validation included a dependency before rejecting an escaped path.',
         );
 
+        // Shared paths must execute once while include-local variables retain
+        // the historical scope across adjacent canonical includes.
+        runtime_kernel_write_fixture($tempRoot, 'app/loader-shared.php',
+            '<?php $loaderScopeSentinel = "shared"; $GLOBALS['
+                . var_export($globalKey, true) . '][] = "loader-shared";');
+        runtime_kernel_write_fixture($tempRoot, 'app/loader-tail.php',
+            '<?php $GLOBALS[' . var_export($globalKey, true)
+                . '][] = $loaderScopeSentinel ?? "scope-lost";');
+        $sharedDefinitions = [
+            'shared-first' => ['depends' => [], 'files' => ['app/loader-shared.php']],
+            'shared-second' => [
+                'depends' => ['shared-first'],
+                'files' => ['app/loader-shared.php', 'app/loader-tail.php'],
+            ],
+            'shared-empty' => ['depends' => ['shared-second'], 'files' => []],
+        ];
+        $sharedOrder = ['app/loader-shared.php', 'app/loader-tail.php'];
+        $sharedLoader = new ModuleLoader($tempRoot, $sharedDefinitions, $sharedOrder);
+        $sharedLoader->load('shared-empty');
+        $sharedLoader->load('shared-second');
+        runtime_kernel_assert(
+            array_slice($GLOBALS[$globalKey], -2) === ['loader-shared', 'shared']
+                && $sharedLoader->loadedModules() === [
+                    'shared-first', 'shared-second', 'shared-empty',
+                ],
+            'Shared paths, empty modules, repeat loads and include scope must remain stable.',
+        );
+        require_once $root . '/app/diagnostics/admin_test_run_early.php';
+        $GLOBALS['gallery_admin_test_run_early'] = [
+            'enabled' => true,
+            'adopted' => false,
+            'request_time_unix' => microtime(true),
+            'phases' => [],
+            'open_phases' => [],
+            'marks' => [],
+        ];
+        try {
+            $sharedLoader->load('shared-empty');
+            runtime_kernel_assert(
+                array_column($GLOBALS['gallery_admin_test_run_early']['phases'], 'name')
+                    === ['runtime_loader.plan'],
+                'A fully loaded closure must record preflight without another canonical execute pass.',
+            );
+            $traceFailureLoader = new ModuleLoader($tempRoot, [
+                'trace-missing' => ['depends' => [], 'files' => ['app/trace-missing.php']],
+            ], ['app/trace-missing.php']);
+            runtime_kernel_expect_exception(
+                static fn(): mixed => $traceFailureLoader->load('trace-missing'),
+                RuntimeException::class,
+                'Traced preflight failures must propagate unchanged.',
+            );
+            $tracePhases = $GLOBALS['gallery_admin_test_run_early']['phases'];
+            $traceFailure = $tracePhases[array_key_last($tracePhases)];
+            runtime_kernel_assert(
+                $traceFailure['name'] === 'runtime_loader.plan'
+                    && $traceFailure['completed'] === false
+                    && $traceFailure['included_files_delta'] === 0
+                    && $traceFailure['error_or_warning']['type'] === RuntimeException::class,
+                'Failed planning must retain failure diagnostics without including selected code.',
+            );
+        } finally {
+            unset($GLOBALS['gallery_admin_test_run_early']);
+        }
+
+        // A path verified by an earlier load must not become a reusable
+        // validation receipt for an unloaded module after a filesystem change.
+        runtime_kernel_write_fixture($tempRoot, 'app/loader-replaced.php', '<?php');
+        $replacementDefinitions = [
+            'replacement-first' => ['depends' => [], 'files' => ['app/loader-replaced.php']],
+            'replacement-second' => ['depends' => [], 'files' => ['app/loader-replaced.php']],
+        ];
+        foreach ([null, ['app/loader-replaced.php']] as $replacementOrder) {
+            $replacementLoader = new ModuleLoader($tempRoot, $replacementDefinitions, $replacementOrder);
+            $replacementLoader->load('replacement-first');
+            unlink($tempRoot . '/app/loader-replaced.php');
+            clearstatcache(true, $tempRoot . '/app/loader-replaced.php');
+            runtime_kernel_expect_exception(
+                static fn(): mixed => $replacementLoader->load('replacement-second'),
+                RuntimeException::class,
+                'Later loads must reject a removed shared file in both loader modes.',
+            );
+            runtime_kernel_assert(
+                $replacementLoader->loadedModules() === ['replacement-first'],
+                'A failed later path check must not claim the unloaded module.',
+            );
+            runtime_kernel_write_fixture($tempRoot, 'app/loader-replaced.php', '<?php');
+        }
+
+        // Constructor validation covers the whole graph, including unselected
+        // cycles and malformed paths; no optimization may defer these refusals.
+        foreach ([
+            [
+                'cycle-a' => ['depends' => ['cycle-b'], 'files' => []],
+                'cycle-b' => ['depends' => ['cycle-a'], 'files' => []],
+            ],
+            ['invalid' => ['depends' => [], 'files' => ['app/../escape.php']]],
+        ] as $invalidDefinitions) {
+            runtime_kernel_expect_exception(
+                static fn(): ModuleLoader => new ModuleLoader($tempRoot, $invalidDefinitions, []),
+                RuntimeException::class,
+                'Whole-plan cycle and path validation must run before includes.',
+            );
+        }
+        runtime_kernel_expect_exception(
+            static fn(): ModuleLoader => new ModuleLoader(
+                $tempRoot, $sharedDefinitions, array_reverse($sharedOrder),
+            ),
+            RuntimeException::class,
+            'A complete but noncanonical plan must be rejected.',
+        );
+
+        // Canonical execution can finish the second DFS branch before the
+        // first one. A failure in that gap must expose no completed prefix.
+        runtime_kernel_write_fixture($tempRoot, 'app/loader-a-ready.php', '<?php');
+        runtime_kernel_write_fixture($tempRoot, 'app/loader-m-failure.php',
+            '<?php throw new RuntimeException("ordered gap failure");');
+        runtime_kernel_write_fixture($tempRoot, 'app/loader-z-pending.php', '<?php');
+        $gapLoader = new ModuleLoader($tempRoot, [
+            'gap-first' => ['depends' => [], 'files' => ['app/loader-z-pending.php']],
+            'gap-second' => ['depends' => [], 'files' => ['app/loader-a-ready.php']],
+            'gap-root' => [
+                'depends' => ['gap-first', 'gap-second'],
+                'files' => ['app/loader-m-failure.php'],
+            ],
+        ], [
+            'app/loader-a-ready.php', 'app/loader-m-failure.php',
+            'app/loader-z-pending.php',
+        ]);
+        runtime_kernel_expect_exception(
+            static fn(): mixed => $gapLoader->load('gap-root'),
+            RuntimeException::class,
+            'The canonical-order gap failure must propagate.',
+        );
+        runtime_kernel_assert($gapLoader->loadedModules() === [],
+            'A completed later branch must not jump over an incomplete DFS prefix.');
+
+        // Linux hosted owners exercise symlink confinement. Windows may deny
+        // link creation without Developer Mode; lexical escape checks still run.
+        if (@symlink($tempRoot . '/escape.php', $tempRoot . '/app/loader-link.php')) {
+            $linkLoader = new ModuleLoader($tempRoot, [
+                'link-base' => ['depends' => [], 'files' => ['app/base.php']],
+                'link-root' => [
+                    'depends' => ['link-base'],
+                    'files' => ['app/loader-link.php'],
+                ],
+            ], ['app/base.php', 'app/loader-link.php']);
+            $beforeLinkFailure = $GLOBALS[$globalKey];
+            runtime_kernel_expect_exception(
+                static fn(): mixed => $linkLoader->load('link-root'),
+                RuntimeException::class,
+                'A symlink outside app must fail before any selected include.',
+            );
+            runtime_kernel_assert($GLOBALS[$globalKey] === $beforeLinkFailure,
+                'Escaped symlink validation must preserve include-time state.');
+        }
+
         $kernelLoader = new ModuleLoader($tempRoot, [
             'kernel-fixture' => ['depends' => [], 'files' => []],
         ]);

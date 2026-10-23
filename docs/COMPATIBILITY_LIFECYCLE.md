@@ -1791,6 +1791,29 @@ not a source parser or a commitment to remove anything on a calendar date.
   boundary for external consumers. Do not infer external non-use from local
   search results.
 
+### CORE-3 — Module validation lifetime and optional opcode caching
+
+- **Owner:** `app/runtime/ModuleLoader.php` and the existing early Test Run trace.
+- **Protected behavior:** Complete composed-plan shape/path/graph validation
+  remains per loader/request, including unselected modules. A physical path is
+  checked once per `load()` preflight, before includes, and checked afresh when
+  another unloaded module selects it in a later load. No persisted validation
+  receipt, APCu, file cache or extension-dependent fallback is introduced.
+- **Ordering/failure:** Canonical layer/lexical order is checked linearly;
+  file completion counters retain the dependency-first completed prefix, even
+  if independent branches finish in a different order or a later include fails.
+  `require_once`, selective roots and the legacy two-argument API remain.
+- **Updates/concurrency:** Request-local preflight sets have no shared writers
+  or invalidation races. Existing activation gates protect partial deployment.
+  Server OPcache invalidation is still the hosting operator's responsibility;
+  disabled timestamp validation requires reset/restart during deployment.
+- **Evidence/usage:** `runtime_kernel_test.php` covers shared files, scope,
+  missing/replaced paths, cycles and canonical/partial completion. The targeted
+  disposable HTTP benchmark separates opcode-cold and warm requests; production
+  hosting adoption and real traffic performance remain unknown.
+- **Lifecycle:** PHP 8.1 and hosting without optional cache extensions are
+  permanent support. No cache requirement or retirement date is introduced.
+
 ### CORE-2 — Flat session keys and domain-owned semantics
 
 - **Reason / protected scenario:** `app/session_context.php` centralizes

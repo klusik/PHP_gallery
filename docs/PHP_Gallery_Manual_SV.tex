@@ -3124,6 +3124,20 @@ Vanliga begäranden kommer in genom \filepath{public/index.php}; \filepath{index
 
 Den lilla begärandelokala kärnan under \filepath{app/runtime/} styr den befintliga livscykeln via Request, Router, RouteRegistry och ModuleLoader innan den anropar den procedurala kontrollern. Den kanoniska rutt- och säkerhetstabellen finns kvar i \filepath{app/bootstrap/dispatch.php}. En granskad genererad plan laddar logiska moduler för vald rutt; produktionen skannar inte källfiler, kompilerar inte beroenden och har ingen reservväg som laddar hela programmet. Befintliga PHP~8.1- och webbhotellskrav räcker fortfarande, utan Composer eller Node-bygge. Äldre CLI-/testverktyg kan använda \filepath{app/bootstrap\_full.php} för hela det procedurala API:et.
 
+Laddaren validerar hela modulplanen för varje begäran. Den kontrollerar
+kanonisk lager-/sökvägsordning i en genomgång, varje vald fysisk sökväg en gång
+per laddningsförberedelse och räknar färdiga filer utan upprepade genomgångar
+av modullistor. Senare laddningar kontrollerar sina sökvägar på nytt.
+Valideringsresultat delas inte mellan begäranden; uppdateringar och samtidiga
+begäranden behöver därför ingen extra cacheinvalidering. Valfri OPcache är
+fortfarande en serverinställning: kontrollera dess status i webbens PHP och
+behåll tidsstämpelkontroll eller återställning vid distribution. Befintlig
+Test Run-spårning skiljer planladdning, full validering, beroendeplanering och
+includes. Utvecklarmätningar använder isolerade offentliga/Admin-begäranden
+med kalla och varma opcode-prov; de fastställer inte produktionslatens.
+Kompilatorn granskar den privata spårningscallbacken uttryckligen; endast lokala
+laddaroperationer skickar den, utan ytterligare modulberoende.
+
 Leverans av miniatyrbilder delar den befintliga fullständiga modulen för
 offentliga medier. Kompileringen godtar beroendet endast när hela dess
 filmängd redan ingår i miniatyrmodulens ansvar. Ruttens filgränser och

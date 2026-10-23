@@ -3210,6 +3210,21 @@ Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{ind
 
 Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
 
+Der Loader prüft den vollständigen Modulplan bei jeder Anfrage. Er prüft die
+kanonische Schicht-/Pfadreihenfolge in einem Durchlauf, jeden ausgewählten
+physischen Pfad einmal pro Ladevorprüfung und zählt abgeschlossene Dateien
+ohne wiederholtes Durchlaufen der Modullisten. Spätere Ladevorgänge prüfen ihre
+Pfade erneut. Zwischen Anfragen wird kein Prüfergebnis gespeichert; Updates
+und parallele Anfragen brauchen deshalb keine zusätzliche Cache-Invalidierung.
+Die optionale OPcache bleibt eine Servereinstellung: ihren Zustand im Web-PHP
+prüfen und Zeitstempelprüfung oder Zurücksetzen beim Deployment sicherstellen.
+Die bestehende Test-Run-Aufzeichnung trennt Planladen, vollständige Prüfung,
+Abhängigkeitsplanung und Includes. Entwicklermessungen verwenden isolierte
+öffentliche und Admin-Anfragen mit kalten und warmen Opcode-Stichproben;
+Produktionslatenz wird damit nicht nachgewiesen.
+Der Compiler prüft den privaten Trace-Callback ausdrücklich; nur lokale
+Loader-Operationen übergeben ihn, ohne zusätzliche Modulabhängigkeit.
+
 Die Auslieferung von Vorschaubildern verwendet das vorhandene vollständige
 Modul für öffentliche Medien gemeinsam. Die Kompilierung akzeptiert diese
 Abhängigkeit nur, wenn dessen gesamte Dateimenge bereits zum Vorschaumodul

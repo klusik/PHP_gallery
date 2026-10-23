@@ -3104,6 +3104,20 @@ Běžné požadavky vstupují přes \filepath{public/index.php}; \filepath{index
 
 Malé jádro pro aktuální požadavek v~\filepath{app/runtime/} řídí existující životní cyklus pomocí Request, Router, RouteRegistry a~ModuleLoader a~poté volá procedurální kontroler. Kanonická tabulka tras a~zabezpečení zůstává v~\filepath{app/bootstrap/dispatch.php}. Revidovaný generovaný plán načítá logické moduly podle vybrané trasy; produkce neskenuje zdrojové soubory, nekompiluje závislosti a~nemá náhradní načtení celé aplikace. Stávající PHP~8.1 a~sdílený hosting zůstávají dostačující bez Composeru či sestavení pomocí Node. Starší CLI a~testy mohou pro úplné procedurální API používat \filepath{app/bootstrap\_full.php}.
 
+Loader ověřuje celý plán modulů v~každém požadavku. Kanonické pořadí vrstev
+a~cest kontroluje jedním průchodem, každou vybranou fyzickou cestu jednou
+v~rámci přípravy načtení a~dokončené soubory počítá bez opakovaného procházení
+seznamů modulů. Další načtení ověřuje své cesty znovu. Ověření se neukládá
+mezi požadavky, takže aktualizace a~souběžné požadavky nepotřebují další
+invalidaci cache. Volitelná OPcache zůstává nastavením serveru; ověřte její
+stav ve webovém PHP a~zachovejte kontrolu časů souborů nebo reset při nasazení.
+Stávající trasování Test Run odděluje načtení plánu, úplné ověření, přípravu
+závislostí a~includes. Vývojářské měření používá izolované veřejné a~Admin
+požadavky a~rozlišuje studenou opcode cache od zahřátých vzorků; neprokazuje
+latenci produkce.
+Kompilátor výslovně eviduje revizi privátního trasovacího callbacku; předávají
+jej pouze místní operace loaderu a~nepřidává závislost na dalším modulu.
+
 Doručování náhledů sdílí stávající úplný modul veřejných médií.
 Kompilace přijme tuto závislost pouze tehdy, když celá jeho množina souborů
 již patří vlastníkovi náhledů. Limity souborů trasy i~kontrola duplicitního

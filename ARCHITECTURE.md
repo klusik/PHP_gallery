@@ -962,6 +962,34 @@ plans exclude this optional transport owner; direct bootstrap consumers retain
 the existing guarded hook behavior. ModuleLoader records the actual
 `runtime_module.<id>` include phases when early instrumentation is active.
 
+The same opt-in trace separates `runtime_loader.metadata`, `.validate`, `.plan`,
+`.execute` and `.include`. Execute contains includes and completion accounting;
+subtracting include time estimates accounting/diagnostic overhead, not OS I/O.
+Ordinary requests do not create a trace or write measurement files.
+The dynamic-site registry reviews the private observer's exact `$operation()`
+expression. Only lexical constructor/load closures invoke existing loader
+methods; no request input selects a callable and no module root is added.
+
+Every composed loader still validates the complete immutable plan, including
+unselected nodes, before feature loading. Canonical order is checked by adjacent
+layer/path comparisons rather than sorting a copy. One `load()` preflight checks
+each selected physical path once even when several selected modules reference
+it; its successful-check set is discarded before the next call. Missing files
+and escaped real paths still fail before any file in that closure executes.
+Completion counts and a dependency-first prefix replace repeated file-list
+rescans after each include. Empty repeat loads return before scanning the global
+file order. Successful/partial completion history and include-local scope stay
+unchanged, and `require_once` remains the execution guard.
+
+No validation result is shared across requests or persisted. Updates and
+concurrent requests therefore need no cache key, shared writer, lock or expiry;
+each request reads its shipped plan and performs full validation. Existing
+updater activation gates still protect partial deployments. OPcache remains an
+optional hosting optimization, independently owned by the server configuration;
+its timestamp/reset policy must keep deployed PHP, including the plan, current.
+The diagnostic comparison and its limits are described in
+[TESTING.md](TESTING.md#module-loader-phase-measurement).
+
 The generated schema-2 plan represents reviewed shared ownership with explicit
 module `depends` relationships. A single canonical `file_order` preserves the
 established layer/path include order across the transitive union, so extracting

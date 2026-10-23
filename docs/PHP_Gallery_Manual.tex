@@ -3127,6 +3127,20 @@ Ordinary requests enter through \filepath{public/index.php}; the~repository-root
 
 The~small request-local kernel under \filepath{app/runtime/} coordinates the~existing request lifecycle through Request, Router, RouteRegistry, and~ModuleLoader before invoking the~procedural controller. The~canonical route and~security table remains in~\filepath{app/bootstrap/dispatch.php}. A~reviewed generated plan loads logical modules for~the~selected route; production performs no~source scan or~dependency compilation and~has~no~load-all fallback. Existing PHP~8.1 and~shared-hosting requirements remain sufficient, without Composer or~a~Node build. Legacy CLI/test consumers may~use \filepath{app/bootstrap\_full.php} for~the~complete procedural API.
 
+The~loader validates the~complete module plan in~each request. It~checks
+canonical layer/path order in~one pass, checks each selected physical path
+once within a~load preflight, and~counts completed files without repeatedly
+scanning module lists. Later loads check their paths afresh. No~validation
+cache is~shared between requests, so~updates and~concurrent requests need
+no~additional cache invalidation. Optional OPcache remains a~server setting;
+verify its~state in~the~web PHP runtime and~keep timestamp validation
+or~deployment resets effective. The~existing Test Run trace separates plan
+loading, full validation, dependency planning and~includes. Developer
+measurements use disposable public/Admin requests and~distinguish opcode-cold
+and~warm samples; they do~not~establish production latency.
+The~compiler explicitly reviews the~private tracing callback; only local loader
+operations supply it, with no~additional module dependency.
+
 Thumbnail delivery reuses the~existing complete public-media module.
 Compilation accepts this dependency only while its~full file closure already
 belongs to~the~thumbnail owner. Route file limits and~the~duplicate-ownership

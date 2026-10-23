@@ -1559,6 +1559,56 @@ existing cardinality limit remains unchanged. The isolated photo manifest
 fixture explicitly enables PDF/music capabilities and primes an empty settings
 snapshot so missing archive preferences exercise the default photo-only path.
 
+### Module loader phase measurement
+
+For an explicitly authorized local performance investigation, set
+`GALLERY_WORKFLOW_ENABLE=disposable-only`, `GALLERY_WORKFLOW_MYSQL_BIN` to a
+MySQL 8 `mysqld`, `PHP_GALLERY_LOADER_LABEL=before` or `after`, and
+`PHP_GALLERY_LOADER_OPCACHE=off` or `on`, then run
+`php scripts/gallery_workflow_mysql.php --loader-benchmark`. This is a targeted
+diagnostic, not another test orchestrator or a substitute for hosted CI.
+
+The tool reuses the owned migrated database, real Admin login, registered route
+response contracts and all nine existing CLI lifecycle probes. It then records
+five representative loopback HTTP routes: robots, Home, Gallery, Admin and Admin
+telemetry. Each route has one first observation and seven warm observations.
+With OPcache enabled the first observation follows a successful opcode reset;
+without it the first observation has no claim of a cold filesystem. All raw
+numeric samples and CLI reference results are retained under
+`cache/test-audit/loader-{before|after}-{off|on}.json`.
+
+The server alone receives optional interpreter options. OPcache uses a unique
+Windows cache ID, timestamp validation enabled, zero-second revalidation, and
+zero-second copied-file protection so newly copied fixture sources can enter
+the cache immediately. These integer/boolean settings apply only to the owned
+benchmark server: zero revalidation checks deployed timestamps each request,
+and zero file-update protection avoids an arbitrary sleep before measurement.
+The active installation's PHP configuration is never changed.
+
+`PHP_GALLERY_LOADER_TRACE=1` opts the existing CLI probe and disposable HTTP
+router into the in-memory Admin Test Run phases. Metadata measures plan require;
+validate measures full constructor validation; plan measures each dependency
+preflight including physical path checks; execute includes canonical selection,
+includes and completion accounting; include measures individual require calls.
+The include scope stays in the loader method. Timings overlap: do not add execute
+and include together. Phase call counts expose repeated load calls; warm opcode
+hits and misses verify the cache state rather than assuming it from an INI flag.
+
+Wall times include tracing overhead and application/database/shutdown work.
+Disk and database buffers are not flushed; PHP built-in-server results do not
+establish Apache/FPM, remote-host or production latency. Included-file counts
+include nested application includes; peak bytes describe the PHP request
+allocator, excluding process RSS and shared OPcache memory. Compare the same
+plan/base and unchanged response semantics, counts and memory ceilings.
+
+`runtime_kernel_test.php` retains legacy/composed invalid path, missing file,
+whole-plan cycle, canonical-order and partial-failure checks. Shared-path,
+empty/repeated-load, include-scope and later-load filesystem replacement cases
+protect the optimized accounting and preflight lifetime. These scenarios belong
+to the central PHP registry; BASIC syntax/docs alone does not execute them.
+Active-trace assertions also require empty loads to omit canonical execution
+and failed preflights to retain their exception without including feature code.
+
 ### PHP worker scheduling
 
 Hosted `hosted-full` partitions the sorted, discovered PHP regression basenames

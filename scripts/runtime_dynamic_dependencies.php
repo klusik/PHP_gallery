@@ -99,6 +99,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Controllers\smart_gallery_capture_html|variable_callable|$renderer()
     Gallery\Controllers\viewer_collection_capture_html|variable_callable|$renderer()
     Gallery\Controllers\viewer_lifecycle_capture_html|variable_callable|$renderer()
+    Gallery\Core\ModuleLoader::observe|variable_callable|$operation()
     Gallery\Core\db|dynamic_class|new $pdoClass
     Gallery\Core\db|variable_callable|$pdoClass()
     Gallery\Core\load_migration_definition|dynamic_callback_argument|is_callable($after)
@@ -222,6 +223,12 @@ function runtime_dynamic_dependency_reviewed_sites(): array
             continue;
         }
         $reviewed[$signature] = match (true) {
+            // The private observer receives only constructor/load closures that
+            // invoke this same loader's validation, planning or execution.
+            // No request-selected callable or hidden Gallery root is accepted.
+            $signature === 'Gallery\\Core\\ModuleLoader::observe'
+                . '|variable_callable|$operation()'
+                => 'module-loader:private-lexical-operation-no-module-edge',
             str_contains($signature, '|dynamic_class|'),
             str_starts_with($signature, 'Gallery\\Core\\db|variable_callable|'),
                 => 'runtime-class:PDO-driver-from-config',
