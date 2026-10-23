@@ -32,6 +32,74 @@ if ($path === '/__workflow_' . $token . '/health') {
     echo $token;
     return;
 }
+if (getenv('PHP_GALLERY_LOADER_TRACE') === '1') {
+    if ($path === '/__workflow_' . $token . '/loader-reset') {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'reset' => function_exists('opcache_reset') && opcache_reset(),
+        ], JSON_THROW_ON_ERROR);
+        return;
+    }
+    require_once __DIR__ . '/app/diagnostics/admin_test_run_early.php';
+    $GLOBALS['gallery_admin_test_run_early'] = [
+        'enabled' => true,
+        'adopted' => false,
+        'request_time_unix' => microtime(true),
+        'marks' => [],
+        'phases' => [],
+        'open_phases' => [],
+    ];
+    $loaderStarted = hrtime(true);
+    $loaderOpcacheBefore = function_exists('opcache_get_status')
+        ? opcache_get_status(false) : false;
+    register_shutdown_function(static function () use (
+        $loaderStarted, $loaderOpcacheBefore,
+    ): void {
+        // Run after the application's shutdown work; never alter its response.
+        register_shutdown_function(static function () use (
+            $loaderStarted, $loaderOpcacheBefore,
+        ): void {
+            $phases = [];
+            foreach ($GLOBALS['gallery_admin_test_run_early']['phases'] ?? [] as $phase) {
+                if (!str_starts_with($phase['name'], 'runtime_loader.')) {
+                    continue;
+                }
+                $entry = $phases[$phase['name']] ?? ['ms' => 0.0, 'calls' => 0];
+                $entry['ms'] += $phase['duration_ms'];
+                $entry['calls']++;
+                $phases[$phase['name']] = $entry;
+            }
+            $files = array_values(array_filter(
+                get_included_files(),
+                static fn(string $file): bool => str_starts_with(
+                    str_replace('\\', '/', $file),
+                    str_replace('\\', '/', __DIR__) . '/app/',
+                ) || $file === __DIR__ . '/public/index.php',
+            ));
+            $opcache = function_exists('opcache_get_status')
+                ? opcache_get_status(false) : false;
+            $metric = [
+                'uri' => $_SERVER['REQUEST_URI'],
+                'wall_ms' => (hrtime(true) - $loaderStarted) / 1e6,
+                'included_php_files' => count($files),
+                'peak_memory_bytes' => memory_get_peak_usage(true),
+                'phases' => $phases,
+                'php' => PHP_VERSION,
+                'sapi' => PHP_SAPI,
+                'opcache_enabled' => $opcache !== false,
+                'opcache_before' => $loaderOpcacheBefore['opcache_statistics'] ?? null,
+                'opcache_after' => $opcache['opcache_statistics'] ?? null,
+                'opcache_validate_timestamps' => ini_get('opcache.validate_timestamps'),
+                'opcache_revalidate_freq' => ini_get('opcache.revalidate_freq'),
+            ];
+            file_put_contents(
+                __DIR__ . '/loader-metrics.jsonl',
+                json_encode($metric, JSON_THROW_ON_ERROR) . "\n",
+                FILE_APPEND | LOCK_EX,
+            );
+        });
+    });
+}
 if ($path === '/__workflow_' . $token . '/preview-error') {
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
         http_response_code(405);

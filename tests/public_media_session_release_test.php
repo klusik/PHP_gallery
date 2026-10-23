@@ -131,7 +131,7 @@ $maintenanceSkip = strpos(
 $autoupdate = strpos(
     $maintenanceTokens,
     php_source_contract_tokens(
-        '<?php application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel',
+        '<?php \\Gallery\\Services\\request_scheduler_register_visit($page, request_method(),',
     ),
 );
 media_session_assert(

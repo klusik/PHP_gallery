@@ -47,7 +47,7 @@ use function Gallery\Views\view_render_admin_gallery_access_fields;
 /**
  * Render the Access tab panel.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
+ * @param array{id:int|string,visibility:string,scheduled_publish_at?:string|null,access_listing?:string,access_mode?:string,access_password_hash?:string|null,access_token_hash?:string|null,access_token_expires_at?:string|null,...} $gallery Persisted gallery being edited, including optional UTC deadline and access fields.
  * @param string $activeEditTab Currently selected editor tab.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
  * @return void Render the access tab.
@@ -162,8 +162,19 @@ function admin_edit_gallery_render_access_tab(
     // $nsfwSchemaStatus distinguishes a pending migration from an operational inspection failure.
     $nsfwSchemaStatus = nsfw_guard_schema_status();
 
+    // The native minute control uses the first 16 characters of SQL datetime;
+    // these are format offsets, not a configurable scheduling limit.
     ob_start();
     view_render_admin_gallery_access_fields([
+        'publication_state' =>
+            \Gallery\Services\gallery_publication_schema_state(),
+        'scheduled_publish_value' => isset($gallery['scheduled_publish_at'])
+            ? str_replace(' ', 'T', substr($gallery['scheduled_publish_at'], 0, 16))
+            : '',
+        'scheduled_publish_label' => $gallery['scheduled_publish_at'] ?? '',
+        'publication_unlisted' =>
+            ($gallery['visibility'] ?? '') === 'public'
+            && ($gallery['access_listing'] ?? '') === 'unlisted',
         'access_ready' => $accessReady,
         'share_token_ready' => $shareTokenReady,
         'visibility_options_html' => visibility_options(

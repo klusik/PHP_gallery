@@ -170,8 +170,20 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /**
+     * Supply the discovery controller's default fixture batch of 10 galleries.
+     * Type: int. Units: galleries. Scope: isolated side-panel controller test.
+     * Consumers: discovery request parsing and the fixture discovery adapter.
+     * Rationale: retain a realistic default without loading production policy.
+     */
     const ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE = 10;
 
+    /**
+     * Bound discovery requests to 100 galleries in this controller fixture.
+     * Type: int. Units: galleries. Scope: isolated side-panel controller test.
+     * Consumers: discovery controller batch validation.
+     * Rationale: exercise the production-shaped upper-bound contract offline.
+     */
     const ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE = 100;
 
     /**

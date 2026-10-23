@@ -80,6 +80,10 @@ $bootstrapSource =
 $servicesSource = (string) file_get_contents(__DIR__ . '/../app/services.php');
 $siteMaintenanceSource = (string) file_get_contents(__DIR__
     . '/../app/services/site_maintenance.php');
+$schedulerTriggerSource = (string) file_get_contents(__DIR__
+    . '/../app/services/request_scheduler_trigger.php');
+$schedulerExecutionSource = (string) file_get_contents(__DIR__
+    . '/../app/services/request_scheduler/execution.php');
 $siteMaintenanceViewSource = (string) file_get_contents(__DIR__
     . '/../app/views/admin_dashboard_sections.php');
 $archiveHtaccess = (string) file_get_contents(__DIR__
@@ -224,11 +228,20 @@ assert_admin_log_archive_maintenance(
 assert_admin_log_archive_maintenance(
     php_source_contains(
         $bootstrapSource,
-        'admin_log_archive_register_request_trigger($page, $kernel',
+        '\\Gallery\\Services\\request_scheduler_register_visit($page, request_method(),',
     )
+        && !php_source_contains(
+            $bootstrapSource,
+            'admin_log_archive_register_request_trigger($page, $kernel',
+        )
+        && php_source_contains($schedulerTriggerSource, 'register_shutdown_function')
+        && php_source_contains(
+            $schedulerExecutionSource,
+            "admin_log_archive_maintenance_run(['source' => 'request_scheduler', 'force' => \$force,",
+        )
         && php_source_contains($archiveServiceSource, "['admin', 'admin_logs']")
         && php_source_contains($archiveServiceSource, 'register_shutdown_function'),
-    'Only authenticated Admin page loads may register due archive work, and it must execute after response.',
+    'One successful-response scheduler hook must replace the independent archive hook, delegate to the existing guarded owner, and retain the legacy Admin-only adapter.',
 );
 assert_admin_log_archive_maintenance(
     php_source_contains($bootstrapSource, "'admin_log_archive_maintenance' =>")

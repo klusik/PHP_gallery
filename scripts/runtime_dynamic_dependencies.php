@@ -99,6 +99,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Controllers\smart_gallery_capture_html|variable_callable|$renderer()
     Gallery\Controllers\viewer_collection_capture_html|variable_callable|$renderer()
     Gallery\Controllers\viewer_lifecycle_capture_html|variable_callable|$renderer()
+    Gallery\Core\ModuleLoader::observe|variable_callable|$operation()
     Gallery\Core\db|dynamic_class|new $pdoClass
     Gallery\Core\db|variable_callable|$pdoClass()
     Gallery\Core\load_migration_definition|dynamic_callback_argument|is_callable($after)
@@ -118,6 +119,9 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Models\viewer_registration_model_independent_transaction|variable_callable|$operation()
     Gallery\Models\viewer_registration_model_transaction|variable_callable|$operation()
     Gallery\Services\admin_log_archive_register_request_trigger|variable_callable|$loadDependencies()
+    Gallery\Services\request_scheduler_register_visit|variable_callable|$loadDependencies()
+    Gallery\Services\request_scheduler_snapshot|variable_callable|$loadDependencies()
+    Gallery\Services\request_scheduler_execute_owner|variable_callable|$loadDependencies()
     Gallery\Services\admin_mutation_schema_health_statuses|dynamic_callback_argument|is_callable($resolver)
     Gallery\Services\admin_mutation_schema_health_statuses|variable_callable|$resolver()
     Gallery\Services\admin_ordered_gallery_rows|variable_callable|$appendChildren()
@@ -166,6 +170,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\gallery_move_images_locked|dynamic_callback_argument|is_callable($options)
     Gallery\Services\gallery_move_images_locked|variable_callable|$checkpoint()
     Gallery\Services\gallery_public_path_assignments|variable_callable|$buildPath()
+    Gallery\Services\gallery_publication_request|variable_callable|$load()
     Gallery\Services\image_decode_gd_path_result|dynamic_function_exists|function_exists(dynamic)
     Gallery\Services\legacy_download_artifact_cache_status_for_path|variable_callable|$probe()
     Gallery\Services\maintenance_center_analysis_step_unlocked|dynamic_callback_argument|is_callable($analyzer)
@@ -218,12 +223,24 @@ function runtime_dynamic_dependency_reviewed_sites(): array
             continue;
         }
         $reviewed[$signature] = match (true) {
+            // The private observer receives only constructor/load closures that
+            // invoke this same loader's validation, planning or execution.
+            // No request-selected callable or hidden Gallery root is accepted.
+            $signature === 'Gallery\\Core\\ModuleLoader::observe'
+                . '|variable_callable|$operation()'
+                => 'module-loader:private-lexical-operation-no-module-edge',
             str_contains($signature, '|dynamic_class|'),
             str_starts_with($signature, 'Gallery\\Core\\db|variable_callable|'),
                 => 'runtime-class:PDO-driver-from-config',
             str_contains($signature, 'cms_route_from_request|')
                 => 'injected-module-loader:routing-paths',
             str_contains($signature, 'application_autoupdate_maybe_run|'),
+            // Scheduler loaders accept only literal reviewed lifecycle IDs;
+            // explicit roots retain the passive and execution entrypoints.
+            str_contains($signature, 'request_scheduler_'),
+            // Publication receives the kernel loader and passes only the
+            // literal site-maintenance-work owner after its indexed due check.
+            str_contains($signature, 'gallery_publication_request|'),
             str_contains(
                 $signature,
                 'site_maintenance_register_request_trigger|',

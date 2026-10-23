@@ -53,7 +53,7 @@ function view_admin_trash_icon(): string
 /**
  * Return a decorative outline symbol for Admin navigation and compact controls.
  *
- * @param string $icon Semantic symbol identifier, including the drag grip.
+ * @param string $icon Semantic navigation/control symbol, including play, pause, copy and the drag grip.
  * @return string Trusted SVG hidden from assistive technology, or empty for unknown icons.
  */
 function view_admin_menu_icon(string $icon): string
@@ -63,6 +63,10 @@ function view_admin_menu_icon(string $icon): string
     }
     // Keep the same view box, stroke, and text color as the existing Trash symbol.
     $symbols = [
+        'play' => '<path d="m8 5 11 7-11 7V5Z"/>',
+        'pause' => '<path d="M9 5v14M15 5v14"/>',
+        'copy' => '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
+        'clock' => '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
         'search' => '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',
         'clean' => '<path d="m15 3-4 9m-5 0 9 4-3 6-9-4 3-6m-1 4 8 4M18 7l3 1m-3 4 2 2"/>',
         'overview' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',

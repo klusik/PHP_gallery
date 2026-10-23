@@ -611,11 +611,23 @@ License: MIT License (see LICENSE file in repository)
         'remembered tag is offered for the next viewer photo without applying it on open');
         window.quickTagInputPhase = 'normal-next-escape';
         await waitFor(() => quickTagPopover.hidden, 'Escape did not close the next-photo editor.');
+        const fullscreenEntered = new Promise((resolve) => {
+            document.addEventListener('fullscreenchange', resolve, {once: true});
+        });
         window.quickTagInputPhase = 'fullscreen-f';
         await waitFor(() => document.fullscreenElement === quickTagViewer
             || quickTagViewer.classList.contains('is-css-fullscreen')
             || quickTagViewer.classList.contains('is-fullscreen'),
         'F did not enter native or application fullscreen mode.');
+        if (document.fullscreenElement === quickTagViewer) {
+            await fullscreenEntered;
+        }
+        // Native fullscreen can expose its owner before layout and viewport
+        // events settle. Two paint boundaries commit that new geometry before
+        // the next trusted key measures the HUD anchor; no assertion is relaxed.
+        await new Promise((resolve) => requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+        }));
         window.quickTagFullscreenMode = document.fullscreenElement === quickTagViewer
             ? 'native' : 'application';
         if (quickTagFullscreenMode === 'native' && nativeRequestFullscreen

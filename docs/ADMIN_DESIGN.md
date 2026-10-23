@@ -62,6 +62,27 @@ media panels and public header actions. Their shared surface tokens belong to
   horizontal scrolling. These changes preserve the existing search behavior,
   native checkbox semantics, page URLs and no-JavaScript pagination.
 
+## Public Picture manager HUD
+
+Hide an empty manager above the viewport, retaining an invisible 8px top-edge
+hover target. Hover reveals and opens it; a nonempty selection keeps it visible.
+Visible keyboard focus and an open help popover also preserve access. Touch
+users reveal it by selecting a card. Keep the summary narrow when collapsed
+and the expanded task surface bounded independently of gallery page width.
+Selection actions stay on one
+line where space allows, followed by the destination picker and Move/Copy.
+Creation uses a native disclosure rather than a permanently visible second
+form. The parent picker, gallery title and optional folder remain available
+inside it. Keep field labels and accessible names independent of placeholders.
+
+Selection gestures and copy/move explanations belong behind a plain `?`
+auto-popover, with native keyboard activation, Escape and outside-click
+dismissal. The shared picker retains its search, directory link and failure
+feedback; routine instructions and its directory link appear while focused.
+Idle status is quiet; progress, success and errors remain visible. Scope all
+styles to the Picture manager and use Theme `--ink`, panel and accent tokens.
+Use 28px desktop and 44px mobile controls with visible keyboard focus.
+
 ## Controls and layout
 
 - Use short labels with small `?` context-help controls for longer explanations.

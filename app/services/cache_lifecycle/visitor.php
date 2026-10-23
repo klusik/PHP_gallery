@@ -16,11 +16,13 @@ namespace Gallery\Services;
  * Admit one visitor burst with foreground priority and shared scheduler exclusion.
  * @param bool $detached Whether a direct visitor's response was finished; false retains a 40 ms direct admission budget. Independent chained requests use their own budget without implying this primitive exists.
  * @param bool $chained Whether an authenticated independent HTTP worker owns this invocation; true admits up to five seconds without making a browser wait.
+ * @param bool $force Bypass only timing gates for an authenticated manual request; foreground priority, locks, capacity and slice limits remain enforced.
  * @return CacheLifecycleCheckpoint|array{ok:bool,blocked?:bool,busy?:bool,skipped?:bool,reason?:string,slices?:int,elapsed_ms?:int,done?:bool,progressed?:bool,id?:string,free_space_known?:bool,free_bytes?:int|null,exception_class?:string} Canonical checkpoint or admission outcome; admitted bursts report actual counters and timing without substituting fixture data.
  */
 function cache_lifecycle_visitor_run(
     bool $detached,
     bool $chained = false,
+    bool $force = false,
 ): array {
     if (!feature_capability_effective_enabled('automatic_cache_cleanup'))
         return [
@@ -61,7 +63,7 @@ function cache_lifecycle_visitor_run(
             ];
         clearstatcache(true, $directory . '/visitor-attempt');
         if (
-            is_file($directory . '/visitor-attempt')
+            !$force && is_file($directory . '/visitor-attempt')
             && (
                 cache_lifecycle_now()
                 - (int) filemtime($directory . '/visitor-attempt')
@@ -180,6 +182,7 @@ function cache_lifecycle_visitor_run(
                 $slices,
                 null,
                 $foregroundLimited,
+                $force,
             );
         } finally {
             if (is_resource($siteLock)) {

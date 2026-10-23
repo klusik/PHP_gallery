@@ -569,8 +569,11 @@ function resolve_public_gallery_path(
 /**
  * Fetch one gallery by its preferred clean public URL path, with legacy fallbacks.
  *
- * @param string $publicPath Public path filesystem path.
- * @return ?array Structured result data for the caller.
+ * @param string $publicPath Clean gallery URL path, with optional slashes/encoding.
+ * @return array{id:int|string,folder_path:string,title:string,visibility:string,
+ *     access_listing?:string,scheduled_publish_at?:string|null,...}|null Persisted
+ *     gallery row, or null when unresolved;
+ *     cached identities resolve through the current numeric-row owner after publication.
  */
 function find_gallery_by_public_path(string $publicPath): ?array
 {
@@ -589,7 +592,9 @@ function find_gallery_by_public_path(string $publicPath): ?array
     // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $normalizedPath;
     if (array_key_exists($cacheKey, $cache)) {
-        return $cache[$cacheKey];
+        return $cache[$cacheKey] !== null
+            ? find_gallery((int) $cache[$cacheKey]['id'])
+            : null;
     }
 
     if (public_path_schema_ready()) {

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.141.3}
-\newcommand{\manualdate}{22.~října~2026}
+\newcommand{\version}{0.142}
+\newcommand{\manualdate}{23.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -791,6 +791,37 @@ Ukládají se pouze zaškrtnuté řádky. Nezaškrtnuté návrhy se ignorují a~
 Pole dat v~administraci ponechávají nativní datumové pole prohlížeče jako odesílanou hodnotu, ale přidávají kompaktní tlačítko kalendáře a~pomocné volby \ui{Dnes} a~\ui{Vymazat}. \ui{Dnes} vloží aktuální místní kalendářní datum prohlížeče; \ui{Vymazat} pole vyprázdní. Toto vylepšení se znovu použije na formuláře načtené do postranního panelu administrace, zatímco základní nativní datumové pole zůstává použitelné i~bez dodatečných ovládacích prvků JavaScriptu.
 
 \subsection{Přehled ovládacích prvků editoru galerie}
+\paragraph{Plánování zveřejnění}
+Vylepšené pole používá pojmenované pásmo prohlížeče, takže nabízený aktuální
+čas odpovídá místním hodinám. Pod polem je přesný přepočet na UTC.
+Pásmo uživatele se neukládá. Bez JavaScriptu zůstává pole výslovně v~UTC
+a~očekává zadání UTC. Neexistující čas při jarním posunu se odmítne.
+Při novém zadání opakované podzimní hodiny zkontrolujte UTC náhled:
+prohlížeč vybere první výskyt. Nezměněný uložený druhý výskyt zůstává zachován.
+
+Na kartě \ui{Přístup} vyplňte budoucí datum a~čas v~nativním poli
+\ui{Naplánovat zveřejnění}, podle zobrazeného pásma, a~uložte formulář.
+Indikátor ukazuje přesný termín v~UTC. Změna pole přesune termín,
+prázdné pole plán zruší. Volba \ui{Zveřejněná} plán také zruší.
+Pokud používáte nevylepšené pole označené UTC, zamýšlený místní čas
+před zadáním převeďte na UTC.
+
+Nezveřejněná galerie si před termínem zachová běžnou přímou adresu,
+soukromá zůstává chráněná. V~termínu nebo později první běžný PHP požadavek
+GET/HEAD, včetně anonymního robota, změní základní viditelnost na
+veřejnou a~zařadí galerii do veřejných seznamů stejně jako ruční volba
+\ui{Zveřejněná}. Hesla, NSFW, tokeny, expirace a~děděná ochrana zůstanou
+zachovány.
+Nedokončené PDF podgalerie zůstávají chráněné a~děti se automaticky
+nezveřejňují. Bez návštěv se nic nespustí; statické soubory ani CDN
+spuštění nezajistí. Velká zásoba termínů se dohání po dávkách 16 při
+dalších návštěvách. Není potřeba cron, démon ani časovač prohlížeče.
+Nejprve spusťte běžné databázové migrace. Termíny vlastní databáze;
+sidecary uchovávají výslednou viditelnost, ale nepřenášejí čekající
+termíny do jiné instalace.
+Lehká kontrola využívá stávající model galerie a~službu přístupu;
+zápisové závislosti načítá jen při nalezení splatného řádku přes index.
+
 \index{e00035@editor galerie!o00131@ovládací prvky}
 \index{g00040@galerie!v00250@viditelnost}
 \index{g00040@galerie!p00178@přepsání zobrazení}
@@ -2581,6 +2612,22 @@ V~klientech, například PhotoSync, použijte typ cíle WebDAV. Současný serve
 Veřejná odpověď \codeword{/robots.txt} popisuje hranice pro roboty, zatímco \codeword{/sitemap.xml} uvádí způsobilé veřejné URL galerií a~obrázků s~metadaty obrázků a~informacemi o~poslední změně. Nezveřejněný, soukromý, heslem chráněný, věkově omezený nebo jinak nepovolený obsah se těmito výstupy nezveřejňuje. Kanonické URL, sociální metadata a~strukturovaná data obrázků používají stejný model veřejných cest zohledňující přístup.
 
 Správce fotografií je překryv veřejného zobrazení galerie pro přihlášeného správce, nikoli funkce návštěvníka. Správce může vybrat fotografie a~fyzické podgalerie, odstranit smíšený výběr nebo jej zkopírovat do nové fyzické galerie pod vybraným rodičem. Výběry pouze fotografií lze také přetáhnout na viditelnou podřízenou galerii, přesunout či kopírovat prohledávatelným výběrem cíle, sdílet nativní nabídkou zařízení, je-li podporována, nebo stáhnout. Nativní sdílení přechází na ZIP vybraných fotografií, pokud prohlížeč nemůže sdílet připravené soubory. Chytré galerie jsou vyloučeny z~operací fyzických podstromů. Samotný výběr je jen stavem prohlížeče a~neuděluje oprávnění. Každý požadavek změny či ZIP znovu kontroluje běžně přihlášený účet, token CSRF, zdrojovou galerii, vlastnictví výběru a~případný cíl. Běžní návštěvníci tyto prvky nedostávají. Správce fotografií je záměrně nezávislý na schopnosti Přímá správa: vypnutí Přímé správy odstraní prvky úprav, přidávání, odstraňování a~pořadí přímo na veřejné stránce, zatímco nezávisle povolený Správce fotografií může nadále poskytovat výběr, odstranění, přesun, kopírování, vytváření fyzických galerií a~export výběru.
+
+Kompaktní horní lišta průběžně ukazuje počet vybraných položek. Po rozbalení
+nabízí výběr všeho, zrušení výběru, sdílení, odstranění a~cílovou galerii
+pro přesun nebo kopírování fotografií. Oddíl \ui{Nová galerie z~výběru}
+rozbalte až při vytváření galerie; rodičem je ve výchozím stavu aktuální galerie.
+Prosté tlačítko \ui{?} otevírá nápovědu k~výběru, přetažení, kopírování
+a~přesunu; zavřete ji kliknutím mimo nebo klávesou Escape. Pokyny výběru
+a~odkaz na adresář galerií se zobrazí při zaměření výběru cíle. Průběh,
+úspěch a~chyby zůstávají viditelné; klidová zpráva o~připravenosti se nezobrazuje.
+
+Bez výběru je správce skrytý nad stránkou. Najeďte ukazatelem ke středu
+horního okraje a~panel se zobrazí a~rozbalí. Vybrané fotografie nebo fyzické
+podgalerie jej udržují viditelný. Zobrazí jej také zaměření klávesnicí;
+na dotykovém zařízení nejprve vyberte kartu. Otevřená nápověda zůstává
+přístupná až do zavření.
+
 \section{Údržba, aktualizace a~obnova}
 \label{sec:maintenance}
 \index{u00238@údržba}
@@ -2858,6 +2905,39 @@ aktivní práci; volný zámek je~jen okamžitý odečet.
 \index{c00019@cron!u00241@údržba webu}
 
 Běžná údržba může probíhat v~omezených částech místo jediného dlouhého požadavku. Služba údržby řetězí bezpečné webové požadavky, je-li dostupný provoz, a~lze ji také volat z~cronu hostingu příkazem CLI uvedeným v~administraci. Může kontrolovat stav náhledů, obnovovat metadata, zpracovávat úklid, shrnovat telemetrii a~archivovat způsobilé dny protokolu administrace podle nastavených pravidel. Skrytý token webového cronu lze obměnit; obměna zneplatňuje dříve zveřejněné URL webového cronu. Údržba je ve výchozím stavu nedestruktivní a~nenahrazuje výslovné potvrzení optimalizace databáze ani jiných závažných akcí.
+\subsection{Přehled cronu a~spouštění návštěvami}
+V~nabídce \ui{Údržba > Přehled cronu} je kompaktní řaditelná tabulka automatických
+aktualizací, archivace protokolů, údržby webu a~cache, odložených souborů
+aktualizátoru, retence telemetrie a~jednorázového doplnění počtů příloh.
+Každý vlastník poskytuje skutečný interval, nejbližší časovou možnost a~doklady
+posledního pokusu. Neznámý stav zůstává neznámý; přijetí neznamená dokončení.
+Běžné PHP návštěvy včetně robotů dávají společnému scheduleru příležitost předat
+nejvýše jednu omezenou úlohu. Platí její zámky, zapnutí, okna UTC i~nárok Centra
+údržby. Plánovaná publikace galerie dál proběhne před vykreslením spouštěcí stránky.
+
+Řazení se mění kliknutím na záhlaví. Viditelná stránka přibližně každou sekundu
+obnoví stávající buňky, aniž spustí práci; skrytá stránka čtení pozastaví
+ a~při chybách prodlužuje odstup. Ikona Play odešle chráněnou akci přímo
+v~tabulce a~přeskočí pouze časovou podmínku. Bez JavaScriptu funguje běžný POST.
+Výsledek může být obsazený, pokračující či odložený. Nejbližší možnost není
+záruka přesného okamžiku: bez návštěv práce čeká na další požadavek.
+Play je přímo před názvem úlohy. Ikona pozastavení vedle nadpisu zmrazí jen
+živý náhled; obnovení ihned načte stav a~úlohy na pozadí běží dál.
+Budoucí hodnoty zachovají přesný čas a~v~závorce doplní zbývající dobu.
+Názvy úloh odkazují na jejich stávající nastavení či ovládání. Chybějící další
+termín se vysvětlí jako vypnuto, dokončeno nebo nic nečeká na úklid;
+neznámý údaj zůstává vyhrazen nedostupným dokladům.
+
+Sbalená část \ui{Volitelný cron hostingu} vytvoří či obnoví kopírovatelnou
+chráněnou URL a~umožní její zneplatnění. Respektuje podadresář instalace
+ i~směrování bez přepisování URL. Příklad s~\codeword{curl -fsS} lze volitelně
+volat každou jednu až pět minut. Použije stejný scheduler a~nevypne návštěvnické
+spouštění. URL je tajný údaj. Není vyžadován cron, časovač práce v~prohlížeči,
+trvale běžící proces ani externí fronta.
+Vedle 256bitového tokenu a~společných zámků platí nejvýše jedno přijaté
+volání hostingu za minutu. Opakované volání neobejde podmínky vlastníka úlohy.
+Ochranu proti zahlcení sítě či ICMP řeší poskytovatel hostingu.
+
 \subsection{Historie a~archivy protokolů administrace}
 \index{p00163@protokoly administrace}
 \index{a00008@archiv protokolů}
@@ -3023,6 +3103,20 @@ Generovaný plán modulů deklaruje sdílené závislosti a~jedno kanonické po�
 Běžné požadavky vstupují přes \filepath{public/index.php}; \filepath{index.php} v~kořeni repozitáře je podporovaný kompatibilní vstup pro jiná uspořádání hostingu. Veřejný vstup načítá \filepath{app/early\_runtime.php} před \filepath{app/bootstrap.php} a~obě uspořádání pak dosahují stejného běžného postupu zpracování požadavku.
 
 Malé jádro pro aktuální požadavek v~\filepath{app/runtime/} řídí existující životní cyklus pomocí Request, Router, RouteRegistry a~ModuleLoader a~poté volá procedurální kontroler. Kanonická tabulka tras a~zabezpečení zůstává v~\filepath{app/bootstrap/dispatch.php}. Revidovaný generovaný plán načítá logické moduly podle vybrané trasy; produkce neskenuje zdrojové soubory, nekompiluje závislosti a~nemá náhradní načtení celé aplikace. Stávající PHP~8.1 a~sdílený hosting zůstávají dostačující bez Composeru či sestavení pomocí Node. Starší CLI a~testy mohou pro úplné procedurální API používat \filepath{app/bootstrap\_full.php}.
+
+Loader ověřuje celý plán modulů v~každém požadavku. Kanonické pořadí vrstev
+a~cest kontroluje jedním průchodem, každou vybranou fyzickou cestu jednou
+v~rámci přípravy načtení a~dokončené soubory počítá bez opakovaného procházení
+seznamů modulů. Další načtení ověřuje své cesty znovu. Ověření se neukládá
+mezi požadavky, takže aktualizace a~souběžné požadavky nepotřebují další
+invalidaci cache. Volitelná OPcache zůstává nastavením serveru; ověřte její
+stav ve webovém PHP a~zachovejte kontrolu časů souborů nebo reset při nasazení.
+Stávající trasování Test Run odděluje načtení plánu, úplné ověření, přípravu
+závislostí a~includes. Vývojářské měření používá izolované veřejné a~Admin
+požadavky a~rozlišuje studenou opcode cache od zahřátých vzorků; neprokazuje
+latenci produkce.
+Kompilátor výslovně eviduje revizi privátního trasovacího callbacku; předávají
+jej pouze místní operace loaderu a~nepřidává závislost na dalším modulu.
 
 Doručování náhledů sdílí stávající úplný modul veřejných médií.
 Kompilace přijme tuto závislost pouze tehdy, když celá jeho množina souborů

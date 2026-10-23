@@ -228,9 +228,9 @@ if (
 }
 if (!php_source_contains(
     $maintenanceSource,
-    'application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel',
+    '\\Gallery\\Services\\request_scheduler_register_visit($page, request_method(),',
 )) {
-    $violations[] = 'Maintenance bootstrap does not pass request method explicitly to updater policy';
+    $violations[] = 'Maintenance bootstrap does not pass request method explicitly to the central scheduler';
 }
 
 if ($violations !== []) {

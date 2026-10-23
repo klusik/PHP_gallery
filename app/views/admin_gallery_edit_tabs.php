@@ -272,7 +272,10 @@ function view_render_admin_upload_automation_manager_action(array $viewModel): v
 /**
  * Render the editable Access-tab field group.
  *
- * @param array<string, mixed> $viewModel Controller-prepared access state, labels, and trusted option fragments.
+ * @param array<string, mixed> $viewModel Controller-prepared access state, labels,
+ *     trusted option fragments, publication_state (available/missing/unknown),
+ *     scheduled_publish_value (UTC datetime-local string),
+ *     scheduled_publish_label (UTC SQL timestamp) and publication_unlisted flag.
  * @return void Render the access fields.
  */
 function view_render_admin_gallery_access_fields(array $viewModel): void
@@ -304,11 +307,42 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
             . '">';
     echo '<div class="admin-access-main">';
     echo
-        '<label>'
+        '<div class="admin-access-field"><label>'
             . e((string) ($labels['visibility'] ?? 'Visibility'))
             . '<select name="visibility">'
             . (string) ($viewModel['visibility_options_html'] ?? '')
             . '</select></label>';
+    if (!empty($viewModel['publication_unlisted'])) {
+        echo '<small class="muted admin-access-field-status">'
+            . e(t('publication.unlisted')) . '</small>';
+    }
+    echo '</div><div class="admin-access-field admin-access-publication">';
+    if (($viewModel['publication_state'] ?? '') === 'available') {
+        echo '<label><span class="admin-access-field-title">'
+            . e(t('publication.schedule')) . '</span>'
+            . '<input name="scheduled_publish_at" type="datetime-local"'
+            . ' data-publication-utc-time'
+            . ' data-local-help="'
+            . e(t('publication.local_help') . ' ' . t('publication.listing_help'))
+            . '"'
+            . ' data-local-invalid="' . e(t('publication.local_invalid')) . '"'
+            . ' value="' . e((string) ($viewModel['scheduled_publish_value'] ?? ''))
+            . '" aria-describedby="gallery-publication-help">'
+            . '<small data-publication-timezone>UTC</small></label>';
+    } else {
+        echo '<small class="muted">' . e(t('publication.unavailable')) . '</small>';
+    }
+    if (!empty($viewModel['scheduled_publish_label'])) {
+        echo '<small class="muted" role="status">'
+            . e(t('publication.pending', null, [
+                'time' => (string) $viewModel['scheduled_publish_label'] . ' UTC',
+            ])) . '</small>';
+    }
+    echo '<details class="admin-inline-help admin-gallery-media-help">'
+        . '<summary aria-label="' . e(t('publication.schedule'))
+        . '"><span aria-hidden="true">?</span></summary>'
+        . '<div class="admin-inline-help-content" id="gallery-publication-help">'
+        . e(t('publication.help')) . '</div></details></div>';
     if ($accessReady) {
         echo
             '<label>'

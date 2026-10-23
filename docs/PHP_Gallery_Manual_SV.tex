@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.141.3}
-\newcommand{\manualdate}{22~oktober~2026}
+\newcommand{\version}{0.142}
+\newcommand{\manualdate}{23~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -797,6 +797,38 @@ Endast markerade rader sparas. Omarkerade förslag ignoreras, och administratör
 Datumfält i administrationen behåller webbläsarens inbyggda datumfält som inskickat värde men lägger till en kompakt kalenderöppnare samt hjälpknapparna \ui{Idag} och \ui{Radera}. \ui{Idag} skriver webbläsarens aktuella lokala kalenderdatum; \ui{Radera} tömmer fältet. Förbättringen tillämpas igen på formulär som läses in i administrationens sidopanel, medan det underliggande inbyggda datumfältet fortfarande går att använda utan de extra JavaScript-kontrollerna.
 
 \subsection{Referens för galleriredigerarens kontroller}
+\paragraph{Schemalägg publicering}
+Det förbättrade fältet använder webbläsarens namngivna tidszon, så föreslagen
+aktuell tid motsvarar den lokala klockan. Exakt UTC-tid visas under fältet.
+Ingen användartidszon sparas. Utan JavaScript är fältet uttryckligen i UTC.
+Icke existerande vårklockslag avvisas. Vid ny inmatning under den upprepade
+hösttimmen väljer webbläsaren den tidigare förekomsten; kontrollera UTC-vyn.
+En oförändrad sparad senare förekomst bevaras.
+
+Ange ett framtida datum och klockslag i det inbyggda fältet
+\ui{Schemalägg publicering} under \ui{Åtkomst} och spara.
+Följ fältets tidszonsetikett; statusen visar exakt UTC-tid.
+Ändra tiden för att flytta publiceringen eller töm fältet för att avbryta.
+Valet \ui{Publicerad} tar också bort schemat. Utan JavaScript behöver önskad
+lokal tid omvandlas till UTC före inmatning i det UTC-märkta fältet.
+
+Ett opublicerat galleri behåller sin vanliga direktadress före tiden,
+medan ett privat galleri behåller sina åtkomstregler. Nästa vanliga
+PHP-sidbesök med GET/HEAD vid eller efter tiden, även från en anonym
+sökrobot, ändrar den kanoniska synligheten till offentlig.
+Lösenord, NSFW, delningstoken, giltighetstid och överordnade skydd bevaras.
+Schemalagd publicering återställer också offentlig listning, precis som
+det manuella valet \ui{Publicerad}.
+Ofullständiga PDF-undergallerier förblir skyddade och barn publiceras inte
+automatiskt. Utan besök körs inget; statiska filer och CDN-träffar utlöser
+ingenting. Större köer av tidpunkter hanteras i grupper om 16 över fler besök.
+Ingen cron, bakgrundsprocess eller webbläsartimer behövs.
+Kör vanliga databasmigreringar först. Schemat hör till databasen; sidofiler
+bevarar resulterande synlighet men överför inte väntande tider till
+andra installationer.
+Den lätta kontrollen använder befintlig gallerimodell och åtkomsttjänst;
+skrivberoenden laddas bara när indexet hittar en förfallen rad.
+
 \index{g00108@galleriredigerare!k00137@kontroller}
 \index{g00096@galleri!s00235@synlighet}
 \index{g00096@galleri!z00276@åsidosättningar av visning}
@@ -2596,6 +2628,22 @@ Använd måltypen WebDAV i klienter som PhotoSync. Aktuell serverinläsning acce
 Det offentliga svaret \codeword{/robots.txt} beskriver gränser för sökrobotar, medan \codeword{/sitemap.xml} listar lämpliga offentliga galleri- och bild-URL:er med bildmetadata och information om senaste ändring. Opublicerat, privat, lösenordsskyddat, åldersbegränsat eller annars otillåtet innehåll görs inte offentligt genom dessa utdata. Kanoniska URL:er, sociala metadata och strukturerade bilddata använder samma åtkomstmedvetna offentliga sökvägsmodell.
 
 Bildhanteraren är ett överlägg för inloggade administratörer på den offentliga gallerivyn, inte en besökarfunktion. Administratören kan välja fotografier och fysiska undergallerier, radera ett blandat urval eller kopiera det till ett nytt fysiskt galleri under ett valt övergalleri. Urval med enbart fotografier kan också dras till ett synligt undergalleri, flyttas eller kopieras genom den sökbara destinationsväljaren, delas genom enhetens inbyggda delningspanel där den stöds eller hämtas. Inbyggd delning faller tillbaka på ZIP för valda fotografier när webbläsaren inte kan dela de förberedda filerna. Smarta gallerier utesluts från fysiska underträdsåtgärder. Urvalet självt är bara webbläsartillstånd och ger ingen behörighet. Varje ändrings- och ZIP-begäran kontrollerar på nytt vanligt inloggat konto, CSRF-token, källgalleri, vald tillhörighet och destination där det är relevant. Vanliga besökare får inte dessa kontroller. Bildhanteraren är avsiktligt oberoende av funktionen Administration direkt på offentliga sidor: om den senare stängs av tas direkta kontroller på offentliga sidor för redigering, tillägg, radering och omordning bort, medan en oberoende aktiverad Bildhanterare fortfarande kan erbjuda sina flöden för urval, radering, flyttning, kopiering, skapande av fysiska gallerier och urvalsexport.
+
+Det kompakta övre verktygsfältet visar antalet markerade objekt. Öppna det
+för att markera alla, rensa urvalet, dela, radera och välja målgalleri för
+flyttning eller kopiering av fotografier. Öppna \ui{Nytt galleri från urval}
+först när ett galleri ska skapas; aktuellt galleri är förvalt som övergalleri.
+Den enkla \ui{?}-knappen visar hjälp för urval, dragning, kopiering och
+flyttning; klicka utanför eller tryck Escape för att stänga hjälpen.
+Väljarens instruktioner och länken till gallerikatalogen visas när väljaren
+har fokus. Förlopp, resultat och fel förblir synliga; vilomeddelandet döljs.
+
+Utan urval är hanteraren dold ovanför sidan. För pekaren till mitten av
+överkanten för att visa och öppna den. Markerade fotografier eller fysiska
+undergallerier håller den synlig. Tangentbordsfokus visar den också; på
+en pekskärm markerar du först ett kort. Öppen hjälp förblir tillgänglig
+tills den stängs.
+
 \section{Underhåll, uppdateringar och återställning}
 \label{sec:maintenance}
 \index{u00251@underhåll}
@@ -2875,6 +2923,40 @@ gäller endast det observerade ögonblicket.
 \index{c00046@cron!w00270@webbplatsunderhåll}
 
 Vanligt underhåll kan köras i begränsade delar i stället för en lång begäran. Underhållstjänsten länkar säkra webbegäranden när trafik finns och kan också anropas från webbhotellets cron med CLI-kommandot som visas i administrationen. Den kan kontrollera miniatyrbildstillstånd, uppdatera metadata, behandla rensningsuppgifter, sammanställa telemetri och arkivera lämpliga administrationsloggdagar enligt deras konfigurerade policyer. Den dolda webb-cron-token kan roteras; rotation ogiltigförklarar tidigare publicerade webb-cron-URL:er. Underhåll är icke-destruktivt som standard och ersätter inte uttrycklig bekräftelse för databasoptimering eller andra åtgärder med betydande följder.
+\subsection{Cronöversikt och besöksutlöst körning}
+Under \ui{Underhåll > Cronöversikt} visas en kompakt sorterbar tabell med
+uppdateringskontroll, loggarkivering, webbplats- och cacheunderhåll,
+rensning av uppdateringsrester, telemetrilagring och engångsräkning av bilagor.
+Varje ägare lämnar sitt verkliga intervall, nästa möjliga körning och bevis
+för senaste försök. Okända uppgifter förblir okända; godkännande är inte
+slutförande. Vanliga PHP-sidbesök, även sökrobotar, ger den gemensamma
+schemaläggaren möjlighet att lämna högst ett begränsat bakgrundsjobb.
+Lås, aktivering, UTC-fönster och Underhållscentrets anspråk gäller fortfarande.
+Schemalagd galleripublicering sker fortfarande före den utlösande sidans rendering.
+
+Kolumnrubriker ändrar sorteringen. Den synliga sidan uppdaterar befintliga
+celler ungefär varje sekund utan att köra jobb. Dolda sidor pausar och fel
+förlänger intervallet. Play skickar en skyddad åtgärd direkt i tabellen och
+går endast förbi tidsvillkoret. Vanligt POST fungerar utan JavaScript.
+Upptaget, fortsatt eller uppskjutet betyder inte slutfört. Nästa möjliga körning
+är en tidsgräns, ingen exakt klockgaranti: Utan besök väntar arbetet.
+Play visas direkt före jobbnamnet. Pausikonen vid rubriken fryser bara denna
+livevisning; återupptagning läser tillståndet direkt. Bakgrundsjobb fortsätter.
+Framtida tider behåller den absoluta tiden och visar återstående tid inom parentes.
+Jobbnamnen länkar till befintliga inställningar eller kontroller. En saknad
+nästa tid förklaras som avstängd, klar eller ingen väntande rensning;
+okänt används bara när underlag inte är tillgängligt.
+
+\ui{Valfri hosting-cron} skapar eller förnyar en kopierbar skyddad URL och
+kan återkalla den. Installationsundermappar och frågerouting utan
+URL-omskrivning stöds. Exemplet med \codeword{curl -fsS} kan valfritt anropas
+var en till fem minuter. Samma schemaläggare används och besöksutlösta körningar
+förblir aktiva. Behandla URL:en som en hemlighet. Hosting-cron, webbläsartimer
+för jobb, ständig process eller extern kö krävs inte.
+Utöver 256-bitars token och gemensamma lås accepteras högst ett hostinganrop
+per minut. Upprepningar kringgår inga jobbvillkor. Skydd mot nätverks- och
+ICMP-överbelastning måste skötas av webbhotellet.
+
 \subsection{Administrationsloggens historik och arkiv}
 \index{a00004@administrationsloggar}
 \index{l00153@loggarkiv}
@@ -3041,6 +3123,20 @@ Den genererade modulplanen anger delade beroenden och en kanonisk filordning som
 Vanliga begäranden kommer in genom \filepath{public/index.php}; \filepath{index.php} i kodförrådets rot är en stödd kompatibilitetsingång för andra webbhotellsupplägg. Den offentliga ingången läser in \filepath{app/early\_runtime.php} före \filepath{app/bootstrap.php}, och sedan når båda uppläggen samma vanliga begärandepipeline.
 
 Den lilla begärandelokala kärnan under \filepath{app/runtime/} styr den befintliga livscykeln via Request, Router, RouteRegistry och ModuleLoader innan den anropar den procedurala kontrollern. Den kanoniska rutt- och säkerhetstabellen finns kvar i \filepath{app/bootstrap/dispatch.php}. En granskad genererad plan laddar logiska moduler för vald rutt; produktionen skannar inte källfiler, kompilerar inte beroenden och har ingen reservväg som laddar hela programmet. Befintliga PHP~8.1- och webbhotellskrav räcker fortfarande, utan Composer eller Node-bygge. Äldre CLI-/testverktyg kan använda \filepath{app/bootstrap\_full.php} för hela det procedurala API:et.
+
+Laddaren validerar hela modulplanen för varje begäran. Den kontrollerar
+kanonisk lager-/sökvägsordning i en genomgång, varje vald fysisk sökväg en gång
+per laddningsförberedelse och räknar färdiga filer utan upprepade genomgångar
+av modullistor. Senare laddningar kontrollerar sina sökvägar på nytt.
+Valideringsresultat delas inte mellan begäranden; uppdateringar och samtidiga
+begäranden behöver därför ingen extra cacheinvalidering. Valfri OPcache är
+fortfarande en serverinställning: kontrollera dess status i webbens PHP och
+behåll tidsstämpelkontroll eller återställning vid distribution. Befintlig
+Test Run-spårning skiljer planladdning, full validering, beroendeplanering och
+includes. Utvecklarmätningar använder isolerade offentliga/Admin-begäranden
+med kalla och varma opcode-prov; de fastställer inte produktionslatens.
+Kompilatorn granskar den privata spårningscallbacken uttryckligen; endast lokala
+laddaroperationer skickar den, utan ytterligare modulberoende.
 
 Leverans av miniatyrbilder delar den befintliga fullständiga modulen för
 offentliga medier. Kompileringen godtar beroendet endast när hela dess

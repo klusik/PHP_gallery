@@ -34,7 +34,7 @@ import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bu
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20261014-floating-scroll-v1';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1';
-import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
+import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20261023-picture-manager-context-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261021-upload-media-v1';
@@ -1180,7 +1180,7 @@ async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupAdminPanelThumbnailBoundControls(body);
     setupTagSuggestions(body);
     if (workspace instanceof HTMLElement) {
-        const {setupAdminDatePickers} = await import('./admin-date-picker.js?v=20261003-scoped-i18n-v1');
+        const {setupAdminDatePickers} = await import('./admin-date-picker.js?v=20261023-publication-local-time-v2');
         if (!contentIsCurrent()) return;
         setupAdminDatePickers(body);
     }

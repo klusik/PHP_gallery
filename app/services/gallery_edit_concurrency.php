@@ -101,6 +101,7 @@ function gallery_edit_comparison(array $gallery): array
         'parent_id',
         'sort_order',
         'visibility',
+        'scheduled_publish_at',
         'access_mode',
         'access_listing',
         'nsfw_enabled',

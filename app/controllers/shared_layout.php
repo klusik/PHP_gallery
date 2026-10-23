@@ -98,6 +98,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-layout.css',
         'assets/styles/admin-dashboard.css',
         'assets/styles/admin-maintenance-center.css',
+        'assets/styles/admin-cron.css',
         'assets/styles/admin-telemetry.css',
         'assets/styles/admin-logs.css',
         'assets/styles/admin-subtabs.css',

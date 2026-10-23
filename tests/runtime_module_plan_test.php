@@ -265,6 +265,39 @@ foreach ($routeModules as $route => $_module) {
     );
 }
 
+$loaderObserverSignature = 'Gallery\\Core\\ModuleLoader::observe'
+    . '|variable_callable|$operation()';
+$reviewedDynamicSites = \Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_reviewed_sites();
+assert_contract(
+    ($reviewedDynamicSites[$loaderObserverSignature] ?? null)
+        === 'module-loader:private-lexical-operation-no-module-edge',
+    'The private loader observer must retain its explicit lexical callback review.',
+);
+$loaderObserverSite = [
+    'caller' => 'Gallery\\Core\\ModuleLoader::observe',
+    'kind' => 'variable_callable',
+    'expression' => '$operation()',
+    // The first source line is a structural fixture; policy identity ignores it.
+    'line' => 1,
+];
+$loaderObserverDrift = \Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_policy_drift([
+    $loaderObserverSite,
+]);
+assert_contract(
+    $loaderObserverDrift['unexpected'] === [],
+    'The exact reviewed loader observer expression must be accepted.',
+);
+$loaderObserverSite['expression'] = '$unreviewed()';
+$loaderObserverDrift = \Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_policy_drift([
+    $loaderObserverSite,
+]);
+assert_contract(
+    $loaderObserverDrift['unexpected'] === [
+        'Gallery\\Core\\ModuleLoader::observe|variable_callable|$unreviewed()',
+    ],
+    'Another callback in the same loader method must still require review.',
+);
+
 $unknownDynamic = \Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_policy_drift([
     [
         'caller' => 'Gallery\\Services\\new_unreviewed_callback',

@@ -43,16 +43,82 @@
 .admin-access-share {
     min-width: 0;
     padding: 0.65rem;
-    border: 1px solid var(--admin-border, #d4dde7);
-    border-radius: 0.65rem;
-    background: #fff;
+    border: 0;
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--admin-border, #d4dde7) 12%, transparent);
 }
 
 .admin-access-main {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: end;
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+    align-items: start;
+    gap: 0.75rem;
+}
+
+#admin-edit-access .admin-access-field {
+    position: relative;
+    min-width: 0;
+}
+
+#admin-edit-access .admin-access-field-status,
+#admin-edit-access .admin-access-publication > small {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+#admin-edit-access .admin-access-publication > label {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#admin-edit-access .admin-access-field-title,
+#admin-edit-access .admin-access-publication input:not([type="hidden"]) {
+    grid-column: 1 / -1;
+}
+
+#admin-edit-access .admin-access-field-title {
+    padding-right: 1.4rem;
+}
+
+#admin-edit-access [data-publication-timezone],
+#admin-edit-access .admin-access-time-preview {
+    grid-row: 3;
+    font-size: 0.72rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--muted, #64748b);
+}
+
+#admin-edit-access [data-publication-timezone] {
+    grid-column: 2;
+    white-space: nowrap;
+}
+
+#admin-edit-access .admin-access-time-preview {
+    grid-column: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+#admin-edit-access .admin-access-time-preview[hidden] { display: none; }
+
+#admin-edit-access .admin-access-publication > .admin-inline-help {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+#admin-edit-access .admin-inline-help > summary {
+    width: 1.25rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    min-height: 1.25rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 0.85rem;
 }
 
 .admin-page #admin-edit-access .admin-access-main label,
@@ -97,11 +163,41 @@
     font-size: 0.82rem;
 }
 
-.admin-access-inline-options input[type="checkbox"] {
-    width: 1rem;
-    height: 1rem;
-    min-height: 1rem;
+#admin-edit-access .admin-access-inline-options input[type="checkbox"] {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 14px;
+    min-height: 14px;
     margin: 0;
+    padding: 0;
+    border: 1px solid var(--admin-border, #cad5e0);
+    border-radius: 9px;
+    background: transparent;
+    cursor: pointer;
+}
+
+#admin-edit-access .admin-access-inline-options input[type="checkbox"]::before {
+    content: "";
+    display: block;
+    width: 8px;
+    height: 8px;
+    margin: 2px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+#admin-edit-access .admin-access-inline-options input[type="checkbox"]:checked {
+    background: color-mix(in srgb, var(--admin-accent, #3159ac) 18%, transparent);
+}
+
+#admin-edit-access .admin-access-inline-options input[type="checkbox"]:checked::before {
+    transform: translateX(12px);
+}
+
+#admin-edit-access .admin-access-inline-options input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--admin-accent, #3159ac);
+    outline-offset: 3px;
 }
 
 .admin-access-share {
@@ -153,9 +249,19 @@
     font-size: 0.8rem;
 }
 
-@media (max-width: 760px) {
-    .admin-access-main {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (forced-colors: active) {
+    #admin-edit-access .admin-access-inline-options input[type="checkbox"] {
+        appearance: auto;
+    }
+    #admin-edit-access .admin-access-inline-options input[type="checkbox"]::before {
+        display: none;
+    }
+}
+
+@media (max-width: 640px) {
+    #admin-edit-access :is(input:not([type="hidden"]):not([type="checkbox"]), select, button),
+    #admin-edit-access .admin-access-inline-options .checkbox-label {
+        min-height: 44px;
     }
 }
 

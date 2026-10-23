@@ -42,19 +42,20 @@ namespace Gallery\Services {
     }
 
     /**
-     * Observe whether startup dispatches background updater work.
-     * @param int $ttlSeconds Requested metadata interval in seconds.
-     * @param string $requestMethod Fixture HTTP method.
-     * @param (callable(string):void)|null $loadDependencies Optional loader accepting a module name; deliberately unused by this isolated probe.
-     * @return void Records a dispatch without running any worker.
+     * Observe the single scheduler registration without admitting any work.
+     * @param string $page Canonical route selected by the startup bridge.
+     * @param string $method Normalized fixture method.
+     * @param bool $passive Whether a passive request excludes scheduling.
+     * @param callable(string):mixed|null $loadDependencies Optional loader unused by this isolated spy.
+     * @return void Counts central registrations instead of legacy updater calls.
      */
-    function application_autoupdate_maybe_run(
-        int $ttlSeconds,
-        string $requestMethod,
+    function request_scheduler_register_visit(
+        string $page, string $method, bool $passive,
         ?callable $loadDependencies = null,
     ): void {
         $GLOBALS['cache_transport_background_calls']++;
     }
+
 }
 
 namespace {

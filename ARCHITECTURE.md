@@ -1,5 +1,75 @@
 # PHP Gallery Architecture
 
+## Unified visitor scheduler
+
+`request_scheduler_register_visit()` is the single maintenance lifecycle entry.
+Its foreground phase preserves indexed scheduled publication before rendering;
+the small `request_scheduler_trigger.php` owner keeps the planner and passive
+task observations out of ordinary rendering and denied/media responses.
+After a successful HTML response it admits at most one existing background
+owner through `request_scheduler_tick()`. Visitors and optional token-protected
+hosting calls use this same due-only tick. A nonblocking flock, expiring
+single-use handoff and fair dispatch order preserve independent owner policies.
+The Admin Cron Overview uses passive one-second snapshots, separate CSRF POST
+actions and a dense sortable table. See the authoritative
+[task inventory and operations](docs/REQUEST_SCHEDULER.md).
+
+
+## Visitor-triggered gallery publication
+
+The gallery row owns its nullable UTC `scheduled_publish_at` deadline.
+The existing Admin date-picker module enhances only the marked publication
+input into a browser-local native picker with an explicit IANA timezone label.
+The original named input remains the UTC hidden transport; a visible UTC
+preview exposes the exact chosen instant. Native current-time suggestions now
+refer to the displayed local zone. New nonexistent spring wall times are
+refused. Autumn edits use the browser's earlier occurrence and expose its UTC
+equivalent; an unchanged stored later occurrence is preserved exactly.
+Without JavaScript or a usable browser timezone, the existing UTC-labelled
+native input remains supported. No user timezone is persisted.
+The existing `models/galleries.php` owner contains the SQL primitives;
+`services/gallery_access.php` owns lightweight schema/time policy. Reusing
+these already-loaded gallery owners avoids extra files on the no-due route.
+The maintenance bootstrap admits ordinary PHP GET/HEAD
+requests before dispatch, including anonymous visitors and crawlers, while
+excluding read-only media and explicit maintenance transports. The central scheduler handles heavy maintenance separately in bounded owner
+slices after the response; foreground publication does not run those owners.
+
+The existing `site-request-trigger` root owns the indexed due check. An empty
+result loads no publication writer/sidecar dependencies. A nonempty result
+loads the existing `site-maintenance-work` owner and calls
+`gallery_editor_publish_due`; loading this owner does not run unrelated tasks.
+The common zero-wait gallery writer lease serializes editors, Trash and this
+runner. Under that lease it re-reads each live identity, checks its exact
+deadline/revision and the existing PDF guard, then atomically changes canonical
+visibility, restores listed discovery and consumes the timestamp, matching
+explicit manual Publish. It preserves NSFW, passwords, tokens and other
+settings. Missing folders and deleted rows are skipped.
+Fresh numeric and child-list caches, plus cached clean-path identity resolution,
+let the triggering render observe the transition. Sidecar writes use the
+existing canonical writer and bounded, non-secret failure diagnostics.
+
+Runtime review before hosted preparation: the installed plan has 98 modules,
+4,072 direct file entries, 446 unique files and 3,626 duplicate entries.
+The unchanged duplicate ceiling is 3,653 and the logical-module allowance is
+already consumed. This feature reuses existing roots and adds two unique PHP
+owners. Expected deltas are zero logical modules and additional writer closure
+files only in the deferred work owner; exact duplication and route budgets
+remain for hosted preparation/FULL to establish. No baseline is raised.
+
+Local Server error recovery regenerated the plan after registering the injected
+publication loader in `runtime_dynamic_dependencies.php`. The prepared plan
+contains 98 modules, 4,094 direct entries, 448 unique files and 3,646 duplicate
+entries, below the unchanged 3,653 ceiling. Shipping an authored hook without
+this generated closure causes an undefined-function HTTP 500 before dispatch;
+source BASIC alone does not exercise that request path.
+
+The first hosted integration measured the two separate publication files above
+the existing Home/Gallery/Admin relative include ratchets. Their functions now
+live in the established gallery model/access owners with unchanged SQL and
+deferred work. Generated preparation must verify the final closure; no file,
+duplicate, module or route allowance is increased.
+
 Updater-owned prune-trash now has an independent scheduled consumer before the
 site-maintenance thumbnail window/enable gate. Maintenance Center dispatches the
 same owner under its approved cache task. The updater start lock, validated
@@ -21,7 +91,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.141.3';
+const CMS_VERSION = '0.142';
 ```
 
 Update-related code uses:
@@ -891,6 +961,34 @@ controller, which includes and initializes it before bootstrap. Selective domain
 plans exclude this optional transport owner; direct bootstrap consumers retain
 the existing guarded hook behavior. ModuleLoader records the actual
 `runtime_module.<id>` include phases when early instrumentation is active.
+
+The same opt-in trace separates `runtime_loader.metadata`, `.validate`, `.plan`,
+`.execute` and `.include`. Execute contains includes and completion accounting;
+subtracting include time estimates accounting/diagnostic overhead, not OS I/O.
+Ordinary requests do not create a trace or write measurement files.
+The dynamic-site registry reviews the private observer's exact `$operation()`
+expression. Only lexical constructor/load closures invoke existing loader
+methods; no request input selects a callable and no module root is added.
+
+Every composed loader still validates the complete immutable plan, including
+unselected nodes, before feature loading. Canonical order is checked by adjacent
+layer/path comparisons rather than sorting a copy. One `load()` preflight checks
+each selected physical path once even when several selected modules reference
+it; its successful-check set is discarded before the next call. Missing files
+and escaped real paths still fail before any file in that closure executes.
+Completion counts and a dependency-first prefix replace repeated file-list
+rescans after each include. Empty repeat loads return before scanning the global
+file order. Successful/partial completion history and include-local scope stay
+unchanged, and `require_once` remains the execution guard.
+
+No validation result is shared across requests or persisted. Updates and
+concurrent requests therefore need no cache key, shared writer, lock or expiry;
+each request reads its shipped plan and performs full validation. Existing
+updater activation gates still protect partial deployments. OPcache remains an
+optional hosting optimization, independently owned by the server configuration;
+its timestamp/reset policy must keep deployed PHP, including the plan, current.
+The diagnostic comparison and its limits are described in
+[TESTING.md](TESTING.md#module-loader-phase-measurement).
 
 The generated schema-2 plan represents reviewed shared ownership with explicit
 module `depends` relationships. A single canonical `file_order` preserves the

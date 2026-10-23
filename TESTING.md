@@ -1,5 +1,124 @@
 # Testing Guide
 
+## Cron Overview and visitor scheduler coverage
+
+`request_scheduler_test.php` owns visitor/media/status exclusions, fair bounded
+selection, unknown evidence, missing storage, exclusive admission, ticket replay
+and host-token read/rotate/revoke behavior. `admin_cron_browser_test.mjs` uses
+production markup/styles/module in disposable Chromium for numeric sort,
+compact desktop rows, 44 px mobile targets, contained table scrolling,
+late Admin theme overrides, in-place polling, focus retention, stale bodies, a single
+in-flight read, hidden/unmounted pause, backoff and explicit manual submission.
+It also covers inline Play, icon geometry and operator pause/resume while a
+stale JSON body is pending, including a hidden/visible round trip. The PHP
+fixture verifies independent hosting throttles and future-duration formatting.
+Pause, hide and teardown cancel both the passive request and its owned read
+deadline even when an already-received JSON body has not resolved. The single
+in-flight promise remains authoritative until it settles.
+An immediate reconciliation consumes any older sequential poll timer. Manual
+completion cannot schedule another timer while a newer read is in flight;
+the outage scenario verifies both sides of this completion-order boundary.
+Absent-deadline cases distinguish disabled work, completed one-shot work,
+empty updater cleanup and genuinely unknown evidence. Browser reads retain
+existing task-settings anchors when patching names in place.
+Existing cache-transport, media-session, updater-latency and HTTP-boundary
+fixtures require the central registration seam instead of direct updater work.
+Their source assertions retain fully qualified callable identities and the
+strict media/transport guards. Archive coverage requires one scheduler hook
+and delegation to the existing bounded archive owner; its legacy Admin-only
+adapter remains covered separately. Private telemetry transport retains the
+ordinary scheduled owner, while explicit force uses its timing override.
+The integrated publication regression still owns same-response publication.
+The real route include matrix retains its existing ceilings: only the small
+visitor trigger loads before rendering, with planner/observation dependencies
+deferred until successful shutdown or explicit authenticated status/actions.
+
+These fixtures run under the central hosted audit. BASIC is source-only;
+authorized FULL must execute runtime/database/browser coverage on the exact
+prepared SHA. Real shared-hosting with no external cron, optional hosting calls,
+subdirectory/non-rewrite routes and a no-JavaScript Play POST remain explicit
+live-installation smoke coverage. Inspect actual row heights, keyboard focus,
+mobile touch targets and dark/light Theme colors.
+
+The authorized `localhost/Galerie` browser smoke on 2026-10-23 observed
+33 px desktop rows, 28 px desktop Play, 44 by 44 px mobile Play at a 390 px
+viewport, contained table scrolling, both directions of timestamp sorting
+with unknown times last, live owner-state changes, keyboard help/Escape,
+and one manual updater-cache admission completing without page navigation.
+The follow-up smoke verified the preview pause freezes values and resumes
+immediately, inline Play, absolute/relative deadlines, factual absent-deadline
+labels and existing owner links. A generated local hosting URL had the correct
+installation path and 64-hex token; its first call returned a due-only result
+and its immediate repeat returned `throttled`. These calls do not qualify
+no-JavaScript submission, real shared hosting or the complete hosted suites.
+
+
+## Scheduled gallery publication
+
+The owner-authorized localhost regression on Testovací A321 starts from
+`unpublished + unlisted`, saves a genuinely future UTC deadline through the
+existing editor owner and confirms the anonymous parent page omits the card.
+The first real HTTP visit at the deadline must observe `public + listed`, a
+consumed deadline and the visible card in that same response. Compare password,
+token, NSFW and parent fields, then restore `unpublished + unlisted` with no
+deadline so the owner can repeat the test independently. This specific local
+regression passed; it is separate from disposable hosted FULL qualification.
+
+Access layout keeps visibility status within its field and the scheduling
+timezone/UTC preview below the date. Production styles were checked at desktop
+width (all four inputs share the same top edge) and in a real 390px iframe
+viewport (single-column controls, no horizontal overflow). Help remains a plain
+glyph and native checkbox semantics remain under the compact switch styling.
+
+`gallery_publication_local_time_test.mjs` executes the production picker
+conversion functions under Prague summer/winter time, UTC, New York and a
+fractional-hour offset. It covers the reported local 12:05 -> UTC 10:05 case,
+invalid dates, cancellation, nonexistent spring hours and repeated autumn hours.
+Browser acceptance also checks injected panel controls, UTC transport preview
+and preservation of an unchanged stored second-occurrence autumn instant.
+
+`gallery_publication_test.php` exercises the real SQL model against disposable
+SQLite storage and controlled schema observations. It covers inclusive UTC
+boundaries, invalid/past/new versus unchanged deadlines, DST-independent UTC
+input, missing/unknown schema and index refusal, bounded GET/HEAD admission,
+the empty fast path, stale rescheduling/cancellation and idempotent consumption.
+
+The existing serial `gallery_edit_concurrency_mysql_test.php` owns real
+editor/HTTP coverage in the disposable workflow database. Its publication
+scenarios cover anonymous crawler GET and visitor HEAD, same-response public
+listing, private and unpublished behavior before the deadline, held writer-lock
+deferral, sidecar publication, revision changes, password/NSFW/token/listing
+preservation, restored public listing, unchanged unrelated unlisted saves,
+schedule validation before
+filesystem effects, rescheduling, cancellation, manual publication, restricted
+PDF children and deleted rows. It is discovered by the existing central FULL
+registry; ordinary feature BASIC does not execute these runtime scenarios.
+
+The HTTP fixture uses the supported `gallery_path` request vocabulary and
+reads the actual parent gallery where the new child card belongs. Direct-link
+status, persisted unpublished state and the pending timestamp are checked
+separately. The visibility-eye contract preserves explicit listing changes and
+unchanged unlisted saves; the model revision inventory includes the atomic
+publication consumer. Hosting qualification also retains all existing relative
+route-include budgets while reusing the gallery model/access owners.
+Password and NSFW gates deliberately return HTTP 200: the fixture asserts the
+actual age-confirmation form, submits its existing CSRF-protected action, then
+asserts the password prompt. Both responses must omit protected descriptions;
+private pre-deadline access separately remains HTTP 404.
+
+Manual qualification still includes the injected Admin side-panel form on
+desktop/mobile, keyboard/touch datetime input, rescheduling/cancellation with
+in-place completion and a real anonymous visit after the deadline. No local
+installation, browser or runtime qualification follows from BASIC alone.
+
+The localhost Server error diagnosis reproduced an undefined
+`gallery_publication_request()` at the maintenance hook with the stale plan.
+After registering its injected loader and regenerating the canonical plan,
+actual anonymous Home and Admin login requests returned HTTP 200 instead of
+500. The focused portable publication regression also passed. This confirms
+that specific startup repair; it does not qualify authenticated scheduling,
+schema migration, the complete HTTP fixture or deployment-wide behavior.
+
 ## Public search and root creation toolbar
 
 `public_home_creation_browser_test.mjs` loads production public styles and the
@@ -811,7 +930,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.141.3. Release verification uses the
+This guide applies to PHP Gallery Version 0.142. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1439,6 +1558,56 @@ FULL/release PHP registry. It is not added to the curated quick subset, whose
 existing cardinality limit remains unchanged. The isolated photo manifest
 fixture explicitly enables PDF/music capabilities and primes an empty settings
 snapshot so missing archive preferences exercise the default photo-only path.
+
+### Module loader phase measurement
+
+For an explicitly authorized local performance investigation, set
+`GALLERY_WORKFLOW_ENABLE=disposable-only`, `GALLERY_WORKFLOW_MYSQL_BIN` to a
+MySQL 8 `mysqld`, `PHP_GALLERY_LOADER_LABEL=before` or `after`, and
+`PHP_GALLERY_LOADER_OPCACHE=off` or `on`, then run
+`php scripts/gallery_workflow_mysql.php --loader-benchmark`. This is a targeted
+diagnostic, not another test orchestrator or a substitute for hosted CI.
+
+The tool reuses the owned migrated database, real Admin login, registered route
+response contracts and all nine existing CLI lifecycle probes. It then records
+five representative loopback HTTP routes: robots, Home, Gallery, Admin and Admin
+telemetry. Each route has one first observation and seven warm observations.
+With OPcache enabled the first observation follows a successful opcode reset;
+without it the first observation has no claim of a cold filesystem. All raw
+numeric samples and CLI reference results are retained under
+`cache/test-audit/loader-{before|after}-{off|on}.json`.
+
+The server alone receives optional interpreter options. OPcache uses a unique
+Windows cache ID, timestamp validation enabled, zero-second revalidation, and
+zero-second copied-file protection so newly copied fixture sources can enter
+the cache immediately. These integer/boolean settings apply only to the owned
+benchmark server: zero revalidation checks deployed timestamps each request,
+and zero file-update protection avoids an arbitrary sleep before measurement.
+The active installation's PHP configuration is never changed.
+
+`PHP_GALLERY_LOADER_TRACE=1` opts the existing CLI probe and disposable HTTP
+router into the in-memory Admin Test Run phases. Metadata measures plan require;
+validate measures full constructor validation; plan measures each dependency
+preflight including physical path checks; execute includes canonical selection,
+includes and completion accounting; include measures individual require calls.
+The include scope stays in the loader method. Timings overlap: do not add execute
+and include together. Phase call counts expose repeated load calls; warm opcode
+hits and misses verify the cache state rather than assuming it from an INI flag.
+
+Wall times include tracing overhead and application/database/shutdown work.
+Disk and database buffers are not flushed; PHP built-in-server results do not
+establish Apache/FPM, remote-host or production latency. Included-file counts
+include nested application includes; peak bytes describe the PHP request
+allocator, excluding process RSS and shared OPcache memory. Compare the same
+plan/base and unchanged response semantics, counts and memory ceilings.
+
+`runtime_kernel_test.php` retains legacy/composed invalid path, missing file,
+whole-plan cycle, canonical-order and partial-failure checks. Shared-path,
+empty/repeated-load, include-scope and later-load filesystem replacement cases
+protect the optimized accounting and preflight lifetime. These scenarios belong
+to the central PHP registry; BASIC syntax/docs alone does not execute them.
+Active-trace assertions also require empty loads to omit canonical execution
+and failed preflights to retain their exception without including feature code.
 
 ### PHP worker scheduling
 
@@ -6823,3 +6992,28 @@ The real installer fixture executes migration/replay/opt-out in its disposable
 database. BASIC does not execute these regressions; exact prepared FULL is the
 runtime qualification. Live payload deletion and provider incident acceptance
 remain outside source verification.
+
+## Picture manager HUD browser review
+
+On an authenticated physical gallery, verify an empty manager is offscreen,
+hovering the top edge reveals and opens it, leaving hides it, keyboard focus
+reveals it, and photo/physical-gallery selection keeps it visible. Clearing the
+last selection restores hiding when the pointer and keyboard focus leave.
+Verify the collapsed count, expand/collapse,
+Select all/Clear, individual and range selection, and photo-only versus mixed
+selection action availability. Search a destination by keyboard and verify the
+committed picker value enables Move/Copy only for photos. Expand New gallery
+from selection, verify the current parent and title-dependent Create state,
+and keep actual filesystem mutations on disposable data only.
+
+Open `?` using click and keyboard; dismiss by outside click and Escape. Check
+that picker guidance/directory access appears on focus and that request errors
+and completion feedback remain visible. Review desktop and narrow layouts,
+long localized labels, Theme colors, visible focus and mobile 44px targets.
+This presentation review complements the existing mixed-selection/copy
+contracts; hosted BASIC alone does not qualify filesystem operations.
+
+The lightbox quick-tag race fixture waits for native `fullscreenchange` and
+committed layout before sending the fullscreen tagging key. Its strict popup
+viewport bounds remain unchanged; fullscreen ownership alone does not establish
+settled HUD geometry on the hosted Chromium runner.

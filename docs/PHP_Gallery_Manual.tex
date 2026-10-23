@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.141.3}
-\newcommand{\manualdate}{22 October 2026}
+\newcommand{\version}{0.142}
+\newcommand{\manualdate}{23 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -796,6 +796,37 @@ Only checked rows are~saved. Unchecked suggestions are~ignored, and~the~administ
 Admin date fields keep the~native browser date input as~the~submitted value but~add a~compact calendar opener plus \ui{Today} and~\ui{Delete} helpers. \ui{Today} writes the~browser's current local calendar date; \ui{Delete} clears the~field. The~enhancement is~re-applied to~forms loaded into~the~Admin side panel, while the~underlying native date field remains usable without the~extra JavaScript controls.
 
 \subsection{Gallery editor control reference}
+\paragraph{Schedule publication}
+The~enhanced picker uses your browser's named timezone, so~its current-time
+suggestions refer to~your local clock. A~UTC preview below it~shows the~exact
+stored instant. No~timezone preference is~saved. Without JavaScript,
+the~field remains explicitly UTC and~requires UTC input.
+Nonexistent spring clock-change times are~rejected. For~a~new edit
+in~a~repeated autumn hour, check the~UTC preview: the~browser chooses
+the~earlier occurrence. An~unchanged saved later occurrence is~preserved.
+
+In~\ui{Access}, enter a~future date and~time in~the~native
+\ui{Schedule publication} field, following its displayed timezone, and~save.
+The~pending indicator shows the~exact UTC deadline. Edit it~to~reschedule;
+leave it~empty to~cancel. Choosing \ui{Published} also clears the~schedule.
+For~the~unenhanced UTC field, convert your intended local time to~UTC
+before entering it.
+
+An~unpublished gallery retains its normal direct URL before the~deadline;
+a~private gallery retains its private access rules. At~or~after the~deadline,
+the~next ordinary PHP page GET/HEAD, including an~anonymous crawler, changes
+canonical visibility to~public. Passwords, NSFW, share tokens, expiry,
+and~parent restrictions stay unchanged. Scheduled publication also restores
+public listing, just like choosing \ui{Published} manually.
+Incomplete PDF children remain protected and~children are~not automatically
+published. No~traffic means no~execution; static/CDN hits cannot trigger it.
+A~large backlog catches up~in~batches of~16 across visits. No~cron, daemon
+or~browser timer is~needed. Run normal database migrations before using this
+control. Schedules stay in~the~database; sidecars retain resulting visibility
+without transferring pending deadlines to~another installation.
+The~lightweight check reuses the~existing gallery model and~access service;
+publication writers load only when an~indexed due row exists.
+
 \index{gallery editor!controls}
 \index{gallery!visibility}
 \index{gallery!display overrides}
@@ -2599,6 +2630,20 @@ The~public \codeword{/robots.txt} response describes crawler boundaries, while \
 
 The~Picture Manager is~a~logged-in administrator overlay on~the~public gallery view, not~a~visitor feature. An~administrator can~select photographs and~physical subgalleries, delete a~mixed selection, or~copy it~into a~new physical gallery below a~chosen parent. Photo-only selections can~also be~dragged onto a~visible child gallery, moved or~copied through the~searchable destination picker, shared through the~native device share sheet where supported, or~downloaded. Native sharing falls back to~the~selected-photo ZIP when the~browser cannot share the~prepared files. Smart Galleries are~excluded from~physical subtree operations. The~selection itself is~only browser state and~does not~grant permission. Every mutation/ZIP request rechecks the~normal logged-in account, CSRF token, source gallery, selected ownership, and~destination where applicable. Ordinary visitors do~not~receive these controls. Picture Manager is~intentionally independent from~the~Inline Administration capability: disabling Inline Administration removes direct public-page edit, add, delete, and~reorder affordances, while an~independently enabled Picture Manager can~still provide its~selection, deletion, move, copy, physical-gallery creation, and~selection-export workflows.
 
+The~compact top toolbar shows the~selection count when visible. Open it~to~select
+all items, clear the~selection, share or~delete, and~choose a~destination
+for~moving or~copying photos. Expand \ui{New gallery from selection} only
+when creating a~gallery; its~parent defaults to~the~current gallery.
+The~plain \ui{?} control opens selection, drag, copy and~move guidance;
+click outside or~press Escape to~dismiss it. Picker instructions and~the~gallery
+directory link appear while the~picker has~focus. Progress, success and~errors
+remain visible; the~idle ready message is~omitted.
+
+With no~selection, the~manager is~hidden above the~page. Move the~pointer
+to~the~top centre edge to~reveal and~open it. Selected photos or~physical
+subgalleries keep it~visible. Keyboard focus also reveals it; on~touch devices,
+select a~card first. Open help remains available until dismissed.
+
 \section{Maintenance, updates, and~recovery}
 \label{sec:maintenance}
 \index{maintenance}
@@ -2879,6 +2924,41 @@ work; an~unlocked worker is~only an~instantaneous observation.
 
 Routine maintenance can~run in~bounded slices instead of~one long request. The~maintenance service chains safe web requests when traffic is~available and~can~also be~called from~hosting cron with the~CLI command shown in~Admin. It~can~check thumbnail state, refresh metadata, process cleanup tasks, roll up~telemetry, and~archive eligible Admin-log days according to~their configured policies. The~hidden web-cron token is~rotatable; rotating it~invalidates previously published web-cron URLs. Maintenance is~non-destructive by~default and~does~not~replace explicit confirmation for~database optimization or~other consequential actions.
 
+\subsection{Cron Overview and~visitor scheduling}
+Open \ui{Maintenance > Cron Overview} for~a~dense, sortable table of~automatic
+updates, log archival, site/cache maintenance, updater-trash cleanup,
+telemetry retention and~one-shot attachment-count reconciliation. Each owner
+supplies its effective cadence, next eligible threshold and~actual last-attempt
+evidence. Unknown evidence remains unknown; admission is~not~completion.
+Ordinary visitor and~crawler PHP page requests provide scheduling opportunities.
+The~shared scheduler admits at~most one bounded background owner per~tick,
+retaining owner locks, enablement, UTC windows and~the~Maintenance Center claim.
+Scheduled gallery publication still happens before the~triggering page renders.
+
+Sort the~column headings; the~visible page refreshes existing cells about once
+per~second without executing jobs. Observation pauses while hidden and~backs off
+on~errors. Play submits one protected task action in~place, overriding only
+its time gate; native POST remains available without JavaScript. A~task can~be
+busy, continued or~deferred rather than complete. Next eligible is~a~threshold,
+not~an~exact execution promise: without visitors, work waits for~the~next request.
+Play is~directly before the~task name. The~pause icon beside the~heading freezes
+only this live preview; resume reads immediately and~background tasks continue.
+Future thresholds retain their absolute time with~the~remaining duration
+in~parentheses.
+Task names link to~their existing settings or~operational controls. No next
+deadline is~labelled Disabled, Completed or~Nothing pending cleanup where
+appropriate; Unknown is~reserved for~unavailable evidence.
+
+The~collapsed \ui{Optional hosting cron} section creates or~regenerates a~copyable
+protected URL and~can~revoke it. The~URL respects installation subdirectories
+and~query routing without rewriting. Its example uses \codeword{curl -fsS} every
+one to~five minutes, optionally. It~calls the~same due-only scheduler and~never
+disables visitor scheduling. Treat the~URL as~a~secret. No hosting cron, browser
+job timer, resident process or~external queue is~required.
+The~256-bit token and~shared locks are~supplemented by~one accepted hosting call
+per~minute. Repeated calls cannot force work past its owner gates. Network/ICMP
+flood protection remains the~hosting provider's responsibility.
+
 \subsection{Admin log history and~archives}
 \index{admin logs}
 \index{log archive}
@@ -3046,6 +3126,20 @@ The~generated module plan declares shared dependencies and~one canonical file or
 Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. The~public entry loads \filepath{app/early\_runtime.php} before \filepath{app/bootstrap.php}, then both layouts reach the~same normal request pipeline.
 
 The~small request-local kernel under \filepath{app/runtime/} coordinates the~existing request lifecycle through Request, Router, RouteRegistry, and~ModuleLoader before invoking the~procedural controller. The~canonical route and~security table remains in~\filepath{app/bootstrap/dispatch.php}. A~reviewed generated plan loads logical modules for~the~selected route; production performs no~source scan or~dependency compilation and~has~no~load-all fallback. Existing PHP~8.1 and~shared-hosting requirements remain sufficient, without Composer or~a~Node build. Legacy CLI/test consumers may~use \filepath{app/bootstrap\_full.php} for~the~complete procedural API.
+
+The~loader validates the~complete module plan in~each request. It~checks
+canonical layer/path order in~one pass, checks each selected physical path
+once within a~load preflight, and~counts completed files without repeatedly
+scanning module lists. Later loads check their paths afresh. No~validation
+cache is~shared between requests, so~updates and~concurrent requests need
+no~additional cache invalidation. Optional OPcache remains a~server setting;
+verify its~state in~the~web PHP runtime and~keep timestamp validation
+or~deployment resets effective. The~existing Test Run trace separates plan
+loading, full validation, dependency planning and~includes. Developer
+measurements use disposable public/Admin requests and~distinguish opcode-cold
+and~warm samples; they do~not~establish production latency.
+The~compiler explicitly reviews the~private tracing callback; only local loader
+operations supply it, with no~additional module dependency.
 
 Thumbnail delivery reuses the~existing complete public-media module.
 Compilation accepts this dependency only while its~full file closure already

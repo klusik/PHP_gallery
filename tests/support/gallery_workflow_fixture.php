@@ -60,9 +60,10 @@ final class Fixture
     }
 
     /** Create an owned database, migrate and seed the clone, and start its loopback server.
+     * @param list<string> $phpOptions Trusted CLI-only PHP options for the owned server.
      * @return void The disposable fixture is ready for HTTP requests.
      */
-    public function start(): void
+    public function start(array $phpOptions = []): void
     {
         check(
             @mkdir($this->directory, 0700),
@@ -141,6 +142,7 @@ final class Fixture
         $this->httpProcess = proc_open(
             [
                 PHP_BINARY,
+                ...$phpOptions,
                 '-d',
                 'display_errors=0',
                 '-d',

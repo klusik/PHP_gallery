@@ -110,6 +110,7 @@ try {
                 '--audit',
                 '--release',
                 '--route-probes',
+                '--loader-benchmark',
             ],
             true,
         ),
@@ -236,9 +237,12 @@ try {
     $stage = match ($mode) {
         '--development' => 'new workflow development checks',
         '--route-probes' => 'route lifecycle probes with disposable database',
+        '--loader-benchmark' => 'loader phase benchmark with disposable database',
         default => 'central audit with disposable database',
     };
-    $childCommand = [PHP_BINARY, __DIR__ . '/gallery_workflow_run.php', $mode];
+    $childCommand = $mode === '--loader-benchmark'
+        ? [PHP_BINARY, __DIR__ . '/audit_loader_benchmark.php']
+        : [PHP_BINARY, __DIR__ . '/gallery_workflow_run.php', $mode];
     if ($mode === '--route-probes') {
         $childCommand[] = $routeProbeLabel;
         $environment['PHP_GALLERY_ROUTE_PROBE_EVIDENCE'] = $routeProbeLabel;

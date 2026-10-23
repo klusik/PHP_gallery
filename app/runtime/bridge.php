@@ -26,7 +26,29 @@ function cms_runtime_kernel(): Kernel
     if ($kernel instanceof Kernel) {
         return $kernel;
     }
-    $plans = require __DIR__ . '/modules.php';
+    $trace = function_exists(
+        'Gallery\\Diagnostics\\admin_test_run_early_phase_start',
+    );
+    if ($trace) {
+        \Gallery\Diagnostics\admin_test_run_early_phase_start(
+            'runtime_loader.metadata',
+        );
+    }
+    try {
+        $plans = require __DIR__ . '/modules.php';
+    } catch (\Throwable $exception) {
+        if ($trace) {
+            \Gallery\Diagnostics\admin_test_run_early_phase_end(
+                'runtime_loader.metadata', false, $exception,
+            );
+        }
+        throw $exception;
+    }
+    if ($trace) {
+        \Gallery\Diagnostics\admin_test_run_early_phase_end(
+            'runtime_loader.metadata',
+        );
+    }
     if (
         !is_array($plans)
         || ($plans['schema_version'] ?? null) !== 2

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.141.3}
-\newcommand{\manualdate}{22.~Oktober~2026}
+\newcommand{\version}{0.142}
+\newcommand{\manualdate}{23.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -827,6 +827,41 @@ Nur markierte Zeilen werden gespeichert. Unmarkierte Vorschläge werden ignorier
 Datumsfelder in der Administration verwenden weiterhin das native Datumsfeld des Browsers als übermittelten Wert, ergänzen aber einen kompakten Kalenderöffner sowie die Hilfen \ui{Heute} und \ui{Löschen}. \ui{Heute} trägt das aktuelle lokale Kalenderdatum des Browsers ein; \ui{Löschen} leert das Feld. Diese Erweiterung wird auch auf Formulare angewendet, die in den Administrations-Seitenbereich geladen werden; das zugrunde liegende native Datumsfeld bleibt ohne die zusätzlichen JavaScript-Steuerungen nutzbar.
 
 \subsection{Referenz der Galerieeditor-Steuerungen}
+\paragraph{Veröffentlichung planen}
+Das erweiterte Feld verwendet die angezeigte Browser-Zeitzone; vorgeschlagene
+aktuelle Uhrzeiten passen dadurch zur Ortszeit. Darunter steht die genaue
+UTC-Entsprechung. Es wird keine Benutzer-Zeitzone gespeichert. Ohne JavaScript
+bleibt das Feld ausdrücklich in UTC. Nicht vorhandene Frühlingszeiten werden
+abgelehnt. Bei einer neuen Eingabe während der doppelten Herbststunde wählt
+der Browser das frühere Vorkommen; prüfen Sie die UTC-Vorschau.
+Ein unverändert gespeichertes späteres Vorkommen bleibt erhalten.
+
+Tragen Sie unter \ui{Zugriff} im nativen Feld
+\ui{Veröffentlichung planen} einen zukünftigen Termin ein und speichern Sie.
+Beachten Sie die Zeitzonenbeschriftung; der Status zeigt den genauen
+UTC-Termin. Ändern Sie ihn zum Verschieben, leeren Sie das Feld zum Abbrechen.
+Die Auswahl \ui{Veröffentlicht} löscht den Termin ebenfalls.
+Beim unveränderten UTC-Feld ohne JavaScript rechnen Sie die gewünschte
+Ortszeit vor der Eingabe in UTC um.
+
+Eine unveröffentlichte Galerie behält vor dem Termin ihre direkte URL,
+eine private Galerie ihre Zugriffssperren. Der nächste gewöhnliche
+PHP-Seitenaufruf per GET/HEAD ab dem Termin, auch durch einen anonymen
+Crawler, ändert die kanonische Sichtbarkeit auf öffentlich.
+Passwörter, NSFW, Freigabetoken, Ablauf und übergeordnete Schutzregeln bleiben
+erhalten. Die geplante Veröffentlichung stellt auch öffentliche Listung her,
+genau wie die manuelle Auswahl \ui{Veröffentlicht}.
+Unvollständige PDF-Untergalerien bleiben geschützt; Kinder werden nicht
+automatisch veröffentlicht. Ohne Besuche erfolgt keine Ausführung;
+statische Dateien und CDN-Zugriffe lösen nichts aus. Größere Rückstände
+werden in Gruppen von 16 über weitere Besuche abgearbeitet.
+Cron, Daemon und Browser-Zeitgeber sind unnötig.
+Führen Sie zuerst die normalen Datenbankmigrationen aus. Termine bleiben
+datenbankgebunden; Sidecars übertragen die resultierende Sichtbarkeit,
+aber keine ausstehenden Termine auf andere Installationen.
+Die leichte Prüfung nutzt das bestehende Galeriemodell und den Zugriffsdienst;
+Schreibabhängigkeiten werden nur für einen über den Index fälligen Eintrag geladen.
+
 \index{g00125@Galerieeditor!s00236@Steuerungen}
 \index{g00117@Galerie!s00223@Sichtbarkeit}
 \index{g00117@Galerie!a00020@Anzeigeüberschreibungen}
@@ -2663,6 +2698,23 @@ Verwenden Sie den Zieltyp WebDAV in Clients wie PhotoSync. Die aktuelle Serverau
 Die öffentliche Antwort \codeword{/robots.txt} beschreibt Crawlergrenzen; \codeword{/sitemap.xml} führt geeignete öffentliche Galerie- und Bild-URLs mit Bildmetadaten und letzter Änderungszeit auf. Nicht veröffentlichte, private, passwortgeschützte, altersbeschränkte oder anderweitig nicht autorisierte Inhalte werden durch diese Ausgaben nicht öffentlich. Kanonische URLs, soziale Metadaten und strukturierte Bilddaten verwenden dasselbe zugriffsbewusste öffentliche Pfadmodell.
 
 Picture Manager ist eine Überlagerung der öffentlichen Galerieansicht für angemeldete Administratoren, keine Besucherfunktion. Ein Administrator kann Fotos und physische Untergalerien auswählen, eine gemischte Auswahl löschen oder unter einer gewählten übergeordneten Galerie in eine neue physische Galerie kopieren. Reine Fotoauswahlen können außerdem auf eine sichtbare Untergalerie gezogen, über die durchsuchbare Zielauswahl verschoben oder kopiert, über den nativen Gerätefreigabedialog geteilt, sofern unterstützt, oder heruntergeladen werden. Natives Teilen fällt auf die ZIP-Datei ausgewählter Fotos zurück, wenn der Browser vorbereitete Dateien nicht teilen kann. Smart Galleries sind von physischen Teilbaumaktionen ausgeschlossen. Die Auswahl selbst ist nur Browserzustand und gewährt keine Berechtigung. Jede Änderungs-/ZIP-Anfrage prüft erneut normales angemeldetes Konto, CSRF-Token, Quellgalerie, ausgewählte Zuordnungen und gegebenenfalls Ziel. Gewöhnliche Besucher erhalten diese Steuerungen nicht. Picture Manager ist bewusst unabhängig von der Fähigkeit Inline-Administration: Deren Deaktivierung entfernt direkte öffentliche Bearbeitungs-, Hinzufüge-, Lösch- und Sortiersteuerungen; ein unabhängig aktivierter Picture Manager kann weiterhin Auswahl-, Lösch-, Verschiebe-, Kopier-, physische Galerieerstellungs- und Auswahlexportabläufe anbieten.
+
+Die kompakte obere Leiste zeigt stets die Anzahl ausgewählter Elemente.
+Aufgeklappt bietet sie Gesamtauswahl, Aufheben der Auswahl, Teilen, Löschen
+und die Zielgalerie zum Verschieben oder Kopieren von Fotos. Öffnen Sie
+\ui{Neue Galerie aus Auswahl} erst beim Erstellen einer Galerie; als
+übergeordnete Galerie ist die aktuelle Galerie voreingestellt. Das schlichte
+\ui{?} öffnet Hinweise zu Auswahl, Ziehen, Kopieren und Verschieben;
+ein Klick außerhalb oder Escape schließt sie. Auswahlhinweise und der Link
+zum Galerieverzeichnis erscheinen bei Fokus in der Zielauswahl. Fortschritt,
+Erfolg und Fehler bleiben sichtbar; die Bereitschaftsmeldung entfällt.
+
+Ohne Auswahl ist die Verwaltung oberhalb der Seite verborgen. Bewegen Sie
+den Zeiger an den oberen mittleren Rand, um sie einzublenden und zu öffnen.
+Ausgewählte Fotos oder physische Untergalerien halten sie sichtbar. Auch
+Tastaturfokus blendet sie ein; auf Touchgeräten zuerst eine Karte auswählen.
+Geöffnete Hilfe bleibt bis zum Schließen zugänglich.
+
 \section{Wartung, Aktualisierungen und Wiederherstellung}
 \label{sec:maintenance}
 \index{w00268@Wartung}
@@ -2952,6 +3004,44 @@ keine aktive Arbeit; die Sperrprüfung gilt nur für den beobachteten Moment.
 \index{c00056@Cron!w00273@Websitewartung}
 
 Regelmäßige Wartung kann in begrenzten Teilabschnitten statt einer langen Anfrage laufen. Der Wartungsdienst verkettet sichere Webanfragen bei vorhandenem Verkehr und kann auch über Hosting-Cron mit dem in der Administration gezeigten CLI-Befehl aufgerufen werden. Er kann Vorschaubildzustand prüfen, Metadaten aktualisieren, Bereinigungsaufgaben bearbeiten, Telemetrie aggregieren und geeignete Tage des Administrationsprotokolls gemäß konfigurierten Richtlinien archivieren. Das verborgene Web-Cron-Token ist austauschbar; ein Austausch macht zuvor veröffentlichte Web-Cron-URLs ungültig. Wartung ist standardmäßig nicht destruktiv und ersetzt keine ausdrückliche Bestätigung von Datenbankoptimierung oder anderen folgenreichen Aktionen.
+\subsection{Cron-Übersicht und besuchergetriebene Ausführung}
+Unter \ui{Wartung > Cron-Übersicht} zeigt eine kompakte sortierbare Tabelle
+Updateprüfung, Protokollarchivierung, Website- und Cache-Wartung,
+Updater-Abfallbereinigung, Telemetrieaufbewahrung und einmalige Anhangszähler.
+Jeder Eigentümer liefert sein wirksames Intervall, die nächste mögliche
+Ausführung und tatsächliche Versuchsbelege. Unbekannte Angaben bleiben
+unbekannt; Annahme bedeutet keinen Abschluss. Normale PHP-Seitenbesuche,
+auch von Crawlern, erlauben dem gemeinsamen Scheduler höchstens einen
+begrenzten Hintergrundauftrag. Sperren, Aktivierung, UTC-Fenster und der
+Wartungszentrumsanspruch bleiben gültig. Geplante Galerieveröffentlichung
+bleibt vor dem Rendern der auslösenden Seite wirksam.
+
+Spaltenüberschriften ändern die Sortierung. Die sichtbare Seite aktualisiert
+bestehende Zellen ungefähr jede Sekunde, ohne Aufgaben auszuführen. Verdeckte
+Seiten pausieren; bei Fehlern wächst der Abstand. Play sendet eine geschützte
+Aktion direkt in der Tabelle und übergeht nur die Zeitbedingung. Ohne JavaScript
+bleibt normales POST verfügbar. Belegt, fortgesetzt und aufgeschoben bedeuten
+keinen vollständigen Abschluss. Der nächste mögliche Lauf ist eine Zeitgrenze,
+keine genaue Uhrzeitgarantie: Ohne Besuche wartet die Arbeit.
+Play steht direkt vor dem Aufgabennamen. Das Pausensymbol neben dem Titel
+friert nur diese Live-Vorschau ein; Fortsetzen liest sofort den Zustand.
+Hintergrundaufgaben laufen weiter. Künftige Zeitgrenzen behalten die absolute
+Zeit und ergänzen die verbleibende Dauer in Klammern.
+Aufgabennamen verlinken vorhandene Einstellungen oder Steuerungen. Fehlende
+Folgetermine erscheinen als deaktiviert, abgeschlossen oder keine ausstehende
+Bereinigung; unbekannt bleibt nicht verfügbaren Belegen vorbehalten.
+
+\ui{Optionaler Hosting-Cron} erstellt oder erneuert eine kopierbare geschützte
+URL und kann sie widerrufen. Unterverzeichnisse und Query-Routing ohne
+URL-Umschreibung werden berücksichtigt. Das Beispiel mit \codeword{curl -fsS}
+kann optional alle ein bis fünf Minuten aufgerufen werden. Es nutzt denselben
+Scheduler und deaktiviert keine Besuchertrigger. Die URL bleibt geheim.
+Hosting-Cron, Browser-Aufgabentimer, Dauerprozess und externe Queue sind
+nicht erforderlich.
+Zusätzlich zu 256-Bit-Token und gemeinsamen Sperren wird höchstens ein
+Hosting-Aufruf pro Minute angenommen. Wiederholungen umgehen keine
+Aufgabenbedingungen. Netzwerk- und ICMP-Flutschutz bleibt beim Hostinganbieter.
+
 \subsection{Administrationsprotokollverlauf und Archive}
 \index{a00006@Administrationsprotokolle}
 \index{p00197@Protokollarchiv}
@@ -3119,6 +3209,21 @@ Der generierte Modulplan erklärt gemeinsame Abhängigkeiten und eine kanonische
 Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{index.php} im Repository-Stamm ist ein unterstützter Kompatibilitätseinstieg für andere Hostingstrukturen. Der öffentliche Einstieg lädt \filepath{app/early\_runtime.php} vor \filepath{app/bootstrap.php}; danach erreichen beide Strukturen dieselbe normale Anfragepipeline.
 
 Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
+
+Der Loader prüft den vollständigen Modulplan bei jeder Anfrage. Er prüft die
+kanonische Schicht-/Pfadreihenfolge in einem Durchlauf, jeden ausgewählten
+physischen Pfad einmal pro Ladevorprüfung und zählt abgeschlossene Dateien
+ohne wiederholtes Durchlaufen der Modullisten. Spätere Ladevorgänge prüfen ihre
+Pfade erneut. Zwischen Anfragen wird kein Prüfergebnis gespeichert; Updates
+und parallele Anfragen brauchen deshalb keine zusätzliche Cache-Invalidierung.
+Die optionale OPcache bleibt eine Servereinstellung: ihren Zustand im Web-PHP
+prüfen und Zeitstempelprüfung oder Zurücksetzen beim Deployment sicherstellen.
+Die bestehende Test-Run-Aufzeichnung trennt Planladen, vollständige Prüfung,
+Abhängigkeitsplanung und Includes. Entwicklermessungen verwenden isolierte
+öffentliche und Admin-Anfragen mit kalten und warmen Opcode-Stichproben;
+Produktionslatenz wird damit nicht nachgewiesen.
+Der Compiler prüft den privaten Trace-Callback ausdrücklich; nur lokale
+Loader-Operationen übergeben ihn, ohne zusätzliche Modulabhängigkeit.
 
 Die Auslieferung von Vorschaubildern verwendet das vorhandene vollständige
 Modul für öffentliche Medien gemeinsam. Die Kompilierung akzeptiert diese

@@ -1691,18 +1691,6 @@ button:disabled,
     padding-top: 3.6rem;
 }
 
-.public-page.page-width-wide .picture-manager-toolbar {
-    inline-size: min(var(--page-width-wide, 1440px), calc(100vw - 0.8rem));
-}
-
-.public-page.page-width-custom .picture-manager-toolbar {
-    inline-size: min(var(--page-width-custom, 1440px), calc(100vw - 0.8rem));
-}
-
-.public-page.page-width-full .picture-manager-toolbar {
-    inline-size: calc(100vw - clamp(1rem, 3vw, 3rem));
-}
-
 /* Admin-only public render timing panel. */
 .public-render-profile {
     margin: 1.5rem auto;
@@ -1930,6 +1918,404 @@ button:disabled,
 .picture-manager-toolbar .gallery-search-picker-option-path {
     font-size: 0.6rem;
     line-height: 1.15;
+}
+
+/* Picture manager follows the compact media-panel design without changing
+   the other consumers of the shared top-tool-hud shell. */
+.public-page .picture-manager-toolbar {
+    /* Bound the task surface so it does not cover a whole gallery row.
+       Type: CSS length. Units: rem. Scope: Picture manager HUD.
+       Consumers: expanded toolbar. Value: 46rem.
+       Rationale: fit one destination picker and two actions at readable size. */
+    --picture-manager-width: 46rem;
+    /* Keep desktop controls compact and mobile controls comfortably tappable.
+       Type: CSS length. Units: px. Scope: Picture manager HUD.
+       Consumers: buttons, inputs and disclosures. Value: 28px desktop.
+       Rationale: match the Admin toolbar contract; mobile overrides to 44px. */
+    --picture-manager-target: 28px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    inline-size: min(var(--picture-manager-width), calc(100% - 1rem));
+    padding: .25rem .5rem;
+    border-color: color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: 0 0 min(var(--radius, 8px), 8px) min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 6px 24px #0002;
+}
+
+/* Keep an empty manager above the viewport, with a narrow invisible hover
+   target at the top edge. Selection, keyboard focus and open help keep it
+   available without requiring a mouse or a persistent empty toolbar. */
+.public-page [data-picture-manager] {
+    /* Type: CSS length. Units: px. Scope: empty Picture manager reveal area.
+       Consumers: toolbar ::before hit area. Value: 8px.
+       Rationale: a reachable top edge without covering normal header actions. */
+    --picture-manager-reveal-edge: 8px;
+}
+
+.public-page [data-picture-manager]::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    inset-inline: 0;
+    height: var(--picture-manager-reveal-edge);
+}
+
+.public-page [data-picture-manager]:not(
+    .has-picture-manager-selection, :hover,
+    :has(:focus-visible), :has(:popover-open)
+) {
+    transform: translate(-50%, -100%);
+    box-shadow: none;
+}
+
+.public-page [data-picture-manager]:not(
+    .has-picture-manager-selection, :hover,
+    :has(:focus-visible), :has(:popover-open)
+)
+    .picture-manager-panel {
+    visibility: hidden;
+}
+
+.public-page .picture-manager-toolbar.is-picture-manager-collapsed {
+    inline-size: fit-content;
+    max-inline-size: calc(100% - 1rem);
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-summary {
+    gap: .75rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-toggle {
+    width: auto;
+    min-height: var(--picture-manager-target);
+    padding: 0 .25rem;
+    gap: .5rem;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    border-radius: 4px;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-toggle strong {
+    font-size: .8rem;
+    line-height: 1.3;
+    font-weight: 600;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-toggle-icon {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: .75rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-count {
+    width: auto;
+    margin-inline-start: auto;
+    padding: .2rem .35rem;
+    border: 0;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    color: var(--ink);
+    font-size: .75rem;
+    font-weight: 500;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-help-toggle {
+    flex: 0 0 auto;
+    min-width: var(--picture-manager-target);
+    min-height: var(--picture-manager-target);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    box-shadow: none;
+    font-size: .9rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-panel {
+    gap: .65rem;
+    padding: .75rem;
+    max-height: calc(100dvh - 4rem);
+    border-color: color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 97%, transparent);
+    box-shadow: 0 12px 32px #0003;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-heading {
+    display: block;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-actions {
+    justify-content: flex-start;
+    gap: .25rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-share-button {
+    margin-inline-start: auto;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: .5rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-action-card {
+    padding: 0;
+    gap: .4rem;
+    border: 0;
+    background: transparent;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-action-card label {
+    font-size: .75rem;
+    line-height: 1.4;
+    font-weight: 600;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-inline-fields {
+    gap: .4rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-icon-button {
+    min-height: var(--picture-manager-target);
+    padding: .25rem .5rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .75rem;
+    font-weight: 500;
+    gap: .35rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-icon-button:disabled {
+    opacity: .45;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-icon-button:not(:disabled):hover,
+.public-page .picture-manager-toolbar
+    .picture-manager-create-disclosure > summary:hover {
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-icon-button.is-primary-action {
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--ink);
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-button-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 0;
+    background: transparent;
+    font-size: 1rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-delete-button:not(:disabled) {
+    color: var(--danger, #b42318);
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-create-disclosure > summary {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    min-height: var(--picture-manager-target);
+    padding: .2rem .35rem;
+    border-radius: 4px;
+    list-style: none;
+    cursor: pointer;
+    font-size: .75rem;
+    color: var(--ink);
+}
+
+.picture-manager-create-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.picture-manager-create-disclosure > summary::after {
+    content: '';
+    width: .35rem;
+    height: .35rem;
+    margin-inline-start: auto;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: rotate(45deg);
+}
+
+.picture-manager-create-disclosure[open] > summary::after {
+    transform: rotate(225deg);
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-create-disclosure[open] > summary {
+    margin-block-end: .5rem;
+    box-shadow: inset 0 -1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-create-fields {
+    align-items: flex-start;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-create-fields > .gallery-search-picker {
+    flex-basis: 100%;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-inline-fields > input,
+.public-page .picture-manager-toolbar
+    .gallery-search-picker-field input[type="text"] {
+    min-height: var(--picture-manager-target);
+    font-size: .8rem;
+    line-height: 1.4;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    color: var(--ink);
+}
+/* Reveal picker instructions and its directory link while working in that
+   picker, retaining keyboard access and the existing failure recovery path. */
+.public-page .picture-manager-toolbar
+    .gallery-search-picker:not(:focus-within) > .gallery-search-picker-help,
+.public-page .picture-manager-toolbar
+    .gallery-search-picker:not(:focus-within) > a {
+    display: none;
+}
+
+.public-page .picture-manager-toolbar
+    .gallery-search-picker > a,
+.public-page .picture-manager-toolbar
+    .gallery-search-picker-help,
+.public-page .picture-manager-toolbar
+    .gallery-search-picker-empty {
+    font-size: .75rem;
+    line-height: 1.4;
+    text-decoration: none;
+}
+
+.public-page .picture-manager-toolbar
+    .gallery-search-picker-option-title {
+    font-size: .8rem;
+}
+
+.public-page .picture-manager-toolbar
+    .gallery-search-picker-option-path {
+    font-size: .7rem;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-status {
+    border: 0;
+    border-radius: 4px;
+    font-size: .75rem;
+    line-height: 1.4;
+}
+
+.public-page .picture-manager-toolbar
+    .picture-manager-status[data-state="idle"] {
+    display: none;
+}
+
+.public-page .picture-manager-toolbar :is(button, summary, input, a):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.public-page .picture-manager-help {
+    max-inline-size: min(36rem, calc(100vw - 2rem));
+    max-block-size: calc(100dvh - 4rem);
+    overflow: auto;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--panel);
+    color: var(--ink);
+    box-shadow: 0 12px 32px #0003;
+    font-size: .85rem;
+    line-height: 1.5;
+}
+
+.picture-manager-help p {
+    margin: .65rem 0 0;
+}
+@media (max-width: 760px) {
+    .public-page .picture-manager-toolbar .picture-manager-summary,
+    .public-page .picture-manager-toolbar .picture-manager-inline-fields {
+        flex-direction: row;
+        align-items: center;
+    }
+}
+
+@media (max-width: 640px) {
+    .public-page .picture-manager-toolbar {
+        --picture-manager-target: 44px;
+    }
+
+    .public-page .picture-manager-toolbar .picture-manager-summary {
+        gap: .2rem;
+    }
+
+    .public-page .picture-manager-toolbar .picture-manager-count {
+        white-space: normal;
+        text-align: center;
+    }
+
+    .public-page .picture-manager-toolbar .picture-manager-actions > button,
+    .public-page .picture-manager-toolbar .picture-manager-inline-fields > button {
+        width: auto;
+    }
+
+    .public-page .picture-manager-toolbar
+        .picture-manager-inline-fields > .gallery-search-picker {
+        flex-basis: 100%;
+        min-width: 0;
+    }
+
+    .public-page .picture-manager-toolbar .gallery-search-picker-clear {
+        min-width: 44px;
+        min-height: 44px;
+        right: 0;
+    }
+
+    .public-page .picture-manager-toolbar
+        .gallery-search-picker-field input[type="text"] {
+        padding-inline-end: 3rem;
+    }
+
+    .public-page .picture-manager-toolbar .picture-manager-create-fields > input {
+        flex-basis: 100%;
+    }
 }
 
 /* Root creation shares the search row without depending on gallery cards or search availability. */

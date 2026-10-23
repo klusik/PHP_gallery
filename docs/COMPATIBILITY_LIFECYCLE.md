@@ -1,5 +1,69 @@
 # Compatibility lifecycle and retirement register
 
+## Visitor scheduler and optional hosting transport
+
+Owner: `request_scheduler.php` with the existing task services and private
+maintenance controller. Visitor-triggered scheduling is permanent primary
+support for ordinary shared hosting; external cron never becomes a prerequisite.
+A site with zero PHP requests has no wall-clock execution guarantee. Unknown
+schema/ownership and unreadable receipts fail closed without replacing reliable
+state with success. Actual WEDOS/live traffic and worker-pool measurements for
+this scheduler transition are unknown until installation qualification.
+
+The existing standalone registration APIs and updater-continuation bootstrap
+helper remain supported for legacy CLI/fixture consumers. Production startup
+uses only the central entry; retaining these APIs does not register duplicate
+callbacks. Their retirement requires a complete consumer audit and regression
+evidence. Native POST fallback, query-string routing and explicit token
+revocation remain permanent support for no-JavaScript/non-rewrite hosting.
+Hosting calls retain a separate 60-second admission window and shared task
+locks. They never bypass owner deadlines or affect visitor/manual cadence.
+The live-preview pause is browser-local and does not disable work. Its stale
+body/visibility behavior and future-only relative labels have regression
+coverage; network/ICMP flood mitigation remains the hosting provider's layer.
+
+
+## Visitor-triggered publication and unchanged access policy
+
+Owners: gallery publication service/model, existing gallery editor writer and
+maintenance bootstrap. Confirmed pre-feature schema keeps existing galleries
+usable without scheduling; missing/unknown deadline/index storage never permits
+automatic publication or explicit schedule writes. This is permanent support
+for code-before-migration upgrades, retired only if the installation lifecycle
+later proves all requests must have current schema. Deployment prevalence and
+live latency evidence are currently unknown.
+
+The enhanced native input uses the browser timezone and previews its exact UTC
+transport. No timezone preference is persisted. The server still validates UTC
+only. Missing JavaScript/timezone support retains the UTC-labelled native
+control as permanent no-JavaScript compatibility, not a guessed server zone.
+The browser chooses the earlier repeated autumn hour for a new edit; the UTC
+preview exposes that choice. Unchanged stored later occurrences are preserved,
+and nonexistent spring wall times fail validation before submission.
+Stored private/unpublished galleries retain their current direct-link policy
+until execution. Scheduled Publish restores `public + listed`, matching the
+owner's clarified requirement that it behave exactly like explicit manual
+Publish. The initial unlisted-preserving implementation was superseded: the
+manual editor couples unpublished visibility to unlisted, so preserving that
+flag prevented ordinary scheduled galleries from ever entering discovery.
+Password, NSFW, token and parent access policies are unchanged. An unrelated
+unchanged full-form save still preserves independent unlisted state. Existing PDF
+publication markers and the shared zero-wait writer lease remain authoritative.
+Unknown schema, ownership errors and invalid PDF children retain their pending
+deadline for a later eligible visit. No schedule is imported from sidecars or
+restored from a deleted gallery's old deadline.
+
+Work is bounded to 16 candidate identities per eligible visit. Larger backlogs
+catch up across visits; a scalar `gallery_publication.scan_cursor` in existing
+app settings advances an indexed keyset scan so blocked rows cannot permanently
+starve later deadlines. The gallery timestamp remains the sole pending list;
+the cursor contains no queued work or independent per-gallery status. Media
+requests and requests that do not execute PHP do not trigger publication.
+No-traffic time produces no execution. Sidecar failure is reported with a
+bounded diagnostic; database visibility remains authoritative, matching the
+existing editor sidecar-write boundary. Hosted BASIC is source evidence only;
+runtime, migration, browser and deployed behavior need their own qualification.
+
 ## Shared music originals and live gallery assignments
 
 Owners: gallery music model/service and its private projection/migration parts,
@@ -1726,6 +1790,29 @@ not a source parser or a commitment to remove anything on a calendar date.
   explicit order and the project publishes an intentional unsupported-API
   boundary for external consumers. Do not infer external non-use from local
   search results.
+
+### CORE-3 — Module validation lifetime and optional opcode caching
+
+- **Owner:** `app/runtime/ModuleLoader.php` and the existing early Test Run trace.
+- **Protected behavior:** Complete composed-plan shape/path/graph validation
+  remains per loader/request, including unselected modules. A physical path is
+  checked once per `load()` preflight, before includes, and checked afresh when
+  another unloaded module selects it in a later load. No persisted validation
+  receipt, APCu, file cache or extension-dependent fallback is introduced.
+- **Ordering/failure:** Canonical layer/lexical order is checked linearly;
+  file completion counters retain the dependency-first completed prefix, even
+  if independent branches finish in a different order or a later include fails.
+  `require_once`, selective roots and the legacy two-argument API remain.
+- **Updates/concurrency:** Request-local preflight sets have no shared writers
+  or invalidation races. Existing activation gates protect partial deployment.
+  Server OPcache invalidation is still the hosting operator's responsibility;
+  disabled timestamp validation requires reset/restart during deployment.
+- **Evidence/usage:** `runtime_kernel_test.php` covers shared files, scope,
+  missing/replaced paths, cycles and canonical/partial completion. The targeted
+  disposable HTTP benchmark separates opcode-cold and warm requests; production
+  hosting adoption and real traffic performance remain unknown.
+- **Lifecycle:** PHP 8.1 and hosting without optional cache extensions are
+  permanent support. No cache requirement or retirement date is introduced.
 
 ### CORE-2 — Flat session keys and domain-owned semantics
 

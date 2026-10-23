@@ -1,7 +1,44 @@
 # PHP Gallery Database Documentation
 
+## Scheduler observations
+
+Cron Overview reuses domain-owned app settings and telemetry settings/job rows;
+it adds no scheduling table or migration. The telemetry model reads only the
+latest `telemetry.maintenance` attempt by descending ID, preserving unknown or
+missing-schema evidence. Coordination tickets/dispatch receipts are bounded
+private cache state, never an alternative source for domain completion. The
+independent `host_next_at` scalar limits authenticated optional hosting calls
+before domain observations; it does not throttle visitor/manual scheduling. See
+[visitor scheduler ownership](docs/REQUEST_SCHEDULER.md).
+
+
+## Scheduled gallery publication
+
+Migration `202610230001_gallery_scheduled_publication.php` adds nullable
+`galleries.scheduled_publish_at DATETIME` and its
+`idx_galleries_scheduled_publish_at` index. Values are UTC; `NULL` means no
+pending publication. The gallery rows themselves are the pending list, with
+no queue, repeating status or job table. Ordinary migration privileges suffice.
+Interrupted column/index DDL uses the existing duplicate-DDL replay owner.
+
+The indexed `<=` comparison admits at most 16 identities per visit. Successful
+transitions atomically set `visibility = public` and `access_listing = listed`,
+matching explicit manual Publish, clear the deadline,
+update `updated_at` in the existing application clock and increment
+`edit_revision`. Exact deadline/revision guards and the common writer lease
+prevent stale work overriding rescheduling, cancellation or deletion. Scheduling
+publication is explicit intent to restore public discovery at the deadline;
+password, NSFW, tokens and inherited access remain unchanged. An unrelated
+unchanged full editor still preserves independently stored unlisted state.
+Manual publication clears pending intent.
+Confirmed missing storage disables scheduling until migration; unknown
+inspection never authorizes it. Both the deadline column and index must be
+verified before visitor work. Schedules stay database-owned; gallery sidecars
+retain the resulting visibility and existing access settings, rather than
+silently importing an old pending deadline into a different installation.
+
 This document describes the database schema used by PHP Gallery as of
-application version 0.141.3. Version 0.97 adds the recoverable gallery-trash
+application version 0.142. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in

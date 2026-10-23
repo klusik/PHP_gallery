@@ -193,6 +193,12 @@ function view_admin_menu_structure(array $model = []): array
             'label' => t('admin.menu.maintenance', 'Maintenance'),
             'items' => [
                 [
+                    'label' => t('admin.cron.title', 'Cron Overview'),
+                    'page' => 'admin_cron_overview',
+                    'url' => url_for('admin_cron_overview'),
+                    'icon' => 'clock',
+                ],
+                [
                     'label' => t('admin.menu.trash', 'Trash'),
                     'page' => 'admin_trash',
                     'url' => url_for('admin_trash'),

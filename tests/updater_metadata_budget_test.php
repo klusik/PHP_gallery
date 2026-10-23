@@ -11,8 +11,20 @@
  */
 declare(strict_types=1);
 namespace Gallery\Core {
+    /**
+     * Identify the synthetic fixture/gallery remote for discovery requests.
+     * Type: string. Units: GitHub owner/repository. Scope: offline budget test.
+     * Consumers: updater discovery service's confined transport URLs.
+     * Rationale: count realistic requests without reaching a live repository.
+     */
     const CMS_GITHUB_REPOSITORY = 'fixture/gallery';
 
+    /**
+     * Try fixture branches in main, then master order.
+     * Type: list<string>. Units: branch names. Scope: offline budget test.
+     * Consumers: updater metadata discovery fallback.
+     * Rationale: two candidates expose both request budgeting and fallback order.
+     */
     const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
     /** Return the installed fixture release. @return string Installed release. */

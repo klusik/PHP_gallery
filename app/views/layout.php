@@ -1235,6 +1235,8 @@ function view_render_footer(string $page = 'home', array $model = []): void
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/admin-maintenance-center.js',
             dirname(__DIR__, 2)
+                . '/public/assets/gallery-modules/admin-cron.js',
+            dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/admin-test-run.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/gallery-download.js',

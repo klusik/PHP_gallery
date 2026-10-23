@@ -302,10 +302,12 @@ export function setupPictureManager() {
 
         /**
      * Synchronizes toolbar controls and visible card state after any selection change.
+     * @returns {void} Publishes selection context and updates action availability.
      */
     function syncSelectionState() {
         cards.forEach(syncCardState);
         const count = selectedKeys.size;
+        toolbar.classList.toggle('has-picture-manager-selection', count > 0);
         if (countLabel instanceof HTMLElement) {
             countLabel.textContent = count === 0 ? i18n('picture_manager.no_items_selected', 'No items selected.') : (count === 1 ? i18n('picture_manager.one_item_selected', '1 item selected.') : i18n('picture_manager.many_items_selected', '{count} items selected.', {count}));
         }
@@ -1175,6 +1177,11 @@ export function setupPictureManager() {
         target.addEventListener('drop', handleTargetDrop, signalOptions);
     });
 
+    // The invisible top-edge hit area reveals the full task panel on hover.
+    // CSS keeps selected items, keyboard focus and open help context visible.
+    toolbar.addEventListener('pointerenter', () => {
+        setPanelExpanded(true);
+    }, signalOptions);
     if (toggleButton instanceof HTMLButtonElement) {
         toggleButton.addEventListener('click', () => {
             setPanelExpanded(toolbar.classList.contains('is-picture-manager-collapsed'));

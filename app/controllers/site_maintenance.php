@@ -99,6 +99,28 @@ function cms_site_maintenance_cron(): void
         session_write_close();
     }
 
+    if (isset($_POST['scheduler_ticket']) || isset($_GET['scheduler_ticket'])) {
+        $ticket = $_POST['scheduler_ticket'] ?? null;
+        if (\Gallery\Core\request_method() !== 'POST'
+            || !is_string($ticket)
+            || preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+            || array_diff(array_keys($_POST), ['scheduler_ticket']) !== []
+            || array_diff(array_keys($_GET), ['page']) !== []) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'outcome' => 'skipped']);
+            return;
+        }
+        cms_runtime_kernel()->load('archive-request-trigger');
+        try {
+            $result = \Gallery\Services\request_scheduler_work($ticket,
+                static fn(string $module): mixed => cms_runtime_kernel()->load($module));
+        } catch (\Throwable) {
+            $result = ['ok' => false, 'outcome' => 'failed'];
+        }
+        echo json_encode($result);
+        return;
+    }
+
     if (isset($_POST['media_ticket']) || isset($_GET['media_ticket'])) {
         $ticket = $_POST['media_ticket'] ?? null;
         if (

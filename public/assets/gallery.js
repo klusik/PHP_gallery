@@ -61,8 +61,8 @@ import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20261014-floating-scroll-v1';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2';
-import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
-import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
+import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20261023-picture-manager-context-v1';
+import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261023-publication-local-time-v2';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261008-legacy-ofp-dispatch-fl-v3';
 import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261012-gallery-pdf-documents';
 import {
@@ -96,6 +96,7 @@ import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperat
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
+import { setupAdminCron } from './gallery-modules/admin-cron.js?v=20261023-cron-v6';
 import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261020-compact-maintenance-v5';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
@@ -126,7 +127,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261021-smart-photo-tags-v2';
+} from './gallery-modules/admin-operations.js?v=20261023-publication-local-time-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -178,6 +179,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
     setupAdminMaintenanceCenter();
+    setupAdminCron();
     setupAdminGalleryBenchmark();
     setupAdminSearchDiagnostics();
     setupAdminTestRun();

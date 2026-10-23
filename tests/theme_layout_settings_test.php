@@ -30,12 +30,36 @@ declare(strict_types=1);
 namespace Gallery\Services {
     use InvalidArgumentException;
 
+    /**
+     * Supply the four-column fallback used by the isolated Theme policy.
+     * Type: int. Units: columns. Scope: Theme layout settings fixture.
+     * Consumers: Theme layout dimension normalization.
+     * Rationale: keep fallback distinct from the six-column configured value.
+     */
     const CMS_PAGINATION_DEFAULT_COLUMNS = 4;
 
+    /**
+     * Supply the five-row fallback used by the isolated Theme policy.
+     * Type: int. Units: rows. Scope: Theme layout settings fixture.
+     * Consumers: Theme layout dimension normalization.
+     * Rationale: keep fallback distinct from the eight-row configured value.
+     */
     const CMS_PAGINATION_DEFAULT_ROWS = 5;
 
+    /**
+     * Limit fixture layout width to 12 columns.
+     * Type: int. Units: columns. Scope: Theme layout settings fixture.
+     * Consumers: Theme layout settings validation and clamping.
+     * Rationale: exercise bounded dimensions without loading global policy.
+     */
     const CMS_PAGINATION_MAX_COLUMNS = 12;
 
+    /**
+     * Limit fixture layout height to 50 rows.
+     * Type: int. Units: rows. Scope: Theme layout settings fixture.
+     * Consumers: Theme layout settings validation and clamping.
+     * Rationale: retain the production-shaped row ceiling in isolated checks.
+     */
     const CMS_PAGINATION_MAX_ROWS = 50;
 
     /** Return deterministic Theme settings for the owner fixture. @return array<string,string> Fixture Theme values. */

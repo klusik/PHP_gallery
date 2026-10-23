@@ -81,6 +81,14 @@ const SITE_MAINTENANCE_WEB_REPAIR_MAX_BYTES = 25165824;
 
 const SITE_MAINTENANCE_WEB_REPAIR_MAX_PIXELS = 36000000;
 
+/**
+ * Preserve daily UTC scheduling independently of the local DST clock.
+ * Type: int. Units: seconds. Scope: daily site-maintenance schedule.
+ * Consumers: schedule calculation and Cron Overview's normalized cadence.
+ * Rationale: one UTC day contains 86400 seconds even on local DST changes.
+ */
+const SITE_MAINTENANCE_DAY_SECONDS = 86400;
+
 const SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES = 180;
 
 const SITE_MAINTENANCE_MIN_WINDOW_MINUTES = 15;
@@ -758,7 +766,7 @@ function site_maintenance_schedule_due_state(?int $now = null): array
         $todayStart = strtotime($today . ' 00:00:00 UTC') ?: $now;
     }
 
-    $candidateStarts = [$todayStart, $todayStart - 86400];
+    $candidateStarts = [$todayStart, $todayStart - SITE_MAINTENANCE_DAY_SECONDS];
     $activeStart = null;
     foreach ($candidateStarts as $candidateStart) {
         if (
@@ -784,7 +792,7 @@ function site_maintenance_schedule_due_state(?int $now = null): array
         ];
     }
 
-    $nextStart = $now < $todayStart ? $todayStart : $todayStart + 86400;
+    $nextStart = $now < $todayStart ? $todayStart : $todayStart + SITE_MAINTENANCE_DAY_SECONDS;
     $referenceStart = $now >= $todayStart ? $todayStart : $nextStart;
     $referenceEnd = $referenceStart + $windowSeconds;
 
@@ -1110,6 +1118,7 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
  * @param string $ticket Private cache continuation ticket; empty for other worker modes.
  * @param string $updateTicket Private updater continuation ticket; empty for other worker modes.
  * @param string $mediaTicket Private attachment-count ticket; empty for other worker modes.
+ * @param string $schedulerTicket Private central-scheduler ticket; empty for other modes.
  * @return bool True after the complete authenticated POST is written; not proof of worker arrival.
  */
 function site_maintenance_fire_background_worker(
@@ -1117,31 +1126,21 @@ function site_maintenance_fire_background_worker(
     string $ticket = '',
     string $updateTicket = '',
     string $mediaTicket = '',
+    string $schedulerTicket = '',
 ): bool {
     $updaterOnly = $updateTicket !== '';
     $mediaOnly = $mediaTicket !== '';
-    if (
-        !function_exists('stream_socket_client')
-        || (
-            $mediaOnly
-                ? $telemetryOnly
-                || $ticket !== ''
-                || $updateTicket !== ''
-                || preg_match('/^[a-f0-9]{64}$/D', $mediaTicket) !== 1
-                : (
-                    $updaterOnly
-                        ? $telemetryOnly
-                        || $ticket !== ''
-                        || preg_match('/^[a-f0-9]{64}$/D', $updateTicket) !== 1
-                        : (
-                            $telemetryOnly
-                                ? $ticket !== ''
-                                : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
-                        )
-                )
-        )
-    ) {
+    $schedulerOnly = $schedulerTicket !== '';
+    // Exactly one semantic mode is allowed; credentials cannot mix workers.
+    $modes = (int) $telemetryOnly + (int) ($ticket !== '')
+        + (int) $updaterOnly + (int) $mediaOnly + (int) $schedulerOnly;
+    if (!function_exists('stream_socket_client') || $modes !== 1) {
         return false;
+    }
+    foreach ([$ticket, $updateTicket, $mediaTicket, $schedulerTicket] as $value) {
+        if ($value !== '' && preg_match('/^[a-f0-9]{64}$/D', $value) !== 1) {
+            return false;
+        }
     }
     // Preserve the updater's single-worker protection and admitted-visit
     // fallback. Media hops, like telemetry, return after one bounded slice
@@ -1171,7 +1170,9 @@ function site_maintenance_fire_background_worker(
     $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80));
     if ($port < 1 || $port > 65535)
         return false;
-    if ($mediaOnly) {
+    if ($schedulerOnly) {
+        $payload = ['scheduler_ticket' => $schedulerTicket];
+    } elseif ($mediaOnly) {
         $payload = ['media_ticket' => $mediaTicket];
     } elseif ($updaterOnly) {
         $payload = ['update_ticket' => $updateTicket];
@@ -1219,7 +1220,9 @@ function site_maintenance_fire_background_worker(
         return false;
     try {
         stream_set_timeout($socket, $transportSeconds);
-        if ($mediaOnly) {
+        if ($schedulerOnly) {
+            $agent = 'PHP-Gallery-Scheduler-Worker';
+        } elseif ($mediaOnly) {
             $agent = 'PHP-Gallery-Media-Counts-Worker';
         } elseif ($updaterOnly) {
             $agent = 'PHP-Gallery-Update-Worker';
@@ -1638,9 +1641,10 @@ function site_maintenance_register_telemetry_trigger(string $page): void
 
 /**
  * Admit the private telemetry worker under central ownership and telemetry policy.
+ * @param bool $force Bypass only the telemetry due threshold for an authenticated manual slice.
  * @return array{ok:bool,skipped?:bool,reason?:string,has_more?:bool,error?:string,rolled_up?:int,deleted?:array<string,int>,checkpoint?:?string} Bounded progress or a safe unavailable/disabled/busy result.
  */
-function site_maintenance_telemetry_worker_run(): array
+function site_maintenance_telemetry_worker_run(bool $force = false): array
 {
     try {
         if (
@@ -1656,7 +1660,9 @@ function site_maintenance_telemetry_worker_run(): array
                 'reason' => 'central_maintenance_active',
             ];
         }
-        return telemetry_run_scheduled_maintenance();
+        return $force
+            ? telemetry_run_maintenance(['force' => true])
+            : telemetry_run_scheduled_maintenance();
     } catch (Throwable) {
         return [
             'ok' => false,
@@ -1664,6 +1670,60 @@ function site_maintenance_telemetry_worker_run(): array
             'error' => 'maintenance_unavailable',
         ];
     }
+}
+
+/**
+ * Observe foreground traffic without admitting cache work.
+ * @param string $page Canonical HTML route; only existing public cache routes qualify.
+ * @return array{handle:resource,held:bool,directory:string,root:string}|null Shared foreground lease and guarded paths, or null for excluded/unavailable traffic.
+ */
+function site_maintenance_cache_foreground_lease(string $page): ?array
+{
+    if (PHP_SAPI === 'cli'
+        || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
+        || strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'GET'
+        || !feature_capability_effective_enabled('automatic_cache_cleanup')) {
+        return null;
+    }
+    try {
+        $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
+            ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
+            : dirname(__DIR__, 2);
+        foreach (['visitor.lock', 'visitor-signal', 'visitor-attempt'] as $name) {
+            application_update_assert_safe_target(
+                $root, 'cache/site-maintenance/' . $name, true);
+        }
+        $directory = site_maintenance_cache_dir();
+        $foreground = @fopen($directory . '/visitor.lock', 'c');
+        if (!is_resource($foreground)) {
+            return null;
+        }
+        @file_put_contents($directory . '/visitor-signal', (string) hrtime(true));
+        $held = flock($foreground, LOCK_SH | LOCK_NB);
+        return ['handle' => $foreground, 'held' => $held,
+            'directory' => $directory, 'root' => $root];
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+/**
+ * Retain foreground priority through rendering without registering a cache job.
+ * @param string $page Canonical route of the central visitor lifecycle.
+ * @return void Releases only its shared observation lease after the response; scheduler admission remains separate.
+ */
+function site_maintenance_register_foreground_observation(string $page): void
+{
+    $lease = site_maintenance_cache_foreground_lease($page);
+    if ($lease === null) {
+        return;
+    }
+    register_shutdown_function(static function () use ($lease): void {
+        if ($lease['held']) {
+            flock($lease['handle'], LOCK_UN);
+        }
+        fclose($lease['handle']);
+    });
 }
 
 /**
@@ -1676,46 +1736,15 @@ function site_maintenance_register_cache_trigger(
     string $page,
     ?callable $loadDependencies = null,
 ): void {
-    if (
-        PHP_SAPI === 'cli'
-        || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
-        || strtoupper(
-            (string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'),
-        ) !== 'GET'
-        || !feature_capability_effective_enabled('automatic_cache_cleanup')
-    )
+    $lease = site_maintenance_cache_foreground_lease($page);
+    if ($lease === null) {
         return;
+    }
+    $foreground = $lease['handle'];
+    $held = $lease['held'];
+    $directory = $lease['directory'];
+    $root = $lease['root'];
     try {
-        // Guard the complete ancestry before touching coordination metadata.
-        $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
-            ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
-            : dirname(__DIR__, 2);
-        application_update_assert_safe_target(
-            $root,
-            'cache/site-maintenance/visitor.lock',
-            true,
-        );
-        application_update_assert_safe_target(
-            $root,
-            'cache/site-maintenance/visitor-signal',
-            true,
-        );
-        application_update_assert_safe_target(
-            $root,
-            'cache/site-maintenance/visitor-attempt',
-            true,
-        );
-        $directory = site_maintenance_cache_dir();
-        $foreground = @fopen($directory . '/visitor.lock', 'c');
-        if (!is_resource($foreground))
-            return;
-        // Visitors never wait for GC. A signal also detects arrivals during a
-        // burst when its exclusive lease cannot reveal queued PHP requests.
-        @file_put_contents(
-            $directory . '/visitor-signal',
-            (string) hrtime(true),
-        );
-        $held = flock($foreground, LOCK_SH | LOCK_NB);
         register_shutdown_function(static function () use (
             $foreground,
             $held,
@@ -1788,8 +1817,40 @@ function site_maintenance_register_cache_trigger(
  * configured UTC time only decides when a new daily cycle may start. Active work
  * continues across later calls until all phases complete.
  *
- * @param array{force?:bool,source?:string,time_budget_seconds?:int,chain?:bool,cache_only?:bool,cache_run_id?:string} $options Optional flags; cache_run_id correlates explicit manual cleanup diagnostics.
- * @return array<string,mixed> Maintenance response with boolean ok/busy/skipped/done as applicable, safe reason/status strings, optional thumbnail state and telemetry; cache_gc contains owner ok/value/diagnostic, actual removed/bytes_removed/visited, blocked/done, elapsed_ms, total_bytes_removed and next_due when GC runs.
+ * @param array{force?:bool,source?:string,time_budget_seconds?:int,chain?:bool,cache_only?:bool,cache_run_id?:string,scheduler_task_only?:bool} $options Controls for one bounded owner call; cache_run_id correlates explicit manual cleanup diagnostics, while scheduler_task_only excludes unrelated telemetry/cache owners without changing thumbnail safety.
+ * @return array{
+ *   ok:bool,busy?:bool,skipped?:bool,done?:bool,has_more?:bool,reason?:string,
+ *   status?:string,phase?:string,cycle_date?:string,forced?:bool,steps?:int,
+ *   central_job_id?:int,central_phase?:string,continuation_queued?:bool,
+ *   batch_results?:list<array{worked:bool,phase:string,processed_images?:int,
+ *     seen_images?:int,created?:int,skipped?:int,failed?:int,deferred?:int,
+ *     interrupted?:int,metadata_rows_refreshed?:int,metadata_source_syncs?:int,
+ *     duration_seconds?:float,cursor_image_id?:int,next_phase?:string,
+ *     cleanup?:array<string,int>,cleanup_diagnostics?:array<string,array{
+ *       ok:bool,error_code?:string,exception_class?:string,duration_ms?:int}>}>,
+ *   state?:array{status:string,cycle_date:string,source:string,phase:string,
+ *     window_paused_at:string,cursor_image_id:int,current_image_id:int,
+ *     current_image_started_at:string,started_at:string,updated_at:string,
+ *     finished_at:string,error_code:string,exception_class:string,
+ *     last_step_at:string,last_step_summary:array<string,int|float|string|bool>,
+ *     totals:array<string,int>,cleanup:array<string,int>,
+ *     cleanup_diagnostics:array<string,array{ok:bool,error_code?:string,
+ *       exception_class?:string,duration_ms?:int}>,
+ *     thumbnail_metadata_start_snapshot:array<string,int|string|bool>,
+ *     thumbnail_metadata_end_snapshot:array<string,int|string|bool>},
+ *   schedule?:array{due:bool,within_window:bool,date:string,scheduled_at:string,
+ *     window_ends_at:string,seconds_until:int,seconds_until_window_end:int},
+ *   telemetry?:array{ok?:bool,skipped?:bool,reason?:string,error?:string,
+ *     has_more?:bool,rolled_up?:int,deleted?:array<string,int>,checkpoint?:?string},
+ *   cache_lifecycle?:array{ok:bool,value:CacheLifecycleCheckpoint|null,
+ *     diagnostic:array<string,int|float|string|bool>},
+ *   cache_gc?:array{ok:bool,value:array{ok:bool,skipped:bool,reason:string,
+ *     done:bool,removed:int,bytes_removed:int,visited:int,blocked:bool,
+ *     elapsed_ms:float,total_bytes_removed:int,next_due:int,failure_code:string,
+ *     failure_operation:string,object_token:string}|null,
+ *     diagnostic:array<string,int|float|string|bool>}
+ * } Bounded progress, a safe disabled/busy/window skip, or an owner failure;
+ *   optional cleanup evidence contains actual reclaimed counters only.
  */
 function site_maintenance_run(array $options = []): array
 {
@@ -1799,6 +1860,11 @@ function site_maintenance_run(array $options = []): array
     $chain = array_key_exists('chain', $options)
         ? !empty($options['chain'])
         : false;
+    $taskOnly = !empty($options['scheduler_task_only']);
+    if ($taskOnly && (!site_maintenance_enabled()
+        || !site_maintenance_request_trigger_enabled())) {
+        return ['ok' => true, 'skipped' => true, 'reason' => 'disabled'];
+    }
     $cacheOnly = !empty($options['cache_only']);
     if ($cacheOnly)
         $chain = false;
@@ -1842,7 +1908,7 @@ function site_maintenance_run(array $options = []): array
     // Retention has its own lock, throttle, checkpoint and failure evidence.
     // Run it even when thumbnail work is busy, failed or outside its time window.
     $telemetryStarted = microtime(true);
-    $telemetry = !$cacheOnly
+    $telemetry = !$taskOnly && !$cacheOnly
     && function_exists(__NAMESPACE__ . '\\telemetry_run_scheduled_maintenance')
         ? telemetry_run_scheduled_maintenance()
         : ['skipped' => true];
@@ -1858,6 +1924,7 @@ function site_maintenance_run(array $options = []): array
         $source,
         $timeBudgetSeconds,
         $cacheOnly,
+        $taskOnly,
         $cacheRunId,
         &$cacheCleanup,
         &$cacheLifecycle,
@@ -1876,7 +1943,7 @@ function site_maintenance_run(array $options = []): array
             in_array($source, ['admin_manual', 'admin_cache_manual'], true)
             || feature_capability_effective_enabled('automatic_cache_cleanup');
         if (
-            $cacheAllowed
+            !$taskOnly && $cacheAllowed
             && function_exists(__NAMESPACE__
                 . '\\application_update_run_scheduled_cache_cleanup')
         ) {
@@ -1924,11 +1991,13 @@ function site_maintenance_run(array $options = []): array
                 'reason' => 'cache_only',
             ];
         }
-        $cacheLifecycle = site_maintenance_run_cleanup_operation(
-            'cache_lifecycle',
-            static fn(): array => cache_lifecycle_scheduled_slice($force),
-            ['source' => $source],
-        );
+        if (!$taskOnly) {
+            $cacheLifecycle = site_maintenance_run_cleanup_operation(
+                'cache_lifecycle',
+                static fn(): array => cache_lifecycle_scheduled_slice($force),
+                ['source' => $source],
+            );
+        }
         if (!site_maintenance_enabled() && !$force) {
             return [
                 'ok' => true,

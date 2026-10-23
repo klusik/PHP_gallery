@@ -1209,7 +1209,7 @@ function admin_save_gallery_from_input(
  * Apply the authenticated request after the service reserved its edit revision.
  *
  * @param array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...} $gallery Current row returned by the reservation.
- * @param array{edit_revision?:int|string,cover_image_id?:int|string,description?:string,...} $input Submitted editor transport fields, including optional title-picture mode.
+ * @param array{edit_revision?:int|string,cover_image_id?:int|string,description?:string,scheduled_publish_at?:string,...} $input Submitted editor transport fields, including optional title-picture mode and UTC publication time (empty cancels).
  * @param array<string,array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int}> $files PHP upload descriptors indexed by field name.
  * @param string $returnTab Validated editor tab.
  * @param bool $completeForm True for the full editor, false for a partial action.
@@ -1222,6 +1222,24 @@ function admin_save_gallery_owned_input(
     string $returnTab,
     bool $completeForm,
 ): array {
+    // Validate publication intent before any folder/upload effects.
+    if (($input['visibility'] ?? $gallery['visibility']) === 'public') {
+        \Gallery\Services\gallery_publication_manual_storage_available();
+    }
+    $schedulePresent = array_key_exists('scheduled_publish_at', $input);
+    if ($schedulePresent && !is_string($input['scheduled_publish_at'])) {
+        throw new RuntimeException(t('publication.invalid'));
+    }
+    $scheduledPublishAt = $schedulePresent
+        ? \Gallery\Services\gallery_publication_validate(
+            $input['scheduled_publish_at'],
+            $gallery['scheduled_publish_at'] ?? null,
+        )
+        : null;
+    // Explicit manual publication consumes any pending intent in the same save.
+    if (($input['visibility'] ?? '') === 'public') {
+        $scheduledPublishAt = null;
+    }
     // Validate explicit presentation writes before any folder/upload effects.
     // Older forms omit the marker and preserve the exact stored preferences.
     $presentationJson = null;
@@ -1879,12 +1897,12 @@ function admin_save_gallery_owned_input(
     );
     $shouldUpdateAccess =
         $accessInputPresent || ($completeForm && $accessReady);
-    // $shouldUpdateAccessListing keeps the legacy access_listing compatibility flag in lockstep
-    // with an explicitly submitted visibility value. This is intentionally separate from
-    // $shouldUpdateAccess so an inline Published/Unpublished/Private change cannot clear a
-    // password, revoke a token, or otherwise mutate access controls that were not submitted.
-    $shouldUpdateAccessListing =
-        $accessReady && ($completeForm || $visibilityInputPresent);
+    // A changed manual visibility selection owns listing intent. An unchanged
+    // full form must preserve public+unlisted after scheduled publication.
+    // Partial visibility actions remain explicit publication/listing commands.
+    // Neither path opts into password/token controls that were not submitted.
+    $shouldUpdateAccessListing = $accessReady && $visibilityInputPresent
+        && (!$completeForm || $visibility !== $gallery['visibility']);
     if (
         !$accessReady
         && !$accessLegacy
@@ -1974,6 +1992,9 @@ function admin_save_gallery_owned_input(
             ?? 0
         ),
     ];
+    if ($schedulePresent) {
+        $fields['scheduled_publish_at'] = $scheduledPublishAt;
+    }
     if ($shouldMoveGallery) {
         $fields['parent_id'] = $parentId;
     }

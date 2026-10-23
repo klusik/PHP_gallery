@@ -45,7 +45,11 @@ use function Gallery\Core\request_data;
 use function Gallery\Core\session_context_get;
 use function Gallery\Core\session_context_remove;
 use function Gallery\Core\session_context_set;
+use DateTimeImmutable;
+use DateTimeZone;
 use RuntimeException;
+use Throwable;
+use function Gallery\Models\gallery_publication_model_due;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
 use function Gallery\Models\gallery_model_find_by_access_token_hash;
@@ -183,6 +187,122 @@ final class GalleryShareTokenSchemaUnavailableException extends
     public function __construct()
     {
         parent::__construct('gallery_share_token');
+    }
+}
+
+// Bound due work so a long traffic outage cannot monopolize one visitor.
+// Type: int. Units: galleries. Scope: one eligible request.
+// Consumers: gallery_publication_request. Rationale: 16 small transitions allow
+// catch-up while leaving remaining durable deadlines for subsequent visits.
+const GALLERY_PUBLICATION_BATCH_SIZE = 16;
+
+/**
+ * Observe the complete minimum schema needed for an indexed safe transition.
+ * @return string Available, missing or unknown; unknown takes precedence.
+ */
+function gallery_publication_schema_state(): string
+{
+    $state = 'available';
+    foreach ([
+        'scheduled_publish_at', 'edit_revision', 'visibility', 'access_listing',
+    ] as $column) {
+        $result = schema_inspection_column('galleries', $column);
+        if (schema_inspection_is_unknown($result)) {
+            return 'unknown';
+        }
+        if (schema_inspection_is_missing($result)) {
+            $state = 'missing';
+        }
+    }
+    $index = schema_inspection_index(
+        'galleries',
+        'idx_galleries_scheduled_publish_at',
+    );
+    if (schema_inspection_is_unknown($index)) {
+        return 'unknown';
+    }
+    return schema_inspection_is_missing($index) ? 'missing' : $state;
+}
+
+/**
+ * Verify whether manual publication can clear optional deadline storage.
+ * @return bool True for verified storage; false only for a confirmed old schema.
+ * @throws RuntimeException When unknown storage could leave an active deadline.
+ */
+function gallery_publication_manual_storage_available(): bool
+{
+    $column = schema_inspection_column('galleries', 'scheduled_publish_at');
+    if (schema_inspection_is_unknown($column)) {
+        throw new RuntimeException(t('publication.unavailable'));
+    }
+    return schema_inspection_is_available($column);
+}
+
+/**
+ * Validate a native datetime-local control explicitly labelled UTC.
+ * Existing unchanged deadlines may be past while awaiting a visitor; new ones
+ * must be strictly future. UTC removes ambiguous/repeated DST wall times.
+ * @param string $input Native UTC datetime-local value; empty string cancels.
+ * @param string|null $existing Persisted UTC deadline from the owned row.
+ * @param DateTimeImmutable|null $now Clock injection; null uses current UTC time.
+ * @return string|null Canonical UTC SQL datetime, or null for cancellation.
+ * @throws RuntimeException On unavailable storage or invalid/nonfuture new input.
+ */
+function gallery_publication_validate(
+    string $input,
+    ?string $existing,
+    ?DateTimeImmutable $now = null,
+): ?string {
+    if (gallery_publication_schema_state() !== 'available') {
+        throw new RuntimeException(t('publication.unavailable'));
+    }
+    if ($input === '') {
+        return null;
+    }
+    $utc = new DateTimeZone('UTC');
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', $input, $utc);
+    if (!$date || $date->format('Y-m-d\TH:i') !== $input) {
+        throw new RuntimeException(t('publication.invalid'));
+    }
+    $stored = $date->format('Y-m-d H:i:s');
+    if ($stored !== $existing && $date <= ($now ?? new DateTimeImmutable('now', $utc))) {
+        throw new RuntimeException(t('publication.invalid'));
+    }
+    return $stored;
+}
+
+/**
+ * Admit indexed publication work on an ordinary PHP page visit only.
+ * @param string $method Normalized HTTP method.
+ * @param callable(string):void $load Existing runtime loader for due-only owners.
+ * @return void Leave deadlines pending on unavailable schema, contention or failure.
+ */
+function gallery_publication_request(string $method, callable $load): void
+{
+    if (!in_array($method, ['GET', 'HEAD'], true)) {
+        return;
+    }
+    try {
+        $state = gallery_publication_schema_state();
+        if ($state !== 'available') {
+            if ($state === 'unknown') {
+                error_log('Gallery scheduled publication: schema unknown; deferred.');
+            }
+            // Permanent upgrade compatibility: no schedule can be consumed until
+            // the normal migration verifies both its column and due index.
+            return;
+        }
+        $now = gmdate('Y-m-d H:i:s');
+        $due = gallery_publication_model_due($now, GALLERY_PUBLICATION_BATCH_SIZE);
+        if ($due === []) {
+            return;
+        }
+        $load('site-maintenance-work');
+        gallery_editor_publish_due($due, $now);
+    } catch (Throwable) {
+        // Existing visibility remains the authority; a later visit retries.
+        // Never disclose SQL, credentials, gallery paths or private identifiers.
+        error_log('Gallery scheduled publication: operation deferred.');
     }
 }
 

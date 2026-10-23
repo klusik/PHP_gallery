@@ -7,8 +7,9 @@
  * Purpose: Verify disposable-workflow ownership and opt-in guards.
  * Responsibilities:
  *   - Reject unsafe fixture configurations before any database connection.
+ *   - Execute disposable-fixture guards without opening a database connection.
  * Author: Rudolf Klusal
- * Execute disposable-fixture guards without opening a database connection.
+ * License: MIT License (see LICENSE file in repository)
  */
 declare(strict_types=1);
 
@@ -109,11 +110,24 @@ $runnerSource = (string) file_get_contents(
 $mysqlSource = (string) file_get_contents(
     dirname(__DIR__) . '/scripts/gallery_workflow_mysql.php',
 );
-foreach ([$runnerSource, $mysqlSource] as $source) {
+// Only the private-MySQL launcher owns the opt-in loader benchmark. Retain
+// exact mode lists for both entrypoints rather than accepting arbitrary flags.
+foreach ([
+    [
+        $runnerSource,
+        "['--development', '--audit-quick', '--audit', '--release',"
+            . " '--route-probes']",
+    ],
+    [
+        $mysqlSource,
+        "['--development', '--audit-quick', '--audit', '--release',"
+            . " '--route-probes', '--loader-benchmark']",
+    ],
+] as [$source, $expectedModes]) {
     check(
         php_source_contains(
             $source,
-            "['--development', '--audit-quick', '--audit', '--release', '--route-probes']",
+            $expectedModes,
         )
             && php_source_contains($source, "if ((\$argv[1] ?? '') === '--quick')")
             && php_source_contains(
@@ -123,6 +137,15 @@ foreach ([$runnerSource, $mysqlSource] as $source) {
         'Qualification modes and direct quick delegation must remain explicit.',
     );
 }
+check(
+    php_source_contains(
+        $mysqlSource,
+        "\$childCommand = \$mode === '--loader-benchmark'"
+            . " ? [PHP_BINARY, __DIR__ . '/audit_loader_benchmark.php']"
+            . " : [PHP_BINARY, __DIR__ . '/gallery_workflow_run.php', \$mode]",
+    ),
+    'Only the benchmark mode may delegate to the dedicated measurement tool.',
+);
 check(
     php_source_contains($runnerSource, "'--release' => 'release'")
         && !php_source_contains($runnerSource, "'--quick' => 'quick'"),

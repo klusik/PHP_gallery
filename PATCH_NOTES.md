@@ -1,5 +1,167 @@
 # Patch notes
 
+## Version 0.142
+
+Added visitor-triggered gallery publication and a central maintenance scheduler
+with an interactive Cron Overview. Refined the Picture manager into a compact
+contextual panel and reduced repeated runtime-loader work while retaining its
+validation and selective-loading safeguards.
+
+### Highlights
+
+#### Scheduled gallery publication
+
+- Added scheduling, rescheduling, and cancellation in the gallery Access editor.
+  Published due galleries on the next eligible PHP GET or HEAD visit, including
+  crawler visits, before that request rendered its gallery discovery results.
+  [#284](https://github.com/klusik/PHP_gallery/issues/284)
+- Restored both public visibility and listed discovery when a schedule executed,
+  matching manual Publish. Preserved passwords, share-token rules, NSFW checks,
+  inherited access, PDF publication guards, and Trash ownership protections.
+- Displayed the native date/time control in the browser timezone with an exact
+  UTC preview. Preserved an unchanged stored instant during the repeated autumn
+  hour, rejected nonexistent spring times, and retained explicitly labelled UTC
+  input without JavaScript. Manual publication cleared pending intent.
+
+#### Visitor scheduler and Cron Overview
+
+- Centralized visitor opportunities for updates, log archival, site maintenance,
+  cache work, detached updater cleanup, telemetry, and initial attachment-usage
+  reconciliation. Admitted at most one bounded background task per tick while
+  preserving each owner's enablement, cadence, locks, and Maintenance Center
+  claims. Kept scheduled gallery publication as a separate foreground phase.
+  [#285](https://github.com/klusik/PHP_gallery/issues/285)
+- Added Maintenance → Cron Overview with sortable task rows, absolute and relative
+  eligibility times, actual last-run evidence, inline Play controls, and links
+  to existing task settings. Distinguished disabled, completed, empty-cleanup,
+  unscheduled, and unknown states without inventing completion evidence.
+- Updated status cells in place while preserving focus, scroll, and sorting.
+  Added pause/resume for the live preview, stopped reads while hidden or
+  unmounted, and rejected late responses. Preview pause left task execution
+  and explicit manual actions available.
+- Added an optional hosting URL with a separately revocable 256-bit token and an
+  independent one-minute admission window. Kept ordinary visitor scheduling
+  available without hosting cron, an Admin visit, or a browser timer.
+
+#### Compact contextual Picture manager
+
+- Reworked the panel around destination actions, expandable gallery creation,
+  and contextual help. Hid the empty HUD until top-edge hover or keyboard focus
+  and kept it visible while photos or physical galleries were selected.
+- Retained range/toggle selection, destination search, move/copy/delete actions,
+  and physical-gallery creation semantics. Moved detailed guidance into an
+  accessible help popover and retained compact mobile controls.
+
+#### Runtime loading and diagnostics
+
+- Checked canonical file order in one pass, reused physical path checks within
+  one dependency preflight, tracked module completion with counters, and avoided
+  canonical execution scans for empty or repeated loads.
+- Retained full composed-plan validation per request, fresh filesystem checks
+  on later loads, dependency ordering, selective loading, and path/graph safety.
+  Added phase measurements to the existing opt-in Test Run diagnostics.
+
+### Technical Details
+
+#### Backend
+
+- Added `app/services/request_scheduler.php`, its owned execution/status parts,
+  and `app/services/request_scheduler_trigger.php`. Deferred planner loading
+  until an admitted successful-response shutdown opportunity.
+- Reused response-finish primitives for one bounded owner invocation where
+  available and retained private-worker transport elsewhere. Added consumed,
+  expiring tickets and shared installation/worker locks; failed handoffs stayed
+  retryable without an inline heavy-work fallback or a scheduler request loop.
+- Added `app/controllers/admin_cron.php` and `app/views/admin_cron.php` for
+  `admin_cron_overview`, passive `admin_cron_status`, CSRF-protected
+  `admin_cron_run` and `admin_cron_token`, and token-authenticated
+  `request_scheduler_cron` routing. Kept status reads free of task admission,
+  remote release checks, inventory scans, and coordination-state creation.
+- Reused gallery access, model, editor, and writer-lease owners for publication.
+  Checked the captured deadline and current edit revision before each atomic
+  visibility transition; retained pending work after contention or refusal.
+
+#### Database and compatibility
+
+- Added
+  `database/migrations/202610230001_gallery_scheduled_publication.php` with
+  nullable `galleries.scheduled_publish_at DATETIME` and
+  `idx_galleries_scheduled_publish_at`. Stored UTC deadlines directly on gallery
+  rows; introduced no publication queue or scheduler table. Reused the existing
+  duplicate-DDL recovery for interrupted column/index migration.
+- Required confirmed available publication storage before scheduling or consuming
+  deadlines. Confirmed missing storage preserved pre-feature gallery operation
+  with scheduling unavailable; unknown inspection refused scheduling. Checked
+  explicit publication intent before folder/upload effects, and allowed legacy
+  manual publication only when deadline storage was conclusively absent.
+- Bounded due publication to 16 candidate identities per visit and used an indexed
+  scan cursor so blocked rows could not permanently starve later deadlines.
+  Updated edit revisions and resulting sidecars without importing old pending
+  schedules through sidecars. Database visibility remained authoritative when
+  a sidecar refresh failed, with bounded diagnostics.
+- Retained native POST/redirect for manual scheduler actions without JavaScript.
+  Kept passive reporting unknown when evidence was unavailable; task execution
+  retained each owner's schema and enablement checks. Rejected invalid/revoked
+  hosting credentials and replayed, expired, or mixed-mode worker tickets.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/admin-cron.js` and
+  `public/assets/styles/admin-cron.css` with compact desktop rows, 44 px mobile
+  touch targets, contained horizontal scrolling, and sequential status polling.
+- Updated `public/assets/gallery-modules/admin-date-picker.js`, gallery Access
+  markup/styles, side-panel completion, and the public Picture manager controls.
+  Updated English, Czech, German, and Swedish labels and module cache revisions.
+
+#### Runtime tools and tests
+
+- Updated `app/runtime/ModuleLoader.php` and `app/runtime/bridge.php` to measure
+  metadata, validation, dependency/path planning, execution, and includes.
+  Reviewed the private lexical diagnostic callback in the dynamic-dependency
+  registry while retaining unknown-expression rejection.
+- Added `scripts/audit_loader_benchmark.php` with disposable public and
+  authenticated Admin requests, cold/warm OPcache variants, response-contract
+  checks, source hashes, and retained numeric evidence. Recorded the method and
+  limits in `docs/MODULE_LOADING_PERFORMANCE.md`; local measurements established
+  no production latency guarantee and changed no server configuration.
+- Added `tests/gallery_publication_test.php` and
+  `tests/gallery_publication_local_time_test.mjs`; extended real SQL/HTTP coverage
+  for deadline boundaries, missing/unknown schema, stale revisions, rescheduling,
+  cancellation, crawler GET/HEAD, discovery, sidecars, PDF guards, and deletion.
+- Added `tests/request_scheduler_test.php` and
+  `tests/admin_cron_browser_test.mjs` for admission, fairness, transport/ticket
+  safety, hosting-token lifecycle/throttling, sorting, desktop/mobile layout,
+  passive polling, pause/resume, stale bodies, and manual completion races.
+- Extended runtime kernel/plan regressions for shared files, canonical order,
+  empty/repeated loads, later filesystem changes, partial completion, and unsafe
+  dependency expressions. Updated central registrations and existing workflow,
+  Picture manager, and fullscreen interaction fixtures.
+- Updated architecture, database, testing, compatibility, Admin design, and
+  scheduler documentation together with all four maintained TeX manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Made due galleries public and discoverable on an eligible visit while retaining
+  independent access protections. Visits also supplied bounded maintenance
+  opportunities. No traffic meant no automatic execution; a due time remained
+  an eligibility threshold rather than an exact wall-clock execution promise.
+
+#### For administrators
+
+- Added publication scheduling in the existing Access editor and a single live
+  overview for maintenance state, manual task admission, and settings links.
+- Reduced the Picture manager's idle footprint while retaining selected-item
+  context and existing actions. Kept hosting cron optional and separated live
+  preview pause from the maintenance work itself.
+
+#### For maintainers
+
+- Reduced repeated loader bookkeeping without adding persistent validation caches
+  or changing runtime safety limits. Added reproducible diagnostic tooling and
+  expanded regression coverage for the new publication and scheduling paths.
+
 ## Version 0.141.3
 
 Improved public gallery search suggestions with progressive selection, safer query
