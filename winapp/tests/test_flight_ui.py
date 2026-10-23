@@ -24,6 +24,7 @@ import uploader.flight_ui as flight_ui
 import uploader.flight_workflow as flight_workflow
 from uploader.flight_jobs import (
     FlightPreferences, SavedFlight, SessionPlan, connection_binding,
+    ImportBindings,
 )
 
 
@@ -66,6 +67,7 @@ class FlightUITests(unittest.TestCase):
             watcher_activity_var=Mock(),
             api_key_request_blockers=Mock(return_value=[]),
             refresh_connection_controls=Mock(),
+            forget_flight_connection=Mock(),
             open_local_path=Mock(),
             open_log_file=Mock(),
             gallery_label_var=Mock(get=Mock(return_value="Target gallery: Test gallery")),
@@ -90,6 +92,7 @@ class FlightUITests(unittest.TestCase):
         ui.import_bindings = SimpleNamespace(entries=lambda: {})
         ui.operation = None
         ui.automatic_operation = None
+        ui.abandon_previous = None
         ui.text = lambda key: key
         ui.recorder = None
         ui.plan = None
@@ -152,6 +155,122 @@ class FlightUITests(unittest.TestCase):
         )
         return ui
 
+    def test_abandon_cancels_producers_without_resuming_delivery(self) -> None:
+        """Stop active and failed-flight work before forgetting the saved key.
+
+        Returns:
+            None: Confirmation cancels predecessor revocation, stops producers
+                and starts only local abandonment with no resume or transport.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        previous = flight_workflow.FinalizationWorker(
+            [], host.config.gallery_url, host.config.api_key, Mock(), Mock(), True,
+        )
+        ui.operation = previous
+        ui.recorder = Mock()
+        ui.resume_workers = [Mock()]
+        for name in ("worker", "manual_worker", "preflight_worker", "ai_worker"):
+            setattr(host, name, Mock(is_alive=Mock(return_value=True)))
+        with (
+            patch.object(flight_ui.messagebox, "askyesno", return_value=True),
+            patch.object(flight_ui, "FinalizationWorker") as factory,
+        ):
+            ui.abandon()
+        self.assertTrue(previous.cancel.is_set())
+        self.assertFalse(previous.wants_revoke)
+        self.assertIs(previous, ui.abandon_previous)
+        ui.stop.assert_called_once_with()
+        host.utc_sync.stop.assert_called_once_with()
+        for worker in (host.worker, host.manual_worker, host.preflight_worker,
+                       host.ai_worker, *ui.resume_workers):
+            worker.stop.assert_called_once_with()
+        self.assertEqual(ui.wait_for_abandonment, factory.call_args.args[3])
+        self.assertEqual(ui.submit_forget, factory.call_args.kwargs["forget"])
+        self.assertTrue(host.api_key_revoke_running)
+        ui.resume_photos.assert_not_called()
+        ui.revoke_transport.assert_not_called()
+        host.forget_flight_connection.assert_not_called()
+
+    def test_abandon_declined_or_submitted_revoke_preserves_connection(self) -> None:
+        """Refuse cleanup before confirmation or during submitted revocation.
+
+        Returns:
+            None: A declined choice has no effects; a pending server response
+                keeps its worker and key and cannot become local abandonment.
+        """
+        ui = self._ui(self._host())
+        with patch.object(flight_ui.messagebox, "askyesno", return_value=False):
+            ui.abandon()
+        self.assertIsNone(ui.operation)
+        ui.stop.assert_not_called()
+        previous = flight_workflow.FinalizationWorker(
+            [], ui.host.config.gallery_url, ui.host.config.api_key, Mock(), Mock(), True,
+        )
+        previous.server_request_sent = True
+        previous.update("revoking")
+        ui.operation = previous
+        ui.busy = flight_ui.FlightUI.busy.__get__(ui, flight_ui.FlightUI)
+        with patch.object(flight_ui.messagebox, "askyesno", return_value=True):
+            ui.abandon()
+        self.assertIs(previous, ui.operation)
+        self.assertFalse(previous.cancel.is_set())
+        ui.host.forget_flight_connection.assert_not_called()
+
+    def test_abandon_wait_requires_stopped_requests_but_not_delivery(self) -> None:
+        """Wait through existing requests while retaining unresolved queues.
+
+        Returns:
+            None: The barrier tolerates pending photographs/imports, waits for
+                prior work and fails on timeout before any local key cleanup.
+        """
+        ui = self._ui(self._host())
+        ui.host.api_key_request_blockers.side_effect = [["upload"], []]
+        cancel = Mock(is_set=Mock(return_value=False))
+        ui.wait_for_abandonment(
+            cancel, time.monotonic() + flight_workflow.FINALIZATION_DRAIN_SECONDS,
+        )
+        cancel.wait.assert_called_once_with(flight_ui.DRAIN_POLL_SECONDS)
+        ui.pending.assert_not_called()
+        ui.host.api_key_request_blockers.side_effect = None
+        ui.host.api_key_request_blockers.return_value = ["upload"]
+        with self.assertRaises(TimeoutError):
+            ui.wait_for_abandonment(threading.Event(), time.monotonic())
+        ui.host.forget_flight_connection.assert_not_called()
+
+    def test_abandon_cleanup_is_bound_and_persistence_failure_is_retryable(self) -> None:
+        """Resolve only captured imports and retain failed key cleanup for retry.
+
+        Returns:
+            None: Stale events cannot clear a key, matching imports alone are
+                released, and local save failure remains an error until retried.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ui = self._ui(self._host())
+            binding = ui.binding()
+            ui.import_bindings = ImportBindings(Path(temporary))
+            ui.import_bindings.bind("same", binding)
+            other = connection_binding("https://other.test/api", "other")
+            ui.import_bindings.bind("other", other)
+            worker = flight_workflow.FinalizationWorker(
+                [], ui.host.config.gallery_url, ui.host.config.api_key,
+                Mock(), Mock(), False, forget=Mock(),
+            )
+            worker.update("saving_key")
+            ui.operation = worker
+            ui.forgotten(other)
+            ui.host.forget_flight_connection.assert_not_called()
+            ui.host.forget_flight_connection.side_effect = OSError("disk full")
+            ui.forgotten(binding)
+            self.assertEqual("error", worker.snapshot().phase)
+            self.assertEqual({"other": other}, ui.import_bindings.entries())
+            self.assertEqual("test-key", ui.host.config.api_key)
+            worker.update("saving_key")
+            ui.host.forget_flight_connection.side_effect = None
+            ui.forgotten(binding)
+            self.assertEqual("completed", worker.snapshot().phase)
+            self.assertEqual(worker.snapshot().total, worker.snapshot().done)
+
     def test_keep_local_preserves_confirmed_revoke_without_second_confirmation(self) -> None:
         """Carry the failed workflow's existing consent through local completion.
 
@@ -213,7 +332,7 @@ class FlightUITests(unittest.TestCase):
                 automatic completion; ordinary connection controls remain gated.
         """
         ui = self._ui(self._host())
-        operation = Mock(local_reports=False, saved_upload=False)
+        operation = Mock(local_reports=False, saved_upload=False, abandonment=False)
         with patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
             flight_ui, "FinalizationWorker", return_value=operation,
         ) as factory:
@@ -509,7 +628,8 @@ class FlightUITests(unittest.TestCase):
         host.ai_worker.is_alive.return_value = True
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
-        operation = SimpleNamespace(wants_revoke=False, local_reports=False, saved_upload=False, start=Mock())
+        operation = SimpleNamespace(wants_revoke=False, local_reports=False,
+                                    saved_upload=False, abandonment=False, start=Mock())
         with patch.object(
             flight_ui, "FinalizationWorker", return_value=operation
         ) as worker_factory:
@@ -544,7 +664,8 @@ class FlightUITests(unittest.TestCase):
         host.ai_worker.is_alive.return_value = True
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
-        operation = SimpleNamespace(wants_revoke=True, local_reports=False, saved_upload=False, start=Mock())
+        operation = SimpleNamespace(wants_revoke=True, local_reports=False,
+                                    saved_upload=False, abandonment=False, start=Mock())
         with (
             patch.object(
                 flight_ui.messagebox, "askyesno", return_value=True

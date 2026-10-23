@@ -187,6 +187,21 @@ local-retention confirmation that keeps the key. Retry preserves only the same
 process's unsubmitted consent for the same endpoint/key; cancellation, changed
 credentials and restart never restore it. Recovery actions wrap into two rows.
 
+**Abandon flight…** is available beside Finish in Watcher and Import and in
+ordinary flight progress. Use it when the gallery was deleted, its key was
+revoked, or you want to leave the current connection without completing delivery.
+After explicit confirmation it stops recording and upload producers, waits for
+in-flight requests to settle, marks unresolved sessions/import bindings as
+abandoned and removes the saved key from this PC. No connection test, report
+generation, further upload or server revocation is required. It also works when
+no flight tasks remain and only the obsolete key is still configured. Raw
+recordings, queued photograph sources, existing PDFs and acknowledged receipts
+remain local; the main action becomes **Begin flight…** for a new connection.
+A key that remains valid on the server must be revoked separately in Admin.
+An already submitted revocation must settle before abandonment can begin.
+Failed worker shutdown or local configuration persistence keeps recovery visible
+and retains the key for retry. Abandonment does not claim server revocation.
+
 Open **PDF > Saved flights and PDFs**, or the same action in Flight settings.
 The passive tree shows session start, aircraft, checkpoint sample count, local
 PDF count and state. Expand a flight to see every retained PDF as a file,
@@ -499,14 +514,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.8.0)
+## Windows installer (next version: 0.9.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.8.0**; this source version
+Gallery CMS release. The current source targets **0.9.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.8.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.9.0/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -762,7 +777,7 @@ Accepted manual imports are allowed to finish; other requests must settle before
 the revocation call. The UI shows active work and the current phase.
 
 Unsaved URL/API-key edits must be saved or reverted before revocation. The
-request runs off the Tkinter UI thread. The local API key is cleared only after
+request runs off the Tkinter UI thread. Revoke clears the local API key only after
 the gallery confirms server-side revocation; if the request fails, the key is
 retained for retry. Closing is blocked while the server response is pending, so
 a server-revoked key cannot remain silently stored locally.
@@ -1111,15 +1126,25 @@ DLL lookup order:
 
 Normal installed use requires no SDK, manual DLL copying, simulator selection or
 SimConnect configuration. The installer and embedded fallback use the same
-existing
+unmodified
 x64 `winapp/SimConnect.dll`; no second generation-specific runtime is
 introduced.
 Build checks reject missing/wrong-architecture DLLs, missing required exports or
 an embedded payload whose SHA256 differs from that source DLL. This Microsoft
-native binary is retained unchanged; the repository does not contain its
-original
-SDK provenance or redistribution license, and the project's MIT license is not
-a replacement for Microsoft's terms.
+native binary is copied unchanged from `SimConnect SDK/lib/SimConnect.dll` in
+the official [MSFS 2024 SDK Core 1.7.3 archive](https://sdk.flightsimulator.com/msfs2024/files/installers/1.7.3/MSFS2024_SDK_Core_Installer_1.7.3.zip).
+The 2026-10-23 update replaces the previous 85,504-byte binary with the
+84,480-byte SDK copy, SHA256
+`b10de7adf4c62e5f66c89dd6d01b64091bbbcec83411cfe191d6b85fbee61d15`.
+Both have 117 identical named exports; static PE32+/x64 and all required-export
+checks passed without loading the DLL. Neither copy has usable embedded Windows
+file-version metadata, so the SDK package version identifies provenance rather
+than an invented DLL version. The current
+[retail SDK release notes](https://docs.flightsimulator.com/msfs2024/retail/introduction/sdk-release-notes/)
+list 1.7.3. Live MSFS 2020/2024 acceptance remains separate from these checks.
+The [Microsoft SDK terms](https://docs.flightsimulator.com/msfs2024/retail/introduction/sdk-eula/)
+apply; the project's MIT license does not replace them or establish separate
+redistribution permission.
 
 For compatibility with existing gallery servers, multipart fields keep the
 historical names `sim_camera_latitude`, `sim_camera_longitude`,

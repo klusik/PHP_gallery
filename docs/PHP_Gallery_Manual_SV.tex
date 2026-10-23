@@ -1096,7 +1096,14 @@ detta. Se \filepath{winapp/README.md}. Värdbaserade installationsbyggen använd
 uttryckligen x64 CPython 3.14.x. Före paketering kontrolleras byggtolken och
 den faktiska patchversionen, implementationen och pekarbredden i EXE genom en
 rapport före GUI-start. Felaktig eller saknad rapport blockerar förberedelsen.
-Den oberoende programversionen ändras inte.
+Den oberoende källversionen för programmet är 0.9.0.
+
+Den medföljande inbyggda SimConnect-DLL-filen kommer oförändrad från officiella
+MSFS 2024 SDK Core 1.7.3. Dess 84\,480 byte och SHA256 dokumenteras i
+\filepath{winapp/README.md}. Statiska x64- och exportkontroller behåller alla
+117 namngivna exporter; verkliga kamera-, flygtelemetri- och UTC-kontroller i
+MSFS 2020/2024 återstår separat. SDK-versionen anger ursprunget eftersom DLL-filen
+saknar användbar inbäddad filversion. Microsofts SDK-villkor gäller.
 
 WinApp 0.3.2 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
 
@@ -1177,6 +1184,16 @@ nyckeln} och Försök igen det redan bekräftade beslutet för samma anslutning
 i denna appsession. Avbruten återkallelse, nyckelbyte eller omstart överför
 inget samtycke. Vanligt Stop behåller nyckeln. Återställningsknapparna visas
 på två rader.
+
+\ui{Överge flygning} bredvid Slutför i Watcher/Import och i flygförloppet
+erbjuder lokal återställning när galleriet raderats eller nyckeln återkallats.
+Efter bekräftelse stoppas arbetare och pågående anrop avslutas; väntande
+leverans överges och den sparade nyckeln tas bort från denna dator utan
+serverkontakt. Inspelningar, källfoton, PDF-filer och kvittenser behålls lokalt.
+Det fungerar även utan väntande flygningar; huvudåtgärden blir
+\ui{Påbörja flygning}. Återkalla en fortfarande giltig servernyckel separat
+i Admin. En skickad återkallelse måste först avslutas; stopp- eller sparfel
+behåller nyckeln och möjligheten att försöka igen.
 
 För senare uppladdning, spara och testa en giltig gallerinyckel, även en ny
 nyckel för samma galleri. Expandera stoppad flygning och välj PDF-filer med Ctrl/Skift,

@@ -37,6 +37,82 @@ PDF_FIXTURE_PREFIX = b"%PDF-test-"
 class FlightWorkflowTests(unittest.TestCase):
     """Verify finalization only acknowledges work after durable boundaries."""
 
+    def test_abandon_retains_files_and_receipts_without_server_requests(self) -> None:
+        """Abandon pending delivery while preserving evidence saved during stop.
+
+        Returns:
+            None: No analysis, rendering, delivery or revoke is attempted; the
+                GUI must acknowledge local key persistence before completion.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "flight", ("en", "cs"))
+            plan.save()
+            raw = plan.directory / "samples.jsonl"
+            raw.write_bytes(b"retained raw data")
+            pdf = plan.directory / "retained.pdf"
+            pdf.write_bytes(b"%PDF-retained")
+            # A predecessor may acknowledge EN after the new UI captured plan.
+            updated = SessionPlan.load(plan.directory)
+            updated.receipts["en"] = "a" * 64
+            updated.save()
+            revoke = Mock()
+            forget = Mock()
+            worker = workflow.FinalizationWorker(
+                [plan], "https://deleted.test/api", "revoked-key", Mock(),
+                revoke, False, forget=forget,
+            )
+            with patch.object(workflow, "analyze_session") as analyze:
+                worker.run()
+            saved = SessionPlan.load(plan.directory)
+            self.assertTrue(saved.abandoned)
+            self.assertTrue(saved.completed)
+            self.assertEqual({"en": "a" * 64}, saved.receipts)
+            self.assertEqual(b"retained raw data", raw.read_bytes())
+            self.assertEqual(b"%PDF-retained", pdf.read_bytes())
+            analyze.assert_not_called()
+            revoke.assert_not_called()
+            forget.assert_called_once_with()
+            self.assertEqual("saving_key", worker.snapshot().phase)
+            self.assertFalse(worker.server_request_sent)
+            with patch.object(worker, "is_alive", return_value=True):
+                self.assertFalse(worker.request_revoke())
+            worker.confirm_local_cleanup()
+            self.assertEqual("completed", worker.snapshot().phase)
+
+    def test_abandon_empty_plan_and_stop_timeout_keep_cleanup_order(self) -> None:
+        """Recover an obsolete saved key even when there are no pending flights.
+
+        Returns:
+            None: Empty plans reach local cleanup; timeout or cancellation never
+                abandons pending work or queues credential removal.
+        """
+        forget = Mock()
+        worker = workflow.FinalizationWorker(
+            [], "https://deleted.test/api", "revoked-key", Mock(), Mock(),
+            False, forget=forget,
+        )
+        worker.run()
+        forget.assert_called_once_with()
+        self.assertEqual("saving_key", worker.snapshot().phase)
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "flight", ("en",))
+            plan.save()
+            before = (plan.directory / "completion.json").read_bytes()
+            for error in (TimeoutError("still stopping"), InterruptedError("cancelled")):
+                with self.subTest(error=type(error).__name__):
+                    forget.reset_mock()
+                    worker = workflow.FinalizationWorker(
+                        [plan], "https://deleted.test/api", "revoked-key",
+                        Mock(side_effect=error), Mock(), False, forget=forget,
+                    )
+                    worker.run()
+                    forget.assert_not_called()
+                    self.assertEqual(
+                        "cancelled" if isinstance(error, InterruptedError) else "error",
+                        worker.snapshot().phase,
+                    )
+                    self.assertEqual(before, (plan.directory / "completion.json").read_bytes())
+
     def test_saved_upload_preserves_old_plan_and_retries_with_replacement_key(self) -> None:
         """Retain acknowledged saved editions across an upload failure and retry.
 

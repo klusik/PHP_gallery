@@ -1088,7 +1088,14 @@ do~not~establish those results. See \filepath{winapp/README.md}.
 Hosted installers explicitly use x64 CPython 3.14.x. Before packaging,
 the~builder verifies its~interpreter and~the~actual frozen EXE's patch version,
 implementation and~pointer width through a~pre-GUI report; a~wrong or~missing
-report fails preparation. The~independent application version is~unchanged.
+report fails preparation. The~independent application source targets 0.9.0.
+
+The~bundled native SimConnect DLL comes unmodified from the~official
+MSFS 2024 SDK Core 1.7.3. Its~84,480 bytes and~SHA256 are~documented
+in~\filepath{winapp/README.md}. Static x64 and~export checks preserve
+the~previous 117 named exports; live camera, flight telemetry and~UTC acceptance
+in~MSFS 2020/2024 remain separate. SDK version identifies provenance because
+the~DLL has~no~usable embedded file version. Microsoft SDK terms apply.
 
 WinApp 0.3.2 automatically uses the~MSFS 2024 camera world position and~falls back to~the~aircraft position on~bounded camera failure. MSFS 2020 uses the~aircraft position directly through the~same SimConnect runtime. Coordinates are~optional: simulator unavailability does~not~prevent upload. Position-source diagnostics distinguish camera and~aircraft results. The~installer requests application shutdown before replacing files; complete pending work before updating. Live simulator and~upgrade acceptance must be~checked on~the~target PC.
 
@@ -1166,6 +1173,16 @@ authorizes completion and~key revocation. After failure, \ui{Keep locally and re
 Retry retain the~same connection's confirmed intent in~this app session.
 Cancelling revocation, changing credentials, or~restarting clears that consent.
 Ordinary Stop keeps the~key. Recovery buttons wrap into two rows.
+
+\ui{Abandon flight} beside Finish in~Watcher/Import and~in~flight progress
+offers explicit local recovery after a~gallery is~deleted or~its~key revoked.
+After confirmation, workers stop and~in-flight requests settle; pending delivery
+is~abandoned and~the~saved key is~removed from this PC without contacting
+the~server. Recordings, photograph sources, PDFs and~receipts remain local.
+It~also works with no~pending sessions. The~main action becomes
+\ui{Begin flight}. A~still-valid server key needs separate revocation in~Admin.
+Submitted revocation must settle first; shutdown or~configuration-save failure
+keeps the~key and~recovery available for~retry.
 
 To~upload retained PDFs, save and test a~valid gallery key, including a~new key
 for~the~same gallery. In~the~report browser select a~stopped flight and~PDF
