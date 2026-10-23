@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.142.2
+
+Updated the Windows companion to 0.9.0 with offline flight abandonment and refreshed its bundled SimConnect runtime.
+
+### Highlights
+
+#### Offline flight recovery
+
+- Added **Abandon flight** actions in Watcher, Import, and flight progress. After confirmation, the app stopped producers, waited for active requests, abandoned unresolved delivery, and cleared the saved key locally without contacting the server.
+- Kept recordings, source photos, PDFs, and receipts on the device. Abandonment also worked with no pending flights; a still-valid server key required separate revocation in Admin.
+- Retained the key and recovery path when worker shutdown, timeout, or configuration saving failed.
+
+#### Bundled simulator runtime
+
+- Replaced the bundled SimConnect DLL with the unmodified x64 MSFS 2024 SDK Core 1.7.3 copy. It retained the same 117 named exports.
+
+### Technical Details
+
+#### Windows companion and compatibility
+
+- Set `winapp/VERSION` to `0.9.0` and updated `winapp/gallery_watch_upload.pyw`, `winapp/uploader/flight_ui.py`, `winapp/uploader/flight_workflow.py`, and `winapp/uploader/flight_report_translations.py`.
+- Limited Import cleanup to the captured connection and required submitted revocation to settle before abandonment.
+- Updated `winapp/SimConnect.dll` to 84,480 bytes. Documented static architecture and export checks; live MSFS 2020/2024 acceptance remained separate.
+- Made no database schema changes.
+
+#### Tests and documentation
+
+- Added regression coverage for abandonment barriers, retained files and receipts, empty flight lists, stale Import bindings, persistence failures, UI routing, and the update gate.
+- Updated `TESTING.md`, `winapp/README.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, and all four maintained TeX manual sources. The documented manual acceptance checks remained necessary; automated tests did not establish live simulator compatibility.
+- Added immutable release-origin and predecessor records for `v_0.142.2`.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Public gallery behavior did not change. Administrators still needed to revoke a still-valid server key separately in Admin after offline abandonment.
+
+#### For Windows companion users and maintainers
+
+- Enabled local recovery from deleted galleries or revoked keys without contacting the server, while preserving flight files and receipts.
+- Added regression coverage and documented simulator-runtime provenance and acceptance limits.
+
 ## Version 0.142.1
 
 Fixed public gallery browsing on narrow screens and improved keyboard focus,
