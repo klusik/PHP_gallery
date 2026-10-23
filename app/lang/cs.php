@@ -1536,4 +1536,7 @@ return [
     'admin.gallery_editor.upload_media' => 'Nahrát média',
     'admin.upload.upload_files' => 'Nahrát soubory',
     'admin.upload.help' => 'Nápověda k nahrávání',
+    'picture_manager.hud_destination' => 'Cílová galerie',
+    'picture_manager.hud_create' => 'Nová galerie z výběru',
+    'picture_manager.hud_help' => 'Nápověda k výběru a akcím',
 ];

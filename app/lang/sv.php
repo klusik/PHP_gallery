@@ -1478,4 +1478,7 @@ return [
     'admin.gallery_editor.upload_media' => 'Ladda upp media',
     'admin.upload.upload_files' => 'Ladda upp filer',
     'admin.upload.help' => 'Hjälp för uppladdning',
+    'picture_manager.hud_destination' => 'Målgalleri',
+    'picture_manager.hud_create' => 'Nytt galleri från urval',
+    'picture_manager.hud_help' => 'Hjälp för urval och åtgärder',
 ];

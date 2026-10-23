@@ -2581,6 +2581,22 @@ V~klientech, například PhotoSync, použijte typ cíle WebDAV. Současný serve
 Veřejná odpověď \codeword{/robots.txt} popisuje hranice pro roboty, zatímco \codeword{/sitemap.xml} uvádí způsobilé veřejné URL galerií a~obrázků s~metadaty obrázků a~informacemi o~poslední změně. Nezveřejněný, soukromý, heslem chráněný, věkově omezený nebo jinak nepovolený obsah se těmito výstupy nezveřejňuje. Kanonické URL, sociální metadata a~strukturovaná data obrázků používají stejný model veřejných cest zohledňující přístup.
 
 Správce fotografií je překryv veřejného zobrazení galerie pro přihlášeného správce, nikoli funkce návštěvníka. Správce může vybrat fotografie a~fyzické podgalerie, odstranit smíšený výběr nebo jej zkopírovat do nové fyzické galerie pod vybraným rodičem. Výběry pouze fotografií lze také přetáhnout na viditelnou podřízenou galerii, přesunout či kopírovat prohledávatelným výběrem cíle, sdílet nativní nabídkou zařízení, je-li podporována, nebo stáhnout. Nativní sdílení přechází na ZIP vybraných fotografií, pokud prohlížeč nemůže sdílet připravené soubory. Chytré galerie jsou vyloučeny z~operací fyzických podstromů. Samotný výběr je jen stavem prohlížeče a~neuděluje oprávnění. Každý požadavek změny či ZIP znovu kontroluje běžně přihlášený účet, token CSRF, zdrojovou galerii, vlastnictví výběru a~případný cíl. Běžní návštěvníci tyto prvky nedostávají. Správce fotografií je záměrně nezávislý na schopnosti Přímá správa: vypnutí Přímé správy odstraní prvky úprav, přidávání, odstraňování a~pořadí přímo na veřejné stránce, zatímco nezávisle povolený Správce fotografií může nadále poskytovat výběr, odstranění, přesun, kopírování, vytváření fyzických galerií a~export výběru.
+
+Kompaktní horní lišta průběžně ukazuje počet vybraných položek. Po rozbalení
+nabízí výběr všeho, zrušení výběru, sdílení, odstranění a~cílovou galerii
+pro přesun nebo kopírování fotografií. Oddíl \ui{Nová galerie z~výběru}
+rozbalte až při vytváření galerie; rodičem je ve výchozím stavu aktuální galerie.
+Prosté tlačítko \ui{?} otevírá nápovědu k~výběru, přetažení, kopírování
+a~přesunu; zavřete ji kliknutím mimo nebo klávesou Escape. Pokyny výběru
+a~odkaz na adresář galerií se zobrazí při zaměření výběru cíle. Průběh,
+úspěch a~chyby zůstávají viditelné; klidová zpráva o~připravenosti se nezobrazuje.
+
+Bez výběru je správce skrytý nad stránkou. Najeďte ukazatelem ke středu
+horního okraje a~panel se zobrazí a~rozbalí. Vybrané fotografie nebo fyzické
+podgalerie jej udržují viditelný. Zobrazí jej také zaměření klávesnicí;
+na dotykovém zařízení nejprve vyberte kartu. Otevřená nápověda zůstává
+přístupná až do zavření.
+
 \section{Údržba, aktualizace a~obnova}
 \label{sec:maintenance}
 \index{u00238@údržba}

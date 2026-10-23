@@ -1541,4 +1541,7 @@ return [
     'admin.gallery_editor.upload_media' => 'Upload media',
     'admin.upload.upload_files' => 'Upload files',
     'admin.upload.help' => 'Upload help',
+    'picture_manager.hud_destination' => 'Destination gallery',
+    'picture_manager.hud_create' => 'New gallery from selection',
+    'picture_manager.hud_help' => 'Selection and actions help',
 ];

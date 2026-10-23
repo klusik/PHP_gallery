@@ -2663,6 +2663,23 @@ Verwenden Sie den Zieltyp WebDAV in Clients wie PhotoSync. Die aktuelle Serverau
 Die öffentliche Antwort \codeword{/robots.txt} beschreibt Crawlergrenzen; \codeword{/sitemap.xml} führt geeignete öffentliche Galerie- und Bild-URLs mit Bildmetadaten und letzter Änderungszeit auf. Nicht veröffentlichte, private, passwortgeschützte, altersbeschränkte oder anderweitig nicht autorisierte Inhalte werden durch diese Ausgaben nicht öffentlich. Kanonische URLs, soziale Metadaten und strukturierte Bilddaten verwenden dasselbe zugriffsbewusste öffentliche Pfadmodell.
 
 Picture Manager ist eine Überlagerung der öffentlichen Galerieansicht für angemeldete Administratoren, keine Besucherfunktion. Ein Administrator kann Fotos und physische Untergalerien auswählen, eine gemischte Auswahl löschen oder unter einer gewählten übergeordneten Galerie in eine neue physische Galerie kopieren. Reine Fotoauswahlen können außerdem auf eine sichtbare Untergalerie gezogen, über die durchsuchbare Zielauswahl verschoben oder kopiert, über den nativen Gerätefreigabedialog geteilt, sofern unterstützt, oder heruntergeladen werden. Natives Teilen fällt auf die ZIP-Datei ausgewählter Fotos zurück, wenn der Browser vorbereitete Dateien nicht teilen kann. Smart Galleries sind von physischen Teilbaumaktionen ausgeschlossen. Die Auswahl selbst ist nur Browserzustand und gewährt keine Berechtigung. Jede Änderungs-/ZIP-Anfrage prüft erneut normales angemeldetes Konto, CSRF-Token, Quellgalerie, ausgewählte Zuordnungen und gegebenenfalls Ziel. Gewöhnliche Besucher erhalten diese Steuerungen nicht. Picture Manager ist bewusst unabhängig von der Fähigkeit Inline-Administration: Deren Deaktivierung entfernt direkte öffentliche Bearbeitungs-, Hinzufüge-, Lösch- und Sortiersteuerungen; ein unabhängig aktivierter Picture Manager kann weiterhin Auswahl-, Lösch-, Verschiebe-, Kopier-, physische Galerieerstellungs- und Auswahlexportabläufe anbieten.
+
+Die kompakte obere Leiste zeigt stets die Anzahl ausgewählter Elemente.
+Aufgeklappt bietet sie Gesamtauswahl, Aufheben der Auswahl, Teilen, Löschen
+und die Zielgalerie zum Verschieben oder Kopieren von Fotos. Öffnen Sie
+\ui{Neue Galerie aus Auswahl} erst beim Erstellen einer Galerie; als
+übergeordnete Galerie ist die aktuelle Galerie voreingestellt. Das schlichte
+\ui{?} öffnet Hinweise zu Auswahl, Ziehen, Kopieren und Verschieben;
+ein Klick außerhalb oder Escape schließt sie. Auswahlhinweise und der Link
+zum Galerieverzeichnis erscheinen bei Fokus in der Zielauswahl. Fortschritt,
+Erfolg und Fehler bleiben sichtbar; die Bereitschaftsmeldung entfällt.
+
+Ohne Auswahl ist die Verwaltung oberhalb der Seite verborgen. Bewegen Sie
+den Zeiger an den oberen mittleren Rand, um sie einzublenden und zu öffnen.
+Ausgewählte Fotos oder physische Untergalerien halten sie sichtbar. Auch
+Tastaturfokus blendet sie ein; auf Touchgeräten zuerst eine Karte auswählen.
+Geöffnete Hilfe bleibt bis zum Schließen zugänglich.
+
 \section{Wartung, Aktualisierungen und Wiederherstellung}
 \label{sec:maintenance}
 \index{w00268@Wartung}

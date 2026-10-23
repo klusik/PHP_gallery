@@ -2596,6 +2596,22 @@ Använd måltypen WebDAV i klienter som PhotoSync. Aktuell serverinläsning acce
 Det offentliga svaret \codeword{/robots.txt} beskriver gränser för sökrobotar, medan \codeword{/sitemap.xml} listar lämpliga offentliga galleri- och bild-URL:er med bildmetadata och information om senaste ändring. Opublicerat, privat, lösenordsskyddat, åldersbegränsat eller annars otillåtet innehåll görs inte offentligt genom dessa utdata. Kanoniska URL:er, sociala metadata och strukturerade bilddata använder samma åtkomstmedvetna offentliga sökvägsmodell.
 
 Bildhanteraren är ett överlägg för inloggade administratörer på den offentliga gallerivyn, inte en besökarfunktion. Administratören kan välja fotografier och fysiska undergallerier, radera ett blandat urval eller kopiera det till ett nytt fysiskt galleri under ett valt övergalleri. Urval med enbart fotografier kan också dras till ett synligt undergalleri, flyttas eller kopieras genom den sökbara destinationsväljaren, delas genom enhetens inbyggda delningspanel där den stöds eller hämtas. Inbyggd delning faller tillbaka på ZIP för valda fotografier när webbläsaren inte kan dela de förberedda filerna. Smarta gallerier utesluts från fysiska underträdsåtgärder. Urvalet självt är bara webbläsartillstånd och ger ingen behörighet. Varje ändrings- och ZIP-begäran kontrollerar på nytt vanligt inloggat konto, CSRF-token, källgalleri, vald tillhörighet och destination där det är relevant. Vanliga besökare får inte dessa kontroller. Bildhanteraren är avsiktligt oberoende av funktionen Administration direkt på offentliga sidor: om den senare stängs av tas direkta kontroller på offentliga sidor för redigering, tillägg, radering och omordning bort, medan en oberoende aktiverad Bildhanterare fortfarande kan erbjuda sina flöden för urval, radering, flyttning, kopiering, skapande av fysiska gallerier och urvalsexport.
+
+Det kompakta övre verktygsfältet visar antalet markerade objekt. Öppna det
+för att markera alla, rensa urvalet, dela, radera och välja målgalleri för
+flyttning eller kopiering av fotografier. Öppna \ui{Nytt galleri från urval}
+först när ett galleri ska skapas; aktuellt galleri är förvalt som övergalleri.
+Den enkla \ui{?}-knappen visar hjälp för urval, dragning, kopiering och
+flyttning; klicka utanför eller tryck Escape för att stänga hjälpen.
+Väljarens instruktioner och länken till gallerikatalogen visas när väljaren
+har fokus. Förlopp, resultat och fel förblir synliga; vilomeddelandet döljs.
+
+Utan urval är hanteraren dold ovanför sidan. För pekaren till mitten av
+överkanten för att visa och öppna den. Markerade fotografier eller fysiska
+undergallerier håller den synlig. Tangentbordsfokus visar den också; på
+en pekskärm markerar du först ett kort. Öppen hjälp förblir tillgänglig
+tills den stängs.
+
 \section{Underhåll, uppdateringar och återställning}
 \label{sec:maintenance}
 \index{u00251@underhåll}

@@ -2599,6 +2599,20 @@ The~public \codeword{/robots.txt} response describes crawler boundaries, while \
 
 The~Picture Manager is~a~logged-in administrator overlay on~the~public gallery view, not~a~visitor feature. An~administrator can~select photographs and~physical subgalleries, delete a~mixed selection, or~copy it~into a~new physical gallery below a~chosen parent. Photo-only selections can~also be~dragged onto a~visible child gallery, moved or~copied through the~searchable destination picker, shared through the~native device share sheet where supported, or~downloaded. Native sharing falls back to~the~selected-photo ZIP when the~browser cannot share the~prepared files. Smart Galleries are~excluded from~physical subtree operations. The~selection itself is~only browser state and~does not~grant permission. Every mutation/ZIP request rechecks the~normal logged-in account, CSRF token, source gallery, selected ownership, and~destination where applicable. Ordinary visitors do~not~receive these controls. Picture Manager is~intentionally independent from~the~Inline Administration capability: disabling Inline Administration removes direct public-page edit, add, delete, and~reorder affordances, while an~independently enabled Picture Manager can~still provide its~selection, deletion, move, copy, physical-gallery creation, and~selection-export workflows.
 
+The~compact top toolbar shows the~selection count when visible. Open it~to~select
+all items, clear the~selection, share or~delete, and~choose a~destination
+for~moving or~copying photos. Expand \ui{New gallery from selection} only
+when creating a~gallery; its~parent defaults to~the~current gallery.
+The~plain \ui{?} control opens selection, drag, copy and~move guidance;
+click outside or~press Escape to~dismiss it. Picker instructions and~the~gallery
+directory link appear while the~picker has~focus. Progress, success and~errors
+remain visible; the~idle ready message is~omitted.
+
+With no~selection, the~manager is~hidden above the~page. Move the~pointer
+to~the~top centre edge to~reveal and~open it. Selected photos or~physical
+subgalleries keep it~visible. Keyboard focus also reveals it; on~touch devices,
+select a~card first. Open help remains available until dismissed.
+
 \section{Maintenance, updates, and~recovery}
 \label{sec:maintenance}
 \index{maintenance}

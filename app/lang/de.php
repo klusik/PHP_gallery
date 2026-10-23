@@ -1484,4 +1484,7 @@ return [
     'admin.gallery_editor.upload_media' => 'Medien hochladen',
     'admin.upload.upload_files' => 'Dateien hochladen',
     'admin.upload.help' => 'Hilfe zum Hochladen',
+    'picture_manager.hud_destination' => 'Zielgalerie',
+    'picture_manager.hud_create' => 'Neue Galerie aus Auswahl',
+    'picture_manager.hud_help' => 'Hilfe zu Auswahl und Aktionen',
 ];

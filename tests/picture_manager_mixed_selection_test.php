@@ -267,7 +267,7 @@ picture_manager_mixed_assert(
     'Physical gallery cards must not become native drag sources.',
 );
 
-$cacheKey = '20260914-picture-manager-mixed-v1';
+$cacheKey = '20261023-picture-manager-context-v1';
 picture_manager_mixed_assert(
     str_contains($entrypoint, $cacheKey),
     'Main browser entrypoint must bust the Picture manager module cache.',

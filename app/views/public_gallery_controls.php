@@ -187,7 +187,11 @@ function view_render_public_page_reorder_toolbar(array $viewModel): void
 /**
  * Render the logged-in public gallery Picture manager toolbar.
  *
- * @param array<string,mixed> $viewModel Controller-prepared manager state.
+ * @param array{gallery_id?:int,has_visible_drop_targets?:bool,
+ *     csrf_token?:string,move_url?:string,copy_url?:string,create_url?:string,
+ *     delete_url?:string,download_url?:string,destination_picker_html?:string,
+ *     new_parent_picker_html?:string} $viewModel Prepared endpoints, source
+ *     identity, CSRF token, drop-target availability and escaped picker markup.
  * @return void Emits the Picture manager controls.
  */
 function view_render_picture_manager_toolbar(array $viewModel): void
@@ -221,36 +225,50 @@ function view_render_picture_manager_toolbar(array $viewModel): void
             . '">';
     echo '<div class="picture-manager-summary">';
     echo
-        '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-expanded="false">';
+        '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-controls="picture-manager-panel-'
+            . $galleryId
+            . '" aria-expanded="false">';
     echo
         '<span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>';
     echo
         '<span><strong>'
             . e(t('picture_manager.title', 'Picture manager'))
-            . '</strong><small>'
-            . e(t(
-                'picture_manager.collapsed_help',
-                'Select photos or physical galleries, then move, copy, delete, or create a gallery.',
-            ))
-            . '</small></span>';
+            . '</strong></span>';
     echo '</button>';
     echo
         '<span class="picture-manager-count" data-picture-manager-count aria-live="polite">'
             . e(t('picture_manager.none_selected', 'No items selected.'))
             . '</span>';
+    echo
+        '<button type="button" class="picture-manager-help-toggle" popovertarget="picture-manager-help-'
+            . $galleryId
+            . '" aria-label="'
+            . e(t('picture_manager.hud_help', 'Selection and actions help'))
+            . '" title="'
+            . e(t('picture_manager.hud_help', 'Selection and actions help'))
+            . '">?</button>';
     echo '</div>';
 
-    echo '<div class="picture-manager-panel" data-picture-manager-panel>';
+    // Native auto popovers provide click, keyboard, Escape and light dismissal.
+    echo '<div class="picture-manager-help" popover id="picture-manager-help-'
+        . $galleryId . '">';
+    echo '<strong>'
+        . e(t('picture_manager.hud_help', 'Selection and actions help'))
+        . '</strong>';
+    foreach ([
+        t('picture_manager.help', 'Select photos or physical subgalleries with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one item.'),
+        $dropHelp,
+        t('picture_manager.create_from_selection', 'Create physical gallery from selection'),
+        t('picture_manager.move_copy_warning', 'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.'),
+        t('picture_manager.copy_warning', 'Creates a real file-based gallery under the selected parent. Photos and selected physical subgallery trees are copied; originals stay here.'),
+        t('gallery_picker.help', 'Type to search, then press Enter or click a result to select it.'),
+    ] as $hint) {
+        echo '<p>' . e($hint) . '</p>';
+    }
+    echo '</div>';
+    echo '<div class="picture-manager-panel" id="picture-manager-panel-'
+        . $galleryId . '" data-picture-manager-panel>';
     echo '<div class="picture-manager-heading">';
-    echo
-        '<div class="picture-manager-hints"><p>'
-            . e(t(
-                'picture_manager.help',
-                'Select photos or physical subgalleries with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one item.',
-            ))
-            . '</p><p>'
-            . e($dropHelp)
-            . '</p></div>';
     echo
         '<div class="picture-manager-actions" aria-label="'
             . e(t('picture_manager.selection_actions', 'Selection actions'))
@@ -297,8 +315,8 @@ function view_render_picture_manager_toolbar(array $viewModel): void
             . $galleryId
             . '">'
             . e(t(
-                'picture_manager.move_or_copy_to',
-                'Move or copy selected photos to gallery',
+                'picture_manager.hud_destination',
+                'Destination gallery',
             ))
             . '</label>';
     echo '<div class="picture-manager-inline-fields">';
@@ -320,23 +338,20 @@ function view_render_picture_manager_toolbar(array $viewModel): void
             . e(t('picture_manager.copy_short', 'Copy'))
             . '</span></button>';
     echo '</div>';
-    echo
-        '<p>'
-            . e(t(
-                'picture_manager.move_copy_warning',
-                'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.',
-            ))
-            . '</p>';
     echo '</div>';
 
+    echo '<details class="picture-manager-create-disclosure">';
+    echo '<summary><span aria-hidden="true">＋</span> '
+        . e(t('picture_manager.hud_create', 'New gallery from selection'))
+        . '</summary>';
     echo '<div class="picture-manager-action-card">';
     echo
-        '<label for="picture-manager-new-title-'
+        '<label for="picture-manager-new-parent-'
             . $galleryId
             . '">'
             . e(t(
-                'picture_manager.create_from_selection',
-                'Create physical gallery from selection',
+                'picture_manager.search_parent',
+                'Search parent gallery',
             ))
             . '</label>';
     echo
@@ -345,11 +360,15 @@ function view_render_picture_manager_toolbar(array $viewModel): void
     echo
         '<input id="picture-manager-new-title-'
             . $galleryId
-            . '" type="text" data-picture-manager-new-title placeholder="'
+            . '" type="text" data-picture-manager-new-title aria-label="'
+            . e(t('picture_manager.new_gallery_title', 'New gallery title'))
+            . '" placeholder="'
             . e(t('picture_manager.new_gallery_title', 'New gallery title'))
             . '">';
     echo
-        '<input type="text" data-picture-manager-new-folder placeholder="'
+        '<input type="text" data-picture-manager-new-folder aria-label="'
+            . e(t('picture_manager.optional_folder_name', 'Optional folder name'))
+            . '" placeholder="'
             . e(t(
                 'picture_manager.optional_folder_name',
                 'Optional folder name',
@@ -364,18 +383,12 @@ function view_render_picture_manager_toolbar(array $viewModel): void
             . e(t('picture_manager.create_short', 'Create'))
             . '</span></button>';
     echo '</div>';
-    echo
-        '<p>'
-            . e(t(
-                'picture_manager.copy_warning',
-                'Creates a real file-based gallery under the selected parent. Photos and selected physical subgallery trees are copied; originals stay here.',
-            ))
-            . '</p>';
     echo '</div>';
+    echo '</details>';
     echo '</div>';
 
     echo
-        '<p class="picture-manager-status" data-picture-manager-status aria-live="polite">'
+        '<p class="picture-manager-status" data-picture-manager-status data-state="idle" aria-live="polite">'
             . e(t('picture_manager.ready', 'Ready.'))
             . '</p>';
     echo '</div>';

@@ -6823,3 +6823,28 @@ The real installer fixture executes migration/replay/opt-out in its disposable
 database. BASIC does not execute these regressions; exact prepared FULL is the
 runtime qualification. Live payload deletion and provider incident acceptance
 remain outside source verification.
+
+## Picture manager HUD browser review
+
+On an authenticated physical gallery, verify an empty manager is offscreen,
+hovering the top edge reveals and opens it, leaving hides it, keyboard focus
+reveals it, and photo/physical-gallery selection keeps it visible. Clearing the
+last selection restores hiding when the pointer and keyboard focus leave.
+Verify the collapsed count, expand/collapse,
+Select all/Clear, individual and range selection, and photo-only versus mixed
+selection action availability. Search a destination by keyboard and verify the
+committed picker value enables Move/Copy only for photos. Expand New gallery
+from selection, verify the current parent and title-dependent Create state,
+and keep actual filesystem mutations on disposable data only.
+
+Open `?` using click and keyboard; dismiss by outside click and Escape. Check
+that picker guidance/directory access appears on focus and that request errors
+and completion feedback remain visible. Review desktop and narrow layouts,
+long localized labels, Theme colors, visible focus and mobile 44px targets.
+This presentation review complements the existing mixed-selection/copy
+contracts; hosted BASIC alone does not qualify filesystem operations.
+
+The lightbox quick-tag race fixture waits for native `fullscreenchange` and
+committed layout before sending the fullscreen tagging key. Its strict popup
+viewport bounds remain unchanged; fullscreen ownership alone does not establish
+settled HUD geometry on the hosted Chromium runner.
