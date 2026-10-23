@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.142.1}
+\newcommand{\version}{0.142.2}
 \newcommand{\manualdate}{23.~října~2026}
 
 \hypersetup{
@@ -1085,7 +1085,15 @@ neprokazují. Viz \filepath{winapp/README.md}. Hostované instalátory výslovn�
 používají x64 CPython 3.14.x. Před zabalením se kontroluje sestavovací interpret
 i~skutečná patch verze, implementace a~šířka ukazatele uvnitř EXE pomocí výpisu
 před spuštěním GUI. Nesprávný či chybějící výpis přípravu odmítne. Nezávislá
-verze aplikace se nemění.
+zdrojová verze aplikace je 0.9.0.
+
+Přibalená nativní DLL SimConnect pochází beze změn z~oficiálního
+MSFS 2024 SDK Core 1.7.3. Velikost 84\,480 bajtů a~SHA256 dokumentuje
+\filepath{winapp/README.md}. Statické ověření x64 a~exportů zachovává
+všech 117 pojmenovaných exportů; živé ověření kamery, telemetrie letu
+a~synchronizace UTC v~MSFS 2020/2024 zůstává samostatné. Verze SDK určuje
+původ, protože DLL nemá použitelnou vloženou verzi souboru. Platí podmínky SDK
+Microsoftu.
 
 WinApp 0.3.2 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
 
@@ -1164,6 +1172,16 @@ zahájí dokončení a~zrušení klíče. Po~chybě zachová \ui{Ponechat místn
 již potvrzený záměr pro stejné připojení v~této instanci aplikace. Zrušení
 revokace, změna klíče nebo restart souhlas nepřenáší. Běžné Zastavení klíč
 zachová. Tlačítka obnovy jsou ve~dvou řádcích.
+
+\ui{Opustit let} vedle dokončení ve~Watcheru/Importu a~v~průběhu letu
+umožňuje místní obnovu po~smazání galerie nebo zrušení klíče. Po~potvrzení
+se~zastaví pracovníci a~vyčká se~na~běžící požadavky; čekající doručení
+se~opustí a~uložený klíč se~odstraní z~tohoto PC bez kontaktování serveru.
+Záznamy, zdrojové fotografie, PDF a~potvrzení zůstanou místně zachované.
+Funguje to~i~bez čekajících letů. Hlavní akce se~změní na~\ui{Zahájit let}.
+Stále platný klíč zrušte samostatně v~Adminu. Již odeslaná revokace musí
+nejprve skončit; chyba zastavení nebo uložení konfigurace ponechá klíč
+a~možnost opakování.
 
 Pro dodatečný upload uložte a~otestujte platný klíč galerie, případně nový klíč
 ke~stejné galerii. V~přehledu rozbalte zastavený let a~vyberte PDF pomocí Ctrl/Shift, poté

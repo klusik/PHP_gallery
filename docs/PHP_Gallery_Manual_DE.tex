@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.142.1}
+\newcommand{\version}{0.142.2}
 \newcommand{\manualdate}{23.~Oktober~2026}
 
 \hypersetup{
@@ -1145,7 +1145,15 @@ verwenden ausdrücklich x64 CPython 3.14.x. Vor dem Verpacken werden der
 Build-Interpreter sowie tatsächliche Patchversion, Implementierung und
 Zeigerbreite im EXE durch einen Bericht vor GUI-Start geprüft. Ein falscher
 oder fehlender Bericht blockiert die Vorbereitung. Die eigenständige
-Anwendungsversion bleibt unverändert.
+Quellversion der Anwendung ist 0.9.0.
+
+Die gebündelte native SimConnect-DLL stammt unverändert aus dem offiziellen
+MSFS 2024 SDK Core 1.7.3. Ihre 84\,480 Bytes und SHA256 stehen in
+\filepath{winapp/README.md}. Statische x64- und Exportprüfungen erhalten alle
+117 benannten Exporte; reale Kamera-, Flugtelemetrie- und UTC-Prüfungen in
+MSFS 2020/2024 bleiben gesondert. Die SDK-Version bezeichnet die Herkunft,
+da die DLL keine nutzbare eingebettete Dateiversion enthält. Es gelten die
+Microsoft-SDK-Bedingungen.
 
 WinApp 0.3.2 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
 
@@ -1231,6 +1239,16 @@ Schlüssel widerrufen} und Wiederholen die bereits bestätigte Absicht für
 dieselbe Verbindung in dieser App-Sitzung. Widerrufsabbruch, Schlüsselwechsel
 oder Neustart übernehmen keine Zustimmung. Normales Stoppen behält den
 Schlüssel. Wiederherstellungsaktionen stehen in zwei Zeilen.
+
+\ui{Flug aufgeben} neben dem Abschluss in Watcher/Import und im Flugfortschritt
+ermöglicht lokale Wiederherstellung bei gelöschter Galerie oder widerrufenem
+Schlüssel. Nach Bestätigung stoppen die Worker und laufende Anfragen enden;
+ausstehende Übertragungen werden aufgegeben und der gespeicherte Schlüssel
+ohne Serverkontakt von diesem PC entfernt. Aufzeichnungen, Quellfotos, PDFs und
+Bestätigungen bleiben lokal erhalten. Dies funktioniert auch ohne ausstehende
+Flüge; die Hauptaktion wird zu \ui{Flug beginnen}. Einen weiterhin gültigen
+Serverschlüssel separat in Admin widerrufen. Ein gesendeter Widerruf muss zuerst
+enden; Stopp- oder Speicherfehler behalten Schlüssel und Wiederholung bei.
 
 Für spätere Uploads einen gültigen Galerieschlüssel speichern und testen,
 auch einen neuen Schlüssel derselben Galerie. Im Berichtbrowser gestoppten

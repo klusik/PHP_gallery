@@ -157,6 +157,19 @@ class FlightHost(Protocol):
         """
         ...
 
+    def forget_flight_connection(self, binding: str) -> None:
+        """Durably remove only the explicitly abandoned saved connection's key.
+
+        Args:
+            binding (str): Captured endpoint/key fingerprint, never a raw key.
+        Returns:
+            None: Clears the local key and connection display without networking.
+        Raises:
+            OSError: The updated configuration cannot be persisted.
+            ValueError: The saved connection changed before cleanup.
+        """
+        ...
+
     def open_local_path(self, path: Path) -> None:
         """Open a local artifact folder through the existing desktop owner.
 
@@ -210,6 +223,7 @@ class FlightUI:
         self.import_bindings = ImportBindings(directory)
         self.operation: FinalizationWorker | None = None
         self.automatic_operation: FinalizationWorker | None = None
+        self.abandon_previous: FinalizationWorker | None = None
         self.recorder: FlightRecorder | None = None
         self.plan: SessionPlan | None = None
         self.dispatch: DispatchPlan | None = None
@@ -1532,7 +1546,11 @@ class FlightUI:
 
         Returns:
             None: Reuses in-memory consent; never restores consent from disk.
+                Failed local abandonment requires its explicit confirmation again.
         """
+        if self.operation is not None and self.operation.abandonment is True:
+            self.abandon()
+            return
         if self.automatic_completion():
             self.begin(self.pending_revoke_intent(), automatic=True)
         else:
@@ -1597,7 +1615,8 @@ class FlightUI:
                 skip confirmation and close its views only after verified success.
 
         Returns:
-            None: Shows progress and runs expensive tasks on a worker.
+            None: Shows progress and runs expensive tasks on a worker;
+                active abandonment cannot be upgraded to remote revocation.
         """
         if self.load_error:
             messagebox.showerror(
@@ -1607,6 +1626,12 @@ class FlightUI:
             )
             return
         if self.busy() and self.independent_operation():
+            self.show_progress()
+            return
+        if (
+            self.busy() and self.operation is not None
+            and self.operation.abandonment is True
+        ):
             self.show_progress()
             return
         if automatic and self.busy():
@@ -1816,13 +1841,17 @@ class FlightUI:
 
         Returns:
             None: Does not start/restart tasks or imply new revoke consent.
+                Local abandonment exposes only retry, retained files and hide.
         """
         local_mode = self.independent_operation()
         saved_upload = bool(
             self.operation is not None
             and self.operation.saved_upload is True
         )
-        mode = "upload" if saved_upload else local_mode
+        abandoning = bool(
+            self.operation is not None and self.operation.abandonment is True
+        )
+        mode = "abandon" if abandoning else "upload" if saved_upload else local_mode
         if self.dialog is not None and self.dialog.winfo_exists():
             if self._progress_local_mode == mode:
                 self.dialog.deiconify()
@@ -1885,7 +1914,13 @@ class FlightUI:
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
         )
+        abandon_actions = (
+            ("retry", self.retry_finalization),
+            ("open_reports", self.open_reports),
+            ("hide", self.dialog.withdraw),
+        )
         choices = (
+            abandon_actions if abandoning else
             local_actions if local_mode else ordinary_actions
         )
         for index, (label, command) in enumerate(choices):
@@ -2018,32 +2053,137 @@ class FlightUI:
             )
 
     def abandon(self) -> None:
-        """Explicitly leave unuploaded tasks retained as abandoned local records.
+        """Stop the captured flight and forget its local key without a server.
 
         Returns:
-            None: No files are deleted and no server revocation is requested.
+            None: Confirmation starts bounded asynchronous worker shutdown,
+                retains files and abandons pending delivery before local cleanup.
+                Submitted revocation and independent PDF work must settle first.
         """
-        if self.busy() or not messagebox.askyesno(
+        if self.busy() and (
+            self.independent_operation()
+            or (self.operation is not None and self.operation.abandonment is True)
+        ):
+            self.show_progress()
+            return
+        if not messagebox.askyesno(
             self.text("abandon"), self.text("confirm_abandon"),
             parent=self.dialog_owner(),
         ):
             return
         try:
-            for plan in self.pending():
-                plan.abandoned = True
-                plan.completed = True
-                plan.error = "Explicitly abandoned; local files retained."
-                plan.save()
-            for job_id, binding in self.import_bindings.entries().items():
-                if binding == self.binding():
-                    self.import_bindings.resolve(job_id)
-            self.detail_var.set(self.text("revoke_cancelled"))
-        except (OSError, ValueError) as exc:
+            plans = self.pending()
+            previous = self.operation
+            if previous is not None:
+                if not previous.cancel_revoke() and (
+                    previous.is_alive() or self.busy()
+                ):
+                    self.show_progress()
+                    return
+                previous.cancel.set()
+            self.abandon_previous = previous
+            self.host.api_key_revoke_running = True
+            self.host.utc_sync.stop()
+            self.stop()
+            for worker in (
+                self.host.worker, self.host.manual_worker,
+                self.host.preflight_worker, self.host.ai_worker,
+                *self.resume_workers,
+            ):
+                if worker is not None and worker.is_alive():
+                    worker.stop()
+            self.host.ai_worker_stop_requested = True
+            self.operation = FinalizationWorker(
+                plans, self.normalize(self.host.config.gallery_url),
+                self.host.config.api_key, self.wait_for_abandonment,
+                self.submit_revoke, False, forget=self.submit_forget,
+                emit=lambda level, message: self.host.events.put((level, message)),
+            )
+            self.automatic_operation = self.operation
+            self.host.api_key_revoke_thread = self.operation
+            self._last_terminal = ""
+            self.operation.start()
+            self.show_progress()
+            self.host.refresh_connection_controls()
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.host.api_key_revoke_running = False
             messagebox.showerror(
                 self.text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
+
+    def wait_for_abandonment(
+        self, cancel: threading.Event, deadline: float
+    ) -> None:
+        """Wait for stopped producers without requiring successful delivery.
+
+        Args:
+            cancel (threading.Event): Cancellation preserving pending records.
+            deadline (float): Existing finalization budget as a monotonic instant.
+        Returns:
+            None: All previous workers and authenticated requests have settled.
+        Raises:
+            InterruptedError: Cancellation retains the key and unresolved work.
+            TimeoutError: A worker did not stop before the existing deadline.
+        """
+        while True:
+            if cancel.is_set():
+                raise InterruptedError("Abandonment cancelled; local key retained.")
+            workers = (
+                self.abandon_previous, self.recorder, self.dispatch_worker,
+                self.host.utc_sync, *self.resume_workers,
+            )
+            if not self.host.api_key_request_blockers() and not any(
+                worker is not None and worker.is_alive() for worker in workers
+            ) and not self.host.semantic_ai_install_running:
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Workers are still stopping; local key retained.")
+            cancel.wait(DRAIN_POLL_SECONDS)
+
+    def submit_forget(self) -> None:
+        """Queue captured local cleanup after the durable abandonment decision.
+
+        Returns:
+            None: Tk owns key persistence; no authentication request is sent.
+        """
+        operation = self.operation
+        if operation is not None:
+            self.host.events.put({
+                "kind": "flight_abandoned",
+                "payload": {"binding": connection_binding(
+                    operation.upload_url, operation.api_key
+                )},
+            })
+
+    def forgotten(self, binding: str) -> None:
+        """Acknowledge local abandonment only for the captured connection.
+
+        Args:
+            binding (str): Non-secret endpoint/key fingerprint from the worker.
+        Returns:
+            None: Resolves matching imports and acknowledges durable key cleanup;
+                failures stay visible with the key retained for retry.
+        """
+        operation = self.operation
+        if (
+            operation is None or not operation.abandonment
+            or operation.snapshot().phase != "saving_key"
+            or binding != connection_binding(operation.upload_url, operation.api_key)
+        ):
+            return
+        try:
+            if binding != self.binding():
+                raise ValueError("Saved connection changed before abandonment cleanup.")
+            for job_id, owner in self.import_bindings.entries().items():
+                if owner == binding:
+                    self.import_bindings.resolve(job_id)
+            self.host.forget_flight_connection(binding)
+        except Exception as exc:
+            operation.confirm_local_cleanup(str(exc))
+            return
+        operation.confirm_local_cleanup()
 
     def tick(self) -> None:
         """Refresh phase/time feedback without calling native/network operations.

@@ -838,6 +838,76 @@ class NavigationTests(unittest.TestCase):
 class FlightDeliveryCoordinationTests(unittest.TestCase):
     """Preserve accepted import and connection state during finalization."""
 
+    def test_abandon_action_respects_update_gate_and_needs_no_connection_test(self) -> None:
+        """Make offline abandonment available for an untested saved key.
+
+        Returns:
+            None: A saved key opens abandonment directly; update ownership or
+                a missing key prevents another lifecycle action.
+        """
+        app = mock.Mock()
+        app.updates.blocked.return_value = False
+        app.config.api_key = "revoked-key"
+        MAIN.WatcherApp.abandon_flight(app)
+        app.flights.abandon.assert_called_once_with()
+        app.test_connection.assert_not_called()
+        app.flights.abandon.reset_mock()
+        app.updates.blocked.return_value = True
+        MAIN.WatcherApp.abandon_flight(app)
+        app.updates.blocked.return_value = False
+        app.config.api_key = ""
+        MAIN.WatcherApp.abandon_flight(app)
+        app.flights.abandon.assert_not_called()
+
+    def test_forget_connection_persists_before_clearing_key_and_preserves_settings(self) -> None:
+        """Keep the saved key on failure and remove only the confirmed credential.
+
+        Returns:
+            None: A mismatched connection and disk failure leave memory/UI
+                untouched; success saves an empty key with other options intact.
+        """
+        app = mock.Mock()
+        original = MAIN.WatcherConfig(
+            gallery_url="https://deleted.test/", api_key="revoked-key",
+            watched_folder="retained-folder", watch_recursive=True,
+        )
+        app.config = original
+        app.flights.binding.return_value = "captured-binding"
+        with self.assertRaises(ValueError):
+            MAIN.WatcherApp.forget_flight_connection(app, "another-binding")
+        app.config_store.save.assert_not_called()
+        app.config_store.save.side_effect = OSError("disk full")
+        with self.assertRaises(OSError):
+            MAIN.WatcherApp.forget_flight_connection(app, "captured-binding")
+        self.assertIs(original, app.config)
+        self.assertEqual("revoked-key", original.api_key)
+        app.api_key_var.set.assert_not_called()
+        app.config_store.save.side_effect = None
+        MAIN.WatcherApp.forget_flight_connection(app, "captured-binding")
+        self.assertEqual("", app.config.api_key)
+        self.assertEqual("retained-folder", app.config.watched_folder)
+        self.assertTrue(app.config.watch_recursive)
+        self.assertEqual("https://deleted.test/", app.config.gallery_url)
+        app.api_key_var.set.assert_called_once_with("")
+        app.flights.revoked.assert_not_called()
+
+    def test_abandon_event_routes_only_the_captured_binding_to_local_cleanup(self) -> None:
+        """Deliver worker abandonment to Tk without asserting server revocation.
+
+        Returns:
+            None: The structured event invokes the local acknowledgement and
+                never enters the remote-revocation completion branch.
+        """
+        app = mock.Mock()
+        app.exiting = False
+        app.events = MAIN.queue.Queue()
+        app.events.put({"kind": "flight_abandoned",
+                        "payload": {"binding": "captured-binding"}})
+        MAIN.WatcherApp.drain_events(app)
+        app.flights.forgotten.assert_called_once_with("captured-binding")
+        app.flights.revoked.assert_not_called()
+        app.config_store.save.assert_not_called()
+
     def test_begin_flight_opens_connection_setup_when_no_key_is_saved(self) -> None:
         """Make the main action useful after scoped credentials were revoked.
 
@@ -861,7 +931,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         Returns:
             None: Independent widget spies verify the action container below
                 the title, Finish beside SimBrief within it, and the constrained
-                expanding title; no real Tk window is constructed.
+                expanding title and offline Abandon action; no Tk root is built.
         """
         app = mock.Mock()
         app.flights.text.return_value = "Finish flight…"
@@ -889,6 +959,12 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         simbrief = widgets.Button.call_args_list[1]
         self.assertIs(actions, simbrief.args[0])
         self.assertEqual(app.flights.toggle_simbrief, simbrief.kwargs["command"])
+        abandon = widgets.Button.call_args_list[2]
+        self.assertIs(actions, abandon.args[0])
+        self.assertEqual(app.abandon_flight, abandon.kwargs["command"])
+        app.abandon_flight_button.grid.assert_called_once_with(
+            row=0, column=3, padx=(6, 0),
+        )
 
     def test_watcher_run_reports_inventory_and_camera_startup_state(self) -> None:
         """Keep the original endpoint and SimConnect startup diagnostics visible.

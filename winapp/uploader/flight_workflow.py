@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/flight_workflow.py
 # Module Type: Flight Finalization Service
-# Purpose: Generate local report revisions and finalize delivery before revoke.
+# Purpose: Generate reports, finalize delivery or explicitly abandon a flight.
 # Responsibilities:
 #   - Run recoverable analysis, report and delivery tasks off the GUI thread.
 #   - Expose measured progress without inventing a completion deadline.
@@ -54,7 +54,7 @@ class FlightProgress:
 
 
 class FinalizationWorker(threading.Thread):
-    """Render/upload saved PDFs or finish accepted work before explicit revoke."""
+    """Render/upload PDFs, finalize delivery or retain an abandoned flight."""
 
     def __init__(
         self,
@@ -69,6 +69,7 @@ class FinalizationWorker(threading.Thread):
         saved_revision: ReportRevision | None = None,
         target_gallery: str = "",
         saved_revisions: tuple[ReportRevision, ...] = (),
+        forget: Callable[[], None] | None = None,
     ) -> None:
         """Capture connection-bound finalization or one independent local source.
 
@@ -94,6 +95,9 @@ class FinalizationWorker(threading.Thread):
             saved_revisions (tuple[ReportRevision, ...]): Explicit edition
                 selections across retained revisions of the same session;
                 when empty, saved_revision supplies the single-revision input.
+            forget (Callable[[], None] | None): Queue local credential cleanup
+                after explicit abandonment; None uses ordinary finalization.
+                Abandonment stops workers without requiring delivery or revoke.
 
         Returns:
             None: Initializes an idle, cancellable finalization thread.
@@ -101,6 +105,7 @@ class FinalizationWorker(threading.Thread):
         Raises:
             ValueError: An independent PDF task has multiple sessions, requests
                 revocation, mixes modes or lacks a confirmed upload destination.
+                Abandonment cannot be combined with another completion mode.
         """
         super().__init__(name="FlightFinalization", daemon=True)
         self.plans = plans
@@ -110,12 +115,16 @@ class FinalizationWorker(threading.Thread):
         self.revoke = revoke
         self.wants_revoke = wants_revoke
         self.local_reports = local_reports
+        self.forget = forget
+        self.abandonment = forget is not None
         self.emit = emit
         self.saved_revisions = saved_revisions or ((saved_revision,) if saved_revision else ())
         self.saved_revision = self.saved_revisions[0] if self.saved_revisions else None
         self.saved_upload = bool(self.saved_revisions)
         self.target_gallery = target_gallery
         self.local_result: dict[str, JsonValue] | None = None
+        if self.abandonment and (local_reports or self.saved_upload or wants_revoke):
+            raise ValueError("Abandonment requires local cleanup without delivery or revoke.")
         if local_reports and (len(plans) != 1 or wants_revoke):
             raise ValueError("Local PDF creation requires one session and no revoke.")
         if self.saved_upload and (
@@ -134,6 +143,9 @@ class FinalizationWorker(threading.Thread):
             tasks = 1 + len(plans[0].languages)
         if self.saved_upload:
             tasks = 1 + sum(len(item.files) for item in self.saved_revisions)
+        if self.abandonment:
+            # One stop barrier, one durable decision per plan, one key cleanup.
+            tasks = 2 + len(plans)
         self._progress = FlightProgress(
             total=tasks, started=now, phase_started=now
         )
@@ -186,11 +198,12 @@ class FinalizationWorker(threading.Thread):
 
         Returns:
             bool: True when attached before operation completion; False for
-                independent PDF tasks or after admission has closed.
+                independent PDF tasks, abandonment or closed admission.
         """
         with self._lock:
             if (
-                self.local_reports or self.saved_upload or not self.is_alive()
+                self.local_reports or self.saved_upload or self.abandonment
+                or not self.is_alive()
                 or self._progress.phase in {"completed", "error", "cancelled", "saving_key"}
             ):
                 return False
@@ -233,7 +246,7 @@ class FinalizationWorker(threading.Thread):
             )
 
     def check_cancelled(self) -> None:
-        """Refuse new dependent work after revocation consent is cancelled.
+        """Refuse new dependent work after explicit operation cancellation.
 
         Returns:
             None: The operation may proceed.
@@ -247,16 +260,41 @@ class FinalizationWorker(threading.Thread):
                 if self.local_reports else
                 "Saved PDF upload cancelled; acknowledged reports retained."
                 if self.saved_upload else
+                "Abandonment cancelled; local key retained."
+                if self.abandonment else
                 "Revocation cancelled; pending work retained."
             )
 
     def run(self) -> None:
-        """Complete durable tasks and submit revoke only through the final barrier.
+        """Complete durable tasks or abandon pending delivery locally.
 
         Returns:
             None: Success, failure or cancellation is retained in progress/state.
+                Abandonment retains files and awaits GUI credential persistence.
         """
         try:
+            if self.forget is not None:
+                self.update("draining")
+                self.wait_for_workers(
+                    self.cancel, time.monotonic() + FINALIZATION_DRAIN_SECONDS
+                )
+                self.check_cancelled()
+                self.update("abandoning", advance=True)
+                for pending in self.plans:
+                    # The cancelled predecessor may have saved a receipt while
+                    # stopping. Reload after it exits; never overwrite that work.
+                    plan = SessionPlan.load(pending.directory)
+                    if not plan.completed:
+                        plan.abandoned = True
+                        plan.completed = True
+                        plan.error = "Explicitly abandoned; local files retained."
+                        plan.save()
+                    self.update("abandoning", plan.session_id, advance=True)
+                # Publish before queuing the event: a fast Tk acknowledgement
+                # must never be overwritten with an unfinished cleanup phase.
+                self.update("saving_key")
+                self.forget()
+                return
             if self.local_reports:
                 self.generate_local_reports()
                 return
@@ -574,7 +612,7 @@ class FinalizationWorker(threading.Thread):
         plan.save()
 
     def confirm_local_cleanup(self, error: str = "") -> None:
-        """Acknowledge GUI-owned credential persistence after server revocation.
+        """Acknowledge credential persistence after revoke or local abandonment.
 
         Args:
             error (str): Empty after durable cleanup; otherwise recovery reason.

@@ -2025,6 +2025,46 @@ not a source parser or a commitment to remove anything on a calendar date.
   query-first and status-classification contracts unless that contract is
   deliberately redesigned.
 
+### WINAPP-4 — Explicit offline flight abandonment
+
+- **Reason / protected scenario:** Deleted galleries and externally revoked
+  keys can reject both inventory/report delivery and final revocation. App
+  0.8.0 diagnostics supplied on 2026-10-23 confirm this HTTP 401 recovery loop,
+  including attempts after no pending sessions remain.
+- **Owner:** `winapp/uploader/flight_ui.py` stops producers and binds the local
+  decision; `flight_workflow.py` persists abandonment after workers settle;
+  `gallery_watch_upload.pyw` persists removal of the captured saved key.
+- **Contract:** Explicit confirmation permanently supports leaving a connection
+  without network availability. It retains recordings, photograph sources, PDFs
+  and existing receipts. It abandons unresolved delivery/import bindings and
+  clears only the local saved key. It neither requests nor claims server
+  revocation. A submitted revocation must settle first. Timeout/persistence
+  failure retains recovery and the key; a new connection cannot inherit consent.
+- **Evidence / retirement:** Central WinApp workflow/UI/app regressions cover
+  empty plans, worker barriers, saved receipts, local persistence and stale
+  bindings. Exact-candidate hosted runtime and installed Windows acceptance
+  remain separate qualification. Deployment adoption is unknown. Keep this
+  explicit local escape while users can delete galleries or revoke keys outside
+  the companion; removal requires an equally offline accepted replacement.
+
+### WINAPP-5 — Official SimConnect SDK runtime refresh
+
+- **Owner / supported behavior:** The app and installer continue to share one
+  unmodified x64 native runtime with existing 2020/2024 transport, camera and
+  aircraft fallback owners. The 0.9.0 source refresh uses the official MSFS 2024
+  SDK Core 1.7.3 `SimConnect SDK/lib/SimConnect.dll`; its complete source URL,
+  size and SHA256 are retained in `winapp/README.md`.
+- **Evidence / limits:** On 2026-10-23, bounded official CDN acquisition verified
+  ZIP CRC and MSI File/Component/Directory mapping before extracting the DLL
+  without installing the SDK. Static PE32+/x64 validation and required exports
+  passed; the old and new binaries expose the same 117 named exports. No usable
+  file-version metadata is present, so no DLL version is inferred. Live
+  simulator/installed-app acceptance and deployment adoption remain unknown.
+- **Lifecycle:** Preserve both generations, optional overrides and bounded
+  camera-to-aircraft fallback. A package refresh alone never establishes live
+  compatibility or retires supported behavior. Microsoft's SDK terms remain
+  distinct from the repository's MIT license.
+
 ### WINAPP-2 — Installer Python selection and matching windowless launcher
 
 - **Reason / protected scenario:** Installer startup finds a supported Python

@@ -381,6 +381,17 @@ reloaded/imported to exercise newly retained dispatch and navlog fields.
 
 ## Flight recording and report delivery
 
+The SimConnect SDK refresh uses the unmodified native DLL from Microsoft's
+MSFS 2024 SDK Core 1.7.3 archive. Focused binary inspection on 2026-10-23
+confirmed ZIP CRC, MSI source mapping, 84,480 bytes, SHA256
+`b10de7adf4c62e5f66c89dd6d01b64091bbbcec83411cfe191d6b85fbee61d15`,
+PE32+/x64, required exports and the same complete 117-name export set as the
+previous binary. No DLL was loaded or SDK installed. The central installer
+fixture continues to validate the source binary and its embedded-copy hash;
+BASIC does not execute that fixture. Real camera position, aircraft telemetry,
+UTC synchronization and reconnects in both MSFS 2020 and 2024 remain manual
+acceptance for the refreshed runtime.
+
 Landscape formatting uses a frozen recorded flight in an ignored workspace
 copy. Inspect every page in EN/CS/DE/SV for true 297 x 210 mm geometry, large
 regular/bold glyphs, unclipped metric labels, chart axes, wind card and footer.
@@ -440,6 +451,16 @@ Transport
 fixtures retain HTTP/action/media-type context while redacting the key. Manual
 Windows acceptance must check **Finish flight…** below Target gallery at narrow
 widths, contextual local-completion confirmations and wrapped recovery buttons.
+Offline abandonment regressions cover confirmed cancellation of active
+producers, an already submitted revocation barrier, retained raw/PDF bytes and
+receipts saved during shutdown, empty pending-flight lists, matching import
+bindings, stale cleanup events, stop timeout and failed local key persistence.
+The app adapter verifies the main Abandon action, event routing and persistence
+before visible credential removal. These fixtures run in the hosted central
+WinApp suite; ordinary feature BASIC does not execute them. Manual acceptance
+must delete a disposable gallery/key, reproduce inventory HTTP 401, choose
+**Abandon flight…**, retain local files, restart and save a new connection.
+Repeat with no pending sessions and with active upload/recording workers.
 After a local-only finish, test a replacement gallery key, select a saved
 revision,
 upload from the report browser and verify the actual gallery PDFs. Exercise a
@@ -930,7 +951,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.142.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.142.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

@@ -5812,7 +5812,7 @@ class WatcherApp:
             parent (tk.Misc): Tkinter frame that receives the controls.
 
         Returns:
-            None: Adds contextual gallery, folder, UTC and flight controls.
+            None: Adds gallery, offline abandonment, folder, UTC and flight controls.
         """
         parent.columnconfigure(0, weight=1)
         hero = GlassCard(parent, padding=(14, 8))
@@ -5846,6 +5846,11 @@ class WatcherApp:
             lambda: self.flights.load_simbrief(change_identity=True),
             self.flights.text("simbrief_identity"),
         ).grid(row=0, column=2, padx=(4, 0))
+        self.abandon_flight_button = ttk.Button(
+            flight_actions, text=self.flights.text("abandon"),
+            command=self.abandon_flight,
+        )
+        self.abandon_flight_button.grid(row=0, column=3, padx=(6, 0))
         ttk.Label(flight_actions, textvariable=self.flights.simbrief_status_var,
                   style="Muted.TLabel").grid(row=1, column=1, sticky="w", pady=(4, 0))
 
@@ -6098,7 +6103,7 @@ class WatcherApp:
             parent (tk.Misc): Tk container receiving the import controls.
 
         Returns:
-            None: Build controls dedicated to manual bulk uploading.
+            None: Builds manual import and offline flight-abandonment controls.
         """
         parent.columnconfigure(0, weight=1)
         card = GlassCard(parent, padding=(14, 10))
@@ -6127,6 +6132,11 @@ class WatcherApp:
             command=self.flight_action,
         )
         self.import_revoke_button.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.import_abandon_button = ttk.Button(
+            target, text=self.flights.text("abandon"),
+            command=self.abandon_flight,
+        )
+        self.import_abandon_button.grid(row=1, column=1, padx=(6, 0), pady=(6, 0))
 
         ttk.Label(card, text="CHOOSE SOURCE", style="Eyebrow.TLabel").grid(
             row=2, column=0, sticky="w", pady=(17, 5)
@@ -7488,7 +7498,8 @@ class WatcherApp:
         """Refresh connection controls while allowing Revoke to initiate Stop.
 
         Returns:
-            None: Displays active work and keeps the combined action available.
+            None: Displays active work, keeps Finish available and enables
+                offline abandonment whenever a saved key is present.
         """
         current_url = self.gallery_url_var.get().strip()
         current_key = self.api_key_var.get().strip()
@@ -7529,6 +7540,11 @@ class WatcherApp:
                     "finish_flight" if saved_key else "begin_flight"
                 ))
                 button.state(["!disabled"])
+        for attr in ("abandon_flight_button", "import_abandon_button"):
+            button = getattr(self, attr, None)
+            if button is not None:
+                button.configure(text=self.flights.text("abandon"))
+                button.state(["!disabled"] if saved_key else ["disabled"])
         entry_state = "disabled" if self.api_key_revoke_running else "normal"
         for attr in ("api_key_entry", "gallery_url_entry"):
             entry = getattr(self, attr, None)
@@ -7740,6 +7756,45 @@ class WatcherApp:
             self.open_connection_dialog()
             return
         self.flights.finish_report()
+
+    def abandon_flight(self) -> None:
+        """Offer explicit local recovery for a deleted or unreachable gallery.
+
+        Returns:
+            None: Uses the shared offline stop/abandon/key-cleanup workflow
+                after confirmation; update ownership keeps its existing gate.
+        """
+        if self.updates.blocked() or not self.config.api_key.strip():
+            return
+        self.flights.abandon()
+
+    def forget_flight_connection(self, binding: str) -> None:
+        """Persist removal of the captured key before updating visible state.
+
+        Args:
+            binding (str): Fingerprint of the explicitly abandoned saved
+                endpoint and key, checked again immediately before persistence.
+        Returns:
+            None: Clears the saved key, resets the target and records local
+                abandonment without claiming server revocation.
+        Raises:
+            ValueError: The saved endpoint/key no longer matches the decision.
+            Exception: Persistence failure retains the original saved key and UI.
+        """
+        if binding != self.flights.binding():
+            raise ValueError("Saved connection changed before local key cleanup.")
+        cleared_config = WatcherConfig.from_dict(self.config.to_dict())
+        cleared_config.api_key = ""
+        self.config_store.save(cleared_config)
+        self.config = cleared_config
+        self.api_key_var.set("")
+        self.connection_status_var.set("Not configured")
+        self.gallery_label_var.set("Target gallery: unknown")
+        message = self.flights.text("flight_abandoned")
+        self.connection_detail_var.set(message)
+        self.write_log(message, "system")
+        self.record_activity("info", message, "system")
+        self.refresh_connection_controls()
 
     def revoke_api_key(self) -> None:
         """Confirm one combined stop, finish, upload and key-revocation action.
@@ -8355,7 +8410,8 @@ class WatcherApp:
         Move tuple and structured worker events into Tkinter and durable activity history.
 
         Returns:
-            None: Refreshes activity/UTC status and schedules the next drain.
+            None: Refreshes activity/UTC status, acknowledges local flight
+                abandonment and schedules the next drain.
         """
         if self.exiting:
             return
@@ -8452,6 +8508,8 @@ class WatcherApp:
                         self.connection_detail_var.set(message)
                         self.write_log("Connection test failed: " + message, "error")
                         self.record_activity("error", "Connection test failed: " + message, "system")
+                elif kind == "flight_abandoned":
+                    self.flights.forgotten(str(payload.get("binding", "")))
                 elif kind == "api_key_revoked":
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None
