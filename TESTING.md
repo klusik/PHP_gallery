@@ -3696,6 +3696,13 @@ pointer-drag retention and release, native
 three-position markup, keyboard scope and EN/CS/DE/SV JSON/PHP catalog
 membership.
 
+The existing gallery-music browser fixture also launches the production mobile
+viewer in a narrow iframe with an explicit mobile/touch detection adapter. It
+waits for the real HUD idle timer, checks that speed ranges and soundtrack
+controls become hidden and reject pointer input, then taps the stage to reveal
+and hide them while photos and music continue. This establishes the mobile CSS
+shell contract, not physical Android Chrome touch behavior.
+
 In a real local gallery, start slideshow and move the pointer to reveal the two
 compact outlined rows. Change each
 range with pointer and arrows/Home/End; left must be Slow and right Fast for
@@ -3715,6 +3722,9 @@ slideshow disabled and in the
 supported desktop/mobile browsers; disabled playback must expose neither speed
 control. Local Chromium evidence
 does not replace the hosted FULL matrix or Firefox/Safari/touch acceptance.
+On a phone, let the slideshow controls fade and confirm both speed ranges and
+the soundtrack panel disappear with the arrows. Tap the photo to restore usable
+controls, tap again to hide them, and confirm photos and music keep playing.
 
 ### Public Lightbox Zoom Verification
 

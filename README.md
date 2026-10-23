@@ -399,6 +399,8 @@ all HUD controls and the optional developer panel disappear, even if a range
 remains focused or hovered. A pointer
 drag holds the controls visible until release, and automatic advances do not
 shorten the input inactivity window.
+On mobile, the speed ranges and soundtrack panel hide with the idle controls;
+tap the photograph to reveal them again while playback continues.
 Both ranges run from Slow on the left through Medium to Fast on the right.
 Choices remain only in the current viewer instance, including stop/resume and
 close/reopen; reloading resets them.

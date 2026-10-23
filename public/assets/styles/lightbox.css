@@ -1002,7 +1002,12 @@
     transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
+/* The CSS-only mobile shell replaces is-fullscreen. Its playback panels share
+   the idle HUD state while mobile navigation keeps its own visibility rules. */
 .lightbox.is-fullscreen .lightbox-hud,
+.lightbox.is-mobile-fullscreen :is(
+    .lightbox-slideshow-speeds, .lightbox-music
+),
 .lightbox.is-fullscreen .lightbox-meta,
 .lightbox.is-fullscreen.is-slideshow .gallery-dev-overlay {
     opacity: 0;
@@ -1012,6 +1017,9 @@
 }
 
 .lightbox.is-fullscreen.is-ui-visible .lightbox-hud,
+.lightbox.is-mobile-fullscreen.is-ui-visible :is(
+    .lightbox-slideshow-speeds, .lightbox-music
+),
 .lightbox.is-fullscreen.is-ui-visible .lightbox-meta,
 .lightbox.is-fullscreen.is-slideshow.is-ui-visible .gallery-dev-overlay {
     opacity: 1;

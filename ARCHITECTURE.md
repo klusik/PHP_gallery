@@ -395,7 +395,10 @@ pointer drag holds it visible. Mere retained
 focus/hover cannot pin the HUD. Hidden fullscreen controls and the slideshow
 developer overlay use visibility as well
 as opacity and reject pointer input. Automatic advances leave the inactivity
-window intact. Range keyboard input
+window intact. The CSS-only mobile fullscreen shell applies the same idle
+visibility and pointer-input rules to speed ranges and the soundtrack panel;
+its existing stage-tap handler reveals them without stopping playback.
+Range keyboard input
 bypasses photo-navigation and voting shortcuts. The deferred lightbox
 loader already propagates the content asset revision, including this changed
 module.

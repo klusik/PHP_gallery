@@ -4,10 +4,11 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: tests/fixtures/gallery_presentation.html
 Module Type: Browser Test Fixture
-Purpose: Verify direct presentation links with native fullscreen refusal.
+Purpose: Verify direct presentation links and mobile idle playback controls.
 Responsibilities:
   - Use production entrypoint, viewer geometry and slideshow scheduling.
   - Decode real synthetic images and confirm blocked launches before revealing.
+  - Verify mobile controls hide and return without interrupting playback.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
@@ -76,6 +77,15 @@ License: MIT License (see LICENSE file in repository)
 <script type="module">
 const overlay = document.querySelector('[data-lightbox]');
 const fixtureMode = new URLSearchParams(location.search).get('fixture_audio');
+const mobileMode = fixtureMode === 'mobile';
+if (mobileMode) {
+    // Exercise the production mobile-device branch with one touch contact.
+    // This models detection, not native Android Chrome or physical touch input.
+    Object.defineProperties(navigator, {
+        maxTouchPoints: {value: 1, configurable: true},
+        userAgent: {value: 'Gallery fixture Mobile', configurable: true},
+    });
+}
 const check = (condition, message) => {
     if (!condition) throw new Error(message);
 };
@@ -132,7 +142,7 @@ try {
         && activeImage().complete && activeImage().naturalWidth > 0,
         'first decoded photo');
     const consent = overlay.querySelector('[data-presentation-consent]');
-    if (fixtureMode !== 'allowed') {
+    if (fixtureMode !== 'allowed' && !mobileMode) {
         await until(() => !consent.hidden, 'activation confirmation');
         check(counter.textContent === '1 / 2'
             && overlay.classList.contains('is-presentation-intro')
@@ -153,12 +163,12 @@ try {
         && activeImage().dataset.lightboxImageId === '1',
         'Link did not start at photo one');
     const stage = overlay.querySelector('[data-lightbox-stage]');
-    check(overlay.classList.contains('is-fullscreen')
+    check(overlay.classList.contains('is-fullscreen') === !mobileMode
         && overlay.classList.contains('is-css-fullscreen')
-            === !['allowed', 'blocked'].includes(fixtureMode)
-        && !overlay.classList.contains('is-mobile-fullscreen')
+            === (!mobileMode && !['allowed', 'blocked'].includes(fixtureMode))
+        && overlay.classList.contains('is-mobile-fullscreen') === mobileMode
         && !document.fullscreenElement,
-        'Native refusal did not retain the desktop CSS shell');
+        'Presentation did not retain the device-specific fullscreen shell');
     check(stage.getBoundingClientRect().width > 0
         && stage.getBoundingClientRect().height > 0
         && activeImage().getBoundingClientRect().width > 0,
@@ -170,9 +180,34 @@ try {
         'Link did not override the saved slow speeds');
     const music = overlay.querySelector('[data-lightbox-music]');
     await until(() => status.textContent === '', 'settled launch feedback');
-    overlay.classList.remove('is-ui-visible');
-    check(getComputedStyle(music).visibility === 'hidden',
+    const speeds = overlay.querySelector('[data-lightbox-slideshow-speeds]');
+    if (mobileMode) {
+        // Let the production inactivity timer expire while photos keep moving.
+        await until(() => !overlay.classList.contains('is-ui-visible'),
+            'mobile idle HUD');
+    } else overlay.classList.remove('is-ui-visible');
+    check(getComputedStyle(speeds).visibility === 'hidden'
+        && getComputedStyle(speeds).pointerEvents === 'none',
+        'Speed controls remained visible or interactive with the idle HUD');
+    check(getComputedStyle(music).visibility === 'hidden'
+        && getComputedStyle(music).pointerEvents === 'none',
         'Soundtrack controls did not hide with the idle HUD');
+    if (mobileMode) {
+        stage.click();
+        await until(() => getComputedStyle(speeds).opacity === '1',
+            'mobile tap reveals speed controls');
+        check(getComputedStyle(speeds).visibility === 'visible'
+            && getComputedStyle(speeds).pointerEvents === 'auto'
+            && getComputedStyle(music).visibility === 'visible',
+            'Stage tap did not restore usable mobile playback controls');
+        stage.click();
+        await until(() => getComputedStyle(speeds).opacity === '0',
+            'mobile tap hides speed controls');
+        check(getComputedStyle(speeds).visibility === 'hidden'
+            && getComputedStyle(speeds).pointerEvents === 'none'
+            && overlay.classList.contains('is-slideshow'),
+            'Hiding mobile controls interrupted playback or left ranges active');
+    }
     const ownedAudio = PresentationAudio.instances.filter(
         item => item instanceof PresentationAudio
     );

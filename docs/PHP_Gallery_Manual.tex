@@ -2121,6 +2121,9 @@ While a~new photograph is~being prepared, the~viewer uses the~same progress area
 
 Start the~slideshow with \codeword{S} or~its existing control. Move the~pointer to~reveal two compact outlined rows: \ui{Photo change speed} and~\ui{Transition speed}. Each range offers \ui{Fast}, \ui{Medium}, and~\ui{Slow}; the~current choice appears beside it. Both ranges run from Slow on~the~left to~Fast on~the~right. Arrow keys adjust a~focused range without navigating photographs. Actual input restarts the~inactivity timer. All controls, including optional developer diagnostics, disappear after inactivity even when a~range retains focus or~the~pointer rests over it. Dragging keeps controls visible until release; movement reveals them again.
 
+On~mobile, both speed ranges and~the~soundtrack panel hide with the~idle
+controls. Tap the~photograph to~reveal them again; photos and~music keep playing.
+
 Photo display intervals are~1, 2, and~4 seconds; transition durations are~0.5, 1, and~2 seconds. Medium preserves the~existing defaults. Changes apply immediately and~independently: the~interval replaces the~pending wait, while the~next blend uses the~new transition duration. An~animation already running finishes normally, and~the~next photograph still waits for~its full-quality image to~be~ready. Choices remain during stop/resume and~close/reopen within the~same viewer instance; reloading restores Medium. No~Save action is~needed.
 
 \subsection{Zooming and~panning a~photograph}
