@@ -597,12 +597,15 @@ try {
     for (const [launchFlag, music, mode] of [
         ['presentation', '1', 'blocked'],
         ['presentation', '1', 'allowed'],
+        ['presentation', '1', 'mobile'],
         ['autoplay', '0', 'muted'],
         ['presentation', '1', 'paused'],
         ['presentation', '1', 'exclusive'],
     ]) {
         const directLink = document.createElement('iframe');
         directLink.style.cssText = 'width:100%;height:100vh;border:0';
+        // Match the narrow portrait boundary below even in the desktop run.
+        if (mode === 'mobile') directLink.style.width = '360px';
         const directResult = new Promise(resolve => {
             const receive = event => {
                 if (event.origin !== location.origin
