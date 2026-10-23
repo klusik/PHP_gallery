@@ -1,5 +1,46 @@
 # Compatibility lifecycle and retirement register
 
+## Visitor-triggered publication and unchanged access policy
+
+Owners: gallery publication service/model, existing gallery editor writer and
+maintenance bootstrap. Confirmed pre-feature schema keeps existing galleries
+usable without scheduling; missing/unknown deadline/index storage never permits
+automatic publication or explicit schedule writes. This is permanent support
+for code-before-migration upgrades, retired only if the installation lifecycle
+later proves all requests must have current schema. Deployment prevalence and
+live latency evidence are currently unknown.
+
+The enhanced native input uses the browser timezone and previews its exact UTC
+transport. No timezone preference is persisted. The server still validates UTC
+only. Missing JavaScript/timezone support retains the UTC-labelled native
+control as permanent no-JavaScript compatibility, not a guessed server zone.
+The browser chooses the earlier repeated autumn hour for a new edit; the UTC
+preview exposes that choice. Unchanged stored later occurrences are preserved,
+and nonexistent spring wall times fail validation before submission.
+Stored private/unpublished galleries retain their current direct-link policy
+until execution. Scheduled Publish restores `public + listed`, matching the
+owner's clarified requirement that it behave exactly like explicit manual
+Publish. The initial unlisted-preserving implementation was superseded: the
+manual editor couples unpublished visibility to unlisted, so preserving that
+flag prevented ordinary scheduled galleries from ever entering discovery.
+Password, NSFW, token and parent access policies are unchanged. An unrelated
+unchanged full-form save still preserves independent unlisted state. Existing PDF
+publication markers and the shared zero-wait writer lease remain authoritative.
+Unknown schema, ownership errors and invalid PDF children retain their pending
+deadline for a later eligible visit. No schedule is imported from sidecars or
+restored from a deleted gallery's old deadline.
+
+Work is bounded to 16 candidate identities per eligible visit. Larger backlogs
+catch up across visits; a scalar `gallery_publication.scan_cursor` in existing
+app settings advances an indexed keyset scan so blocked rows cannot permanently
+starve later deadlines. The gallery timestamp remains the sole pending list;
+the cursor contains no queued work or independent per-gallery status. Media
+requests and requests that do not execute PHP do not trigger publication.
+No-traffic time produces no execution. Sidecar failure is reported with a
+bounded diagnostic; database visibility remains authoritative, matching the
+existing editor sidecar-write boundary. Hosted BASIC is source evidence only;
+runtime, migration, browser and deployed behavior need their own qualification.
+
 ## Shared music originals and live gallery assignments
 
 Owners: gallery music model/service and its private projection/migration parts,

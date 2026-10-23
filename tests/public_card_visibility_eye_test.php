@@ -27,7 +27,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/support/php_source.php';
 
-/** Fail one visibility-eye source contract with a readable message. */
+/**
+ * Fail one visibility-eye source contract with a readable message.
+ * @param bool $condition Required visibility or mutation invariant.
+ * @param string $message Safe assertion description on failure.
+ * @return void Continue on success, otherwise terminate with failure.
+ */
 function visibility_eye_expect(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -147,9 +152,10 @@ visibility_eye_expect(
 visibility_eye_expect(
     php_source_contains(
         $editActions,
-        '$shouldUpdateAccessListing = $accessReady && ($completeForm || $visibilityInputPresent);',
+        '$shouldUpdateAccessListing = $accessReady && $visibilityInputPresent'
+            . ' && (!$completeForm || $visibility !== $gallery[\'visibility\']);',
     ),
-    'Visibility-only saves must synchronize access_listing when the access schema is available.',
+    'Explicit visibility changes must synchronize listing while unchanged full forms preserve link-only state.',
 );
 visibility_eye_expect(
     php_source_contains($editActions, 'if ($shouldUpdateAccessListing) {')

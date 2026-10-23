@@ -12,7 +12,7 @@
  */
 import {setupAdminGalleryImages} from '/assets/gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
 import {setupAdminBulkSelection} from '/assets/gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
-import {setupAdminGallerySidePanel} from '/assets/gallery-modules/admin-side-panel.js?v=20261023-picture-manager-context-v1';
+import {setupAdminGallerySidePanel} from '/assets/gallery-modules/admin-side-panel.js?v=20261023-publication-local-time-v2';
 import {beginAdminPanelOpen} from '/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 
 // Purpose: Pace fixture-side state polling without delaying successful coordinator updates.

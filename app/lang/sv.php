@@ -33,6 +33,15 @@
  */
 
 return [
+    'publication.listing_help' => 'Publicering återställer offentlig listning, precis som manuell publicering.',
+    'publication.local_help' => 'Tiden använder webbläsarens tidszon ovan; motsvarande UTC-tid visas under fältet. Lämna tomt eller välj Publicerad för att avbryta. Publicering sker vid nästa lämpliga PHP-sidbesök. Åtkomstbegränsningar bevaras.',
+    'publication.local_invalid' => 'Ange ett giltigt lokalt datum och klockslag. Tiden kanske inte finns på grund av sommartidsbytet.',
+    'publication.schedule' => 'Schemalägg publicering',
+    'publication.pending' => 'Väntar på publicering: {time}',
+    'publication.help' => 'UTC-tid. Lämna tomt eller välj Publicerad för att ta bort schemat. Nästa PHP-sidbesök vid eller efter tiden publicerar och listar galleriet precis som manuell publicering. Lösenords-, NSFW- och tokenskydd bevaras.',
+    'publication.unlisted' => 'Publicerad synlighet; fortfarande endast tillgänglig via länk och utesluten från offentliga listor.',
+    'publication.unavailable' => 'Schemaläggning blir tillgänglig efter lyckad databasmigrering och schemakontroll.',
+    'publication.invalid' => 'Ange ett giltigt framtida datum och klockslag i UTC.',
     'admin.gallery_editor.media_sections' => 'Medieavsnitt',
     'admin.gallery_editor.pdf_documents' => 'PDF-dokument',
     'admin.gallery_editor.upload_photos' => 'Ladda upp',

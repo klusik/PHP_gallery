@@ -33,6 +33,15 @@
  */
 
 return [
+    'publication.listing_help' => 'Publication restores public listing, as with manual Publish.',
+    'publication.local_help' => 'Times use the browser timezone shown above; the UTC equivalent appears below the field. Leave empty to cancel; choosing Published clears the schedule. Publication runs on the next eligible PHP page visit. Existing access restrictions remain unchanged.',
+    'publication.local_invalid' => 'Enter a valid local date and time. This time may not exist because of a daylight-saving change.',
+    'publication.schedule' => 'Schedule publication',
+    'publication.pending' => 'Pending publication: {time}',
+    'publication.help' => 'UTC time. Leave empty to cancel; choosing Published clears the schedule. At the deadline, the next PHP page visit publishes and lists the gallery just like manual Publish. Password, NSFW and token protections remain unchanged.',
+    'publication.unlisted' => 'Published visibility; still accessible only by link and excluded from public listings.',
+    'publication.unavailable' => 'Scheduling is unavailable until its database migration and schema inspection succeed.',
+    'publication.invalid' => 'Enter a real future date and time in UTC.',
     'admin.gallery_editor.media_sections' => 'Media sections',
     'admin.gallery_editor.pdf_documents' => 'PDF documents',
     'admin.gallery_editor.upload_photos' => 'Upload',

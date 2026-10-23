@@ -166,6 +166,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\gallery_move_images_locked|dynamic_callback_argument|is_callable($options)
     Gallery\Services\gallery_move_images_locked|variable_callable|$checkpoint()
     Gallery\Services\gallery_public_path_assignments|variable_callable|$buildPath()
+    Gallery\Services\gallery_publication_request|variable_callable|$load()
     Gallery\Services\image_decode_gd_path_result|dynamic_function_exists|function_exists(dynamic)
     Gallery\Services\legacy_download_artifact_cache_status_for_path|variable_callable|$probe()
     Gallery\Services\maintenance_center_analysis_step_unlocked|dynamic_callback_argument|is_callable($analyzer)
@@ -224,6 +225,9 @@ function runtime_dynamic_dependency_reviewed_sites(): array
             str_contains($signature, 'cms_route_from_request|')
                 => 'injected-module-loader:routing-paths',
             str_contains($signature, 'application_autoupdate_maybe_run|'),
+            // Publication receives the kernel loader and passes only the
+            // literal site-maintenance-work owner after its indexed due check.
+            str_contains($signature, 'gallery_publication_request|'),
             str_contains(
                 $signature,
                 'site_maintenance_register_request_trigger|',

@@ -74,6 +74,7 @@ $contracts = [
         'gallery_layout_migration_model_apply' => 1,
     ],
     'app/models/galleries.php' => [
+        'gallery_publication_model_consume' => 1,
         'gallery_model_update_scalar_for_ids' => 1,
         'gallery_model_update_fields' => 1,
         'gallery_model_clear_background_sources' => 1,

@@ -26,10 +26,12 @@ final class Http
      * Allocate an in-memory cookie jar scoped to a literal loopback origin.
      *
      * @param string $origin Validated literal loopback origin including its port.
+     * @param string|null $userAgent Optional crawler identity; null preserves curl's default.
      * @return void Initialize the cookie-isolated HTTP client.
      */
     public function __construct(
         private string $origin,
+        ?string $userAgent = null,
     ) {
         check(
             preg_match('~^http://127\.0\.0\.1:[1-9][0-9]{3,4}$~D', $origin)
@@ -46,6 +48,9 @@ final class Http
             CURLOPT_PROXY => '',
             CURLOPT_PROTOCOLS => CURLPROTO_HTTP,
         ]);
+        if ($userAgent !== null) {
+            curl_setopt($this->handle, CURLOPT_USERAGENT, $userAgent);
+        }
     }
 
     /**

@@ -73,6 +73,16 @@ function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
         return;
     }
 
+    // Publication is a separate indexed foreground operation. It runs before
+    // the triggering page renders, without admitting public heavy maintenance.
+    $kernel?->load('site-request-trigger');
+    if ($kernel !== null) {
+        \Gallery\Services\gallery_publication_request(
+            request_method(),
+            static fn(string $module): mixed => $kernel->load($module),
+        );
+    }
+
     // Load the lightweight updater policy before inspecting its interval.
     $kernel?->load('request-maintenance');
     $intervalSeconds = application_autoupdate_interval_seconds();

@@ -797,6 +797,38 @@ Endast markerade rader sparas. Omarkerade förslag ignoreras, och administratör
 Datumfält i administrationen behåller webbläsarens inbyggda datumfält som inskickat värde men lägger till en kompakt kalenderöppnare samt hjälpknapparna \ui{Idag} och \ui{Radera}. \ui{Idag} skriver webbläsarens aktuella lokala kalenderdatum; \ui{Radera} tömmer fältet. Förbättringen tillämpas igen på formulär som läses in i administrationens sidopanel, medan det underliggande inbyggda datumfältet fortfarande går att använda utan de extra JavaScript-kontrollerna.
 
 \subsection{Referens för galleriredigerarens kontroller}
+\paragraph{Schemalägg publicering}
+Det förbättrade fältet använder webbläsarens namngivna tidszon, så föreslagen
+aktuell tid motsvarar den lokala klockan. Exakt UTC-tid visas under fältet.
+Ingen användartidszon sparas. Utan JavaScript är fältet uttryckligen i UTC.
+Icke existerande vårklockslag avvisas. Vid ny inmatning under den upprepade
+hösttimmen väljer webbläsaren den tidigare förekomsten; kontrollera UTC-vyn.
+En oförändrad sparad senare förekomst bevaras.
+
+Ange ett framtida datum och klockslag i det inbyggda fältet
+\ui{Schemalägg publicering} under \ui{Åtkomst} och spara.
+Följ fältets tidszonsetikett; statusen visar exakt UTC-tid.
+Ändra tiden för att flytta publiceringen eller töm fältet för att avbryta.
+Valet \ui{Publicerad} tar också bort schemat. Utan JavaScript behöver önskad
+lokal tid omvandlas till UTC före inmatning i det UTC-märkta fältet.
+
+Ett opublicerat galleri behåller sin vanliga direktadress före tiden,
+medan ett privat galleri behåller sina åtkomstregler. Nästa vanliga
+PHP-sidbesök med GET/HEAD vid eller efter tiden, även från en anonym
+sökrobot, ändrar den kanoniska synligheten till offentlig.
+Lösenord, NSFW, delningstoken, giltighetstid och överordnade skydd bevaras.
+Schemalagd publicering återställer också offentlig listning, precis som
+det manuella valet \ui{Publicerad}.
+Ofullständiga PDF-undergallerier förblir skyddade och barn publiceras inte
+automatiskt. Utan besök körs inget; statiska filer och CDN-träffar utlöser
+ingenting. Större köer av tidpunkter hanteras i grupper om 16 över fler besök.
+Ingen cron, bakgrundsprocess eller webbläsartimer behövs.
+Kör vanliga databasmigreringar först. Schemat hör till databasen; sidofiler
+bevarar resulterande synlighet men överför inte väntande tider till
+andra installationer.
+Den lätta kontrollen använder befintlig gallerimodell och åtkomsttjänst;
+skrivberoenden laddas bara när indexet hittar en förfallen rad.
+
 \index{g00108@galleriredigerare!k00137@kontroller}
 \index{g00096@galleri!s00235@synlighet}
 \index{g00096@galleri!z00276@åsidosättningar av visning}

@@ -33,6 +33,15 @@
  */
 
 return [
+    'publication.listing_help' => 'Zveřejnění zařadí galerii i do veřejných seznamů stejně jako ruční zveřejnění.',
+    'publication.local_help' => 'Čas je v pásmu prohlížeče uvedeném výše; pod polem je přepočet na UTC. Prázdné pole zruší plán; volba Zveřejněná jej také zruší. Zveřejnění proběhne při další vhodné návštěvě PHP stránky. Omezení přístupu zůstanou zachována.',
+    'publication.local_invalid' => 'Zadejte platné místní datum a čas. Tento čas nemusí existovat kvůli změně letního času.',
+    'publication.schedule' => 'Naplánovat zveřejnění',
+    'publication.pending' => 'Čeká na zveřejnění: {time}',
+    'publication.help' => 'Čas v UTC. Prázdné pole zruší plán; volba Zveřejněná jej také zruší. První návštěva PHP stránky po termínu galerii zveřejní i ve veřejných seznamech stejně jako ruční zveřejnění. Heslo, NSFW a ochrana tokeny zůstanou zachovány.',
+    'publication.unlisted' => 'Zveřejněná viditelnost; galerie je stále přístupná pouze přes odkaz a není ve veřejných seznamech.',
+    'publication.unavailable' => 'Plánování není dostupné, dokud neproběhne databázová migrace a úspěšné ověření schématu.',
+    'publication.invalid' => 'Zadejte platné budoucí datum a čas v UTC.',
     'admin.gallery_editor.media_sections' => 'Sekce médií',
     'admin.gallery_editor.pdf_documents' => 'Dokumenty PDF',
     'admin.gallery_editor.upload_photos' => 'Nahrát',

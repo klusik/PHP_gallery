@@ -1,5 +1,60 @@
 # PHP Gallery Architecture
 
+## Visitor-triggered gallery publication
+
+The gallery row owns its nullable UTC `scheduled_publish_at` deadline.
+The existing Admin date-picker module enhances only the marked publication
+input into a browser-local native picker with an explicit IANA timezone label.
+The original named input remains the UTC hidden transport; a visible UTC
+preview exposes the exact chosen instant. Native current-time suggestions now
+refer to the displayed local zone. New nonexistent spring wall times are
+refused. Autumn edits use the browser's earlier occurrence and expose its UTC
+equivalent; an unchanged stored later occurrence is preserved exactly.
+Without JavaScript or a usable browser timezone, the existing UTC-labelled
+native input remains supported. No user timezone is persisted.
+The existing `models/galleries.php` owner contains the SQL primitives;
+`services/gallery_access.php` owns lightweight schema/time policy. Reusing
+these already-loaded gallery owners avoids extra files on the no-due route.
+The maintenance bootstrap admits ordinary PHP GET/HEAD
+requests before dispatch, including anonymous visitors and crawlers, while
+excluding read-only media and explicit maintenance transports. It does not
+enable Admin-only site maintenance for public requests.
+
+The existing `site-request-trigger` root owns the indexed due check. An empty
+result loads no publication writer/sidecar dependencies. A nonempty result
+loads the existing `site-maintenance-work` owner and calls
+`gallery_editor_publish_due`; loading this owner does not run unrelated tasks.
+The common zero-wait gallery writer lease serializes editors, Trash and this
+runner. Under that lease it re-reads each live identity, checks its exact
+deadline/revision and the existing PDF guard, then atomically changes canonical
+visibility, restores listed discovery and consumes the timestamp, matching
+explicit manual Publish. It preserves NSFW, passwords, tokens and other
+settings. Missing folders and deleted rows are skipped.
+Fresh numeric and child-list caches, plus cached clean-path identity resolution,
+let the triggering render observe the transition. Sidecar writes use the
+existing canonical writer and bounded, non-secret failure diagnostics.
+
+Runtime review before hosted preparation: the installed plan has 98 modules,
+4,072 direct file entries, 446 unique files and 3,626 duplicate entries.
+The unchanged duplicate ceiling is 3,653 and the logical-module allowance is
+already consumed. This feature reuses existing roots and adds two unique PHP
+owners. Expected deltas are zero logical modules and additional writer closure
+files only in the deferred work owner; exact duplication and route budgets
+remain for hosted preparation/FULL to establish. No baseline is raised.
+
+Local Server error recovery regenerated the plan after registering the injected
+publication loader in `runtime_dynamic_dependencies.php`. The prepared plan
+contains 98 modules, 4,094 direct entries, 448 unique files and 3,646 duplicate
+entries, below the unchanged 3,653 ceiling. Shipping an authored hook without
+this generated closure causes an undefined-function HTTP 500 before dispatch;
+source BASIC alone does not exercise that request path.
+
+The first hosted integration measured the two separate publication files above
+the existing Home/Gallery/Admin relative include ratchets. Their functions now
+live in the established gallery model/access owners with unchanged SQL and
+deferred work. Generated preparation must verify the final closure; no file,
+duplicate, module or route allowance is increased.
+
 Updater-owned prune-trash now has an independent scheduled consumer before the
 site-maintenance thumbnail window/enable gate. Maintenance Center dispatches the
 same owner under its approved cache task. The updater start lock, validated

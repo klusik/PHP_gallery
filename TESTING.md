@@ -1,5 +1,71 @@
 # Testing Guide
 
+## Scheduled gallery publication
+
+The owner-authorized localhost regression on Testovací A321 starts from
+`unpublished + unlisted`, saves a genuinely future UTC deadline through the
+existing editor owner and confirms the anonymous parent page omits the card.
+The first real HTTP visit at the deadline must observe `public + listed`, a
+consumed deadline and the visible card in that same response. Compare password,
+token, NSFW and parent fields, then restore `unpublished + unlisted` with no
+deadline so the owner can repeat the test independently. This specific local
+regression passed; it is separate from disposable hosted FULL qualification.
+
+Access layout keeps visibility status within its field and the scheduling
+timezone/UTC preview below the date. Production styles were checked at desktop
+width (all four inputs share the same top edge) and in a real 390px iframe
+viewport (single-column controls, no horizontal overflow). Help remains a plain
+glyph and native checkbox semantics remain under the compact switch styling.
+
+`gallery_publication_local_time_test.mjs` executes the production picker
+conversion functions under Prague summer/winter time, UTC, New York and a
+fractional-hour offset. It covers the reported local 12:05 -> UTC 10:05 case,
+invalid dates, cancellation, nonexistent spring hours and repeated autumn hours.
+Browser acceptance also checks injected panel controls, UTC transport preview
+and preservation of an unchanged stored second-occurrence autumn instant.
+
+`gallery_publication_test.php` exercises the real SQL model against disposable
+SQLite storage and controlled schema observations. It covers inclusive UTC
+boundaries, invalid/past/new versus unchanged deadlines, DST-independent UTC
+input, missing/unknown schema and index refusal, bounded GET/HEAD admission,
+the empty fast path, stale rescheduling/cancellation and idempotent consumption.
+
+The existing serial `gallery_edit_concurrency_mysql_test.php` owns real
+editor/HTTP coverage in the disposable workflow database. Its publication
+scenarios cover anonymous crawler GET and visitor HEAD, same-response public
+listing, private and unpublished behavior before the deadline, held writer-lock
+deferral, sidecar publication, revision changes, password/NSFW/token/listing
+preservation, restored public listing, unchanged unrelated unlisted saves,
+schedule validation before
+filesystem effects, rescheduling, cancellation, manual publication, restricted
+PDF children and deleted rows. It is discovered by the existing central FULL
+registry; ordinary feature BASIC does not execute these runtime scenarios.
+
+The HTTP fixture uses the supported `gallery_path` request vocabulary and
+reads the actual parent gallery where the new child card belongs. Direct-link
+status, persisted unpublished state and the pending timestamp are checked
+separately. The visibility-eye contract preserves explicit listing changes and
+unchanged unlisted saves; the model revision inventory includes the atomic
+publication consumer. Hosting qualification also retains all existing relative
+route-include budgets while reusing the gallery model/access owners.
+Password and NSFW gates deliberately return HTTP 200: the fixture asserts the
+actual age-confirmation form, submits its existing CSRF-protected action, then
+asserts the password prompt. Both responses must omit protected descriptions;
+private pre-deadline access separately remains HTTP 404.
+
+Manual qualification still includes the injected Admin side-panel form on
+desktop/mobile, keyboard/touch datetime input, rescheduling/cancellation with
+in-place completion and a real anonymous visit after the deadline. No local
+installation, browser or runtime qualification follows from BASIC alone.
+
+The localhost Server error diagnosis reproduced an undefined
+`gallery_publication_request()` at the maintenance hook with the stale plan.
+After registering its injected loader and regenerating the canonical plan,
+actual anonymous Home and Admin login requests returned HTTP 200 instead of
+500. The focused portable publication regression also passed. This confirms
+that specific startup repair; it does not qualify authenticated scheduling,
+schema migration, the complete HTTP fixture or deployment-wide behavior.
+
 ## Public search and root creation toolbar
 
 `public_home_creation_browser_test.mjs` loads production public styles and the

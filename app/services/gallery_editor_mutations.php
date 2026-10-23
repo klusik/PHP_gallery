@@ -75,7 +75,9 @@ function gallery_editor_unique_slug(
  * Persist semantic gallery editor fields and update the row timestamp.
  *
  * @param int $galleryId Gallery identifier.
- * @param array<string,mixed> $fields Editable gallery column-value map.
+ * @param array{visibility?:string,scheduled_publish_at?:string|null,...} $fields
+ *     Editable gallery columns; deadline is UTC or null to cancel. Other keys
+ *     follow gallery_model_update_fields() and retain their existing semantics.
  * @return void Persist the guarded field update and release its writer lease.
  */
 function gallery_editor_update_fields(int $galleryId, array $fields): void
@@ -91,8 +93,98 @@ function gallery_editor_update_fields(int $galleryId, array $fields): void
                     (string) $fields['visibility'],
                 );
             }
+            if ((string) $fields['visibility'] === 'public') {
+                if (gallery_publication_manual_storage_available()) {
+                    $fields['scheduled_publish_at'] = null;
+                }
+            }
         }
         gallery_model_update_fields($galleryId, $fields, now_sql());
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Publish due live galleries under the same lease as editors and Trash writers.
+ *
+ * Re-read after acquiring ownership: a captured deadline is never permission to
+ * overwrite a reschedule, cancellation, deletion or newer editor revision.
+ * @param list<array{id:int|string,scheduled_publish_at:string}> $due Indexed candidate identities and original UTC deadlines.
+ * @param string $nowUtc Inclusive UTC boundary captured by this visitor.
+ * @return void Consume eligible deadlines and refresh their canonical sidecars.
+ */
+function gallery_editor_publish_due(array $due, string $nowUtc): void
+{
+    require_once __DIR__ . '/gallery_pdf_publication.php';
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        gallery_access_assert_public_policy_available();
+        if (gallery_publication_schema_state() !== 'available') {
+            return;
+        }
+        // This scalar is only a fair-scan cursor, never a second pending list.
+        // Blocked PDF rows must not permanently starve newer due galleries.
+        $cursor = (string) app_setting('gallery_publication.scan_cursor', '');
+        if (preg_match(
+            '/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\|([1-9][0-9]*)$/D',
+            $cursor,
+            $cursorParts,
+        ) === 1) {
+            $next = \Gallery\Models\gallery_publication_model_due(
+                $nowUtc,
+                GALLERY_PUBLICATION_BATCH_SIZE,
+                $cursorParts[1],
+                (int) $cursorParts[2],
+            );
+            if ($next !== []) {
+                $due = $next;
+            }
+        }
+        foreach ($due as $candidate) {
+            $galleryId = (int) $candidate['id'];
+            $gallery = find_gallery($galleryId, true);
+            if (
+                !$gallery
+                || ($gallery['scheduled_publish_at'] ?? null)
+                    !== $candidate['scheduled_publish_at']
+                || !in_array(
+                    (string) $gallery['visibility'],
+                    ['private', 'unpublished', 'draft'],
+                    true,
+                )
+                || gallery_pdf_publication_forces_private($gallery)
+                || !is_dir(gallery_abs_path((string) $gallery['folder_path']))
+            ) {
+                continue;
+            }
+            if (\Gallery\Models\gallery_publication_model_consume(
+                $galleryId,
+                $candidate['scheduled_publish_at'],
+                gallery_edit_revision($gallery),
+                $nowUtc,
+                now_sql(),
+            )) {
+                $updated = find_gallery($galleryId, true);
+                // The triggering render must not reuse earlier child-list rows.
+                $cache = &child_galleries_request_cache();
+                $cache = [];
+                try {
+                    if ($updated && !write_gallery_sidecar($updated)) {
+                        error_log('Gallery scheduled publication: sidecar write failed.');
+                    }
+                } catch (\Throwable) {
+                    error_log('Gallery scheduled publication: sidecar write failed.');
+                }
+            }
+        }
+        if ($due !== []) {
+            $last = $due[array_key_last($due)];
+            set_app_setting(
+                'gallery_publication.scan_cursor',
+                $last['scheduled_publish_at'] . '|' . (int) $last['id'],
+            );
+        }
     } finally {
         gallery_edit_writer_end($writerLock);
     }

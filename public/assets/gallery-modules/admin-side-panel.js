@@ -1180,7 +1180,7 @@ async function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupAdminPanelThumbnailBoundControls(body);
     setupTagSuggestions(body);
     if (workspace instanceof HTMLElement) {
-        const {setupAdminDatePickers} = await import('./admin-date-picker.js?v=20261003-scoped-i18n-v1');
+        const {setupAdminDatePickers} = await import('./admin-date-picker.js?v=20261023-publication-local-time-v2');
         if (!contentIsCurrent()) return;
         setupAdminDatePickers(body);
     }

@@ -827,6 +827,41 @@ Nur markierte Zeilen werden gespeichert. Unmarkierte Vorschläge werden ignorier
 Datumsfelder in der Administration verwenden weiterhin das native Datumsfeld des Browsers als übermittelten Wert, ergänzen aber einen kompakten Kalenderöffner sowie die Hilfen \ui{Heute} und \ui{Löschen}. \ui{Heute} trägt das aktuelle lokale Kalenderdatum des Browsers ein; \ui{Löschen} leert das Feld. Diese Erweiterung wird auch auf Formulare angewendet, die in den Administrations-Seitenbereich geladen werden; das zugrunde liegende native Datumsfeld bleibt ohne die zusätzlichen JavaScript-Steuerungen nutzbar.
 
 \subsection{Referenz der Galerieeditor-Steuerungen}
+\paragraph{Veröffentlichung planen}
+Das erweiterte Feld verwendet die angezeigte Browser-Zeitzone; vorgeschlagene
+aktuelle Uhrzeiten passen dadurch zur Ortszeit. Darunter steht die genaue
+UTC-Entsprechung. Es wird keine Benutzer-Zeitzone gespeichert. Ohne JavaScript
+bleibt das Feld ausdrücklich in UTC. Nicht vorhandene Frühlingszeiten werden
+abgelehnt. Bei einer neuen Eingabe während der doppelten Herbststunde wählt
+der Browser das frühere Vorkommen; prüfen Sie die UTC-Vorschau.
+Ein unverändert gespeichertes späteres Vorkommen bleibt erhalten.
+
+Tragen Sie unter \ui{Zugriff} im nativen Feld
+\ui{Veröffentlichung planen} einen zukünftigen Termin ein und speichern Sie.
+Beachten Sie die Zeitzonenbeschriftung; der Status zeigt den genauen
+UTC-Termin. Ändern Sie ihn zum Verschieben, leeren Sie das Feld zum Abbrechen.
+Die Auswahl \ui{Veröffentlicht} löscht den Termin ebenfalls.
+Beim unveränderten UTC-Feld ohne JavaScript rechnen Sie die gewünschte
+Ortszeit vor der Eingabe in UTC um.
+
+Eine unveröffentlichte Galerie behält vor dem Termin ihre direkte URL,
+eine private Galerie ihre Zugriffssperren. Der nächste gewöhnliche
+PHP-Seitenaufruf per GET/HEAD ab dem Termin, auch durch einen anonymen
+Crawler, ändert die kanonische Sichtbarkeit auf öffentlich.
+Passwörter, NSFW, Freigabetoken, Ablauf und übergeordnete Schutzregeln bleiben
+erhalten. Die geplante Veröffentlichung stellt auch öffentliche Listung her,
+genau wie die manuelle Auswahl \ui{Veröffentlicht}.
+Unvollständige PDF-Untergalerien bleiben geschützt; Kinder werden nicht
+automatisch veröffentlicht. Ohne Besuche erfolgt keine Ausführung;
+statische Dateien und CDN-Zugriffe lösen nichts aus. Größere Rückstände
+werden in Gruppen von 16 über weitere Besuche abgearbeitet.
+Cron, Daemon und Browser-Zeitgeber sind unnötig.
+Führen Sie zuerst die normalen Datenbankmigrationen aus. Termine bleiben
+datenbankgebunden; Sidecars übertragen die resultierende Sichtbarkeit,
+aber keine ausstehenden Termine auf andere Installationen.
+Die leichte Prüfung nutzt das bestehende Galeriemodell und den Zugriffsdienst;
+Schreibabhängigkeiten werden nur für einen über den Index fälligen Eintrag geladen.
+
 \index{g00125@Galerieeditor!s00236@Steuerungen}
 \index{g00117@Galerie!s00223@Sichtbarkeit}
 \index{g00117@Galerie!a00020@Anzeigeüberschreibungen}

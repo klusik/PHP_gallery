@@ -62,7 +62,7 @@ import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20261014-floating-scroll-v1';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2';
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20261023-picture-manager-context-v1';
-import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261003-scoped-i18n-v1';
+import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261023-publication-local-time-v2';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20261008-legacy-ofp-dispatch-fl-v3';
 import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261012-gallery-pdf-documents';
 import {
@@ -126,7 +126,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261023-picture-manager-context-v1';
+} from './gallery-modules/admin-operations.js?v=20261023-publication-local-time-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.

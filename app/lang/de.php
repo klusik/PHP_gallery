@@ -33,6 +33,15 @@
  */
 
 return [
+    'publication.listing_help' => 'Die Veröffentlichung stellt öffentliche Listung wie bei der manuellen Veröffentlichung her.',
+    'publication.local_help' => 'Die Zeit gilt für die oben angezeigte Browser-Zeitzone; darunter steht die UTC-Entsprechung. Ein leeres Feld oder die Auswahl Veröffentlicht löscht den Termin. Die Veröffentlichung erfolgt beim nächsten geeigneten PHP-Seitenaufruf. Zugriffsbeschränkungen bleiben erhalten.',
+    'publication.local_invalid' => 'Geben Sie ein gültiges lokales Datum mit Uhrzeit ein. Diese Uhrzeit existiert möglicherweise wegen der Sommerzeitumstellung nicht.',
+    'publication.schedule' => 'Veröffentlichung planen',
+    'publication.pending' => 'Veröffentlichung ausstehend: {time}',
+    'publication.help' => 'UTC-Zeit. Ein leeres Feld oder die Auswahl Veröffentlicht löscht den Termin. Ab dem Termin veröffentlicht und listet der nächste PHP-Seitenaufruf die Galerie wie die manuelle Veröffentlichung. Passwort-, NSFW- und Tokenschutz bleiben erhalten.',
+    'publication.unlisted' => 'Veröffentlichte Sichtbarkeit; weiterhin nur per Link zugänglich und aus öffentlichen Listen ausgeschlossen.',
+    'publication.unavailable' => 'Die Planung ist erst nach erfolgreicher Datenbankmigration und Schemaprüfung verfügbar.',
+    'publication.invalid' => 'Geben Sie ein gültiges zukünftiges Datum mit Uhrzeit in UTC ein.',
     'admin.gallery_editor.media_sections' => 'Medienbereiche',
     'admin.gallery_editor.pdf_documents' => 'PDF-Dokumente',
     'admin.gallery_editor.upload_photos' => 'Hochladen',

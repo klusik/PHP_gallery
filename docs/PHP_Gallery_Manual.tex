@@ -796,6 +796,37 @@ Only checked rows are~saved. Unchecked suggestions are~ignored, and~the~administ
 Admin date fields keep the~native browser date input as~the~submitted value but~add a~compact calendar opener plus \ui{Today} and~\ui{Delete} helpers. \ui{Today} writes the~browser's current local calendar date; \ui{Delete} clears the~field. The~enhancement is~re-applied to~forms loaded into~the~Admin side panel, while the~underlying native date field remains usable without the~extra JavaScript controls.
 
 \subsection{Gallery editor control reference}
+\paragraph{Schedule publication}
+The~enhanced picker uses your browser's named timezone, so~its current-time
+suggestions refer to~your local clock. A~UTC preview below it~shows the~exact
+stored instant. No~timezone preference is~saved. Without JavaScript,
+the~field remains explicitly UTC and~requires UTC input.
+Nonexistent spring clock-change times are~rejected. For~a~new edit
+in~a~repeated autumn hour, check the~UTC preview: the~browser chooses
+the~earlier occurrence. An~unchanged saved later occurrence is~preserved.
+
+In~\ui{Access}, enter a~future date and~time in~the~native
+\ui{Schedule publication} field, following its displayed timezone, and~save.
+The~pending indicator shows the~exact UTC deadline. Edit it~to~reschedule;
+leave it~empty to~cancel. Choosing \ui{Published} also clears the~schedule.
+For~the~unenhanced UTC field, convert your intended local time to~UTC
+before entering it.
+
+An~unpublished gallery retains its normal direct URL before the~deadline;
+a~private gallery retains its private access rules. At~or~after the~deadline,
+the~next ordinary PHP page GET/HEAD, including an~anonymous crawler, changes
+canonical visibility to~public. Passwords, NSFW, share tokens, expiry,
+and~parent restrictions stay unchanged. Scheduled publication also restores
+public listing, just like choosing \ui{Published} manually.
+Incomplete PDF children remain protected and~children are~not automatically
+published. No~traffic means no~execution; static/CDN hits cannot trigger it.
+A~large backlog catches up~in~batches of~16 across visits. No~cron, daemon
+or~browser timer is~needed. Run normal database migrations before using this
+control. Schedules stay in~the~database; sidecars retain resulting visibility
+without transferring pending deadlines to~another installation.
+The~lightweight check reuses the~existing gallery model and~access service;
+publication writers load only when an~indexed due row exists.
+
 \index{gallery editor!controls}
 \index{gallery!visibility}
 \index{gallery!display overrides}

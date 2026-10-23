@@ -54,6 +54,7 @@
  *   slug:string,title:string,description:string|null,cover_image_id:int|string|null,
  *   cover_image_ids?:string|null,
  *   sort_order:int|string,visibility:string,created_at:string,updated_at:string,
+ *   scheduled_publish_at?:string|null,
  *   voting_enabled?:int|string,show_filenames?:int|string,picture_game_enabled?:int|string,
  *   gps_map_enabled?:int|string|null,nsfw_enabled?:int|string,content_language?:string|null,
  *   url_slug?:string|null,url_path?:string|null,url_path_hash?:string|null,
@@ -387,7 +388,8 @@ function gallery_model_slug_exists_on_connection(
  *   thumbnail_min_size?:int|null,thumbnail_max_size?:int|null,access_listing?:string,access_mode?:string,
  *   access_password_hash?:string|null,access_share_token?:string|null,access_token_hash?:string|null,
  *   access_token_expires_at?:string|null,cover_image_path?:string|null,banner_image_path?:string|null,
- *   logo_image_path?:string|null,separator_image_path?:string|null,background_source?:string|null
+ *   logo_image_path?:string|null,separator_image_path?:string|null,background_source?:string|null,
+ *   scheduled_publish_at?:string|null
  * } $fields Service-normalized editable columns; omitted keys retain their value, nullable keys clear or inherit.
  * @param string $now SQL timestamp written to updated_at.
  * @return void Executes one update without returning a row/count or refreshing dependent state.
@@ -407,6 +409,7 @@ function gallery_model_update_fields(
         'description',
         'slug',
         'visibility',
+        'scheduled_publish_at',
         'sort_order',
         'parent_id',
         'cover_image_id',
@@ -1475,4 +1478,71 @@ function gallery_model_source_picker_page(int $afterId, int $limit): array
         . $limit);
     $statement->execute([$afterId]);
     return $statement->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Read only due identities, bounded before acquiring any writer ownership.
+ * @param string $nowUtc Inclusive UTC deadline in SQL datetime format.
+ * @param int $limit Service-owned maximum number of rows for this visit.
+ * @param string $afterDeadline Optional UTC keyset cursor, empty starts at the oldest due row.
+ * @param int $afterId Identity paired with the cursor deadline; zero starts before all rows.
+ * @return list<array{id:int|string,scheduled_publish_at:string}> Due identities in deadline order.
+ */
+function gallery_publication_model_due(
+    string $nowUtc,
+    int $limit,
+    string $afterDeadline = '',
+    int $afterId = 0,
+): array {
+    // DATETIME's supported MySQL lower boundary, paired with identity zero,
+    // includes every valid stored deadline without comparing dates to ''.
+    $afterDeadline = $afterDeadline !== ''
+        ? $afterDeadline
+        : '1000-01-01 00:00:00';
+    $statement = db()->prepare(
+        'SELECT id, scheduled_publish_at FROM galleries'
+        . ' WHERE scheduled_publish_at <= ?'
+        . ' AND (scheduled_publish_at > ?'
+        . ' OR (scheduled_publish_at = ? AND id > ?))'
+        . ' ORDER BY scheduled_publish_at, id LIMIT ?',
+    );
+    $statement->bindValue(1, $nowUtc);
+    $statement->bindValue(2, $afterDeadline);
+    $statement->bindValue(3, $afterDeadline);
+    $statement->bindValue(4, $afterId, PDO::PARAM_INT);
+    $statement->bindValue(5, $limit, PDO::PARAM_INT);
+    $statement->execute();
+    return $statement->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
+/**
+ * Atomically publish and list an exact deadline under the common writer lease.
+ * Scheduled Publish has the same discovery intent as explicit manual Publish;
+ * password, NSFW, tokens and inherited access remain independent protections.
+ * @param int $galleryId Live gallery identity verified by the service.
+ * @param string $deadline Exact pending UTC deadline just re-read under ownership.
+ * @param string $revision Exact revision just re-read under ownership.
+ * @param string $nowUtc Inclusive UTC comparison time.
+ * @param string $updatedAt Existing application-clock updated_at value.
+ * @return bool True only for the single successful visibility transition.
+ */
+function gallery_publication_model_consume(
+    int $galleryId,
+    string $deadline,
+    string $revision,
+    string $nowUtc,
+    string $updatedAt,
+): bool {
+    $statement = db()->prepare(
+        "UPDATE galleries SET visibility = 'public', access_listing = 'listed',"
+        . ' scheduled_publish_at = NULL, updated_at = ?,'
+        . ' edit_revision = edit_revision + 1'
+        . ' WHERE id = ? AND scheduled_publish_at = ?'
+        . ' AND scheduled_publish_at <= ? AND edit_revision = ?'
+        . " AND visibility IN ('private', 'unpublished', 'draft')",
+    );
+    $statement->execute([
+        $updatedAt, $galleryId, $deadline, $nowUtc, $revision,
+    ]);
+    return $statement->rowCount() === 1;
 }

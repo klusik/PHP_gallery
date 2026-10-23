@@ -791,6 +791,37 @@ Ukládají se pouze zaškrtnuté řádky. Nezaškrtnuté návrhy se ignorují a~
 Pole dat v~administraci ponechávají nativní datumové pole prohlížeče jako odesílanou hodnotu, ale přidávají kompaktní tlačítko kalendáře a~pomocné volby \ui{Dnes} a~\ui{Vymazat}. \ui{Dnes} vloží aktuální místní kalendářní datum prohlížeče; \ui{Vymazat} pole vyprázdní. Toto vylepšení se znovu použije na formuláře načtené do postranního panelu administrace, zatímco základní nativní datumové pole zůstává použitelné i~bez dodatečných ovládacích prvků JavaScriptu.
 
 \subsection{Přehled ovládacích prvků editoru galerie}
+\paragraph{Plánování zveřejnění}
+Vylepšené pole používá pojmenované pásmo prohlížeče, takže nabízený aktuální
+čas odpovídá místním hodinám. Pod polem je přesný přepočet na UTC.
+Pásmo uživatele se neukládá. Bez JavaScriptu zůstává pole výslovně v~UTC
+a~očekává zadání UTC. Neexistující čas při jarním posunu se odmítne.
+Při novém zadání opakované podzimní hodiny zkontrolujte UTC náhled:
+prohlížeč vybere první výskyt. Nezměněný uložený druhý výskyt zůstává zachován.
+
+Na kartě \ui{Přístup} vyplňte budoucí datum a~čas v~nativním poli
+\ui{Naplánovat zveřejnění}, podle zobrazeného pásma, a~uložte formulář.
+Indikátor ukazuje přesný termín v~UTC. Změna pole přesune termín,
+prázdné pole plán zruší. Volba \ui{Zveřejněná} plán také zruší.
+Pokud používáte nevylepšené pole označené UTC, zamýšlený místní čas
+před zadáním převeďte na UTC.
+
+Nezveřejněná galerie si před termínem zachová běžnou přímou adresu,
+soukromá zůstává chráněná. V~termínu nebo později první běžný PHP požadavek
+GET/HEAD, včetně anonymního robota, změní základní viditelnost na
+veřejnou a~zařadí galerii do veřejných seznamů stejně jako ruční volba
+\ui{Zveřejněná}. Hesla, NSFW, tokeny, expirace a~děděná ochrana zůstanou
+zachovány.
+Nedokončené PDF podgalerie zůstávají chráněné a~děti se automaticky
+nezveřejňují. Bez návštěv se nic nespustí; statické soubory ani CDN
+spuštění nezajistí. Velká zásoba termínů se dohání po dávkách 16 při
+dalších návštěvách. Není potřeba cron, démon ani časovač prohlížeče.
+Nejprve spusťte běžné databázové migrace. Termíny vlastní databáze;
+sidecary uchovávají výslednou viditelnost, ale nepřenášejí čekající
+termíny do jiné instalace.
+Lehká kontrola využívá stávající model galerie a~službu přístupu;
+zápisové závislosti načítá jen při nalezení splatného řádku přes index.
+
 \index{e00035@editor galerie!o00131@ovládací prvky}
 \index{g00040@galerie!v00250@viditelnost}
 \index{g00040@galerie!p00178@přepsání zobrazení}

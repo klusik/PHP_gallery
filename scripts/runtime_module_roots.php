@@ -106,8 +106,12 @@ return [
         ],
         'site-request-trigger' => [
             'Gallery\\Services\\site_maintenance_register_request_trigger',
+            'Gallery\\Services\\gallery_publication_request',
         ],
         'site-maintenance-work' => [
+            // Only a nonempty indexed due list admits publication's existing
+            // writer/sidecar closure. This adds no logical lifecycle module.
+            'Gallery\\Services\\gallery_editor_publish_due',
             // Reuse the established private-worker closure for durable media
             // admission; ordinary attachment/public rendering stays unchanged.
             'Gallery\\Services\\gallery_attachment_usage_background_start',
@@ -247,6 +251,12 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        'Gallery\\Services\\gallery_publication_request' => [
+            'Gallery\\Services\\gallery_editor_publish_due',
+        ],
+        'Gallery\\Core\\cms_run_request_maintenance' => [
+            'Gallery\\Services\\gallery_publication_request',
+        ],
         // The Maintenance task loader selects the complete attachment owner
         // before either callback. Passive maintenance pages do not load it.
         'Gallery\\Services\\maintenance_center_analyze_music_repository' => [

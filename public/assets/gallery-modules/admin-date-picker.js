@@ -37,6 +37,97 @@ const ENHANCED_ATTRIBUTE = 'data-admin-date-picker-enhanced';
 const WRAPPER_CLASS = 'admin-date-picker-control';
 
 /**
+ * Format an instant as the browser's local native datetime control value.
+ * @param {Date} instant Valid instant to display in the browser timezone.
+ * @return {string} Local YYYY-MM-DDTHH:mm value, without a timezone suffix.
+ */
+export function publicationLocalInputValue(instant) {
+    // 60,000 converts the Date API's minute offset to milliseconds; 16 is the
+    // fixed minute-precision datetime-local format length, not a time policy.
+    const local = new Date(
+        instant.getTime() - instant.getTimezoneOffset() * 60000,
+    );
+    return local.toISOString().slice(0, 16);
+}
+
+/**
+ * Convert the native picker's local wall time to the existing UTC transport.
+ * @param {string} localValue Local YYYY-MM-DDTHH:mm input, or empty to cancel.
+ * @return {string|null} UTC minute value, empty cancellation, or null for an
+ *     invalid/nonexistent local wall time (including a daylight-saving gap).
+ */
+export function publicationUtcInputValue(localValue) {
+    if (localValue === '') return '';
+    const instant = new Date(localValue);
+    if (!Number.isFinite(instant.getTime())
+        || publicationLocalInputValue(instant) !== localValue) return null;
+    return instant.toISOString().slice(0, 16);
+}
+
+/**
+ * Show publication time locally while retaining the original UTC form field.
+ * @param {HTMLInputElement} input Server-rendered UTC datetime-local control.
+ * @return {void} Enhance once; an unavailable timezone retains labelled UTC.
+ */
+function enhancePublicationTime(input) {
+    if (input.dataset.publicationTimeEnhanced === '1') return;
+    const initialUtcValue = input.value;
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!zone) return;
+    const localInput = document.createElement('input');
+    localInput.type = 'datetime-local';
+    if (localInput.type !== 'datetime-local') return;
+    const instant = input.value ? new Date(`${input.value}:00Z`) : null;
+    if (instant && !Number.isFinite(instant.getTime())) return;
+    localInput.value = instant ? publicationLocalInputValue(instant) : '';
+    localInput.defaultValue = localInput.value;
+    localInput.disabled = input.disabled;
+    localInput.setAttribute('aria-describedby', 'gallery-publication-help');
+    localInput.dataset.publicationLocalTime = '1';
+    const label = input.closest('label');
+    if (!label) return;
+    input.dataset.publicationTimeEnhanced = '1';
+    input.type = 'hidden';
+    label.insertBefore(localInput, input.nextSibling);
+    const zoneLabel = label.querySelector('[data-publication-timezone]');
+    if (zoneLabel) zoneLabel.textContent = zone;
+    const help = input.form?.querySelector('#gallery-publication-help');
+    if (help) help.textContent = input.dataset.localHelp || help.textContent;
+    const preview = document.createElement('small');
+    preview.className = 'muted admin-access-time-preview';
+    label.appendChild(preview);
+    const sync = () => {
+        const utcValue = publicationUtcInputValue(localInput.value);
+        localInput.setCustomValidity(
+            utcValue === null ? input.dataset.localInvalid : '',
+        );
+        // Invalid local input cannot silently retain an earlier valid deadline.
+        input.value = utcValue ?? '';
+        preview.textContent = utcValue
+            ? `${utcValue.replace('T', ' ')} UTC` : '';
+        preview.hidden = !utcValue;
+    };
+    localInput.addEventListener('input', sync);
+    localInput.addEventListener('change', sync);
+    // Preserve the exact stored instant on initialization, including the second
+    // occurrence of a repeated autumn hour. Only an edit chooses a new instant.
+    preview.textContent = input.value
+        ? `${input.value.replace('T', ' ')} UTC` : '';
+    preview.hidden = !input.value;
+    input.form?.addEventListener('reset', () => {
+        queueMicrotask(() => {
+            input.value = initialUtcValue;
+            localInput.value = input.value
+                ? publicationLocalInputValue(new Date(`${input.value}:00Z`)) : '';
+            localInput.setCustomValidity('');
+            preview.textContent = input.value
+                ? `${input.value.replace('T', ' ')} UTC` : '';
+            preview.hidden = !input.value;
+        });
+    });
+}
+
+/**
  * Returns today's date in the YYYY-MM-DD format required by native date inputs.
  *
  * @return {string} Current local date formatted for input[type="date"].
@@ -140,8 +231,12 @@ function enhanceDateInput(input) {
  * Enhances date inputs in the supplied DOM root.
  *
  * @param {ParentNode} root DOM root to scan.
+ * @return {void} Enhance marked publication times and ordinary date controls.
  */
 function enhanceDateInputsInRoot(root) {
+    root.querySelectorAll('input[data-publication-utc-time]').forEach((input) => {
+        if (input instanceof HTMLInputElement) enhancePublicationTime(input);
+    });
     root.querySelectorAll('input[type="date"]').forEach((input) => {
         if (input instanceof HTMLInputElement) {
             enhanceDateInput(input);
@@ -170,6 +265,10 @@ export function setupAdminDatePickers(root = document) {
                 }
                 if (node.matches('input[type="date"]')) {
                     enhanceDateInput(node);
+                    return;
+                }
+                if (node.matches('input[data-publication-utc-time]')) {
+                    enhancePublicationTime(node);
                     return;
                 }
                 enhanceDateInputsInRoot(node);
