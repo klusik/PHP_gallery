@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.142.3
+
+Updated the mobile fullscreen viewer so slideshow speed controls and the
+soundtrack panel followed the idle HUD, and recorded immutable release
+provenance.
+
+### Highlights
+
+#### Mobile fullscreen controls
+
+- Hid the slideshow speed controls and soundtrack panel after inactivity,
+  matching the mobile idle HUD. Tapping the photograph revealed the controls
+  again without stopping slideshow playback or music.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/styles/lightbox.css` so hidden mobile controls also
+  rejected pointer input.
+
+#### Tests and documentation
+
+- Extended the browser fixture and `tests/gallery_music_browser_test.mjs` to
+  cover mobile idle hiding, tap-to-toggle restoration, and continued playback.
+  The fixture modeled device detection, not physical Android touch behavior.
+- Documented the mobile control behavior in the English, Czech, German, and
+  Swedish manuals.
+- Added immutable origin and predecessor records for `v_0.142.3`
+  ([#101](https://github.com/klusik/PHP_gallery/issues/101),
+  [#133](https://github.com/klusik/PHP_gallery/issues/133)). No schema or
+  stored-media changes were made.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Mobile visitors could reveal fullscreen presentation controls with a tap
+  while playback continued. Administrator behavior did not change.
+
+#### For maintainers
+
+- Added immutable release provenance records and updated project documentation.
+
 ## Version 0.142.2
 
 Updated the Windows companion to 0.9.0 with offline flight abandonment and refreshed its bundled SimConnect runtime.
