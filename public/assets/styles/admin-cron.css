@@ -1,0 +1,91 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-cron.css
+ * Module Type: Stylesheet
+ * Purpose: Keep Cron Overview operational rows dense and accessible.
+ * Responsibilities: Scope legacy overrides, themes, focus and mobile tap targets.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+.admin-page .cron-overview { color: var(--ink); max-width: 100%; }
+/* Let this page's grid item shrink so only the table scrolls on narrow screens. */
+.admin-page .admin-content:has(> .cron-overview) { min-width: 0; }
+.admin-page .cron-overview h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
+.admin-page .cron-overview .cron-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+.admin-page .cron-overview .cron-heading h1 { margin: 0; }
+.admin-page .cron-overview .cron-task { display: flex; align-items: center; gap: .4rem; }
+.admin-page .cron-overview .cron-task a { color: inherit; text-decoration: none; border-radius: 3px; }
+.admin-page .cron-overview .cron-task a:hover { color: var(--accent); }
+.admin-page .cron-overview .cron-task a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.admin-page .cron-overview .cron-note { position: relative; margin: 0 0 .65rem; color: var(--muted); }
+/* Native disclosure remains available without JavaScript and never enlarges rows. */
+.admin-page .cron-overview .cron-help { display: inline-block; }
+.admin-page .cron-overview .cron-help summary { list-style: none; cursor: help; min-width: 28px; min-height: 28px; line-height: 28px; text-align: center; }
+.admin-page .cron-overview .cron-help summary::-webkit-details-marker { display: none; }
+.admin-page .cron-overview .cron-help p { position: absolute; z-index: 3; top: 100%; left: 0; width: min(18rem, 75vw); margin: 0; padding: .55rem; background: var(--panel); color: var(--ink); border-radius: 6px; box-shadow: 0 2px 12px #0002; }
+.admin-page .cron-overview .cron-table-scroll { overflow-x: auto; }
+.admin-page .cron-overview table { width: 100%; border-collapse: collapse; margin: 0; }
+.admin-page .cron-overview th,
+.admin-page .cron-overview td {
+    white-space: nowrap; padding: 2px 8px; height: 32px;
+    line-height: 1.15; vertical-align: middle;
+    border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.admin-page .cron-overview button {
+    background: transparent; color: inherit; border: 0; border-radius: 5px;
+    box-shadow: none; font: inherit; margin: 0; padding: 4px 7px;
+    min-height: 28px; height: 28px; line-height: 20px; text-decoration: none;
+}
+/* Outrank only the late Admin primary colors, retaining local size overrides. */
+.admin-page .cron-overview button:not(.secondary):not(.danger) {
+    background: transparent; color: inherit;
+}
+.admin-page .cron-overview th button { padding: 0; font-weight: 600; }
+.admin-page .cron-overview button:not(.secondary):not(.danger):hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.admin-page .cron-overview button:focus-visible,
+.admin-page .cron-overview summary:focus-visible,
+.admin-page .cron-overview input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.admin-page .cron-overview button.cron-icon:not(.secondary):not(.danger) {
+    display: inline-flex; align-items: center; justify-content: center;
+    box-sizing: border-box; width: 28px; min-width: 28px; padding: 0;
+    border: 0; border-radius: 6px; line-height: 1;
+    background: color-mix(in srgb, var(--panel) 72%, transparent);
+    color: var(--ink);
+}
+.admin-page .cron-overview button.cron-icon:not(.secondary):not(.danger):hover,
+.admin-page .cron-overview button.cron-icon[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+}
+.admin-page .cron-overview .cron-icon svg { width: 16px; height: 16px; display: block; }
+.admin-page .cron-overview .cron-icon[hidden],
+.admin-page .cron-overview .cron-icon span[hidden] { display: none; }
+.admin-page .cron-overview form { margin: 0; padding: 0; display: inline; }
+.admin-page .cron-overview button:disabled { opacity: .4; cursor: default; }
+.admin-page .cron-overview tr[data-state="due"] [data-cell="state_label"] { color: var(--accent); }
+.admin-page .cron-overview tr[data-state="failed"] [data-cell="state_label"] { font-weight: 600; }
+.admin-page .cron-overview .cron-feedback,
+.admin-page .cron-overview .cron-connection { min-height: 1em; margin: .3rem 0; font-size: .9em; }
+.admin-page .cron-overview .cron-connection { color: var(--muted); }
+.admin-page .cron-overview .cron-host { margin-top: .65rem; background: color-mix(in srgb, var(--panel) 80%, transparent); padding: .4rem .6rem; border-radius: 6px; }
+.admin-page .cron-overview .cron-host p { margin: .4rem 0; }
+.admin-page .cron-overview .cron-host label { display: flex; align-items: center; gap: .5rem; }
+.admin-page .cron-overview .cron-host-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; }
+.admin-page .cron-overview .cron-host-controls label { flex: 1; min-width: 0; }
+.admin-page .cron-overview .cron-host-controls form { display: inline-flex; gap: .25rem; }
+.admin-page .cron-overview .cron-host-safety { color: var(--muted); font-size: .9em; }
+.admin-page .cron-overview .cron-host input { flex: 1; min-width: 12rem; font: inherit; height: 28px; padding: 2px 5px; }
+.admin-page .cron-overview .cron-host pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .4rem 0; }
+.admin-page .cron-overview [aria-busy="true"] .cron-play svg { animation: cron-pulse 1s ease-in-out infinite alternate; }
+@keyframes cron-pulse { to { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .admin-page .cron-overview [aria-busy="true"] .cron-play svg { animation: none; } }
+@media (max-width: 640px) {
+    .admin-page .cron-overview button:not(.secondary):not(.danger) { height: 44px; min-height: 44px; }
+    .admin-page .cron-overview button.cron-icon:not(.secondary):not(.danger) { width: 44px; min-width: 44px; }
+    .admin-page .cron-overview .cron-host-controls label { flex-basis: 100%; flex-wrap: wrap; }
+    .admin-page .cron-overview .cron-host input { min-width: 0; width: 100%; }
+    .admin-page .cron-overview .cron-help summary { min-width: 44px; min-height: 44px; line-height: 44px; }
+    .admin-page .cron-overview th,
+    .admin-page .cron-overview td { padding: 2px 6px; }
+}

@@ -3004,6 +3004,44 @@ keine aktive Arbeit; die Sperrprüfung gilt nur für den beobachteten Moment.
 \index{c00056@Cron!w00273@Websitewartung}
 
 Regelmäßige Wartung kann in begrenzten Teilabschnitten statt einer langen Anfrage laufen. Der Wartungsdienst verkettet sichere Webanfragen bei vorhandenem Verkehr und kann auch über Hosting-Cron mit dem in der Administration gezeigten CLI-Befehl aufgerufen werden. Er kann Vorschaubildzustand prüfen, Metadaten aktualisieren, Bereinigungsaufgaben bearbeiten, Telemetrie aggregieren und geeignete Tage des Administrationsprotokolls gemäß konfigurierten Richtlinien archivieren. Das verborgene Web-Cron-Token ist austauschbar; ein Austausch macht zuvor veröffentlichte Web-Cron-URLs ungültig. Wartung ist standardmäßig nicht destruktiv und ersetzt keine ausdrückliche Bestätigung von Datenbankoptimierung oder anderen folgenreichen Aktionen.
+\subsection{Cron-Übersicht und besuchergetriebene Ausführung}
+Unter \ui{Wartung > Cron-Übersicht} zeigt eine kompakte sortierbare Tabelle
+Updateprüfung, Protokollarchivierung, Website- und Cache-Wartung,
+Updater-Abfallbereinigung, Telemetrieaufbewahrung und einmalige Anhangszähler.
+Jeder Eigentümer liefert sein wirksames Intervall, die nächste mögliche
+Ausführung und tatsächliche Versuchsbelege. Unbekannte Angaben bleiben
+unbekannt; Annahme bedeutet keinen Abschluss. Normale PHP-Seitenbesuche,
+auch von Crawlern, erlauben dem gemeinsamen Scheduler höchstens einen
+begrenzten Hintergrundauftrag. Sperren, Aktivierung, UTC-Fenster und der
+Wartungszentrumsanspruch bleiben gültig. Geplante Galerieveröffentlichung
+bleibt vor dem Rendern der auslösenden Seite wirksam.
+
+Spaltenüberschriften ändern die Sortierung. Die sichtbare Seite aktualisiert
+bestehende Zellen ungefähr jede Sekunde, ohne Aufgaben auszuführen. Verdeckte
+Seiten pausieren; bei Fehlern wächst der Abstand. Play sendet eine geschützte
+Aktion direkt in der Tabelle und übergeht nur die Zeitbedingung. Ohne JavaScript
+bleibt normales POST verfügbar. Belegt, fortgesetzt und aufgeschoben bedeuten
+keinen vollständigen Abschluss. Der nächste mögliche Lauf ist eine Zeitgrenze,
+keine genaue Uhrzeitgarantie: Ohne Besuche wartet die Arbeit.
+Play steht direkt vor dem Aufgabennamen. Das Pausensymbol neben dem Titel
+friert nur diese Live-Vorschau ein; Fortsetzen liest sofort den Zustand.
+Hintergrundaufgaben laufen weiter. Künftige Zeitgrenzen behalten die absolute
+Zeit und ergänzen die verbleibende Dauer in Klammern.
+Aufgabennamen verlinken vorhandene Einstellungen oder Steuerungen. Fehlende
+Folgetermine erscheinen als deaktiviert, abgeschlossen oder keine ausstehende
+Bereinigung; unbekannt bleibt nicht verfügbaren Belegen vorbehalten.
+
+\ui{Optionaler Hosting-Cron} erstellt oder erneuert eine kopierbare geschützte
+URL und kann sie widerrufen. Unterverzeichnisse und Query-Routing ohne
+URL-Umschreibung werden berücksichtigt. Das Beispiel mit \codeword{curl -fsS}
+kann optional alle ein bis fünf Minuten aufgerufen werden. Es nutzt denselben
+Scheduler und deaktiviert keine Besuchertrigger. Die URL bleibt geheim.
+Hosting-Cron, Browser-Aufgabentimer, Dauerprozess und externe Queue sind
+nicht erforderlich.
+Zusätzlich zu 256-Bit-Token und gemeinsamen Sperren wird höchstens ein
+Hosting-Aufruf pro Minute angenommen. Wiederholungen umgehen keine
+Aufgabenbedingungen. Netzwerk- und ICMP-Flutschutz bleibt beim Hostinganbieter.
+
 \subsection{Administrationsprotokollverlauf und Archive}
 \index{a00006@Administrationsprotokolle}
 \index{p00197@Protokollarchiv}

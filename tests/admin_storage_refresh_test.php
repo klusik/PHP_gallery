@@ -171,6 +171,12 @@ if (!mkdir($fixtureDirectory, 0700) && !is_dir($fixtureDirectory)) {
         'Could not create the isolated workflow fixture directory.',
     );
 }
+/**
+ * Redirect storage-refresh receipts to the generated disposable directory.
+ * Type: string. Units: absolute filesystem path. Scope: this fixture process.
+ * Consumers: admin_storage_refresh_job_directory in the production service.
+ * Rationale: exercise real persistence without touching installation caches.
+ */
 define('ADMIN_STORAGE_REFRESH_TEST_CACHE_DIR', $fixtureDirectory);
 require_once __DIR__ . '/../app/services/admin_storage_refresh.php';
 

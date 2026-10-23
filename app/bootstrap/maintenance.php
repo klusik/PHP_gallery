@@ -36,116 +36,39 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-use function Gallery\Services\application_autoupdate_maybe_run;
-use function Gallery\Services\application_autoupdate_interval_seconds;
-use function Gallery\Services\admin_log_archive_register_request_trigger;
-use function Gallery\Services\site_maintenance_register_request_trigger;
 
 /**
- * Run automatic update and maintenance request triggers in the legacy startup order.
- *
- * @param string $page Resolved page identifier.
- * @param Kernel|null $kernel Optional selective runtime coordinator; legacy full-load consumers may omit it.
- * @return void Executes eligible triggers in the established order.
+ * Register one central scheduler opportunity for an eligible HTML visit.
+ * @param string $page Resolved canonical route identifier.
+ * @param Kernel|null $kernel Selective runtime coordinator; full bootstrap consumers may omit it.
+ * @return void Keeps explicit transports passive and registers one successful-response handoff.
  */
 function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
 {
     $cacheAction = is_string($_POST['site_maintenance_action'] ?? null)
-        ? $_POST['site_maintenance_action']
-        : '';
-    // These explicit Admin transports own their work. A passive checkpoint read
-    // or stop request must never advance an updater before the controller runs.
-    // Route authentication and POST CSRF checks remain in the dispatcher/controllers.
-    if (cms_request_owns_cache_transport(
-        $page,
-        request_method(),
-        isset($_GET['update_job_status']),
-        $cacheAction,
-    )) {
+        ? $_POST['site_maintenance_action'] : '';
+    // Explicit transports own their work and authentication; passive status
+    // reads must never admit a scheduler tick before controller dispatch.
+    if (cms_request_owns_cache_transport($page, request_method(),
+        isset($_GET['update_job_status']), $cacheAction)) {
         return;
     }
     if (cms_route_is_read_only_media_asset($page)) {
         if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.skipped_read_only_media_asset', [
-                'page' => $page,
-            ]);
+            \Gallery\Services\admin_test_run_mark(
+                'maintenance.skipped_read_only_media_asset', ['page' => $page]);
         }
         return;
     }
 
-    // Publication is a separate indexed foreground operation. It runs before
-    // the triggering page renders, without admitting public heavy maintenance.
     $kernel?->load('site-request-trigger');
-    if ($kernel !== null) {
-        \Gallery\Services\gallery_publication_request(
-            request_method(),
-            static fn(string $module): mixed => $kernel->load($module),
-        );
-    }
-
-    // Load the lightweight updater policy before inspecting its interval.
-    $kernel?->load('request-maintenance');
-    $intervalSeconds = application_autoupdate_interval_seconds();
-    if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-        \Gallery\Services\admin_test_run_mark('maintenance.autoupdate.begin', [
-            'configured_check_ttl_seconds' => $intervalSeconds,
-            'background_continue_budget_seconds' => 3.0,
-        ]);
-    }
-    application_autoupdate_maybe_run(
-        $intervalSeconds,
-        request_method(),
+    \Gallery\Services\request_scheduler_register_visit(
+        $page, request_method(),
+        isset($_GET['ajax']) || isset($_POST['ajax'])
+            || isset($_GET['preview']) || isset($_GET['format']),
         $kernel !== null
             ? static fn(string $module): mixed => $kernel->load($module) : null,
     );
-    if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-        \Gallery\Services\admin_test_run_mark('maintenance.autoupdate.end');
-    }
-    $kernel?->load('archive-request-trigger');
-    if (function_exists(
-        'Gallery\\Services\\admin_log_archive_register_request_trigger',
-    )) {
-        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.admin_log_archive_trigger.begin', [
-                'page' => $page,
-            ]);
-        }
-        admin_log_archive_register_request_trigger(
-            $page,
-            $kernel !== null
-                ? static fn(string $module): mixed => $kernel->load(
-                    $module,
-                ) : null,
-        );
-        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.admin_log_archive_trigger.end', [
-                'page' => $page,
-            ]);
-        }
-    }
-    $kernel?->load('site-request-trigger');
-    if (function_exists(
-        'Gallery\\Services\\site_maintenance_register_request_trigger',
-    )) {
-        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.begin', [
-                'page' => $page,
-            ]);
-        }
-        site_maintenance_register_request_trigger(
-            $page,
-            $kernel !== null
-                ? static fn(string $module): mixed => $kernel->load(
-                    $module,
-                ) : null,
-        );
-        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
-            \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.end', [
-                'page' => $page,
-            ]);
-        }
-    }
-    cms_register_update_background_continuation($kernel);
 }
 
 /**
@@ -220,7 +143,10 @@ function cms_request_owns_cache_transport(
     string $cacheAction,
 ): bool {
     return (
-        $page === 'site_maintenance_cron'
+        in_array($page, [
+            'site_maintenance_cron', 'request_scheduler_cron',
+            'admin_cron_status', 'admin_cron_run', 'admin_cron_token',
+        ], true)
             || ($page === 'admin_update' && $method === 'GET' && $jobStatusRead)
             || (
                 $page === 'admin_site_maintenance_settings'

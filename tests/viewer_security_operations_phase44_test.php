@@ -31,14 +31,44 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    /**
+     * Model a verified schema capability with the production available token.
+     * Type: string. Units: inspection state. Scope: Viewer operations fixture.
+     * Consumers: aggregate operations capability decisions.
+     * Rationale: keep positive evidence distinct from missing and unknown state.
+     */
     const SCHEMA_INSPECTION_AVAILABLE = 'available';
 
+    /**
+     * Model confirmed schema absence with the production missing token.
+     * Type: string. Units: inspection state. Scope: Viewer operations fixture.
+     * Consumers: aggregate operations capability decisions.
+     * Rationale: assert unavailable sections without reporting false zero counts.
+     */
     const SCHEMA_INSPECTION_MISSING = 'missing';
 
+    /**
+     * Model unavailable inspection evidence with the production unknown token.
+     * Type: string. Units: inspection state. Scope: Viewer operations fixture.
+     * Consumers: aggregate operations capability decisions.
+     * Rationale: preserve failure visibility independently of known absence.
+     */
     const SCHEMA_INSPECTION_UNKNOWN = 'unknown';
 
+    /**
+     * Identify account-capacity state with the production accounts key.
+     * Type: string. Units: capacity-state key. Scope: Viewer operations fixture.
+     * Consumers: operations capacity queries and deterministic row adapters.
+     * Rationale: separate established accounts from pending registrations.
+     */
     const VIEWER_ACCOUNT_CAPACITY_STATE_KEY = 'accounts';
 
+    /**
+     * Identify staged registration state with the pending_requests key.
+     * Type: string. Units: capacity-state key. Scope: Viewer operations fixture.
+     * Consumers: registration-capacity queries and deterministic row adapters.
+     * Rationale: keep pending-request pressure independent of account totals.
+     */
     const VIEWER_REGISTRATION_STATE_KEY = 'pending_requests';
 
     /** Return deterministic Phase 4.4 Viewer configuration. */

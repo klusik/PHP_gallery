@@ -220,3 +220,16 @@ function telemetry_maintenance_model_retention_counts(
     }
     return $result;
 }
+
+/**
+ * Observe the most recent maintenance attempt without changing its checkpoint.
+ * @return array{status:string,started_at:string,finished_at:?string}|null Latest actual run evidence, or null before the first attempt; unavailable schema throws.
+ */
+function telemetry_maintenance_model_latest_run(): ?array
+{
+    $row = db()->query(
+        "SELECT status, started_at, finished_at FROM telemetry_job_runs
+        WHERE job_name = 'telemetry.maintenance' ORDER BY id DESC LIMIT 1",
+    )->fetch(\PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
+}

@@ -1,5 +1,28 @@
 # Compatibility lifecycle and retirement register
 
+## Visitor scheduler and optional hosting transport
+
+Owner: `request_scheduler.php` with the existing task services and private
+maintenance controller. Visitor-triggered scheduling is permanent primary
+support for ordinary shared hosting; external cron never becomes a prerequisite.
+A site with zero PHP requests has no wall-clock execution guarantee. Unknown
+schema/ownership and unreadable receipts fail closed without replacing reliable
+state with success. Actual WEDOS/live traffic and worker-pool measurements for
+this scheduler transition are unknown until installation qualification.
+
+The existing standalone registration APIs and updater-continuation bootstrap
+helper remain supported for legacy CLI/fixture consumers. Production startup
+uses only the central entry; retaining these APIs does not register duplicate
+callbacks. Their retirement requires a complete consumer audit and regression
+evidence. Native POST fallback, query-string routing and explicit token
+revocation remain permanent support for no-JavaScript/non-rewrite hosting.
+Hosting calls retain a separate 60-second admission window and shared task
+locks. They never bypass owner deadlines or affect visitor/manual cadence.
+The live-preview pause is browser-local and does not disable work. Its stale
+body/visibility behavior and future-only relative labels have regression
+coverage; network/ICMP flood mitigation remains the hosting provider's layer.
+
+
 ## Visitor-triggered publication and unchanged access policy
 
 Owners: gallery publication service/model, existing gallery editor writer and

@@ -495,10 +495,12 @@ function gallery_attachment_usage_background_due(): bool
 
 /** Start or recover one durable automatic usage reconciliation chain.
  * @param callable(string):bool $dispatch Sends one opaque ticket to the independent authenticated worker.
+ * @param bool $force Bypass only the failed-attempt retry deadline; queued tickets and all owner locks remain authoritative.
  * @return array{ok:bool,queued:bool,done:bool,reason:string,scanned:int,ready:int,failed:int,completed:bool} Admission result; queued means the dispatcher accepted the handoff.
  */
 function gallery_attachment_usage_background_start(
     callable $dispatch,
+    bool $force = false,
 ): array {
     $lock = false;
     $ticket = '';
@@ -532,7 +534,7 @@ function gallery_attachment_usage_background_start(
                 $state,
             );
         }
-        if ($state['next_attempt_at'] > $now) {
+        if (!$force && $state['next_attempt_at'] > $now) {
             return gallery_attachment_usage_background_result(
                 true,
                 false,

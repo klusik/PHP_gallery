@@ -26,6 +26,12 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /**
+     * Mark measured route geometry with the production flight_path token.
+     * Type: string. Units: map-source discriminator. Scope: offline route test.
+     * Consumers: route/navdata resolution policy and saved-geometry checks.
+     * Rationale: preserve measured paths while testing planned-route refreshes.
+     */
     const GALLERY_MAP_SOURCE_FLIGHT_PATH = 'flight_path';
 
     /** Read freshness state. @param string $key Setting identity. @param string $fallback Default value. @return string Fixture state. */

@@ -16,31 +16,76 @@ declare(strict_types=1);
 
 namespace Gallery\Tests\SessionContention;
 
-/** Minimum simultaneous reader observation window; not a production latency SLA. */
+/**
+ * Observe simultaneous readers for at least 900 milliseconds.
+ * Type: int. Units: milliseconds. Scope: disposable session-contention tests.
+ * Consumers: holder and reader comparison fixtures.
+ * Rationale: expose serialization without defining a production latency SLA.
+ */
 const OBSERVATION_MILLISECONDS = 900;
 
-/** Readiness/reader deadline allows slow CI hosts without unbounded hangs. */
+/**
+ * Bound each worker readiness/reader barrier to five seconds.
+ * Type: int. Units: seconds. Scope: disposable session-contention tests.
+ * Consumers: server readiness polling, reader barriers and cURL connection.
+ * Rationale: tolerate slow CI startup while refusing unbounded hangs.
+ */
 const READY_TIMEOUT_SECONDS = 5;
 
-/** Fifteen-second self-release covers two five-second readiness phases plus observation/transport margin. */
+/**
+ * Self-release the holder after 15 seconds even if its parent fails.
+ * Type: int. Units: seconds. Scope: disposable session-contention tests.
+ * Consumers: owned holder worker deadline.
+ * Rationale: cover two five-second readiness phases plus observation margin.
+ */
 const HOLD_TIMEOUT_SECONDS = 15;
 
-/** HTTP transport ceiling exceeds the holder's self-release limit. */
+/**
+ * Bound each fixture HTTP operation to 20 seconds.
+ * Type: int. Units: seconds. Scope: disposable session-contention tests.
+ * Consumers: cURL transport and asynchronous reader deadlines.
+ * Rationale: exceed the 15-second holder self-release but keep failure bounded.
+ */
 const HTTP_TIMEOUT_SECONDS = 20;
 
-/** Fixed repetition count keeps comparison evidence small and runtime bounded. */
+/**
+ * Collect three repetitions for each session-contention comparison.
+ * Type: int. Units: samples. Scope: disposable session-contention tests.
+ * Consumers: baseline and held-session sample loops.
+ * Rationale: provide repeated evidence while keeping fixture runtime bounded.
+ */
 const SAMPLE_COUNT = 3;
 
-/** Dedicated holder and two reader workers prevent development-server serialization. */
+/**
+ * Allocate three independent PHP servers: one holder and two readers.
+ * Type: int. Units: workers. Scope: disposable session-contention tests.
+ * Consumers: server allocation and worker-index validation.
+ * Rationale: prevent development-server queuing from mimicking session locking.
+ */
 const WORKER_COUNT = 3;
 
-/** Short polling pause, in microseconds, for fixture readiness and barrier progress. */
+/**
+ * Pause readiness and barrier polling for 10000 microseconds per iteration.
+ * Type: int. Units: microseconds. Scope: disposable session-contention tests.
+ * Consumers: readiness and barrier usleep loops.
+ * Rationale: avoid a busy wait while retaining responsive fixture coordination.
+ */
 const POLL_MICROSECONDS = 10000;
 
-/** Milliseconds per second used by HTTP and session-start measurements. */
+/**
+ * Convert seconds to milliseconds with the exact factor 1000.
+ * Type: int. Units: milliseconds per second. Scope: session-contention tests.
+ * Consumers: HTTP and session-start measurement normalization.
+ * Rationale: report comparable units without changing measured timings.
+ */
 const MILLISECONDS_PER_SECOND = 1000;
 
-/** Deliberately exceed the observation window once to prove reader-start barriers. */
+/**
+ * Delay one reader by the observation window plus 250 milliseconds (1150 total).
+ * Type: int. Units: milliseconds. Scope: session barrier regression fixture.
+ * Consumers: deliberately delayed reader-start scenario.
+ * Rationale: prove the barrier waits for real reader starts before observation.
+ */
 const DELAYED_READER_MILLISECONDS = OBSERVATION_MILLISECONDS + 250;
 
 /** Bounded fixture assertion with a static, non-sensitive message safe for test failure output. */

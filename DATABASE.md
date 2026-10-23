@@ -1,5 +1,17 @@
 # PHP Gallery Database Documentation
 
+## Scheduler observations
+
+Cron Overview reuses domain-owned app settings and telemetry settings/job rows;
+it adds no scheduling table or migration. The telemetry model reads only the
+latest `telemetry.maintenance` attempt by descending ID, preserving unknown or
+missing-schema evidence. Coordination tickets/dispatch receipts are bounded
+private cache state, never an alternative source for domain completion. The
+independent `host_next_at` scalar limits authenticated optional hosting calls
+before domain observations; it does not throttle visitor/manual scheduling. See
+[visitor scheduler ownership](docs/REQUEST_SCHEDULER.md).
+
+
 ## Scheduled gallery publication
 
 Migration `202610230001_gallery_scheduled_publication.php` adds nullable

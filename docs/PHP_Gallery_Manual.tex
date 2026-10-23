@@ -2924,6 +2924,41 @@ work; an~unlocked worker is~only an~instantaneous observation.
 
 Routine maintenance can~run in~bounded slices instead of~one long request. The~maintenance service chains safe web requests when traffic is~available and~can~also be~called from~hosting cron with the~CLI command shown in~Admin. It~can~check thumbnail state, refresh metadata, process cleanup tasks, roll up~telemetry, and~archive eligible Admin-log days according to~their configured policies. The~hidden web-cron token is~rotatable; rotating it~invalidates previously published web-cron URLs. Maintenance is~non-destructive by~default and~does~not~replace explicit confirmation for~database optimization or~other consequential actions.
 
+\subsection{Cron Overview and~visitor scheduling}
+Open \ui{Maintenance > Cron Overview} for~a~dense, sortable table of~automatic
+updates, log archival, site/cache maintenance, updater-trash cleanup,
+telemetry retention and~one-shot attachment-count reconciliation. Each owner
+supplies its effective cadence, next eligible threshold and~actual last-attempt
+evidence. Unknown evidence remains unknown; admission is~not~completion.
+Ordinary visitor and~crawler PHP page requests provide scheduling opportunities.
+The~shared scheduler admits at~most one bounded background owner per~tick,
+retaining owner locks, enablement, UTC windows and~the~Maintenance Center claim.
+Scheduled gallery publication still happens before the~triggering page renders.
+
+Sort the~column headings; the~visible page refreshes existing cells about once
+per~second without executing jobs. Observation pauses while hidden and~backs off
+on~errors. Play submits one protected task action in~place, overriding only
+its time gate; native POST remains available without JavaScript. A~task can~be
+busy, continued or~deferred rather than complete. Next eligible is~a~threshold,
+not~an~exact execution promise: without visitors, work waits for~the~next request.
+Play is~directly before the~task name. The~pause icon beside the~heading freezes
+only this live preview; resume reads immediately and~background tasks continue.
+Future thresholds retain their absolute time with~the~remaining duration
+in~parentheses.
+Task names link to~their existing settings or~operational controls. No next
+deadline is~labelled Disabled, Completed or~Nothing pending cleanup where
+appropriate; Unknown is~reserved for~unavailable evidence.
+
+The~collapsed \ui{Optional hosting cron} section creates or~regenerates a~copyable
+protected URL and~can~revoke it. The~URL respects installation subdirectories
+and~query routing without rewriting. Its example uses \codeword{curl -fsS} every
+one to~five minutes, optionally. It~calls the~same due-only scheduler and~never
+disables visitor scheduling. Treat the~URL as~a~secret. No hosting cron, browser
+job timer, resident process or~external queue is~required.
+The~256-bit token and~shared locks are~supplemented by~one accepted hosting call
+per~minute. Repeated calls cannot force work past its owner gates. Network/ICMP
+flood protection remains the~hosting provider's responsibility.
+
 \subsection{Admin log history and~archives}
 \index{admin logs}
 \index{log archive}

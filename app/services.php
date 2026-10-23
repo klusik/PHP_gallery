@@ -171,6 +171,7 @@ require_once __DIR__ . '/services/admin_test_runs.php';
 require_once __DIR__ . '/services/admin_test_run_analysis.php';
 // Load scheduled site maintenance after logs, thumbnails, downloads, and cleanup helpers are available.
 require_once __DIR__ . '/services/site_maintenance.php';
+require_once __DIR__ . '/services/request_scheduler.php';
 // Load durable login helpers before authentication controllers restore expired PHP sessions.
 require_once __DIR__ . '/services/auth_persistence.php';
 require_once __DIR__ . '/services/auth_accounts.php';

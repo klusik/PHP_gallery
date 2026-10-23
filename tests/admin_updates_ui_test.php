@@ -12,6 +12,12 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /**
+     * Identify the synthetic fixture/gallery repository in updater markup.
+     * Type: string. Units: GitHub owner/repository. Scope: offline UI fixture.
+     * Consumers: updater controller repository links and summary rendering.
+     * Rationale: render realistic links without using installation identity.
+     */
     const CMS_GITHUB_REPOSITORY = 'fixture/gallery';
 
     /** Return the synthetic activated version. @return string Fixture version. */

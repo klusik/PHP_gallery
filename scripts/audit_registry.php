@@ -290,6 +290,11 @@ $registry = [
         'project_website_test.mjs' => ['browser' => true, 'timeout' => 180],
     ],
     'node_tests' => [
+        // Bound Cron Overview browser qualification.
+        // Type: int. Units: seconds. Scope: one isolated Chromium fixture.
+        // Consumers: central browser suite. Rationale: 90 seconds includes PHP
+        // markup rendering, browser startup, deterministic polling and teardown.
+        'admin_cron_browser_test.mjs' => ['browser' => true, 'timeout' => 90],
         'gallery_publication_local_time_test.mjs' => [],
         'develop_integration_test.mjs' => [],
         'feature_qualification_test.mjs' => [],

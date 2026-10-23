@@ -2905,6 +2905,39 @@ aktivní práci; volný zámek je~jen okamžitý odečet.
 \index{c00019@cron!u00241@údržba webu}
 
 Běžná údržba může probíhat v~omezených částech místo jediného dlouhého požadavku. Služba údržby řetězí bezpečné webové požadavky, je-li dostupný provoz, a~lze ji také volat z~cronu hostingu příkazem CLI uvedeným v~administraci. Může kontrolovat stav náhledů, obnovovat metadata, zpracovávat úklid, shrnovat telemetrii a~archivovat způsobilé dny protokolu administrace podle nastavených pravidel. Skrytý token webového cronu lze obměnit; obměna zneplatňuje dříve zveřejněné URL webového cronu. Údržba je ve výchozím stavu nedestruktivní a~nenahrazuje výslovné potvrzení optimalizace databáze ani jiných závažných akcí.
+\subsection{Přehled cronu a~spouštění návštěvami}
+V~nabídce \ui{Údržba > Přehled cronu} je kompaktní řaditelná tabulka automatických
+aktualizací, archivace protokolů, údržby webu a~cache, odložených souborů
+aktualizátoru, retence telemetrie a~jednorázového doplnění počtů příloh.
+Každý vlastník poskytuje skutečný interval, nejbližší časovou možnost a~doklady
+posledního pokusu. Neznámý stav zůstává neznámý; přijetí neznamená dokončení.
+Běžné PHP návštěvy včetně robotů dávají společnému scheduleru příležitost předat
+nejvýše jednu omezenou úlohu. Platí její zámky, zapnutí, okna UTC i~nárok Centra
+údržby. Plánovaná publikace galerie dál proběhne před vykreslením spouštěcí stránky.
+
+Řazení se mění kliknutím na záhlaví. Viditelná stránka přibližně každou sekundu
+obnoví stávající buňky, aniž spustí práci; skrytá stránka čtení pozastaví
+ a~při chybách prodlužuje odstup. Ikona Play odešle chráněnou akci přímo
+v~tabulce a~přeskočí pouze časovou podmínku. Bez JavaScriptu funguje běžný POST.
+Výsledek může být obsazený, pokračující či odložený. Nejbližší možnost není
+záruka přesného okamžiku: bez návštěv práce čeká na další požadavek.
+Play je přímo před názvem úlohy. Ikona pozastavení vedle nadpisu zmrazí jen
+živý náhled; obnovení ihned načte stav a~úlohy na pozadí běží dál.
+Budoucí hodnoty zachovají přesný čas a~v~závorce doplní zbývající dobu.
+Názvy úloh odkazují na jejich stávající nastavení či ovládání. Chybějící další
+termín se vysvětlí jako vypnuto, dokončeno nebo nic nečeká na úklid;
+neznámý údaj zůstává vyhrazen nedostupným dokladům.
+
+Sbalená část \ui{Volitelný cron hostingu} vytvoří či obnoví kopírovatelnou
+chráněnou URL a~umožní její zneplatnění. Respektuje podadresář instalace
+ i~směrování bez přepisování URL. Příklad s~\codeword{curl -fsS} lze volitelně
+volat každou jednu až pět minut. Použije stejný scheduler a~nevypne návštěvnické
+spouštění. URL je tajný údaj. Není vyžadován cron, časovač práce v~prohlížeči,
+trvale běžící proces ani externí fronta.
+Vedle 256bitového tokenu a~společných zámků platí nejvýše jedno přijaté
+volání hostingu za minutu. Opakované volání neobejde podmínky vlastníka úlohy.
+Ochranu proti zahlcení sítě či ICMP řeší poskytovatel hostingu.
+
 \subsection{Historie a~archivy protokolů administrace}
 \index{p00163@protokoly administrace}
 \index{a00008@archiv protokolů}

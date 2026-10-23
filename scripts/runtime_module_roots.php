@@ -103,8 +103,16 @@ return [
         ],
         'archive-request-trigger' => [
             'Gallery\\Services\\admin_log_archive_register_request_trigger',
+            // Reuse this existing observation root only after a response or
+            // an authenticated status/action boundary requests the planner.
+            'Gallery\\Services\\request_scheduler_tick',
+            'Gallery\\Services\\request_scheduler_observe_task',
+            'Gallery\\Services\\request_scheduler_execute_owner',
+            'Gallery\\Models\\telemetry_maintenance_model_latest_run',
+            'Gallery\\Models\\maintenance_center_model_mutation_owner',
         ],
         'site-request-trigger' => [
+            'Gallery\\Services\\request_scheduler_register_visit',
             'Gallery\\Services\\site_maintenance_register_request_trigger',
             'Gallery\\Services\\gallery_publication_request',
         ],
@@ -159,6 +167,13 @@ return [
     ],
     // Distinct public surfaces share some declarations but need different domain closures.
     'handler_modules' => [
+        // The Admin owner already contains the complete layout/auth closure;
+        // retain the lightweight private-worker route owner separately.
+        'Gallery\\Controllers\\cms_admin_cron_overview' => 'domain-admin-maintenance-center',
+        'Gallery\\Controllers\\cms_admin_cron_status' => 'domain-admin-maintenance-center',
+        'Gallery\\Controllers\\cms_admin_cron_run' => 'domain-admin-maintenance-center',
+        'Gallery\\Controllers\\cms_admin_cron_token' => 'domain-admin-maintenance-center',
+        'Gallery\\Controllers\\cms_request_scheduler_cron' => 'domain-site-maintenance',
         'Gallery\\Controllers\\cms_home' => 'public-home',
         'Gallery\\Controllers\\cms_gallery' => 'public-gallery',
         'Gallery\\Controllers\\cms_robots_txt' => 'public-robots',
@@ -251,12 +266,61 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Admin boundaries load the existing lifecycle owner before scheduler calls.
+        'Gallery\\Controllers\\admin_cron_rows' => [
+            'Gallery\\Services\\request_scheduler_snapshot',
+        ],
+        'Gallery\\Controllers\\cms_admin_cron_overview' => [
+            'Gallery\\Services\\request_scheduler_host_url',
+        ],
+        'Gallery\\Controllers\\cms_admin_cron_run' => [
+            'Gallery\\Services\\request_scheduler_task_names',
+            'Gallery\\Services\\request_scheduler_tick',
+        ],
+        'Gallery\\Controllers\\cms_admin_cron_token' => [
+            'Gallery\\Services\\request_scheduler_host_token',
+            'Gallery\\Services\\request_scheduler_host_url',
+        ],
+        'Gallery\\Controllers\\cms_request_scheduler_cron' => [
+            'Gallery\\Services\\request_scheduler_host_token',
+            'Gallery\\Services\\request_scheduler_tick',
+            'Gallery\\Services\\request_scheduler_claim_host_call',
+        ],
+
         'Gallery\\Services\\gallery_publication_request' => [
             'Gallery\\Services\\gallery_editor_publish_due',
         ],
-        'Gallery\\Core\\cms_run_request_maintenance' => [
+        // Scheduler loads existing owners explicitly; passive reads never load workers.
+        'Gallery\\Services\\request_scheduler_register_visit' => [
             'Gallery\\Services\\gallery_publication_request',
+            'Gallery\\Services\\site_maintenance_finish_response_before_background_work',
+            'Gallery\\Services\\request_scheduler_tick',
         ],
+        'Gallery\\Services\\request_scheduler_snapshot' => [
+            'Gallery\\Services\\request_scheduler_observe_task',
+        ],
+        'Gallery\\Services\\request_scheduler_tick' => [
+            'Gallery\\Services\\site_maintenance_fire_background_worker',
+            'Gallery\\Models\\maintenance_center_model_mutation_owner',
+        ],
+        'Gallery\\Services\\request_scheduler_work' => [
+            'Gallery\\Services\\request_scheduler_observe_task',
+            'Gallery\\Services\\request_scheduler_execute_owner',
+            'Gallery\\Models\\maintenance_center_model_mutation_owner',
+        ],
+        'Gallery\\Services\\request_scheduler_execute_owner' => [
+            'Gallery\\Services\\admin_log_archive_maintenance_run',
+            'Gallery\\Services\\application_update_background_chain_start',
+            'Gallery\\Services\\application_autoupdate_dry_run',
+            'Gallery\\Services\\application_autoupdate_run_installing_check',
+            'Gallery\\Services\\site_maintenance_run',
+            'Gallery\\Services\\cache_lifecycle_visitor_run',
+            'Gallery\\Services\\cache_lifecycle_chain_start',
+            'Gallery\\Services\\application_update_run_scheduled_cache_cleanup',
+            'Gallery\\Services\\site_maintenance_telemetry_worker_run',
+            'Gallery\\Services\\gallery_attachment_usage_background_start',
+        ],
+
         // The Maintenance task loader selects the complete attachment owner
         // before either callback. Passive maintenance pages do not load it.
         'Gallery\\Services\\maintenance_center_analyze_music_repository' => [
@@ -296,6 +360,7 @@ return [
             'Gallery\\Services\\application_update_background_chain_start',
         ],
         'Gallery\\Controllers\\cms_site_maintenance_cron' => [
+            'Gallery\\Services\\request_scheduler_work',
             'Gallery\\Services\\application_update_background_chain_run',
             // The exclusive token-authenticated media branch loads this owner;
             // it does not enter the scheduled site/cache maintenance worker.

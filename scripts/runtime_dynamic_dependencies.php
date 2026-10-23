@@ -118,6 +118,9 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Models\viewer_registration_model_independent_transaction|variable_callable|$operation()
     Gallery\Models\viewer_registration_model_transaction|variable_callable|$operation()
     Gallery\Services\admin_log_archive_register_request_trigger|variable_callable|$loadDependencies()
+    Gallery\Services\request_scheduler_register_visit|variable_callable|$loadDependencies()
+    Gallery\Services\request_scheduler_snapshot|variable_callable|$loadDependencies()
+    Gallery\Services\request_scheduler_execute_owner|variable_callable|$loadDependencies()
     Gallery\Services\admin_mutation_schema_health_statuses|dynamic_callback_argument|is_callable($resolver)
     Gallery\Services\admin_mutation_schema_health_statuses|variable_callable|$resolver()
     Gallery\Services\admin_ordered_gallery_rows|variable_callable|$appendChildren()
@@ -225,6 +228,9 @@ function runtime_dynamic_dependency_reviewed_sites(): array
             str_contains($signature, 'cms_route_from_request|')
                 => 'injected-module-loader:routing-paths',
             str_contains($signature, 'application_autoupdate_maybe_run|'),
+            // Scheduler loaders accept only literal reviewed lifecycle IDs;
+            // explicit roots retain the passive and execution entrypoints.
+            str_contains($signature, 'request_scheduler_'),
             // Publication receives the kernel loader and passes only the
             // literal site-maintenance-work owner after its indexed due check.
             str_contains($signature, 'gallery_publication_request|'),

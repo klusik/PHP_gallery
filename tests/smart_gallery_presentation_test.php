@@ -26,12 +26,36 @@ declare(strict_types=1);
 namespace Gallery\Services {
     require_once __DIR__ . '/support/php_source.php';
 
+    /**
+     * Supply a four-column fallback for invalid Smart Gallery dimensions.
+     * Type: int. Units: columns. Scope: isolated presentation fixture.
+     * Consumers: Smart Gallery presentation normalization.
+     * Rationale: distinguish fallback policy from the five-column site fixture.
+     */
     const CMS_PAGINATION_DEFAULT_COLUMNS = 4;
 
+    /**
+     * Supply a six-row fallback for invalid Smart Gallery dimensions.
+     * Type: int. Units: rows. Scope: isolated presentation fixture.
+     * Consumers: Smart Gallery presentation normalization.
+     * Rationale: distinguish fallback policy from the seven-row site fixture.
+     */
     const CMS_PAGINATION_DEFAULT_ROWS = 6;
 
+    /**
+     * Bound fixture pagination width to 12 columns.
+     * Type: int. Units: columns. Scope: isolated presentation fixture.
+     * Consumers: Smart Gallery dimension guardrails.
+     * Rationale: verify upper-bound clamping independently of site defaults.
+     */
     const CMS_PAGINATION_MAX_COLUMNS = 12;
 
+    /**
+     * Bound fixture pagination height to 50 rows.
+     * Type: int. Units: rows. Scope: isolated presentation fixture.
+     * Consumers: Smart Gallery dimension guardrails.
+     * Rationale: retain a finite row ceiling while testing inherited overrides.
+     */
     const CMS_PAGINATION_MAX_ROWS = 50;
 
     /**

@@ -886,6 +886,7 @@ function cache_lifecycle_checkpoint_capacity(?callable $probe = null): array
  * @param int $maxSlices Maximum slices requested by the admitted caller; the canonical upper bound always remains enforced.
  * @param callable(string):(int|float|false)|null $freeSpaceProbe Optional hosting capacity provider; ordinary visitors/cron use native discovery, and disposable fixtures can reproduce known-low or unavailable measurements.
  * @param bool $foregroundLimited Whether a starved autonomous caller admits only its single forty-millisecond fallback slice despite foreground activity.
+ * @param bool $force Bypass only the owning observation due threshold; all resource and mutation guards remain active.
  * @return CacheLifecycleCheckpoint|array{ok:bool,blocked?:bool,busy?:bool,skipped?:bool,reason?:string,exception_class?:string,slices?:int,elapsed_ms?:int,done?:bool,progressed?:bool,id?:string,free_space_known?:bool,free_bytes?:int|null} Lifecycle checkpoint or safe admission/failure marker. Admitted results add actual slice/timing/progress and capacity evidence; early lock refusals never imply work and unknown capacity is not a measured reserve.
  */
 function cache_lifecycle_scheduled_burst(
@@ -894,6 +895,7 @@ function cache_lifecycle_scheduled_burst(
     int $maxSlices = CACHE_LIFECYCLE_RUN_SLICES,
     ?callable $freeSpaceProbe = null,
     bool $foregroundLimited = false,
+    bool $force = false,
 ): array {
     // Bound request admission while preserving each owner's shorter I/O slice.
     // Type: float. Units: seconds. Scope: one external or visitor cache invocation.
@@ -1012,7 +1014,7 @@ function cache_lifecycle_scheduled_burst(
                 }
                 $remaining = $deadline - microtime(true);
                 $result = cache_lifecycle_scheduled_slice(
-                    false,
+                    $force,
                     $id,
                     min(
                         $visitor ? 0.06 : CACHE_LIFECYCLE_COMBINED_SECONDS,

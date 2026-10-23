@@ -2923,6 +2923,40 @@ gäller endast det observerade ögonblicket.
 \index{c00046@cron!w00270@webbplatsunderhåll}
 
 Vanligt underhåll kan köras i begränsade delar i stället för en lång begäran. Underhållstjänsten länkar säkra webbegäranden när trafik finns och kan också anropas från webbhotellets cron med CLI-kommandot som visas i administrationen. Den kan kontrollera miniatyrbildstillstånd, uppdatera metadata, behandla rensningsuppgifter, sammanställa telemetri och arkivera lämpliga administrationsloggdagar enligt deras konfigurerade policyer. Den dolda webb-cron-token kan roteras; rotation ogiltigförklarar tidigare publicerade webb-cron-URL:er. Underhåll är icke-destruktivt som standard och ersätter inte uttrycklig bekräftelse för databasoptimering eller andra åtgärder med betydande följder.
+\subsection{Cronöversikt och besöksutlöst körning}
+Under \ui{Underhåll > Cronöversikt} visas en kompakt sorterbar tabell med
+uppdateringskontroll, loggarkivering, webbplats- och cacheunderhåll,
+rensning av uppdateringsrester, telemetrilagring och engångsräkning av bilagor.
+Varje ägare lämnar sitt verkliga intervall, nästa möjliga körning och bevis
+för senaste försök. Okända uppgifter förblir okända; godkännande är inte
+slutförande. Vanliga PHP-sidbesök, även sökrobotar, ger den gemensamma
+schemaläggaren möjlighet att lämna högst ett begränsat bakgrundsjobb.
+Lås, aktivering, UTC-fönster och Underhållscentrets anspråk gäller fortfarande.
+Schemalagd galleripublicering sker fortfarande före den utlösande sidans rendering.
+
+Kolumnrubriker ändrar sorteringen. Den synliga sidan uppdaterar befintliga
+celler ungefär varje sekund utan att köra jobb. Dolda sidor pausar och fel
+förlänger intervallet. Play skickar en skyddad åtgärd direkt i tabellen och
+går endast förbi tidsvillkoret. Vanligt POST fungerar utan JavaScript.
+Upptaget, fortsatt eller uppskjutet betyder inte slutfört. Nästa möjliga körning
+är en tidsgräns, ingen exakt klockgaranti: Utan besök väntar arbetet.
+Play visas direkt före jobbnamnet. Pausikonen vid rubriken fryser bara denna
+livevisning; återupptagning läser tillståndet direkt. Bakgrundsjobb fortsätter.
+Framtida tider behåller den absoluta tiden och visar återstående tid inom parentes.
+Jobbnamnen länkar till befintliga inställningar eller kontroller. En saknad
+nästa tid förklaras som avstängd, klar eller ingen väntande rensning;
+okänt används bara när underlag inte är tillgängligt.
+
+\ui{Valfri hosting-cron} skapar eller förnyar en kopierbar skyddad URL och
+kan återkalla den. Installationsundermappar och frågerouting utan
+URL-omskrivning stöds. Exemplet med \codeword{curl -fsS} kan valfritt anropas
+var en till fem minuter. Samma schemaläggare används och besöksutlösta körningar
+förblir aktiva. Behandla URL:en som en hemlighet. Hosting-cron, webbläsartimer
+för jobb, ständig process eller extern kö krävs inte.
+Utöver 256-bitars token och gemensamma lås accepteras högst ett hostinganrop
+per minut. Upprepningar kringgår inga jobbvillkor. Skydd mot nätverks- och
+ICMP-överbelastning måste skötas av webbhotellet.
+
 \subsection{Administrationsloggens historik och arkiv}
 \index{a00004@administrationsloggar}
 \index{l00153@loggarkiv}

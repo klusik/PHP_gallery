@@ -1,5 +1,20 @@
 # PHP Gallery Architecture
 
+## Unified visitor scheduler
+
+`request_scheduler_register_visit()` is the single maintenance lifecycle entry.
+Its foreground phase preserves indexed scheduled publication before rendering;
+the small `request_scheduler_trigger.php` owner keeps the planner and passive
+task observations out of ordinary rendering and denied/media responses.
+After a successful HTML response it admits at most one existing background
+owner through `request_scheduler_tick()`. Visitors and optional token-protected
+hosting calls use this same due-only tick. A nonblocking flock, expiring
+single-use handoff and fair dispatch order preserve independent owner policies.
+The Admin Cron Overview uses passive one-second snapshots, separate CSRF POST
+actions and a dense sortable table. See the authoritative
+[task inventory and operations](docs/REQUEST_SCHEDULER.md).
+
+
 ## Visitor-triggered gallery publication
 
 The gallery row owns its nullable UTC `scheduled_publish_at` deadline.
@@ -17,8 +32,8 @@ The existing `models/galleries.php` owner contains the SQL primitives;
 these already-loaded gallery owners avoids extra files on the no-due route.
 The maintenance bootstrap admits ordinary PHP GET/HEAD
 requests before dispatch, including anonymous visitors and crawlers, while
-excluding read-only media and explicit maintenance transports. It does not
-enable Admin-only site maintenance for public requests.
+excluding read-only media and explicit maintenance transports. The central scheduler handles heavy maintenance separately in bounded owner
+slices after the response; foreground publication does not run those owners.
 
 The existing `site-request-trigger` root owns the indexed due check. An empty
 result loads no publication writer/sidecar dependencies. A nonempty result

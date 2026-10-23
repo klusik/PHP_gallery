@@ -30,6 +30,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/support/php_source.php';
+require_once __DIR__ . '/support/module_source.php';
 
 /**
  * Throw when an automatic-update request-safety contract is not satisfied.
@@ -53,6 +54,7 @@ $serviceSource =
         . '/../app/services/updates_install.php');
 $bootstrapSource = (string) file_get_contents(__DIR__
     . '/../app/bootstrap/maintenance.php');
+$schedulerSource = module_source(__DIR__ . '/../app/services/request_scheduler.php');
 $controllerSource = (string) file_get_contents(__DIR__
     . '/../app/controllers/updates.php');
 $dispatchSource = (string) file_get_contents(__DIR__
@@ -63,20 +65,20 @@ $statusSource = (string) file_get_contents(__DIR__
 assert_autoupdate_request_latency_safety(
     php_source_contains(
         $bootstrapSource,
-        'application_autoupdate_maybe_run($intervalSeconds, request_method(), $kernel',
+        '\\Gallery\\Services\\request_scheduler_register_visit($page, request_method(),',
     )
         && php_source_contains(
-            $bootstrapSource,
-            '$intervalSeconds = application_autoupdate_interval_seconds();',
+            $schedulerSource,
+            'application_autoupdate_maybe_run(application_autoupdate_interval_seconds(),',
         )
         && strpos(
             $bootstrapSource,
-            "\$kernel?->load('request-maintenance');",
+            "\$kernel?->load('site-request-trigger');",
         ) < strpos(
             $bootstrapSource,
-            '$intervalSeconds = application_autoupdate_interval_seconds();',
+            'request_scheduler_register_visit(',
         ),
-    'Request maintenance must load the lightweight updater policy, read the saved interval, and pass the request method explicitly.',
+    'Request maintenance must load the central lifecycle owner, pass its method, and retain the configured updater interval in the deferred adapter.',
 );
 
 assert_autoupdate_request_latency_safety(

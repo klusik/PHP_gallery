@@ -1,5 +1,58 @@
 # Testing Guide
 
+## Cron Overview and visitor scheduler coverage
+
+`request_scheduler_test.php` owns visitor/media/status exclusions, fair bounded
+selection, unknown evidence, missing storage, exclusive admission, ticket replay
+and host-token read/rotate/revoke behavior. `admin_cron_browser_test.mjs` uses
+production markup/styles/module in disposable Chromium for numeric sort,
+compact desktop rows, 44 px mobile targets, contained table scrolling,
+late Admin theme overrides, in-place polling, focus retention, stale bodies, a single
+in-flight read, hidden/unmounted pause, backoff and explicit manual submission.
+It also covers inline Play, icon geometry and operator pause/resume while a
+stale JSON body is pending, including a hidden/visible round trip. The PHP
+fixture verifies independent hosting throttles and future-duration formatting.
+Pause, hide and teardown cancel both the passive request and its owned read
+deadline even when an already-received JSON body has not resolved. The single
+in-flight promise remains authoritative until it settles.
+An immediate reconciliation consumes any older sequential poll timer. Manual
+completion cannot schedule another timer while a newer read is in flight;
+the outage scenario verifies both sides of this completion-order boundary.
+Absent-deadline cases distinguish disabled work, completed one-shot work,
+empty updater cleanup and genuinely unknown evidence. Browser reads retain
+existing task-settings anchors when patching names in place.
+Existing cache-transport, media-session, updater-latency and HTTP-boundary
+fixtures require the central registration seam instead of direct updater work.
+Their source assertions retain fully qualified callable identities and the
+strict media/transport guards. Archive coverage requires one scheduler hook
+and delegation to the existing bounded archive owner; its legacy Admin-only
+adapter remains covered separately. Private telemetry transport retains the
+ordinary scheduled owner, while explicit force uses its timing override.
+The integrated publication regression still owns same-response publication.
+The real route include matrix retains its existing ceilings: only the small
+visitor trigger loads before rendering, with planner/observation dependencies
+deferred until successful shutdown or explicit authenticated status/actions.
+
+These fixtures run under the central hosted audit. BASIC is source-only;
+authorized FULL must execute runtime/database/browser coverage on the exact
+prepared SHA. Real shared-hosting with no external cron, optional hosting calls,
+subdirectory/non-rewrite routes and a no-JavaScript Play POST remain explicit
+live-installation smoke coverage. Inspect actual row heights, keyboard focus,
+mobile touch targets and dark/light Theme colors.
+
+The authorized `localhost/Galerie` browser smoke on 2026-10-23 observed
+33 px desktop rows, 28 px desktop Play, 44 by 44 px mobile Play at a 390 px
+viewport, contained table scrolling, both directions of timestamp sorting
+with unknown times last, live owner-state changes, keyboard help/Escape,
+and one manual updater-cache admission completing without page navigation.
+The follow-up smoke verified the preview pause freezes values and resumes
+immediately, inline Play, absolute/relative deadlines, factual absent-deadline
+labels and existing owner links. A generated local hosting URL had the correct
+installation path and 64-hex token; its first call returned a due-only result
+and its immediate repeat returned `throttled`. These calls do not qualify
+no-JavaScript submission, real shared hosting or the complete hosted suites.
+
+
 ## Scheduled gallery publication
 
 The owner-authorized localhost regression on Testovací A321 starts from

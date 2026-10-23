@@ -45,12 +45,36 @@ namespace Gallery\Services {
         }
     }
 
+    /**
+     * Identify ordinary gallery resources with the production token gallery.
+     * Type: string. Units: resource discriminator. Scope: controller fixture.
+     * Consumers: downloads controller capability issuance and validation.
+     * Rationale: retain resource separation without loading token persistence.
+     */
     const DOWNLOAD_CAPABILITY_RESOURCE_GALLERY = 'gallery';
 
+    /**
+     * Identify Smart Gallery resources with the production smart_gallery token.
+     * Type: string. Units: resource discriminator. Scope: controller fixture.
+     * Consumers: downloads controller capability issuance and validation.
+     * Rationale: exercise Smart Gallery authorization independently offline.
+     */
     const DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY = 'smart_gallery';
 
+    /**
+     * Identify progressive download capabilities with the progressive token.
+     * Type: string. Units: scope discriminator. Scope: controller fixture.
+     * Consumers: progressive manifest and download controller branches.
+     * Rationale: preserve scope checks while transport remains a test double.
+     */
     const DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE = 'progressive';
 
+    /**
+     * Identify legacy archive capabilities with the production legacy token.
+     * Type: string. Units: scope discriminator. Scope: controller fixture.
+     * Consumers: legacy ZIP controller branch and capability validation.
+     * Rationale: test archive fallback separately from progressive downloads.
+     */
     const DOWNLOAD_CAPABILITY_SCOPE_LEGACY = 'legacy';
 
     /** Test double for find_gallery(). */
