@@ -33,6 +33,17 @@
  */
 
 return [
+    'lightbox.map_route_start' => 'Route start',
+    'lightbox.map_route_end' => 'Destination',
+    'lightbox.map_waypoint' => 'Waypoint',
+    'public.image_numbered' => '{gallery} — photo {number}',
+    'public.tag.gallery_count.one' => '{count} gallery',
+    'public.tag.gallery_count.few' => '{count} galleries',
+    'gallery.card.pdf_file_count.one' => '{count} unique PDF file in this gallery and subgalleries',
+    'gallery.card.pdf_file_count.few' => '{count} unique PDF files in this gallery and subgalleries',
+    'gallery.card.music_file_count.one' => '{count} unique music file in this gallery and subgalleries',
+    'gallery.card.music_file_count.few' => '{count} unique music files in this gallery and subgalleries',
+    'lightbox.viewer_label' => 'Photo viewer',
     'publication.listing_help' => 'Publication restores public listing, as with manual Publish.',
     'publication.local_help' => 'Times use the browser timezone shown above; the UTC equivalent appears below the field. Leave empty to cancel; choosing Published clears the schedule. Publication runs on the next eligible PHP page visit. Existing access restrictions remain unchanged.',
     'publication.local_invalid' => 'Enter a valid local date and time. This time may not exist because of a daylight-saving change.',

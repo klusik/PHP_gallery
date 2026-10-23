@@ -33,6 +33,17 @@
  */
 
 return [
+    'lightbox.map_route_start' => 'Začátek trasy',
+    'lightbox.map_route_end' => 'Cíl trasy',
+    'lightbox.map_waypoint' => 'Bod trasy',
+    'public.image_numbered' => '{gallery} — fotografie {number}',
+    'public.tag.gallery_count.one' => '{count} galerie',
+    'public.tag.gallery_count.few' => '{count} galerie',
+    'gallery.card.pdf_file_count.one' => '{count} jedinečný soubor PDF v této galerii a podgaleriích',
+    'gallery.card.pdf_file_count.few' => '{count} jedinečné soubory PDF v této galerii a podgaleriích',
+    'gallery.card.music_file_count.one' => '{count} jedinečný hudební soubor v této galerii a podgaleriích',
+    'gallery.card.music_file_count.few' => '{count} jedinečné hudební soubory v této galerii a podgaleriích',
+    'lightbox.viewer_label' => 'Prohlížeč fotografií',
     'publication.listing_help' => 'Zveřejnění zařadí galerii i do veřejných seznamů stejně jako ruční zveřejnění.',
     'publication.local_help' => 'Čas je v pásmu prohlížeče uvedeném výše; pod polem je přepočet na UTC. Prázdné pole zruší plán; volba Zveřejněná jej také zruší. Zveřejnění proběhne při další vhodné návštěvě PHP stránky. Omezení přístupu zůstanou zachována.',
     'publication.local_invalid' => 'Zadejte platné místní datum a čas. Tento čas nemusí existovat kvůli změně letního času.',

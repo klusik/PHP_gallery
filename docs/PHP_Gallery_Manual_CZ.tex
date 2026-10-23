@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.142}
+\newcommand{\version}{0.142.1}
 \newcommand{\manualdate}{23.~října~2026}
 
 \hypersetup{
@@ -2052,6 +2052,27 @@ Po opravě otevřete galerii s~prázdnou mezipamětí prohlížeče a~ověřte, 
 \index{e00036@EXIF}
 \index{g00045@GPS}
 \index{h00048@hlasování}
+
+\subsection{Kompaktní procházení a~ovládání klávesnicí}
+
+Prohlížeč fotografií se vejde i~na úzkou obrazovku; počítadlo je oddělené
+od ovládání. Otevření fotografie či mapy přesune fokus do příslušné vrstvy.
+\ui{Tab} a~\ui{Shift+Tab} zůstávají uvnitř. \ui{Escape} nejprve zavře mapu,
+teprve potom fotografii; zavření vrací fokus na původní ovládací prvek.
+Při 100\% posouvá jeden prst mezi fotografiemi, při zvětšení fotografii
+posouvá a~dva prsty mění přiblížení. Zavření přímého odkazu obnoví kontext
+alba i~pro změnu jazyka a~návrat po přihlášení. Mapové akce bez dostupné
+polohy jsou skryté. Značky pojmenovávají začátek a~cíl trasy, průletové
+body nebo polohu fotografie.
+
+Výsledky štítků používají na úzkých obrazovkách čitelné karty v~jednom
+sloupci. Návrhy vyhledávání zobrazují prostý text popisu a~zachovávají
+užitečné názvy odkazů. Autorské popisky a~názvy fotografií mají přednost
+před přeloženým číslovaným náhradním názvem. Text ovládání, médií a~map
+vychází z~barev vybraného motivu. Hra zachovává odkaz na album v~drobečkové
+navigaci a~kompaktní porovnání fotografií. Plovoucí navigace používá malé
+ikony; widgety zachovávají uložené umístění a~při nedostatku volného místa
+kolem náhledů či ovládání přejdou do toku stránky.
 
 \subsection{Asynchronní metadata lightboxu}
 

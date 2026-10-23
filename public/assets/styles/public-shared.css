@@ -83,6 +83,32 @@
     --public-control-surface: color-mix(in srgb, var(--panel) 72%, transparent);
     --public-control-hover: color-mix(in srgb, var(--accent) 5%, var(--panel));
     --public-control-border: color-mix(in srgb, var(--ink) 20%, transparent);
+    /* Text follows the Theme foreground; accent hues remain decorative.
+       Type: color. Units: sRGB. Scope: public component secondary text.
+       Consumers: search, media and map chrome.
+       Rationale: 85% foreground retains readable secondary text on panels. */
+    --public-muted-ink: color-mix(in srgb, var(--ink) 85%, var(--panel));
+}
+
+.public-page .tag,
+.public-page .tag:is(:hover, :focus-visible),
+.public-page .public-header-action,
+.public-page .public-content-widget-title {
+    color: var(--ink);
+}
+
+.public-page .tag {
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.public-page .public-home-search-input,
+.public-page .public-home-search-input:focus {
+    color: var(--ink);
+}
+
+.public-page .public-home-search-input::placeholder {
+    color: var(--public-muted-ink);
+    opacity: 1;
 }
 
 /* Styles public pagination controls for gallery and photo listings. */
@@ -182,14 +208,17 @@
     pointer-events: auto;
     display: grid;
     align-items: center;
-    grid-template-columns: 1.45rem minmax(0, 1fr);
-    justify-content: start;
+    grid-template-columns: 1fr;
+    justify-content: center;
     text-align: left;
     gap: 0.45rem;
-    min-width: max-content;
-    padding: 0.7rem 0.95rem;
+    width: var(--public-control-height);
+    height: var(--public-control-height);
+    min-width: var(--public-control-height);
+    min-height: var(--public-control-height);
+    padding: 0;
     border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: var(--radius, 16px);
+    border-radius: var(--public-control-radius);
     /* Match the translucent photo-overlay controls, keeping white labels readable over images. */
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(4px);
@@ -236,6 +265,20 @@
     font-size: 1.05rem;
 }
 
+.public-page .back-to-top-button span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+
+.public-page:has(input:focus, textarea:focus, select:focus,
+    [popover]:popover-open, .hero-tag-disclosure[open])
+    .floating-scroll-controls {
+    visibility: hidden;
+}
+
 @media (max-width: 980px) {
     .public-page .gallery-list-frame {
         display: block;
@@ -250,7 +293,7 @@
     }
 
     .public-page .back-to-top-button {
-        padding: 0.65rem 0.8rem;
+        padding: 0;
     }
 }
 
@@ -586,7 +629,7 @@
     padding: .85rem;
     border: 1px solid var(--line);
     border-radius: max(.7rem, calc(var(--radius, 16px) * .72));
-    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    background: color-mix(in srgb, var(--panel) 97%, transparent);
     -webkit-backdrop-filter: blur(16px) saturate(1.2);
     backdrop-filter: blur(16px) saturate(1.2);
     box-shadow: 0 16px 40px rgba(15, 23, 42, .24);
@@ -1777,21 +1820,29 @@ svg.leaflet-image-layer.leaflet-interactive path {
     justify-content: center;
     padding: 1.5rem;
     position: fixed;
-    z-index: 1200;
+    /* Type: integer. Units: stacking order. Scope: public modal map.
+       Consumers: overlay stack. Rationale: 1450 stays above the 1400 mobile
+       lightbox while retaining the existing native fullscreen split map. */
+    --map-overlay-layer: 1450;
+    z-index: var(--map-overlay-layer);
 }
 .map-overlay[hidden] {
     display: none;
 }
 .map-dialog {
-    background: var(--panel-bg, #fff);
-    border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
-    border-radius: 1rem;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    border: 1px solid var(--public-control-border);
+    border-radius: var(--public-control-radius);
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
-    color: var(--text, #111827);
+    color: var(--ink);
     max-width: 1120px;
     padding: 1rem;
     position: relative;
     width: min(96vw, 1120px);
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    backdrop-filter: blur(14px);
 }
 .map-dialog h2 {
     margin: 0 4.5rem 0.75rem 0;
@@ -1800,11 +1851,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
     position: absolute;
     right: 1rem;
     top: 1rem;
+    min-height: var(--public-control-height);
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--public-control-border);
+    border-radius: var(--public-control-radius);
+    background: transparent;
+    color: var(--ink);
 }
 .map-canvas {
     border-radius: 0.75rem;
     height: min(70vh, 720px);
-    min-height: 360px;
+    min-height: min(360px, 50dvh);
     overflow: hidden;
     width: 100%;
 }
@@ -1828,6 +1885,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 }
 .map-attribution-note {
     margin: 0.65rem 0 0;
+    color: var(--public-muted-ink);
 }
 body.has-map-overlay {
     overflow: hidden;

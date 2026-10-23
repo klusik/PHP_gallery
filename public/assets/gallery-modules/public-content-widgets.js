@@ -78,11 +78,14 @@ const FLOAT_GAP = 12;
  * fixed toolbar or page action schedule the same geometry calculation.
  *
  * @param {Document} doc Public document containing the visitor controls.
- * @returns {Array<Element>} Existing public header, action and fixed-tool elements.
+ * @returns {Array<Element>} Public controls and primary discovery previews.
  */
 function publicWidgetFloatingControlElements(doc) {
     return Array.from(doc.querySelectorAll(
-        '.site-header, .public-home-actions, .public-home-search, .hero[data-public-gallery-id] .hero-actions, .back-to-top-button, .picture-manager-toolbar, [data-picture-manager-panel], .nav'
+        '.site-header, .public-home-actions, .public-home-search, '
+        + '.hero[data-public-gallery-id] .hero-actions, .back-to-top-button, '
+        + '.picture-manager-toolbar, [data-picture-manager-panel], .nav, '
+        + '.gallery-card-media, .gallery-image-grid .image-stage'
     ));
 }
 

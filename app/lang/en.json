@@ -4572,6 +4572,7 @@
     "lightbox.3d_carousel_label": "3D carousel nearby photos",
     "lightbox.3d_carousel_open": "Focus carousel photo {current} of {total}",
     "lightbox.close": "Close",
+    "lightbox.viewer_label": "Photo viewer",
     "lightbox.close_map": "Close map",
     "lightbox.close_map_split": "Close map split",
     "lightbox.dev_diagnostics_aria": "Gallery dev mode diagnostics",
@@ -7946,5 +7947,15 @@
     "admin.cron.unit.h": "h",
     "admin.cron.unit.min": "min",
     "admin.cron.unit.s": "s",
-    "admin.cron.host_safety": "A secret 256-bit token, one accepted call per minute and shared task locks protect this URL from repeated HTTP triggers. Network-level flooding must be handled by the hosting provider."
+    "admin.cron.host_safety": "A secret 256-bit token, one accepted call per minute and shared task locks protect this URL from repeated HTTP triggers. Network-level flooding must be handled by the hosting provider.",
+    "lightbox.map_route_start": "Route start",
+    "lightbox.map_route_end": "Destination",
+    "lightbox.map_waypoint": "Waypoint",
+    "public.image_numbered": "{gallery} — photo {number}",
+    "public.tag.gallery_count.one": "{count} gallery",
+    "public.tag.gallery_count.few": "{count} galleries",
+    "gallery.card.pdf_file_count.one": "{count} unique PDF file in this gallery and subgalleries",
+    "gallery.card.pdf_file_count.few": "{count} unique PDF files in this gallery and subgalleries",
+    "gallery.card.music_file_count.one": "{count} unique music file in this gallery and subgalleries",
+    "gallery.card.music_file_count.few": "{count} unique music files in this gallery and subgalleries"
 }

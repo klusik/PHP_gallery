@@ -53,13 +53,13 @@
  */
 
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261010-visual-editor-draft-availability';
-import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261011-widgets-preview-flow-v2';
-import { setupPublicContentWidgets } from './gallery-modules/public-content-widgets.js?v=20261011-widget-size-observer-v1';
+import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261023-discovery-clearance-v1';
+import { setupPublicContentWidgets } from './gallery-modules/public-content-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261005-hero-info-panel-v2';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
-import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20261014-floating-scroll-v1';
+import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20261023-compact-scroll-v2';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2';
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20261023-picture-manager-context-v1';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20261023-publication-local-time-v2';
@@ -106,7 +106,7 @@ import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-v
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261023-public-modal-v3';
 import { setupQuickPhotoTags } from './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
 import {
     setupAdminGalleryFilters,
@@ -127,7 +127,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261023-publication-local-time-v2';
+} from './gallery-modules/admin-operations.js?v=20261023-public-ux-v3';
 
 /**
  * Runs a setup callback after the DOM is ready.

@@ -621,13 +621,13 @@ function public_search_gallery_from_image_row(array $row): array
 /**
  * Collapse rich text into a short one-line search result detail.
  *
- * @param string $text Text value.
- * @param int $limit Maximum number of items.
- * @return string Text result for the caller.
+ * @param string $text Rich gallery description or photo detail text.
+ * @param int $limit Maximum displayed characters, including an ellipsis.
+ * @return string Bounded single-line plain text; empty when no text remains.
  */
 function public_search_compact_text(string $text, int $limit): string
 {
-    $text = trim(strip_tags($text));
+    $text = gallery_description_plain_text($text);
     $text = preg_replace('/\s+/u', ' ', $text) ?? '';
     if ($text === '') {
         return '';

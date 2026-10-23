@@ -407,10 +407,10 @@ function gallery_seo_description(array $gallery): string
 /**
  * Build safe alt text for one gallery image.
  *
- * @param array{description?:string|null,title?:string|null,filename?:string|null} $image Image caption and filename fields used as ordered alt-text fallbacks.
+ * @param array{description?:string|null,title?:string|null,filename?:string|null} $image Caption, authored title and filename-comparison fields.
  * @param array{title?:string|null} $gallery Gallery title used for the final fallback.
- * @param int $index One-based position used when neither image text nor a filename is available.
- * @return string Alt text selected from the image caption, title, filename, or gallery title and position.
+ * @param int $index One-based position for the localized numbered fallback.
+ * @return string Authored caption/title, or gallery title and photo number.
  */
 function image_alt_text(array $image, array $gallery, int $index = 1): string
 {
@@ -421,18 +421,16 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
     }
     // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = trim((string) ($image['title'] ?? ''));
-    if ($title !== '') {
+    // Keep authored titles; recognize technical titles copied from a scan.
+    $filename = trim((string) ($image['filename'] ?? ''));
+    $stem = (string) pathinfo($filename, PATHINFO_FILENAME);
+    if ($title !== '' && $title !== $filename && $title !== $stem) {
         return $title;
     }
-    // $filename stores an intermediate value used by the surrounding gallery workflow.
-    $filename = trim((string) ($image['filename'] ?? ''));
-    if ($filename !== '') {
-        return trim(
-            preg_replace('/[-_]+/', ' ', pathinfo($filename, PATHINFO_FILENAME))
-                ?: $filename,
-        );
-    }
-    return (string) ($gallery['title'] ?? 'Gallery') . ' image ' . $index;
+    return \Gallery\Services\t('public.image_numbered', '{gallery} — photo {number}', [
+        'gallery' => (string) ($gallery['title'] ?? 'Gallery'),
+        'number' => $index,
+    ]);
 }
 
 /**

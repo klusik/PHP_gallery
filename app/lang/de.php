@@ -33,6 +33,17 @@
  */
 
 return [
+    'lightbox.map_route_start' => 'Routenstart',
+    'lightbox.map_route_end' => 'Ziel',
+    'lightbox.map_waypoint' => 'Wegpunkt',
+    'public.image_numbered' => '{gallery} — Foto {number}',
+    'public.tag.gallery_count.one' => '{count} Galerie',
+    'public.tag.gallery_count.few' => '{count} Galerien',
+    'gallery.card.pdf_file_count.one' => '{count} eindeutige PDF-Datei in dieser Galerie und ihren Untergalerien',
+    'gallery.card.pdf_file_count.few' => '{count} eindeutige PDF-Dateien in dieser Galerie und ihren Untergalerien',
+    'gallery.card.music_file_count.one' => '{count} eindeutige Musikdatei in dieser Galerie und ihren Untergalerien',
+    'gallery.card.music_file_count.few' => '{count} eindeutige Musikdateien in dieser Galerie und ihren Untergalerien',
+    'lightbox.viewer_label' => 'Fotoanzeige',
     'publication.listing_help' => 'Die Veröffentlichung stellt öffentliche Listung wie bei der manuellen Veröffentlichung her.',
     'publication.local_help' => 'Die Zeit gilt für die oben angezeigte Browser-Zeitzone; darunter steht die UTC-Entsprechung. Ein leeres Feld oder die Auswahl Veröffentlicht löscht den Termin. Die Veröffentlichung erfolgt beim nächsten geeigneten PHP-Seitenaufruf. Zugriffsbeschränkungen bleiben erhalten.',
     'publication.local_invalid' => 'Geben Sie ein gültiges lokales Datum mit Uhrzeit ein. Diese Uhrzeit existiert möglicherweise wegen der Sommerzeitumstellung nicht.',

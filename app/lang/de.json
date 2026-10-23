@@ -4572,6 +4572,7 @@
     "lightbox.3d_carousel_label": "Nahegelegene Fotos im 3D-Karussell",
     "lightbox.3d_carousel_open": "Karussellfoto {current} von {total} fokussieren",
     "lightbox.close": "Schließen",
+    "lightbox.viewer_label": "Fotoanzeige",
     "lightbox.close_map": "Karte schließen",
     "lightbox.close_map_split": "Geteilte Kartenansicht schließen",
     "lightbox.dev_diagnostics_aria": "Diagnose des Galerie-Entwicklermodus",
@@ -7946,5 +7947,15 @@
     "admin.cron.unit.h": "Std",
     "admin.cron.unit.min": "Min",
     "admin.cron.unit.s": "Sek",
-    "admin.cron.host_safety": "Ein geheimer 256-Bit-Token, höchstens ein angenommener Aufruf pro Minute und gemeinsame Aufgabensperren schützen diese URL vor wiederholten HTTP-Auslösungen. Netzwerküberlastung muss der Hostinganbieter abwehren."
+    "admin.cron.host_safety": "Ein geheimer 256-Bit-Token, höchstens ein angenommener Aufruf pro Minute und gemeinsame Aufgabensperren schützen diese URL vor wiederholten HTTP-Auslösungen. Netzwerküberlastung muss der Hostinganbieter abwehren.",
+    "lightbox.map_route_start": "Routenstart",
+    "lightbox.map_route_end": "Ziel",
+    "lightbox.map_waypoint": "Wegpunkt",
+    "public.image_numbered": "{gallery} — Foto {number}",
+    "public.tag.gallery_count.one": "{count} Galerie",
+    "public.tag.gallery_count.few": "{count} Galerien",
+    "gallery.card.pdf_file_count.one": "{count} eindeutige PDF-Datei in dieser Galerie und ihren Untergalerien",
+    "gallery.card.pdf_file_count.few": "{count} eindeutige PDF-Dateien in dieser Galerie und ihren Untergalerien",
+    "gallery.card.music_file_count.one": "{count} eindeutige Musikdatei in dieser Galerie und ihren Untergalerien",
+    "gallery.card.music_file_count.few": "{count} eindeutige Musikdateien in dieser Galerie und ihren Untergalerien"
 }

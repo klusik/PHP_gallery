@@ -47,12 +47,30 @@ use function Gallery\Services\t;
 /**
  * Render the public root gallery index.
  *
- * @param array<string,mixed> $viewModel Controller-prepared home-page state.
+ * @param array{site_name?:string,canonical_url?:string,gallery_count?:int,
+ *     physical_gallery_count?:int,physical_gallery_revision?:string,
+ *     smart_gallery_count?:int,creation_action?:array{placement:string,
+ *         title:string,url:string,panel_url:string}|null,show_first_gallery?:bool,
+ *     search_bar?:array{enabled?:bool,search_id?:string,context_id?:string,
+ *         gallery_id?:int,aria_label?:string,placeholder?:string,search_url?:string,
+ *         min_length?:int,delay_ms?:int,media_delay_ms?:int,
+ *         descriptive_delay_ms?:int,deep_delay_ms?:int,loading_label?:string,
+ *         empty_label?:string,error_label?:string,context_label?:string,
+ *         clear_label?:string},
+ *     pagination_html?:string,grid_class?:string,current_page?:int,
+ *     total_pages?:int,cards_html?:string,back_to_top_html?:string,
+ *     render_profile_html?:string,public_widgets?:array<string,list<array{
+ *         widget_id:string,title:string,body_html:string,appearance:string,
+ *         source_language:string,placement_mode:string,floating_anchor:string,
+ *         x_permille:int,y_permille:int,width_px:int,sort_order:int}>>} $viewModel
+ *     Controller-prepared heading, discovery controls, cards and widget zones.
  * @return void Emit public content and prepared inline actions without resolving authorization or catalog state.
  */
 function view_render_public_gallery_home(array $viewModel): void
 {
     render_header((string) ($viewModel['site_name'] ?? ''));
+    echo '<h1 class="visually-hidden">'
+        . e((string) ($viewModel['site_name'] ?? '')) . '</h1>';
     $widgets = (array) ($viewModel['public_widgets'] ?? []);
     view_render_public_widget_region($widgets, 'content_top');
     $hasRails = !empty($widgets['left_rail']) || !empty($widgets['right_rail']);

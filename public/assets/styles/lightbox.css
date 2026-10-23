@@ -32,6 +32,10 @@
     box-shadow: 0 0 0 3px rgba(165, 72, 28, 0.18);
 }
 .lightbox {
+    /* Type: number. Units: rem. Scope: normal viewer stage fitting.
+       Consumers: updateNormalLightboxStageSizeFromDimensions.
+       Rationale: 12 reserves desktop arrows, gaps and outer padding. */
+    --lightbox-inline-reserve: 12;
     position: fixed;
     inset: 0;
     z-index: 20;
@@ -401,6 +405,11 @@
 }
 .lightbox-stage-link::-moz-focus-inner {
     border: 0 !important;
+}
+
+.lightbox .lightbox-stage-link:focus-visible {
+    outline: 2px solid #fffdf8 !important;
+    outline-offset: -2px;
 }
 
 .lightbox.is-fullscreen .lightbox-stage-link {
@@ -1209,6 +1218,11 @@
     left: 7rem;
     min-width: 2.6rem;
     font-weight: 700;
+}
+
+/* Hidden map actions must win over Theme and mobile display rules. */
+.lightbox [data-lightbox-map][hidden] {
+    display: none !important;
 }
 
 /* Picture-strip lightbox mode */
@@ -2325,7 +2339,7 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     flex: 1 1 14rem;
     width: auto;
 }
-.gallery-attachment-applets > .gallery-presentation { flex-basis: 100%; }
+.gallery-attachment-applets > .gallery-presentation { flex-basis: 14rem; }
 .gallery-attachment-applets .gallery-media-widget { order: -1; }
 .gallery-attachment-applets .gallery-media-widget > summary {
     width: 100%;
@@ -2468,7 +2482,31 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     position: sticky;
     top: -0.25rem;
     z-index: 1;
-    background: var(--color-surface, #fff);
+    background: var(--panel);
+}
+
+/* Component text must use the same Theme surface/foreground pair. The
+   --color-* aliases belong to older media skins and can describe a light skin
+   while the installation uses a dark Theme. Keep this scoped to public media. */
+.public-page :is(.gallery-attachment-applets, .gallery-media-panel) {
+    color: var(--ink);
+    --color-surface: var(--panel);
+    --color-muted: var(--public-muted-ink);
+    --color-border: var(--line);
+}
+
+.public-page :is(.gallery-attachment-applets, .gallery-media-panel)
+    :is(h2, h3, a, button, summary, th, td, output) {
+    color: var(--ink);
+}
+
+.public-page :is(.gallery-pdf-table, .gallery-music-table) :is(th, td) {
+    background: transparent;
+    color: var(--ink);
+}
+
+.public-page :is(.gallery-attachment-applets, .gallery-media-panel) .muted {
+    color: var(--public-muted-ink);
 }
 .music-track-line {
     display: flex;

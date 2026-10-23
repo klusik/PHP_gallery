@@ -44,8 +44,19 @@ use function Gallery\Services\t;
 /**
  * Render the public tag landing page body.
  *
- * @param array<string, mixed> $viewModel Prepared tag-page presentation model.
- * @return void
+ * @param array{title?:string,breadcrumbs?:array{
+ *     items:list<array{label:string,url:?string,current:bool}>,
+ *     aria_label:string,style_class:string},tag_id?:int,gallery_count?:int,
+ *     canonical_url?:string,admin_actions?:array{enabled:bool,tag_id?:int,
+ *         name?:string,edit_label?:string,delete_label?:string,edit_url?:string,
+ *         panel_url?:string,panel_kicker?:string,panel_title?:string,
+ *         delete_url?:string,return_url?:string},description_enabled?:bool,
+ *     description?:string,gallery_count_label?:string,has_galleries?:bool,
+ *     pagination_top_html?:string,pagination_bottom_html?:string,
+ *     grid_class?:string,gallery_cards_html?:string,
+ *     back_to_top_html?:string} $viewModel Prepared tag identity, counts, links and
+ *     optional authorized Admin actions.
+ * @return void Emits the tag heading and its authorized gallery results.
  */
 function view_render_public_tag_page(array $viewModel): void
 {
@@ -83,7 +94,7 @@ function view_render_public_tag_page(array $viewModel): void
     echo '<div class="gallery-list-content" data-back-to-top-list>';
     echo (string) ($viewModel['pagination_top_html'] ?? '');
     echo
-        '<section class="grid'
+        '<section class="grid public-tag-gallery-grid'
             . e((string) ($viewModel['grid_class'] ?? ''))
             . '">';
     echo (string) ($viewModel['gallery_cards_html'] ?? '');

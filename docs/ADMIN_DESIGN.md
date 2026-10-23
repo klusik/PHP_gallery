@@ -39,6 +39,14 @@ media panels and public header actions. Their shared surface tokens belong to
 `public/assets/styles/public-shared.css`; search layout belongs to
 `public/assets/styles/public.css`. Keep changes scoped to public pages.
 
+Public tags, search text, map chrome and PDF/music panels use the Theme
+foreground/panel pair. Accent hues remain decoration where small text would
+otherwise lose contrast. Expanded information panels retain enough panel backing
+to obscure underlying text. The map Close action uses the same transparent,
+compact treatment as other public actions. Floating Top/Down controls use icons
+with retained accessible labels; the widget geometry owner keeps floating panels
+clear of primary gallery/photo previews as well as header and action controls.
+
 - Use a translucent Theme panel surface, a quiet foreground-derived border,
   and rounding capped at 8 px while respecting smaller Theme radii. Text,
   borders and accents follow the selected Theme, including dark themes.

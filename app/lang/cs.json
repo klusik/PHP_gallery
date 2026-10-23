@@ -4572,6 +4572,7 @@
     "lightbox.3d_carousel_label": "Blízké fotky v 3D karuselu",
     "lightbox.3d_carousel_open": "Zaměřit fotku {current} z {total} v karuselu",
     "lightbox.close": "Zavřít",
+    "lightbox.viewer_label": "Prohlížeč fotografií",
     "lightbox.close_map": "Zavřít mapu",
     "lightbox.close_map_split": "Zavřít oddělenou mapu",
     "lightbox.dev_diagnostics_aria": "Diagnostika vývojového režimu galerie",
@@ -7946,5 +7947,15 @@
     "admin.cron.unit.h": "h",
     "admin.cron.unit.min": "min",
     "admin.cron.unit.s": "s",
-    "admin.cron.host_safety": "Tajný 256bitový token, nejvýše jedno přijaté volání za minutu a společné zámky úloh chrání URL před opakovaným HTTP spouštěním. Zahlcení sítě musí řešit poskytovatel hostingu."
+    "admin.cron.host_safety": "Tajný 256bitový token, nejvýše jedno přijaté volání za minutu a společné zámky úloh chrání URL před opakovaným HTTP spouštěním. Zahlcení sítě musí řešit poskytovatel hostingu.",
+    "lightbox.map_route_start": "Začátek trasy",
+    "lightbox.map_route_end": "Cíl trasy",
+    "lightbox.map_waypoint": "Bod trasy",
+    "public.image_numbered": "{gallery} — fotografie {number}",
+    "public.tag.gallery_count.one": "{count} galerie",
+    "public.tag.gallery_count.few": "{count} galerie",
+    "gallery.card.pdf_file_count.one": "{count} jedinečný soubor PDF v této galerii a podgaleriích",
+    "gallery.card.pdf_file_count.few": "{count} jedinečné soubory PDF v této galerii a podgaleriích",
+    "gallery.card.music_file_count.one": "{count} jedinečný hudební soubor v této galerii a podgaleriích",
+    "gallery.card.music_file_count.few": "{count} jedinečné hudební soubory v této galerii a podgaleriích"
 }

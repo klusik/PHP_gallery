@@ -50,6 +50,14 @@ const backToTopState = {
 };
 
 /**
+ * Admit floating navigation after the listing enters the readable viewport.
+ * Type: number. Units: viewport-height fraction. Scope: public listing controls.
+ * Consumers: both Top and Down visibility decisions.
+ * Rationale: 0.72 preserves the existing listing-entry threshold for both paths.
+ */
+const SCROLL_LISTING_ENTRY_RATIO = 0.72;
+
+/**
  * Finds the currently active back-to-top elements.
  *
  * DOM nodes are looked up on demand so this module never stores old gallery
@@ -69,7 +77,7 @@ function findBackToTopElements() {
 /**
  * Returns whether the supplied back-to-top elements are usable.
  *
- * @param {HTMLElement} elements Elements value.
+ * @param {{scope:Element|null,listing:Element|null,button:HTMLButtonElement|null,downButton:HTMLButtonElement|null}} elements Current public scroll controls.
  * @return {boolean} True when the condition matches.
  */
 function hasConnectedBackToTopElements(elements) {
@@ -86,7 +94,7 @@ function hasConnectedBackToTopElements(elements) {
 /**
  * Determines whether the back-to-top button should be visible now.
  *
- * @param {HTMLElement} elements Elements value.
+ * @param {{scope:Element|null,listing:Element|null,button:HTMLButtonElement|null,downButton:HTMLButtonElement|null}} elements Current public scroll controls.
  * @return {boolean} True when the condition matches.
  */
 function shouldShowBackToTopButton(elements) {
@@ -99,7 +107,8 @@ function shouldShowBackToTopButton(elements) {
 
     const scopeRect = elements.scope.getBoundingClientRect();
     const listingRect = elements.listing.getBoundingClientRect();
-    const enteredListing = listingRect.top < window.innerHeight * 0.72;
+    const enteredListing = listingRect.top
+        < window.innerHeight * SCROLL_LISTING_ENTRY_RATIO;
     const stillInsideListing = scopeRect.bottom > window.innerHeight * 0.24;
     return enteredListing && stillInsideListing && window.scrollY > 180;
 }
@@ -123,7 +132,11 @@ function shouldShowScrollToBottomButton(elements) {
 
     const viewportHeight = window.innerHeight;
     const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    return documentHeight > viewportHeight + 2
+    // Use the existing listing-entry boundary for both directions. A floating
+    // Down action has no role above the listing's search and description tools.
+    const listingEntered = elements.listing.getBoundingClientRect().top
+        < viewportHeight * SCROLL_LISTING_ENTRY_RATIO;
+    return listingEntered && documentHeight > viewportHeight + 2
         && window.scrollY + viewportHeight < documentHeight - 2;
 }
 

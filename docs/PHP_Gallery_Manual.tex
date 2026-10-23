@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.142}
+\newcommand{\version}{0.142.1}
 \newcommand{\manualdate}{23 October 2026}
 
 \hypersetup{
@@ -2066,6 +2066,27 @@ After repair, open the~gallery with an~empty browser cache and~confirm that cove
 \index{EXIF}
 \index{GPS}
 \index{voting}
+
+\subsection{Compact browsing and~keyboard focus}
+
+The~photo viewer fits narrow screens, with the~counter separated from~its
+controls. Opening a~photo or~map moves keyboard focus into~that layer;
+\ui{Tab} and~\ui{Shift+Tab} stay inside it. \ui{Escape} closes the~map before
+the~underlying photo, and~closing returns focus to~the~opening control.
+At~100\% a~single finger swipes between photos; above that scale one finger
+pans and~two fingers pinch. Closing a~direct photo restores the~album context
+for~language switching and~login return links. Map actions without available
+location data are~hidden. Interactive markers identify route starts,
+destinations, waypoints or~photo locations.
+
+Tag results use readable single-column cards on~narrow screens. Search
+suggestions show plain description text while retaining useful link labels.
+Authored photo captions/titles take precedence over a~localized numbered
+fallback. Public controls and~media/map panels follow the~selected Theme's
+foreground and~panel colors. The~picture game retains an~album breadcrumb
+link and~compact photo comparisons. Floating navigation uses small icons;
+widgets retain their saved placement and~return to~the~page flow when
+previews or~controls leave no~safe floating space.
 
 \subsection{Asynchronous lightbox metadata}
 

@@ -35,6 +35,49 @@ close/reopen, and terminal disposal.
 `tests/lightbox_navigation_transaction_liveness_test.php`
 continues to protect coordinator integration and the no-shadow-state contract.
 
+## Public modal focus and compact browsing
+
+`public-modal-lifecycle.js` owns focus and background isolation for the existing
+lightbox shell and its body-level map. Deferred activation acquires the same
+owner while the initial loader is visible. Each layer retains its opener;
+covered branches keep their previous `inert` state, including dynamically added
+background nodes. Tab and Shift+Tab wrap in the active layer. Escape dismisses
+the map before the lightbox, and closing returns focus to the opener. Native
+dialogs retain their browser top-layer focus ownership. Viewer teardown releases
+both layers without focusing detached controls; unloaded documents cannot
+acquire a new modal layer. When an existing editor moves from covered background
+into the viewer, the same owner restores its original inert state and reconciles
+focus into the visible nested dialog. This preserves late quick-tag setup and
+its trusted keyboard flow without changing media or gesture ownership.
+
+`lightbox.js` retains navigation, map rendering and gestures. Help and split-map
+dismissal precede fullscreen/viewer dismissal. Header language links and the
+localized login return destination follow photo entry, exit and history events.
+Language, anonymous preview and visual-preview context survive photo transitions.
+Unavailable map buttons are hidden and disabled together; all interactive
+Leaflet markers carry purpose-specific title/alt names and retain keyboard
+popup activation.
+
+The 760px/coarse-pointer CSS owner also fits narrow mouse/keyboard viewports.
+Normal-stage inline reserve is 12rem on desktop and 1rem on compact layouts;
+arrows overlay the compact stage rather than consuming separate grid columns.
+Touch-device detection, one-finger swipe at 100%, zoom pan and two-finger pinch
+continue through their existing listeners. Tag results share the home/subgallery
+single-column breakpoint. Public component text follows Theme foreground/panel
+tokens; accents decorate controls without becoming low-contrast small text.
+
+Floating widgets use the existing geometry solver, now also excluding primary
+gallery/photo previews. Unreachable placements retain the in-flow fallback and
+saved coordinates. Compact Top/Down controls appear while browsing the listing
+and yield to focused inputs and open popovers.
+
+`public_ux_browser_test.mjs` serves the real CSS/viewer at 320/390px and rotated
+landscape in isolated frames. It covers focus restoration, map availability,
+route context and the browser's combined PointerEvent/TouchEvent gesture paths.
+`lightbox_map_browser_test.mjs` retains map/navigation coverage and checks marker
+names and standalone-map Escape. Real phones and other browser engines remain
+manual coverage.
+
 ## Lightbox nearby-preview queue
 
 `public/assets/gallery-modules/lightbox-preload-lifecycle.js` owns one bounded

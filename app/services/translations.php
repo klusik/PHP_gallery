@@ -1563,10 +1563,16 @@ function translation_admin_missing_key_text(string $text, string $key): string
 /**
  * Translate a string key using the active language with safe fallbacks.
  *
- * @param string $key Lookup key.
- * @param string|array|null $fallback Fallback value.
- * @param array<string,scalar|null> $parameters Scalar replacements keyed by placeholder name.
- * @return string Text result for the caller.
+ * Integer count replacements opt into a catalog's .one/.few cardinal forms.
+ * Existing catalogs without those forms retain their original base-key text.
+ *
+ * @param string $key Lookup key, optionally owning cardinal-form variants.
+ * @param string|array<string,scalar|null>|null $fallback Literal fallback text,
+ *     or placeholder replacements supplied in the second argument.
+ * @param array<string,scalar|null> $parameters Scalar replacements keyed by
+ *     placeholder name; an integer count selects an available cardinal form.
+ * @return string Interpolated active-language text, default-language text,
+ *     explicit fallback or the untranslated key when no translation exists.
  */
 function t(
     string $key,
@@ -1581,6 +1587,19 @@ function t(
     $active = translation_active_language();
     $default = translation_default_language();
     $activeStrings = translation_load_language($active);
+
+    $count = $parameters['count'] ?? null;
+    if (is_int($count)) {
+        // Cardinal grammar boundaries, not operational configuration: one is
+        // singular; Czech integers two through four use the paucal form.
+        $suffix = $count === 1 ? '.one' : '';
+        if ($active === 'cs' && $count >= 2 && $count <= 4) {
+            $suffix = '.few';
+        }
+        if ($suffix !== '' && isset($activeStrings[$key . $suffix])) {
+            $key .= $suffix;
+        }
+    }
 
     if (
         array_key_exists($key, $activeStrings)

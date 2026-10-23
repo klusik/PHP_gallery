@@ -1,5 +1,131 @@
 # Patch notes
 
+## Version 0.142.1
+
+Fixed public gallery browsing on narrow screens and improved keyboard focus,
+map controls, language switching, search snippets, and localized labels.
+Aligned public components with the selected Theme and reduced obstruction from
+floating controls and widgets.
+
+### Highlights
+
+#### Compact photo viewing and accessible overlays
+
+- Fixed narrow-screen lightbox sizing so the photo stage fit the viewport,
+  arrows overlaid the stage, toolbar controls wrapped, and the duplicated
+  counter stayed clear of normal viewer controls.
+  [#287](https://github.com/klusik/PHP_gallery/issues/287)
+- Added shared modal focus ownership for the initial loader, photo viewer,
+  and map. Kept Tab and Shift+Tab inside the active layer, isolated covered
+  content, and restored focus to the opening control when a layer closed.
+- Fixed Escape ordering so a modal map closed before its underlying photo.
+  Dismissed viewer help and split-map panels before fullscreen or the viewer.
+  Preserved browser-owned native dialogs and restored focus when an existing
+  editor moved into the viewer.
+- Hid and disabled unavailable map actions together. Added localized,
+  purpose-specific names to interactive route-start, destination, waypoint,
+  and photo markers while retaining keyboard popup activation.
+
+#### Readable discovery and contextual navigation
+
+- Changed tag-result galleries to readable single-column cards on compact
+  layouts, matching the existing home and subgallery breakpoint.
+- Fixed search suggestions that exposed Markdown and BBCode. Preserved useful
+  link labels, inline code, literal URLs, and word boundaries in bounded
+  plain-text snippets, with escaping retained by the result renderer.
+- Synchronized header language links and the login return destination when
+  entering or leaving a photo and after history navigation. Preserved language,
+  anonymous-preview, and visual-preview context during photo transitions.
+  Closing a directly opened photo kept language switching on its album.
+- Added a visually hidden homepage heading, preferred authored photo captions
+  and titles over technical filename-derived names, and supplied localized
+  gallery/photo-number fallbacks. Corrected singular gallery and media counts
+  across English, Czech, German, and Swedish, including Czech paucal forms.
+- Added an album return link to the picture-game breadcrumb and descriptive
+  names for its choices. Reduced comparison-card padding and excessive image
+  space, and let the presentation applet share the attachment row.
+
+#### Theme-aware panels and unobstructed browsing
+
+- Aligned search text, tags, header actions, widget titles, PDF/music tables,
+  and map chrome with the selected Theme's foreground and panel colors.
+  Increased backing behind expanded information panels and made map controls
+  compact while preserving the configured Theme and background.
+- Replaced floating Top/Down text buttons with compact icons while retaining
+  accessible labels. Delayed Down until the listing entered view and hid
+  floating navigation while an input or supported popover needed that space.
+- Extended the existing widget placement solver to avoid gallery and photo
+  previews. Retained saved coordinates and the established in-flow fallback
+  when no safe floating placement was available.
+
+### Technical Details
+
+#### Backend and presentation
+
+- Added `gallery_description_plain_text()` to
+  `app/services/gallery_description_layout.php` and reused it from
+  `public_search_compact_text()` in `app/services/public_search.php`.
+  Removed raw HTML before decoding authored entities, projected supported
+  markup, and protected inline code and literal URLs during emphasis handling.
+- Extended `t()` in `app/services/translations.php` to select available
+  cardinal keys for integer counts. Retained base-key behavior for catalogs
+  without those variants and updated both PHP and JSON language catalogs.
+- Updated `image_alt_text()` in `app/helpers_public_urls.php`, picture-game
+  view models in `app/controllers/picture_game.php`, and public views for
+  meaningful photo names, navigation, headings, and dialog labels.
+
+#### Frontend and compatibility
+
+- Added `public/assets/gallery-modules/public-modal-lifecycle.js` as the shared
+  focus/background owner. Preserved each covered branch's previous `inert`
+  state, handled dynamically added or reparented content, and prevented
+  detached documents from acquiring a new modal layer.
+- Integrated modal ownership into `lightbox-deferred.js` and `lightbox.js`.
+  Kept media navigation, one-finger swipe, zoom pan, and two-finger pinch with
+  their existing owners; retained no-JavaScript links and pagination support.
+- Updated `public/assets/styles/mobile-gallery.css`,
+  `public/assets/styles/lightbox.css`,
+  `public/assets/styles/public-shared.css`, and
+  `public/assets/styles/public.css` for compact geometry and Theme surfaces.
+  Updated affected browser-module cache revisions and footer dependencies.
+- Preserved stored photo metadata and configured visible filenames while
+  improving accessible names. Documented focus, text, widget-placement, and
+  manual-device coverage limits in the existing lifecycle references.
+
+#### Tests and documentation
+
+- Added `tests/public_ux_browser_test.mjs` and
+  `tests/fixtures/public_ux.html`, registered with the central audit. Covered
+  320/390 px and rotated landscape layouts, representative Theme contrast,
+  tag widths, focus entry/wrapping/restoration, reparented editors, unavailable
+  maps, route context, swipe, pinch, and pinch-to-pan handoff.
+- Added `tests/public_ux_presentation_test.php` for safe rich-text projection,
+  paragraph boundaries, encoded literal markup, unsafe descriptions, URL/code
+  preservation, cardinal forms, and authored/numbered photo-name precedence.
+- Extended the existing map browser fixture for accessible marker names,
+  standalone-map focus, and Escape dismissal. Updated navigation adapters and
+  cache-revision assertions without replacing their existing coverage.
+- Updated `CODEMAP.md`, `TESTING.md`, Admin design and browser/compatibility
+  references, and all four maintained TeX manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Improved narrow-screen photo and tag browsing, keyboard navigation, map
+  discoverability, readable search results, and language changes after closing
+  a photo. Kept authored content and existing navigation and gesture workflows.
+- Made media/map panels and public controls follow the selected Theme while
+  reducing the space occupied by comparison cards and floating navigation.
+
+#### For administrators and maintainers
+
+- Preserved saved widget positions and existing editors while improving their
+  placement and keyboard behavior around the viewer.
+- Added focused automated regression coverage and aligned the four manuals.
+  Real-phone touch, screen-reader sessions, and non-Chromium browser acceptance
+  remained manual coverage rather than a claim established by these fixtures.
+
 ## Version 0.142
 
 Added visitor-triggered gallery publication and a central maintenance scheduler
