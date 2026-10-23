@@ -76,6 +76,7 @@ import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } 
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=20261006-lightbox-navigation-v1';
 import { createLightboxResourceLifecycle } from './lightbox-resource-lifecycle.js?v=20261011-resource-decode-v2';
+import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261023-public-modal-v3';
 import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,
@@ -101,6 +102,51 @@ const galleryLightboxState = {
     cleanup: null,
     present: null,
 };
+
+/**
+ * Authorized point fields consumed by map markers and photo popup navigation.
+ * @typedef {Object} GalleryMapPoint
+ * @property {number} lat Latitude.
+ * @property {number} lng Longitude.
+ * @property {number|string} [id] Photo identity.
+ * @property {number|string} [gallery_id] Source gallery identity.
+ * @property {string} [title] Authored display title.
+ * @property {string} [name] Route waypoint name.
+ * @property {string} [description] Plain popup description.
+ * @property {string} [thumb] Authorized thumbnail URL.
+ * @property {string} [page_url] Canonical photo page URL.
+ * @property {string} [pageUrl] Compatible canonical photo page URL.
+ * @property {string} [image] Legacy authorized photo URL.
+ * @property {string} [point_type] Photo or route role.
+ * @property {string} [type] Compatible point role.
+ * @property {string} [source_type] Source route classification.
+ * @property {string} [map_source_type] Compatible source classification.
+ * @property {boolean} [active_photo] Active photograph marker.
+ */
+
+/**
+ * Optional map geometry and route rendering metadata.
+ * @typedef {Object} GalleryMapPayload
+ * @property {GalleryMapPoint[]} [points] Authorized route/photo markers.
+ * @property {{type:string,points:GalleryMapPoint[]}} [geometry] Route polyline.
+ * @property {string} [sourceType] Source route classification.
+ * @property {string} [source_type] Compatible source classification.
+ * @property {string} [map_source_type] Compatible map classification.
+ * @property {boolean} [renderPath] Explicit connected-route flag.
+ */
+
+/**
+ * Optional inputs retained by the existing canonical photo-navigation owner.
+ * @typedef {Object} LightboxOpenOptions
+ * @property {boolean} [revealHud] Reveal controls after navigation.
+ * @property {boolean} [forceImmediateSwap] Skip the current transition.
+ * @property {boolean} [preserveMapSplit] Retain the fullscreen map pane.
+ * @property {AbortController} [mapPhotoNavigation] Owning map selection.
+ * @property {number} [navigationIntentToken] Sparse navigation generation.
+ * @property {HTMLImageElement} [slideshowPreparedImage] Decoded slideshow image.
+ * @property {string} [slideshowPreparedSrc] Exact authorized prepared source.
+ * @property {string} [telemetryTrigger] Existing navigation trigger category.
+ */
 
 /**
  * Launch the current authorized gallery with the existing viewer scheduler.
@@ -733,7 +779,9 @@ export function setupGalleryLightbox() {
         }
         if (mapOverlay instanceof HTMLElement) {
             mapOverlay.hidden = true;
+            closePublicModal(mapOverlay, false);
         }
+        if (overlay instanceof HTMLElement) closePublicModal(overlay, false);
         document.body.classList.remove('has-map-overlay');
     };
 
@@ -1261,6 +1309,8 @@ export function setupGalleryLightbox() {
         }
         overlay.hidden = true;
         overlay.classList.remove('is-css-fullscreen');
+        closePublicModal(overlay, false);
+        if (mapOverlay instanceof HTMLElement) closePublicModal(mapOverlay, false);
         overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow', 'is-picture-strip-animating', 'is-3d-carousel-mode');
         overlay.classList.toggle('is-picture-strip-mode', pictureStripEnabled);
         overlay.classList.toggle('is-3d-carousel-mode', threeDCarouselEnabled);
@@ -2344,6 +2394,7 @@ export function setupGalleryLightbox() {
      *
      * @param {number} naturalWidth Intrinsic browser display width.
      * @param {number} naturalHeight Intrinsic browser display height.
+     * @returns {void} Fits the stage inside the current viewport and HUD reserve.
      */
     function updateNormalLightboxStageSizeFromDimensions(naturalWidth, naturalHeight) {
         if (!stageLink || overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen')) {
@@ -2357,7 +2408,11 @@ export function setupGalleryLightbox() {
         // rootFontSize stores state or configuration for the gallery front-end flow.
         const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
         // availableWidth stores state or configuration for the gallery front-end flow.
-        const availableWidth = Math.max(240, window.innerWidth - (12 * rootFontSize));
+        const inlineReserve = Number.parseFloat(getComputedStyle(overlay)
+            .getPropertyValue('--lightbox-inline-reserve')) || 0;
+        // One CSS pixel is the structural nonzero bound for degenerate viewports.
+        const availableWidth = Math.max(1,
+            window.innerWidth - (inlineReserve * rootFontSize));
         // measuredMetaHeight stores state or configuration for the gallery front-end flow.
         const measuredMetaHeight = lightboxMeta && !overlay.hidden ? lightboxMeta.getBoundingClientRect().height : 0;
         // verticalReserve stores state or configuration for the gallery front-end flow.
@@ -3628,6 +3683,48 @@ export function setupGalleryLightbox() {
         }
     }
 
+    /**
+     * Keep supported visitor context when entering or leaving a photo route.
+     * @param {string} target Canonical server-prepared photo or album URL.
+     * @returns {string} Same-origin URL with language and preview context.
+     */
+    function lightboxContextUrl(target) {
+        const destination = new URL(target, window.location.href);
+        const current = new URL(window.location.href);
+        if (destination.origin !== current.origin) return target;
+        ['lang', 'view_as', 'preview'].forEach((name) => {
+            if (current.searchParams.has(name)) {
+                destination.searchParams.set(name, current.searchParams.get(name));
+            }
+        });
+        return destination.href;
+    }
+
+    /**
+     * Synchronize header actions after the viewer replaces the visible route.
+     * @returns {void} Retains query context and the existing localized login URL.
+     */
+    function syncPublicHeaderRoute() {
+        const current = new URL(window.location.href);
+        document.querySelectorAll('.public-language-button[hreflang]')
+            .forEach((link) => {
+                const target = new URL(current.href);
+                target.searchParams.set('lang', link.hreflang);
+                link.href = target.href;
+            });
+        document.querySelectorAll('[data-public-login-return]')
+            .forEach((link) => {
+                const target = new URL(link.href, current.href);
+                if (target.origin !== current.origin) return;
+                target.searchParams.set('return',
+                    current.pathname + current.search + current.hash);
+                link.href = target.href;
+            });
+    }
+
+    window.addEventListener('popstate', syncPublicHeaderRoute,
+        {signal: controller.signal});
+
         /**
      * Show or update the initial lazy-loading progress indicator.
      *
@@ -3638,6 +3735,7 @@ export function setupGalleryLightbox() {
      *
      * @param {number} index Zero-based requested lightbox index.
      * @param {number} progressPercent Estimated progress between 1 and 100.
+     * @returns {void} Reveals the current loader and acquires modal focus.
      */
     function showInitialLightboxLoader(index, progressPercent = 12) {
         if (!(initialLoader instanceof HTMLElement)) {
@@ -3659,6 +3757,7 @@ export function setupGalleryLightbox() {
         }
         updateLightboxCounters(cards.length > 0 ? `${index + 1} / ${cards.length}` : '');
         overlay.hidden = false;
+        openPublicModal(overlay, cards[index]);
         document.documentElement.classList.add('has-lightbox');
         document.body.classList.add('has-lightbox');
         if (isMobileTouchDevice && !isLightboxFullscreen()) {
@@ -4419,7 +4518,7 @@ export function setupGalleryLightbox() {
      * Open the lightbox at a specific index.
      *
      * @param {number} index Zero-based image index.
-     * @param {Record<string, unknown>} options Navigation and presentation options.
+     * @param {LightboxOpenOptions} options Navigation ownership, media and HUD preferences.
      * @return {void} Opens the selected card or resumes its sparse-metadata transaction.
      */
     function openAt(index, options = {}) {
@@ -4498,19 +4597,22 @@ export function setupGalleryLightbox() {
         hideLightboxHelpPanel();
         markLightboxNavigationDiagnostic(normalizedIndex, imageToken, 'source-selection');
         // pageUrl stores state or configuration for the gallery front-end flow.
-        const pageUrl = card.dataset.pageUrl || '';
+        const pageUrl = card.dataset.pageUrl
+            ? lightboxContextUrl(card.dataset.pageUrl) : '';
         // galleryUrl stores the page that should be restored when the lightbox closes.
         // Prefer the current browser URL when the visitor opens a photo from a
         // paginated gallery page, because the server-rendered fallback points to
         // the base gallery URL and intentionally has no active pagination state.
         const galleryUrl = window.location.href;
-        const fallbackGalleryUrl = card.dataset.galleryUrl || galleryUrl;
+        const fallbackGalleryUrl = card.dataset.galleryUrl
+            ? lightboxContextUrl(card.dataset.galleryUrl) : galleryUrl;
         if (!lightboxHistoryActive) {
             lightboxReturnUrl = pageUrl && urlsMatch(galleryUrl, pageUrl) ? fallbackGalleryUrl : galleryUrl;
             lightboxHistoryActive = true;
         }
         if (pageUrl && window.history && window.history.replaceState) {
             window.history.replaceState({lightbox: true}, '', pageUrl);
+            syncPublicHeaderRoute();
         }
         // previewSrc stores the lightweight thumbnail source used for nearby previews and fallback loading.
         const previewSrc = card.dataset.previewSrc || '';
@@ -4682,6 +4784,7 @@ export function setupGalleryLightbox() {
         }
         preloadAdjacentImages(normalizedIndex);
         overlay.hidden = false;
+        openPublicModal(overlay, card);
         document.documentElement.classList.add('has-lightbox');
         document.body.classList.add('has-lightbox');
         if (isMobileTouchDevice && !isLightboxFullscreen()) {
@@ -4714,6 +4817,7 @@ export function setupGalleryLightbox() {
      * Synchronize toolbar and fullscreen map controls with the current item.
      *
      * @param {string} mapPoint Serialized EXIF marker payload for the active photo.
+     * @returns {void} Hides and disables every unavailable map action.
      */
     function syncLightboxMapControls(mapPoint) {
         const hasMapPoint = String(mapPoint || '').trim() !== '';
@@ -4722,7 +4826,10 @@ export function setupGalleryLightbox() {
             if (!(button instanceof HTMLElement)) {
                 return;
             }
-            button.hidden = !(hasMapPoint || hasMapFallback);
+            const available = hasMapPoint || hasMapFallback;
+            button.hidden = !available;
+            button.disabled = !available;
+            button.setAttribute('aria-disabled', available ? 'false' : 'true');
             button.dataset.mapPoint = hasMapPoint ? mapPoint : '';
         });
     }
@@ -5169,6 +5276,7 @@ export function setupGalleryLightbox() {
         updateLightboxViewportMode();
         hideInitialLightboxLoader();
         overlay.hidden = true;
+        closePublicModal(overlay);
         clearPendingLightboxQualityUpgrade();
         removeTransitionImage();
         image.removeAttribute('src');
@@ -5187,6 +5295,7 @@ export function setupGalleryLightbox() {
         document.body.classList.remove('has-lightbox');
         if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {
             window.history.replaceState({}, '', lightboxReturnUrl);
+            syncPublicHeaderRoute();
         }
         lightboxHistoryActive = false;
         if (lightboxBenchmarkDiagnosticsEnabled) {
@@ -5594,6 +5703,8 @@ export function setupGalleryLightbox() {
     }
 
     overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
+    overlay.addEventListener('publicModalKeyboardNavigation', showLightboxHud,
+        {signal: controller.signal});
     overlay.addEventListener('pointermove', showLightboxHudFromPointerMove, {signal: controller.signal});
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud, {signal: controller.signal});
     if (lightboxSlideshowSpeedControls instanceof HTMLElement) {
@@ -5645,7 +5756,7 @@ export function setupGalleryLightbox() {
     window.visualViewport?.addEventListener('scroll', updateMobileLightboxViewport, {signal: controller.signal});
 
     document.addEventListener('keydown', (event) => {
-        if (overlay.hidden) {
+        if (overlay.hidden || document.body.classList.contains('has-map-overlay')) {
             return;
         }
         if (lightboxPresentationIntro) {
@@ -5674,6 +5785,17 @@ export function setupGalleryLightbox() {
             return;
         }
         if (event.key === 'Escape') {
+            event.preventDefault();
+            if (lightboxHelpPanel && !lightboxHelpPanel.hidden) {
+                hideLightboxHelpPanel();
+                overlay.querySelector('[data-lightbox-action="help"]')?.focus();
+                return;
+            }
+            if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+                closeLightboxMapSplit();
+                lightboxMapButtons.find((button) => !button.hidden)?.focus();
+                return;
+            }
             if (isLightboxFullscreen()) {
                 event.preventDefault();
                 exitLightboxFullscreen();
@@ -6736,8 +6858,9 @@ export function setupGalleryLightbox() {
         /**
      * Persist the current user-chosen Leaflet viewport in runtime memory.
      *
-     * @param {*} map Leaflet map instance.
+     * @param {L.Map} map Leaflet map instance.
      * @param {string} viewKey Runtime viewport key.
+     * @returns {void} Saves this map's current center and zoom in memory.
      */
     function saveMapViewport(map, viewKey) {
         if (!isUsableLeafletMap(map) || map.galleryViewportSuppressSave) {
@@ -7014,13 +7137,11 @@ export function setupGalleryLightbox() {
 
     // Function `openMapOverlay` executes this focused behavior.
     /**
-     * Open map overlay.
-     *
-     * Used by browser-side gallery behavior.
-     *
-     * @param {*} title Title value.
-     * @param {*} points Points value.
-     * @param {object} mapPayload Map payload value.
+     * Open the existing modal map and assign it the topmost focus layer.
+     * @param {string} title Localized map title.
+     * @param {GalleryMapPoint[]} points Authorized marker payloads.
+     * @param {GalleryMapPayload} mapPayload Route geometry and source metadata.
+     * @returns {Promise<void>} Renders the map, or leaves an empty map closed.
      */
     async function openMapOverlay(title, points, mapPayload = {}) {
         if (!Array.isArray(points) || points.length === 0) {
@@ -7038,6 +7159,8 @@ export function setupGalleryLightbox() {
         }
         bindMapOverlayClose(overlay);
         overlay.hidden = false;
+        overlay.setAttribute('aria-label', String(title));
+        openPublicModal(overlay);
         document.body.classList.add('has-map-overlay');
         overlay.querySelector('[data-map-title]').textContent = title;
 
@@ -7143,10 +7266,10 @@ export function setupGalleryLightbox() {
         /**
      * Render markers and optional flight route geometry into an existing map.
      *
-     * @param {*} map Leaflet map instance.
-     * @param {Array} points Already normalized marker points.
-     * @param {*} mapPayload Normalized map metadata.
-     * @return {Array} Leaflet bounds input collected from valid route points.
+     * @param {L.Map} map Leaflet map instance.
+     * @param {GalleryMapPoint[]} points Already normalized marker points.
+     * @param {GalleryMapPayload} mapPayload Normalized map metadata.
+     * @return {Array<[number,number]>} Bounds collected from valid route points.
      */
     function renderLeafletMapPayload(map, points, mapPayload = {}) {
         const normalizedPoints = normalizeMapPoints(points);
@@ -7164,10 +7287,24 @@ export function setupGalleryLightbox() {
                 weight: 4,
             }).addTo(map);
         }
-        normalizedPoints.forEach((point) => {
+        normalizedPoints.forEach((point, index) => {
             const markerRole = mapPointMarkerRole(point);
+            const roleKey = {
+                'route-start': 'lightbox.map_route_start',
+                'route-end': 'lightbox.map_route_end',
+                'route-via': 'lightbox.map_waypoint',
+                route: 'lightbox.map_waypoint',
+                photo: 'lightbox.photo_location',
+                'active-photo': 'lightbox.photo_location',
+            }[markerRole];
+            const purpose = i18n(roleKey, 'Map point');
+            const detail = String(point.title || point.name || index + 1);
+            const markerLabel = `${purpose}: ${detail}`;
             const marker = L.marker([point.lat, point.lng], {
                 icon: getGalleryMapMarkerIcon(point),
+                title: markerLabel,
+                alt: markerLabel,
+                keyboard: true,
                 pane: 'markerPane',
                 zIndexOffset: markerRole === 'active-photo' ? 1200 : (markerRole === 'photo' ? 500 : (markerRole === 'route-via' ? 50 : 100)),
             }).addTo(map);
@@ -7298,6 +7435,7 @@ export function setupGalleryLightbox() {
         /**
      * Closes the persistent map overlay without changing the current photo viewer.
      * @param {boolean} cancelPhotoNavigation False only for dismissal by the owning popup selection.
+     * @returns {void} Dismisses the map and restores focus to its opener.
      */
     function closeMapOverlay(cancelPhotoNavigation = true) {
         if (cancelPhotoNavigation) {
@@ -7307,6 +7445,7 @@ export function setupGalleryLightbox() {
         const mapOverlay = document.querySelector('[data-map-overlay]');
         if (mapOverlay instanceof HTMLElement) {
             mapOverlay.hidden = true;
+            closePublicModal(mapOverlay);
         }
         document.body.classList.remove('has-map-overlay');
     }

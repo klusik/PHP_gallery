@@ -322,3 +322,50 @@ function gallery_description_markdown_html(string $markdown): string
     }
     return implode('', $html);
 }
+
+/**
+ * Project supported rich description markup into safe, readable plain text.
+ *
+ * Link labels survive Markdown/BBCode projection. HTML remains text-only;
+ * consumers still escape the returned value for their presentation context.
+ *
+ * @param string $markdown Authored description containing optional rich markup.
+ * @return string Plain description text with paragraph and inline boundaries.
+ */
+function gallery_description_plain_text(string $markdown): string
+{
+    $text = preg_replace('/<\/?(?:p|div|br|li|h[1-6])\b[^>]*>/iu', ' ', $markdown)
+        ?? $markdown;
+    // Decode authored entities once, after removing raw HTML. Encoded literal
+    // markup stays text and is escaped again by the existing renderer below.
+    $text = html_entity_decode(
+        strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8',
+    );
+    $text = preg_replace('/\[(url|link)=[^\]\r\n]+\]([^\[]*)\[\/\1\]/iu', '$2', $text)
+        ?? $text;
+    $text = preg_replace('/\[(url|link)\]([^\[]*)\[\/\1\]/iu', '$2', $text)
+        ?? $text;
+    $text = preg_replace('/!?\[([^\]\n]+)\]\([^\)\n]+\)/u', '$1', $text)
+        ?? $text;
+    $tokens = [];
+    // Protect code and literal URLs before emphasis processing. The control
+    // delimiter is removed from authored input so it cannot impersonate a token.
+    $text = str_replace("\x1F", '', $text);
+    $text = preg_replace_callback(
+        '/`([^`\n]+)`|https?:\/\/[^\s<>]+/u',
+        static function (array $matches) use (&$tokens): string {
+            $token = "\x1F" . count($tokens) . "\x1F";
+            $tokens[$token] = (string) (
+                ($matches[1] ?? '') !== '' ? $matches[1] : $matches[0]
+            );
+            return $token;
+        },
+        $text,
+    ) ?? $text;
+    // Reuse the description owner's supported emphasis/code syntax. Separators
+    // replace generated block tags before entity decoding, keeping literals safe.
+    $html = gallery_description_markdown_html($text);
+    $html = str_replace(['</p>', '<br>'], ' ', $html);
+    $plain = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    return trim(strtr($plain, $tokens));
+}

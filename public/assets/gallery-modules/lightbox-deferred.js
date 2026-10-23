@@ -33,6 +33,7 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261023-public-modal-v3';
 import {galleryPresentationOptions} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
 import {
     stopGalleryMusicViewer,
@@ -125,6 +126,7 @@ function deferredLightboxIndex(target) {
  * Show a small initial progress indicator while the real lightbox module loads.
  *
  * @param {Element|null} target Clicked activation target.
+ * @returns {void} Shows the modal loader and gives it keyboard ownership.
  */
 function showDeferredLightboxLoader(target) {
     if (!(target instanceof HTMLElement) || !target.matches('[data-lightbox-image], [data-lightbox-source]')) {
@@ -147,6 +149,7 @@ function showDeferredLightboxLoader(target) {
     loader.setAttribute('aria-busy', 'true');
     overlay.classList.add('is-initial-loading');
     overlay.hidden = false;
+    openPublicModal(overlay, target);
     document.body.classList.add('has-lightbox');
     if (loaderFill instanceof HTMLElement) {
         const progress = total > 0 ? Math.max(8, Math.min(35, ((index + 1) / total) * 100)) : 12;
@@ -166,6 +169,7 @@ function showDeferredLightboxLoader(target) {
 
 /**
  * Hide the bootstrap progress indicator if full viewer activation fails.
+ * @returns {void} Releases the loader's focus and background isolation.
  */
 function hideDeferredLightboxLoader() {
     const overlay = document.querySelector('[data-lightbox]');
@@ -179,6 +183,7 @@ function hideDeferredLightboxLoader() {
     }
     overlay.classList.remove('is-initial-loading');
     overlay.hidden = true;
+    closePublicModal(overlay);
     document.body.classList.remove('has-lightbox');
 }
 

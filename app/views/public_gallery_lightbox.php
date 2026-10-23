@@ -367,7 +367,9 @@ function view_render_lightbox(array $viewModel): void
         );
 
     echo
-        '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="'
+        '<div class="lightbox" role="dialog" aria-label="'
+            . e(t('lightbox.viewer_label', 'Photo viewer'))
+            . '" data-lightbox data-lightbox-browsing-mode="'
             . e($lightboxBrowsingMode)
             . '" data-lightbox-maps-enabled="'
             . ($mapsAllowed ? '1' : '0')
@@ -381,7 +383,7 @@ function view_render_lightbox(array $viewModel): void
             . '" hidden>';
     // Activation needs an explicit action even when the link hides its HUD.
     echo
-        '<section class="presentation-consent" data-presentation-consent'
+        '<section class="presentation-consent" data-presentation-consent data-modal-focus-scope'
             . ' role="group" aria-labelledby="presentation-consent-title" hidden>'
             . '<h2 id="presentation-consent-title">'
             . e(t('presentation.confirm_start', 'Start presentation'))

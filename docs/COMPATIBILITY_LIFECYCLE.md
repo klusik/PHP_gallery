@@ -1,5 +1,31 @@
 # Compatibility lifecycle and retirement register
 
+## Public viewer focus, compact geometry and text projection
+
+Owners: the existing public lightbox/map controller, shared public modal
+lifecycle, public CSS, description projection and translation services.
+The modal stack isolates covered content while preserving its exact prior inert
+state, restores openers and gives Escape to the topmost map before the viewer.
+Native dialogs retain browser-owned focus. Late work cannot acquire focus in
+an unloaded document. Compact mouse/keyboard layouts and actual touch-device
+layouts remain supported through the same viewer; no gesture pipeline or media
+authorization route is replaced. No-JavaScript links and pagination remain
+permanent support.
+
+Public text projection retains authored captions and titles. Filename-derived
+alt names use a localized gallery/photo-number fallback without changing stored
+metadata or configured visible filenames. Description snippets retain link labels
+and code text while removing rich-text syntax; result rendering still escapes
+them. EN/CS/DE/SV cardinal forms use the existing translation helper; catalogs
+opt in with cardinal keys while keys without variants retain their base text.
+
+Floating widgets retain configured coordinates and their established in-flow
+fallback when primary previews or controls leave no safe space. Theme selection,
+typography and backgrounds are preserved; component text uses their foreground
+and panel tokens. Real-phone, screen-reader and non-Chromium evidence remains
+unknown until the corresponding manual checks are performed. Automated browser
+gestures establish deterministic event routing, not physical-device acceptance.
+
 ## Visitor scheduler and optional hosting transport
 
 Owner: `request_scheduler.php` with the existing task services and private

@@ -79,7 +79,7 @@ const PHOTO_CARD_TAG_PREVIEW_LIMIT = 3;
 /**
  * Public tag-filter page listing galleries associated with a tag.
  *
- * @return void
+ * @return void Renders the responsive tagged-gallery listing or not-found page.
  */
 function cms_tag(): void
 {

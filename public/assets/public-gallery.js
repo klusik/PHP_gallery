@@ -30,12 +30,12 @@
  *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261022-initial-loader-open-guard-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261023-public-modal-v3';
 
 const optionalPublicModules = {
     quickPhotoTags: './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5',
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
-    backToTop: './gallery-modules/back-to-top.js?v=20261014-floating-scroll-v1',
+    backToTop: './gallery-modules/back-to-top.js?v=20261023-compact-scroll-v2',
     publicHomeSearch: './gallery-modules/public-home-search.js?v=20261022-search-keyboard-v2',
     responsiveThumbnails: './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1',
     progressiveThumbnailRenderer: './gallery-modules/progressive-thumbnail-renderer.js?v=20260824-aspect-aware-thumbnail-selection',
@@ -45,7 +45,7 @@ const optionalPublicModules = {
     viewerFavourites: './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1',
     galleryDownload: './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1',
     ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-keyboard-repeat',
-    publicContentWidgets: './gallery-modules/public-content-widgets.js?v=20261011-widget-size-observer-v1',
+    publicContentWidgets: './gallery-modules/public-content-widgets.js?v=20261023-discovery-clearance-v1',
     music: './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1',
     mediaPanels: './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1',
 };

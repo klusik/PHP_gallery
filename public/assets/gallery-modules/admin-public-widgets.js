@@ -16,7 +16,7 @@ import {
     readPublicWidgetFloatingGeometry,
     publicWidgetRectConflicts,
     resolvePublicWidgetFloatingRect,
-} from './public-content-widgets.js?v=20261011-widget-size-observer-v1';
+} from './public-content-widgets.js?v=20261023-discovery-clearance-v1';
 
 /**
  * Replace only the selected Markdown text with an intentionally simple formatting token.

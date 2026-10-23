@@ -22,6 +22,55 @@
    lightbox and gallery rules do not need compact-screen exceptions. */
 
 @media (max-width: 760px), (pointer: coarse) {
+    /* Narrow mouse/keyboard viewports need fitting too; touch detection remains
+       owned by the existing gesture controller and its fullscreen shell. */
+    .lightbox {
+        /* Type: number. Units: rem. Scope: compact normal viewer.
+           Consumers: normal stage fitting. Rationale: 1 reserves two 8px edges
+           at the default font size; overlay arrows need no separate columns. */
+        --lightbox-inline-reserve: 1;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "stage";
+        padding: 4rem 0.5rem 1rem;
+        gap: 0;
+        overflow: auto;
+    }
+
+    .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-nav {
+        position: absolute;
+        top: 50%;
+        z-index: 6;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0;
+    }
+
+    .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-previous {
+        left: 0.5rem;
+    }
+
+    .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-next {
+        right: 0.5rem;
+    }
+
+    .lightbox:not(.is-mobile-device):not(.is-mobile-fullscreen)
+        .lightbox-mobile-counter {
+        /* The normal toolbar already owns this count. Only the touch shell
+           needs a floating copy, so keyboard viewports reserve no HUD slot. */
+        display: none;
+    }
+
+    .lightbox .lightbox-toolbar {
+        flex-wrap: wrap;
+        justify-content: center;
+        min-width: 0;
+    }
+
+    .lightbox .lightbox-meta {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
     .public-page .gallery-list-frame {
         margin-inline: calc(clamp(0.75rem, 3vw, 1rem) * -0.35);
     }
@@ -32,6 +81,7 @@
     }
 
     .public-page .public-home-gallery-grid,
+    .public-page .public-tag-gallery-grid,
     .public-page [data-public-subgallery-grid] {
         grid-template-columns: 1fr !important;
         gap: 0.85rem;

@@ -200,9 +200,17 @@ Author: Rudolf Klusal
             check(map.lines.length === 1 && JSON.stringify(map.lines[0]) === JSON.stringify(routeCoordinates), 'zero-photo gallery must render its complete route');
             check(JSON.stringify(map.bounds) === JSON.stringify(routeCoordinates), 'zero-photo map must fit all route coordinates');
             check(map.markers.length === 3 && map.markers.every(marker => !marker.options.icon.className.endsWith('--photo')), 'route points must not become synthetic photo markers');
+            check(map.markers.every(marker => marker.options.title
+                && marker.options.alt === marker.options.title
+                && marker.options.keyboard === true),
+                'every interactive route marker needs a stable accessible name');
+            check(mapOverlay.getAttribute('role') === 'dialog'
+                && mapOverlay.contains(document.activeElement),
+                'standalone map must own modal semantics and focus');
             const reset = mapOverlay.querySelector('button[title="Reset map zoom"]');
             check(reset, 'route-only map must have working viewport controls'); reset.click();
-            mapOverlay.querySelector('[data-map-close]').click();
+            document.dispatchEvent(new KeyboardEvent('keydown',
+                {key:'Escape',bubbles:true,cancelable:true}));
             check(mapOverlay.hidden, 'route-only map close must work without a photo viewer');
             const reopenedMap = await openRecordedMap();
             check(map._mapPane === null, 'reopening must dispose the previous map');

@@ -33,6 +33,17 @@
  */
 
 return [
+    'lightbox.map_route_start' => 'Ruttstart',
+    'lightbox.map_route_end' => 'Destination',
+    'lightbox.map_waypoint' => 'Ruttpunkt',
+    'public.image_numbered' => '{gallery} — foto {number}',
+    'public.tag.gallery_count.one' => '{count} galleri',
+    'public.tag.gallery_count.few' => '{count} gallerier',
+    'gallery.card.pdf_file_count.one' => '{count} unik PDF-fil i detta galleri och undergallerier',
+    'gallery.card.pdf_file_count.few' => '{count} unika PDF-filer i detta galleri och undergallerier',
+    'gallery.card.music_file_count.one' => '{count} unik musikfil i detta galleri och undergallerier',
+    'gallery.card.music_file_count.few' => '{count} unika musikfiler i detta galleri och undergallerier',
+    'lightbox.viewer_label' => 'Fotovisare',
     'publication.listing_help' => 'Publicering återställer offentlig listning, precis som manuell publicering.',
     'publication.local_help' => 'Tiden använder webbläsarens tidszon ovan; motsvarande UTC-tid visas under fältet. Lämna tomt eller välj Publicerad för att avbryta. Publicering sker vid nästa lämpliga PHP-sidbesök. Åtkomstbegränsningar bevaras.',
     'publication.local_invalid' => 'Ange ett giltigt lokalt datum och klockslag. Tiden kanske inte finns på grund av sommartidsbytet.',

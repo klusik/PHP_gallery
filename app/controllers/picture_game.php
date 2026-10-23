@@ -39,6 +39,7 @@ namespace Gallery\Controllers;
 use RuntimeException;
 use Gallery\Services\PresentationSchemaUnavailableException;
 use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_alt_text;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -176,7 +177,18 @@ function cms_picture_game(): void
     }
 
     ob_start();
-    render_breadcrumbs($gallery);
+    $breadcrumbs = public_gallery_breadcrumbs_view_model($gallery);
+    $last = array_key_last($breadcrumbs['items']);
+    if ($last !== null) {
+        $breadcrumbs['items'][$last]['url'] = gallery_public_url($gallery);
+        $breadcrumbs['items'][$last]['current'] = false;
+    }
+    $breadcrumbs['items'][] = [
+        'label' => t('picture_game.title'),
+        'url' => null,
+        'current' => true,
+    ];
+    \Gallery\Views\view_render_public_gallery_breadcrumbs($breadcrumbs);
     $breadcrumbsHtml = (string) ob_get_clean();
 
     $viewModel = [
@@ -225,7 +237,7 @@ function cms_picture_game(): void
 /**
  * Prepare one selectable picture-game choice.
  *
- * @param array{id?:int|string,title?:string,filename?:string,gallery_show_filenames?:int|string,gallery_title?:string} $image Image row fields used to build the choice.
+ * @param array{id?:int|string,title?:string,description?:string|null,filename?:string,gallery_show_filenames?:int|string,gallery_title?:string} $image Image row fields used to build the choice.
  * @param string $side Side value.
  * @return array{id:int,side:string,label:string,src:string,srcset:string,alt:string,display_title:string,gallery_title:string} Prepared image-choice model for the view.
  */
@@ -242,14 +254,14 @@ function picture_game_choice_view_model(array $image, string $side): array
     // Variable $displayTitle stores this steps working value.
     $displayTitle = public_image_display_title($image, $imageGallery);
     // Variable $altText stores this steps working value.
-    $altText = $displayTitle !== ''
-        ? $displayTitle
-        : t('picture_game.picture_alt');
+    $altText = image_alt_text($image, [
+        'title' => (string) ($image['gallery_title'] ?? ''),
+    ], $side === 'left' ? 1 : 2);
 
     return [
         'id' => (int) ($image['id'] ?? 0),
         'side' => $side,
-        'label' => $label,
+        'label' => $label . ': ' . $altText,
         'src' => thumbnail_url($image, 300),
         'srcset' => thumbnail_srcset($image, [300, 600, 800]),
         'alt' => $altText,

@@ -467,7 +467,7 @@ function view_render_header(
         $adminLoginLabel = t('nav.admin_login', 'Admin login');
         if ($bodyClass === 'public-page') {
             echo
-                '<a class="public-header-action" title="'
+                '<a class="public-header-action" data-public-login-return title="'
                     . e($adminLoginLabel)
                     . '" href="'
                     . e(url_for('admin_login', $adminLoginParams))
@@ -1075,7 +1075,17 @@ function view_render_browser_i18n_script(string $assetUrl): void
  * Used by server-rendered view helpers.
  *
  * @param string $page Current page key.
- * @param array<string,mixed> $model Controller-prepared footer data.
+ * @param array{has_admin_shell?:bool,is_admin_page?:bool,
+ *     user?:array{id?:int|string,username?:string,email?:string|null}|null,
+ *     anonymous_preview?:bool,public_widget_footer_html?:string,
+ *     github_project_url?:string,browser_i18n_asset_url?:string,
+ *     admin_test_run_panel?:array{active?:bool,active_token?:string,
+ *         current_request_id?:string,starter_request_id?:string,
+ *         finish_url?:string,finalize_url?:string,probe_url?:string,
+ *         static_probe_url?:string,csrf_token?:string,latest_download_url?:string,
+ *         latest?:array{finalized_at?:string,request_count?:int,
+ *             peak_concurrency?:int,all_closed?:bool}|null}|null} $model
+ *     Prepared shell, optional diagnostic panel and revisioned public assets.
  * @return void Render the footer.
  */
 function view_render_footer(string $page = 'home', array $model = []): void
@@ -1122,6 +1132,8 @@ function view_render_footer(string $page = 'home', array $model = []): void
                 . '/public/assets/gallery-modules/lightbox-deferred.js',
             dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox.js',
             dirname(__DIR__, 2)
+                . '/public/assets/gallery-modules/public-modal-lifecycle.js',
+            dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/lightbox-navigation-lifecycle.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/lightbox-resource-lifecycle.js',
@@ -1167,6 +1179,8 @@ function view_render_footer(string $page = 'home', array $model = []): void
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/public-thumbnail-render-diagnostics.js',
             dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox.js',
+            dirname(__DIR__, 2)
+                . '/public/assets/gallery-modules/public-modal-lifecycle.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/lightbox-navigation-lifecycle.js',
             dirname(__DIR__, 2)

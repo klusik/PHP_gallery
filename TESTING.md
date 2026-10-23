@@ -3717,6 +3717,25 @@ checks are optional reproduction steps only.
 Manual browser coverage remains required because the repository has no
 production browser-automation dependency:
 
+The registered `public_ux_browser_test.mjs` adds isolated 320/390px and rotated
+landscape checks with production CSS. It covers tag-card width, modal focus
+entry/wrap/return, background isolation, reparented editor focus, unavailable maps,
+header route context, one-finger swipe and two-finger pinch/pan handoff.
+The map browser fixture also
+checks marker names and standalone-map Escape. The PHP
+`public_ux_presentation_test.php` exercises rich-text snippets, all four
+languages' count forms and authored/numbered photo-name precedence. These
+fixtures do not replace a physical phone or assistive-technology session.
+
+Also open a photo from a direct link and from a paginated album at 320/390px.
+Check that the stage and captions fit, and that the counter never covers F/S/M.
+Open its map, Tab around it and press Escape: only the map closes and focus
+returns to its action. Closing the lightbox returns to its photo opener. Switch
+language after closing a direct photo; the album must stay visible. Check dark
+Theme search, tags, media tables and map text over the actual image background.
+Review floating widgets with both populated and empty preview areas: the saved
+placement may float only when the existing solver finds clear space.
+
 1. In current Chromium/Edge, Firefox, and Safari/WebKit where available, open a
    normal gallery photo and use `+`, `−`,
    percentage reset, `+`/`=`, `-`/`_`, `0`, wheel/trackpad, drag, and pinch.

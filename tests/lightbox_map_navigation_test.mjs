@@ -28,6 +28,15 @@ import {execFileSync} from 'node:child_process';
 import vm from 'node:vm';
 import {createLightboxNavigationLifecycle} from '../public/assets/gallery-modules/lightbox-navigation-lifecycle.js';
 
+/**
+ * Controlled metadata request and the exact response shape delivered below.
+ * @typedef {Object} MapFixtureRequest
+ * @property {string} url Production metadata endpoint URL.
+ * @property {RequestInit} options Fetch options, including its cancellation signal.
+ * @property {function({ok:boolean,json:function():Promise<{target_index:number,items:Array<{id:number,index:number,gallery_id:number}>}>}):void} resolve Deliver a successful target response.
+ * @property {function(Error):void} reject Deliver a failed or cancelled request.
+ */
+
 const source = process.argv.includes('--baseline')
     ? execFileSync('git', ['show', 'HEAD:public/assets/gallery-modules/lightbox.js'], {encoding: 'utf8'})
     : readFileSync(new URL('../public/assets/gallery-modules/lightbox.js', import.meta.url), 'utf8');
@@ -59,7 +68,18 @@ async function settle() {
 /**
  * Build an isolated live-viewer fixture around the production navigation owner and functions.
  *
- * @return {Record<string, unknown>} Fixture controls, observations, and production closure context.
+ * @return {{context:vm.Context,
+ * pending:MapFixtureRequest[],
+ * opened:Array<{index:number,options:{revealHud?:boolean,
+ * forceImmediateSwap?:boolean,preserveMapSplit?:boolean,
+ * mapPhotoNavigation?:AbortController,telemetryTrigger?:string}}>,
+ * navigated:string[],overlay:Element,split:Element,mapOverlay:Element,
+ * select:function(number,number=):void,flush:function():Promise<void>,
+ * load:function(number,number):void,
+ * respond:function(MapFixtureRequest,number,number):Promise<void>,
+ * close:function():void}} Controls and observations for the production closure;
+ * select/load receive photo identity and gallery identity/index respectively,
+ * respond receives a pending request plus its returned identity and index.
  */
 function fixture() {
     const visible = new Element({imageId: '1', galleryId: '7', lightboxIndex: '0'});
@@ -85,6 +105,8 @@ function fixture() {
         lightboxEndpoint: '/index.php?page=gallery_lightbox_data&id=7', lightboxTotal: 200, lightboxWindowSize: 60,
         lightboxOrderRefreshGeneration: 0,
         overlay, lightboxMapSplit: split, lightboxMapSplitCanvas: null, fullscreen: false,
+        // Modal focus has real-browser coverage; this adapter owns navigation only.
+        closePublicModal: () => {},
         clearLightboxSplitMapRuntime() {}, clearFullscreenMapImageFit() {}, scheduleLightboxZoomReclamp() {},
         /**
          * Accept active-photo counter updates without rendering presentation markup.

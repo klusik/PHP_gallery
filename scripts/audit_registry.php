@@ -478,6 +478,9 @@ $registry = [
             'browser' => true,
             'timeout' => 60,
         ],
+        'public_ux_browser_test.mjs' => [
+            'browser' => true,
+        ],
         'simbrief_ofp_lightbox_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,
