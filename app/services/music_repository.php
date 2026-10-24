@@ -287,10 +287,50 @@ function music_repository_asset_path(array $asset): ?string
     return $path;
 }
 
+/** Resolve a song for an already-authorized administrator's read-only preview.
+ * No promotion, copy, assignment or catalog reconciliation occurs here.
+ * @param int $songId Positive canonical catalog song identity.
+ * @return array{path:string,track:array{filename:string,mime:string,size:int}}|null
+ *     Verified original metadata, or null when no readable original exists.
+ * @throws \RuntimeException When the repository schema cannot be verified.
+ */
+function music_repository_preview_song(int $songId): ?array
+{
+    if ($songId < 1) {
+        return null;
+    }
+    music_repository_assert_schema_ready('music_repository.preview_song');
+    foreach (\Gallery\Models\music_repository_model_assets_for_song($songId) as $asset) {
+        $path = music_repository_asset_path($asset);
+        if ($path !== null) {
+            return [
+                'path' => $path,
+                'track' => [
+                    'filename' => $asset['filename'],
+                    'mime' => $asset['mime'],
+                    'size' => (int) $asset['byte_size'],
+                ],
+            ];
+        }
+    }
+    foreach (\Gallery\Models\music_repository_model_song_sources($songId) as $source) {
+        $document = gallery_music_track([
+            'id' => (int) $source['gallery_id'],
+            'folder_path' => (string) $source['folder_path'],
+        ], (string) $source['track_id']);
+        if ($document !== null) {
+            return $document;
+        }
+    }
+    return null;
+}
+
 /** Promote a song from a verified existing repository asset or legacy source.
  * @param int $songId Existing logical song identity.
  * @return array{id:string,song_id:int,filename:string,indexed_title:string,mime:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null} Usable central asset metadata.
- * @throws \RuntimeException When no verified central or physical source is available.
+ * @throws \RuntimeException With music.source_reconcile_required when a dirty
+ *     legacy snapshot withholds a candidate, or music.original_unavailable
+ *     when no verified central or physical original is readable.
  */
 function music_repository_prepare_song(int $songId): array
 {
@@ -355,5 +395,8 @@ function music_repository_prepare_song(int $songId): array
             gallery_music_release_lock($lock);
         }
     }
-    throw new \RuntimeException('No verified original is available for this song.');
+    if (\Gallery\Models\music_repository_model_song_has_dirty_sources($songId)) {
+        throw new \RuntimeException('music.source_reconcile_required');
+    }
+    throw new \RuntimeException('music.original_unavailable');
 }

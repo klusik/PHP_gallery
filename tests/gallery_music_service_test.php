@@ -12,6 +12,22 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /** Provide an anonymous actor to the isolated production log writer.
+     * @return null This fixture never impersonates an administrator.
+     */
+    function current_user(): ?array
+    {
+        return null;
+    }
+
+    /** Keep log timestamps deterministic in the isolated writer fixture.
+     * @return string Fixed SQL-format fixture timestamp.
+     */
+    function now_sql(): string
+    {
+        return '2026-10-24 00:00:00';
+    }
+
     /**
      * Return the isolated database used for catalog schema preflight.
      * @return \PDO SQLite connection with an attached empty information schema.
@@ -71,6 +87,43 @@ namespace Gallery\Core {
     }
 }
 
+namespace Gallery\Models {
+    /** Select available or unavailable Admin-log storage for failure coverage.
+     * @return bool Whether the fixture admits an Admin-log insert.
+     */
+    function admin_log_model_schema_ready(): bool
+    {
+        return empty($GLOBALS['music_log_unavailable']);
+    }
+
+    /** Capture the production log service's sanitized persistence boundary.
+     * @param array{user_id:?int,level:string,category:string,severity:string,
+     *     event_key:string,message:string,subject_type:?string,subject_id:?int,
+     *     request_id:string,route_name:string,context_json:?string,
+     *     created_at:string} $values Prepared Admin log fields.
+     * @param array{failure_code?:string,exception_class?:string,sqlstate?:string,
+     *     driver_code?:int,field?:string}|null $diagnostic Optional receipt.
+     * @return bool True after capture, false when the persisted field is too long.
+     */
+    function admin_log_model_insert_available(
+        array $values,
+        ?array &$diagnostic = null,
+    ): bool {
+        $diagnostic = [];
+        // VARCHAR(26) is the installed request_id wire constraint, not a
+        // tunable fixture budget. Exercise the real writer's refusal boundary.
+        if (strlen($values['request_id']) > 26) {
+            $diagnostic = [
+                'failure_code' => 'log_insert_exception',
+                'field' => 'request_id',
+            ];
+            return false;
+        }
+        $GLOBALS['music_log_records'][] = $values;
+        return true;
+    }
+}
+
 namespace Gallery\Services {
     /**
      * Keep source discovery subordinate to canonical public listing policy.
@@ -118,10 +171,20 @@ namespace Gallery\Services {
     /**
      * Preserve translation identities in service refusal assertions.
      * @param string $key Translation key.
-     * @return string The original translation key.
+     * @param string|array<string,string|int>|null $fallback Optional unused
+     *     fallback or legacy parameter map from production callers.
+     * @param array<string,string|int> $parameters Safe response placeholders.
+     * @return string The original translation key, or the interpolated reference.
      */
-    function t(string $key): string
+    function t(
+        string $key,
+        string|array|null $fallback = null,
+        array $parameters = [],
+    ): string
     {
+        if ($key === 'music.failure_reference') {
+            return 'Reference: ' . ($parameters['reference'] ?? '') . '.';
+        }
         return $key;
     }
 }
@@ -1034,6 +1097,60 @@ namespace {
                 . ' source delivery, mount path and anonymous-preview policy.',
         );
         $GLOBALS['music_anonymous_preview'] = false;
+        $failure = \Gallery\Controllers\admin_gallery_music_failure(
+            101, 'add_song', 'mutation', 901,
+            new \RuntimeException('music.original_unavailable'),
+        );
+        $logged = $GLOBALS['music_log_records'][0];
+        $context = json_decode($logged['context_json'], true, flags: JSON_THROW_ON_ERROR);
+        music_assert(
+            $failure['reason'] === 'original_unavailable'
+                && $logged['event_key'] === 'gallery.music.operation_failed'
+                && $logged['category'] === 'media'
+                && $logged['subject_id'] === 101
+                && $logged['request_id'] === $failure['reference']
+                && preg_match('/^[a-f0-9]{24}$/D', $failure['reference']) === 1
+                && $context['selection_id'] === 901
+                && $context['stage'] === 'mutation'
+                && $context['persisted'] === false,
+            'A failed catalog add must produce an Admin event with matching response reference and source identity.',
+        );
+        $sensitive = 'secret-password /private/music/source.bin SELECT token FROM credentials';
+        // 23000 is the SQLSTATE integrity-constraint class used as a safe vector.
+        $databaseError = new \PDOException($sensitive, 23000);
+        $databaseFailure = \Gallery\Controllers\admin_gallery_music_failure(
+            101, $sensitive, $sensitive, 901,
+            new \RuntimeException($sensitive, 0, $databaseError), true,
+        );
+        $safeLog = json_encode($GLOBALS['music_log_records'][1], JSON_THROW_ON_ERROR);
+        music_assert(
+            $databaseFailure['reason'] === 'database_error'
+                && str_starts_with($databaseFailure['message'], 'music.refresh_failed')
+                && !str_contains($safeLog, $sensitive)
+                && !str_contains($safeLog, 'secret-password')
+                && str_contains($safeLog, '23000')
+                && str_contains($safeLog, 'unknown'),
+            'Wrapped persistence failures must retain safe causes and committed state without messages, paths or SQL.',
+        );
+        $previousErrorLog = ini_get('error_log');
+        ini_set('error_log', $root . '/music-errors.log');
+        $GLOBALS['music_log_unavailable'] = true;
+        try {
+            $fallbackFailure = \Gallery\Controllers\admin_gallery_music_failure(
+                101, 'add_song', 'mutation', 901,
+                new \RuntimeException($sensitive),
+            );
+            $fallbackLog = file_get_contents($root . '/music-errors.log');
+            music_assert(
+                str_contains($fallbackLog, $fallbackFailure['reference'])
+                    && str_contains($fallbackLog, 'gallery.music.operation_failed')
+                    && !str_contains($fallbackLog, 'secret-password'),
+                'Unavailable Admin log storage must preserve the refusal and emit its safe PHP-log reference.',
+            );
+        } finally {
+            ini_set('error_log', $previousErrorLog);
+            $GLOBALS['music_log_unavailable'] = false;
+        }
         music_assert(
             \Gallery\Controllers\gallery_music_view_model($b)['tracks']
                 === [],

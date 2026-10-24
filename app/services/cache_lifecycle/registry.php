@@ -313,8 +313,14 @@ function cache_lifecycle_registry_slice(
         ));
         if (empty($retired['ok']))
             return $retired;
-        if ($row['kind'] === 'discovery')
-            return cache_lifecycle_registry_discover($seconds);
+        if ($row['kind'] === 'discovery') {
+            // Discovery is one region, not completion of the whole registry.
+            // Return its identity so bounded callers can continue it fairly.
+            return [
+                'registry' => true,
+                'region_key' => $row['region_key'],
+            ] + cache_lifecycle_registry_discover($seconds);
+        }
         $state = cache_lifecycle_registry_checkpoint();
         $before = $state;
         if ($state === [] || $state['phase'] === 'complete')

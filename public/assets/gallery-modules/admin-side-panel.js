@@ -33,7 +33,7 @@
 import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261020-shift-range-v1';
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20261023-compact-scroll-v2';
-import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261023-public-modal-v3';
+import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261024-catalog-workspace-v3';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20261023-picture-manager-context-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';

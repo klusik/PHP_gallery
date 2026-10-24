@@ -287,7 +287,7 @@ function cms_admin_scan_images(): void
  *
  * @param string $tab Requested query/hash tab identity.
  * @return string Registered tab, with former Images/Documents aliases
- *     normalized to Upload media, or empty for an unknown identity.
+ *     normalized to Media management, or empty for an unknown identity.
  */
 function admin_edit_gallery_tab_id(string $tab): string
 {

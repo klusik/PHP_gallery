@@ -173,6 +173,7 @@ function setupOneMaintenanceCenter(root) {
     let job = parseJsonScript(root, '[data-maintenance-center-initial]', null);
     let requestActive = false;
     let autoContinue = true;
+    let pendingControl = '';
     const blockedByOtherJob = root.dataset.blockedByOtherJob === '1';
 
     const endpoints = {
@@ -730,7 +731,11 @@ function setupOneMaintenanceCenter(root) {
         renderReport();
     }
 
-    /** Advance analysis or execution serially until the persisted state reaches a stop point. */
+    /** Advance serially and admit queued operator controls between requests.
+     * @param {string} kind Analysis or execution continuation phase.
+     * @returns {Promise<void>} Resolves after the loop stops and any queued
+     *     pause/cancel request is handed to the serialized action handler.
+     */
     async function continueLoop(kind) {
         if (requestActive || !job?.id) return;
         requestActive = true;
@@ -748,11 +753,29 @@ function setupOneMaintenanceCenter(root) {
             renderActions();
         } finally {
             requestActive = false;
+            if (pendingControl) {
+                const action = pendingControl;
+                pendingControl = '';
+                void handleAction(action);
+            }
         }
     }
 
-    /** Handle one delegated operator action and continue only from returned persisted state. */
+    /** Handle an operator action, queuing stop controls behind an active step.
+     * @param {string} action Server-backed toolbar action identifier.
+     * @returns {Promise<void>} Resolves after queuing a control, completing its
+     *     serialized request, or displaying a request failure.
+     */
     async function handleAction(action) {
+        if (action === 'pause' || action === 'cancel') {
+            autoContinue = false;
+            if (requestActive) {
+                // Cancellation supersedes a pause, never the reverse. The
+                // in-flight step settles before its checkpoint is controlled.
+                if (pendingControl !== 'cancel') pendingControl = action;
+                return;
+            }
+        }
         if (requestActive) return;
         try {
             setBrowserError('');
@@ -800,6 +823,15 @@ function setupOneMaintenanceCenter(root) {
                 autoContinue = false;
                 requestActive = true;
                 job = await request(endpoints.cancel, {job_id: job?.id || 0});
+                // Running jobs acknowledge the durable cancellation flag first.
+                // One final guarded step consumes it and releases their claim.
+                if (job?.status === 'running' || job?.status === 'analyzing') {
+                    job = await request(
+                        job.status === 'running'
+                            ? endpoints.executeStep : endpoints.analyzeStep,
+                        {job_id: job.id},
+                    );
+                }
                 requestActive = false;
                 render();
                 return;
@@ -814,6 +846,12 @@ function setupOneMaintenanceCenter(root) {
             autoContinue = false;
             setBrowserError(String(error?.message || strings.request_failed || 'Request failed.'));
             renderActions();
+        } finally {
+            if (!requestActive && pendingControl) {
+                const queued = pendingControl;
+                pendingControl = '';
+                void handleAction(queued);
+            }
         }
     }
 

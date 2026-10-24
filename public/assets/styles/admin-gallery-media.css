@@ -307,6 +307,20 @@
     margin: 0 0 0.3rem;
 }
 #admin-edit-media .gallery-media-inline > header h3 { margin: 0; }
+#admin-edit-media .gallery-music .gallery-media-inline > header {
+    flex-wrap: wrap;
+}
+#admin-edit-media .gallery-music .gallery-music-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.45rem;
+    margin: 0 0 0 auto;
+    font-size: 0.72rem;
+}
+#admin-edit-media .gallery-music-settings .gallery-presentation-setting span {
+    white-space: normal;
+}
 #admin-edit-media .gallery-media-inline .gallery-media-body {
     --media-list-max-height: none;
     max-height: none;
@@ -332,19 +346,30 @@
 #admin-edit-media .gallery-music .music-player > output {
     flex-basis: 100%;
 }
-#admin-edit-media .gallery-music-picker { margin: 0 0 0.5rem; }
+#admin-edit-media .gallery-music-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 0.75rem;
+}
+#admin-edit-media .gallery-music-workspace > section { min-width: 0; }
+#admin-edit-media .gallery-music-workspace h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+@container gallery-media-tools (min-width: 760px) {
+    #admin-edit-media .gallery-music-workspace {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+#admin-edit-media .gallery-music-picker { margin: 0; }
 #admin-edit-media .gallery-music-warning {
     margin: 0.25rem 0;
     padding: 0.35rem 0.5rem;
     border-inline-start: 3px solid #a86b00;
     background: #fff8e8;
     font-size: 0.76rem;
-}
-#admin-edit-media .gallery-music-picker > summary {
-    width: fit-content;
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 600;
 }
 #admin-edit-media .gallery-music-picker form {
     display: flex;
@@ -360,37 +385,183 @@
     font-size: 0.78rem;
 }
 #admin-edit-media [data-music-catalog-results] {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-    max-height: 12rem;
+    max-height: 24rem;
     margin-top: 0.35rem;
     overflow: auto;
 }
-#admin-edit-media [data-music-catalog-results] form { margin: 0; }
-#admin-edit-media [data-music-catalog-results] button {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+#admin-edit-media [data-music-add-selected] {
+    position: relative;
+    display: inline-flex;
     align-items: center;
-    column-gap: 0.35rem;
-    max-width: 19rem;
-    min-height: 2rem;
-    padding: 0.25rem 0.4rem;
-    border: 1px solid var(--admin-border, #d4dde7);
-    border-radius: 5px;
-    background: #fff;
-    text-align: left;
+    gap: 0.25rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    padding: 0;
+    background: transparent;
+    color: var(--admin-ink, #182230);
+    border: 0;
+}
+#admin-edit-media [data-music-add-selected]:disabled { opacity: 0.45; }
+#admin-edit-media [data-music-selection-count]:not(:empty) {
+    position: absolute;
+    inset-block-start: -0.15rem;
+    inset-inline-end: -0.15rem;
+    padding: 0 0.15rem;
+    border-radius: 0.2rem;
+    background: var(--admin-ink, #182230);
+    color: #fff;
+    font-size: 0.6rem;
+    line-height: 1.2;
+}
+#admin-edit-media [data-music-add-selected] svg {
+    width: 1rem;
+    height: 1rem;
+}
+#admin-edit-media .music-catalog-table .music-catalog-select-cell {
+    width: 1.4rem;
+    padding-top: 0.45rem;
+    text-align: center;
+}
+#admin-edit-media [data-music-catalog-select] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    vertical-align: middle;
+}
+#admin-edit-media .music-catalog-table {
+    width: 100%;
+    margin: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    color: var(--admin-ink, #182230);
     font-size: 0.76rem;
 }
-#admin-edit-media [data-music-catalog-results] button small {
-    grid-column: 2;
+#admin-edit-media .music-catalog-table :is(th, td) {
+    padding: 0.22rem 0.3rem;
+    border: 0;
+    border-bottom: 1px solid var(--admin-border, #d4dde7);
+    text-align: left;
+    vertical-align: middle;
+}
+#admin-edit-media .music-catalog-table th:last-child,
+#admin-edit-media .music-catalog-table td.music-catalog-actions {
+    width: 2.25rem;
+    text-align: right;
+    white-space: nowrap;
+}
+#admin-edit-media .music-catalog-table .music-catalog-actions form {
+    display: inline-flex;
+    vertical-align: top;
+    margin: 0;
+}
+#admin-edit-media .music-catalog-title {
+    overflow-wrap: anywhere;
+    font-weight: inherit;
+}
+#admin-edit-media .music-catalog-table small {
+    margin-inline-start: 0.45rem;
     color: var(--admin-muted, #667085);
+    font-size: 0.7rem;
+}
+#admin-edit-media .music-catalog-album > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 1.75rem;
+    padding-block: 0.3rem;
+    cursor: pointer;
+    list-style: none;
+}
+#admin-edit-media .music-catalog-album > summary::-webkit-details-marker {
+    display: none;
+}
+#admin-edit-media .music-catalog-album > summary::before {
+    content: '';
+    flex: 0 0 0.35rem;
+    width: 0.35rem;
+    height: 0.35rem;
+    margin-inline: 0.15rem;
+    border-inline-end: 1.5px solid currentColor;
+    border-block-end: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+}
+#admin-edit-media .music-catalog-album[open] > summary::before {
+    transform: rotate(45deg);
+}
+#admin-edit-media .music-catalog-album > summary:focus-visible {
+    outline: 2px solid var(--admin-accent, #315f9b);
+}
+#admin-edit-media .music-catalog-album-icon {
+    display: inline-flex;
+    vertical-align: middle;
+}
+#admin-edit-media .music-catalog-album-icon svg {
+    width: 1rem;
+    height: 1rem;
+}
+#admin-edit-media .music-catalog-album .music-catalog-table thead {
+    display: none;
+}
+#admin-edit-media .music-catalog-album [data-music-album-results] {
+    margin-block-start: 0.2rem;
+    padding-inline-start: 0.4rem;
+    border-inline-start: 1px solid var(--admin-border, #d4dde7);
+}
+#admin-edit-media .music-catalog-table .music-catalog-group th {
+    padding-block: 0.3rem 0.1rem;
+    background: transparent;
+    color: var(--admin-muted, #667085);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-align: left;
+}
+#admin-edit-media .music-catalog-album-row > :is(td:first-child, td:last-child) {
+    vertical-align: top;
+}
+#admin-edit-media .music-catalog-album > .music-catalog-path {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+#admin-edit-media .music-catalog-table .music-icon {
+    vertical-align: top;
+    color: var(--admin-ink, #182230);
+}
+#admin-edit-media .music-catalog-browse {
+    display: inline-block;
+    font-size: 0.72rem;
+}
+#admin-edit-media .music-catalog-album[data-loaded="1"] > .music-catalog-browse {
+    display: none;
+}
+#admin-edit-media .music-catalog-more {
+    width: auto;
+    min-height: 1.75rem;
+    padding: 0.15rem 0.35rem;
+    background: transparent;
+    color: var(--admin-ink, #182230);
+    border: 0;
+}
+#admin-edit-media .music-catalog-more[hidden] {
+    display: none;
+}
+#admin-edit-media .music-catalog-player > [data-gallery-music-controls] {
+    font-size: 0.76rem;
+}
+@media (max-width: 640px) {
+    #admin-edit-media .music-catalog-table .music-icon {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+    #admin-edit-media .music-catalog-table th:last-child,
+    #admin-edit-media .music-catalog-table td.music-catalog-actions {
+        width: 2.75rem;
+    }
 }
 #admin-edit-media .gallery-music-source th {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.25rem 0.55rem;
+    /* Keep colspan effective; the inner source line owns flex layout. */
+    display: table-cell;
     padding: 0.35rem 0.45rem;
     background: #f3f6f9;
     text-align: left;

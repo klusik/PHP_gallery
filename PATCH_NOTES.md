@@ -1,5 +1,117 @@
 # Patch notes
 
+## Version 0.142.4
+
+Fixed gallery music management with a compact, playable catalog and reliable
+single and bulk assignments. Preserved legacy originals when removing gallery
+music, added actionable failure diagnostics, and kept Maintenance Center moving
+through deferred cache work.
+
+### Highlights
+
+#### Compact gallery music workspace
+
+- Renamed the gallery editor's Upload media tab to Media management. Placed
+  the music catalog and gallery playlist in separate compact tables, stacked
+  in narrow editors, with the gallery-wide music switch beside the player.
+- Added playback before each catalog song title, expandable album tracks,
+  distinct disclosure and playback icons, and multi-selection with an Add icon
+  beside search. Kept already-included songs playable while disabling Add.
+- Fixed additions that inserted the complete editor into the catalog table.
+  Kept single and batch mutations inside the outer editor, preserved search,
+  reused fresh revisions, and skipped songs included by earlier selections.
+
+#### Retained originals and useful diagnostics
+
+- Preserved and verified catalogued local audio centrally before removing its
+  gallery selection, retaining the song identity for later re-addition. Kept
+  the old playlist and local file when preservation failed.
+- Distinguished missing originals from legacy sources awaiting catalog
+  reconciliation. Added a response reference matching Admin Logs, category
+  Media, with safe failure context and a PHP error-log fallback.
+- Extended the selected music relocation task to remove unbacked catalog
+  records after migration. Preserved registered originals and active or dirty
+  gallery references; removed metadata only in bounded batches.
+
+#### Resumable maintenance controls
+
+- Stopped central cache maintenance from repeatedly restarting healthy regions
+  while other regions waited for retry. Retained unfinished checkpoints and
+  allowed later tasks to continue after a bounded cache opportunity.
+- Queued Pause and Cancel behind an active browser request, prioritized Cancel,
+  and consumed its durable cancellation flag before releasing the job claim.
+
+### Technical Details
+
+#### Backend and database
+
+- Extended the existing gallery editor controller with authenticated read-only
+  catalog preview, album pages and assignment availability. Reused protected
+  GET/HEAD/range audio streaming without promoting or assigning previewed files.
+- Updated `app/services/gallery_music/repository.php` to verify an existing
+  central copy or retain matching local bytes before publishing removal under
+  the gallery lock and revision guard.
+- Added catalog-model orphan selection with row locking and deletion-time
+  guards. Pruned at most 20 logical songs per step through the existing catalog
+  transaction and foreign keys; added no schema migration or audio-file purge.
+- Required verified repository/catalog readiness for preservation and cleanup.
+  Retained confirmed pre-catalog deletion compatibility and refused partial or
+  unknown catalog state. Registered asset metadata remained protective even
+  when its physical file needed restoration.
+- Added `gallery.music.operation_failed` with selected identity, stage,
+  committed-write state and a matching reference. Bounded logged exception
+  provenance and SQLSTATE while excluding raw messages, SQL, credentials and
+  absolute storage paths. Preserved the refusal if Admin logging failed.
+- Limited central cache lifecycle work to 32 persisted slices, observed due
+  and retry dates, and distinguished regional discovery from whole-cache
+  completion. Logged completion or deferral with coverage and pending bytes;
+  isolated optional status failures from later maintenance tasks.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-gallery-music.js` and scoped
+  styles for lazy album rows, serial batches, current membership checks and
+  canonical outer-editor refresh. Retained auth/CSRF transport and CAS checks.
+- Updated the shared player to use the activated scope's own playlist and stop
+  playback when its source was detached. Advanced the affected import chain.
+- Updated `public/assets/gallery-modules/admin-maintenance-center.js` to
+  serialize stop controls after pending requests without resetting checkpoints.
+
+#### Tests, documentation and release provenance
+
+- Expanded browser and database coverage for preview, dynamic replacement,
+  bulk revisions, duplicate skipping, legacy detach/re-add, failed preservation,
+  bounded orphan cleanup and protected references.
+- Added `tests/maintenance_center_controls_test.mjs` and extended maintenance
+  and cache-registry fixtures for deferral, status failures and queued controls.
+  Aligned isolated bootstraps, synthetic editor ownership and migrated columns
+  with production contracts while retaining negative and security assertions.
+- Updated permanent references and all four manual sources, including missing
+  300px editor-thumbnail recovery through existing generation tools. Kept
+  preview loading read-only without an original-image fallback.
+- Added immutable release origin and predecessor records for `v_0.142.4`
+  ([#101](https://github.com/klusik/PHP_gallery/issues/101),
+  [#133](https://github.com/klusik/PHP_gallery/issues/133)).
+
+### User Impact
+
+#### For administrators
+
+- Made catalog playback, selection and gallery membership clearer without
+  nested editor refreshes. Enabled removed legacy songs to be added again
+  when a verified original was retained.
+- Made failures traceable in Admin Logs and kept unrelated maintenance moving
+  when cache work was deferred. Required fresh analysis for the revised music
+  cleanup task. Previously deleted audio still required an original or backup.
+
+#### For visitors and maintainers
+
+- Retained existing public music access and download rules. Kept catalog
+  preview administrator-only and preserved shared originals across gallery
+  selection removal.
+- Documented remaining manual acceptance for real codecs, shared hosting and
+  exhaustive no-JavaScript or assistive-technology workflows.
+
 ## Version 0.142.3
 
 Updated the mobile fullscreen viewer so slideshow speed controls and the

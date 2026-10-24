@@ -139,8 +139,11 @@ function renderFixture(mode, query = '') {
 const initialMarkup = renderFixture('page');
 const refreshedMusicCard = renderFixture('music-card');
 const filteredChoices = renderFixture('choices', 'Night');
+const albumChoices = renderFixture('album-choices');
 const noPresentationMarkup = renderFixture('without-presentation');
 const encodedFilteredChoices = JSON.stringify(filteredChoices)
+    .replaceAll('<', '\\u003c');
+const encodedAlbumChoices = JSON.stringify(albumChoices)
     .replaceAll('<', '\\u003c');
 const encodedRefreshedMusicCard = JSON.stringify(refreshedMusicCard)
     .replaceAll('<', '\\u003c');
@@ -192,12 +195,40 @@ window.addEventListener('unhandledrejection', event => {
 });
 </script>
 <script type="module">
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261020-unified-gallery-media-v3';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
+import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 
 const check = (condition, message) => {
     if (!condition) throw new Error(message);
 };
+/** Inspect visible catalog titles and glyphs under the production CSS cascade.
+ * @returns {boolean} True when every choice has readable text, a visible glyph
+ * and fits inside the current result viewport.
+ */
+function musicCatalogChoicesReadable() {
+    const results = document.querySelector('[data-music-catalog-results]');
+    const reference = document.querySelector(
+        '[data-gallery-music-search] .music-icon',
+    );
+    const titles = Array.from(results?.querySelectorAll('.music-catalog-title') || [])
+        .filter(title => title.checkVisibility());
+    const buttons = Array.from(results?.querySelectorAll('.music-icon') || [])
+        .filter(button => button.checkVisibility());
+    if (!reference || !results || buttons.length === 0) return false;
+    const ink = getComputedStyle(reference).color;
+    return results.scrollWidth <= results.clientWidth
+        && titles.length > 0
+        && titles.every(title => title.textContent.trim()
+            && getComputedStyle(title).color === ink)
+        && buttons.every(button => {
+            const glyph = Array.from(button.querySelectorAll('svg'))
+                .find(svg => svg.checkVisibility())?.getBoundingClientRect();
+            return Boolean(getComputedStyle(button).color === ink
+                && glyph?.width > 0 && glyph?.height > 0);
+        });
+}
+window.__galleryMusicCatalogReadable = musicCatalogChoicesReadable;
 /** Capture visible icon geometry and presentation in one production context.
  * @typedef {{label:string,width:number,height:number,svgWidth:number,
  *     svgHeight:number,background:string,borders:string[],boxShadow:string,
@@ -268,9 +299,19 @@ const PRESENTATION_ICON_HITBOX_PX = ${PRESENTATION_ICON_HITBOX_PX};
 const PUBLIC_ICON_HITBOX_MAX_PX = ${PUBLIC_ICON_HITBOX_MAX_PX};
 const MUSIC_QUERY_LIMIT_BYTES = ${MUSIC_QUERY_LIMIT_BYTES};
 const FILTERED_CHOICES_HTML = ${encodedFilteredChoices};
+const ALBUM_CHOICES_HTML = ${encodedAlbumChoices};
 const REFRESHED_MUSIC_CARD_HTML = ${encodedRefreshedMusicCard};
 const NO_PRESENTATION_MARKUP = ${encodedNoPresentationMarkup};
 const fixtureWrites = [];
+const fixtureAlbumReads = [];
+const fixtureAudioPlays = [];
+const fixtureAssignedSongs = new Set(['901']);
+let fixtureBatchQualification = false;
+// Native codec behavior is covered separately; record only explicit preview intent.
+HTMLMediaElement.prototype.play = function () {
+    fixtureAudioPlays.push(this.getAttribute('src'));
+    return Promise.resolve();
+};
 let failPanelRefresh = false;
 let holdNextPreferenceWrite = false;
 let releaseHeldPreferenceWrite = null;
@@ -392,6 +433,23 @@ window.fetch = /** Mock same-origin catalog and mutation endpoints while preserv
  * @returns {Promise<Response>} Filtered choice fragment or canonical completion envelope.
  */
 async (input, options = {}) => {
+    const requestUrl = new URL(String(input), location.href);
+    if (requestUrl.searchParams.get('action') === 'music_selection_status') {
+        return new Response(JSON.stringify({
+            ok: true,
+            already_added: fixtureAssignedSongs.has(requestUrl.searchParams.get('song_id')),
+        }), {headers: {'Content-Type': 'application/json'}});
+    }
+    if (requestUrl.searchParams.get('action') === 'music_album_choices') {
+        fixtureAlbumReads.push({
+            url: requestUrl.href,
+            method: options.method,
+            credentials: options.credentials,
+        });
+        return new Response(JSON.stringify({
+            ok: true, choices_html: ALBUM_CHOICES_HTML, next_offset: null,
+        }), {headers: {'Content-Type': 'application/json'}});
+    }
     const body = options.body instanceof FormData ? options.body : new FormData();
     const action = String(body.get('music_action') || '');
     fixtureWrites.push({
@@ -455,6 +513,19 @@ async (input, options = {}) => {
         }
         return resolvePreferenceWrite();
     }
+    if (action === 'add_song') {
+        fixtureAssignedSongs.add(String(body.get('selection_id')));
+        if (fixtureBatchQualification) {
+            check(body.get('music_revision') === 'write:'
+                + String(musicRevisionNumber).padStart(4, '0'),
+            'Each batch item must use the latest canonical write token.');
+            musicRevisionNumber += 1;
+            return canonicalMutationResponse(action, {
+                music_revision: 'write:' + String(musicRevisionNumber).padStart(4, '0'),
+                music_enabled: persistedMusicEnabled,
+            });
+        }
+    }
     return await holdOwnedMusicResponse(
         action,
         canonicalMutationResponse(action),
@@ -464,6 +535,7 @@ async (input, options = {}) => {
 try {
     setupAdminNestedTabs(document);
     setupGalleryMusic();
+    setupGalleryMusicPlayback();
     const manager = document.querySelector(
         '#admin-gallery-media-music [data-gallery-music][data-music-editor="1"]',
     );
@@ -527,6 +599,11 @@ try {
             instanceof HTMLElement
         && manager.querySelector(':scope > details.gallery-media-widget') === null,
     'Admin Music must show its list and player inline without a second disclosure.');
+    check(manager.querySelector('.gallery-music-settings')?.closest('header')
+        === musicInline.querySelector(':scope > header')
+        && manager.querySelector('.gallery-music-workspace > .gallery-music-picker')
+        && manager.querySelector('.gallery-music-workspace > .gallery-music-current'),
+    'Catalog and gallery must have separate compact columns with the gallery preference in their shared header.');
     const adminMusicIcons = iconStyleSnapshots(
         document,
         '#admin-edit-media .gallery-music .music-icon',
@@ -603,6 +680,9 @@ try {
     ), 'Presentation editor actions must retain compact visible SVG controls: '
         + JSON.stringify(presentationIcons));
     musicTab?.click();
+    check(getComputedStyle(localSources[0].querySelector('th')).display
+        === 'table-cell',
+    'An album heading must retain its table-cell colspan while its inner controls use flex layout.');
     check(document.querySelector(
         '#admin-gallery-media-pdf [data-gallery-pdf-documents]',
     ) instanceof HTMLElement
@@ -760,15 +840,48 @@ try {
     const mountedRevisionFields = initialRevisionFields
         .filter(input => !input.closest('[data-music-catalog-results]'))
         .map(input => ({input, value: input.value}));
-    const picker = manager.querySelector('details.gallery-music-picker');
+    const picker = manager.querySelector('section.gallery-music-picker');
     const search = picker?.querySelector('form[data-gallery-music-search]');
     const query = search?.querySelector('input[name="music_query"]');
-    check(picker instanceof HTMLDetailsElement
+    check(picker instanceof HTMLElement
         && search instanceof HTMLFormElement
         && query instanceof HTMLInputElement
         && query.maxLength === MUSIC_QUERY_LIMIT_BYTES,
     'The catalog chooser must expose a bounded native query form.');
-    picker.open = true;
+    check(musicCatalogChoicesReadable(),
+    'Catalog choices must show readable titles, metadata and visible add icons.');
+    const albumPicker = picker.querySelector('[data-music-catalog-album]');
+    check(albumPicker instanceof HTMLDetailsElement
+        && fixtureAlbumReads.length === 0,
+    'Catalog album members must remain unloaded while their disclosure is closed.');
+    albumPicker.open = true;
+    await waitForIdle();
+    const albumDeadline = Date.now() + ACTION_TIMEOUT_MS;
+    while (albumPicker.dataset.loaded !== '1' && Date.now() < albumDeadline) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    check(albumPicker.dataset.loaded === '1'
+        && fixtureAlbumReads.length === 1
+        && fixtureAlbumReads[0].method === 'GET'
+        && fixtureAlbumReads[0].credentials === 'same-origin'
+        && albumPicker.querySelectorAll('[data-music-catalog-song]').length === 2,
+    'Expanding an album must read its songs once into compact playable rows.');
+    const previewWritesBefore = fixtureWrites.length;
+    const preview = albumPicker.querySelector('[data-music-action="toggle"]');
+    preview.click();
+    await waitForIdle();
+    check(fixtureAudioPlays.at(-1)?.includes('action=music_preview')
+        && preview.getAttribute('aria-pressed') === 'true'
+        && fixtureWrites.length === previewWritesBefore,
+    'A catalog member must play through the preview transport without assignment.');
+    preview.click();
+    await waitForIdle();
+    albumPicker.open = false;
+    albumPicker.open = true;
+    await waitForIdle();
+    check(fixtureAlbumReads.length === 1,
+    'Reopening a loaded album must preserve its rows without another read.');
+    albumPicker.open = false;
     query.value = 'Night';
     heldMusicAction = 'choices';
     search.requestSubmit(search.querySelector('button[type="submit"]'));
@@ -797,8 +910,12 @@ try {
     'Bounded catalog search must preserve the mounted card and its POST, credentials and JSON request contract.');
     check(manager.querySelectorAll('[data-music-catalog-results] form').length === 1
         && manager.querySelector('[data-music-catalog-results]')?.textContent
-            .includes('Night Drive Theme'),
+            .includes('Night Drive Theme')
+        && manager.querySelector('[data-music-add-selected]').disabled
+        && manager.querySelector('[data-music-selection-count]').textContent === '',
     'The Night query must replace only the choices with its one matching song.');
+    check(musicCatalogChoicesReadable(),
+    'Filtered catalog choices must retain readable titles and visible add icons.');
     const resultRevisionFields = Array.from(manager.querySelectorAll(
         '[data-music-catalog-results] input[name="music_revision"]',
     ));
@@ -838,8 +955,14 @@ try {
         && addWrite.revision === 'write:0007'
         && addWrite.catalogRevision === 'catalog:raw/0009'
         && refreshedManager !== manager
+        && !manager.isConnected
+        && refreshedManager?.querySelectorAll(
+            '[data-gallery-music][data-music-editor="1"]',
+        ).length === 0
         && refreshedManager?.querySelector('[data-music-status]')?.textContent
             === 'Music saved successfully.'
+        && refreshedManager?.querySelectorAll('[data-music-status]').length === 1
+        && !refreshedManager?.querySelector('[data-music-status]')?.closest('table')
         && panelBeforeWrite === document.querySelector('[data-admin-side-panel]')
         && panelBeforeWrite?.dataset.open === '1'
         && location.href === pageUrlBeforeWrite,
@@ -1018,6 +1141,39 @@ try {
         && preferenceSwitchBeforeSyncFailure.checked === false,
     'A failed completion must reject a newer preference intent until the editor is safely refreshed.');
     failPanelRefresh = false;
+    // A fresh fragment must retain delegated bulk actions after earlier failures.
+    const batchTemplate = document.createElement('template');
+    batchTemplate.innerHTML = preferenceCardMarkup(
+        persistedMusicEnabled,
+        'write:' + String(musicRevisionNumber).padStart(4, '0'),
+    );
+    document.querySelector('[data-gallery-music][data-music-editor="1"]')
+        .replaceWith(batchTemplate.content.querySelector('[data-gallery-music][data-music-editor="1"]'));
+    const batchManager = document.querySelector('[data-gallery-music][data-music-editor="1"]');
+    for (const id of ['902', '903', '904']) {
+        const selection = batchManager.querySelector(
+            '[data-music-catalog-select][value="add_song:' + id + '"]',
+        );
+        selection.checked = true;
+        selection.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    const batchWritesBefore = fixtureWrites.length;
+    fixtureBatchQualification = true;
+    batchManager.querySelector('[data-music-add-selected]').click();
+    const batchDeadline = Date.now() + ACTION_TIMEOUT_MS;
+    let batchStatus = '';
+    while (Date.now() < batchDeadline) {
+        batchStatus = document.querySelector('[data-music-status]')?.textContent || '';
+        if (batchStatus === 'Added 2 item(s); 1 already present.') break;
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    check(batchStatus === 'Added 2 item(s); 1 already present.'
+        && fixtureWrites.length === batchWritesBefore + 2
+        && fixtureWrites.slice(batchWritesBefore).map(write => write.selectionId).join(',') === '903,904'
+        && document.querySelectorAll('[data-gallery-music][data-music-editor="1"]').length === 1
+        && document.querySelector('[data-admin-side-panel]') === preferenceSidePanel
+        && location.href === preferenceUrlBefore,
+    'Bulk add must serialize fresh revisions, skip already-present music and retain one outer editor.');
     document.getElementById('results').textContent =
         'BROWSER PASS local gallery Music tabs, chooser, source groups, autosave ordering, CAS, coordinator and stale lock';
 } catch (error) {
@@ -1148,8 +1304,14 @@ try {
                         );
                         const panel = document.getElementById(target);
                         const body = document.querySelector('[data-admin-side-panel-body]');
+                        if (target === 'admin-gallery-media-music') {
+                            panel.querySelector('.gallery-music-picker')
+                                .scrollIntoView({block: 'nearest'});
+                        }
                         return {
                             target,
+                            catalogReadable: target !== 'admin-gallery-media-music'
+                                || window.__galleryMusicCatalogReadable(),
                             tabSelected: tab?.getAttribute('aria-selected') === 'true',
                             visible: panel?.hidden === false,
                             documentWidth: document.documentElement.scrollWidth,
@@ -1172,6 +1334,7 @@ try {
                 assert.ok(Array.isArray(desktopPanelStates)
                     && desktopPanelStates.length === 4
                     && desktopPanelStates.every(panel => panel.tabSelected
+                        && panel.catalogReadable
                         && panel.visible
                         && panel.documentWidth <= panel.viewportWidth
                         && panel.panelWidth <= panel.panelClientWidth
@@ -1240,8 +1403,14 @@ try {
                         );
                         const panel = document.getElementById(target);
                         const body = document.querySelector('[data-admin-side-panel-body]');
+                        if (target === 'admin-gallery-media-music') {
+                            panel.querySelector('.gallery-music-picker')
+                                .scrollIntoView({block: 'nearest'});
+                        }
                         return {
                             target,
+                            catalogReadable: target !== 'admin-gallery-media-music'
+                                || window.__galleryMusicCatalogReadable(),
                             tabSelected: tab?.getAttribute('aria-selected') === 'true',
                             visible: panel?.hidden === false,
                             viewportWidth: innerWidth,
@@ -1264,6 +1433,7 @@ try {
                 assert.ok(Array.isArray(mobilePanelStates)
                     && mobilePanelStates.length === 4
                     && mobilePanelStates.every(panel => panel.tabSelected
+                        && panel.catalogReadable
                         && panel.visible
                         && panel.viewportWidth === MOBILE_VIEWPORT_WIDTH
                         && panel.documentWidth <= panel.viewportWidth

@@ -2,7 +2,7 @@
 
 ## Shared originals and live gallery playlists
 
-**Edit gallery → Upload media** combines photographs, presentation, PDF documents
+**Edit gallery → Media management** combines photographs, presentation, PDF documents
 and a compact gallery music manager. **Upload files** detects photos, PDFs and
 audio in one selection; Music keeps playlist management rather than a second
 upload picker. Add individual catalog songs or a complete album from
@@ -11,6 +11,47 @@ ordering changes in Music Manager appear in every gallery using it. Direct
 songs remain independent items. Gallery controls move or remove source groups
 and set their download permission; album members keep the album's global order.
 Removing a source changes this gallery only. It never deletes a shared original.
+
+Music uses two compact tables: the catalog on the left and this gallery's
+playlist on the right. Narrow editors stack them. The shared header contains
+the player and gallery-wide slideshow music switch. Catalog Play precedes the
+song title; Add is at the row end. Search and the selected-items Add icon share
+one toolbar. Checkboxes select several songs or albums; the count appears on
+the Add icon. Already-included songs, including live album members, remain
+playable but cannot be selected or added again through the chooser.
+
+Albums have the existing overlapping-files icon and a distinct disclosure
+chevron. Expanding an album reads at most 100 members per page on demand;
+Next continues it. Nested rows are indented and independent songs are separated
+by a Songs heading. Preview uses the existing exclusive player without assigning
+music, copying originals or changing catalog revisions. Its authenticated editor
+endpoint preserves byte ranges, HEAD, private no-store caching and opaque missing
+files. Anonymous visitors and anonymous preview cannot use it.
+
+Single and batch additions replace only the outer music editor. A batch runs
+canonical single-item mutations in order, carries each fresh write revision and
+rechecks membership before each item so an earlier album addition cannot add
+the same song twice. Failure stops the batch and reports completed progress;
+closing the editor stops further items. Search text survives successful writes.
+Removing a gallery source restores its Add action when no remaining source
+includes it; shared originals and global album membership remain intact.
+
+An assignment failure has a reference matching **Admin > Logs**, category
+**Media**, event `gallery.music.operation_failed`. The record identifies the
+gallery, selected song/album, action, failure stage and whether the playlist
+write already completed. It retains bounded exception classes, repository code
+locations and SQLSTATE only; it excludes raw exception text, SQL, credentials,
+absolute storage paths and request payloads. If Admin-log persistence fails,
+the same safe record goes to PHP's error log. This fallback is permanently
+supported so a broken log database does not erase the original failure.
+
+A catalog identity alone does not prove its original is present. Missing or
+unreadable audio asks for restoring the original files or uploading them again;
+a legacy source withheld by a dirty catalog snapshot asks for the music catalog
+task in Maintenance Center. Neither refusal changes the playlist or relaxes
+original verification. Copy SQL, `data/music/` and gallery sidecars together when
+moving an installation between machines. A failure after a completed write is
+reported as a refresh failure, so reopen the editor before trying again.
 
 Public gallery cards may show unique PDF and music file counts beneath the
 photo-count icon in a compact, tightly spaced stack. When the photo-count badge
@@ -73,6 +114,15 @@ atomically changes the gallery reference and then removes the matching local
 copy. A persisted cleanup journal and stable cursor support interruption/retry.
 Track IDs, song identities, saved order, titles and permissions are retained.
 Uncertain or unreadable files stop that task rather than deleting source data.
+After relocation finishes, the same task removes at most 20 unbacked logical
+song records per step. A song is eligible only without central asset metadata
+and without active gallery references or references awaiting dirty-snapshot
+reconciliation. Album/tag membership alone does not retain an unplayable song;
+its dependent metadata is removed through existing foreign keys. No audio files
+are deleted by this catalog cleanup. A central row with missing/unreadable bytes
+remains protected for diagnosis or restoration. Removed counts appear in activity,
+the report and `maintenance_center.music_orphans_removed` in Admin Logs.
+Analyze again before running this revised task; older reviewed plans are stale.
 Adding a legacy song/album to another gallery may first preserve its original
 centrally; it does not remove the original source copy.
 
@@ -406,10 +456,16 @@ metadata work; they are not browser decoding guarantees.
 Every mutation takes an exclusive sidecar lock and requires the last observed
 revision. Stale edits refuse the complete operation. Originals are copied with
 a byte ceiling and verified digest before the atomic index replacement makes
-them visible. Removing a legacy local track publishes the new index before
-unlinking its original. Removing a central reference retains the shared
-original. A process crash or failed legacy unlink can leave an inaccessible orphan;
-it never authorizes an unindexed original. There is no automatic orphan cleanup.
+them visible. With the catalog available, removing a local track first retains
+and verifies its original centrally under the same logical song identity, then
+publishes the shorter index and unlinks only the matching local copy. A failed
+preservation refuses removal and retains the original playlist/file. The song
+can be assigned again without uploading it. Confirmed pre-catalog installations
+retain the original-only delete contract; partial/unknown schema refuses writes.
+Removing a central reference retains the shared original. A process crash or
+failed legacy unlink can leave an inaccessible local copy;
+it never authorizes an unindexed original. No automatic cleanup removes these
+unindexed audio files.
 Concurrent gallery moves are governed by the existing gallery mutation owner.
 
 Whole-gallery filesystem moves and Trash restoration carry this sidecar.

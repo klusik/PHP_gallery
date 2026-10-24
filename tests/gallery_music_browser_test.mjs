@@ -66,8 +66,8 @@ body { margin: 8px; font: 16px sans-serif; }
 import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
-} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
+} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
  * Yield one browser task so native form/promise completion can settle.
@@ -285,6 +285,7 @@ try {
             + '<output data-music-playback-status></output></div>';
         return '<section class="gallery-music" data-gallery-music'
             + ' data-music-gallery="' + galleryId
+            + '" data-music-editor="' + (editor ? '1' : '0')
             + '"><script type="application/json" data-gallery-music-playlist'
             + ' data-music-gallery="' + galleryId + '" data-music-editor="'
             + (editor ? '1' : '0') + '">' + data + '<' + '/script>'
@@ -528,9 +529,11 @@ try {
         + '<output data-music-status></output></form></div></div></section>'
     );
     mount.innerHTML = card('initial');
-    check(mount.querySelector('.gallery-media-inline') instanceof HTMLElement
+    check(mount.querySelector('[data-gallery-music][data-music-editor="1"]')
+            instanceof HTMLElement
+        && mount.querySelector('.gallery-media-inline') instanceof HTMLElement
         && mount.querySelector('details.gallery-media-widget') === null,
-    'The dynamically mounted editor must start with its production inline panel shape.');
+    'The dynamically mounted editor must retain the production mutation owner and inline panel shape.');
     const initialUrl = location.href;
     const nativeFetch = window.fetch;
     let writes = 0;

@@ -44,12 +44,13 @@ use Throwable;
 
 /** Registry revision bound into every analyzed plan. */
 /**
- * Invalidate plans predating the selected music move and thumbnail task owner.
+ * Invalidate plans predating bounded music catalog orphan cleanup.
  * Type: string. Units: registry revision identifier. Scope: Maintenance Center plans.
  * Consumers: plan freshness and execution admission.
- * Rationale: require fresh analysis for changed task defaults and dependencies.
+ * Rationale: require fresh approval before the music task removes proven
+ *     unbacked logical song records after preserving existing local originals.
  */
-const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-20.compact-maintenance';
+const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-24.music-orphans';
 
 /** Bound diagnostic identifiers without retaining raw exception messages.
  * Type: int. Units: ASCII characters. Scope: one maintenance failure event.
@@ -83,6 +84,16 @@ const MAINTENANCE_CENTER_MUSIC_WEIGHT = 5;
  * Value: 25 work units.
  */
 const MAINTENANCE_CENTER_ATTACHMENT_USAGE_WEIGHT = 25;
+
+/**
+ * Bound cache lifecycle work before yielding to unrelated central tasks.
+ * Type: int. Units: browser slices. Scope: one central maintenance job.
+ * Consumers: download/cache execution and its persisted continuation policy.
+ * Rationale: 32 short slices allow useful progress without waiting indefinitely
+ *     for rotating regions or retry backoff. Durable cache cursors remain owned
+ *     by the cache worker and continue on later maintenance opportunities.
+ */
+const MAINTENANCE_CENTER_CACHE_LIFECYCLE_SLICES = 32;
 
 /** Terminal job history retained by normal maintenance. */
 const MAINTENANCE_CENTER_HISTORY_RETENTION_DAYS = 90;

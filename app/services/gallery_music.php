@@ -593,6 +593,8 @@ function gallery_music_track(array $gallery, string $id): ?array
 /**
  * Apply an optimistic, serialized playlist operation with atomic index
  *     publication.
+ * Catalogued local tracks are retained and verified centrally before removal;
+ * confirmed pre-catalog schemas preserve the original-only delete behavior.
  * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @param string $revision Last observed playlist revision; stale writes are
  *     refused.
@@ -757,6 +759,7 @@ function gallery_music_mutate(
         throw new \RuntimeException(t('music.failed'));
     @chmod($directory . '/.lock', \Gallery\Models\GALLERY_MUSIC_FILE_MODE);
     $newPath = '';
+    $removedLocalTrack = null;
     $committed = false;
     try {
         if (!flock($lock, LOCK_EX))
@@ -863,6 +866,23 @@ function gallery_music_mutate(
                             throw new \RuntimeException(t('music.conflict'));
                         }
                     }
+                    $removedTrack = $state['tracks'][$directPosition];
+                    if (!isset($removedTrack['asset_id'])) {
+                        if ($catalogMode === 'available') {
+                            // Removing a gallery selection must not destroy the
+                            // catalog's last original. Retain verified bytes
+                            // before publishing the shortened playlist.
+                            gallery_music_preserve_removed_original(
+                                $gallery,
+                                $removedTrack,
+                            );
+                        }
+                        // Confirmed pre-catalog installations retain their
+                        // original-only delete contract; no catalog exists to
+                        // keep a shared song. Partial/unknown schema refused
+                        // this mutation at its admission boundary above.
+                        $removedLocalTrack = $removedTrack;
+                    }
                     array_splice($state['tracks'], $directPosition, 1);
                 } elseif ($albumPosition !== false) {
                     array_splice($state['albums'], $albumPosition, 1);
@@ -965,12 +985,19 @@ function gallery_music_mutate(
                 $catalogSyncPending = true;
             }
         }
-        // Metadata is authoritative: an interrupted unlink leaves an inaccessible
-        // orphan rather than a playlist that points to a deleted original.
-        if ($action === 'delete') {
+        // Publish the removal first. A failed unlink keeps only a local copy;
+        // catalogued originals have already been preserved centrally. Never
+        // unlink unrelated files when removing a central or album reference.
+        if ($removedLocalTrack !== null) {
             $path = $directory . '/' . $trackId . '.bin';
-            if (!is_link($path) && is_file($path))
+            if (!is_link($path) && is_file($path)
+                && @filesize($path) === $removedLocalTrack['size']
+                && hash_equals(
+                    $removedLocalTrack['sha256'],
+                    (string) @hash_file('sha256', $path),
+                )) {
                 @unlink($path);
+            }
         }
         return [
             'revision' => $state['revision'],

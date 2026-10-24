@@ -271,6 +271,8 @@ namespace {
     // The browser-visible route path simulates both deployment layouts, even
     // when PHP's development-server router is implemented by this fixture file.
     $_SERVER['SCRIPT_NAME'] = $routePath;
+    // The shared audio streamer normalizes GET/HEAD through the Core owner.
+    require_once dirname(__DIR__, 2) . '/app/helpers_runtime.php';
     require_once
         dirname(__DIR__, 2) . '/app/services/gallery_pdf_documents.php';
     require_once

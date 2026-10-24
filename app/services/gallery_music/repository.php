@@ -12,6 +12,59 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+
+/** Preserve a catalogued local original before removing its gallery reference.
+ * The caller holds the gallery writer lock and has verified its revision.
+ * @param array{id:int,folder_path:string} $gallery Locked physical source.
+ * @param array{id:string,filename:string,title:string,size:int,sha256:string}
+ *     $track Authoritative local track selected for removal.
+ * @return void Returns only after the same original is verified centrally;
+ *     failures preserve the old playlist and local file.
+ * @throws \RuntimeException When schema, source or retained copy is unavailable.
+ */
+function gallery_music_preserve_removed_original(
+    array $gallery,
+    array $track,
+): void {
+    music_repository_assert_schema_ready('gallery_music.detach_legacy');
+    $songId = music_catalog_track_song_id((int) $gallery['id'], $track['id']);
+    if ($songId !== null) {
+        foreach (\Gallery\Models\music_repository_model_assets_for_song(
+            $songId,
+        ) as $retained) {
+            if ($retained['byte_size'] === $track['size']
+                && hash_equals($track['sha256'], $retained['sha256'])
+                && music_repository_asset_path($retained) !== null) {
+                return;
+            }
+        }
+    }
+    $path = gallery_music_directory($gallery) . DIRECTORY_SEPARATOR
+        . $track['id'] . '.bin';
+    if (
+        is_link($path)
+        || !is_file($path)
+        || @filesize($path) !== $track['size']
+        || !hash_equals($track['sha256'], (string) @hash_file('sha256', $path))
+    ) {
+        throw new \RuntimeException('music.original_unavailable');
+    }
+    $asset = music_repository_store_source(
+        $path,
+        $track['filename'],
+        $songId,
+        ['gallery_id' => (int) $gallery['id'], 'track_id' => $track['id']],
+        $track['title'],
+    );
+    if (
+        $asset['byte_size'] !== $track['size']
+        || !hash_equals($track['sha256'], $asset['sha256'])
+        || music_repository_asset_path($asset) === null
+    ) {
+        throw new \RuntimeException('music.original_unavailable');
+    }
+}
+
 /** Build local attachment accounting rows without charging central assets.
  * @param array{tracks:list<array{id:string,size:int,asset_id?:string}> ,legacy_cleanup:list<array{track_id:string,size:int,sha256:string}>} $state Raw authoritative source state.
  * @return list<array{id:string,size:int}> Local originals and promoted copies awaiting verified cleanup.

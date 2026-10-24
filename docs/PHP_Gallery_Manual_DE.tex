@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.142.3}
+\newcommand{\version}{0.142.4}
 \newcommand{\manualdate}{24.~Oktober~2026}
 
 \hypersetup{
@@ -492,7 +492,7 @@ Jedes erzeugte Erstellungsformular und klassische Uploadformular enthält außer
   \item Geben Sie einen besucherfreundlichen Titel ein; übernehmen Sie bei Bedarf einen Titelvorschlag.
   \item Erstellen Sie die nicht veröffentlichte Galerie. Bei verfügbarem JavaScript öffnet sich der vollständige Editor im selben Seitenbereich.
   \item Ergänzen Sie unter \ui{Identität} Beschreibung, Datum oder Datumsbereich, Ausgangssprache, Schlagwörter und optionale SimBrief-Daten.
-  \item Prüfen Sie \ui{Zugriff}, \ui{Anzeige}, \ui{Medien hochladen} sowie gegebenenfalls die Werte für Galerieordner und übergeordnete Galerie unter den erweiterten Optionen.
+  \item Prüfen Sie \ui{Zugriff}, \ui{Anzeige}, \ui{Medienverwaltung} sowie gegebenenfalls die Werte für Galerieordner und übergeordnete Galerie unter den erweiterten Optionen.
   \item Speichern Sie die Galerie, fügen Sie Fotos hinzu und wählen Sie ein Titelbild, sobald geeignete Fotos vorhanden sind.
   \item Veröffentlichen Sie die fertige Galerie und prüfen Sie anschließend das Ergebnis anonym.
 \end{enumerate}
@@ -508,7 +508,7 @@ Das sichtbare SimBrief-Feld akzeptiert eine Pilot ID oder einen Pilotennamen. Au
 \subsubsection{Im kompakten Editor arbeiten}
 \index{g00125@Galerieeditor!s00214@Seitenbereich}
 
-Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{Anzeige} und \ui{Medien hochladen}; anschließend folgen je nach Verfügbarkeit Bild- und Spezialwerkzeuge. Die obere fixierte Navigation hält die Diskette \ui{Speichern} beim Scrollen der Einstellungen und Fotolisten sichtbar. Ein Registerwechsel speichert nicht automatisch. Verwenden Sie nach der Bearbeitung die Schaltfläche und öffnen Sie die Galerie anschließend erneut, wenn Sie die gespeicherten Werte prüfen möchten. Längere Erklärungen stehen hinter per Tastatur erreichbaren Fragezeichen-Schaltflächen, seltenere Optionen unter aufklappbaren \ui{Erweitert}-Bereichen. Ein direkter Administrationseditor verwendet dieselben Felder; ein Browser ohne JavaScript nutzt die normale Formularübermittlung.
+Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{Anzeige} und \ui{Medienverwaltung}; anschließend folgen je nach Verfügbarkeit Bild- und Spezialwerkzeuge. Die obere fixierte Navigation hält die Diskette \ui{Speichern} beim Scrollen der Einstellungen und Fotolisten sichtbar. Ein Registerwechsel speichert nicht automatisch. Verwenden Sie nach der Bearbeitung die Schaltfläche und öffnen Sie die Galerie anschließend erneut, wenn Sie die gespeicherten Werte prüfen möchten. Längere Erklärungen stehen hinter per Tastatur erreichbaren Fragezeichen-Schaltflächen, seltenere Optionen unter aufklappbaren \ui{Erweitert}-Bereichen. Ein direkter Administrationseditor verwendet dieselben Felder; ein Browser ohne JavaScript nutzt die normale Formularübermittlung.
 
 \ui{Identität} hält Titel, Beschreibung, Datum, Ausgangssprache, SimBrief und Schlagwörter direkt erreichbar. Der erweiterte Abschnitt enthält Slug, Ordner, übergeordnete Galerie, Sortierreihenfolge und, sofern aktiviert, KI-Galerietext. \ui{API} zeigt einen kopierbaren Uploadendpunkt, Schlüsselbezeichnung und -aktion sowie einen neu erzeugten Schlüssel genau einmal; vorhandene Schlüssel erscheinen nur, wenn welche existieren. Die Neuerzeugung von KI-Metadaten, Migration und die globale API-Verwaltung liegen unter \ui{Erweiterte API-Werkzeuge}. \ui{Zugriff} bündelt Sichtbarkeit, Passwort, Freigabelink-Steuerungen und das NSFW-Kontrollkästchen; längere Richtlinienerklärungen stehen hinter Fragezeichen. \ui{Anzeige} beginnt mit dem Raster und den üblichen Schaltern für Abstimmung und Dateinamen; EXIF/GPS, Galeriekartenformat, Anzahlkennzeichnung, Lightbox-Modus, Picture Game, Vorschaubildgrenzen liegen unter \ui{Erweiterte Anzeigeeinstellungen}; Flugroutentext ist neben SimBrief unter \ui{Identität} verfügbar.
 
@@ -522,6 +522,33 @@ Bei beiden OFF bleiben Präsentationsvorgaben bei~aktivem Lightbox erhalten.
 Ist~auch Lightbox OFF, entfällt der~leere Reiter; alte URLs wählen Identität.
 Bereits erzeugte Seitenfotos behalten ihre normalen Zugriffsregeln.
 SimBrief kann Beschreibungen/Routen weiter aktualisieren und~behält alte PDFs.
+
+Unter \ui{Medienverwaltung > Musik} steht links der Katalog und rechts
+die Galerieliste; schmale Editoren stapeln beide Tabellen. Wiedergabe steht
+vor dem Titel, Hinzufügen am Zeilenende. Wählen Sie mehrere Einträge über
+Kontrollkästchen und nutzen Sie das Plus neben der Suche. Vorhandene Titel
+bleiben abspielbar, ihre Hinzufügen-Aktion ist jedoch gesperrt, auch bei
+Live-Alben. Alben haben ein Dateisymbol und einen eigenen Aufklapppfeil;
+erst das Öffnen lädt die eingerückten Titel. Vorhören weist nichts zu.
+Stapel laufen nacheinander und melden bei Fehlern den erreichten Fortschritt.
+Entfernen aus der Galerie gibt verfügbare Hinzufügen-Aktionen wieder frei
+und bewahrt gemeinsame Originale. Player und galerieweiter Musikschalter
+stehen im gemeinsamen Kopfbereich.
+Unter \ui{Medienverwaltung > Bilder} ersetzt ein großes vorhandenes
+Vorschaubild nicht die erforderliche 300px-Vorschau. Erstellen Sie bei Bedarf
+die Galerie-Vorschaubilder über die Vorschaubildwerkzeuge und laden Sie
+die Bilder erneut. Deaktivieren Sie die Browser-Erstellung, um auf dem Server
+zu erzeugen. Der Editor lädt Originale niemals als Ersatzvorschau herunter.
+
+Ein Musikfehler zeigt eine Referenz zum Eintrag unter \ui{Admin > Protokolle},
+Kategorie \ui{Medien}. Er enthält Galerie, Auswahl, Aktion, Phase und
+Speicherzustand, jedoch keine rohen Ausnahmen, SQL, Zugangsdaten oder
+absoluten Speicherpfade. Scheitert das Admin-Protokoll, geht der sichere
+Eintrag ins PHP-Fehlerprotokoll. Fehlende Originale wiederherstellen oder
+erneut hochladen; eine nicht abgeglichene Quelle benötigt die
+Musikkatalog-Aufgabe im Wartungszentrum. Übertragen Sie SQL,
+\filepath{data/music/} und Galerie-Sidecars gemeinsam zwischen Rechnern.
+Nach gespeichertem, aber nicht aktualisiertem Ergebnis zuerst den Editor neu öffnen.
 
 \subsubsection{PDF-Dokumente anhängen und umwandeln}
 Aufgeklappte Konvertierungsfelder vergrößern die Dokumentspalte nicht. Fehlt das bisherige Ziel oder wurde es geändert, bestätigen Sie ein neues privates Ergebnis; bisherige Dateien und Galerien bleiben erhalten.
@@ -552,7 +579,7 @@ Anonyme Besucher verwenden denselben Link nach normalen Zugriffskontrollen.
 Benötigen Vollbild oder~Ton Aktivierung, wartet der~schwarze Beginn auf
 \ui{Präsentation starten}. Danach füllt der~Ersatz bei~fehlender nativer
 Unterstützung das~Browserfenster; \ui{Abspielen} hilft bei~späteren Tonfehlern.
-Unter \ui{Galerie bearbeiten > Medien hochladen > Präsentation} bietet die~transparente
+Unter \ui{Galerie bearbeiten > Medienverwaltung > Präsentation} bietet die~transparente
 Karte \ui{Präsentationseinstellungen} öffentliche Schalter, Musik und~beide
 Geschwindigkeiten. Das~Speichern-Symbol verwendet das~geschützte Galerieformular.
 Vorschau und~Teilen verwenden aktuelle, auch ungespeicherte Werte. Neue Links
@@ -601,7 +628,7 @@ Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzept
 
 \index{PDF!Galeriedokumente}
 
-Der~Galerieeditor vereint Fotos und~Medien unter \ui{Medien hochladen},
+Der~Galerieeditor vereint Fotos und~Medien unter \ui{Medienverwaltung},
 mit~\ui{Bilder}, \ui{Musik}, \ui{PDF}, \ui{Präsentation},
 \ui{Gestaltung} und~ZIP-Optionen. Eine Auswahl \ui{Dateien hochladen}
 erkennt aktivierte Foto-, PDF- und~Audioformate automatisch. PDF-Verwaltung,
@@ -714,7 +741,7 @@ Identitäten erzeugen neue Einträge; fremde Archive liefern keine vertrauten ID
 
 \subsubsection{Musikspeicher}
 
-Öffnen Sie~\ui{Galerie bearbeiten > Medien hochladen > Musik}, um~Audio hochzuladen
+Öffnen Sie~\ui{Galerie bearbeiten > Medienverwaltung > Musik}, um~Audio hochzuladen
 und~die~Playlist der~Galerie zu~verwalten. Neue Uploads speichern unveränderliche
 Originale im~geschützten zentralen Repository \filepath{data/music/}; Audio wird
 niemals in~Fotos umgewandelt. Einzelne Songzuordnungen bleiben unabhängige
@@ -784,6 +811,18 @@ migrierte lokale Kopien zählen separat. Beim Löschen einer Galerie verschwinde
 ihre~Referenzen, das~gemeinsam genutzte Original bleibt erhalten. Foto-ZIP-Exporte
 und~Galerieübertragungen enthalten keine Musik. Siehe
 \filepath{docs/GALLERY_MUSIC.md}.
+
+Beim Entfernen eines katalogisierten lokalen Titels wird dessen Original
+zuerst zentral gesichert und geprüft; danach lässt er sich ohne Upload wieder
+hinzufügen. Ein Fehler bewahrt die bisherige Playlist und Datei. Nach dem
+Umzug entfernt die ausgewählte Wartungsaufgabe höchstens 20 Katalogeinträge
+pro Schritt ohne Galerienutzung oder registriertes zentrales Original.
+Ungeklärte Quellabgleiche und registrierte Originale bleiben geschützt, auch
+wenn deren Dateien wiederhergestellt werden müssen. Album-/Tagmetadaten allein
+bewahren keinen verwaisten Titel. Die Bereinigung löscht nur Metadaten und
+protokolliert die Anzahl. Analysieren Sie den geänderten Auftrag vor der
+Freigabe erneut. Früher gelöschtes Audio benötigt Original oder Sicherung;
+Wartung kann diese Bytes nicht neu erzeugen.
 
 Dasselbe Wartungszentrum bietet einen vorausgewählten optionalen Abgleich
 älterer öffentlicher PDF-/Musikzähler. Er arbeitet in Schritten mit höchstens
@@ -900,12 +939,12 @@ Anzeige & Lightbox-Browsingmodus & Designvorgabe übernehmen, klassisches Einzel
 Anzeige & Benutzerdefiniertes Raster & Erste sichtbare Anzeigesteuerung: optionale Spalten und Zeilen für diese Galerie. Ohne ausdrückliches Raster gilt das nächste übergeordnete Raster, das Vererbung an Untergalerien zulässt, danach die Designvorgabe.\\
 Anzeige & Grenzen responsiver Vorschaubilder & Optionale Mindest-/Höchstgrenzen für Vorschaubildgrößen. Beim Speichern können die Galeriegrenzen rekursiv auf Nachkommen kopiert werden; rekursives Speichern ist standardmäßig aus.\\
 Anzeige & Flugroute & Erweiterter manueller Routentext unterstützt die lokale Kennungssuche und ausdrückliche \codeword{NAME@latitude,longitude}-Punkte. SimBrief kann einen OFP, einen Beschreibungsentwurf und aufgelöste Routenkoordinaten speichern.\\
-Medien hochladen & Titelbild & Automatisch oder ein ausgewähltes Foto, einschließlich geeigneter Fotos aus Nachkommen, wenn die Auswahl sie anbietet.\\
-Medien hochladen & Hochgeladenes Galerievorschaubild & Separates Medium für die Galeriekarte, unabhängig von gewöhnlichen Galeriefotos gespeichert.\\
-Medien hochladen & Hintergrundquelle & Designvorgabe übernehmen, einen neuen Hintergrund hochladen, ein vorhandenes Galeriebild wählen oder eine Collage aus öffentlichen Galerien erzeugen.\\
-Medien hochladen & Branding-Ressourcen & Optionale galeriespezifische Banner-, Logo- und Trennlinienressourcen überschreiben konfigurierte Designersatzwerte nur für diese Galerie.\\
-Medien hochladen & Scan/Import & Durchsucht den physischen Galerieordner erneut und synchronisiert unterstützte Medien in den Katalog.\\
-Medien hochladen & Alle Vorschaubilder erstellen & Erstellt die Vorschaubilder dieser Galerie neu. Wählen Sie \ui{Untergalerien einschließen}, um ihre Nachkommen einzubeziehen; andere Galeriezweige bleiben außerhalb des Auftrags. Die Browsererzeugung ist standardmäßig ausgewählt, wenn verfügbar; es gibt eine Option zur Servererzeugung.\\
+Medienverwaltung & Titelbild & Automatisch oder ein ausgewähltes Foto, einschließlich geeigneter Fotos aus Nachkommen, wenn die Auswahl sie anbietet.\\
+Medienverwaltung & Hochgeladenes Galerievorschaubild & Separates Medium für die Galeriekarte, unabhängig von gewöhnlichen Galeriefotos gespeichert.\\
+Medienverwaltung & Hintergrundquelle & Designvorgabe übernehmen, einen neuen Hintergrund hochladen, ein vorhandenes Galeriebild wählen oder eine Collage aus öffentlichen Galerien erzeugen.\\
+Medienverwaltung & Branding-Ressourcen & Optionale galeriespezifische Banner-, Logo- und Trennlinienressourcen überschreiben konfigurierte Designersatzwerte nur für diese Galerie.\\
+Medienverwaltung & Scan/Import & Durchsucht den physischen Galerieordner erneut und synchronisiert unterstützte Medien in den Katalog.\\
+Medienverwaltung & Alle Vorschaubilder erstellen & Erstellt die Vorschaubilder dieser Galerie neu. Wählen Sie \ui{Untergalerien einschließen}, um ihre Nachkommen einzubeziehen; andere Galeriezweige bleiben außerhalb des Auftrags. Die Browsererzeugung ist standardmäßig ausgewählt, wenn verfügbar; es gibt eine Option zur Servererzeugung.\\
 Werkzeuge & Organizer, Umbenenner, API & Datumsorganizer, physischer Medienumbenenner, Verwaltung von Upload-API-Schlüsseln, KI-Neuerzeugung und Galeriemigration erscheinen nur bei verfügbaren Schemata/Funktionen.\\
 \bottomrule
 \end{longtable}
@@ -1883,7 +1922,7 @@ Der Reiter \ui{Bilder} im Galeriebearbeiter bündelt häufige Fotoarbeiten in ei
 
 Der Titelbild-Stern hat bei unterstütztem Datenbankschema drei Zustände: Ein leerer Stern wählt nur dieses Foto aus (gold); ein erneuter Klick auf den goldenen Stern lässt es ausgewählt und aktiviert das Hinzufügen (blau); ein Klick auf einen weiteren leeren Stern fügt das Foto hinzu, bis zu vier Fotos. Ein Klick auf einen ausgewählten blauen Stern behält nur dieses Foto bei (gold). Jeder Klick wird sofort gespeichert. Die Sterne werden direkt im rechten Admin-Bereich aktualisiert; Registerkarte, Bildlaufposition, andere Formularentwürfe und geladene Fotoreihen bleiben erhalten. Die öffentliche Galerie wird separat aktualisiert. Nach einem Fehler oder einer verlorenen Antwort liest der Editor zuerst den aktuellen Titelbildstatus ein, ohne den Bereich zu ersetzen. Bei geändertem Zustand aktualisiert er die Sterne und danach die öffentliche Galerie; andernfalls prüfen Sie vor einem erneuten Versuch den aktuellen Zustand, da die Speicherung vor einem Fehler beim Erstellen der Antwort erfolgt sein kann.
 
-Unter \ui{Medien hochladen} > \ui{Titelbild} wählt \ui{Automatisch (2 Fotos)} bis zu zwei geeignete direkte Fotos und füllt fehlende Plätze mit zugänglichen Untergalerien. \ui{Standard (bisheriges Galerieverhalten)} bewahrt die bisherige Darstellung für Galerien, die noch keinen automatischen oder manuellen Titelbildmodus festgelegt haben. Öffentliche Karten prüfen Sichtbarkeit und Galeriezugriff erneut; unveröffentlichte oder unzugängliche Fotos werden nicht angezeigt.
+Unter \ui{Medienverwaltung} > \ui{Titelbild} wählt \ui{Automatisch (2 Fotos)} bis zu zwei geeignete direkte Fotos und füllt fehlende Plätze mit zugänglichen Untergalerien. \ui{Standard (bisheriges Galerieverhalten)} bewahrt die bisherige Darstellung für Galerien, die noch keinen automatischen oder manuellen Titelbildmodus festgelegt haben. Öffentliche Karten prüfen Sichtbarkeit und Galeriezugriff erneut; unveröffentlichte oder unzugängliche Fotos werden nicht angezeigt.
 
 Ist die optionale Funktion \ui{Picture Manager} aktiviert, kann ein normal angemeldeter Administrator Fotos und direkte physische Untergalerien im öffentlichen Galerieraster auswählen. Häkchen wählen einzelne Karten; Umschalt-Klick wählt einen Bereich; Strg-Klick oder Cmd-Klick schaltet die Auswahl einer Karte um; \ui{Alle auswählen}, \ui{Auswahl aufheben} und Strg/Cmd+A unterstützen größere Auswahlen auf der sichtbaren Seite. Smart-Gallery-Karten gehören nicht zu dieser dateibasierten Auswahl. Das Ziehen eines nicht ausgewählten Fotos beginnt mit diesem Foto als Auswahl; das Ziehen einer vorhandenen Fotoauswahl verschiebt die ausgewählten Fotos gemeinsam. Eine sichtbare Untergaleriekarte wird zum Ablageziel; das Ablegen führt denselben validierten Fotoverschiebevorgang aus wie die Zielauswahl. Physische Galeriekarten selbst sind keine Ziehquellen.
 
@@ -2838,6 +2877,18 @@ Pausieren und Abbrechen erfolgen kooperativ: Sie wirken zwischen begrenzten Vorg
 Der Abschlussbericht trennt entfernte Zeilen und Dateien, analysierte oder optimierte Tabellen, Übersprünge, Warnungen und Fehler. Er meldet physischen Speicher vor/nach der Arbeit nur bei ausreichenden Bestandsnachweisen. Der allgemeine Ablauf wendet niemals Migrationen an, führt Schemareparaturen aus, installiert Aktualisierungen, löscht Administrationsprotokollarchive, leert alle Papierkorbeinträge oder erzeugt Medien neu; verwenden Sie Spezialseiten für diese bewussten Vorgänge.
 
 Download-/Cachebereinigung durchläuft Manifestcache, bisherigen Download-Artefaktcache und Cache erzeugter ZIP-Dateien als getrennte begrenzte Schritte. Diese Caches sind unabhängige Optimierungen: Ist einer auf dem aktuellen Host nicht verfügbar, bewahrt die Zentrale erledigte Bereinigung, vermerkt eine sichere Warnung und fährt mit anderen Verantwortungsbereichen und späteren Aufgaben fort. Die Warnung darf Vorgang und stabile Fehlerkategorie benennen, aber keine unverarbeitete Ausnahmemeldung, SQL, Zugangsdaten, privaten Pfad oder Stacktrace offenlegen. Ändert eine Aktualisierung diesen Ausführungsvertrag, ist ein älterer fertiger Plan bewusst veraltet; führen Sie vor dem Fortsetzen Analysieren erneut aus.
+
+Der Cache-Lebenszyklus erhält höchstens 32 kurze Browserschritte pro zentralem
+Lauf. Fertige Bereiche starten nicht erneut, während ein anderer auf einen
+Wiederholungsversuch wartet. Aufgeschobene oder nicht verfügbare Arbeit behält
+ihren Kontrollpunkt; spätere Aufgaben laufen weiter. Das Admin-Protokoll
+vermerkt Grund, Schrittzahl, Abdeckung und ausstehende Bytes unter
+\codeword{maintenance\_center.cache\_lifecycle\_deferred}.
+Pause und Abbrechen funktionieren auch während einer Anfrage: Die Steuerung
+folgt dem aktuellen Schritt; ein letzter geschützter Schritt gibt beim Abbruch
+die zentrale Sperre frei. Ein Dienstneustart bewahrt den Auftrag. Laden Sie
+nach der Aktualisierung die Wartungszentrale neu, um denselben Lauf
+fortzusetzen oder abzubrechen.
 
 \subsection{Vorschaubildwartung}
 

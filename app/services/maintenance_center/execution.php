@@ -1078,21 +1078,31 @@ function maintenance_center_complete_job(array $row, array $state): array
 }
 
 /**
- * Move at most one verified legacy original and retain its resumable cursor.
- * @param array{task_state:array{cursor?:array{gallery_id:int,
- *     track_id:string}|null,moved?:int,bytes?:int}} $context Persisted task
- *     checkpoint; the surrounding executor owns the durable job write.
+ * Move a verified local original, then prune bounded unbacked catalog records.
+ * @param array{job?:array{id?:int},task_state:array{cursor?:array{gallery_id:int,
+ *     track_id:string}|null,moved?:int,bytes?:int,migration_complete?:bool,
+ *     orphans_removed?:int}} $context Persisted task checkpoint; the surrounding
+ *     executor owns its durable write.
  * @return array{done:bool,task_state:array{cursor:?array{gallery_id:int,
- *     track_id:string},moved:int,bytes:int},metrics:array{
- *     music_tracks_moved:int,music_bytes_moved:int},activity:string} Committed
- *     slice totals and next cursor; failed moves preserve the old checkpoint.
- * @throws RuntimeException When an original cannot be moved safely.
+ *     track_id:string},moved:int,bytes:int,migration_complete:bool,
+ *     orphans_removed:int},metrics:array{music_tracks_moved:int,
+ *     music_bytes_moved:int,rows_removed:array{music_songs:int}},activity:string}
+ *     Committed totals and cursor; cleanup continues without repeating moves.
+ * @throws RuntimeException When an original or catalog cannot be changed safely.
  */
 function maintenance_center_execute_music_repository(array $context): array
 {
     $previous = $context['task_state'];
     $cursor = $previous['cursor'] ?? null;
-    $result = gallery_music_migrate_repository($cursor);
+    $result = !empty($previous['migration_complete'])
+        ? [
+            'cursor' => $cursor,
+            'moved' => 0,
+            'bytes' => 0,
+            'complete' => true,
+            'error' => null,
+        ]
+        : gallery_music_migrate_repository($cursor);
     if ($result['error'] !== null) {
         throw new RuntimeException(maintenance_center_runtime_text(
             'admin.maintenance_center.runtime.music_repository_failed',
@@ -1103,22 +1113,47 @@ function maintenance_center_execute_music_repository(array $context): array
     $moved = max(0, (int) $result['moved']);
     $bytes = max(0, (int) $result['bytes']);
     $totalMoved = max(0, (int) ($previous['moved'] ?? 0)) + $moved;
+    $pruned = $result['complete']
+        ? music_catalog_prune_unbacked_songs()
+        : ['removed' => 0, 'has_more' => true];
+    $orphansRemoved = max(0, (int) ($previous['orphans_removed'] ?? 0))
+        + $pruned['removed'];
+    if ($pruned['removed'] > 0) {
+        maintenance_center_log_lifecycle(
+            'info',
+            'maintenance_center.music_orphans_removed',
+            'Removed catalog song records without gallery use or repository assets.',
+            (int) ($context['job']['id'] ?? 0),
+            ['removed' => $pruned['removed']],
+        );
+    }
+    $activity = maintenance_center_runtime_text(
+        'admin.maintenance_center.runtime.music_repository_moved',
+        'Moved {count} original(s) to the music repository.',
+        ['count' => $totalMoved],
+    );
+    if ($result['complete']) {
+        $activity .= ' ' . maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.music_orphans_removed',
+            'Removed {count} catalog record(s) without originals.',
+            ['count' => $orphansRemoved],
+        );
+    }
     return [
-        'done' => $result['complete'],
+        'done' => $result['complete'] && !$pruned['has_more'],
         'task_state' => [
             'cursor' => $result['cursor'],
             'moved' => $totalMoved,
             'bytes' => max(0, (int) ($previous['bytes'] ?? 0)) + $bytes,
+            'migration_complete' => $result['complete'],
+            'orphans_removed' => $orphansRemoved,
         ],
         'metrics' => [
             'music_tracks_moved' => $moved,
             'music_bytes_moved' => $bytes,
+            'rows_removed' => ['music_songs' => $pruned['removed']],
         ],
-        'activity' => maintenance_center_runtime_text(
-            'admin.maintenance_center.runtime.music_repository_moved',
-            'Moved {count} original(s) to the music repository.',
-            ['count' => $totalMoved],
-        ),
+        'activity' => $activity,
     ];
 }
 
@@ -1481,9 +1516,48 @@ function maintenance_center_run_download_cleanup_operation(
 }
 
 /**
+ * Decide whether the central cache opportunity can admit another worker slice.
+ * @param array{ok?:bool,busy?:bool,skipped?:bool|int,cleanup_blocked?:bool,
+ *     registry?:bool,phase?:string} $worker Actual worker outcome; integer
+ *     skipped counts describe preserved files, while boolean true means yield.
+ * @param int $slices Worker calls already admitted by this central job.
+ * @return array{advance:bool,reason:string} Whether to run later central tasks,
+ *     with a bounded reason; deferred work retains its own durable checkpoint.
+ */
+function maintenance_center_cache_lifecycle_continuation(
+    array $worker,
+    int $slices,
+): array {
+    $reason = match (true) {
+        empty($worker['ok']) => 'worker_unavailable',
+        !empty($worker['busy']) => 'worker_busy',
+        !empty($worker['cleanup_blocked']) => 'cleanup_blocked',
+        ($worker['skipped'] ?? false) === true => 'worker_deferred',
+        empty($worker['registry'])
+            && ($worker['phase'] ?? '') === 'complete' => 'completed',
+        $slices >= MAINTENANCE_CENTER_CACHE_LIFECYCLE_SLICES
+            => 'central_slice_limit',
+        default => 'working',
+    };
+    return ['advance' => $reason !== 'working', 'reason' => $reason];
+}
+
+/**
  * Run one existing cache owner or independently resumable updater-trash slice.
- * @param array{job:array{id?:int},task_state:array<string,mixed>} $context Central job identity and persisted task continuation state.
- * @return array{done:bool,fraction:float,task_state:array<string,mixed>,activity:string,metrics?:array<string,mixed>,current_subtask?:string,warning?:string,warning_code?:string} Bounded task progress with actual removals and visible owner warnings.
+ * The persisted task state retains operation_index, manifest_slices,
+ * lifecycle_slices, lifecycle_cycle_id and lifecycle_continuations (SHA-256
+ * region keys), plus owner snapshots under manifest, legacy, zip,
+ * updater_cache_gc and cache_lifecycle. Diagnostics are keyed by operation and
+ * contain safe status/duration, optional exception provenance, continuation
+ * reason, slice/coverage counters and pending bytes.
+ * @param array{job:array{id?:int},task_state:array<string,mixed>} $context
+ *     Central job identity and the persisted continuation/snapshot fields above.
+ * @return array{done:bool,fraction:float,task_state:array<string,mixed>,
+ *     activity:string,metrics?:array{files_removed:int,
+ *     updater_cache_bytes_removed:int,rows_removed:array{download_cache:int}},
+ *     current_subtask?:string,warning?:string,warning_code?:string} Bounded
+ *     progress with the updated task state described above, actual removals
+ *     and visible owner warnings; the already-finished path omits metrics.
  */
 function maintenance_center_execute_downloads(array $context): array
 {
@@ -1519,42 +1593,134 @@ function maintenance_center_execute_downloads(array $context): array
     $bytes = 0;
 
     if ($operation === 'cache_lifecycle') {
-        $before = cache_lifecycle_status();
+        $slices = max(0, (int) ($taskState['lifecycle_slices'] ?? 0)) + 1;
+        $cycleId = (string) ($taskState['lifecycle_cycle_id'] ?? '');
+        $continuations = (array) (
+            $taskState['lifecycle_continuations'] ?? []
+        );
         $result = maintenance_center_run_download_cleanup_operation(
             $jobId,
             $operation,
-            static fn(): array => cache_lifecycle_scheduled_slice(true),
+            static function () use ($cycleId, $continuations): array {
+                $before = cache_lifecycle_status();
+                // Due work wins; only admitted unfinished identities continue
+                // early. Never force healthy completed regions to restart while
+                // another region is waiting for its retry backoff.
+                $worker = cache_lifecycle_scheduled_slice(
+                    false,
+                    $cycleId,
+                    CACHE_LIFECYCLE_COMBINED_SECONDS,
+                    $continuations,
+                );
+                return [
+                    'before' => $before,
+                    'worker' => $worker,
+                    'after' => cache_lifecycle_status(),
+                ];
+            },
         );
-        $lifecycle = $result['value'];
-        $after = cache_lifecycle_status();
-        $same = $before['id'] === $after['id'];
-        $files = max(0, $after['removed'] - ($same ? $before['removed'] : 0));
+        $before = (array) ($result['value']['before'] ?? []);
+        $lifecycle = (array) ($result['value']['worker'] ?? []);
+        $after = (array) ($result['value']['after'] ?? []);
+        $same = ($before['id'] ?? '') === ($after['id'] ?? '');
+        $files = max(
+            0,
+            (int) ($after['removed'] ?? 0)
+                - ($same ? (int) ($before['removed'] ?? 0) : 0),
+        );
         $bytes = max(
             0,
-            $after['bytes_removed'] - ($same ? $before['bytes_removed'] : 0),
+            (int) ($after['bytes_removed'] ?? 0)
+                - ($same ? (int) ($before['bytes_removed'] ?? 0) : 0),
         );
-        $advance =
-            empty($result['ok'])
-            || !empty($lifecycle['skipped'])
-            || empty($lifecycle['ok'])
-            || $after['phase'] === 'complete';
-        if (
-            $after['partial']
+        $continuation = maintenance_center_cache_lifecycle_continuation(
+            !empty($after['ok']) ? $lifecycle : ['ok' => false],
+            $slices,
+        );
+        $advance = $continuation['advance'];
+        $taskState['lifecycle_slices'] = $slices;
+        if (!empty($lifecycle['registry'])) {
+            $regionKey = (string) ($lifecycle['region_key'] ?? '');
+            // Region identities are exactly one hexadecimal SHA-256 digest.
+            if (preg_match('/^[a-f0-9]{64}$/D', $regionKey) === 1) {
+                $continuations = array_values(array_filter(
+                    $continuations,
+                    static fn(string $key): bool => $key !== $regionKey,
+                ));
+                $continuations[] = $regionKey;
+            }
+            $taskState['lifecycle_continuations'] = $continuations;
+        } else {
+            $taskState['lifecycle_cycle_id'] = (string) (
+                $lifecycle['id'] ?? ''
+            );
+        }
+        $incomplete =
+            !empty($after['partial'])
             || empty($result['ok'])
-            || !empty($lifecycle['skipped'])
-            || empty($lifecycle['ok'])
-        ) {
+            || empty($after['ok'])
+            || !in_array(
+                $continuation['reason'],
+                ['working', 'completed', 'worker_deferred'],
+                true,
+            )
+            || $continuation['reason'] === 'worker_deferred'
+                && ($lifecycle['reason'] ?? '') !== 'cache_lifecycle_not_due';
+        if ($advance && $incomplete) {
             $warning = maintenance_center_runtime_text(
-                'admin.cache_lifecycle.central_partial',
-                'Cache lifecycle has protected, partial or unavailable work; inspect its preview and diagnostics.',
+                'admin.maintenance_center.runtime.lifecycle_deferred',
+                'Cache cleanup has unfinished or unavailable work. Maintenance continues; see Admin Logs for details.',
+            );
+        }
+        $workerReason = (string) ($lifecycle['reason'] ?? '');
+        $diagnostic = $result['diagnostic'] + [
+            'reason' => $continuation['reason'],
+            'worker_reason' => strlen($workerReason)
+                <= MAINTENANCE_CENTER_DIAGNOSTIC_CODE_LIMIT
+                && preg_match('/^[a-z0-9_]+$/D', $workerReason) === 1
+                    ? $workerReason : '',
+            'slices' => $slices,
+            'partial' => $incomplete,
+            'phase' => (string) ($after['phase'] ?? 'unavailable'),
+            'regions_working' => (int) ($after['regions_working'] ?? 0),
+            'regions_unverified' => (int) ($after['regions_unverified'] ?? 0),
+            'pending_bytes' => (int) ($after['pending_bytes'] ?? 0),
+            'errors' => (int) ($after['errors'] ?? 0),
+            'blocked' => (int) ($after['blocked'] ?? 0),
+        ];
+        if ($advance) {
+            maintenance_center_log_lifecycle(
+                $incomplete ? 'warning' : 'info',
+                $incomplete
+                    ? 'maintenance_center.cache_lifecycle_deferred'
+                    : 'maintenance_center.cache_lifecycle_completed',
+                'Central cache cleanup opportunity ended; later maintenance tasks can continue.',
+                $jobId,
+                array_intersect_key($diagnostic, array_flip([
+                    'reason',
+                    'worker_reason',
+                    'slices',
+                    'partial',
+                    'phase',
+                    'regions_working',
+                    'regions_unverified',
+                    'pending_bytes',
+                    'errors',
+                    'blocked',
+                ])),
             );
         }
         $taskState['cache_lifecycle'] = $after;
-        $taskState['diagnostics'][$operation] = $result['diagnostic'];
+        $taskState['diagnostics'][$operation] = $diagnostic;
         $activity = maintenance_center_runtime_text(
-            'admin.cache_lifecycle.central_progress',
-            'Cache lifecycle {phase}: {files} removed, {bytes} bytes reclaimed.',
-            ['phase' => $after['phase'], 'files' => $files, 'bytes' => $bytes],
+            'admin.maintenance_center.runtime.lifecycle_progress',
+            'Cache cleanup slice {slice}/{limit}: {files} removed, {bytes} bytes reclaimed.',
+            [
+                'slice' => $slices,
+                'limit' => MAINTENANCE_CENTER_CACHE_LIFECYCLE_SLICES,
+                'files' => $files,
+                'bytes' => $bytes,
+            ],
         );
     } elseif ($operation === 'updater_prune_trash') {
         $result = maintenance_center_run_download_cleanup_operation(
@@ -1714,6 +1880,15 @@ function maintenance_center_execute_downloads(array $context): array
                 $operationIndex
                 + min(0.99, (int) ($taskState['manifest_slices'] ?? 1) / 10)
             ) / count($operations);
+    } elseif (!$advance && $operation === 'cache_lifecycle') {
+        $fraction = (
+            $operationIndex
+            + min(
+                0.99,
+                $taskState['lifecycle_slices']
+                    / MAINTENANCE_CENTER_CACHE_LIFECYCLE_SLICES,
+            )
+        ) / count($operations);
     }
 
     return [

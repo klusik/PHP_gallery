@@ -156,10 +156,34 @@ shared `data/music/` folder.
 `admin_gallery_music_browser_test.mjs` renders the real Media/music view and
 uses production styles and mutation handlers on desktop and narrow screens.
 It covers scoped nested tabs, direct/live source groups, chooser replacement
+with readable titles and nonzero action icons under the production CSS cascade,
 without rebasing unrelated revision tokens, canonical completion and retained
 panel/URL state. Controlled audio/transport adapters do not qualify real codecs.
+It also covers lazy album rows, preview without assignment, the shared-header
+preference, serial bulk writes with fresh CAS tokens, already-present skipping
+and exactly one outer editor after replacement. The repository database fixture
+checks read-only preview and direct-source chooser availability.
+The service fixture also exercises the production Admin-log writer with a
+capturing persistence adapter: response/log reference agreement, safe wrapped
+PDO diagnostics, persisted-write status and the PHP-log fallback. The repository
+database fixture distinguishes withheld dirty sources from missing originals
+and verifies that both refusals preserve the authoritative source playlist.
 The global manager fixture also covers repository-only file details, promoted
 origin deduplication and direct/live gallery location links.
+The repository fixture also reproduces removing a v1 track before migration:
+failed preservation keeps the file/index, successful removal retains the same
+song and verified central bytes, and subsequent re-add/remove remains usable.
+Its orphan cleanup cases cover dependent album metadata, a lowered batch bound,
+dirty/active local references and a registered asset with temporarily missing
+bytes. The maintenance fixture covers multiple cleanup batches without replaying
+the completed migration. These fixtures do not establish live Mac recovery of
+bytes already deleted by the former removal path.
+
+The isolated Images controller fixture loads the actual catalog response owner,
+and the public media HTTP fixture loads Core request normalization before the
+shared audio streamer. Synthetic music cards carry the same outer editor marker
+as the production view. The orphan scenario seeds the installed track-instance
+columns rather than assuming song timestamps also exist on instances.
 
 The Maintenance Center contract keeps music relocation opt-in, delegates one
 source slice per step and preserves the last successful checkpoint on refusal.
@@ -951,7 +975,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.142.3. Release verification uses the
+This guide applies to PHP Gallery Version 0.142.4. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -2222,6 +2246,18 @@ preflight, and reuses the existing attachment owner. The fixture executes its
 read-only schema analyzer and adapter-backed worker executor across resumable
 slices, checking cumulative cursor/counters, per-slice metrics and terminal
 warnings for failed snapshots.
+
+The same contract exercises regional versus whole-cache completion, boolean
+scheduler yields versus integer preserved-file counts, and the exact central
+32-slice boundary. `tests/cache_lifecycle_registry_test.php` executes the real
+central cache adapter against disposable SQLite/filesystem state with failed
+regions in retry backoff and healthy regions not yet due. It verifies bounded
+deferral logging, unchanged checkpoints and isolation of invalid status JSON.
+`tests/maintenance_center_controls_test.mjs` exercises the production async
+control owners with held responses: pause during execution, cancellation during
+analysis/execution, cancel taking priority over pause, cancellation flag
+consumption and a queued cancel surviving transport failure. It uses no live
+maintenance data. Real browser/server cancellation remains a manual check.
 
 A real MySQL/MariaDB physical rebuild is environment-dependent and is not proven
 by the source-level fixture. On a disposable migrated installation, manually
@@ -6039,7 +6075,7 @@ browser retries. Run these through the central audit, not a separate test loop.
 
 ## Clipboard image uploads
 
-Local upload UI acceptance covers the single Upload media main tab, photo
+Local upload UI acceptance covers the single Media management main tab, photo
 preloading alongside usable media tools, legacy Images links, a single mixed
 photo/PDF/audio picker, collapsed PDF conversion and plain help dismissal with
 Escape/outside click. Check desktop and narrow layouts plus the top disk Save's

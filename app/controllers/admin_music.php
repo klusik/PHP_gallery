@@ -830,6 +830,8 @@ function admin_music_error(Throwable $exception): string
         ]);
     }
     return match ($exception->getMessage()) {
+        'music.original_unavailable' => t('music.original_unavailable'),
+        'music.source_reconcile_required' => t('music.catalog_sync_required'),
         'music.conflict' => t('admin.music.error_stale', 'The catalog changed. Reload before saving.'),
         'invalid_selection' => t('admin.music.error_selection', 'Select at least two valid items.'),
         'music.album_cycle' => t('admin.music.error_cycle', 'An album cannot be moved inside itself.'),

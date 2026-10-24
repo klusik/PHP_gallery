@@ -419,6 +419,9 @@ namespace {
     require_once
         dirname(__DIR__)
             . '/app/controllers/admin_galleries_edit_page/tab_images.php';
+    // The editor now delegates catalog reads before selecting an Images path.
+    // Load that actual owner even when this fixture requests no music action.
+    require_once dirname(__DIR__) . '/app/controllers/gallery_music.php';
     require_once
         dirname(__DIR__)
             . '/app/controllers/admin_galleries_edit_page/controller.php';

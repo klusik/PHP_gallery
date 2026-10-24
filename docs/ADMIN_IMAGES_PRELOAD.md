@@ -62,6 +62,12 @@ geometry/EXIF reads are excluded. The ordinary
 thumbnail resolver and visual-preview fallback remain supported by default.
 900px previews are merely retained as on-demand button URLs.
 
+An existing large thumbnail does not establish that the 300px editor thumbnail
+exists. If the editor reports failed thumbnails, use **Thumbnail tools → Create
+gallery thumbnails** to complete missing variants, then retry Images. Disable
+**Browser-side thumbnail rebuild** there to use server-side generation.
+The preload itself stays read-only and never downloads originals as a fallback.
+
 Images is aria-disabled, removed from keyboard traversal and rejected by the
 shared activation function during preparation. Direct Images query intent is
 remembered and selected only after readiness. Other tab clicks do not change
