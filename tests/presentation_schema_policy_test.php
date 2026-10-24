@@ -245,6 +245,7 @@ namespace {
         'presentation_picture_game',
         'presentation_lightbox_override',
         'presentation_gallery_settings',
+        'presentation_links',
         'presentation_openai_text',
         'presentation_openai_image_input',
         'presentation_ai_image_analysis',

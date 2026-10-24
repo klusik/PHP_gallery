@@ -362,12 +362,12 @@ leaflet_marker_assert_contains(
 );
 leaflet_marker_assert_contains(
     $galleryEntrypoint,
-    '20261018-presentation-confirm-v1',
+    '20261024-short-presentation-v1',
     'authenticated entrypoint cache revision',
 );
 leaflet_marker_assert_contains(
     $publicEntrypoint,
-    '20261018-presentation-confirm-v1',
+    '20261024-short-presentation-v1',
     'public entrypoint cache revision',
 );
 leaflet_marker_assert_not_contains(

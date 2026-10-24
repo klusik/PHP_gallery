@@ -34,7 +34,7 @@
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261023-public-modal-v3';
-import {galleryPresentationOptions} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
+import {galleryPresentationOptions, galleryPresentationRequested} from './gallery-presentation.js?v=20261024-short-presentation-v1';
 import {
     stopGalleryMusicViewer,
 } from './gallery-music-player.js?v=20261024-catalog-workspace-v3';
@@ -338,8 +338,7 @@ export function setupGalleryLightbox() {
 
     scheduleIdleLightboxActivation(setupToken);
     if (!deferredLightboxState.presentationConsumed
-        && ['presentation', 'autoplay'].some(key =>
-            new URLSearchParams(location.search).get(key) === '1')
+        && galleryPresentationRequested()
         && document.querySelector('[data-lightbox]')) {
         deferredLightboxState.presentationConsumed = true;
         void activateFullLightbox(setupToken).then(() => {

@@ -448,7 +448,8 @@ function view_render_public_gallery_preview_toolbar(array $viewModel): void
  * @param array{title?:string,description?:string,
  *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
  *     banner_url?:string,logo_url?:string,date_html?:string,pdf_html?:string,
- *     presentation_url?:string,presentation_music?:bool} $viewModel Prepared
+ *     presentation_url?:string,presentation_music?:bool,
+ *     presentation_csrf?:string} $viewModel Prepared
  *     branding, authorized attachments and optional presentation controls;
  *     omitted fields retain their empty presentation defaults.
  * @param bool $includeContent Whether to append description and documents; defaults to true for direct view consumers.
@@ -495,7 +496,7 @@ function view_render_public_gallery_branding_header(
  * @param array{description?:string,
  *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
  *     pdf_html?:string,presentation_url?:string,
- *     presentation_music?:bool} $viewModel Prepared description, link metadata,
+ *     presentation_music?:bool,presentation_csrf?:string} $viewModel Prepared description, link metadata,
  *     eligible presentation URL and
  *     protected attachment markup; absent fields render no content.
  * @return void Emit the hero row, standalone text or left-aligned applets.
@@ -514,6 +515,7 @@ function view_render_public_gallery_description_documents(array $viewModel): voi
         'media_html' => (string) ($viewModel['pdf_html'] ?? ''),
         'presentation_url' => (string) ($viewModel['presentation_url'] ?? ''),
         'presentation_music' => !empty($viewModel['presentation_music']),
+        'presentation_csrf' => (string) ($viewModel['presentation_csrf'] ?? ''),
     ]);
 }
 

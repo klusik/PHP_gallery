@@ -16,7 +16,8 @@ import {test} from 'node:test';
 import vm from 'node:vm';
 import {createLightboxNavigationLifecycle} from '../public/assets/gallery-modules/lightbox-navigation-lifecycle.js';
 import {
-    galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
+    galleryPresentationOptions, galleryPresentationRequested,
+    GALLERY_PRESENTATION_SPEEDS,
 } from '../public/assets/gallery-modules/gallery-presentation.js';
 
 const source = readFileSync(new URL('../public/assets/gallery-modules/lightbox.js', import.meta.url), 'utf8');
@@ -92,6 +93,7 @@ test('presentation links launch once and require an authorized viewer', async ()
         },
         teardownGalleryLightbox: () => {},
         scheduleIdleLightboxActivation: () => {},
+        galleryPresentationRequested: () => true,
         activateFullLightbox: async () => { launches.push('activate'); },
     });
     vm.runInContext(setup[0].replace('export ', ''), context);
@@ -138,6 +140,32 @@ test('link snapshots override saved defaults with a closed playback vocabulary',
     } finally {
         if (original === undefined) delete globalThis.location;
         else globalThis.location = original;
+    }
+});
+
+test('resolved compact snapshots launch without expanding the browser URL', () => {
+    const oldLocation = globalThis.location;
+    const oldDocument = globalThis.document;
+    const snapshot = {version: 1, autoplay: false, music: false,
+        fullscreen: false, exclusive: true, interval: 'fast', transition: 'slow'};
+    globalThis.location = {href: 'https://gallery.test/presentation=abcd1234',
+        search: ''};
+    globalThis.document = {querySelector: () => ({getAttribute: () => JSON.stringify(snapshot)})};
+    try {
+        assert.equal(galleryPresentationRequested(), true);
+        assert.deepEqual(galleryPresentationOptions({dataset: {}}), {
+            autoplay: false, music: false, fullscreen: false, exclusive: true,
+            interval: 'fast', transition: 'slow',
+        });
+        assert.match(location.href, /\/presentation=abcd1234$/);
+        globalThis.document = {querySelector: () => null};
+        assert.equal(galleryPresentationRequested(), false,
+            'An unresolved code must never launch through a client-only guess.');
+    } finally {
+        if (oldLocation === undefined) delete globalThis.location;
+        else globalThis.location = oldLocation;
+        if (oldDocument === undefined) delete globalThis.document;
+        else globalThis.document = oldDocument;
     }
 });
 

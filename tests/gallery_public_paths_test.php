@@ -41,6 +41,7 @@ use function Gallery\Services\gallery_parent_id_assignments_from_folder_paths;
 use function Gallery\Services\gallery_public_path_assignments;
 
 require_once __DIR__ . '/../app/helpers.php';
+require_once __DIR__ . '/../app/services/gallery_paths.php';
 require_once __DIR__ . '/../app/services/public_paths.php';
 
 /**
@@ -216,5 +217,14 @@ assert_gallery_public_path_same(
     $parentAssignments[3],
     'stale grandchild parent replaced from folder path',
 );
+
+$reservedAssignments = gallery_public_path_assignments([
+    ['id' => 40, 'title' => 'ae684832', 'folder_path' => 'hash-title'],
+    ['id' => 41, 'title' => 'p-ae684832', 'folder_path' => 'prefixed-title'],
+]);
+assert_gallery_public_path_same('gallery-ae684832',
+    $reservedAssignments[40]['slug'], 'reserve bare presentation code slug');
+assert_gallery_public_path_same('gallery-p-ae684832',
+    $reservedAssignments[41]['slug'], 'reserve presentation prefix slug');
 
 echo "Gallery public path tests passed.\n";

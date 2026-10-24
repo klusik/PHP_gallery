@@ -40,6 +40,213 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 /**
+ * Bound the public code while retaining a sufficiently large collision space.
+ * Type: int. Units: hexadecimal characters. Scope: stored presentation links.
+ * Consumers: presentation_link_code and presentation_link_resolve.
+ * Rationale: Eight characters meet the requested maximum and provide 32 bits;
+ * database uniqueness and collision retries protect existing link identities.
+ */
+const PRESENTATION_LINK_CODE_LENGTH = 8;
+
+/**
+ * Bound contention/collision work for one explicit share request.
+ * Type: int. Units: candidate inserts. Scope: one presentation_link_create call.
+ * Consumers: presentation_link_create.
+ * Rationale: Thirty-two candidates tolerate collisions without an unbounded
+ * public request; exhaustion fails visibly and never replaces an existing row.
+ */
+const PRESENTATION_LINK_INSERT_ATTEMPTS = 32;
+
+/**
+ * Validate the immutable public short-code grammar before any database work.
+ * @param string $code Untrusted path, query or access-gate code.
+ * @return bool Whether the code is exactly eight lowercase hex characters.
+ */
+function presentation_link_code_valid(string $code): bool
+{
+    return strlen($code) === PRESENTATION_LINK_CODE_LENGTH
+        && ctype_xdigit($code) && strtolower($code) === $code;
+}
+
+/**
+ * Find a root short link's destination without granting any visitor access.
+ * @param string $code Untrusted root path/query code.
+ * @return array{gallery_kind:string,gallery_id:int|string}|null Valid routing
+ *     identity, or null for malformed, unknown or invalid stored ownership.
+ * @throws PresentationSchemaUnavailableException On missing/unknown storage.
+ */
+function presentation_link_destination(string $code): ?array
+{
+    if (!presentation_link_code_valid($code)) return null;
+    presentation_schema_assert_write_available(
+        presentation_links_schema_status(),
+        'presentation_link_destination',
+        t('presentation.link_unavailable'),
+    );
+    $destination = \Gallery\Models\presentation_link_model_destination($code);
+    return $destination !== null
+        && in_array($destination['gallery_kind'], ['gallery', 'smart'], true)
+        && (int) $destination['gallery_id'] > 0 ? $destination : null;
+}
+
+/**
+ * Validate and canonicalize a closed version-one presentation snapshot.
+ * @param array{autoplay:string,music:string,fullscreen:string,exclusive:string,
+ *     interval:string,transition:string,lang:string,source_gallery_id:string}
+ *     $input Explicit wire values selected by the HTTP controller.
+ * @return array{version:int,autoplay:bool,music:bool,fullscreen:bool,
+ *     exclusive:bool,interval:string,transition:string,lang:string,
+ *     source_gallery_id:int} Complete immutable snapshot in stable key order.
+ * @throws \InvalidArgumentException On unsupported or malformed option values.
+ */
+function presentation_link_snapshot(array $input): array
+{
+    $snapshot = ['version' => 1]; // Immutable version-one document grammar.
+    foreach (['autoplay', 'music', 'fullscreen', 'exclusive'] as $key) {
+        if (!in_array($input[$key], ['0', '1'], true)) {
+            throw new \InvalidArgumentException('Invalid presentation option.');
+        }
+        $snapshot[$key] = $input[$key] === '1';
+    }
+    foreach (['interval', 'transition'] as $key) {
+        if (!in_array($input[$key], ['slow', 'medium', 'fast'], true)) {
+            throw new \InvalidArgumentException('Invalid presentation speed.');
+        }
+        $snapshot[$key] = $input[$key];
+    }
+    $language = translation_normalize_language_code($input['lang']);
+    if ($language === '' || !translation_language_allowed($language)) {
+        throw new \InvalidArgumentException('Invalid presentation language.');
+    }
+    $source = filter_var($input['source_gallery_id'], FILTER_VALIDATE_INT);
+    if ($source === false || $source < 0) {
+        throw new \InvalidArgumentException('Invalid presentation source.');
+    }
+    $snapshot['lang'] = $language;
+    $snapshot['source_gallery_id'] = $source;
+    return $snapshot;
+}
+
+/**
+ * Derive a deterministic candidate without truncating the deduplication key.
+ * @param string $fingerprint Full canonical gallery/settings SHA-256 digest.
+ * @param int $attempt Zero for the digest prefix, positive for collision retries.
+ * @return string Eight lowercase hexadecimal characters.
+ */
+function presentation_link_code(string $fingerprint, int $attempt = 0): string
+{
+    return substr(
+        $attempt === 0 ? $fingerprint : hash('sha256', $fingerprint . ':' . $attempt),
+        0,
+        PRESENTATION_LINK_CODE_LENGTH,
+    );
+}
+
+/**
+ * Reuse or atomically register one immutable gallery presentation snapshot.
+ * @param string $kind Gallery namespace, gallery or smart.
+ * @param int $galleryId Positive stable identity in that namespace.
+ * @param array{version:int,autoplay:bool,music:bool,fullscreen:bool,
+ *     exclusive:bool,interval:string,transition:string,lang:string,
+ *     source_gallery_id:int} $snapshot Canonical version-one options.
+ * @return string Existing or newly registered unique short code.
+ * @throws \RuntimeException On storage failure, fingerprint mismatch or exhaustion.
+ * @throws PresentationSchemaUnavailableException On missing/unknown storage.
+ */
+function presentation_link_create(
+    string $kind,
+    int $galleryId,
+    array $snapshot,
+): string {
+    if (!in_array($kind, ['gallery', 'smart'], true) || $galleryId < 1) {
+        throw new \InvalidArgumentException('Invalid presentation gallery.');
+    }
+    presentation_schema_assert_write_available(
+        presentation_links_schema_status(),
+        'presentation_link_create',
+        t('presentation.link_unavailable'),
+    );
+    $json = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $fingerprint = hash('sha256', $kind . ':' . $galleryId . ':' . $json);
+    for ($attempt = 0; $attempt < PRESENTATION_LINK_INSERT_ATTEMPTS; $attempt++) {
+        $existing = \Gallery\Models\presentation_link_model_find_fingerprint(
+            $fingerprint,
+        );
+        if ($existing !== null) {
+            if ($existing['settings_json'] !== $json
+                || $existing['gallery_kind'] !== $kind
+                || (int) $existing['gallery_id'] !== $galleryId) {
+                throw new \RuntimeException('Presentation fingerprint mismatch.');
+            }
+            return $existing['code'];
+        }
+        $code = presentation_link_code($fingerprint, $attempt);
+        if (\Gallery\Models\presentation_link_model_insert(
+            $code, $fingerprint, $kind, $galleryId, $json, gmdate('Y-m-d H:i:s'),
+        )) {
+            return $code;
+        }
+        // The next lookup observes an identical concurrent winner before
+        // trying another code. Existing rows are immutable, including collisions.
+    }
+    // A winner may have committed on the last admitted insert attempt.
+    $existing = \Gallery\Models\presentation_link_model_find_fingerprint($fingerprint);
+    if ($existing !== null && $existing['settings_json'] === $json
+        && $existing['gallery_kind'] === $kind
+        && (int) $existing['gallery_id'] === $galleryId) {
+        return $existing['code'];
+    }
+    throw new \RuntimeException('Presentation code allocation exhausted.');
+}
+
+/**
+ * Resolve a stored version-one snapshot after ordinary gallery authorization.
+ * @param string $code Untrusted short code from the path or query string.
+ * @param string $kind Authorized gallery namespace, gallery or smart.
+ * @param int $galleryId Authorized positive gallery identity.
+ * @return array{version:int,autoplay:bool,music:bool,fullscreen:bool,
+ *     exclusive:bool,interval:string,transition:string,lang:string,
+ *     source_gallery_id:int}|null Valid canonical snapshot, or null for an
+ *     invalid/unknown/cross-gallery code or unsupported/corrupt stored document.
+ * @throws PresentationSchemaUnavailableException On missing/unknown storage.
+ */
+function presentation_link_resolve(string $code, string $kind, int $galleryId): ?array
+{
+    if (!presentation_link_code_valid($code)) {
+        return null;
+    }
+    presentation_schema_assert_write_available(
+        presentation_links_schema_status(),
+        'presentation_link_resolve',
+        t('presentation.link_unavailable'),
+    );
+    $row = \Gallery\Models\presentation_link_model_find($code, $kind, $galleryId);
+    if ($row === null) return null;
+    $snapshot = json_decode($row['settings_json'], true);
+    if (!is_array($snapshot) || ($snapshot['version'] ?? null) !== 1) return null;
+    $input = [];
+    foreach (['autoplay', 'music', 'fullscreen', 'exclusive'] as $key) {
+        if (!is_bool($snapshot[$key] ?? null)) return null;
+        $input[$key] = $snapshot[$key] ? '1' : '0';
+    }
+    foreach (['interval', 'transition', 'lang'] as $key) {
+        if (!is_string($snapshot[$key] ?? null)) return null;
+        $input[$key] = $snapshot[$key];
+    }
+    if (!is_int($snapshot['source_gallery_id'] ?? null)) return null;
+    $input['source_gallery_id'] = (string) $snapshot['source_gallery_id'];
+    try {
+        $canonical = presentation_link_snapshot($input);
+    } catch (\InvalidArgumentException) {
+        return null;
+    }
+    $json = json_encode($canonical, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    return hash_equals($row['fingerprint'], hash(
+        'sha256', $kind . ':' . $galleryId . ':' . $json,
+    )) && $json === $row['settings_json'] ? $canonical : null;
+}
+
+/**
  * Normalize versioned defaults without changing existing gallery behavior.
  * @param array{version?:int,enabled?:bool,autoplay?:bool,music?:bool,interval?:string,
  *     transition?:string}|string|null $value Stored JSON, decoded settings,

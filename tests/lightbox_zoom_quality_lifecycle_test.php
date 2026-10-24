@@ -381,10 +381,10 @@ lightbox_zoom_quality_lifecycle_assert(
     'Teardown, navigation, and close must invalidate pending quality work.',
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($publicEntrypointSource, '20261018-presentation-confirm-v1')
+    str_contains($publicEntrypointSource, '20261024-short-presentation-v1')
         && str_contains(
             $authenticatedEntrypointSource,
-            '20261018-presentation-confirm-v1',
+            '20261024-short-presentation-v1',
         )
         && str_contains(
             $lightboxSource,

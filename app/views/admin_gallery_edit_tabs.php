@@ -1578,7 +1578,7 @@ function view_render_admin_gallery_media_tab(array $model): void
 /**
  * Render discoverable presentation preferences beside the media applets.
  * @param array{gallery_id:int,ready:bool,settings:array{version:int,enabled:bool,autoplay:bool,
- *     music:bool,interval:string,transition:string},url:string} $model
+ *     music:bool,interval:string,transition:string},url:string,csrf?:string} $model
  *     Controller-prepared preferences and localized public snapshot URL.
  * @return void Emit native controls associated with the guarded gallery form.
  */
@@ -1682,7 +1682,11 @@ function view_render_admin_gallery_presentation(array $model): void
                 . '</a>';
     }
     echo
-        view_presentation_share($model['url'], 'editor-' . $model['gallery_id'])
+        view_presentation_share(
+            $model['url'],
+            'editor-' . $model['gallery_id'],
+            (string) ($model['csrf'] ?? ''),
+        )
             . '</div></section>';
 }
 

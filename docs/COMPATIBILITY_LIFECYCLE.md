@@ -1,5 +1,37 @@
 # Compatibility lifecycle and retirement register
 
+## Persistent short presentation links
+
+Owners: existing gallery model, lightbox-settings service, public/Smart
+controllers and presentation browser modules. Newly shared links use immutable
+gallery-scoped version-one snapshots and globally unique eight-character codes.
+The surrogate primary key and full fingerprint remain independent of future
+settings fields. Keep explicit decoders for supported document versions; do not
+reinterpret stored defaults when adding options. Codes have no automatic expiry
+and never grant gallery access. Retain reservations even if a gallery is deleted
+so an old code cannot be reassigned.
+Canonical URLs start at the application root: `/presentation=<code>`, or
+`index.php?presentation=<code>` without rewrite. Destination identity lookup
+does not read settings or grant access. Playback retains the compact address.
+New/edited/generated gallery URL slugs reserve bare eight-character hex codes
+and presentation prefixes, using `gallery-` to disambiguate. Display titles stay
+free. Existing persisted addresses are not rewritten during ordinary reads;
+future regeneration applies the reservation policy.
+
+Legacy `presentation=1` and `autoplay=1` parameter snapshots remain permanent
+support for previously distributed links. Ordinary galleries and legacy links
+remain usable before the new migration; short-link creation/resolution refuses
+missing or unknown storage. The selectable-URL clipboard fallback remains
+supported. Automated fixtures cover persistence, collisions, scope, schema
+refusal and asynchronous ownership. Deployment-wide usage, real-phone playback
+and assistive-technology acceptance are unknown until manual qualification;
+source BASIC does not establish them.
+Password/age forms retain the short code and return only to a presentation
+bound to the same gallery after the existing grant succeeds. If link storage
+fails at that final return, the access controller permanently supports returning
+to the ordinary gallery rather than undoing a valid grant. Full installation
+acceptance of these protected-gallery transitions remains a manual check.
+
 ## Central cache continuation and stop controls
 
 Owner: the existing Maintenance Center and cache registry services, plus the

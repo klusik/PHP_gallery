@@ -266,6 +266,18 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Core bootstrap requires dispatch.php before Kernel::run enters any
+        // controller. Root presentations re-enter that already loaded security
+        // boundary; feature plans must not acquire its bootstrap dependency tree.
+        'Gallery\\Controllers\\public_presentation_root' => [
+            'Gallery\\Core\\cms_dispatch_page',
+        ],
+        // The security owner calls this optional Admin adapter only when its
+        // declaration is already present. Public POSTs use the existing local
+        // JSON detector; CSRF verification must not eagerly load Admin helpers.
+        'Gallery\\Core\\security_request_wants_json' => [
+            'Gallery\\Core\\admin_wants_json',
+        ],
         // Admin boundaries load the existing lifecycle owner before scheduler calls.
         'Gallery\\Controllers\\admin_cron_rows' => [
             'Gallery\\Services\\request_scheduler_snapshot',

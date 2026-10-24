@@ -2002,11 +2002,12 @@ function smart_gallery_save(array $input, int $id = 0): array
  *
  * @param string $value Title or requested slug to normalize.
  * @param int $excludeId Existing definition ID excluded from slug collision checks.
- * @return string Available normalized slug, or throws when no candidate is available.
+ * @return string Available normalized slug outside the presentation namespace,
+ *     or throws when no candidate is available; the display title is unchanged.
  */
 function smart_gallery_unique_slug(string $value, int $excludeId = 0): string
 {
-    $base = slugify($value) ?: 'smart-gallery';
+    $base = gallery_url_slug_base($value) ?: 'smart-gallery';
     $candidate = $base;
     for ($suffix = 2; $suffix < 10000; $suffix++) {
         if (!\Gallery\Models\smart_gallery_model_slug_exists(

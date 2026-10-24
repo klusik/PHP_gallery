@@ -598,6 +598,24 @@ and
 asserts close/audio cleanup. This covers desktop and narrow viewport dimensions.
 The real anonymous HTTP gallery workflow accepts `presentation=1`; guard probes
 retain unknown-parameter and non-gallery-route rejection.
+`presentation_links_test.php` uses real isolated SQLite unique indexes and
+production Model/Service owners for normalized deduplication, physical/Smart
+identity separation, cross-gallery and invalid-code refusal, a forced short-code
+collision, duplicate-fingerprint arbitration, missing/unknown schema and mounted
+clean routing using the production request/URL helpers, plus escaped snapshot
+metadata from the shared lightbox view. Browser sharing verifies session/CSRF
+POST fields, disabled copy
+while pending, short output, stale-result suppression and clipboard fallback.
+The persistence fixture also verifies public security JSON classification before
+and after loading the optional Admin adapter.
+The slideshow fixture covers server-resolved compact snapshots and refuses
+client-only guesses for unresolved codes. Root route vectors have no album path;
+slug fixtures reserve bare codes and presentation prefixes without altering
+titles. Existing hosted PHP/browser/Node
+registries own these fixtures; source BASIC alone does not execute them.
+Manual localhost acceptance also covers actual MySQL migration, physical/Smart
+sharing, filter/language restoration, repeated generation, anonymous password/NSFW
+gates and the non-rewrite query form.
 The music browser fixture runs denied, allowed, muted, paused and exclusive URL
 launches,
 asserts that link presets override saved defaults, and verifies that blocked
@@ -975,7 +993,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.142.4. Release verification uses the
+This guide applies to PHP Gallery Version 0.143. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

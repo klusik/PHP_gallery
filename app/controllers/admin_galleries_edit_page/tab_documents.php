@@ -81,6 +81,7 @@ function admin_edit_gallery_render_documents_tab(
             'settings' => $settings,
             'ready' => \Gallery\Services\gallery_presentation_schema_ready(),
             'url' => $url,
+            'csrf' => \Gallery\Core\csrf_token(),
         ]);
         $presentationHtml = (string) ob_get_clean();
     }

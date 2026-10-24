@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/gallery_edit_concurrency.php';
+require_once __DIR__ . '/gallery_paths.php';
 
 use function Gallery\Core\now_sql;
 use function Gallery\Core\slugify;
@@ -50,14 +51,15 @@ use function Gallery\Models\gallery_model_update_fields;
  * @param string $value User supplied slug or title fallback.
  * @param int $excludeGalleryId Existing gallery identifier excluded from collisions.
  * @param ?callable(string):bool $collision Optional model-read adapter for a legacy caller-owned connection.
- * @return string Unique normalized gallery slug.
+ * @return string Unique normalized gallery slug outside the presentation
+ *     namespace; displayed titles remain unchanged.
  */
 function gallery_editor_unique_slug(
     string $value,
     int $excludeGalleryId = 0,
     ?callable $collision = null,
 ): string {
-    $base = slugify($value);
+    $base = gallery_url_slug_base($value);
     $candidate = $base;
     $counter = 2;
     while (

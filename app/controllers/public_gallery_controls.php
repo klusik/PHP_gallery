@@ -38,6 +38,7 @@ namespace Gallery\Controllers;
 
 use RuntimeException;
 use Throwable;
+
 use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\anonymous_preview_url;
 use function Gallery\Core\append_cms_footer_script;
@@ -580,6 +581,7 @@ function render_public_gallery_branding_header(
         // gates still run before this public gallery can be rendered.
         'presentation_url' => $presentationUrl,
         'presentation_music' => $hasMusic && $presentation['music'],
+        'presentation_csrf' => $presentationUrl !== '' ? csrf_token() : '',
     ];
     \Gallery\Views\view_render_public_gallery_branding_header(
         $viewModel,
@@ -674,9 +676,13 @@ function render_breadcrumbs(?array $gallery = null): void
 /**
  * Render the gallery password/share/age gate without exposing protected descriptions.
  *
- * @param array<string,mixed> $gallery Gallery whose existing policy requires an access gate.
+ * @param array{id:int|string,title?:string,slug?:string,folder_path?:string,
+ *     parent_id?:int|string|null,access_password_hash?:string|null,
+ *     nsfw_enabled?:int|string|null} $gallery Protected gallery identity and
+ *     existing inherited access/NSFW policy fields.
  * @param string $error Prepared access validation message.
- * @param ?array<string,mixed> $image Optional protected photo context.
+ * @param array{id:int|string,gallery_id:int|string,
+ *     nsfw_enabled?:int|string|null}|null $image Optional protected photo context.
  * @return void Renders the existing access gate with a localized title and no protected description.
  */
 function render_gallery_access_gate(
@@ -701,6 +707,12 @@ function render_gallery_access_gate(
         $state = 'password';
     }
 
+    $accessParams = [];
+    $presentationCode = $_GET['presentation'] ?? '';
+    if (is_string($presentationCode)
+        && \Gallery\Services\presentation_link_code_valid($presentationCode)) {
+        $accessParams['presentation'] = $presentationCode;
+    }
     \Gallery\Views\view_render_gallery_access_gate([
         'title' => (string) \Gallery\Services\content_localize_entity(
             'gallery',
@@ -709,13 +721,39 @@ function render_gallery_access_gate(
         'breadcrumbs' => public_gallery_breadcrumbs_view_model($gallery),
         'error' => $error,
         'state' => $state,
-        'access_url' => url_for('gallery_access'),
+        'access_url' => url_for('gallery_access', $accessParams),
         'csrf_html' => csrf_field(),
         'gallery_id' => (int) $gallery['id'],
         'image_id' => $image !== null ? (int) $image['id'] : 0,
         'requirement_id' => (int) ($requirement['id'] ?? 0),
         'lifetime_minutes' => (int) (gallery_access_lifetime_seconds() / 60),
     ]);
+}
+
+/**
+ * Retain a validated gallery-scoped presentation after password/age approval.
+ * @param array{id:int|string,slug?:string,url_path?:string|null,
+ *     folder_path?:string|null,title?:string|null} $gallery Approved gallery.
+ * @return string Its matching root presentation URL, or its ordinary gallery
+ *     URL when no matching code exists or short-link storage is unavailable.
+ */
+function public_presentation_access_return_url(array $gallery): string
+{
+    $code = $_GET['presentation'] ?? '';
+    if (is_string($code) && \Gallery\Services\presentation_link_code_valid($code)) {
+        try {
+            $destination = \Gallery\Services\presentation_link_destination($code);
+            if ($destination !== null && $destination['gallery_kind'] === 'gallery'
+                && (int) $destination['gallery_id'] === (int) $gallery['id']) {
+                return \Gallery\Core\presentation_public_url($code);
+            }
+        } catch (Throwable) {
+            // Permanent access-owner recovery: a storage outage must not undo
+            // a valid password/age grant. The ordinary gallery remains usable;
+            // its short presentation can be retried after storage recovers.
+        }
+    }
+    return gallery_public_url($gallery);
 }
 
 /**
@@ -776,7 +814,7 @@ function cms_gallery_access(): void
         redirect_to(
             $image
                 ? image_public_url($image, $gallery)
-                : gallery_public_url($gallery),
+                : public_presentation_access_return_url($gallery),
         );
     }
     // $requirement stores an intermediate value used by the surrounding gallery workflow.
@@ -801,7 +839,7 @@ function cms_gallery_access(): void
         return;
     }
     grant_gallery_public_access((int) $requirement['id']);
-    redirect_to(gallery_public_url($gallery));
+    redirect_to(public_presentation_access_return_url($gallery));
 }
 
 /**

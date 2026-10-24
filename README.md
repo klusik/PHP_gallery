@@ -58,7 +58,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.142.4
+**Current Version:** 0.143
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -404,6 +404,19 @@ tap the photograph to reveal them again while playback continues.
 Both ranges run from Slow on the left through Medium to Fast on the right.
 Choices remain only in the current viewer instance, including stop/resume and
 close/reopen; reloading resets them.
+
+Presentation sharing creates compact gallery URLs such as
+`/presentation=1a2b3c4d`. The share panel stores a snapshot of the
+selected playback options, language and any Smart source filter. Sharing the
+same settings for the same gallery reuses its code; another gallery receives
+its own code. Links have no automatic expiry and retain ordinary gallery access
+checks. Installations without clean URLs use `presentation=<code>` in the query
+string. Existing long presentation links remain supported. Run the normal
+database migration after upgrading before creating or opening short links.
+The URL starts directly at the application root, with no album path. Generated
+or edited gallery URL slugs reserve eight-character hexadecimal names and the
+presentation prefixes; a `gallery-` prefix disambiguates them without changing
+the displayed gallery title.
 
 ### Gallery music and slideshow soundtrack
 

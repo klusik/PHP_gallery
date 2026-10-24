@@ -93,6 +93,15 @@ Use 28px desktop and 44px mobile controls with visible keyboard focus.
 
 ## Controls and layout
 
+The presentation share overlay follows these same public/Admin tokens: a
+translucent Theme surface, at most 8px rounding, quiet foreground-derived lines,
+26 by 14px switches and thin unboxed ranges. Copy/Close are transparent 28px
+icon actions with 16px glyphs; narrow/touch layouts use 44px interaction targets.
+The URL field keeps a restrained translucent surface and enough width for a
+short root link. Preserve visible keyboard focus and native forced-color
+controls. Scope overrides to this overlay, including its retained Admin
+ancestors, so legacy white fields and filled blue buttons cannot take over.
+
 - Use short labels with small `?` context-help controls for longer explanations.
   Help must open by mouse click and keyboard activation, close on outside click
   and Escape, and expose an accessible name and relationship to its content.

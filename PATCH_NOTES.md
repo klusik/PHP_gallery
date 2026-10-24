@@ -1,5 +1,110 @@
 # Patch notes
 
+## Version 0.143
+
+Added compact, reusable presentation links for physical and Smart Galleries,
+with saved playback settings and a refreshed sharing panel.
+
+### Highlights
+
+#### Short presentation links
+
+- Added application-root links such as `/presentation=ae684832`, without an
+  album path or a long playback query. Each code identifies one gallery and
+  its saved presentation settings.
+  [#294](https://github.com/klusik/PHP_gallery/issues/294)
+- Reused an existing code when the same gallery and settings were shared again.
+  Saved options included autoplay, music, fullscreen, exclusive playback,
+  slideshow and transition speeds, language, and the Smart Gallery source filter.
+- Retained existing gallery access checks and legacy long presentation links.
+
+#### Modern sharing controls
+
+- Updated the public and Admin sharing overlay with a compact translucent Theme
+  surface, small switches, thin sliders, and quiet Copy and Close icon actions.
+- Disabled Copy while a short link was being generated and prevented superseded
+  requests from replacing the latest selected settings.
+
+### Technical Details
+
+#### Backend
+
+- Added root-code recognition in `app/bootstrap/routing.php` and clean/query URL
+  output in `app/helpers_public_urls.php`. Installations without rewrite emitted
+  `index.php?presentation=<code>`.
+- Added canonical version-one snapshots and full gallery-scoped SHA-256
+  fingerprints in `app/services/gallery_lightbox_mode.php`, with deterministic,
+  bounded collision retries that preserved existing records.
+- Added destination discovery followed by normal physical or Smart Gallery
+  authorization before scoped snapshot restoration. Matched password/age returns
+  retained the presentation code; an unavailable final link lookup returned to
+  the ordinary gallery after a valid access grant.
+- Reused the bootstrapped dispatcher and guarded optional security JSON adapter
+  through authored runtime dependencies without raising runtime-plan limits.
+
+#### Database
+
+- Added `database/migrations/202610240001_presentation_links.php` and the
+  `presentation_links` table with a surrogate primary key, versioned settings
+  JSON, gallery identity, UTC creation time, and separate UNIQUE indexes for
+  the eight-character code and full fingerprint.
+- Required conclusively available table, column, and index metadata for short
+  link creation and resolution. Confirmed missing and unknown storage were
+  refused safely; ordinary galleries and legacy links remained usable before
+  migration. Added the `presentation_links` System Health registration, gated by
+  `lightbox_modes`; disabled health checks avoided unnecessary metadata probes.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/gallery-media-panels.js` with
+  CSRF-protected asynchronous generation, cancellation and response ownership,
+  pending controls, and selectable short URLs when clipboard access was denied.
+- Restored server-resolved snapshots through escaped lightbox metadata and kept
+  the compact root address during playback. Updated browser import revisions
+  together across public and Admin consumers.
+- Updated `public/assets/styles/lightbox.css` with Theme-based overlay styling,
+  visible focus, touch targets, and forced-color control support. Synchronized
+  active EN/CS/DE/SV catalogs and all four manual source editions.
+
+#### Tests
+
+- Added `tests/presentation_links_test.php` for canonical deduplication,
+  physical/Smart identity separation, invalid and cross-gallery codes, forced
+  collisions, database uniqueness, schema refusal, mounted root routing,
+  metadata escaping, and public/Admin security JSON classification.
+- Extended slideshow and music browser fixtures for stored snapshots,
+  pending sharing, stale responses, and clipboard fallback. Updated URL-slug,
+  schema-registry, and browser-cache revision regressions.
+
+#### Compatibility
+
+- Preserved permanent support for existing long presentation parameters. Short
+  codes had no automatic expiry, did not grant access, and retained reservations
+  after gallery deletion. Versioned documents kept future settings independent
+  of the database primary key.
+- Reserved newly generated or edited URL slugs matching eight hexadecimal
+  characters or presentation prefixes by adding `gallery-`. Displayed titles
+  remained unrestricted and existing persisted addresses were not bulk rewritten.
+
+### User Impact
+
+#### For visitors
+
+- Made presentation links shorter to copy and share while restoring the selected
+  playback settings for the intended gallery. Existing privacy, password, and
+  age requirements continued to apply.
+- Kept the short address visible during playback and retained a selectable URL
+  when browser clipboard permissions prevented copying.
+
+#### For administrators
+
+- Added the presentation-link database migration and storage health reporting.
+  Short-link operations remained unavailable until their required schema could
+  be verified, and capability checks continued to control sharing availability.
+- Aligned the sharing panel with the compact gallery design and documented the
+  URL reservations, migration requirements, and compatibility behavior in all
+  four maintained manual editions.
+
 ## Version 0.142.4
 
 Fixed gallery music management with a compact, playable catalog and reliable
