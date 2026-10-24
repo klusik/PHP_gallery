@@ -1,6 +1,6 @@
 {
     "version": "0.143",
-    "generated_at": "2026-10-24T23:00:24+00:00",
+    "generated_at": "2026-10-24T23:46:05+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -905,7 +905,7 @@
         "public/assets/styles/admin.css": "sha256:bf33d58d9e368db5d08cc3bfa84333e1b07c59d39624ef7b813a924187ce8196",
         "public/assets/styles/base.css": "sha256:b285d49ba97d3ae7c6adaffc72f1eadd7ff2b4c452bc15f96b71d21972cadcf6",
         "public/assets/styles/breadcrumbs.css": "sha256:0a36182e14921fcf4d3e689195f2e56b096dfa76d715ed47ce711da02dafb023",
-        "public/assets/styles/lightbox.css": "sha256:c79350bc6d8664f64d24248f837937b719e5b5d686252332d64f88f80ac4fe14",
+        "public/assets/styles/lightbox.css": "sha256:b3bb5daed617d8346876d40ff433f46e4ef1e4875607746414af0c5f46446998",
         "public/assets/styles/mobile-gallery.css": "sha256:a4a5f9c33f3b1af5fdaa9e12ffdc1c8a2f9e060d1dd9ac283e880f42a713aa90",
         "public/assets/styles/public-content-widgets.css": "sha256:1524fe9e4f17767f9e711402c09b35634f666c870356093771c18878f819055d",
         "public/assets/styles/public-shared.css": "sha256:cea2797a526f8bdb17723ca535944905f41e87b107571c7463164be2c691af21",
