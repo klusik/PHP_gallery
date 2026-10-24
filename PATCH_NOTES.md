@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.143.1
+
+Refined the presentation launch confirmation to match the compact Theme design, with clearer focus states and larger touch targets.
+
+### Highlights
+
+#### Presentation launch confirmation
+
+- Updated the confirmation panel with a translucent background and compact,
+  transparent Start and Close actions.
+- Added visible keyboard focus, muted disabled actions, and larger touch targets
+  for narrow screens and coarse pointers.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/styles/lightbox.css` with 28px desktop actions, 16px
+  icons, and 44px minimum targets on narrow screens and coarse pointers.
+- Added forced-color styling using system colors. Existing markup, labels,
+  activation handlers, imports, access guards, persistence, and schema remained
+  unchanged.
+
+#### Documentation
+
+- Updated `docs/ADMIN_DESIGN.md` and the English, Czech, German, and Swedish
+  manuals with the confirmation styling and touch-target guidance.
+
+#### Release metadata
+
+- Initialized immutable origin and predecessor metadata for `v_0.143.1` and
+  updated `app/core-manifest.json`. The release-origin commit referenced
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+- People using the presentation launch confirmation saw a more compact panel,
+  visible keyboard focus, and larger touch targets on narrow screens and
+  coarse-pointer devices.
+- Presentation activation, access checks, and persistence behavior did not
+  change.
+
 ## Version 0.143
 
 Added compact, reusable presentation links for physical and Smart Galleries,
