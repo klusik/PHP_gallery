@@ -565,8 +565,23 @@ The~same black introduction, activation confirmation and~exclusive mode apply.
 
 Below the~cards, \ui{Presentation} starts at~the~first photo with configured
 speeds and~soundtrack for~that launch. The~saved slideshow music preference stays
-unchanged. The~share icon opens an~overlay with a~gallery link with the~active language
-and~\codeword{presentation=1}, omitting pagination and~preview state.
+unchanged. The~share icon opens an~overlay that creates a~compact gallery link
+at~the~application root, e.g. \codeword{/Galerie/presentation=1a2b3c4d},
+without an~album path, pagination or~preview state.
+The~eight lowercase hexadecimal characters identify a~stored snapshot of~the
+playback options, language and~any Smart source filter. The~same gallery and
+settings reuse the~same code; another gallery receives its~own code.
+Links have no~automatic expiry and~never grant gallery access.
+Without clean URLs, the~short code uses the~\codeword{presentation} query parameter.
+Run the~normal database migration after upgrading; unavailable storage shows
+an~error and~disables copying. Older long links remain supported.
+The~database stores versioned JSON and~a~full SHA-256 fingerprint separately
+from the~surrogate primary key, preserving supported snapshots when options grow.
+Generated gallery URL slugs reserve eight-character hexadecimal names and
+presentation prefixes, adding \codeword{gallery-} when necessary; displayed
+gallery titles remain unrestricted. Playback retains the~short root address.
+The~share overlay uses compact translucent Theme colors, small switches,
+thin speed sliders and~an~icon-only Copy action with visible keyboard focus.
 Opening it~starts the~same presentation after ordinary access checks.
 Browser autoplay restrictions may~require \ui{Play}; denied clipboard
 access reveals a~selectable link for~manual copying.
@@ -578,7 +593,7 @@ Use~\ui{Edit gallery > Media management > Presentation} and~its~transparent
 \ui{Presentation settings} card to~choose public button visibility, music,
 photo speed and~transition speed. The~Save icon uses the~ordinary guarded
 gallery form. Preview and~Share use current selections, including unsaved ones.
-New links embed music and~both speeds; later gallery edits do~not~change
+New links store music and~both speeds; later gallery edits do~not~change
 those snapshots. Visitors can~change playback controls temporarily.
 \codeword{autoplay=1} also starts a~presentation. If~sound needs activation,
 the~player hides with the~idle HUD; movement shows it~again.

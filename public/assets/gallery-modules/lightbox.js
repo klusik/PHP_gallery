@@ -95,7 +95,7 @@ import {
 
 import {
     galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
-} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
+} from './gallery-presentation.js?v=20261024-short-presentation-v1';
 
 const galleryLightboxState = {
     controller: null,
@@ -4610,7 +4610,10 @@ export function setupGalleryLightbox() {
             lightboxReturnUrl = pageUrl && urlsMatch(galleryUrl, pageUrl) ? fallbackGalleryUrl : galleryUrl;
             lightboxHistoryActive = true;
         }
-        if (pageUrl && window.history && window.history.replaceState) {
+        // A resolved short presentation owns its root address throughout
+        // playback; copying the location must retain the stored snapshot.
+        if (pageUrl && !document.querySelector('meta[name="gallery-presentation"]')
+            && window.history && window.history.replaceState) {
             window.history.replaceState({lightbox: true}, '', pageUrl);
             syncPublicHeaderRoute();
         }

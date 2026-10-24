@@ -1633,6 +1633,7 @@ function cms_smart_gallery(): void
         return;
     }
 
+    if (!public_presentation_restore('smart', $gallery)) return;
     $sourceGalleryId = max(0, (int) ($_GET['source_gallery_id'] ?? 0));
     try {
         if ($testRunActive)
@@ -1671,6 +1672,14 @@ function cms_smart_gallery(): void
         cms_not_found();
         return;
     }
+
+    if (public_presentation_create(
+        'smart',
+        $gallery,
+        $total > 0 && !empty($presentation['lightbox_enabled'])
+            && !empty($presentation['slideshow_enabled']),
+        $sourceGalleryId,
+    )) return;
 
     $columns = (int) $presentation['grid_columns'];
     $rows = (int) $presentation['grid_rows'];
@@ -2045,6 +2054,8 @@ function cms_smart_gallery(): void
         'media_html' => $mediaHtml,
         'presentation_url' => $presentationUrl,
         'presentation_music' => $hasMusic,
+        'presentation_csrf' => $presentationUrl !== ''
+            ? \Gallery\Core\csrf_token() : '',
     ]);
 
     if ($testRunActive) {

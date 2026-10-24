@@ -13,7 +13,7 @@ import {
 } from './gallery-pdf-metadata.js?v=20261017-media-summary-v1';
 import {
     galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
-} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
+} from './gallery-presentation.js?v=20261024-short-presentation-v1';
 
 /**
  * Keep attachment disclosure motion brief without delaying media controls.
@@ -348,9 +348,63 @@ function updatePresentationShare(panel) {
             input.setAttribute('aria-valuetext', text);
         }
     }
-    panel.querySelector('[data-presentation-copy]').value = url.href;
     panel.dataset.presentationUrl = url.href;
-    panel.querySelector('[data-presentation-status]').textContent = '';
+    void generatePresentationLink(panel, url);
+}
+
+/**
+ * Keep asynchronous generation owned by the current controls of each panel.
+ * @type {WeakMap<HTMLElement,{controller:AbortController,url:string}>}
+ */
+const presentationShareRequests = new WeakMap();
+
+/**
+ * Request a persistent short code and suppress late results from older drafts.
+ * @param {HTMLElement} panel Share disclosure owning the controls and feedback.
+ * @param {URL} draft Complete internal launch draft; never copied to the user.
+ * @returns {Promise<void>} Show the current short URL or a localized failure.
+ */
+async function generatePresentationLink(panel, draft) {
+    presentationShareRequests.get(panel)?.controller.abort();
+    const state = {controller: new AbortController(), url: draft.href};
+    presentationShareRequests.set(panel, state);
+    const status = panel.querySelector('[data-presentation-status]');
+    const input = panel.querySelector('[data-presentation-copy]');
+    const button = panel.querySelector('[data-presentation-copy-button]');
+    input.value = '';
+    button.disabled = true;
+    status.textContent = status.dataset.linkPending;
+    const body = new URLSearchParams({
+        action: 'presentation_share',
+        csrf_token: panel.dataset.presentationCsrf || '',
+        lang: draft.searchParams.get('lang') || document.documentElement.lang || 'en',
+    });
+    for (const key of ['autoplay', 'music', 'fullscreen', 'exclusive',
+        'interval', 'transition']) {
+        const parameter = key === 'autoplay' ? key : 'presentation_' + key;
+        body.set(key, draft.searchParams.get(parameter)
+            || (key === 'exclusive' ? '0' : '1'));
+    }
+    try {
+        const response = await fetch(draft.href, {
+            method: 'POST', credentials: 'same-origin', body,
+            headers: {Accept: 'application/json'}, signal: state.controller.signal,
+        });
+        const result = await response.json();
+        if (presentationShareRequests.get(panel) !== state || !panel.isConnected) return;
+        if (!response.ok || result.ok !== true || typeof result.url !== 'string') {
+            throw new Error(status.dataset.linkFailed);
+        }
+        const destination = new URL(result.url, location.href);
+        if (destination.origin !== location.origin) throw new Error(status.dataset.linkFailed);
+        input.value = destination.href;
+        button.disabled = false;
+        status.textContent = '';
+    } catch {
+        if (presentationShareRequests.get(panel) !== state
+            || state.controller.signal.aborted || !panel.isConnected) return;
+        status.textContent = status.dataset.linkFailed;
+    }
 }
 
 /**

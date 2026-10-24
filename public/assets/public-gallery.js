@@ -30,7 +30,7 @@
  *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261024-catalog-workspace-v3';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261024-short-presentation-v1';
 
 const optionalPublicModules = {
     quickPhotoTags: './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5',
@@ -47,7 +47,7 @@ const optionalPublicModules = {
     ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-keyboard-repeat',
     publicContentWidgets: './gallery-modules/public-content-widgets.js?v=20261023-discovery-clearance-v1',
     music: './gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3',
-    mediaPanels: './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1',
+    mediaPanels: './gallery-modules/gallery-media-panels.js?v=20261024-short-presentation-v1',
 };
 
 /**

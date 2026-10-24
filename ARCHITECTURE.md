@@ -211,9 +211,37 @@ JavaScript. Autoplay defaults ON and can be disabled per gallery. A retained
 native
 share disclosure configures a URL snapshot (autoplay, music, fullscreen,
 exclusive
-controls and both speed presets) without persistence. Public URLs snapshot these
-options; explicit
-link values override later gallery edits. Missing/unknown settings retain prior
+controls and both speed presets). Opening the share disclosure registers the
+snapshot through a CSRF-protected POST to the already authorized gallery
+controller. `gallery_lightbox_mode.php` owns canonical versioned options,
+SHA-256 deduplication and bounded collision retries; `models/galleries.php`
+owns insert-only `presentation_links` persistence. Shared HTTP adapters live in
+`controllers/http_helpers.php`, already loaded by physical and Smart routes.
+The full fingerprint includes
+gallery kind, stable gallery ID, playback options, language and Smart source
+filter. Unique indexes protect both the fingerprint and the globally unique
+eight-character lowercase hexadecimal code. Identical requests reuse one row;
+a short-code collision never overwrites it. Clean URLs use the application-root
+`/presentation=<code>`; non-rewrite installations use
+`index.php?presentation=<code>`. Root lookup reads only gallery kind/ID; ordinary
+gallery authorization then precedes settings/media reads. Smart destinations
+re-enter the normal dispatcher and preserve its capability and source guards.
+Resolved options reach the existing browser owner through escaped metadata;
+playback retains the compact root address. Gallery slug normalization reserves
+eight-character hexadecimal names and presentation prefixes while leaving
+display titles unrestricted.
+Password/age forms retain the code and validate its scope before returning to
+the root presentation. A storage failure at that final return preserves the
+valid grant and opens the ordinary gallery.
+Missing/unknown link storage refuses creation/resolution with a safe error;
+ordinary galleries and existing long links still work. Lazy System Health
+exposes this storage dependency. No new runtime file or logical module is
+introduced; existing owners contain the new declarations. The observed installed
+plan has 98 modules, 450 unique files, 4,103 direct entries and 3,653 duplicates,
+exactly at the unchanged duplicate ceiling. Expected logical-module/new-runtime
+file deltas are zero; hosted preparation must establish actual closure metrics.
+Public URLs snapshot these options; explicit link values override later gallery
+edits. Missing/unknown gallery-default settings retain prior
 enabled/music/medium behavior. Media delivery and visitor authorization are
 unchanged.
 The single slideshow timer also gates a launch-only one-second black hold on

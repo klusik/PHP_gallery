@@ -41,6 +41,16 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
+ * Render controller-prepared playback metadata for an authorized presentation.
+ * @param string $snapshotJson Serialized versioned playback settings.
+ * @return void Emit one escaped metadata element without looking up policy.
+ */
+function view_render_presentation_snapshot(string $snapshotJson): void
+{
+    echo '<meta name="gallery-presentation" content="' . e($snapshotJson) . '">';
+}
+
+/**
  * Build the shared data attributes consumed by the public lightbox.
  *
  * @param array<string, mixed> $viewModel Prepared lightbox-image attribute model.
@@ -553,12 +563,14 @@ function view_music_control_icon(string $action): string
 }
 
 /**
- * Render one configurable link disclosure without a new persistence surface.
+ * Render one configurable disclosure for explicit persistent link creation.
  * @param string $url Controller-prepared localized presentation snapshot URL.
  * @param string $identity Safe unique public/editor identity for fragment reuse.
+ * @param string $csrf Controller-prepared session CSRF token; empty for isolated
+ *     render consumers that cannot issue a persistent share request.
  * @return string Native disclosure, playback controls and selectable copy field.
  */
-function view_presentation_share(string $url, string $identity): string
+function view_presentation_share(string $url, string $identity, string $csrf = ''): string
 {
     $label = t('presentation.share');
     $html =
@@ -576,6 +588,7 @@ function view_presentation_share(string $url, string $identity): string
         . '" data-gallery-media-panel'
         . ' data-presentation-share-panel data-presentation-url="'
         . e($url)
+        . '" data-presentation-csrf="' . e($csrf)
         . '"><header><h3>'
         . e($label)
         . '</h3><button type="button"'
@@ -644,9 +657,7 @@ function view_presentation_share(string $url, string $identity): string
         . '<label class="presentation-share-link"><span class="visually-hidden">'
         . e(t('presentation.link'))
         . '</span><input type="url" readonly'
-        . ' data-presentation-copy value="'
-        . e($url)
-        . '"></label>'
+        . ' data-presentation-copy value=""></label>'
         . '<button type="button"'
         . ' class="music-icon" data-presentation-copy-button title="'
         . e(t('presentation.copy'))
@@ -659,6 +670,8 @@ function view_presentation_share(string $url, string $identity): string
         . e(t('presentation.copied'))
         . '" data-copy-failed="'
         . e(t('presentation.copy_manually'))
+        . '" data-link-pending="' . e(t('presentation.link_pending'))
+        . '" data-link-failed="' . e(t('presentation.link_unavailable'))
         . '"></output>'
         . '<p class="presentation-share-help muted">'
         . e(t('presentation.exclusive_help'))
@@ -799,7 +812,8 @@ function view_media_panel_end(bool $inline = false): void
 /**
  * Render the common responsive description, media and presentation hero row.
  * @param array{description_html:string,media_html:string,
- *     presentation_url?:string,presentation_music?:bool} $model Escaped/rendered
+ *     presentation_url?:string,presentation_music?:bool,
+ *     presentation_csrf?:string} $model Escaped/rendered
  *     description and authorized attachment fragments, plus the prepared URL.
  * @return void Emit the same applet layout without discovering source policy
  *     or loading a caller's Markdown/link-metadata dependencies.
@@ -813,6 +827,7 @@ function view_render_gallery_media_hero(array $model): void
         $mediaHtml .= view_public_gallery_presentation(
             $presentationUrl,
             !empty($model['presentation_music']),
+            (string) ($model['presentation_csrf'] ?? ''),
         );
     }
     $hasDescription = trim($descriptionHtml) !== '';
@@ -840,9 +855,14 @@ function view_render_gallery_media_hero(array $model): void
  * Render a soundtrack presentation launcher and configurable share applet.
  * @param string $url Complete canonical, localized presentation launch URL.
  * @param bool $hasMusic Whether authorized music is available for this launch.
+ * @param string $csrf Prepared session CSRF token; empty disables issuance.
  * @return string Escaped launcher and native share disclosure.
  */
-function view_public_gallery_presentation(string $url, bool $hasMusic): string
+function view_public_gallery_presentation(
+    string $url,
+    bool $hasMusic,
+    string $csrf = '',
+): string
 {
     return (
         '<div class="gallery-presentation" data-gallery-presentation>'
@@ -862,7 +882,7 @@ function view_public_gallery_presentation(string $url, bool $hasMusic): string
             . '<path d="m8 4 13 8-13 8Z"/></svg>'
             . e(t('presentation.start'))
             . '</a>'
-            . view_presentation_share($url, 'public-' . sha1($url))
+            . view_presentation_share($url, 'public-' . sha1($url), $csrf)
             . '</div></div>'
     );
 }

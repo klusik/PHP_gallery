@@ -780,6 +780,26 @@ candidate list and an authenticated endpoint URL; the browser owner is
 `public/assets/gallery-modules/admin-gallery-title-completion.js`.
 See `docs/TITLE_COMPLETION.md` for budgets and normalization.
 
+Short presentation links use `app/models/galleries.php` for immutable
+`presentation_links` SQL, `app/services/gallery_lightbox_mode.php` for canonical
+version-one snapshots, gallery-scoped SHA-256 fingerprints and collision retries,
+and `app/services/presentation_schema_policy.php` for three-state readiness.
+Public/Smart controllers authorize before settings creation/resolution;
+`http_helpers.php` owns root identity discovery, normal Smart dispatch,
+CSRF POST/JSON and metadata preparation. The existing shared
+`public_gallery_lightbox.php` view escapes the serialized snapshot. The Core
+bootstrap loads the canonical dispatcher before controllers; the root helper's
+deferred call reuses that security boundary without expanding feature plans.
+The security JSON detector's guarded Admin adapter remains optional: public
+sharing uses its existing local detector without loading Admin mutation helpers.
+`app/bootstrap/routing.php` recognizes the application-root short path;
+`app/helpers_public_urls.php` emits clean/query destinations.
+`gallery-media-panels.js` suppresses superseded generation results and copies
+only the registered URL. `gallery-presentation.js` and `lightbox-deferred.js`
+reuse the existing viewer for compact and legacy launches.
+`gallery_paths.php` reserves presentation-like URL slug bases; editor, Smart,
+public-path generation and import/migration callers retain displayed titles.
+
 Nearby lightbox preview scheduling belongs to
 `public/assets/gallery-modules/lightbox-preload-lifecycle.js`; `lightbox.js`
 retains foreground navigation, cache, media authorization inputs, quality, and

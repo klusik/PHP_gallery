@@ -52,6 +52,27 @@ use function Gallery\Core\slugify;
  */
 
 /**
+ * Normalize a gallery URL slug outside the reserved presentation namespace.
+ * @param string $value Requested slug or title used only as an address source.
+ * @return string Normalized slug, prefixed with gallery- when it is exactly
+ *     eight hex characters or starts with p- or presentation-; empty stays empty.
+ *     Display titles and existing persisted addresses are never changed here.
+ */
+function gallery_url_slug_base(string $value): string
+{
+    $slug = slugify($value);
+    // Eight hex digits are the immutable short-code wire grammar. slugify
+    // normalizes presentation= into presentation-, so reserve both forms.
+    if (preg_match('/^[a-f0-9]{8}$/D', $slug) === 1
+        || str_starts_with($slug, 'p-')
+        || $slug === 'presentation'
+        || str_starts_with($slug, 'presentation-')) {
+        return 'gallery-' . $slug;
+    }
+    return $slug;
+}
+
+/**
  * Configured filesystem root where gallery folders are stored.
  *
  * @return string Text result for the caller.

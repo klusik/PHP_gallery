@@ -562,8 +562,23 @@ startbekräftelse och~exklusivt läge fungerar på~samma sätt.
 
 Under korten startar \ui{Presentation} från första fotot med
 inställda hastigheter och~musik för~denna start. Den~sparade musikinställningen
-ändras inte. Delningsikonen öppnar en~överlagring med~gallerilänk med~aktivt språk
-och~\codeword{presentation=1}, utan sidval eller~administratörsförhandsvisning.
+ändras inte. Delningsikonen öppnar en~överlagring som~skapar en~kort länk direkt
+i~applikationens rot, till exempel \codeword{/Galerie/presentation=1a2b3c4d},
+utan albumsökväg, sidval eller~administratörsförhandsvisning.
+Åtta små hexadecimala tecken identifierar sparade uppspelningsval, språk
+och~eventuellt Smart-källfilter. Samma galleri och~inställningar återanvänder
+samma kod; ett~annat galleri får~en~egen. Länkar upphör inte automatiskt
+och~ger~inte åtkomst till galleriet. Utan rena URL:er används frågeparametern
+\codeword{presentation}. Kör~den~vanliga databasmigreringen efter uppgradering;
+otillgänglig lagring visar ett~fel och~inaktiverar kopiering.
+Äldre långa länkar stöds fortfarande. Versionsmärkt JSON och~fullständigt
+SHA-256-fingeravtryck lagras separat från den~egna primärnyckeln, så~nya val
+inte ändrar stödda sparade ögonblicksbilder.
+Genererade galleri-URL-sluggar reserverar åttateckens hexadecimala namn
+och~presentationsprefix; vid~behov läggs \codeword{gallery-} till.
+Visade titlar förblir fria. Uppspelningen behåller den~korta rotadressen.
+Delningspanelen använder kompakta genomskinliga temafärger, små omkopplare,
+tunna hastighetsreglage och~en~kopieringsikon med~synligt tangentbordsfokus.
 Länken startar samma presentation efter vanliga åtkomstkontroller.
 Webbläsaren kan~kräva \ui{Spela}; nekad urklippsåtkomst visar
 en~markerbar länk för~manuell kopiering.

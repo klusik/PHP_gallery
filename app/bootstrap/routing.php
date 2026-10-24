@@ -126,7 +126,20 @@ function cms_route_from_request(?callable $loadDependencies = null): array
         static fn(string $segment): bool => $segment !== '',
     ));
 
+    // Root presentation links carry their gallery identity in the database.
+    // Reuse the public gallery boundary; its controller discovers only the
+    // destination, then runs normal physical/Smart authorization and rendering.
+    if (count($segments) === 1
+        && str_starts_with($segments[0], 'presentation=')) {
+        return ['page' => 'gallery', 'params' => ['presentation' => rawurldecode(
+            substr($segments[0], strlen('presentation=')),
+        )]];
+    }
+
     if ($segments === [] || $segments === ['index.php']) {
+        if (array_key_exists('presentation', $_GET)) {
+            return ['page' => 'gallery', 'params' => []];
+        }
         return ['page' => 'home', 'params' => []];
     }
     if ($segments === ['robots.txt']) {

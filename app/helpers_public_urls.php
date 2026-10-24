@@ -113,6 +113,20 @@ function gallery_public_path_segment(string $folderPath): string
 }
 
 /**
+ * Build a compact presentation destination in the installation's route mode.
+ * @param string $code Registered eight-character presentation code.
+ * @return string Root presentation URL or query equivalent without preview,
+ *     locale, pagination or playback options, which belong to the stored snapshot.
+ */
+function presentation_public_url(string $code): string
+{
+    return base_url(
+        (url_rewrite_should_emit_clean_urls() ? '' : 'index.php?')
+            . 'presentation=' . rawurlencode($code),
+    );
+}
+
+/**
  * Build the preferred public URL for one gallery, using its clean public path and active preview audience state when available.
  *
  * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery path, slug, folder and title fields used to build the preferred route.

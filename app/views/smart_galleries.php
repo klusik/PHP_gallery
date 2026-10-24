@@ -1120,7 +1120,7 @@ function view_render_smart_gallery_source_summary(array $summary): void
  *     selected:bool,filter_url?:string}>},pagination_html?:string,
  *     lightbox_enabled?:bool,lightbox_endpoint?:string,
  *     lightbox_browsing_mode?:string,lightbox_html?:string,media_html?:string,
- *     presentation_url?:string,presentation_music?:bool,
+ *     presentation_url?:string,presentation_music?:bool,presentation_csrf?:string,
  *     cards?:array{grid_class?:string,cards?:list<array{attributes_html?:string,
  *     favourite_attribute_html?:string,url?:string,thumbnail_html?:string,
  *     favourite_html?:string,collection_html?:string,vote_html?:string,
@@ -1205,6 +1205,7 @@ function view_render_public_smart_gallery(array $viewModel): void
         'media_html' => (string) ($viewModel['media_html'] ?? ''),
         'presentation_url' => (string) ($viewModel['presentation_url'] ?? ''),
         'presentation_music' => !empty($viewModel['presentation_music']),
+        'presentation_csrf' => (string) ($viewModel['presentation_csrf'] ?? ''),
     ]);
     echo '</section>';
 

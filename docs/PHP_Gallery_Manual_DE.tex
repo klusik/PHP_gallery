@@ -570,9 +570,25 @@ Schwarzer Beginn, Startbestätigung und~exklusive Ansicht bleiben gleich.
 
 Unter den~Karten startet \ui{Präsentation} beim ersten Foto mit
 eingestellten Geschwindigkeiten und~Musik für~diesen Start. Die~gespeicherte
-Musikvorgabe bleibt unverändert. Das~Teilen-Symbol öffnet ein~Overlay mit~Galerielink
-mit~aktiver Sprache und~\codeword{presentation=1}, ohne Seitenauswahl
-oder~Administratorvorschau. Nach normalen Zugriffskontrollen startet
+Musikvorgabe bleibt unverändert. Das~Teilen-Symbol öffnet ein~Overlay, das~einen
+kurzen Link direkt im~Anwendungsstamm erzeugt, etwa
+\codeword{/Galerie/presentation=1a2b3c4d}, ohne Albumpfad, Seitenauswahl
+oder~Administratorvorschau. Acht kleine Hexadezimalzeichen
+bezeichnen gespeicherte Wiedergabeoptionen, Sprache und~Smart-Quellenfilter.
+Dieselbe Galerie mit~denselben Einstellungen verwendet denselben Code;
+eine andere Galerie erhält einen eigenen. Links laufen nicht automatisch
+ab~und~gewähren keinen Galeriezugriff. Ohne saubere URLs verwendet der~Code
+den~Abfrageparameter \codeword{presentation}. Nach dem~Upgrade die~normale
+Datenbankmigration ausführen; fehlender Speicher zeigt einen Fehler und
+sperrt Kopieren. Alte lange Links bleiben unterstützt. Versioniertes JSON
+und~vollständiger SHA-256-Fingerabdruck sind vom~eigenen Primärschlüssel
+getrennt; zusätzliche Optionen ändern unterstützte gespeicherte Schnappschüsse
+nicht. Galerie-URL-Slugs reservieren achtstellige Hexadezimalnamen und
+Präsentationspräfixe; bei~Bedarf wird \codeword{gallery-} vorangestellt.
+Angezeigte Titel bleiben frei. Die~Wiedergabe behält die~kurze Stammadresse.
+Das~Teilen-Overlay nutzt kompakte transparente Theme-Farben, kleine Schalter,
+schmale Geschwindigkeitsregler und~ein~Kopiersymbol mit~sichtbarem Tastaturfokus.
+Nach normalen Zugriffskontrollen startet
 derselbe Ablauf. Browserregeln können \ui{Abspielen} erfordern;
 bei~verweigerter Zwischenablage erscheint ein~markierbarer Link.
 Anonyme Besucher verwenden denselben Link nach normalen Zugriffskontrollen.

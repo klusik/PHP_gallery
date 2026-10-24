@@ -809,7 +809,9 @@ function refresh_gallery_public_paths(): int
  * assignments are keyed by gallery id and contain the final local slug and
  * complete hierarchical public path.
  *
- * @param array<int,array<string,mixed>> $galleries Gallery rows.
+ * @param array<int,array{id:int|string,parent_id?:int|string|null,
+ *     folder_path?:string,title?:string|null,slug?:string|null}> $galleries
+ *     Gallery identities, physical hierarchy and display names for slug input.
  * @return array<int,array{slug:string,path:string}> Assignments keyed by gallery id.
  */
 function gallery_public_path_assignments(array $galleries): array
@@ -861,7 +863,10 @@ function gallery_public_path_assignments(array $galleries): array
                 ?: $baseName
                 ?: $sibling['slug'] ?? '' ?: 'gallery'
             );
-            $slug = unique_public_slug_in_set($base, $usedSlugs);
+            $slug = unique_public_slug_in_set(
+                gallery_url_slug_base($base),
+                $usedSlugs,
+            );
             $slugById[$siblingId] = $slug;
             $usedSlugs[$slug] = true;
         }

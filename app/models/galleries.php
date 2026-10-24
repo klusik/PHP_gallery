@@ -33,7 +33,8 @@
  *     acquire gallery writer ownership, touch files, refresh sidecars or clear
  *     request caches. Services own those steps and any wider transaction.
  *   - Updates participate in an existing transaction or autocommit. Every model
- *     write advances edit_revision explicitly; an installed compatibility
+ *     gallery-row write advances edit_revision explicitly; an installed
+ *     compatibility
  *     trigger may enforce the same OLD + 1 value and refuse competing writes.
  *     The timestamp is not an optimistic concurrency precondition.
  *
@@ -79,8 +80,104 @@ namespace Gallery\Models;
 
 use InvalidArgumentException;
 use PDO;
+use PDOException;
 use function Gallery\Core\db;
 use function Gallery\Core\slugify;
+
+/**
+ * Discover only the gallery identity attached to a globally unique code.
+ * @param string $code Validated eight-character lowercase hexadecimal code.
+ * @return array{gallery_kind:string,gallery_id:int|string}|null Routing identity
+ *     or null; this query neither reads settings nor authorizes gallery access.
+ */
+function presentation_link_model_destination(string $code): ?array
+{
+    $statement = db()->prepare(
+        'SELECT gallery_kind, gallery_id FROM presentation_links
+         WHERE code = ? LIMIT 1',
+    );
+    $statement->execute([$code]);
+    return $statement->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+/**
+ * Find an immutable presentation by its complete gallery/settings fingerprint.
+ * @param string $fingerprint Lowercase SHA-256 fingerprint of canonical input.
+ * @return array{code:string,fingerprint:string,gallery_kind:string,
+ *     gallery_id:int|string,settings_json:string}|null Stored snapshot or null.
+ */
+function presentation_link_model_find_fingerprint(string $fingerprint): ?array
+{
+    $statement = db()->prepare(
+        'SELECT code, fingerprint, gallery_kind, gallery_id, settings_json
+         FROM presentation_links WHERE fingerprint = ? LIMIT 1',
+    );
+    $statement->execute([$fingerprint]);
+    return $statement->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+/**
+ * Resolve a code only within its original physical or Smart Gallery identity.
+ * @param string $code Validated eight-character lowercase hexadecimal code.
+ * @param string $kind Canonical gallery kind, gallery or smart.
+ * @param int $galleryId Positive stable gallery identity.
+ * @return array{code:string,fingerprint:string,gallery_kind:string,
+ *     gallery_id:int|string,settings_json:string}|null Matching snapshot or null.
+ */
+function presentation_link_model_find(
+    string $code,
+    string $kind,
+    int $galleryId,
+): ?array {
+    $statement = db()->prepare(
+        'SELECT code, fingerprint, gallery_kind, gallery_id, settings_json
+         FROM presentation_links
+         WHERE code = ? AND gallery_kind = ? AND gallery_id = ? LIMIT 1',
+    );
+    $statement->execute([$code, $kind, $galleryId]);
+    return $statement->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+/**
+ * Insert a snapshot without replacing any concurrently stored code or settings.
+ * @param string $code Eight-character candidate selected by the service.
+ * @param string $fingerprint Complete gallery/settings SHA-256 fingerprint.
+ * @param string $kind Canonical gallery kind, gallery or smart.
+ * @param int $galleryId Positive stable gallery identity.
+ * @param string $json Canonical versioned settings document.
+ * @param string $createdAt UTC SQL creation timestamp.
+ * @return bool True after insertion; false only for a unique-key conflict.
+ * @throws PDOException On other database failures; no partial write is accepted.
+ */
+function presentation_link_model_insert(
+    string $code,
+    string $fingerprint,
+    string $kind,
+    int $galleryId,
+    string $json,
+    string $createdAt,
+): bool {
+    try {
+        $statement = db()->prepare(
+            'INSERT INTO presentation_links
+             (code, fingerprint, gallery_kind, gallery_id, settings_json,
+              created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        );
+        return $statement->execute([
+            $code, $fingerprint, $kind, $galleryId, $json, $createdAt,
+        ]);
+    } catch (PDOException $exception) {
+        $state = (string) $exception->getCode();
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+        // SQLSTATE 23505 is PostgreSQL unique_violation; MySQL 1062 and
+        // SQLite 19/2067 identify uniqueness on this insert-only table.
+        if ($state === '23505' || ($state === '23000'
+            && in_array($driverCode, [1062, 19, 2067], true))) {
+            return false;
+        }
+        throw $exception;
+    }
+}
 
 /** Bound the physical source key stored in one derived attachment projection.
  * Type: int. Units: bytes. Scope: one source_id column value.

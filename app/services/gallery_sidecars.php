@@ -713,7 +713,11 @@ function gallery_folder_candidate_metadata(string $folderPath): array
  * unless gallery.json says otherwise, and images are scanned only by the caller.
  *
  * @param string $folderPath Folder path filesystem path.
- * @return array<string,mixed>|null Indexed gallery row (id, title and folder_path plus schema fields), or null for an absent/empty path.
+ * @return array{id:int|string,title:string,folder_path:string,
+ *     slug:string,parent_id?:int|string|null,visibility?:string,
+ *     presentation_json?:string|null}|null Indexed gallery identity with other
+ *     persisted schema fields, or null for an absent/empty path. Generated slugs
+ *     reserve presentation codes without changing the imported display title.
  */
 function create_gallery_row_for_folder(string $folderPath): ?array
 {
@@ -729,7 +733,11 @@ function create_gallery_row_for_folder(string $folderPath): ?array
  * Perform create gallery row for folder while the caller owns the gallery writer lease.
  *
  * @param string $folderPath Normalized relative folder to index.
- * @return array<string,mixed>|null Indexed gallery row, or null when the requested folder cannot be indexed.
+ * @return array{id:int|string,title:string,folder_path:string,slug:string,
+ *     parent_id?:int|string|null,visibility?:string,
+ *     presentation_json?:string|null}|null Indexed gallery identity plus
+ *     persisted schema fields, or null when the folder cannot be indexed.
+ *     New URL slugs reserve presentation names; imported titles are preserved.
  */
 function create_gallery_row_for_folder_owned(string $folderPath): ?array
 {
@@ -837,7 +845,9 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
         'parent_id' => $parent ? (int) $parent['id'] : null,
         'folder_path' => $folderPath,
         'folder_path_hash' => hash('sha256', $folderPath),
-        'slug' => gallery_model_unique_slug((string) $candidate['title']),
+        'slug' => gallery_model_unique_slug(gallery_url_slug_base(
+            (string) $candidate['title'],
+        )),
         'title' => $candidate['title'],
         'description' => $candidate['description'],
         'sort_order' => (int) $candidate['sort_order'],

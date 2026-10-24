@@ -36,6 +36,13 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use Throwable;
+use function Gallery\Core\append_cms_head_extras;
+use function Gallery\Core\e;
+use function Gallery\Core\request_method;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Services\t;
@@ -44,6 +51,178 @@ use function Gallery\Services\telemetry_request_id;
 use function Gallery\Views\view_render_back_to_top_button;
 use function Gallery\Views\view_render_not_found;
 use function Gallery\Views\view_render_public_service_unavailable;
+
+/**
+ * Give a transient short-link storage outage a bounded retry hint.
+ * Type: int. Units: seconds. Scope: unavailable presentation responses.
+ * Consumers: public_presentation_restore.
+ * Rationale: Sixty seconds avoids immediate retry loops during an upgrade.
+ */
+const PUBLIC_PRESENTATION_RETRY_SECONDS = 60;
+
+/**
+ * Resolve a root code into the existing gallery dispatcher without a redirect.
+ * @param int|null $physicalGalleryId Receives the exact physical gallery ID on
+ *     success; null for ordinary requests, Smart dispatch or refusal. Defaults
+ *     to null when the caller does not need the physical identity output.
+ * @return bool True after a Smart dispatch or controlled error; false when the
+ *     ordinary physical gallery controller should continue with prepared identity.
+ */
+function public_presentation_root(?int &$physicalGalleryId = null): bool
+{
+    $physicalGalleryId = null;
+    if (!array_key_exists('presentation', $_GET)
+        || isset($_GET['public_path']) || isset($_GET['gallery_path'])
+        || isset($_GET['slug'])) return false;
+    if (!in_array(request_method(), ['GET', 'HEAD'], true)) {
+        http_response_code(405);
+        header('Allow: GET, HEAD');
+        return true;
+    }
+    try {
+        $code = $_GET['presentation'];
+        $destination = is_string($code)
+            ? \Gallery\Services\presentation_link_destination($code) : null;
+        if ($destination === null) {
+            cms_not_found();
+            return true;
+        }
+        $smart = $destination['gallery_kind'] === 'smart';
+        $gallery = $smart
+            ? \Gallery\Services\smart_gallery_find_public_by_id(
+                (int) $destination['gallery_id'],
+            )
+            : find_gallery((int) $destination['gallery_id']);
+        if ($gallery === null) {
+            cms_not_found();
+            return true;
+        }
+        $_GET['slug'] = (string) $gallery['slug'];
+        if ($smart) {
+            $_GET['page'] = 'smart_gallery';
+            // Re-enter the existing dispatcher to retain Smart capability,
+            // privacy, NSFW and source authorization before any content output.
+            \Gallery\Core\cms_dispatch_page('smart_gallery');
+            return true;
+        }
+        $physicalGalleryId = (int) $gallery['id'];
+        return false;
+    } catch (Throwable) {
+        http_response_code(503);
+        header('Cache-Control: private, no-store, max-age=0');
+        header('Retry-After: ' . PUBLIC_PRESENTATION_RETRY_SECONDS);
+        header('X-Robots-Tag: noindex, nofollow');
+        echo e(t('presentation.link_unavailable'));
+        return true;
+    }
+}
+
+/**
+ * Restore a short snapshot only after the caller authorizes its gallery.
+ * @param string $kind Authorized gallery namespace, gallery or smart.
+ * @param array{id:int|string} $gallery Authorized stable gallery identity.
+ * @return bool True for ordinary/legacy requests or a resolved snapshot; false
+ *     after a uniform not-found or safe unavailable response has been emitted.
+ */
+function public_presentation_restore(string $kind, array $gallery): bool
+{
+    if (request_method() !== 'GET' && request_method() !== 'HEAD') return true;
+    $code = $_GET['presentation'] ?? '1';
+    if ($code === '1') return true; // Permanent support for existing long links.
+    if (!is_string($code)) {
+        cms_not_found();
+        return false;
+    }
+    try {
+        $snapshot = \Gallery\Services\presentation_link_resolve(
+            $code, $kind, (int) $gallery['id'],
+        );
+        if ($snapshot === null || ($kind === 'gallery'
+            && $snapshot['source_gallery_id'] !== 0)) {
+            cms_not_found();
+            return false;
+        }
+        // Keep the browser's address compact. Only request-local state and
+        // prepared metadata receive the complete immutable playback intent.
+        $_GET['source_gallery_id'] = (string) $snapshot['source_gallery_id'];
+        $_GET['lang'] = $snapshot['lang'];
+        \Gallery\Core\apply_cookie_intents(
+            \Gallery\Services\translation_bootstrap_request(
+                $kind === 'smart' ? 'smart_gallery' : 'gallery',
+                ['query' => ['lang' => $snapshot['lang']]],
+            ),
+        );
+        ob_start();
+        \Gallery\Views\view_render_presentation_snapshot(
+            json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+        );
+        append_cms_head_extras((string) ob_get_clean());
+        header('Cache-Control: private, no-store, max-age=0');
+        return true;
+    } catch (Throwable) {
+        http_response_code(503);
+        header('Cache-Control: private, no-store, max-age=0');
+        header('Retry-After: ' . PUBLIC_PRESENTATION_RETRY_SECONDS);
+        header('X-Robots-Tag: noindex, nofollow');
+        echo e(t('presentation.link_unavailable'));
+        return false;
+    }
+}
+
+/**
+ * Handle explicit short-link creation inside an already authorized gallery.
+ * @param string $kind Gallery namespace, gallery or smart.
+ * @param array{id:int|string,slug?:string,url_path?:string|null,
+ *     folder_path?:string|null,title?:string|null} $gallery Authorized identity.
+ * @param bool $allowed Whether current photos and capabilities allow sharing.
+ * @param int $sourceGalleryId Already validated Smart source filter; zero for
+ *     physical galleries or unfiltered Smart results.
+ * @return bool False for unrelated requests; true after a JSON response.
+ */
+function public_presentation_create(
+    string $kind,
+    array $gallery,
+    bool $allowed,
+    int $sourceGalleryId = 0,
+): bool {
+    if (request_method() !== 'POST'
+        || ($_POST['action'] ?? '') !== 'presentation_share') return false;
+    verify_csrf();
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: private, no-store, max-age=0');
+    header('X-Robots-Tag: noindex, nofollow');
+    try {
+        if (!$allowed) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => t('presentation.link_unavailable')]);
+            return true;
+        }
+        $input = [];
+        foreach (['autoplay', 'music', 'fullscreen', 'exclusive',
+            'interval', 'transition', 'lang'] as $key) {
+            if (!is_string($_POST[$key] ?? null)) {
+                throw new \InvalidArgumentException('Invalid presentation input.');
+            }
+            $input[$key] = $_POST[$key];
+        }
+        $input['source_gallery_id'] = (string) $sourceGalleryId;
+        $snapshot = \Gallery\Services\presentation_link_snapshot($input);
+        $code = \Gallery\Services\presentation_link_create(
+            $kind, (int) $gallery['id'], $snapshot,
+        );
+        echo json_encode([
+            'ok' => true,
+            'url' => \Gallery\Core\presentation_public_url($code),
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    } catch (\InvalidArgumentException) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => t('presentation.link_invalid')]);
+    } catch (Throwable) {
+        http_response_code(503);
+        echo json_encode(['ok' => false, 'error' => t('presentation.link_unavailable')]);
+    }
+    return true;
+}
 
 const PUBLIC_SCHEMA_UNAVAILABLE_EVENT = 'security.public_schema_inspection_unavailable';
 

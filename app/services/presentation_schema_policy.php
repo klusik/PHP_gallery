@@ -514,6 +514,29 @@ function presentation_gallery_settings_schema_status(): array
     ]);
 }
 
+/**
+ * Observe persistent short-link storage without guessing from failed queries.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,
+ *     object_type:string,table:string,object:string,error_code:string,
+ *     diagnostic:string}>} Available, missing or unknown snapshot storage.
+ */
+function presentation_links_schema_status(): array
+{
+    $status = presentation_schema_tables_status('presentation.links', [
+        'presentation_links' => [
+            'id', 'code', 'fingerprint', 'gallery_kind', 'gallery_id',
+            'settings_json', 'created_at',
+        ],
+    ]);
+    $status['requirements'][] = schema_inspection_index(
+        'presentation_links', 'presentation_links_code',
+    );
+    $status['requirements'][] = schema_inspection_index(
+        'presentation_links', 'presentation_links_fingerprint',
+    );
+    return schema_inspection_feature('presentation.links', $status['requirements']);
+}
+
 /** Return schema status for per-user OpenAI text settings storage.
  * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and required user OpenAI text settings table column checks.
  */
@@ -759,6 +782,10 @@ function presentation_schema_health_definitions(): array
         'presentation_gallery_settings' => [
             'resolver' =>
                 static fn(): array => presentation_gallery_settings_schema_status(),
+            'flag' => 'lightbox_modes',
+        ],
+        'presentation_links' => [
+            'resolver' => static fn(): array => presentation_links_schema_status(),
             'flag' => 'lightbox_modes',
         ],
         'presentation_openai_text' => [

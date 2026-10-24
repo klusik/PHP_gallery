@@ -363,7 +363,20 @@ function gallery_migration_target_gallery_id(
  * Apply imported metadata, converting legacy orientation semantics without moving folders or copying secrets.
  *
  * @param int $targetGalleryId Target gallery id identifier.
- * @param array<string,mixed> $manifest Manifest or entry containing gallery metadata and its semantics marker.
+ * @param array{gallery?:array{title?:string,description?:string,slug?:string,
+ *     sort_order?:int,visibility?:string,voting_enabled?:bool|int,
+ *     show_filenames?:bool|int,gallery_date?:string|null,
+ *     gallery_date_end?:string|null,description_layout?:string,
+ *     description_layout_semantics_version?:int,
+ *     count_badge_visibility?:string|null,
+ *     picture_game_enabled?:bool|int,gps_map_enabled?:bool|int|null,
+ *     grid_columns?:int|null,grid_rows?:int|null,
+ *     grid_use_for_subgalleries?:bool|int,thumbnail_min_size?:int|null,
+ *     thumbnail_max_size?:int|null,background_source?:string|null,
+ *     nsfw_enabled?:bool|int,tags?:string,content_language?:string|null,
+ *     translations?:array<string,array{title?:string,description?:string}>}}
+ *     $manifest Imported metadata; only supported fields are applied. Reserved
+ *     presentation-like slugs are disambiguated without changing the title.
  * @param bool $includeSortOrder Preserve source sibling order value.
  * @param bool $includeVisibility Apply source visibility value.
  * @return void Applies allowed metadata while preserving null/inherited orientation overrides.
@@ -446,7 +459,7 @@ function gallery_migration_apply_gallery_metadata(
         )
     ) {
         $updates['slug'] = gallery_model_unique_slug(
-            (string) $metadata['slug'],
+            gallery_url_slug_base((string) $metadata['slug']),
             $targetGalleryId,
         );
     }

@@ -231,6 +231,8 @@ function render_public_smart_gallery_attachment_group(
  */
 function cms_gallery(): void
 {
+    $presentationGalleryId = null;
+    if (public_presentation_root($presentationGalleryId)) return;
     public_render_profile_start('gallery');
     // Variable $anonymousPreview stores whether a logged-in admin asked to render the page with anonymous visitor rules.
     $anonymousPreview = admin_anonymous_preview_active();
@@ -239,7 +241,8 @@ function cms_gallery(): void
         ? null
         : (current_user_is_known_under_18() ? null : current_user());
     // Variable $gallery stores this steps working value.
-    $gallery = null;
+    $gallery = $presentationGalleryId !== null
+        ? find_gallery($presentationGalleryId) : null;
     // Variable $requestedImage stores this steps working value.
     $requestedImage = null;
     if (isset($_GET['public_path'])) {
@@ -340,6 +343,7 @@ function cms_gallery(): void
         render_gallery_access_gate($gallery, '', $requestedImage);
         return;
     }
+    if (!public_presentation_restore('gallery', $gallery)) return;
     public_render_profile_set_gallery((int) $gallery['id']);
     // Variable $publicOnly stores this steps working value.
     $publicOnly = !$viewer;
@@ -370,6 +374,12 @@ function cms_gallery(): void
             true,
         ),
     );
+    if (public_presentation_create(
+        'gallery',
+        $gallery,
+        $lightboxTotalCount > 0
+            && feature_capability_effective_enabled('lightbox_modes'),
+    )) return;
     // Variable $images stores the visible page photo rows. It is filled after pagination knows the requested offset.
     $images = [];
     // Variable $allImages stores only the current visible photo set. Full-gallery lightbox data is loaded asynchronously.

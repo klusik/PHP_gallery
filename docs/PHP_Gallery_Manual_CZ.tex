@@ -560,8 +560,23 @@ se~středními rychlostmi a~nemění hudbu běžné Smart prezentace. Platí ste
 
 Pod kartami tlačítko \ui{Prezentace} spustí první fotografii, nastavené
 rychlosti a~hudbu pro toto spuštění. Uloženou předvolbu běžné prezentace nezmění.
-Ikona sdílení otevře panel s~odkazem na~galerii s~aktuálním jazykem
-a~\codeword{presentation=1}, bez stránkování či~náhledu administrátora.
+Ikona sdílení otevře panel, který vytvoří krátký odkaz přímo v~kořeni aplikace,
+například \codeword{/Galerie/presentation=1a2b3c4d}, bez cesty konkrétního alba,
+stránkování či~náhledu administrátora.
+Osm malých hexadecimálních znaků označuje uložený snímek nastavení přehrávání,
+jazyka a~případného filtru zdrojů Smart galerie. Stejná galerie a~nastavení
+použijí stejný kód; jiná galerie dostane vlastní. Odkazy automaticky neexpirují
+a~neudělují přístup do~galerie. Bez čistých URL se~krátký kód předává
+parametrem \codeword{presentation}. Po~aktualizaci spusťte běžnou migraci
+databáze; nedostupné úložiště zobrazí chybu a~zakáže kopírování.
+Staré dlouhé odkazy zůstávají podporované. Databáze ukládá verzovaný JSON
+a~plný SHA-256 otisk odděleně od~samostatného primárního klíče, takže lze
+přidávat volby bez změny významu podporovaných uložených snímků.
+Generované URL slugy galerií rezervují osmiznakové hexadecimální názvy
+a~prezentační prefixy; podle potřeby přidají \codeword{gallery-}.
+Zobrazované názvy zůstanou volné. Přehrávání zachová krátkou kořenovou adresu.
+Panel sdílení používá kompaktní průsvitné barvy motivu, malé přepínače,
+tenké posuvníky rychlosti a~ikonu kopírování s~viditelným zaměřením klávesnice.
 Otevření odkazu spustí stejnou prezentaci po~běžné kontrole přístupu.
 Prohlížeč může vyžadovat kliknutí na~\ui{Přehrát}; odmítnutí schránky
 zobrazí označitelný odkaz pro ruční kopírování.

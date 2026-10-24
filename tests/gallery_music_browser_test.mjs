@@ -35,6 +35,7 @@ body { margin: 8px; font: 16px sans-serif; }
 <details data-gallery-media-widget data-presentation-share-widget>
 <summary>Share presentation</summary>
 <section id="share-fixture" data-gallery-media-panel data-presentation-share-panel
+ data-presentation-csrf="fixture-csrf"
  data-presentation-url="http://127.0.0.1/gallery?lang=en&amp;presentation=1">
 <input type="checkbox" data-share-option="autoplay">
 <input type="checkbox" data-share-option="music">
@@ -49,7 +50,8 @@ body { margin: 8px; font: 16px sans-serif; }
 <span hidden data-share-speed="medium">Medium</span>
 <span hidden data-share-speed="fast">Fast</span></label>
 <output data-presentation-status data-copied="Copied"
- data-copy-failed="Copy manually"></output>
+ data-copy-failed="Copy manually" data-link-pending="Creating"
+ data-link-failed="Unavailable"></output>
 <input type="url" readonly data-presentation-copy>
 <button type="button" data-presentation-copy-button>Copy</button>
 </section></details>
@@ -425,6 +427,21 @@ try {
         value: {writeText: async value => { copiedUrl = value; }},
     });
     const sharePage = location.href;
+    const presentationFetch = window.fetch;
+    const shareRequests = [];
+    window.fetch = async (url, options) => {
+        if (options?.body?.get('action') !== 'presentation_share') {
+            return presentationFetch(url, options);
+        }
+        check(options.method === 'POST' && options.credentials === 'same-origin'
+            && options.headers.Accept === 'application/json'
+            && options.body.get('csrf_token') === 'fixture-csrf',
+            'Short link generation lost its method, session or CSRF boundary');
+        let finish;
+        const pending = new Promise(resolve => { finish = resolve; });
+        shareRequests.push({body: options.body, finish});
+        return pending;
+    };
     share.click();
     await turn();
     check(!copiedUrl && presentation.querySelector('details').open,
@@ -438,14 +455,24 @@ try {
         else input.value = '2';
         input.dispatchEvent(new Event('input', {bubbles: true}));
     }
-    const configured = new URL(copyInput.value);
-    check(configured.searchParams.get('autoplay') === '0'
-        && configured.searchParams.get('presentation_music') === '0'
-        && configured.searchParams.get('presentation_exclusive') === '1'
-        && configured.searchParams.get('presentation_interval') === 'fast'
-        && configured.searchParams.get('presentation_transition') === 'fast'
-        && configured.searchParams.get('lang') === 'en',
-        'Share controls did not serialize the bounded localized snapshot');
+    const configured = shareRequests.at(-1).body;
+    check(configured.get('autoplay') === '0'
+        && configured.get('music') === '0'
+        && configured.get('exclusive') === '1'
+        && configured.get('interval') === 'fast'
+        && configured.get('transition') === 'fast'
+        && configured.get('lang') === 'en'
+        && copyInput.value === '' && copyButton.disabled,
+        'Pending sharing must send complete options and suppress stale copy URLs');
+    const shortUrl = location.origin + '/presentation=abcd1234';
+    shareRequests.at(-1).finish(new Response(JSON.stringify({ok: true, url: shortUrl}),
+        {headers: {'Content-Type': 'application/json'}}));
+    await turn();
+    shareRequests[0].finish(new Response(JSON.stringify({ok: true,
+        url: location.origin + '/presentation=00000000'})));
+    await turn();
+    check(copyInput.value === shortUrl && !copyButton.disabled,
+        'A stale response replaced the current short presentation link');
     copyButton.click();
     await turn();
     check(copiedUrl === copyInput.value && location.href === sharePage
@@ -461,6 +488,7 @@ try {
         && shareStatus.textContent === 'Copy manually',
         'Denied clipboard did not expose a keyboard-selectable launch URL');
     share.click();
+    window.fetch = presentationFetch;
 
     // Eight rows exceed the five-row applet sample; this is a layout vector.
     const documents = document.createElement('section');

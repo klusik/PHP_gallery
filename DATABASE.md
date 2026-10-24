@@ -96,7 +96,33 @@ retain the supported preferences. The migration uses ordinary ALTER TABLE only;
 duplicate-column recovery remains owned by the existing migration runner.
 The lazy `presentation_gallery_settings` health resolver shares the same schema
 authority and lightbox capability gate. Link-only fullscreen/exclusive choices
-do not require additional persistence.
+are independent of gallery defaults.
+
+Migration `202610240001_presentation_links.php` adds `presentation_links` with
+an auto-increment surrogate `id`, globally UNIQUE eight-character lowercase
+hexadecimal `code`, UNIQUE full SHA-256 `fingerprint`, `gallery_kind`
+(`gallery`/`smart`), stable `gallery_id`, versioned canonical `settings_json`
+and UTC `created_at`. An index on `(gallery_kind, gallery_id)` supports ownership
+inspection. The fingerprint covers the gallery namespace/ID plus all canonical
+snapshot fields: autoplay, music, fullscreen, exclusive controls, interval,
+transition, language and Smart source filter. It is not a composite primary key
+over today's settings columns. New settings require an explicit document-version
+decoder/default policy while supported version-one documents remain immutable.
+
+Sharing inserts on demand, reuses identical fingerprints and retries a bounded
+sequence of deterministic candidates on short-code collisions. Database unique
+constraints arbitrate concurrent inserts; existing rows are never updated to
+point at another presentation. Codes have no automatic expiry. The polymorphic
+gallery identity deliberately has no cross-table foreign key: retained rows do
+not grant access, deleted/unavailable galleries still fail ordinary authorization,
+and retained reservations prevent reassignment. They contain no passwords,
+access tokens or media paths. Normal gallery listing does not probe this table.
+Explicit sharing/resolution requires verified columns and both unique indexes
+through `presentation_links_schema_status()`; missing/unknown schema refuses
+that operation and is visible in lazy System Health.
+The application-root `presentation=<code>` route discovers only the stored
+gallery identity before normal authorization, then resolves its snapshot within
+that exact scope. Gallery names/paths are not encoded in the public link.
 
 Attachment accounting adds migration
 `202610190001_gallery_attachment_storage.php`. The derived
