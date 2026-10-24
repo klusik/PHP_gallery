@@ -503,7 +503,7 @@ Det synliga SimBrief-fältet accepterar ett~pilot-ID eller pilotnamn. Enbart sif
 \subsubsection{Arbeta i den kompakta redigeraren}
 \index{g00108@galleriredigerare!s00219@sidopanel}
 
-De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visning} och \ui{Ladda upp media}; därefter följer bildverktyg och specialverktyg när de är tillgängliga. Den fasta övre navigeringen håller diskettknappen \ui{Spara} synlig när inställningar eller fotolistan rullas. Att byta flik sparar inte automatiskt. Använd knappen efter redigering och öppna sedan galleriet igen om du vill verifiera de lagrade värdena. Längre förklaringar finns bakom frågeteckenskontroller som kan nås med tangentbordet, och mer sällan använda val ligger under utfällbara \ui{Avancerat}-avsnitt. En direkt administrationsredigerare använder samma fält, medan en webbläsare utan JavaScript använder vanlig formulärinlämning.
+De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visning} och \ui{Mediehantering}; därefter följer bildverktyg och specialverktyg när de är tillgängliga. Den fasta övre navigeringen håller diskettknappen \ui{Spara} synlig när inställningar eller fotolistan rullas. Att byta flik sparar inte automatiskt. Använd knappen efter redigering och öppna sedan galleriet igen om du vill verifiera de lagrade värdena. Längre förklaringar finns bakom frågeteckenskontroller som kan nås med tangentbordet, och mer sällan använda val ligger under utfällbara \ui{Avancerat}-avsnitt. En direkt administrationsredigerare använder samma fält, medan en webbläsare utan JavaScript använder vanlig formulärinlämning.
 
 \ui{Identitet} håller titel, beskrivning, datum, källspråk, SimBrief och taggar lätt tillgängliga. Dess avancerade avsnitt innehåller URL-namn, mapp, övergalleri, sorteringsordning och AI-galleritext när funktionen är~aktiverad. \ui{API} visar en kopierbar uppladdningsadress, nyckelns etikett och åtgärd samt en nyskapad nyckel endast en gång; befintliga nycklar visas bara när sådana finns. Omgenerering av AI-metadata, migrering och den globala API-hanteraren ligger under \ui{Avancerade API-verktyg}. \ui{Åtkomst} samlar synlighet, lösenord, delningslänkskontroller och NSFW-kryssrutan, med längre policyförklaringar under frågetecken. \ui{Visning} börjar med rutnätet och vanliga växlar för röstning och filnamn; EXIF/GPS, format för gallerikort, antalmarkering, ljuslådeläge, Bildspelet, miniatyrbildsgränser ligger under \ui{Avancerade visningsinställningar}; flygrutttext finns bredvid SimBrief under \ui{Identitet}.
 
@@ -516,6 +516,31 @@ Med båda OFF finns presentationsval kvar om~Lightbox är~aktivt.
 Är~även Lightbox OFF döljs den~tomma fliken; gamla länkar väljer Identitet.
 Redan skapade sidfoton behåller sina vanliga åtkomstregler. SimBrief kan
 fortsätta uppdatera beskrivningar/rutter och~behåller gamla PDF-original.
+
+Under \ui{Mediehantering > Musik} visas katalogen till vänster och galleriets
+musik till höger; smala redigerare staplar tabellerna. Spela står före titeln
+och Lägg till i radens slut. Välj flera poster med kryssrutor och använd
+plusikonen bredvid sökningen. Befintliga låtar kan spelas men inte läggas till
+igen, även när de ingår i livealbum. Album har en filikon och en separat
+utfällningspil; först när de öppnas läses de indragna låtarna in.
+Förhandslyssning tilldelar inget. Flera tillägg körs i ordning och visar
+utförd del om något misslyckas. Borttagning från galleriet återställer
+tillgängliga tillägg utan att radera gemensamma original. Spelaren och
+galleriets musikreglage finns i det gemensamma huvudet.
+Under \ui{Mediehantering > Bilder}
+ersätter en stor befintlig miniatyr inte den nödvändiga 300px-förhandsvisningen.
+Skapa galleriets miniatyrer via miniatyrverktygen när den storleken saknas
+och försök sedan läsa in bilderna igen. Stäng av webbläsarbaserad generering
+för att skapa på servern. Redigeraren hämtar aldrig original som reservbild.
+
+Ett musikfel visar en referens till posten under \ui{Admin > Loggar},
+kategori \ui{Media}. Den innehåller galleri, val, åtgärd, fas och sparstatus,
+men inga råa undantag, SQL, inloggningsuppgifter eller absoluta lagringssökvägar.
+Om Admin-loggningen misslyckas går den säkra posten till PHP:s fellogg.
+Återställ eller ladda upp saknade original igen; en osynkroniserad källa
+kräver musikkataloguppgiften i Underhållscenter. Flytta SQL,
+\filepath{data/music/} och galleriernas sidofiler tillsammans mellan datorer.
+Efter ett sparat resultat där gränssnittet inte uppdaterats öppnar du redigeraren igen.
 
 \subsubsection{Bifoga och konvertera ett PDF-dokument}
 Öppnade konverteringskontroller gör inte dokumentkolumnen bredare. Om det tidigare målet saknas eller har ändrats, bekräfta ett nytt privat resultat; tidigare filer och gallerier bevaras.
@@ -546,7 +571,7 @@ Anonyma besökare använder samma länk efter vanliga åtkomstkontroller.
 Kräver helskärm eller~ljud aktivering väntar den~svarta inledningen på
 \ui{Starta presentationen}. Efter bekräftelse fyller reservläget fönstret
 om~äkta helskärm saknar stöd; \ui{Spela} kan~försöka igen vid~senare ljudfel.
-I~\ui{Redigera galleri > Ladda upp media > Presentation} finns det~genomskinliga
+I~\ui{Redigera galleri > Mediehantering > Presentation} finns det~genomskinliga
 kortet \ui{Presentationsinställningar} för~offentliga knappar, musik och~båda
 hastigheterna. Sparaikonen använder det~skyddade galleriformuläret.
 Förhandsvisning och~delning använder aktuella, även osparade val. Nya länkar
@@ -592,7 +617,7 @@ Filväljaren och släppkön i uppladdningspanelen för ett befintligt galleri ac
 
 \index{PDF!galleridokument}
 
-Galleriredigeraren samlar foton och~media under \ui{Ladda upp media}, med
+Galleriredigeraren samlar foton och~media under \ui{Mediehantering}, med
 \ui{Bilder}, \ui{Musik}, \ui{PDF}, \ui{Presentation}, \ui{Grafik} och~ZIP-val.
 Ett enda \ui{Ladda upp filer}-val känner automatiskt igen aktiverade foto-,
 PDF- och~ljudformat. PDF-hantering, konvertering och~den valfria OFP-panelen
@@ -692,7 +717,7 @@ identiteter ger nya poster; överförda arkiv tillför inga betrodda logiska ID:
 
 \subsubsection{Musiklagring}
 
-Öppna \ui{Redigera galleri > Ladda upp media > Musik} för~att~ladda upp ljud och~hantera
+Öppna \ui{Redigera galleri > Mediehantering > Musik} för~att~ladda upp ljud och~hantera
 galleriets spellista. Nya uppladdningar lagrar oföränderliga original i~det
 skyddade centrala arkivet \filepath{data/music/}; ljud omvandlas aldrig till foton.
 Direkta låttilldelningar är~fristående poster. Albumtilldelningar är~levande
@@ -757,6 +782,17 @@ och~dolda äldre index tillsammans. Varje centralt musikoriginal räknas en~gån
 oavsett gallerianknytningar; omigrerade lokala original räknas separat. När ett
 galleri tas bort försvinner dess referenser, inte det~delade originalet. Foto-ZIP
 och~galleriöverföringar innehåller inte musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
+
+När ett katalogiserat lokalt spår tas bort sparas och~verifieras originalet
+först centralt; det kan sedan läggas till igen utan uppladdning. Ett fel
+bevarar den gamla spellistan och~filen. Efter flytten tar den valda
+underhållsuppgiften bort högst 20 katalogposter per steg utan gallerianvändning
+eller registrerat centralt original. Väntande källavstämning och~registrerade
+original skyddas, även om filerna behöver återställas. Enbart album/taggmetadata
+bevarar inte ett föräldralöst spår. Rensningen tar bara bort metadata och~loggar
+antalet. Kör Analysera igen före godkännande av den ändrade uppgiften.
+Tidigare raderat ljud kräver original eller säkerhetskopia; underhållet kan
+inte återskapa dessa byte.
 
 Samma Underhållscenter erbjuder en förvald, valfri avstämning av äldre PDF-
 och musikräkningar på offentliga kort. Den går vidare i steg med högst 25 gallerier
@@ -871,8 +907,8 @@ Medier & Titelbild & Automatisk eller ett valt fotografi, inklusive lämpliga fo
 Medier & Uppladdad galleriminiatyrbild & Separat medieresurs för gallerikort, lagrad oberoende av vanliga gallerifotografier.\\
 Medier & Bakgrundskälla & Ärver Tema, laddar upp en ny bakgrund, väljer en befintlig galleribild eller genererar ett kollage från offentliga gallerier.\\
 Medier & Profileringsresurser & Valfria gallerispecifika banderoll-, logotyp- och avdelarresurser åsidosätter Temas reservvärden endast för det galleriet där de har konfigurerats.\\
-Ladda upp media & Skanna/importera & Skannar om den fysiska gallerimappen och synkroniserar medier som stöds med katalogen.\\
-Ladda upp media & Skapa alla miniatyrbilder & Återskapar miniatyrbilder för detta galleri. Välj \ui{Inkludera undergallerier} för att omfatta dess undergallerier; andra gallerigrenar ingår inte i jobbet. Webbläsargenerering väljs som standard när den är tillgänglig, med servergenerering som alternativ.\\
+Mediehantering & Skanna/importera & Skannar om den fysiska gallerimappen och synkroniserar medier som stöds med katalogen.\\
+Mediehantering & Skapa alla miniatyrbilder & Återskapar miniatyrbilder för detta galleri. Välj \ui{Inkludera undergallerier} för att omfatta dess undergallerier; andra gallerigrenar ingår inte i jobbet. Webbläsargenerering väljs som standard när den är tillgänglig, med servergenerering som alternativ.\\
 Verktyg & Organiserare, Filnamnsbyte, API & Datumorganiserare, fysiskt mediefilnamnsbyte, hantering av uppladdnings-API-nycklar, AI-omgenerering och gallerimigrering visas bara när deras scheman och funktioner är tillgängliga.\\
 \bottomrule
 \end{longtable}
@@ -1813,7 +1849,7 @@ Fliken \ui{Bilder} i galleriredigeraren samlar vanliga bildåtgärder i en kompa
 
 Titelbildsstjärnan har tre lägen när databasschemat stöder flera foton: en tom stjärna väljer bara det fotot (guld); ett nytt klick på den gyllene stjärnan behåller valet och aktiverar tilläggsläget (blått); ett klick på en annan tom stjärna lägger till fotot, upp till fyra foton. Ett klick på en vald blå stjärna behåller bara det fotot (guld). Varje klick sparas direkt. Stjärnorna uppdateras i den högra Admin-panelen utan att ersätta hela panelen; öppen flik, rullningsposition, andra formulärutkast och inlästa bildrader bevaras. Det offentliga galleriet uppdateras separat. Efter ett fel eller ett förlorat svar hämtar redigeraren först det aktuella titelbildsläget utan att ändra panelen. Om läget har ändrats uppdateras stjärnorna före den offentliga gallerisynkroniseringen; annars ska du kontrollera aktuellt läge innan du försöker igen, eftersom sparandet kan ha lyckats innan svaret byggdes.
 
-Under \ui{Ladda upp media} > \ui{Titelbild} väljer \ui{Automatiskt (2 foton)} upp till två lämpliga direkta foton och fyller tomma platser med tillgängliga undergallerier. \ui{Standard (galleriets tidigare beteende)} bevarar den äldre visningen för gallerier som inte uttryckligen har valt automatiskt läge eller ett manuellt titelbildsläge. Offentliga kort kontrollerar aktuell synlighet och åtkomst igen; opublicerade eller otillgängliga foton visas inte.
+Under \ui{Mediehantering} > \ui{Titelbild} väljer \ui{Automatiskt (2 foton)} upp till två lämpliga direkta foton och fyller tomma platser med tillgängliga undergallerier. \ui{Standard (galleriets tidigare beteende)} bevarar den äldre visningen för gallerier som inte uttryckligen har valt automatiskt läge eller ett manuellt titelbildsläge. Offentliga kort kontrollerar aktuell synlighet och åtkomst igen; opublicerade eller otillgängliga foton visas inte.
 
 När den valfria funktionen \ui{Bildhanteraren} är~aktiverad kan en vanlig inloggad administratör välja fotografier och direkta fysiska undergallerier i det offentliga gallerirutnätet. Bockar väljer enskilda kort; Skift-klick väljer ett intervall; Ctrl-klick eller Cmd-klick växlar ett kort; \ui{Markera alla}, \ui{Rensa} och Ctrl/Cmd+A stöder större urval på den synliga sidan. Smarta gallerikort ingår inte i detta filbaserade urval. Att dra ett omarkerat fotografi börjar med det fotografiet som urval, medan dragning av ett befintligt bildurval flyttar de valda fotografierna tillsammans. Ett synligt undergallerikort blir ett släppmål, och släpp där utför samma validerade bildflytt som destinationsväljaren. Fysiska gallerikort kan inte själva dras.
 
@@ -2762,6 +2798,17 @@ Pausa och Avbryt samarbetar med körningen: de får effekt mellan begränsade å
 Slutrapporten skiljer mellan borttagna rader och filer, analyserade eller optimerade tabeller, överhoppningar, varningar och fel. Den rapporterar fysisk lagring före och efter endast när inventeringsunderlaget stöder slutsatsen. Det generiska arbetsflödet tillämpar aldrig migreringar, gör schemareparation, installerar uppdateringar, raderar administrationsloggarkiv, tömmer alla papperskorgsposter eller genererar om medier; använd specialsidorna för dessa avsiktliga åtgärder.
 
 Rensning av hämtningar och cache går genom manifestcachen, äldre hämtningsartefaktcache och genererad ZIP-cache som separata begränsade steg. Dessa cacher är oberoende optimeringar: om en är otillgänglig på aktuellt webbhotell bevarar centret redan slutförd rensning, registrerar en säker varning och fortsätter med övriga ansvarsområden och senare uppgifter. Varningen kan identifiera åtgärden och en stabil felkategori men avslöjar inte råa undantagsmeddelanden, SQL, inloggningsuppgifter, privata sökvägar eller stackspår. Efter att en uppdatering ändrat detta körningskontrakt är en äldre färdig plan avsiktligt inaktuell; kör Analysera igen innan du fortsätter.
+
+Cachelivscykeln får högst 32 korta webbläsarsteg per central körning.
+Färdiga områden startas inte om medan ett annat väntar på nytt försök.
+Uppskjutet eller otillgängligt arbete behåller sin kontrollpunkt; senare
+uppgifter fortsätter. Admin-loggen registrerar orsak, stegantal, täckning
+och~återstående byte under
+\codeword{maintenance\_center.cache\_lifecycle\_deferred}.
+Paus och~Avbryt fungerar även under en väntande begäran: kontrollen följer
+det aktuella steget och~ett sista skyddat steg frigör det centrala låset vid
+avbrott. En tjänsteomstart bevarar jobbet. Ladda om Underhållscenter efter
+uppdateringen för att fortsätta eller avbryta samma körning.
 
 \subsection{Miniatyrbildsunderhåll}
 

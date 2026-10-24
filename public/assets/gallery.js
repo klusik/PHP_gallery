@@ -68,11 +68,11 @@ import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js
 import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261021-smart-photo-tags-v2';
-import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
+import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
 import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261021-upload-media-v1';
 import {
     setupGalleryMusicPlayback,
-} from './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
+} from './gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
 import {
     setupGalleryMediaPanels,
 } from './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1';
@@ -97,7 +97,7 @@ import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplic
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
 import { setupAdminCron } from './gallery-modules/admin-cron.js?v=20261023-cron-v6';
-import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261020-compact-maintenance-v5';
+import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261024-cache-continuation-v6';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
 import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';
@@ -106,7 +106,7 @@ import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-v
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261023-public-modal-v3';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261024-catalog-workspace-v3';
 import { setupQuickPhotoTags } from './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
 import {
     setupAdminGalleryFilters,
@@ -127,7 +127,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261023-public-ux-v3';
+} from './gallery-modules/admin-operations.js?v=20261024-catalog-workspace-v3';
 
 /**
  * Runs a setup callback after the DOM is ready.

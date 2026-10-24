@@ -435,6 +435,22 @@ continue through cron.
 Maintenance Center's existing `downloads.cache` task includes lifecycle work and
 reports partial/refused owners; old analyzed plans require fresh analysis under
 the changed registry revision. Cron JSON includes `cache_lifecycle.value`.
+One central job admits at most 32 lifecycle slices, with the current slice count
+visible in activity. It observes ordinary due/retry dates and resumes only its
+admitted unfinished regions or legacy cycle. It never forces healthy completed
+regions to restart while another region waits for retry. A discovery completion
+settles only that region. If the owner yields, becomes unavailable or reaches
+the central limit, unrelated tasks continue; no cache checkpoint or protected
+payload is discarded. Admin Logs records
+`maintenance_center.cache_lifecycle_deferred` with the safe reason, slice count,
+coverage, pending bytes and error/blocked counts, or
+`maintenance_center.cache_lifecycle_completed`
+when the admitted opportunity ends without incomplete evidence. These events
+describe a central opportunity, not proof that all cache storage is clean.
+Pause and Cancel queue behind the active browser request. Cancellation finishes
+through one final guarded step so a stopped loop does not strand the central
+mutation claim. Running jobs survive service restarts and can use these controls
+or continue from their existing checkpoint after updating the code.
 Eligibility after a TTL is not a promise of instantaneous removal: progress
 needs
 repeated cron/browser slices, and active ownership/pins always take precedence.

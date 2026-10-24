@@ -202,6 +202,7 @@ namespace {
     use function Gallery\Services\music_catalog_sync_gallery_snapshot;
     use function Gallery\Services\music_catalog_usage;
     use function Gallery\Services\music_repository_asset_path;
+    use function Gallery\Services\music_repository_preview_song;
     use function Gallery\Services\music_repository_directory;
     use function Gallery\Services\music_repository_store_source;
     use function Gallery\Services\gallery_branch_attachment_usage_counts;
@@ -430,6 +431,38 @@ namespace {
         );
         foreach ($initialSongs as $songId) {
             $fixtureSongIds[] = (int) $songId;
+        }
+
+        $sourceBeforeRefusal = file_get_contents($sourceDirectory . '/index.json');
+        \Gallery\Models\music_catalog_model_mark_gallery_dirty($sourceId);
+        try {
+            \Gallery\Services\music_repository_prepare_song((int) $initialSongs[$trackIds[0]]);
+            throw new \LogicException('A dirty source must remain withheld.');
+        } catch (\RuntimeException $failure) {
+            check(
+                $failure->getMessage() === 'music.source_reconcile_required'
+                    && file_get_contents($sourceDirectory . '/index.json') === $sourceBeforeRefusal,
+                'A withheld source must report catalog reconciliation without rewriting its playlist.',
+            );
+        } finally {
+            \Gallery\Models\music_catalog_model_clear_gallery_dirty($sourceId);
+        }
+
+        // The fixture owns this temporary unavailable original and restores it
+        // before migration. SQL metadata alone must never authorize assignment.
+        $unavailablePath = $sourceDirectory . '/' . $trackIds[0] . '.bin';
+        rename($unavailablePath, $unavailablePath . '.held');
+        try {
+            \Gallery\Services\music_repository_prepare_song((int) $initialSongs[$trackIds[0]]);
+            throw new \LogicException('Missing bytes must not be assigned.');
+        } catch (\RuntimeException $failure) {
+            check(
+                $failure->getMessage() === 'music.original_unavailable'
+                    && file_get_contents($sourceDirectory . '/index.json') === $sourceBeforeRefusal,
+                'A missing original must have a distinct refusal and preserve the prior playlist.',
+            );
+        } finally {
+            rename($unavailablePath . '.held', $unavailablePath);
         }
 
         $firstMigration = gallery_music_migrate_repository([
@@ -667,6 +700,134 @@ namespace {
             $assetForSong !== null
                 && music_repository_asset_path($assetForSong) !== null,
             'A promoted asset must resolve to its verified central bytes.',
+        );
+        $previewState = gallery_music_state($source);
+        $previewRevision = music_catalog_revision();
+        $preview = music_repository_preview_song((int) $assetForSong['song_id']);
+        check(
+            $preview !== null
+                && $preview['path'] === music_repository_asset_path($assetForSong)
+                && gallery_music_state($source) === $previewState
+                && music_catalog_revision() === $previewRevision
+                && music_repository_preview_song(0) === null,
+            'Catalog preview must return verified bytes without assigning, migrating or revising music.',
+        );
+        $available = \Gallery\Services\music_catalog_assignment_availability(
+            $sourceId,
+            gallery_music_playlist($source, true)['sources'],
+            [
+                'revision' => $previewRevision,
+                'songs' => [[
+                    'id' => (int) $assetForSong['song_id'],
+                    'title' => 'Fixture preview',
+                ]],
+                'albums' => [],
+            ],
+        );
+        check(
+            $available['songs'][0]['already_added'] === true,
+            'Chooser availability must recognize an authoritative direct source.',
+        );
+
+        // Removing a still-local v1 track must retain its last original before
+        // publishing the empty gallery. Corrupt bytes must refuse that removal.
+        $detachId = '00000000000000000000000000000007';
+        $fixtureTrackIds[] = $detachId;
+        $detachDirectory = gallery_music_directory($secondDestination);
+        $detachPath = $detachDirectory . '/' . $detachId . '.bin';
+        $detachTrack = array_replace($legacyTracks[0], [
+            'id' => $detachId,
+            'filename' => 'Detached legacy ' . $token . '.wav',
+            'title' => 'Detached legacy ' . $token,
+        ]);
+        file_put_contents($detachPath, $wav);
+        file_put_contents($detachDirectory . '/index.json', json_encode([
+            'format' => 'gallery_music_v1',
+            'revision' => $v1Revision,
+            'enabled' => false,
+            'tracks' => [$detachTrack],
+        ], JSON_THROW_ON_ERROR));
+        music_catalog_sync_gallery_snapshot(
+            $secondDestinationId,
+            [$detachTrack],
+            music_catalog_revision(),
+        );
+        $detachSongId = \Gallery\Services\music_catalog_track_song_id(
+            $secondDestinationId,
+            $detachId,
+        );
+        $fixtureSongIds[] = $detachSongId;
+        $detachIndex = file_get_contents($detachDirectory . '/index.json');
+        $corruptDetach = str_repeat('x', strlen($wav));
+        file_put_contents($detachPath, $corruptDetach);
+        $detachRefused = false;
+        try {
+            gallery_music_mutate(
+                $secondDestination, $v1Revision, 'delete', $detachId,
+            );
+        } catch (\RuntimeException) {
+            $detachRefused = true;
+        }
+        check(
+            $detachRefused && is_file($detachPath)
+                && file_get_contents($detachPath) === $corruptDetach
+                && file_get_contents($detachDirectory . '/index.json')
+                    === $detachIndex,
+            'A failed preservation must leave the local original and playlist untouched.',
+        );
+        file_put_contents($detachPath, $wav);
+        gallery_music_mutate(
+            $secondDestination, $v1Revision, 'delete', $detachId,
+        );
+        $detachedAsset = \Gallery\Services\music_repository_prepare_song(
+            $detachSongId,
+        );
+        $fixtureAssetIds[] = $detachedAsset['id'];
+        $fixtureAssetPaths[] = music_repository_directory() . '/'
+            . $detachedAsset['id'] . '.bin';
+        check(
+            !is_file($detachPath)
+                && gallery_music_playlist($secondDestination)['tracks'] === []
+                && $detachedAsset['song_id'] === $detachSongId
+                && music_repository_asset_path($detachedAsset) !== null,
+            'Legacy removal must preserve the same catalog song and verified central original.',
+        );
+        // A verified earlier promotion also permits detaching an obsolete
+        // local reference whose former file is already absent.
+        file_put_contents($detachDirectory . '/index.json', $detachIndex);
+        music_catalog_sync_gallery_snapshot(
+            $secondDestinationId,
+            [$detachTrack],
+            music_catalog_revision(),
+        );
+        gallery_music_mutate(
+            $secondDestination, $v1Revision, 'delete', $detachId,
+        );
+        check(
+            gallery_music_playlist($secondDestination)['tracks'] === []
+                && music_repository_asset_path($detachedAsset) !== null,
+            'A matching verified central original must permit removing a missing local reference.',
+        );
+        $reattached = gallery_music_mutate(
+            $secondDestination,
+            gallery_music_state($secondDestination)['write_revision'],
+            'add_song', '', '', '', false, false, $detachSongId, null,
+            music_catalog_revision(),
+        );
+        $fixtureTrackIds[] = $reattached['track_id'];
+        check(
+            count(gallery_music_playlist($secondDestination)['tracks']) === 1,
+            'A removed legacy song must be assignable again without reupload.',
+        );
+        gallery_music_mutate(
+            $secondDestination,
+            $reattached['revision'],
+            'delete',
+            $reattached['track_id'],
+        );
+        check(
+            music_repository_asset_path($detachedAsset) !== null,
+            'Removing the retained central reference must keep its original.',
         );
 
         $uploadSource = $directory . DIRECTORY_SEPARATOR . 'owned-upload.wav';
@@ -1602,6 +1763,92 @@ namespace {
         schema_inspection_set_query_executor_for_tests(null);
         schema_inspection_reset_request_cache();
 
+        // Only catalog metadata without gallery use or repository assets is
+        // disposable. An inactive row under a dirty source remains uncertain.
+        $orphanInsert = $pdo->prepare(
+            'INSERT INTO music_songs (title, created_at, updated_at)'
+                . ' VALUES (?, NOW(), NOW())',
+        );
+        $orphanInsert->execute(['Orphan ' . $token]);
+        $orphanId = (int) $pdo->lastInsertId();
+        $fixtureSongIds[] = $orphanId;
+        $orphanInsert->execute(['Dirty source ' . $token]);
+        $dirtySongId = (int) $pdo->lastInsertId();
+        $fixtureSongIds[] = $dirtySongId;
+        $dirtyTrackId = '00000000000000000000000000000008';
+        $fixtureTrackIds[] = $dirtyTrackId;
+        $pdo->prepare(
+            'INSERT INTO music_track_instances (gallery_id, track_id, song_id,'
+                . ' filename, indexed_title, file_sha256, active,'
+                . ' updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, NOW())',
+        )->execute([
+            $secondDestinationId, $dirtyTrackId, $dirtySongId,
+            'dirty.wav', 'Dirty source ' . $token, $sha,
+        ]);
+        \Gallery\Models\music_catalog_model_mark_gallery_dirty(
+            $secondDestinationId,
+        );
+        // A noncontiguous position places this otherwise unbacked member after
+        // the ordinary album members; membership metadata must not retain it.
+        $pdo->prepare(
+            'INSERT INTO music_album_songs (album_id, song_id, sort_order)'
+                . ' VALUES (?, ?, ?)',
+        )->execute([(int) $album['album_id'], $orphanId, 100]);
+        $retainedPath = music_repository_asset_path($detachedAsset);
+        rename($retainedPath, $retainedPath . '.held');
+        try {
+            $singlePrune =
+                \Gallery\Services\music_catalog_prune_unbacked_songs(1);
+            check(
+                $singlePrune['removed'] <= 1,
+                'A lowered orphan batch must retain its explicit record bound.',
+            );
+            // The finite bound follows the fixture's owned identities, while
+            // every production call retains its independent 20-record limit.
+            for ($step = 0; $step <= count($fixtureSongIds); $step++) {
+                $pruned = \Gallery\Services\music_catalog_prune_unbacked_songs();
+                if (!$pruned['has_more']) break;
+            }
+            $songExists = $pdo->prepare(
+                'SELECT COUNT(*) FROM music_songs WHERE id = ?',
+            );
+            $songExists->execute([$orphanId]);
+            check(
+                (int) $songExists->fetchColumn() === 0,
+                'An unbacked catalog identity must be removed even with album metadata.',
+            );
+            $memberExists = $pdo->prepare(
+                'SELECT COUNT(*) FROM music_album_songs WHERE song_id = ?',
+            );
+            $memberExists->execute([$orphanId]);
+            check(
+                (int) $memberExists->fetchColumn() === 0,
+                'Orphan removal must also remove dependent album membership.',
+            );
+            foreach ([$dirtySongId, $detachSongId, $firstSongId] as $keptSongId) {
+                $songExists->execute([$keptSongId]);
+                check(
+                    (int) $songExists->fetchColumn() === 1,
+                    'Dirty, centrally registered and actively used songs must survive orphan cleanup.',
+                );
+            }
+        } finally {
+            rename($retainedPath . '.held', $retainedPath);
+            \Gallery\Models\music_catalog_model_clear_gallery_dirty(
+                $secondDestinationId,
+            );
+        }
+        $pdo->prepare(
+            'UPDATE music_track_instances SET active = 1'
+                . ' WHERE gallery_id = ? AND track_id = ?',
+        )->execute([$secondDestinationId, $dirtyTrackId]);
+        \Gallery\Services\music_catalog_prune_unbacked_songs();
+        $songExists->execute([$dirtySongId]);
+        check(
+            (int) $songExists->fetchColumn() === 1,
+            'An active local reference must protect a song without central assets.',
+        );
+
         $sourceAssets = array_column($afterSecond['tracks'], 'asset_id');
         $pdo->prepare('DELETE FROM galleries WHERE id = ?')->execute([$sourceId]);
         $deletedOriginDetails = music_catalog_song_details(
@@ -1624,22 +1871,32 @@ namespace {
         echo "Music repository database contracts passed.\n";
     } finally {
         if ($pdo instanceof \PDO) {
-            $ownedAssetQuery = $pdo->prepare(
-                'SELECT id FROM music_repository_assets '
-                    . 'WHERE (origin_gallery_id = ? AND origin_track_id IN (?, ?)) '
-                    . 'OR filename = ?',
-            );
             if ($fixtureGalleryIds !== [] && count($fixtureTrackIds) >= 2) {
-                $ownedAssetQuery->execute([
-                    $fixtureGalleryIds[0],
-                    '00000000000000000000000000000001',
-                    '00000000000000000000000000000002',
-                    'Central upload ' . $token . '.wav',
-                ]);
-                $fixtureAssetIds = array_merge(
-                    $fixtureAssetIds,
-                    array_map('strval', $ownedAssetQuery->fetchAll(\PDO::FETCH_COLUMN)),
+                $galleryMarks = implode(',', array_fill(
+                    0, count($fixtureGalleryIds), '?',
+                ));
+                $trackMarks = implode(',', array_fill(
+                    0, count($fixtureTrackIds), '?',
+                ));
+                $ownedAssetQuery = $pdo->prepare(
+                    'SELECT id FROM music_repository_assets'
+                        . ' WHERE (origin_gallery_id IN (' . $galleryMarks
+                        . ') AND origin_track_id IN (' . $trackMarks . '))'
+                        . ' OR filename = ?',
                 );
+                $ownedAssetQuery->execute(array_merge(
+                    $fixtureGalleryIds,
+                    $fixtureTrackIds,
+                    ['Central upload ' . $token . '.wav'],
+                ));
+                $ownedAssetIds = array_map(
+                    'strval', $ownedAssetQuery->fetchAll(\PDO::FETCH_COLUMN),
+                );
+                $fixtureAssetIds = array_merge($fixtureAssetIds, $ownedAssetIds);
+                foreach ($ownedAssetIds as $ownedAssetId) {
+                    $fixtureAssetPaths[] = dirname(__DIR__) . '/data/music/'
+                        . $ownedAssetId . '.bin';
+                }
             }
             if ($fixtureGalleryIds !== []) {
                 $galleryMarks = implode(',', array_fill(0, count($fixtureGalleryIds), '?'));

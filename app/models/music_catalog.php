@@ -17,6 +17,45 @@ use PDO;
 use Closure;
 use function Gallery\Core\db;
 
+/** Find candidate songs included by the current authoritative gallery sources.
+ * @param int $galleryId Physical gallery identity.
+ * @param list<string> $trackIds Current direct source identities.
+ * @param list<int> $albumIds Current live album identities.
+ * @param list<int> $songIds Bounded candidate song identities to check.
+ * @return list<int> Candidate songs present directly or through a live album.
+ */
+function music_catalog_model_selected_song_ids(
+    int $galleryId,
+    array $trackIds,
+    array $albumIds,
+    array $songIds,
+): array {
+    if ($songIds === [] || ($trackIds === [] && $albumIds === [])) {
+        return [];
+    }
+    $queries = [];
+    $parameters = [];
+    if ($trackIds !== []) {
+        $marks = implode(',', array_fill(0, count($trackIds), '?'));
+        $queries[] = 'SELECT song_id FROM music_track_instances'
+            . ' WHERE gallery_id = ? AND active = 1 AND track_id IN ('
+            . $marks . ')';
+        $parameters = array_merge([$galleryId], $trackIds);
+    }
+    if ($albumIds !== []) {
+        $marks = implode(',', array_fill(0, count($albumIds), '?'));
+        $queries[] = 'SELECT song_id FROM music_album_songs'
+            . ' WHERE album_id IN (' . $marks . ')';
+        $parameters = array_merge($parameters, $albumIds);
+    }
+    $marks = implode(',', array_fill(0, count($songIds), '?'));
+    $statement = db()->prepare('SELECT DISTINCT song_id FROM ('
+        . implode(' UNION ALL ', $queries) . ') selected_music'
+        . ' WHERE song_id IN (' . $marks . ')');
+    $statement->execute(array_merge($parameters, $songIds));
+    return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+}
+
 /** Read the persisted global catalog revision.
  * @return string Decimal revision token, or initial token when the row is absent.
  */
@@ -452,6 +491,24 @@ function music_repository_model_song_sources(int $songId): array
     return $sources;
 }
 
+/** Detect a legacy source withheld until its gallery snapshot is reconciled.
+ * @param int $songId Stable normalized song identity.
+ * @return bool Whether a dirty gallery owns an active legacy candidate.
+ */
+function music_repository_model_song_has_dirty_sources(int $songId): bool
+{
+    // LIMIT 1 expresses existence; no source list or filesystem scan is needed.
+    $statement = db()->prepare(
+        'SELECT 1 FROM music_track_instances i'
+            . ' JOIN music_catalog_dirty_galleries d ON d.gallery_id = i.gallery_id'
+            . ' JOIN galleries g ON g.id = i.gallery_id'
+            . ' WHERE i.song_id = ? AND i.active = 1 AND i.asset_id IS NULL'
+            . ' LIMIT 1',
+    );
+    $statement->execute([$songId]);
+    return $statement->fetchColumn() !== false;
+}
+
 /** Bind one stable gallery track to a previously registered repository asset.
  * @param int $galleryId Physical gallery identity.
  * @param string $trackId Stable gallery-scoped track identity.
@@ -794,6 +851,44 @@ function music_catalog_model_prune_gallery(int $galleryId, array $trackIds): voi
     }
     $marks = implode(',', array_fill(0, count($trackIds), '?'));
     db()->prepare("UPDATE music_track_instances SET active = 0 WHERE gallery_id = ? AND track_id NOT IN ($marks)")->execute(array_merge([$galleryId], $trackIds));
+}
+
+/** Delete bounded orphan identities inside the caller's catalog transaction.
+ * A repository row preserves a song even if its file is missing/unreadable.
+ * Dirty gallery snapshots cannot prove absence and also preserve the identity.
+ * @param int $limit Service-validated positive song deletion bound.
+ * @return int Actual removed songs; existing foreign keys remove only their
+ *     inactive track metadata, album memberships and song-tag links.
+ * @throws \PDOException When selection, locking or deletion fails.
+ */
+function music_catalog_model_prune_unbacked_songs(int $limit): int
+{
+    $predicate = 'NOT EXISTS (SELECT 1 FROM music_repository_assets a'
+        . ' WHERE a.song_id = music_songs.id)'
+        . ' AND NOT EXISTS (SELECT 1 FROM music_track_instances i'
+        . ' LEFT JOIN music_catalog_dirty_galleries d'
+        . ' ON d.gallery_id = i.gallery_id'
+        . ' WHERE i.song_id = music_songs.id'
+        . ' AND (i.active = 1 OR d.gallery_id IS NOT NULL))';
+    $select = db()->prepare(
+        'SELECT id FROM music_songs WHERE ' . $predicate
+            . ' ORDER BY id LIMIT ? FOR UPDATE',
+    );
+    $select->bindValue(1, $limit, PDO::PARAM_INT);
+    $select->execute();
+    $ids = array_map('intval', $select->fetchAll(PDO::FETCH_COLUMN));
+    if ($ids === []) {
+        return 0;
+    }
+    $marks = implode(',', array_fill(0, count($ids), '?'));
+    // Recheck all guards at deletion; repository FKs additionally refuse a
+    // concurrent asset registration rather than deleting its logical owner.
+    $delete = db()->prepare(
+        'DELETE FROM music_songs WHERE id IN (' . $marks . ') AND '
+            . $predicate,
+    );
+    $delete->execute($ids);
+    return $delete->rowCount();
 }
 
 /** Record one committed physical playlist change for later reconciliation.

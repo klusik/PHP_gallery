@@ -52,7 +52,7 @@
 
 import {
     getGalleryMusicPlayer, stopGalleryMusicViewer,
-} from './gallery-music-player.js?v=20261018-presentation-confirm-v1';
+} from './gallery-music-player.js?v=20261024-catalog-workspace-v3';
 
 /**
  * Return a translated browser string with simple placeholder replacement.

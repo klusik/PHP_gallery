@@ -80,9 +80,10 @@ function view_render_gallery_music_archive_toggle(
  *     sources?:list<array{id:string,type:string,song_id:?int,album_id:?int,
  *     title:string,downloadable:bool,hidden:bool,track_count:int,
  *     position:int,path?:string}>,choices?:array{revision:string,
- *     songs:list<array{id:int,title:string,track_count:int}>,
- *     albums:list<array{id:int,title:string,song_count:int,path:string}>},
- *     choices_error?:string,query?:string,unavailable?:int,omitted?:int,
+ *     songs:list<array{id:int,title:string,track_count?:int,preview_url:string,already_added?:bool}>,
+ *     albums:list<array{id:int,title:string,song_count:int,path:string,members_url:string,browse_url:string,already_added?:bool}>},
+ *     selection_status_url?:string,choices_error?:string,query?:string,
+ *     unavailable?:int,omitted?:int,
  *     partial?:bool,
  *     over_limit?:bool,query_limit?:int
  * } $model Authorized playlist and optional editor controls.
@@ -115,6 +116,16 @@ function view_render_gallery_music(array $model): void
             . e(t('music.preference_saved'))
             . '" data-music-search-error="'
             . e(t('music.search_failed'))
+            . '" data-selection-status-url="'
+            . e((string) ($model['selection_status_url'] ?? ''))
+            . '" data-music-batch-progress="'
+            . e(t('music.batch_progress'))
+            . '" data-music-batch-complete="'
+            . e(t('music.batch_complete'))
+            . '" data-music-batch-failed="'
+            . e(t('music.batch_failed'))
+            . '" data-music-batch-limit="'
+            . e(t('music.batch_limit'))
             . '">';
     if ($model['error'] !== '') {
         if ($model['editor'])
@@ -137,15 +148,33 @@ function view_render_gallery_music(array $model): void
                 . e(t('music.duration_unknown'))
                 . '">…</dd></div></dl>';
     }
+    $headerControls = $model['editor'] && $model['tracks'] !== []
+        ? view_music_player_controls(false) : '';
+    if ($model['editor']) {
+        ob_start();
+        view_render_gallery_music_form_start($model, 'gallery-music-settings');
+        echo
+            '<label class="gallery-presentation-setting">'
+                . '<input type="checkbox" role="switch"'
+                . ' data-music-default-switch name="music_enabled" value="1"'
+                . ($model['enabled'] ? ' checked' : '')
+                . '><span>'
+                . e(t('music.default'))
+                . '</span></label>'
+                . '<output data-music-preference-status role="status"></output>'
+                . '<noscript><button type="submit" name="music_action"'
+                . ' value="settings">'
+                . e(t('music.save_default'))
+                . '</button></noscript></form>';
+        $headerControls .= (string) ob_get_clean();
+    }
     view_media_panel_start(
         'gallery-music-list-' . $model['gallery_id'] . '-' . $surface,
         t('music.title'),
         count($model['tracks']),
         view_music_control_icon('music'),
         $model['editor'],
-        $model['editor'] && $model['tracks'] !== []
-            ? view_music_player_controls(false)
-            : '',
+        $headerControls,
     );
     if (!empty($model['over_limit'])) {
         echo '<p class="gallery-music-warning" role="status">'
@@ -162,9 +191,10 @@ function view_render_gallery_music(array $model): void
             ])) . '</p>';
     }
     if ($model['editor']) {
+        echo '<div class="gallery-music-workspace">';
         view_render_gallery_music_assignment_picker($model);
-        echo '<p class="gallery-music-status" data-music-status'
-            . ' role="status" aria-live="polite"></p>';
+        echo '<section class="gallery-music-current"><h4>'
+            . e(t('music.in_gallery')) . '</h4>';
     }
     echo
         '<table class="gallery-music-table"><colgroup>'
@@ -438,21 +468,13 @@ function view_render_gallery_music(array $model): void
         }
     }
     echo '</tbody></table>';
+    if ($model['editor'] && $model['tracks'] === []) {
+        echo '<p class="music-gallery-empty">'
+            . e(t('music.gallery_empty')) . '</p>';
+    }
     if ($model['editor']) {
-        view_render_gallery_music_form_start($model, 'gallery-music-settings');
-        echo
-            '<label class="gallery-presentation-setting">'
-                . '<input type="checkbox" role="switch"'
-                . ' data-music-default-switch name="music_enabled" value="1"'
-                . ($model['enabled'] ? ' checked' : '')
-                . '><span>'
-                . e(t('music.default'))
-                . '</span></label>'
-                . '<output data-music-preference-status role="status"></output>'
-                . '<noscript><button type="submit" name="music_action"'
-                . ' value="settings">'
-                . e(t('music.save_default'))
-                . '</button></noscript></form>';
+        echo '</section></div><p class="gallery-music-status" data-music-status'
+            . ' role="status" aria-live="polite"></p>';
     }
     view_media_panel_end($model['editor']);
     if ($model['tracks'] !== []) {
@@ -497,9 +519,9 @@ function view_render_gallery_music(array $model): void
  *     download_url:string}>,sources?:list<array{id:string,type:string,
  *     song_id:?int,album_id:?int,title:string,downloadable:bool,hidden:bool,
  *     track_count:int,position:int,path?:string}>,choices?:array{revision:string,
- *     songs:list<array{id:int,title:string,track_count:int}>,
- *     albums:list<array{id:int,title:string,song_count:int,path:string}>},
- *     query?:string,query_limit?:int,choices_error?:string}
+ *     songs:list<array{id:int,title:string,track_count?:int,preview_url:string,already_added?:bool}>,
+ *     albums:list<array{id:int,title:string,song_count:int,path:string,members_url:string,browse_url:string,already_added?:bool}>},
+ *     selection_status_url?:string,query?:string,query_limit?:int,choices_error?:string}
  *     $model Prepared editor choices and mutation identity.
  * @return void Emit independent search and assignment forms.
  */
@@ -510,13 +532,15 @@ function view_render_gallery_music_assignment_picker(array $model): void
         'songs' => [],
         'albums' => [],
     ];
-    echo '<details class="gallery-music-picker"><summary>'
-        . e(t('music.add_from_catalog')) . '</summary>'
+    echo '<section class="gallery-music-picker" aria-label="'
+        . e(t('music.catalog')) . '"><h4>'
+        . e(t('music.catalog')) . '</h4>'
         . '<form method="post" action="' . e($model['action_url'])
         . '" data-gallery-music-search>' . $model['csrf_html']
         . '<input type="hidden" name="id" value="'
         . $model['gallery_id'] . '">'
-        . '<label><span>' . e(t('music.search_catalog')) . '</span>'
+        . '<label><span class="visually-hidden">'
+        . e(t('music.search_catalog')) . '</span>'
         . '<input type="search" name="music_query" maxlength="'
         . (int) ($model['query_limit'] ?? 0) . '" value="'
         . e((string) ($model['query'] ?? '')) . '"'
@@ -524,13 +548,19 @@ function view_render_gallery_music_assignment_picker(array $model): void
         . '<button type="submit" class="music-icon" name="music_action"'
         . ' value="choices" title="' . e(t('music.search_catalog'))
         . '" aria-label="' . e(t('music.search_catalog')) . '">'
-        . view_music_control_icon('search') . '</button></form>'
+        . view_music_control_icon('search') . '</button>'
+        . '<button type="button" class="music-icon" data-music-add-selected'
+        . ' aria-label="' . e(t('music.add_selected')) . '" title="'
+        . e(t('music.add_selected')) . '" disabled>'
+        . view_music_control_icon('add')
+        . '<output data-music-selection-count data-label="{count}"'
+        . ' aria-live="polite"></output></button></form>'
         . '<div data-music-catalog-results aria-live="polite">';
     if (($model['choices_error'] ?? '') !== '') {
         echo '<p role="status">' . e($model['choices_error']) . '</p>';
     }
     view_render_gallery_music_choice_rows($model, $choices);
-    echo '</div></details>';
+    echo '</div></section>';
 }
 
 /**
@@ -540,38 +570,128 @@ function view_render_gallery_music_assignment_picker(array $model): void
  *     tracks:list<array{id:string,title:string,filename:string,mime:string,
  *     size:int,sha256:string,hidden:bool,downloadable:bool,url:string,
  *     download_url:string}>,choices?:array{revision:string,
- *     songs:list<array{id:int,title:string,track_count:int}>,
- *     albums:list<array{id:int,title:string,song_count:int,path:string}>}}
+ *     songs:list<array{id:int,title:string,track_count?:int,preview_url:string,already_added?:bool}>,
+ *     albums:list<array{id:int,title:string,song_count:int,path:string,members_url:string,browse_url:string,already_added?:bool}>}}
  *     $model Editor identity and form transport.
  * @param array{revision:string,songs:list<array{id:int,title:string,
- *     track_count:int}>,albums:list<array{id:int,title:string,song_count:int,
- *     path:string}>} $choices Bounded catalog results.
+ *     track_count?:int,preview_url:string,already_added?:bool}>,albums:list<array{id:int,title:string,song_count:int,
+ *     path:string,members_url:string,browse_url:string,already_added?:bool}>} $choices Bounded catalog results.
  * @return void Emit album and song assignment forms.
  */
 function view_render_gallery_music_choice_rows(
     array $model,
     array $choices,
 ): void {
+    if ($choices['albums'] === [] && $choices['songs'] === []) {
+        echo '<p class="music-catalog-empty">'
+            . e(t('admin.music.empty')) . '</p>';
+        return;
+    }
+    echo '<div data-gallery-music data-music-gallery="'
+        . (int) $model['gallery_id'] . '" class="music-catalog-player">'
+        . '<table class="gallery-music-table music-catalog-table"><thead><tr>'
+        . '<th scope="col" class="music-catalog-select-cell"><span'
+        . ' class="visually-hidden">' . e(t('music.selection'))
+        . '</span></th><th scope="col">'
+        . e(t('music.track')) . '</th><th scope="col"><span'
+        . ' class="visually-hidden">' . e(t('common.actions'))
+        . '</span></th></tr></thead><tbody>';
     foreach ($choices['albums'] as $album) {
+        $added = !empty($album['already_added']);
+        echo '<tr class="music-catalog-album-row"><td'
+            . ' class="music-catalog-select-cell"><input type="checkbox"'
+            . ' data-music-catalog-select value="add_album:' . (int) $album['id']
+            . '" aria-label="' . e(t('music.select_item', '', [
+                'title' => $album['title'],
+            ])) . '"' . ($added ? ' disabled' : '') . '></td>'
+            . '<td><details class="music-catalog-album"'
+            . ' data-music-catalog-album data-members-url="'
+            . e($album['members_url']) . '" data-load-error="'
+            . e(t('music.catalog_load_error')) . '"><summary>'
+            . '<span class="music-catalog-album-icon">'
+            . view_music_control_icon('copy') . '</span><span'
+            . ' class="music-catalog-title">' . e($album['title'])
+            . '</span><small>' . e(t('music.album_songs', '{count} songs', [
+                'count' => (int) $album['song_count'],
+            ])) . '</small></summary>';
+        if ($album['path'] !== $album['title']) {
+            echo '<small class="music-catalog-path">'
+                . e($album['path']) . '</small>';
+        }
+        echo '<a class="music-catalog-browse" href="'
+            . e($album['browse_url']) . '">'
+            . e(t('admin.music.tab_albums')) . '</a>'
+            . '<div data-music-album-results aria-live="polite"></div>'
+            . '<button type="button" class="music-catalog-more"'
+            . ' data-music-album-more hidden>'
+            . e(t('pagination.next')) . '</button></details></td>'
+            . '<td class="music-catalog-actions">';
         view_render_gallery_music_choice_form(
             $model,
             'add_album',
             (int) $album['id'],
             (string) $album['title'],
-            (string) $album['path'],
-            (int) $album['song_count'],
+            $added,
         );
+        echo '</td></tr>';
+    }
+    $tracks = [];
+    if ($choices['albums'] !== [] && $choices['songs'] !== []) {
+        echo '<tr class="music-catalog-group"><th colspan="3" scope="rowgroup">'
+            . e(t('admin.music.tab_songs')) . '</th></tr>';
     }
     foreach ($choices['songs'] as $song) {
+        $added = !empty($song['already_added']);
+        $trackId = 'catalog-song-' . (int) $song['id'];
+        $tracks[] = [
+            'id' => $trackId,
+            'title' => (string) $song['title'],
+            'url' => (string) $song['preview_url'],
+        ];
+        echo '<tr data-music-catalog-song><td class="music-catalog-select-cell">'
+            . '<input type="checkbox" data-music-catalog-select'
+            . ' value="add_song:' . (int) $song['id']
+            . '" aria-label="' . e(t('music.select_item', '', [
+                'title' => $song['title'],
+            ])) . '"' . ($added ? ' disabled' : '')
+            . '></td><td><div class="music-track-line">';
+        echo '<button type="button" class="music-icon"'
+            . ' data-music-action="toggle" data-music-track-id="'
+            . e($trackId) . '" data-music-play-label="'
+            . e(t('music.play')) . '" data-music-stop-label="'
+            . e(t('music.stop')) . '" aria-label="'
+            . e(t('music.play')) . '" title="'
+            . e(t('music.play')) . '" aria-pressed="false">'
+            . '<span data-music-toggle-play>'
+            . view_music_control_icon('play') . '</span>'
+            . '<span data-music-toggle-stop hidden>'
+            . view_music_control_icon('stop') . '</span></button>'
+            . '<span class="music-track-name" title="' . e($song['title'])
+            . '"><span class="music-catalog-title">' . e($song['title'])
+            . '</span></span></div></td><td class="music-catalog-actions">';
         view_render_gallery_music_choice_form(
             $model,
             'add_song',
             (int) $song['id'],
             (string) $song['title'],
-            '',
-            (int) $song['track_count'],
+            $added,
         );
+        echo '</td></tr>';
     }
+    echo '</tbody></table><div data-gallery-music-controls>'
+        . '<output data-music-playback-status role="status"></output></div>';
+    if ($tracks !== []) {
+        echo '<script type="application/json" data-gallery-music-playlist'
+            . ' data-music-editor="1" data-music-gallery="'
+            . (int) $model['gallery_id'] . '">'
+            . json_encode([
+                'galleryId' => (int) $model['gallery_id'],
+                'enabled' => false,
+                'tracks' => $tracks,
+            ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+            . '</script>';
+    }
+    echo '</div>';
 }
 
 /**
@@ -580,12 +700,12 @@ function view_render_gallery_music_choice_rows(
  *     revision:string,write_revision?:string,enabled:bool,error:string,
  *     tracks:list<array{id:string,title:string,filename:string,mime:string,
  *     size:int,sha256:string,hidden:bool,downloadable:bool,url:string,
- *     download_url:string}>} $model Editor form transport.
+ *     download_url:string}>,choices?:array{revision:string}}
+ *     $model Editor form transport and displayed catalog revision.
  * @param string $action Supported assignment action.
  * @param int $selectionId Catalog album or song identifier.
  * @param string $title Display title.
- * @param string $path Full album breadcrumb, empty for songs.
- * @param int $count Current album members or available song variants.
+ * @param bool $alreadyAdded Whether this selection is already in the gallery.
  * @return void Emit one localized button form.
  */
 function view_render_gallery_music_choice_form(
@@ -593,17 +713,11 @@ function view_render_gallery_music_choice_form(
     string $action,
     int $selectionId,
     string $title,
-    string $path,
-    int $count,
+    bool $alreadyAdded = false,
 ): void {
-    $label = $action === 'add_album'
+    $label = $alreadyAdded ? t('music.already_added') : ($action === 'add_album'
         ? t('music.add_live_album')
-        : t('music.add_individual_song');
-    $detail = $action === 'add_album'
-        ? t('music.album_songs', '{count} songs', ['count' => $count])
-        : t('music.song_variants', '{count} available file(s)', [
-            'count' => $count,
-        ]);
+        : t('music.add_individual_song'));
     echo '<form method="post" action="' . e($model['action_url'])
         . '" data-gallery-music-form>' . $model['csrf_html']
         . '<input type="hidden" name="id" value="'
@@ -614,13 +728,11 @@ function view_render_gallery_music_choice_form(
         . $selectionId . '">'
         . '<input type="hidden" name="catalog_revision" value="'
         . e((string) ($model['choices']['revision'] ?? '')) . '">'
-        . '<button type="submit" name="music_action" value="'
+        . '<button type="submit" class="music-icon" name="music_action" value="'
         . e($action) . '" title="' . e($label) . '" aria-label="'
-        . e($label . ': ' . $title) . '">'
-        . view_music_control_icon('add') . '<span>' . e($title)
-        . '</span><small>' . e($label . ' · '
-            . ($path !== '' ? $path . ' · ' . $detail : $detail))
-        . '</small></button></form>';
+        . e($label . ': ' . $title) . '"'
+        . ($alreadyAdded ? ' disabled' : '') . '>'
+        . view_music_control_icon('add') . '</button></form>';
 }
 
 /**
@@ -681,5 +793,5 @@ function view_render_music_download_toggle(bool $allowed, bool $all): void
             . e(t($key))
             . '">'
             . view_music_control_icon($allowed ? 'download' : 'locked')
-            . '</button><output data-music-status role="status"></output>';
+            . '</button>';
 }

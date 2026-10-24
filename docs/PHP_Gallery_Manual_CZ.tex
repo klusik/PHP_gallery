@@ -486,7 +486,7 @@ Každý vygenerovaný formulář vytváření galerie nebo klasického nahrává
   \item Zadejte název srozumitelný návštěvníkům; případně přijměte návrh názvu.
   \item Vytvořte nezveřejněnou galerii. Je-li dostupný JavaScript, úplný editor se otevře ve stejném panelu.
   \item V~oddílu \ui{Identita} přidejte popis, datum nebo rozsah dat, zdrojový jazyk, štítky a~volitelné údaje SimBrief.
-  \item Zkontrolujte \ui{Přístup}, \ui{Zobrazení}, \ui{Nahrát média} a~podle potřeby také hodnoty složky a~nadřazené galerie v~pokročilých volbách.
+  \item Zkontrolujte \ui{Přístup}, \ui{Zobrazení}, \ui{Správa médií} a~podle potřeby také hodnoty složky a~nadřazené galerie v~pokročilých volbách.
   \item Uložte galerii, přidejte fotografie a~po vložení vhodných fotografií zvolte titulní obrázek.
   \item Až budete připraveni, galerii zveřejněte a~poté anonymně ověřte výsledek.
 \end{enumerate}
@@ -502,7 +502,7 @@ Viditelné pole SimBrief přijímá ID pilota nebo jeho jméno. Samotné čísli
 \subsubsection{Práce v~kompaktním editoru}
 \index{e00035@editor galerie!p00146@postranní panel}
 
-Běžné pracovní oblasti jsou \ui{Identita}, \ui{API}, \ui{Přístup}, \ui{Zobrazení} a~\ui{Nahrát média}; podle dostupnosti následují nástroje pro obrázky a~specializované úlohy. Horní přichycená navigace ponechává disketu \ui{Uložit} dostupnou při posouvání nastavení i~seznamu fotografií. Změna karty automaticky neukládá. Po úpravách použijte tlačítko a~chcete-li ověřit uložené hodnoty, galerii znovu otevřete. Delší vysvětlení jsou dostupná přes ovládací prvky s~otazníkem přístupné z~klávesnice a~méně časté volby jsou pod rozbalovacími prvky \ui{Pokročilé}. Přímý editor v~administraci používá stejná pole; prohlížeč bez JavaScriptu odesílá formulář běžným způsobem.
+Běžné pracovní oblasti jsou \ui{Identita}, \ui{API}, \ui{Přístup}, \ui{Zobrazení} a~\ui{Správa médií}; podle dostupnosti následují nástroje pro obrázky a~specializované úlohy. Horní přichycená navigace ponechává disketu \ui{Uložit} dostupnou při posouvání nastavení i~seznamu fotografií. Změna karty automaticky neukládá. Po úpravách použijte tlačítko a~chcete-li ověřit uložené hodnoty, galerii znovu otevřete. Delší vysvětlení jsou dostupná přes ovládací prvky s~otazníkem přístupné z~klávesnice a~méně časté volby jsou pod rozbalovacími prvky \ui{Pokročilé}. Přímý editor v~administraci používá stejná pole; prohlížeč bez JavaScriptu odesílá formulář běžným způsobem.
 
 \ui{Identita} ponechává snadno dostupný název, popis, datum, zdrojový jazyk, SimBrief a~štítky. Její pokročilý oddíl obsahuje identifikátor v~URL, složku, nadřazenou galerii, pořadí a~text galerie od AI, je-li povolen. \ui{API} zobrazuje kopírovatelný koncový bod nahrávání, označení a~akci klíče a~nově vygenerovaný klíč pouze jednou; existující klíče se zobrazují, jen pokud nějaké jsou. Obnova metadat pomocí AI, migrace a~globální správce API jsou pod \ui{Pokročilé nástroje API}. \ui{Přístup} seskupuje viditelnost, heslo, ovládání odkazu pro sdílení a~zaškrtávací pole NSFW; delší vysvětlení pravidel jsou pod otazníky. \ui{Zobrazení} začíná mřížkou a~běžnými přepínači hlasování a~názvů souborů; EXIF/GPS, formát karty galerie, odznak počtu, režim lightboxu, hra s~fotografiemi, meze náhledů jsou pod \ui{Pokročilá nastavení zobrazení}; text letové trasy je dostupný vedle SimBrief v~oddílu \ui{Identita}.
 
@@ -515,6 +515,30 @@ pro opětovné zapnutí. Při vypnutí obou funkcí zůstává nastavení prezen
 pokud je~zapnutý lightbox. Při jeho vypnutí zmizí prázdná záložka;
 starý odkaz vybere Identitu. Vytvořené fotografie stránek zachovají přístupová
 pravidla. SimBrief může dál aktualizovat popis a~trasu a~zachová staré PDF.
+
+V~\ui{Správa médií > Hudba} je vlevo katalog a~vpravo hudba této galerie;
+v~úzkém editoru se tabulky skládají pod sebe. Přehrání je před názvem,
+přidání na konci řádku. Více položek vyberte políčky a~přidejte ikonou plus
+vedle hledání. Už přítomné skladby lze přehrát, ale nelze znovu přidat,
+včetně skladeb obsažených v~živém albu. Alba označuje ikona více souborů
+a~odlišný chevron; až rozbalení načte jejich odsazené skladby.
+Poslech nic nepřiřazuje. Hromadné přidání postupuje po položkách a~při chybě
+uvede dokončený průběh. Odebrání zdroje z~galerie obnoví dostupné přidání
+a~nemaže sdílené originály. Přehrávač a~přepínač hudby pro celou galerii
+jsou ve společném záhlaví. V~\ui{Správa médií > Obrázky}
+velký existující náhled nenahrazuje požadovaný náhled 300px. Pokud chybí,
+vytvořte náhledy galerie přes nástroje náhledů a~opakujte načtení obrázků.
+Pro generování na serveru vypněte vytváření náhledů v~prohlížeči.
+Načítání náhledů editoru nikdy nestahuje originály jako náhradní řešení.
+
+Při chybě hudby se zobrazí reference odpovídající záznamu v~\ui{Admin > Logy},
+v~kategorii \ui{Média}. Záznam obsahuje galerii, výběr, akci, fázi a~stav
+uložení, ale ne surové výjimky, SQL, přihlašovací údaje ani absolutní cesty.
+Pokud zápis do Admin logu selže, bezpečný záznam jde do PHP error logu.
+Chybějící originál obnovte nebo znovu nahrajte; nesynchronizovaný zdroj
+vyžaduje úlohu hudebního katalogu v~Centru údržby. Mezi počítači přenášejte
+společně SQL, \filepath{data/music/} a~postranní soubory galerií.
+Po uložené změně s~neobnoveným rozhraním nejprve znovu otevřete editor.
 
 \subsubsection{Připojení a~převod dokumentu PDF}
 Rozbalení převodu nezvětší sloupec dokumentů. Pokud předchozí cíl chybí nebo byl změněn, potvrďte nový soukromý výsledek; dřívější soubory a galerie zůstanou zachovány.
@@ -545,7 +569,7 @@ Stejný odkaz funguje i~anonymně po~běžné kontrole přístupu.
 Pokud celá obrazovka či~zvuk vyžadují souhlas, černý úvod čeká na
 \ui{Spustit prezentaci}. Po~potvrzení zůstane při nepodporovaném fullscreen
 vyplněné okno; \ui{Přehrát} umožní opakovat pozdější selhání zvuku.
-V~\ui{Upravit galerii > Nahrát média > Prezentace} najdete průhlednou kartu
+V~\ui{Upravit galerii > Správa médií > Prezentace} najdete průhlednou kartu
 \ui{Nastavení prezentace}: viditelnost tlačítek, hudbu a~obě rychlosti.
 Ikona uložení používá běžný chráněný formulář galerie. Náhled a~sdílení
 použijí aktuální volby i~před uložením. Nové odkazy obsahují hudbu i~rychlosti;
@@ -589,7 +613,7 @@ Výběr souborů i~přetažení v~panelu Nahrát fotografie do~existující gale
 
 \index{PDF!dokumenty galerie}
 
-Editor spojuje fotografie a~média v~kartě \ui{Nahrát média}, se~sekcemi
+Editor spojuje fotografie a~média v~kartě \ui{Správa médií}, se~sekcemi
 \ui{Obrázky}, \ui{Hudba}, \ui{PDF}, \ui{Prezentace}, \ui{Vizuální prvky}
 a~volbami ZIP. Jediný výběr \ui{Nahrát soubory} přijímá současně povolené
 fotografie, PDF a~hudbu; každý originál zpracuje automaticky podle typu.
@@ -688,7 +712,7 @@ přenášené archivy nedodávají důvěryhodná logická ID.
 
 \subsubsection{Úložiště hudby}
 
-Otevřete \ui{Upravit galerii > Nahrát média > Hudba} pro~nahrání zvuku a~správu
+Otevřete \ui{Upravit galerii > Správa médií > Hudba} pro~nahrání zvuku a~správu
 playlistu galerie. Nové uploady ukládají neměnné originály do~chráněného
 centrálního úložiště \filepath{data/music/}; zvuk se~nikdy nepřevádí na fotografie.
 Samostatně přiřazené skladby zůstávají nezávislé položky. Přiřazení alba je~živý
@@ -752,6 +776,16 @@ Centrální originál se~v~úložišti počítá pouze jednou bez ohledu na~poč
 nepřesunuté lokální kopie se~počítají zvlášť. Smazání galerie odstraní její
 vazby, nikoli sdílený originál. ZIP export fotografií a~přenos galerie hudbu
 nezahrnují. Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
+
+Odebrání katalogizované lokální skladby nejdřív zachová a~ověří originál
+centrálně; potom ji~lze znovu přidat bez nahrávání. Selhání zachová původní
+playlist i~soubor. Po~přesunu vybraná úloha údržby odstraňuje nejvýše 20 záznamů
+katalogu na~krok bez použití v~galerii a~bez záznamu centrálního originálu.
+Zdroje čekající na~synchronizaci a~registrované originály zůstávají chráněné,
+i~když jejich soubor potřebuje obnovu. Samotné členství v~albu či~tagy osiřelou
+skladbu nezachovají. Úklid maže jen metadata a~zapisuje počet do~logu.
+Před schválením upravené úlohy znovu spusťte Analýzu. Zvuk smazaný starším
+odebráním vyžaduje původní soubor či~zálohu; údržba jej~nevytvoří.
 
 Stejné Centrum údržby nabízí předem vybranou, volitelnou kontrolu starších
 počtů PDF a~hudby na veřejných kartách. Pokračuje po dávkách nejvýše 25 galerií
@@ -860,12 +894,12 @@ Zobrazení & Režim procházení lightboxu & Dědění ze Vzhledu, klasický jed
 Zobrazení & Vlastní mřížka & První viditelný ovládací prvek Zobrazení: volitelné sloupce a~řádky této galerie. Bez výslovné mřížky se použije nejbližší mřížka nadřazené galerie povolující dědění do podgalerií a~poté Vzhled.\\
 Zobrazení & Meze responzivních náhledů & Volitelné minimální a~maximální meze velikosti náhledů. Uložení může meze galerie rekurzivně zkopírovat potomkům; rekurzivní uložení je ve výchozím stavu vypnuté.\\
 Zobrazení & Letová trasa & Pokročilý ruční text trasy podporuje místní vyhledávání identifikátorů a~výslovné body \codeword{NAME@latitude,longitude}. SimBrief může uložit OFP, návrh popisu a~vyřešené souřadnice trasy.\\
-Nahrát média & Titulní fotografie & Automatická nebo vybraná fotografie, včetně způsobilých fotografií potomků, pokud je výběr nabízí.\\
-Nahrát média & Nahraný náhled galerie & Samostatné médium karty galerie uložené nezávisle na běžných fotografiích galerie.\\
-Nahrát média & Zdroj pozadí & Dědění ze Vzhledu, nahrání nového pozadí, výběr existujícího obrázku galerie nebo vytvoření koláže z~veřejných galerií.\\
-Nahrát média & Podklady vlastní značky & Volitelné podklady banneru, loga a~oddělovače pro konkrétní galerii přepisují náhradní hodnoty Vzhledu pouze v~té galerii, kde jsou nastavené.\\
-Nahrát média & Skenování/import & Znovu prohledá fyzickou složku galerie a~synchronizuje podporovaná média do katalogu.\\
-Nahrát média & Vytvořit všechny náhledy & Znovu vytvoří náhledy této galerie. Chcete-li zahrnout potomky, vyberte \ui{Zahrnout podgalerie}; ostatní větve galerií zůstávají mimo úlohu. Je-li dostupné generování v~prohlížeči, je vybrané jako výchozí, s~možností generování na serveru.\\
+Správa médií & Titulní fotografie & Automatická nebo vybraná fotografie, včetně způsobilých fotografií potomků, pokud je výběr nabízí.\\
+Správa médií & Nahraný náhled galerie & Samostatné médium karty galerie uložené nezávisle na běžných fotografiích galerie.\\
+Správa médií & Zdroj pozadí & Dědění ze Vzhledu, nahrání nového pozadí, výběr existujícího obrázku galerie nebo vytvoření koláže z~veřejných galerií.\\
+Správa médií & Podklady vlastní značky & Volitelné podklady banneru, loga a~oddělovače pro konkrétní galerii přepisují náhradní hodnoty Vzhledu pouze v~té galerii, kde jsou nastavené.\\
+Správa médií & Skenování/import & Znovu prohledá fyzickou složku galerie a~synchronizuje podporovaná média do katalogu.\\
+Správa médií & Vytvořit všechny náhledy & Znovu vytvoří náhledy této galerie. Chcete-li zahrnout potomky, vyberte \ui{Zahrnout podgalerie}; ostatní větve galerií zůstávají mimo úlohu. Je-li dostupné generování v~prohlížeči, je vybrané jako výchozí, s~možností generování na serveru.\\
 Nástroje & Organizátor, Přejmenování, API & Organizátor podle data, fyzické přejmenování médií, správa klíčů API pro nahrávání, obnova pomocí AI a~migrace galerie se zobrazují pouze tehdy, jsou-li dostupná jejich schémata a~funkce.\\
 \bottomrule
 \end{longtable}
@@ -1799,7 +1833,7 @@ Karta \ui{Obrázky} v~editoru galerie soustřeďuje běžnou práci s~fotografie
 
 Hvězdička titulní fotografie má při podpoře databázového schématu tři stavy: obrysová hvězdička nastaví pouze danou fotografii (zlatá); opětovné kliknutí na zlatou ji ponechá vybranou a~zapne přidávání (modrá); kliknutí na další obrysovou hvězdičku ji přidá do výběru, nejvýše do~čtyř fotografií. Kliknutí na kteroukoli vybranou modrou hvězdičku ponechá pouze tuto fotografii (zlatá). Každé kliknutí se ihned uloží. Hvězdičky se aktualizují přímo v~pravém panelu, který zachová otevřenou kartu, pozici posunutí, rozepsaná nastavení a~načtené řádky fotografií; veřejný náhled galerie se obnoví samostatně. Po chybné nebo ztracené odpovědi editor nejprve načte aktuální stav titulní fotografie bez změny panelu. Pokud se stav změnil, hvězdičky se aktualizují a~poté obnoví veřejná galerie; jinak před opakováním zkontrolujte aktuální stav, protože uložení mohlo proběhnout před selháním tvorby odpovědi.
 
-V~části \ui{Nahrát média} > \ui{Titulní fotografie} volba \ui{Automaticky (2 fotografie)} vybere až~dvě vhodné přímé fotografie a~chybějící pozice doplní z~přístupných podgalerií. Volba \ui{Výchozí (dosavadní chování galerie)} zachovává dosavadní chování galerií, které dosud výslovně nezvolily automatický ani ruční titulní obrázek. Veřejné karty znovu ověřují aktuální viditelnost a~přístup ke galerii; nezveřejněné ani nepřístupné fotografie se nezobrazí.
+V~části \ui{Správa médií} > \ui{Titulní fotografie} volba \ui{Automaticky (2 fotografie)} vybere až~dvě vhodné přímé fotografie a~chybějící pozice doplní z~přístupných podgalerií. Volba \ui{Výchozí (dosavadní chování galerie)} zachovává dosavadní chování galerií, které dosud výslovně nezvolily automatický ani ruční titulní obrázek. Veřejné karty znovu ověřují aktuální viditelnost a~přístup ke galerii; nezveřejněné ani nepřístupné fotografie se nezobrazí.
 
 Je-li povolena volitelná funkce \ui{Správce fotografií}, běžně přihlášený správce může vybírat fotografie a~přímé fyzické podgalerie ve veřejné mřížce galerie. Zaškrtnutí vybírá jednotlivé karty; kliknutí se Shiftem vybírá rozsah; kliknutí s~Ctrl nebo Cmd přepíná kartu; \ui{Vybrat vše}, \ui{Vymazat výběr} a~Ctrl/Cmd+A~podporují větší výběry na viditelné stránce. Karty chytrých galerií nejsou součástí tohoto výběru založeného na souborech. Přetažení nevybrané fotografie začíná výběrem této fotografie, zatímco přetažení existujícího výběru přesouvá vybrané fotografie společně. Viditelná karta podřízené galerie se stává cílem přetažení a~upuštění provádí stejný ověřený přesun fotografií jako výběr cíle. Samotné karty fyzických galerií nejsou zdroji přetažení.
 
@@ -2745,6 +2779,16 @@ Pozastavení a~zrušení jsou kooperativní: projeví se mezi omezenými operace
 Závěrečná zpráva odděluje odstraněné řádky a~soubory, analyzované či optimalizované tabulky, přeskočení, upozornění a~chyby. Fyzické úložiště před a~po hlásí pouze tehdy, když závěr podporují inventarizační podklady. Obecný postup nikdy nepoužívá migrace, neopravuje schéma, neinstaluje aktualizace, neodstraňuje archivy protokolů administrace, nevyprazdňuje všechny položky Koše ani neobnovuje média; pro tyto záměrné operace použijte specializované stránky.
 
 Úklid stahování a~mezipaměti postupuje přes mezipaměť manifestů, starší mezipaměť podkladů stahování a~mezipaměť generovaných ZIP v~samostatných omezených krocích. Tyto mezipaměti jsou nezávislé optimalizace: není-li některá na aktuálním hostingu dostupná, centrum zachová již dokončený úklid, zaznamená bezpečné upozornění a~pokračuje ostatními oblastmi a~pozdějšími úkoly. Upozornění může určit operaci a~stabilní kategorii chyby, ale neodhaluje nezpracovanou zprávu výjimky, SQL, přihlašovací údaj, soukromou cestu ani zásobník volání. Po aktualizaci měnící tento kontrakt provádění je starší připravený plán záměrně zastaralý; před pokračováním spusťte znovu Analýzu.
+
+Životní cyklus cache dostává nejvýše 32 krátkých kroků prohlížeče na~centrální
+běh. Dokončené oblasti se~nespouštějí znovu, zatímco jiná čeká na~opakování.
+Odložená či~nedostupná práce zachová checkpoint a~další úlohy pokračují.
+Admin log zaznamená důvod, počet kroků, pokrytí a~zbývající bajty pod~událostí
+\codeword{maintenance\_center.cache\_lifecycle\_deferred}.
+Pozastavení a~Zrušení fungují i~během požadavku: ovládání následuje po~aktuálním
+kroku a~zrušení uvolní centrální zámek posledním chráněným krokem.
+Restart služeb úlohu zachová; po~aktualizaci znovu načtěte Centrum údržby
+a~pokračujte ve~stávajícím běhu nebo jej~zrušte.
 
 \subsection{Údržba náhledů}
 

@@ -30,6 +30,16 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    /** Supply bounded orphan cleanup results without a live database.
+     * @return array{removed:int,has_more:bool} Fixture-owned cleanup outcome.
+     */
+    function music_catalog_prune_unbacked_songs(): array
+    {
+        $GLOBALS['maintenance_music_prune_calls'] =
+            ($GLOBALS['maintenance_music_prune_calls'] ?? 0) + 1;
+        return $GLOBALS['maintenance_music_prune_result'];
+    }
+
     /**
      * Supply one controlled source outcome to the real maintenance executor.
      * @param array{gallery_id:int,track_id:string}|null $cursor Last durable
@@ -374,6 +384,40 @@ namespace {
         $failed && $checkpoint['cursor']['track_id'] === str_repeat('a', 32),
         'A refused source must not publish a successful advanced checkpoint.',
     );
+    $GLOBALS['maintenance_music_prune_calls'] = 0;
+    // A full production-sized 20-record batch needs a follow-up check; the
+    // following single-row tail proves cumulative counts and phase retention.
+    $GLOBALS['maintenance_music_prune_result'] = [
+        'removed' => 20,
+        'has_more' => true,
+    ];
+    $GLOBALS['maintenance_music_result']['error'] = null;
+    $GLOBALS['maintenance_music_result']['complete'] = true;
+    $cleanup = \Gallery\Services\maintenance_center_execute_music_repository([
+        'task_state' => $checkpoint,
+    ]);
+    maintenance_center_test_assert(
+        !$cleanup['done']
+            && $cleanup['task_state']['migration_complete']
+            && $cleanup['task_state']['orphans_removed'] === 20
+            && $cleanup['metrics']['rows_removed']['music_songs'] === 20,
+        'Completed relocation must enter resumable catalog-only cleanup.',
+    );
+    $migrationCalls = $GLOBALS['maintenance_music_calls'];
+    $GLOBALS['maintenance_music_prune_result'] = [
+        'removed' => 1,
+        'has_more' => false,
+    ];
+    $cleaned = \Gallery\Services\maintenance_center_execute_music_repository([
+        'task_state' => $cleanup['task_state'],
+    ]);
+    maintenance_center_test_assert(
+        $cleaned['done']
+            && $cleaned['task_state']['orphans_removed'] === 21
+            && $GLOBALS['maintenance_music_prune_calls'] === 2
+            && $GLOBALS['maintenance_music_calls'] === $migrationCalls,
+        'Later cleanup batches must preserve totals without repeating migration.',
+    );
     maintenance_center_test_assert(
         !empty($registry['database.optimize']['atomic']),
         'Physical DB optimization must remain an explicit atomic operation.',
@@ -614,6 +658,60 @@ namespace {
             === 'runtime_exception',
         'Isolated cache failures must carry a stable diagnostic code.',
     );
+
+    // A completed regional discovery/cleanup is not whole-cache completion.
+    // Integer skipped counts describe preserved files, not a scheduler yield.
+    $regionalWorker = [
+        'ok' => true,
+        'registry' => true,
+        'phase' => 'complete',
+        'skipped' => 1,
+    ];
+    $regionalProgress =
+        \Gallery\Services\maintenance_center_cache_lifecycle_continuation(
+            $regionalWorker,
+            1,
+        );
+    maintenance_center_test_assert(
+        !$regionalProgress['advance']
+            && $regionalProgress['reason'] === 'working',
+        'A completed region must allow other due regions to run.',
+    );
+    $sliceLimit = \Gallery\Services\MAINTENANCE_CENTER_CACHE_LIFECYCLE_SLICES;
+    $beforeLimit =
+        \Gallery\Services\maintenance_center_cache_lifecycle_continuation(
+            $regionalWorker,
+            $sliceLimit - 1,
+        );
+    $atLimit =
+        \Gallery\Services\maintenance_center_cache_lifecycle_continuation(
+            $regionalWorker,
+            $sliceLimit,
+        );
+    maintenance_center_test_assert(
+        !$beforeLimit['advance']
+            && $atLimit['advance']
+            && $atLimit['reason'] === 'central_slice_limit',
+        'Rotating cache work must yield at the central bound without resetting checkpoints.',
+    );
+    foreach ([
+        [['ok' => false], 'worker_unavailable'],
+        [['ok' => true, 'busy' => true], 'worker_busy'],
+        [['ok' => true, 'cleanup_blocked' => true], 'cleanup_blocked'],
+        [['ok' => true, 'skipped' => true], 'worker_deferred'],
+        [['ok' => true, 'phase' => 'complete'], 'completed'],
+    ] as [$workerOutcome, $expectedReason]) {
+        $yield =
+            \Gallery\Services\maintenance_center_cache_lifecycle_continuation(
+                $workerOutcome,
+                1,
+            );
+        maintenance_center_test_assert(
+            $yield['advance'] && $yield['reason'] === $expectedReason,
+            'Cache stop outcomes must admit the following maintenance task: '
+                . $expectedReason,
+        );
+    }
 
     $migration = maintenance_center_test_source(
         $root,

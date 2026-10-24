@@ -67,6 +67,18 @@ namespace Gallery\Services {
             'music.live_album' => 'Live album',
             'music.individual_song' => 'Individual song',
             'music.add_from_catalog' => 'Add from music catalog',
+            'music.catalog' => 'Music catalog',
+            'music.in_gallery' => 'Music in this gallery',
+            'music.already_added' => 'Already in this gallery',
+            'music.select_item' => 'Select {title}',
+            'music.selection' => 'Selection',
+            'music.add_selected' => 'Add selected',
+            'music.batch_progress' => 'Adding {current} of {total}…',
+            'music.batch_complete' => 'Added {count} item(s); {skipped} already present.',
+            'music.batch_failed' => 'Added {count} of {total}. {message}',
+            'music.batch_limit' => 'Select at most {count} items at a time.',
+            'music.gallery_empty' => 'No music yet. Add songs or albums from the catalog.',
+            'music.catalog_load_error' => 'Album tracks could not be loaded. Try again.',
             'music.search_catalog' => 'Search songs and albums',
             'music.add_live_album' => 'Add live album',
             'music.add_individual_song' => 'Add individual song',
@@ -139,7 +151,8 @@ namespace {
     /** Build stable editor and chooser rows for one bounded fixture query.
      * @param string $query Search text supplied by the mocked catalog endpoint.
      * @return array{
-     *     gallery_id:int,editor:bool,action_url:string,csrf_html:string,
+     *     gallery_id:int,selection_status_url:string,editor:bool,
+     *     action_url:string,csrf_html:string,
      *     revision:string,write_revision:string,enabled:bool,error:string,
      *     tracks:list<array{id:string,title:string,filename:string,
      *         mime:string,size:int,sha256:string,hidden:bool,downloadable:bool,
@@ -149,8 +162,8 @@ namespace {
      *         album_id:int|null,title:string,downloadable:bool,hidden:bool,
      *         track_count:int,position:int,path?:string}>,
      *     choices:array{revision:string,
-     *         songs:list<array{id:int,title:string,track_count:int}>,
-     *         albums:list<array{id:int,title:string,song_count:int,path:string}>},
+     *         songs:list<array{id:int,title:string,track_count?:int,preview_url:string,already_added?:bool}>,
+     *         albums:list<array{id:int,title:string,song_count:int,path:string,members_url:string,browse_url:string,already_added?:bool}>},
      *     query:string,query_limit:int,choices_error:string,
      *     unavailable:int,omitted:int,partial:bool,over_limit:bool
      * } Prepared presentation-only Music view model.
@@ -161,6 +174,8 @@ namespace {
         $songs = [
             ['id' => 901, 'title' => 'Quiet Morning', 'track_count' => 1],
             ['id' => 902, 'title' => 'Night Drive Theme', 'track_count' => 2],
+            ['id' => 903, 'title' => 'Evening Breeze', 'track_count' => 1],
+            ['id' => 904, 'title' => 'Clouds', 'track_count' => 1],
         ];
         $albums = [[
             'id' => 801,
@@ -190,9 +205,24 @@ namespace {
             ));
         }
         $actionUrl = '/index.php?page=admin_edit_gallery&id=42';
+        foreach ($songs as &$song) {
+            $song['already_added'] = $song['id'] === 901;
+            $song['preview_url'] = $actionUrl . '&action=music_preview&song_id='
+                . $song['id'];
+        }
+        unset($song);
+        foreach ($albums as &$album) {
+            $album['already_added'] = true;
+            $album['members_url'] = $actionUrl
+                . '&action=music_album_choices&album_id=' . $album['id'];
+            $album['browse_url'] = '/index.php?page=admin_music&album_id='
+                . $album['id'] . '&tab=albums';
+        }
+        unset($album);
         $csrf = '<input type="hidden" name="csrf_token" value="fixture-csrf">';
         return [
             'gallery_id' => 42,
+            'selection_status_url' => $actionUrl . '&action=music_selection_status',
             'editor' => true,
             'action_url' => $actionUrl,
             'csrf_html' => $csrf,
@@ -278,6 +308,16 @@ namespace {
     $mode = (string) ($argv[1] ?? 'page');
     $query = (string) ($argv[2] ?? '');
     $model = fixtureMusicModel($query);
+    if ($mode === 'album-choices') {
+        $model['choices']['albums'] = [];
+        // The fixture album contains two members, independent of catalog size.
+        $model['choices']['songs'] = array_slice($model['choices']['songs'], 0, 2);
+        \Gallery\Views\view_render_gallery_music_choice_rows(
+            $model,
+            $model['choices'],
+        );
+        return;
+    }
     if ($mode === 'choices') {
         \Gallery\Views\view_render_gallery_music_choice_rows(
             $model,

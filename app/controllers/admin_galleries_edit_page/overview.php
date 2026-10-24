@@ -180,7 +180,7 @@ function admin_edit_gallery_render_overview(
         ],
         [
             'id' => 'admin-edit-media',
-            'label' => t('admin.gallery_editor.upload_media', 'Upload media'),
+            'label' => t('admin.gallery_editor.upload_media', 'Media management'),
             'badge' => $imageCount,
         ],
     ];

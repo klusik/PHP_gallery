@@ -224,6 +224,13 @@ snapshot for catalog usage; the sidecar remains the gallery selection authority.
 Live membership comes from current `music_album_songs`, so it is never copied
 into a physical-instance snapshot. Merge/split preserve shared-asset identity.
 Removing a gallery or assignment does not delete central assets.
+Removing a still-local catalogued selection registers and verifies its original
+centrally before the gallery index changes, retaining the existing song ID.
+After repository migration, bounded catalog cleanup removes only `music_songs`
+without any `music_repository_assets` row and without active or dirty-snapshot
+track references. Existing foreign keys cascade inactive instances, album
+membership and song tags; no schema change or audio-file deletion is involved.
+An asset row remains protective even if its physical bytes need restoration.
 
 Repository readiness is observed separately from the old catalog schema.
 Central writes require complete verified repository storage. Confirmed missing

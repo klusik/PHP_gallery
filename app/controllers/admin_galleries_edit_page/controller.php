@@ -74,6 +74,9 @@ function cms_admin_edit_gallery(): void
         cms_not_found();
         return;
     }
+    if (admin_gallery_music_catalog_response($gallery)) {
+        return;
+    }
     if (admin_edit_gallery_handle_json_panel_request($gallery)) {
         return;
     }

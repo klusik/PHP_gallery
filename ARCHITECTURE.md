@@ -162,13 +162,34 @@ source and rule-count inputs stay fresh on every explicit run. No persistent
 source-analysis cache, extra runtime file or logical module is added; inspection
 reuses the already loaded passive Core observer under unchanged closure limits.
 
-The gallery editor prepares one Upload media main tab containing the independent
+The gallery editor prepares one Media management main tab containing the independent
 image manager and existing music/PDF/presentation/artwork forms. The image
 preloader replaces only its original Images container; it does not own sibling
 media sections. One shared file chooser uses the existing image, PDF and audio
 upload coordinators. The gallery view associates the sticky navigation's Save
 button with the existing guarded settings form through native form ownership.
 No new persistence, schema or upload transport is introduced.
+
+The Music workspace distinguishes its catalog player scopes from the outer
+`data-music-editor="1"` mutation owner. Every add/remove/preference refresh
+replaces that outer owner, never an inner catalog table. The existing music
+Controller handles authenticated read-only preview, album pages and assignment
+availability through the gallery editor route. Its shared streamer retains the
+public music protocol after authorization; repository lookup never promotes a
+previewed legacy file. The Model resolves membership only for bounded candidate
+IDs. Serial browser batches reuse canonical mutation completion and fresh CAS
+tokens. Playback reads only the activated player's own playlist, and detaching
+its source disposes audio. These responsibilities reuse existing files and
+logical owners; hosted preparation/FULL still owns closure-budget qualification.
+
+Music failure reporting stays in the existing Controller owner and uses the
+shared Admin-log receipt API. The Model distinguishes dirty legacy source
+metadata from absence only after verified source resolution fails; no dirty
+snapshot is promoted or silently reconciled. Diagnostics preserve failure stage,
+selected identity, committed-write state and a response/log reference without
+raw exceptions, SQL or absolute storage paths. PHP error logging is the permanent
+fallback when the Admin writer cannot persist. Expected runtime delta is no new
+source file or logical root; actual dependency closure remains hosted evidence.
 
 The public gallery controller prepares canonical presentation links only when
 authorized photos and lightbox capability are available. Views render
@@ -275,6 +296,17 @@ original, switches its index reference and resumes verified local cleanup throug
 a persisted journal. Central originals survive gallery deletion and Trash.
 Storage reporting adds their SQL byte totals once and accounts remaining local
 copies separately; ordinary gallery links never duplicate physical totals.
+Removing a catalogued legacy selection preserves and verifies its central copy
+before publishing the shortened gallery index. The gallery lock and source
+revision remain held, and the canonical song identity is retained. Confirmed
+pre-catalog schemas keep the documented original-only delete contract; partial
+or unknown schema never permits deletion through that compatibility path.
+After the music migration completes, Maintenance Center prunes at most 20
+unbacked logical songs per step through the catalog transaction owner. The model
+locks eligible identities and rechecks absence of central asset rows, active
+gallery references and dirty-snapshot references before deletion. Existing FKs
+remove dependent metadata; audio files and registered assets are never pruned.
+This revised task requires a newly analyzed plan and records removed counts.
 
 Public PDF/music card counts use a separate optional derived projection under
 the existing `gallery-pdf-documents` runtime owner. The ready snapshot covers
@@ -4446,6 +4478,18 @@ owner records only a bounded operation name, exception class, stable error code,
 and duration, marks that owner skipped, preserves already completed cleanup, and
 continues with unrelated maintenance. Raw exception messages, SQL, credentials,
 private paths, and traces never enter the job state or lifecycle log.
+
+The central cache lifecycle opportunity admits at most 32 persisted browser
+slices. It respects due/retry dates and carries admitted unfinished region keys
+or a legacy cycle ID across requests. Completed discovery is a regional result,
+not whole-cache completion; completed healthy regions are not forced to restart.
+When no work is admitted, an owner is unavailable, or the central bound is
+reached, later tasks continue and outstanding cache journals remain intact.
+One bounded lifecycle event records completion or deferral with the reason,
+slice count, coverage and pending bytes. Status reads share the optional-owner
+failure boundary. The browser queues pause/cancel behind an active request;
+cancellation consumes its durable flag through one guarded final step before
+presenting the terminal status and releasing the central claim.
 
 Cancellation is cooperative and takes effect between bounded operations. It does
 not roll back already committed cleanup and cannot interrupt a currently

@@ -1,5 +1,45 @@
 # Compatibility lifecycle and retirement register
 
+## Central cache continuation and stop controls
+
+Owner: the existing Maintenance Center and cache registry services, plus the
+Maintenance Center browser module. A central job grants at most 32 short cache
+slices before later tasks continue. Due/retry dates, original files, pins,
+manual preview approval and durable deletion checkpoints remain authoritative.
+Legacy single-cycle checkpoints resume by their admitted ID; registry work
+resumes by admitted region keys. Both formats remain supported until the
+existing cache migration owner proves legacy debt drained. No checkpoint reset
+or schema migration is introduced. Running job rows from the earlier executor
+have no slice counter; their first updated request starts this bounded allowance
+and retains their existing task index and cache journals.
+
+The browser accepts pause/cancel while a step is pending, serializes the control
+after that response, and consumes a cancellation flag before stopping. This is
+permanent support for persisted running jobs, including jobs surviving service
+restarts. The maintenance, registry and asynchronous-control fixtures cover the
+decision boundary, disposable deferral/status failure and request ordering.
+Live Mac/Apache/MySQL recovery and cancellation acceptance remain unverified.
+
+## Legacy music detachment and unbacked catalog cleanup
+
+Owners: gallery music mutation/repository parts, the music catalog model/service
+and Maintenance Center. Catalogued local originals are preserved and verified
+centrally before detachment, retaining their logical song identity. Missing or
+unverified originals refuse the operation before index publication. A confirmed
+pre-catalog schema retains original-only deletion permanently for old supported
+installations; unknown or partial schema cannot select that compatibility path.
+
+After relocation, a freshly reviewed maintenance task prunes at most 20 logical
+songs per step when no asset row, active gallery reference or dirty-snapshot
+reference remains. Album/tag-only metadata may be removed; audio bytes and
+registered assets are preserved. Missing/unreadable bytes behind a registered
+asset remain a restoration/diagnostic problem rather than proof of disposable
+metadata. Existing catalog locking, revision changes and FKs own this operation.
+Repository and maintenance fixtures cover retention/refusal, re-add, dependent
+metadata cleanup and protected references. The separate Mac report supports the
+former legacy removal sequence; recovery of already deleted bytes is unknown
+and requires an original or backup. No automatic audio recovery is claimed.
+
 ## Public viewer focus, compact geometry and text projection
 
 Owners: the existing public lightbox/map controller, shared public modal
@@ -91,6 +131,25 @@ existing editor sidecar-write boundary. Hosted BASIC is source evidence only;
 runtime, migration, browser and deployed behavior need their own qualification.
 
 ## Shared music originals and live gallery assignments
+
+Gallery music failures retain a non-secret response/Admin-log reference, with
+PHP error logging when the Admin writer is unavailable. This permanent fallback
+preserves diagnostics during database/log-storage failures without changing the
+mutation outcome. Missing originals and dirty legacy sources have distinct
+refusals; no compatibility path assigns unverified bytes or trusts dirty usage
+metadata. Regression owners are the music service and repository database
+fixtures; the reported failure on a separate Mac has not been directly observed
+in this Windows environment.
+
+The editor's catalog preview is a permanent administrator-only read surface.
+It resolves verified central or existing legacy bytes without promotion or
+assignment and shares the established GET/HEAD/range music streamer. Public
+gallery delivery retains its existing authorization and download policy.
+Chooser duplicate prevention is presentation policy: directly assigned and
+live album sources retain their independent stored semantics. Batches recheck
+current membership and reuse canonical single-item mutations rather than
+introducing a second persistence path. Evidence is owned by the existing local
+Music browser and repository database fixtures; deployment-wide usage is unknown.
 
 Owners: gallery music model/service and its private projection/migration parts,
 the central repository service, catalog SQL model/service and Maintenance Center.

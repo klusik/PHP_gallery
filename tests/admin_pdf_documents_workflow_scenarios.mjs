@@ -437,7 +437,7 @@ const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
     editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
 assert.match(overviewSource,
     /'id' => 'admin-edit-media',\s*'label' => t\('admin\.gallery_editor\.upload_media'/,
-    'The gallery editor must expose the unified localized Upload media tab.');
+    'The gallery editor must expose the unified localized Media management tab.');
 assert.doesNotMatch(overviewSource, /'id'\s*=>\s*'admin-edit-images'/,
     'Images must not remain a separate main editor tab.');
 assert.doesNotMatch(overviewSource, /'id'\s*=>\s*'admin-edit-documents'/,
@@ -449,7 +449,7 @@ assert.match(editorSource,
     'A legacy Documents page request must redirect to Media with its PDF subsection selected.');
 assert.match(editActionsSource,
     /if \(in_array\(\$tab, \['admin-edit-documents', 'admin-edit-images'\], true\)\)\s*\{\s*return 'admin-edit-media';/,
-    'Legacy Documents and Images URLs must normalize to Upload media.');
+    'Legacy Documents and Images URLs must normalize to Media management.');
 assert.match(editActionsSource,
     /if \(\$tab === 'admin-edit-documents'\)\s*\{\s*\$params\['media_section'\]\s*=\s*'pdf';/,
     'The Documents alias must retain the PDF subsection when it normalizes.');
@@ -508,7 +508,10 @@ assert.match(publicMediaSource,
     /if \(\$inline\)\s*\{[\s\S]*?gallery-media-inline[\s\S]*?return;[\s\S]*?<details class="gallery-media-widget"/,
     'Inline authenticated media and native public disclosure must remain separate branches of one owner.');
 assert.match(musicViewSource,
-    /view_media_panel_start\([\s\S]*?view_music_control_icon\('music'\),\s*\$model\['editor'\],\s*\$model\['editor'\] && \$model\['tracks'\] !== \[\][\s\S]*?view_music_player_controls\(false\)/,
+    /\$headerControls = \$model\['editor'\] && \$model\['tracks'\] !== \[\]\s*\? view_music_player_controls\(false\) : '';/,
+    'Music must prepare the inline player only for an editor with tracks.');
+assert.match(musicViewSource,
+    /view_media_panel_start\([\s\S]*?view_music_control_icon\('music'\),\s*\$model\['editor'\],\s*\$headerControls,/,
     'Music must route editor mode and its inline toolbar through the shared panel helper.');
 assert.match(musicViewSource,
     /view_media_panel_end\(\$model\['editor'\]\)/,

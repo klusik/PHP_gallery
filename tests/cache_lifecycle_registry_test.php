@@ -11,6 +11,29 @@
  */
 declare(strict_types=1);
 namespace Gallery\Services {
+    /** Capture safe lifecycle events without accessing the live Admin log.
+     * @param string $level Event severity.
+     * @param string $eventKey Stable event identity.
+     * @param string $message Safe operation summary.
+     * @param array<string,string|int|float|bool|null> $context Bounded scalar
+     *     maintenance evidence.
+     * @param array{category?:string,severity?:string} $options Log classification.
+     * @return void Appends an isolated event receipt for fixture assertions.
+     */
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
+        $GLOBALS['maintenance_cache_events'][] = [
+            'key' => $eventKey,
+            'level' => $level,
+            'context' => $context,
+        ];
+    }
+
     /**
      * Enable only the isolated automatic cache capability unless the fixture opts out.
      * @param string $key Requested canonical capability key.
@@ -713,6 +736,76 @@ namespace {
                 && $failedStatus['errors'] >= 2,
             'An earlier complete discovery concealed a newer failed discovery attempt.',
         );
+
+        // Reproduce a central run reaching a partial registry whose failed
+        // regions are in backoff and whose healthy regions are not due.
+        // The former forced caller restarted healthy regions indefinitely.
+        require_once __DIR__ . '/../app/services/maintenance_center.php';
+        $database->prepare(
+            'UPDATE cache_lifecycle_regions SET next_due_at = ? WHERE failures = 0',
+        )->execute([
+            \Gallery\Services\cache_lifecycle_now()
+                + \Gallery\Services\CACHE_REGISTRY_RECHECK_SECONDS,
+        ]);
+        $beforeCentral = $database->query(
+            'SELECT region_key, checkpoint_json, next_due_at, retry_at FROM cache_lifecycle_regions ORDER BY region_key',
+        )->fetchAll(\PDO::FETCH_ASSOC);
+        $central = \Gallery\Services\maintenance_center_execute_downloads([
+            'job' => ['id' => 0],
+            // The first four independent owners have already completed.
+            'task_state' => ['operation_index' => 4],
+        ]);
+        $afterCentral = $database->query(
+            'SELECT region_key, checkpoint_json, next_due_at, retry_at FROM cache_lifecycle_regions ORDER BY region_key',
+        )->fetchAll(\PDO::FETCH_ASSOC);
+        cache_registry_assert(
+            $central['done']
+                && $central['warning'] !== ''
+                && $central['task_state']['lifecycle_slices'] === 1
+                && $central['task_state']['diagnostics']['cache_lifecycle']
+                    ['worker_reason'] === 'cache_lifecycle_not_due'
+                && $beforeCentral === $afterCentral,
+            'Central cache work must yield partial/backoff regions without restarting completed regions or rewriting checkpoints.',
+        );
+        $centralEvent = end($GLOBALS['maintenance_cache_events']);
+        cache_registry_assert(
+            $centralEvent['key']
+                === 'maintenance_center.cache_lifecycle_deferred'
+                && $centralEvent['level'] === 'warning'
+                && $centralEvent['context']['worker_reason']
+                    === 'cache_lifecycle_not_due'
+                && $centralEvent['context']['regions_unverified'] >= 0
+                && $centralEvent['context']['partial'] === true,
+            'A central deferral must log its safe reason and incomplete coverage.',
+        );
+
+        // A status read belongs inside the same optional-owner failure boundary.
+        // Invalid control JSON must not abort unrelated central maintenance.
+        $controlPath = $root . '/cache/cache-lifecycle/state.json';
+        $savedControl = is_file($controlPath)
+            ? file_get_contents($controlPath)
+            : null;
+        file_put_contents($controlPath, '{broken');
+        try {
+            $unavailable =
+                \Gallery\Services\maintenance_center_execute_downloads([
+                    'job' => ['id' => 0],
+                    'task_state' => ['operation_index' => 4],
+                ]);
+            cache_registry_assert(
+                $unavailable['done']
+                    && $unavailable['warning'] !== ''
+                    && $unavailable['task_state']['diagnostics']
+                        ['cache_lifecycle']['status'] === 'failed',
+                'Unreadable cache status must be isolated from later maintenance tasks.',
+            );
+        } finally {
+            if ($savedControl === null) {
+                unlink($controlPath);
+            } else {
+                file_put_contents($controlPath, $savedControl);
+            }
+        }
         $retainedBytes = $failedStatus['bytes'];
         \Gallery\Services\cache_lifecycle_inventory_start();
         \Gallery\Services\cache_lifecycle_inventory_slice();

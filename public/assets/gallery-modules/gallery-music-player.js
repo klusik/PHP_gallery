@@ -12,6 +12,7 @@
  */
 let currentPlayer = null;
 let currentSignature = '';
+let currentSource = null;
 
 /**
  * @typedef {'playing'|'silent'|'blocked'|'failed'|'cancelled'} MusicPlaybackResult
@@ -301,13 +302,14 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
  * Resolve one page-wide exclusive player from current server-rendered
  *     playlist data.
  * @param {HTMLElement|null} card Optional table whose explicit control was
- *     activated.
+ *     activated; nested catalog players retain their own playlist ownership.
  * @returns {ReturnType<typeof createGalleryMusicPlayer>|null} Current shared
  *     player, or null without authorized music.
  */
 export function getGalleryMusicPlayer(card = null) {
     const source = card
-        ? card.querySelector('[data-gallery-music-playlist]')
+        ? Array.from(card.querySelectorAll('[data-gallery-music-playlist]'))
+            .find(candidate => candidate.closest('[data-gallery-music]') === card)
         : document.querySelector('[data-gallery-music-playlist]:not([data-music-editor="1"])');
     if (!card) {
         for (const controls of document.querySelectorAll('[data-lightbox-music]')) {
@@ -318,13 +320,17 @@ export function getGalleryMusicPlayer(card = null) {
     if (!source) return null;
     const signature = source.textContent;
     if (currentPlayer && signature === currentSignature) {
+        currentSource = source;
         currentPlayer.refresh();
         return currentPlayer;
     }
     currentPlayer?.destroy();
     currentPlayer = null;
     currentSignature = signature;
-    try { currentPlayer = createGalleryMusicPlayer(document, JSON.parse(signature)); }
+    try {
+        currentPlayer = createGalleryMusicPlayer(document, JSON.parse(signature));
+        currentSource = source;
+    }
     catch { currentSignature = ''; }
     return currentPlayer;
 }
@@ -385,6 +391,12 @@ export function setupGalleryMusicPlayback() {
     });
     window.addEventListener('resize', () => observeMusicTitles(document));
     const observer = new MutationObserver(changes => {
+        if (currentSource?.isConnected === false) {
+            currentPlayer?.destroy();
+            currentPlayer = null;
+            currentSource = null;
+            currentSignature = '';
+        }
         for (const change of changes) for (const node of change.addedNodes) {
             if (node instanceof Element && (node.matches('[data-gallery-music]')
                 || node.querySelector('[data-gallery-music]'))) scanGalleryMusicDurations(node);

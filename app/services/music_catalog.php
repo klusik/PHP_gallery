@@ -54,6 +54,14 @@ const MUSIC_CATALOG_REPOSITORY_BATCH_LIMIT = 100;
  */
 const MUSIC_CATALOG_RECONCILE_BATCH = 20;
 
+/** Bound catalog-only orphan removal after repository migration.
+ * Type: int. Units: song records. Scope: one maintenance browser step.
+ * Consumers: music_catalog_prune_unbacked_songs and its model selector.
+ * Rationale: 20 rows match the existing reconciliation batch and bound row/FK
+ *     work independently of library size. No audio files are removed.
+ */
+const MUSIC_CATALOG_ORPHAN_BATCH = 20;
+
 /**
  * Bound nested album ancestry so browser and database work stay finite.
  * Type: int. Units: levels. Scope: the music album tree.
@@ -500,6 +508,30 @@ function music_catalog_commit_mutation(string $revision, string $operation, \Clo
 function music_catalog_revision(): string
 {
     return \Gallery\Models\music_catalog_model_revision();
+}
+
+/** Remove only logical songs without repository assets or trusted gallery use.
+ * @param int $limit Maximum records per transaction, within the orphan bound.
+ * @return array{removed:int,has_more:bool} Actual deletions and whether a full
+ *     batch requires another bounded check; files are never inspected/deleted.
+ * @throws \RuntimeException When schema, revision or persistence is unavailable.
+ * @throws \InvalidArgumentException When the requested batch exceeds policy.
+ */
+function music_catalog_prune_unbacked_songs(
+    int $limit = MUSIC_CATALOG_ORPHAN_BATCH,
+): array {
+    if ($limit < 1 || $limit > MUSIC_CATALOG_ORPHAN_BATCH) {
+        throw new \InvalidArgumentException('Invalid music orphan batch.');
+    }
+    music_repository_assert_schema_ready('catalog.prune_unbacked_songs');
+    $result = music_catalog_commit_mutation(
+        music_catalog_revision(),
+        'catalog.prune_unbacked_songs',
+        static fn(): int =>
+            \Gallery\Models\music_catalog_model_prune_unbacked_songs($limit),
+    );
+    $removed = (int) $result['value'];
+    return ['removed' => $removed, 'has_more' => $removed === $limit];
 }
 
 /** Report whether committed physical snapshots await catalog reconciliation.
@@ -1173,6 +1205,56 @@ function music_catalog_assignment_choices(string $query, int $limit = MUSIC_CATA
         }
     }
     return ['revision' => music_catalog_revision(), 'songs' => $songs, 'albums' => $albums];
+}
+
+/** Mark chooser rows already included by authoritative gallery source groups.
+ * @param int $galleryId Physical gallery identity.
+ * @param list<array{id:string,type:string,song_id:?int,album_id:?int}>
+ *     $sources Current direct and live album groups.
+ * @param array{revision:string,songs:list<array{id:int,title:string,
+ *     track_count?:int}>,albums:list<array{id:int,title:string,
+ *     song_count:int,path:string}>} $choices Bounded catalog candidates.
+ * @return array{revision:string,songs:list<array{id:int,title:string,
+ *     track_count?:int,already_added:bool}>,albums:list<array{id:int,
+ *     title:string,song_count:int,path:string,already_added:bool}>}
+ *     Choices with explicit assignment availability; preview stays available.
+ */
+function music_catalog_assignment_availability(
+    int $galleryId,
+    array $sources,
+    array $choices,
+): array {
+    $tracks = [];
+    $albums = [];
+    $directSongs = [];
+    foreach ($sources as $source) {
+        if ($source['type'] === 'album' && $source['album_id'] !== null) {
+            $albums[] = (int) $source['album_id'];
+        } else {
+            $tracks[] = $source['id'];
+            if ($source['song_id'] !== null) {
+                $directSongs[] = (int) $source['song_id'];
+            }
+        }
+    }
+    $presentSongs = array_fill_keys(array_merge(
+        $directSongs,
+        \Gallery\Models\music_catalog_model_selected_song_ids(
+            $galleryId,
+            $tracks,
+            $albums,
+            array_column($choices['songs'], 'id'),
+        ),
+    ), true);
+    foreach ($choices['songs'] as &$song) {
+        $song['already_added'] = isset($presentSongs[$song['id']]);
+    }
+    unset($song);
+    foreach ($choices['albums'] as &$album) {
+        $album['already_added'] = in_array($album['id'], $albums, true);
+    }
+    unset($album);
+    return $choices;
 }
 
 /** Create a nested album under a validated parent.
