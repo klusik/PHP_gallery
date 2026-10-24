@@ -102,6 +102,11 @@ short root link. Preserve visible keyboard focus and native forced-color
 controls. Scope overrides to this overlay, including its retained Admin
 ancestors, so legacy white fields and filled blue buttons cannot take over.
 
+The presentation launch confirmation uses the same translucent Theme panel and
+compact transparent Start/Close actions, with 28px desktop targets, 16px glyphs
+and 44px narrow/touch targets. Keep the localized Start label, visible keyboard
+focus, muted disabled state and system colors in forced-color mode.
+
 - Use short labels with small `?` context-help controls for longer explanations.
   Help must open by mouse click and keyboard activation, close on outside click
   and Escape, and expose an accessible name and relationship to its content.
