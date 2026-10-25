@@ -26,6 +26,12 @@ acknowledges existing New; shared Smart identities affect all their placements.
 Missing/unknown index schema and dirty/oversized evidence preserve ordinary
 gallery navigation and explicitly omit New evidence. Do not replace an unavailable
 watermark with generic gallery/image modification timestamps or visitor writes.
+The public panel also omits technical availability warnings and does not claim
+that unknown evidence means no new content. Existing bounded server diagnostics
+remain unchanged. Notification-only acknowledgement preserves visit flags and
+monotonically advances known baselines. The separate reversible bulk visit
+action keeps those baselines, uses ordered record stamps and remains usable
+without content evidence; it never clears installation history or reset epochs.
 Automated regression sources cover policy, persistence and rendered panel
 behavior. Real multi-device, private-browser, touch and assistive-technology
 acceptance remains installation-specific; BASIC does not qualify those paths.

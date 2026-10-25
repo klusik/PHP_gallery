@@ -9,6 +9,10 @@ parent/child acknowledgement, explicit read-all, source moves, NSFW grants,
 corrupt records and concurrent reset epochs. Branch undo covers descendants,
 shared Smart identity, source/unrelated-node isolation, retained New baselines,
 stale writers in both merge directions and later genuine reopening.
+Independent bulk vectors assert that notification acknowledgement never sets
+visit flags or lowers newer watermarks, while the visit toggle preserves New
+baselines and unrelated history, prioritizes completion and only reverses a
+fully completed graph. Missing evidence and an empty real graph remain covered.
 It does not use image snapshots.
 The music catalog's disposable database fixture also verifies that committed
 catalog edits notify dirty physical sources outside their transaction. Thin
@@ -30,9 +34,13 @@ CSS/JavaScript in disposable Chromium at desktop/narrow viewports. It retains
 the Theme foreground stacking selector that previously overrode fixed panel
 geometry. Assertions cover icon-only title statuses, simultaneous New, bounded
 translucent positioning, nonmodal page access, 44px narrow actions, in-place
-read-all, clickable inline branch undo, outside/Escape dismissal, focus return,
-cancelled/confirmed reset and installation isolation. Short lists must have no
-scrollbar; long synthetic lists must reach the actual viewport bound before
+notification acknowledgement, clickable inline branch undo, outside/Escape
+dismissal, focus return, both bulk visit directions and installation isolation.
+Unavailable evidence omits warnings, empty claims and the notification action;
+an empty overview also omits its heading and updates the dialog's accessible
+name. Visits stay usable and blocked storage affects only the subordinate
+lifetime note. Short lists must have no scrollbar; long synthetic lists must
+reach the actual viewport bound before
 scrolling, with bulk actions retained. Desktop, narrow and short CSS viewports
 exercise these independent-of-count bounds. The central registry owns these
 regressions.

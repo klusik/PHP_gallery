@@ -15,7 +15,8 @@ const source = readFileSync(new URL(
     '../public/assets/gallery-modules/gallery-visit-progress.js', import.meta.url,
 ), 'utf8');
 const {parseVisitHistory, mergeVisitHistory, observeVisitGraph,
-    acknowledgeVisitNodes, computeVisitStates, markVisitBranchUnseen} = await import(
+    acknowledgeVisitNodes, acknowledgeVisitContent, toggleVisitNodesSeen,
+    computeVisitStates, markVisitBranchUnseen} = await import(
     `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`,
 );
 
@@ -84,6 +85,58 @@ assert.equal(computeVisitStates(nodes, history)['g:4'].newContent, true);
 acknowledgeVisitNodes(history, nodes, Object.keys(nodes), true);
 assert.equal(Object.values(computeVisitStates(nodes, history)).some(value => value.newContent), false);
 assert.equal(history.g['r:0'].o, false, 'The synthetic root is never a real visit.');
+
+// Notification acknowledgement and visit completion are independent bulk actions.
+const bulkNodes = {
+    'r:0': node(['g:10'], {'e:g:10': 1}),
+    'g:10': node(['s:10'], {'m:10:0': 1, 'e:s:10': 1}),
+    's:10': node([], {'m:10:0': 1}),
+};
+const bulkHistory = parseVisitHistory(null);
+observeVisitGraph(bulkHistory, bulkNodes, true);
+bulkHistory.g['g:99'] = {o: true, b: {'m:99:0': 1}};
+bulkNodes['s:10'].watermark['m:10:0']++;
+acknowledgeVisitContent(bulkHistory, bulkNodes, true);
+assert.deepEqual(computeVisitStates(bulkNodes, bulkHistory)['g:10'],
+    {progress: 'unseen', newContent: false},
+    'Reading notifications must not invent a physical or Smart visit.');
+assert.equal(bulkHistory.g['s:10'].o, false);
+acknowledgeVisitContent(bulkHistory, {
+    's:10': node([], {'m:10:0': 1}),
+}, true);
+assert.equal(bulkHistory.g['s:10'].b['m:10:0'], 2,
+    'An older tab must not lower an already acknowledged content watermark.');
+bulkNodes['s:10'].watermark['m:10:0']++;
+const bulkBaselines = Object.fromEntries(Object.entries(bulkHistory.g)
+    .map(([key, record]) => [key, JSON.stringify(record.b)]));
+toggleVisitNodesSeen(bulkHistory, bulkNodes);
+assert.deepEqual(computeVisitStates(bulkNodes, bulkHistory)['g:10'],
+    {progress: 'seen', newContent: true},
+    'The default bulk visit action completes every accessible descendant only.');
+assert.equal(bulkHistory.g['r:0'].o, false);
+const bulkSeen = parseVisitHistory(JSON.stringify(bulkHistory));
+toggleVisitNodesSeen(bulkHistory, bulkNodes);
+assert.deepEqual(computeVisitStates(bulkNodes, bulkHistory)['g:10'],
+    {progress: 'unseen', newContent: true},
+    'Only an already complete graph toggles back to unvisited.');
+assert.equal(mergeVisitHistory(bulkSeen, bulkHistory).g['s:10'].o, false);
+assert.equal(mergeVisitHistory(bulkHistory, bulkSeen).g['s:10'].o, false,
+    'Stale completed tabs must not undo a bulk unvisit in either merge order.');
+assert.equal(bulkHistory.g['g:99'].o, true, 'Bulk visits preserve unrelated history.');
+assert.deepEqual(Object.fromEntries(Object.entries(bulkHistory.g)
+    .map(([key, record]) => [key, JSON.stringify(record.b)])), bulkBaselines,
+    'Both bulk visit directions must retain every New baseline.');
+const beforeUnavailable = JSON.stringify(bulkHistory);
+acknowledgeVisitContent(bulkHistory, bulkNodes, false);
+assert.equal(JSON.stringify(bulkHistory), beforeUnavailable,
+    'Unavailable notification evidence must never be acknowledged.');
+acknowledgeVisitNodes(bulkHistory, bulkNodes, ['s:10'], false);
+toggleVisitNodesSeen(bulkHistory, bulkNodes);
+assert.equal(computeVisitStates(bulkNodes, bulkHistory, false)['g:10'].progress, 'seen',
+    'Partial visits still default to completion when content evidence is absent.');
+const completeBulk = parseVisitHistory(JSON.stringify(bulkHistory));
+toggleVisitNodesSeen(bulkHistory, {'r:0': node()});
+assert.deepEqual(bulkHistory, completeBulk, 'An empty real graph must be inert.');
 
 // Undo a complete branch, including shared Smart placements, without changing
 // content acknowledgements, unrelated roots or a Smart item's physical sources.

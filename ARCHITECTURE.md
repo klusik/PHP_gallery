@@ -42,7 +42,10 @@ edges. Storage contains direct-open flags, compact watermarks and a reset epoch;
 computed states, titles, URLs and photo identities are absent. A visible,
 non-prerendered successful detail acknowledges only its own media and incoming
 placement edges. Parent opens retain unopened descendant alerts. Explicit
-read-all acknowledges the complete received authorized graph. Web Locks and
+notification acknowledgement advances the complete received authorized graph's
+watermarks without setting visit flags. The separate footer action marks every
+real node seen unless all are already seen, then marks all unseen. Both visit
+directions preserve content baselines and unrelated history. Web Locks and
 storage-event union preserve concurrent visits; ordered epochs prevent stale
 writes from resurrecting reset history.
 Clicking a card's progress icon resets its complete currently authorized branch
@@ -63,6 +66,14 @@ and 44px narrow/touch actions. There is no modal backdrop.
 Panel height follows the actual CSS viewport, independently of item count and
 browser zoom. Long panels shift upward and only the compact list scrolls after
 the viewport bound is reached; the heading and actions remain visible.
+Notification acknowledgement sits directly above that list and appears only
+with verified unread entries. With no unread entries, the complete news heading
+and section disappear; the compact panel's accessible name follows its visit
+action. Missing/unknown/dirty evidence also omits the optional
+news area without a public technical warning or a false empty-state claim;
+existing schema diagnostics remain authoritative. The footer visit toggle
+remains available independently. Blocked storage changes only its quiet
+local-history note to explain the current tab's lifetime.
 
 Runtime ownership review: this batch adds no PHP runtime file or logical module;
 it extends existing gallery, Smart, layout and presentation-policy owners. The

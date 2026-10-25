@@ -559,20 +559,24 @@ function view_render_gallery_visit_notifications(): void
         . 'fill="none" stroke="currentColor" stroke-width="1.7" '
         . 'stroke-linecap="round" aria-hidden="true">'
         . '<path d="m6 6 12 12M18 6 6 18"/></svg></button></div>'
-        . '<p class="gallery-visit-message" data-visit-message role="status"></p>'
-        . '<ul class="gallery-visit-notifications" data-visit-list></ul>'
-        . '<div class="gallery-visit-actions"><button type="button" '
+        . '<div class="gallery-visit-news-actions" data-visit-news-actions hidden>'
+        . '<button type="button" '
         . 'class="gallery-visit-action" data-visit-read-all>'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
         . 'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
         . 'aria-hidden="true"><path d="m3 12 4 4L17 6M11 16l3 3 8-10"/></svg>'
-        . e(t('gallery.visit.read_all', 'Mark all as read'))
-        . '</button><button type="button" class="gallery-visit-action" data-visit-reset>'
+        . e(t('gallery.visit.read_all', 'Mark all new content as read'))
+        . '</button></div>'
+        . '<ul class="gallery-visit-notifications" data-visit-list></ul>'
+        . '<div class="gallery-visit-actions"><button type="button" '
+        . 'class="gallery-visit-action" data-visit-toggle>'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
         . 'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
-        . 'aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg>'
-        . e(t('gallery.visit.reset', 'Clear seen history'))
-        . '</button></div><p class="gallery-visit-help">'
+        . 'aria-hidden="true"><path data-visit-toggle-icon '
+        . 'd="m3 12 4 4L17 6M11 16l3 3 8-10"/></svg>'
+        . '<span id="gallery-visit-toggle-label" data-visit-toggle-label>'
+        . e(t('gallery.visit.mark_all_seen', 'Mark all galleries as seen'))
+        . '</span></button></div><p class="gallery-visit-help" data-visit-help>'
         . e(t('gallery.visit.local', 'History is saved only in this browser.'))
         . '</p></section>';
 }

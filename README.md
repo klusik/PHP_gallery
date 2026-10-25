@@ -174,7 +174,12 @@ Public gallery titles carry small inline Unseen, Partial or Seen icons and an
 independent New-content sparkle. A branch is complete only after its own page
 and every navigable descendant, including placed Smart Galleries, were opened.
 The header bell opens a compact translucent panel beneath the bell with links
-to new content, **Mark all as read**, and confirmation-protected history reset.
+to new content and **Mark all new content as read** beside the notifications.
+That action preserves gallery visits. A separate footer action marks all
+available galleries seen; only a fully completed set offers the reverse unseen
+action. Both directions retain notification baselines. Unavailable evidence
+omits the optional news area without technical warnings or a false empty claim;
+the visit action stays usable.
 Authenticated administrators never see this feature, including in anonymous
 preview; logging out restores the ordinary visitor interface.
 

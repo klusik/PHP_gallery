@@ -232,6 +232,49 @@ export function acknowledgeVisitNodes(history, nodes, keys, ready) {
 }
 
 /**
+ * Dismiss current notifications without changing any gallery's visit state.
+ * @param {VisitHistory} history Mutable installation-local history.
+ * @param {Record<string,VisitNode>} nodes Current authorized projection.
+ * @param {boolean} ready Whether complete content evidence can be acknowledged.
+ * @returns {void} Updates current watermarks only; unavailable evidence is inert.
+ */
+export function acknowledgeVisitContent(history, nodes, ready) {
+    if (!ready) return;
+    for (const [key, node] of Object.entries(nodes)) {
+        const record = history.g[key];
+        if (!record) continue;
+        record.b ??= {};
+        for (const [lane, revision] of Object.entries(node.watermark)) {
+            record.b[lane] = Math.max(record.b[lane] ?? 0, revision);
+        }
+    }
+}
+
+/**
+ * Toggle all authorized galleries, prioritizing completion of unfinished visits.
+ * @param {VisitHistory} history Mutable installation-local history.
+ * @param {Record<string,VisitNode>} nodes Current authorized physical/Smart graph.
+ * @returns {void} Marks every real node seen unless all are already seen, then
+ *     marks them unseen. Preserves content baselines and unrelated history;
+ *     ordered record stamps prevent stale tabs from reversing the bulk action.
+ */
+export function toggleVisitNodesSeen(history, nodes) {
+    const keys = Object.keys(nodes).filter(key => key !== 'r:0');
+    if (!keys.length) return;
+    const seen = !keys.every(key => history.g[key]?.o === true);
+    const latest = Object.values(history.g).reduce(
+        (previous, record) => (record.r ?? '') > previous ? record.r : previous,
+        history.epoch,
+    );
+    const order = visitResetStamp(latest);
+    for (const key of keys) {
+        if (!history.g[key]) continue;
+        history.g[key].o = seen;
+        history.g[key].r = order;
+    }
+}
+
+/**
  * Compare one authorized membership lane without cosmetic NSFW false positives.
  * @param {Record<string,number>} current Current available membership lanes.
  * @param {Record<string,number>} baseline Last observed/acknowledged lanes.
@@ -355,8 +398,10 @@ export function setupGalleryVisitProgress(config) {
     // contexts while remaining spatially attached to the actual bell.
     document.body.append(panel);
     const list = panel.querySelector('[data-visit-list]');
-    const message = panel.querySelector('[data-visit-message]');
-    panel.querySelector('[data-visit-read-all]').disabled = !config.ready;
+    const newsActions = panel.querySelector('[data-visit-news-actions]');
+    const readAll = panel.querySelector('[data-visit-read-all]');
+    const visitToggle = panel.querySelector('[data-visit-toggle]');
+    const help = panel.querySelector('[data-visit-help]');
     let history = parseVisitHistory(null);
     let storageAvailable = true;
     let activated = false;
@@ -453,9 +498,21 @@ export function setupGalleryVisitProgress(config) {
             item.append(visitIcon('new', config.strings.new), link);
             list.append(item);
         }
-        message.textContent = !storageAvailable ? config.strings.unavailable
-            : !config.ready ? config.strings.content_unavailable
-            : fresh.length ? '' : config.strings.empty;
+        // Empty or unavailable news needs no public section, technical warning
+        // or empty-state claim; retain only the independently usable visit action.
+        panel.classList.toggle('is-visits-only', !fresh.length);
+        panel.setAttribute('aria-labelledby', fresh.length
+            ? 'gallery-visit-heading' : 'gallery-visit-toggle-label');
+        newsActions.hidden = !config.ready || !fresh.length;
+        readAll.disabled = newsActions.hidden;
+        const keys = Object.keys(config.nodes).filter(key => key !== 'r:0');
+        const allSeen = keys.length > 0 && keys.every(key => history.g[key]?.o === true);
+        visitToggle.disabled = !keys.length;
+        visitToggle.querySelector('[data-visit-toggle-label]').textContent = allSeen
+            ? config.strings.mark_all_unseen : config.strings.mark_all_seen;
+        visitToggle.querySelector('[data-visit-toggle-icon]').setAttribute('d', allSeen
+            ? 'M3 10a9 9 0 1 1 2 8M3 4v6h6' : 'm3 12 4 4L17 6M11 16l3 3 8-10');
+        help.textContent = storageAvailable ? config.strings.local : config.strings.unavailable;
         bell.querySelector('[data-visit-bell-dot]').hidden = fresh.length === 0;
         bell.setAttribute('aria-label', config.strings.bell
             + (fresh.length ? ` (${fresh.length})` : ''));
@@ -530,10 +587,14 @@ export function setupGalleryVisitProgress(config) {
     });
     window.addEventListener('resize', positionPanel);
     window.addEventListener('scroll', positionPanel, {capture: true, passive: true});
-    panel.querySelector('[data-visit-read-all]').addEventListener('click', () => {
-        void update(current => {
-            acknowledgeVisitNodes(current, config.nodes, Object.keys(config.nodes), config.ready);
+    readAll.addEventListener('click', async () => {
+        if (readAll.disabled) return;
+        await update(current => {
+            acknowledgeVisitContent(current, config.nodes, config.ready);
         });
+        if (!panel.hidden && readAll.disabled) {
+            visitToggle.focus({preventScroll: true});
+        }
     });
     document.addEventListener('click', async event => {
         const control = event.target.closest?.('[data-visit-unseen-key]');
@@ -545,17 +606,8 @@ export function setupGalleryVisitProgress(config) {
         control.closest('[data-visit-key]')?.querySelector('.gallery-card-title-link')
             ?.focus({preventScroll: true});
     });
-    panel.querySelector('[data-visit-reset]').addEventListener('click', () => {
-        if (!window.confirm(config.strings.reset_confirm)) return;
-        void update(current => {
-            const latest = Object.values(current.g).reduce(
-                (previous, record) => (record.r ?? '') > previous ? record.r : previous,
-                current.epoch,
-            );
-            current.epoch = visitResetStamp(latest);
-            current.g = {};
-            observeVisitGraph(current, config.nodes, config.ready);
-        });
+    visitToggle.addEventListener('click', () => {
+        void update(current => toggleVisitNodesSeen(current, config.nodes));
     });
     window.addEventListener('storage', event => {
         if (event.key !== config.storageKey) return;

@@ -92,11 +92,13 @@ try {
     const nodes = {
         'g:1':{title:'Fixture',url:'/gallery/fixture/',children:[],watermark:{'m:1:0':2}},
     };
-    setupGalleryVisitProgress({storageKey:key,opened:'',ready:true,nodes,
+    const config = {storageKey:key,opened:'',ready:true,nodes,
         strings:{unseen:'Unseen',partial:'Partial',seen:'Seen',new:'New content',
-        empty:'No new content.',unavailable:'Storage unavailable',content_unavailable:'Index unavailable',
-        reset_confirm:'Clear fixture history?',bell:'What is new',updated:'Read',
-        mark_unseen:'Mark this gallery and its subgalleries as unvisited'}});
+        empty:'No new content.',unavailable:'Visits are remembered only in this tab.',
+        local:'History is saved only in this browser.',bell:'What is new',
+        mark_all_seen:'Mark all galleries as seen',mark_all_unseen:'Mark all galleries as unseen',
+        mark_unseen:'Mark this gallery and its subgalleries as unvisited'}};
+    setupGalleryVisitProgress(config);
     const bell = document.querySelector('[data-visit-bell]');
     const panel = document.querySelector('[data-visit-panel]');
     await until(() => !bell.hidden, 'The public bell was never enabled.');
@@ -116,17 +118,37 @@ try {
     check(getComputedStyle(panel).backdropFilter !== 'none',
         'The contextual panel must retain the shared translucent treatment.');
     const notificationList = panel.querySelector('[data-visit-list]');
+    const readAll = panel.querySelector('[data-visit-read-all]');
+    const visitToggle = panel.querySelector('[data-visit-toggle]');
+    const toggleLabel = visitToggle.querySelector('[data-visit-toggle-label]');
+    check(readAll.getBoundingClientRect().bottom <= notificationList.getBoundingClientRect().top,
+        'Notification acknowledgement belongs directly above the notification list.');
     check(notificationList.scrollHeight <= notificationList.clientHeight,
         'A short list must use natural panel height without a scrollbar.');
     if (innerWidth <= NARROW_WIDTH) {
         check([...panel.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= TOUCH_TARGET),
             'Narrow panel actions require comfortable 44px targets.');
     }
-    panel.querySelector('[data-visit-read-all]').click();
+    readAll.click();
     await until(() => !document.querySelector('[data-visit-icons] .is-new'),
         'Read-all must acknowledge current content without closing the panel.');
-    check(!panel.hidden && JSON.parse(localStorage.getItem(key)).g['g:1'].o,
-        'Read-all must persist direct completion in place.');
+    check(!panel.hidden && !JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'Reading all notifications must preserve the unvisited gallery state.');
+    check(panel.querySelector('[data-visit-news-actions]').hidden,
+        'An empty overview must not retain a confusing disabled read-all action.');
+    await until(() => document.activeElement === visitToggle,
+        'Acknowledgement must move focus off its now-hidden notification action.');
+    check(panel.classList.contains('is-visits-only')
+        && panel.querySelector('h2').getBoundingClientRect().height === 0
+        && panel.getAttribute('aria-labelledby') === toggleLabel.id,
+        'An empty overview must omit its news heading while retaining an accurate dialog label.');
+    check(toggleLabel.textContent === config.strings.mark_all_seen,
+        'An unfinished gallery must offer bulk visit completion first.');
+    visitToggle.click();
+    await until(() => JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'The separate visit action must mark available galleries seen.');
+    check(toggleLabel.textContent === config.strings.mark_all_unseen,
+        'Only a complete graph must offer the inverse unvisited action.');
     const stateControl = document.querySelector('[data-visit-unseen-key="g:1"]');
     check(!stateControl.disabled && stateControl.tagName === 'BUTTON',
         'The inline progress icon must expose an accessible undo control.');
@@ -135,9 +157,9 @@ try {
         'Clicking the progress icon must undo the branch visit.');
     check(stateControl.disabled && !document.querySelector('[data-visit-icons] .is-new'),
         'Undo retains content baselines and disables the already-unseen control.');
-    panel.querySelector('[data-visit-read-all]').click();
+    visitToggle.click();
     await until(() => JSON.parse(localStorage.getItem(key)).g['g:1'].o,
-        'Explicit read-all can acknowledge a previously reset branch again.');
+        'The bulk visit action can complete a previously reset branch again.');
     document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
     check(panel.hidden && document.activeElement === bell,
         'Escape must close the panel and return focus to the bell.');
@@ -145,18 +167,28 @@ try {
     document.getElementById('outside').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
     check(panel.hidden, 'Outside interaction must dismiss the contextual panel.');
     bell.click();
-    window.confirm = () => false;
-    panel.querySelector('[data-visit-reset]').click();
-    check(JSON.parse(localStorage.getItem(key)).g['g:1'].o,
-        'Cancelling reset must preserve direct visits.');
-    window.confirm = () => true;
-    panel.querySelector('[data-visit-reset]').click();
+    nodes['g:1'].watermark['m:1:0']++;
+    window.dispatchEvent(new StorageEvent('storage',{key}));
+    check(!panel.querySelector('[data-visit-news-actions]').hidden,
+        'New content must restore its own acknowledgement action.');
+    const baseline = JSON.stringify(JSON.parse(localStorage.getItem(key)).g['g:1'].b);
+    window.confirm = () => { throw new Error('Reversible visit toggles need no confirmation.'); };
+    visitToggle.click();
     await until(() => !JSON.parse(localStorage.getItem(key)).g['g:1'].o,
-        'Confirmed reset must return to an unvisited first observation.');
-    check(!document.querySelector('[data-visit-icons] .is-new'),
-        'Reset must initialize current content without inventing a new-content alert.');
+        'An already complete graph must toggle back to unvisited.');
+    check(document.querySelector('[data-visit-icons] .is-new')
+        && JSON.stringify(JSON.parse(localStorage.getItem(key)).g['g:1'].b) === baseline,
+        'The inverse visit action must retain unread content and its baseline.');
+    visitToggle.click();
+    await until(() => JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'The next click must complete visits again.');
+    check(document.querySelector('[data-visit-icons] .is-new'),
+        'Completing visits must not dismiss notifications.');
+    readAll.click();
+    await until(() => !document.querySelector('[data-visit-icons] .is-new'),
+        'Only notification acknowledgement should dismiss New without navigation.');
     check(localStorage.getItem(other) === 'untouched',
-        'Bulk acknowledgement and reset must leave other installations untouched.');
+        'Both bulk actions must leave other installations untouched.');
     const longHistory = JSON.parse(localStorage.getItem(key));
     nodes['g:1'].watermark['m:1:0']++;
     for (let id = 2; id <= LONG_LIST_COUNT; id++) {
@@ -177,6 +209,30 @@ try {
         'Only the overflowing long list should scroll.');
     check(panel.querySelector('[data-visit-read-all]').getBoundingClientRect().bottom
         <= viewportHeight, 'Bulk actions must stay visible outside the scrolling list.');
+    check(visitToggle.getBoundingClientRect().bottom <= viewportHeight,
+        'The independent visit toggle must remain below the scrolling list.');
+    config.ready = false;
+    window.dispatchEvent(new StorageEvent('storage',{key}));
+    check(notificationList.children.length === 0
+        && panel.querySelector('[data-visit-news-actions]').hidden
+        && panel.classList.contains('is-visits-only')
+        && !panel.querySelector('[data-visit-message]'),
+        'Missing, dirty or unknown evidence must show neither technical warnings nor false empty claims.');
+    const unknownBaselines = JSON.stringify(JSON.parse(localStorage.getItem(key)).g['g:1'].b);
+    visitToggle.click();
+    await until(() => Object.entries(JSON.parse(localStorage.getItem(key)).g)
+        .filter(([id]) => id !== 'r:0').every(([, record]) => record.o),
+        'Bulk visits must remain available independently of notification evidence.');
+    check(JSON.stringify(JSON.parse(localStorage.getItem(key)).g['g:1'].b) === unknownBaselines,
+        'Visits without evidence must preserve content acknowledgements.');
+    const nativeSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new Error('Fixture blocks persistent storage.'); };
+    visitToggle.click();
+    await until(() => panel.querySelector('[data-visit-help]').textContent === config.strings.unavailable,
+        'Blocked storage should produce a quiet tab-lifetime note below the visit action.');
+    Storage.prototype.setItem = nativeSetItem;
+    check(!panel.querySelector('[data-visit-message]'),
+        'Storage limitations must not replace the notification overview.');
     document.getElementById('results').textContent = 'BROWSER PASS visitor progress and anchored panel';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL ' + error.stack;
