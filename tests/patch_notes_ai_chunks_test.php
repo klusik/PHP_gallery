@@ -149,6 +149,16 @@ try {
         . '/'
         . substr($manifest['levels'][0]['parts'][0]['prompt'], 0, -7)
         . '.md';
+    $acceptedSummary = file_get_contents($summaryPath);
+    file_put_contents($summaryPath, "NOTES_REVIEW_REQUIRED\r\n");
+    $refused(static fn(): string => patch_notes_chunks_summary(
+        $summaryPath,
+    ), 'requested external editorial review');
+    file_put_contents($summaryPath, $acceptedSummary);
+    $check(
+        patch_notes_chunks_summary($summaryPath) === trim($acceptedSummary),
+        'An explicit review request must not make a subsequent complete digest invalid.',
+    );
     file_put_contents($summaryPath, str_repeat(
         'x',
         PATCH_NOTES_AI_DIGEST_BYTES + 1,

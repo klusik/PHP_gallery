@@ -80,6 +80,22 @@ record/check. Its immutable origin remains on the release branch. Evidence,
 artifact-upload, filesystem and actual assembly errors still fail normally.
 Completed maintainer-written version sections skip all generation.
 
+New patch notes link every evidenced issue/PR directly addressed by a described
+change in the current release. Complete commit metadata includes each commit's
+changed paths so the generator can match references to the source diff and
+path-preserving digests. Previous notes supply style only. Historical examples
+and routine origin/predecessor/version/manifest updates do not establish current
+issue work. Release initialization and the PR wrapper add no fixed references;
+actual new fixes to older issues remain eligible.
+
+Copilot may return exactly `NOTES_REVIEW_REQUIRED` when an evidence extraction
+or final synthesis cannot be completed reliably, including a material unresolved
+issue-to-change relationship. Digest/prose validation rejects that signal and
+the existing pending path exports the complete external JSON handoff. Ordinary
+admitted work still uses Copilot automatically; byte/file/context limits and
+setup/provider/quota/timeout/invalid-output fallback remain unchanged. Editorial
+relevance is a model/reviewer decision, not a property proven by format checks.
+
 To continue:
 
 1. Download that Actions artifact and give `prompt.txt` to your chosen AI. It

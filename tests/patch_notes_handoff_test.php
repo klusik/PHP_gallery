@@ -139,6 +139,12 @@ try {
         ),
         'The artifact includes the actual maintained template.',
     );
+    $instructions = (string) file_get_contents($directory . '/README.md');
+    $check(
+        str_contains($instructions, 'every issue actually addressed by a current change')
+            && str_contains($instructions, 'incidental or inherited references do not qualify'),
+        'External editorial review must retain the contextual reference policy.',
+    );
     $notes =
         "## Version 1.2.3\n\n### Highlights\n- Preserved žluťoučký source.\n\n"
         . '### Technical Details'
@@ -200,6 +206,12 @@ try {
             $identity,
         ));
     }
+    $reviewResponse = $response;
+    $reviewResponse['notes_markdown'] = 'NOTES_REVIEW_REQUIRED';
+    $refused(static fn(): string => patch_notes_handoff_response(
+        json_encode($reviewResponse, JSON_THROW_ON_ERROR),
+        $identity,
+    ));
     $refused(static fn(): array => patch_notes_handoff_bundle(
         $large,
         $directory,

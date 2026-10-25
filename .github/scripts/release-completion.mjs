@@ -166,7 +166,7 @@ export function openQualifiedPullRequest(record,repository,notes,adapters={}) {
         maintainer_can_modify:false,body:'Qualified head Q: `'+record.candidate_sha+'`\n\n'
             +'[Complete qualification and manual publication assets](https://github.com/'+repository+'/actions/runs/'+record.run_id+')\n\n'
             +'Approve this exact head once. Automatically dispatched completion preserves the protected standard merge, immutable tag and safe develop FF. '
-            +'GitHub Release publication remains manual.\n\n'+notes+'\n\nRefs #101, #133'});
+            +'GitHub Release publication remains manual.\n\n'+notes});
     requireBotPullRequest(pr,repository,record.candidate_sha,'main');
     if (pr.base?.sha!==base || requireCurrentMainBase(request,repository,{...adapters,api:call,record})!==base
         || call('repos/'+repository+'/git/ref/heads/'+record.branch).object?.sha!==record.candidate_sha) {

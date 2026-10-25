@@ -3793,6 +3793,17 @@ s~reprodukovatelným časem a~nakonec obnoví inventář a~úplný manifest.
 Změněné vstupy WinApp vyžadují instalátor; jinak se~zachová jeho
 samostatná verze a~ověřené existující soubory.
 
+Nové patch notes odkazují na~každé doložené issue či~PR přímo řešené popsanou
+změnou daného vydání. Úplná metadata obsahují změněné cesty každého commitu
+pro~porovnání se~zdrojovým diffem a~souhrny podkladů. Starší poznámky slouží
+jen jako vzor stylu; historické příklady ani rutinní release metadata
+nedokládají aktuální práci na~issue. Zprávy inicializace releasu ani obal PR
+nepřidávají pevné reference. Skutečná nová práce na~starším issue může odkaz mít.
+Pokud extrakci, sloučení podkladů či~podložené generování nelze spolehlivě
+dokončit, například kvůli nevyřešené zásadní vazbě issue na~změnu, může Copilot
+vrátit \codeword{NOTES_REVIEW_REQUIRED}. Validace pak použije stejné předání
+externí AI přes JSON popsané níže. Kontrola formátu neprokazuje věcnou relevanci.
+
 Hotový redakční text zůstává zachován; jinak se~použije ohraničené
 generování Copilotem z~úplných Git podkladů. Automatická cesta připustí nejvýše
 100000 bajtů diffu, 20 zdrojových souborů a~180000 bajtů promptu ještě před

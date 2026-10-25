@@ -3815,6 +3815,18 @@ och~skapar till~sist inventering och~fullständigt manifest.
 Ändrade WinApp-indata kräver installeraren; annars bevaras dess oberoende
 version och~verifierade befintliga filer.
 
+Nya patch notes länkar varje belagt issue eller~PR direkt vid~den ändring
+som~behandlar det~i~aktuell release. Fullständiga commitmetadata innehåller varje
+commits ändrade sökvägar för~jämförelse med~källdiff och~underlagssammandrag.
+Tidigare anteckningar ger~endast stil; historiska exempel och~rutinmässiga
+releasemetadata belägger inget aktuellt issuearbete. Originmeddelanden
+och~PR-omslag lägger inte till fasta referenser. Nytt arbete med~äldre issues
+kan~fortfarande länkas. Kan~Copilot inte slutföra extraktion, sammanställning
+eller~belagd syntes tillförlitligt, exempelvis vid~en väsentlig oklar
+issuekoppling, får~det~returnera \codeword{NOTES_REVIEW_REQUIRED}.
+Valideringen använder då~samma externa JSON-överlämning som~beskrivs nedan.
+Formatkontroller bevisar inte semantisk relevans.
+
 Färdig redaktionell text bevaras; annars används begränsad Copilot-generering
 med~fullständiga Git-underlag. Före leverantörsinstallationen tillåter automatiken
 högst 100000 diffbyte, 20 källfiler och~180000 promptbyte. Större ändringar,

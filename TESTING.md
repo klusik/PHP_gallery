@@ -1439,6 +1439,17 @@ deterministic chunk orchestration but cannot validate Copilot entitlement,
 provider quotas or editorial quality without a release run using
 `COPILOT_GITHUB_TOKEN`.
 
+The real Git evidence fixture separates a feature reference and its changed
+paths from a historical origin-only reference and previous-release style links.
+It retains every quoted byte while checking the contextual output contract.
+Digest and final-prose validation reject an exact `NOTES_REVIEW_REQUIRED`
+response so the existing provider-failure path can export external work;
+external JSON cannot apply that signal as completed notes. The handoff fixture
+retains the same relevance instructions and source identity. The real-Git
+release completion fixture verifies that new origin messages and PR wrappers
+inject no historical references while preserving contextual links in supplied
+notes. These checks do not prove semantic issue selection by a real model.
+
 The release-note evidence regression also verifies that the generation contract
 and validator share all three mandatory main headings, including for
 tooling-only releases with no direct public behavior change. Missing headings,

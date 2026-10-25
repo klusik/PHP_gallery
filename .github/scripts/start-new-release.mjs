@@ -98,7 +98,7 @@ export function startNewRelease(request,repository,adapters={}) {
         entries.push({path:file,mode:'100644',type:'blob',sha:blob.sha});
     }
     const tree=call('repos/'+repository+'/git/trees','POST',{base_tree:source.tree.sha,tree:entries});
-    const commit=call('repos/'+repository+'/git/commits','POST',{message:'Initialize immutable origin for v_'+request.version+' (Refs #101, #133)',tree:tree.sha,parents:[request.selected]});
+    const commit=call('repos/'+repository+'/git/commits','POST',{message:'Initialize immutable origin for v_'+request.version,tree:tree.sha,parents:[request.selected]});
     if (!/^[a-f0-9]{40}$/.test(commit.sha ?? '') || commit.parents?.length!==1
         || commit.parents[0].sha!==request.selected) throw new Error('BLOCKED origin lost its exact single parent.');
     if (matchingBranchSha(call,repository,branch)!==head || !absent()

@@ -456,6 +456,20 @@ quota exhaustion, first-install GitHub input UI and live continuation acceptance
 remain unknown until a maintainer release exercises them. No historical release,
 tag, approved tree, asset or source-qualification protocol is retired.
 
+The same owners retain contextual issue references in the canonical prompt and
+external bundle. Per-commit changed paths preserve the reference-to-change
+context; old style examples and routine release bookkeeping confer no current
+issue relevance. Fixed historical references are no longer added to new origin
+commits or PR wrappers. Already completed notes and historical commits remain
+authoritative; there is no issue-number blacklist. An exact
+`NOTES_REVIEW_REQUIRED` model response permanently supports explicit inability
+to extract/consolidate evidence or produce grounded notes, including a material
+unresolved issue relationship. Existing validation routes it to the same
+source-bound JSON handoff. Deterministic fixtures cover signal rejection and
+unchanged transport/provenance; live model judgment and use remain unknown until
+release acceptance. Retain external support while provider/context limitations
+or maintainer editorial review may require it.
+
 ## Telemetry storage and historical aggregates
 
 Successful public HTML visits now supply private telemetry-only worker requests

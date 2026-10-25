@@ -3928,6 +3928,18 @@ festgelegtem TinyTeX und~reproduzierbarer Zeit und~erzeugt zuletzt Inventar
 und~vollständiges Manifest. Geänderte WinApp-Eingaben benötigen den~Installer;
 sonst bleiben unabhängige Version und~geprüfte vorhandene Dateien erhalten.
 
+Neue Patch Notes verlinken jedes belegte Issue oder~PR direkt bei~der Änderung,
+die~es~im~aktuellen Release behandelt. Vollständige Commit-Metadaten enthalten
+die~geänderten Pfade jedes Commits zum~Abgleich mit~Quell-Diff und~Belegdigest.
+Frühere Notizen liefern nur~den Stil; historische Beispiele und~routinemäßige
+Release-Metadaten belegen keine aktuelle Issue-Arbeit. Origin-Nachrichten
+und~PR-Rahmentext ergänzen keine festen Referenzen. Neue Arbeit an~älteren Issues
+bleibt zulässig. Kann Copilot Extraktion, Zusammenführung oder~belegte Synthese
+nicht zuverlässig abschließen, etwa bei~einer wesentlichen ungeklärten
+Issue-Beziehung, darf es~\codeword{NOTES_REVIEW_REQUIRED} zurückgeben.
+Die~Validierung nutzt dann dieselbe unten beschriebene externe JSON-Übergabe.
+Formatprüfungen beweisen keine inhaltliche Relevanz.
+
 Fertiger redaktioneller Text bleibt erhalten; andernfalls arbeitet die
 begrenzte Copilot-Erzeugung mit~vollständigen Git-Belegen. Vor~der Einrichtung
 des~Anbieters erlaubt die~Automatik höchstens 100000 Diff-Bytes, 20 Quelldateien
