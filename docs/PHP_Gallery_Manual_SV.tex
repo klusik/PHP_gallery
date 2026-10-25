@@ -2852,6 +2852,16 @@ tills den stängs.
 
 \subsection{Migreringar}
 
+Migreringscallbackar använder den uttryckliga databasanslutningen och fristående
+migreringsmodeller. Filbytet laddar inte om en redan inkluderad körningsmodell;
+\codeword{require\_once} behåller dess gamla definitioner. Det första innehållsindexet
+använder därför en separat modell med fasta migreringsgränser. FULL kör den riktiga
+callbacken efter en gammal laddad modell och ett filbyte med fyllda fysiska och
+smarta gallerier, PDF och musik. Äldre seed-symboler, återkörning, uppskjuten
+valfri beredskap och SQL-återställning testas också. Databasdelar använder isolerad
+MySQL/MariaDB, medan källkodsdelar använder en isolerad SQLite-adapter.
+Tester av en nyinstallation är fortsatt en separat kontroll.
+
 Schemaändringar ligger i tidsstämplade PHP-filer under \filepath{database/migrations/}. Migreringsköraren förvaliderar väntande definitioner, tillämpar dem i filnamnsordning och registrerar lyckade versioner. Nytt schemaarbete får en ny migreringsfil så att befintliga installationer behåller en deterministisk historik.\footnote{Vissa migreringar innehåller reparationsfunktioner utöver SQL. Kompatibilitetstester skyddar partiella uppdateringsfall där en äldre körare möter nyare migreringsdefinitioner.}
 
 Kontroller av databasberedskap sparas bara för aktuell PHP-begäran. Det minskar normalt upprepade metadatafrågor, men en migrering kan ändra svaret medan samma administrations-, installations-, uppdaterings- eller kommandoradsprocess fortfarande körs. Migreringsköraren rensar därför de sparade svaren efter schemaändrande satser och efter lyckade reparationsfunktioner. En kontroll efter migreringen läser då den nya databaskatalogen i stället för att återanvända ett svar från före migreringen. Vanliga migreringssatser som enbart ändrar data rensar inte beredskapscachen eftersom de inte kan skapa eller ta bort en tabell, ett fält eller ett index.

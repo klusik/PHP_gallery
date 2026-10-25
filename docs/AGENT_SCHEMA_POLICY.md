@@ -52,6 +52,14 @@ bootstrap, and successful repair callbacks must clear request-local schema
 inspection results before same-process validation. Data-only statements should
 not invalidate schema capability state.
 
+Migration callbacks must also tolerate an older runtime owner already included
+before updater activation. Replacing its bytes and using `require_once` cannot
+provide newly added functions in that PHP process. Load migration-owned bootstrap
+files with independent symbols and use the explicit PDO; do not couple a callback
+to new runtime adapters or silently swallow undefined-function failures. Cover
+actual callback execution after an old-model/file-swap vector, populated branches,
+replay and SQL-error rollback in hosted integration, alongside fresh installation.
+
 ## Gallery access and administrator authentication
 
 The converted gallery access/visibility/share-token and administrator

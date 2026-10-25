@@ -2937,6 +2937,16 @@ Geöffnete Hilfe bleibt bis zum Schließen zugänglich.
 
 \subsection{Migrationen}
 
+Migrationscallbacks verwenden die explizite Datenbankverbindung und unabhängige
+Migrationsmodelle. Der Dateiaustausch lädt ein bereits eingebundenes Laufzeitmodell
+nicht erneut; \codeword{require\_once} behält dessen alte Definitionen. Der erste
+Inhaltsindex verwendet deshalb ein separates Modell mit festen Migrationsgrenzen.
+FULL führt den echten Callback nach geladenem Altmodell und Dateiaustausch mit
+gefüllten physischen Galerien, Smart Galleries, PDF und Musik aus. Alte
+Seed-Symbole, Wiederholung, optionale Bereitschaft und SQL-Rollback sind abgedeckt.
+Datenbank-Shards verwenden isolierte MySQL/MariaDB-Datenbanken, Quellcode-Shards
+einen isolierten SQLite-Adapter. Tests der Erstinstallation bleiben separat.
+
 Schemaänderungen liegen in PHP-Dateien mit Zeitstempel unter \filepath{database/migrations/}. Der Migrationsläufer prüft ausstehende Definitionen vorab, wendet sie in Dateinamenreihenfolge an und vermerkt erfolgreiche Versionen. Neue Schemaarbeit erhält eine neue Migrationsdatei, damit vorhandene Installationen einen deterministischen Verlauf behalten.\footnote{Manche Migrationen enthalten neben SQL auch Reparaturcallbacks. Kompatibilitätstests schützen Teilaktualisierungsszenarien, in denen ein älterer Läufer auf neuere Migrationsdefinitionen trifft.}
 
 Datenbankbereitschaftsprüfungen werden nur für die aktuelle PHP-Anfrage gespeichert. Das verringert normalerweise wiederholte Metadatenabfragen; eine Migration kann die Antwort jedoch ändern, während derselbe Administrations-, Installations-, Aktualisierungs- oder Befehlszeilenprozess noch läuft. Der Migrationsläufer leert daher diese gespeicherten Antworten nach schemaändernden Anweisungen und erfolgreichen Reparaturcallbacks. Eine Prüfung nach der Migration liest dann den neuen Datenbankkatalog, statt eine Antwort von vorher wiederzuverwenden. Gewöhnliche reine Datenmigrationsanweisungen leeren den Bereitschaftscache nicht, weil sie keine Tabelle, kein Feld und keinen Index erstellen oder entfernen können.

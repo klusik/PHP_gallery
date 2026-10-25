@@ -32,11 +32,14 @@ return ['statements' => [
         KEY gallery_visit_content_lanes (node_key, lane_key, revision)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ], 'after' => static function (\PDO $pdo): void {
-    require_once dirname(__DIR__, 2) . '/app/models/galleries.php';
+    // A newly activated runtime model may already be included from old code.
+    // Load the dedicated migration owner by its independent, stable file path.
+    require_once dirname(__DIR__, 2)
+        . '/app/models/gallery_visit_content_migration.php';
     require_once dirname(__DIR__, 2) . '/app/models/smart_galleries.php';
     try {
-        \Gallery\Models\gallery_visit_content_model_seed($pdo);
-    } catch (\Gallery\Models\GalleryVisitContentNotReady) {
+        \Gallery\Models\gallery_visit_migration_model_seed($pdo);
+    } catch (\Gallery\Models\GalleryVisitMigrationNotReady) {
         // Bounded optional data readiness must not block a core upgrade. Keep
         // the index dirty and public New explicitly unavailable; SQL failures
         // still propagate through the normal retryable migration lifecycle.

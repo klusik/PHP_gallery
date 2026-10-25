@@ -2,6 +2,17 @@
 
 ## Visitor progress and notification bell
 
+`gallery_visit_migration_upgrade_test.php` preloads an old gallery model, replaces
+its file in an owned application copy and executes the actual migration callback.
+The negative control must reproduce undefined function reference `F05D71A153A2`.
+Populated physical, Smart, PDF and music branches must then seed through the
+explicit PDO without using the poisoned runtime adapter. A previous seed symbol
+also remains loaded without collisions. Replay, dirty attachment deferral and
+SQL-error rollback stay covered. Source owners use in-memory SQLite with only
+INSERT IGNORE spelling and CONCAT adapted; database owners execute the unchanged
+SQL against private disposable MySQL/MariaDB databases. The existing FULL PHP
+discovery includes this test without a parallel workflow registry.
+
 `gallery_visit_progress_test.mjs` exercises the production browser policy:
 first-observation/visit separation, physical/Smart identity separation, deep
 bottom-up completion, independent New states, new child/root discovery,

@@ -225,7 +225,9 @@ cross-layer leakage is immediately release-blocking.
 Visitor progress/notifications: controller preparation in
 `app/controllers/public_gallery_cards.php`; hierarchy and scoped content policy
 in `app/services/gallery_lookup.php`; SQL in `app/models/galleries.php` and
-`app/models/smart_galleries.php`; readiness in
+`app/models/smart_galleries.php`; initial migration SQL in the independent
+`app/models/gallery_visit_content_migration.php`, exercised by
+`tests/gallery_visit_migration_upgrade_test.php`; readiness in
 `app/services/presentation_schema_policy.php`; bell in `app/views/layout.php`;
 inline identities in `app/views/public_gallery_cards.php`; browser policy in
 `public/assets/gallery-modules/gallery-visit-progress.js`; styles in

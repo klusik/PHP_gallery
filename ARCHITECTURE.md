@@ -12,8 +12,12 @@ branch; unrelated listings receive no unlisted/private hierarchy.
 Tag cards may independently seed an authorized listed branch without creating
 a direct visit or disclosing an inaccessible ancestor.
 
-The existing gallery/Smart models own content membership SQL. A migration seeds
-historical membership once using its explicit PDO connection. Content owners
+The existing gallery/Smart models own runtime content membership SQL. The
+standalone `gallery_visit_content_migration.php` model owns initial seeding on
+the migration's explicit PDO. Its independent filename and symbols tolerate an
+older gallery model already included before updater activation; `require_once`
+cannot reload that older model. Frozen admission limits and migration-owned
+attachment reads avoid coupling to old runtime adapters. Content owners
 then reconcile identified physical sources or Smart definitions only. Pending
 scopes and a generation lease prevent interrupted/concurrent work from becoming
 false evidence. Original mutations and locks remain owned by their existing
@@ -75,11 +79,12 @@ existing schema diagnostics remain authoritative. The footer visit toggle
 remains available independently. Blocked storage changes only its quiet
 local-history note to explain the current tab's lifetime.
 
-Runtime ownership review: this batch adds no PHP runtime file or logical module;
-it extends existing gallery, Smart, layout and presentation-policy owners. The
-previous 98-module plan and existing route/file/duplicate ratchets remain
-unchanged. Hosted preparation must establish actual dependency closure deltas;
-source BASIC and local browser smoke do not establish FULL qualification.
+The migration-only model is loaded by its callback, outside ordinary HTTP
+dependency roots. Existing gallery, Smart, layout and presentation-policy owners
+retain runtime responsibilities. The expected plan remains 98 modules with
+unchanged route/file/duplicate limits; hosted preparation establishes actual
+dependency closure deltas. Source BASIC and local browser smoke do not establish
+FULL qualification.
 
 ## Unified visitor scheduler
 

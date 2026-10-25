@@ -20,8 +20,13 @@ New information is explicitly unavailable.
 An oversized seed or unfinished attachment snapshot leaves the derived index
 dirty without blocking the core upgrade. SQL/schema failures still propagate
 through normal migration recovery. After resolving data readiness, an explicit
-maintainer operation can retry `gallery_visit_content_model_seed($pdo)` on the
-same migration-owned connection; page views never perform this repair.
+maintainer operation can load `app/models/gallery_visit_content_migration.php`
+and the Smart query compiler, then retry `gallery_visit_migration_model_seed($pdo)`
+on the same explicit connection; page views never perform this repair.
+The migration-owned model is independent of `galleries.php` already loaded by
+an older updater request. Its initial admission limits and attachment SQL are
+frozen with the migration rather than delegated to changing runtime adapters.
+Completed seeds remain unchanged; unrecorded failed migrations replay normally.
 
 ## Scheduler observations
 
