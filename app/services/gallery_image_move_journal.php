@@ -968,7 +968,12 @@ function gallery_image_move_recover(string $operationId): array
             (int) $job['source_gallery_id'],
             (int) $job['destination_gallery_id'],
         ]);
-        return gallery_image_move_recover_locked($operationId);
+        $result = gallery_image_move_recover_locked($operationId);
+        gallery_visit_content_update([
+            (int) $job['source_gallery_id'],
+            (int) $job['destination_gallery_id'],
+        ]);
+        return $result;
     } finally {
         try {
             gallery_image_move_release_locks($locks);

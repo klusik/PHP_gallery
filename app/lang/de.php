@@ -33,6 +33,21 @@
  */
 
 return [
+    'gallery.visit.mark_unseen' => 'Diese Galerie mit ihren Untergalerien als unbesucht markieren',
+    'gallery.visit.content_unavailable' => 'Informationen zu neuen Inhalten sind vorübergehend nicht verfügbar.',
+    'gallery.visit.unseen' => 'Noch nicht besucht',
+    'gallery.visit.partial' => 'Teilweise besucht',
+    'gallery.visit.seen' => 'Besucht',
+    'gallery.visit.new' => 'Neue Inhalte',
+    'gallery.visit.empty' => 'Keine neuen Inhalte.',
+    'gallery.visit.unavailable' => 'Der Verlauf kann nicht gespeichert werden und gilt nur in diesem Tab.',
+    'gallery.visit.reset_confirm' => 'Besuchsverlauf und Inhaltsmarkierungen für diese Galerieinstallation löschen?',
+    'gallery.visit.bell' => 'Was ist neu',
+    'gallery.visit.updated' => 'Alle verfügbaren Inhalte sind als gelesen markiert.',
+    'gallery.visit.close' => 'Schließen',
+    'gallery.visit.local' => 'Der Verlauf wird nur in diesem Browser gespeichert.',
+    'gallery.visit.read_all' => 'Alles als gelesen markieren',
+    'gallery.visit.reset' => 'Besuchsverlauf löschen',
     'lightbox.map_route_start' => 'Routenstart',
     'lightbox.map_route_end' => 'Ziel',
     'lightbox.map_waypoint' => 'Wegpunkt',

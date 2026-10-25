@@ -1211,8 +1211,11 @@ function gallery_trash_cover_relative_path(array $gallery): ?string
  * every listing, scanner, and public route without any additional filtering.
  *
  * @param array<int,int> $galleryIds Gallery identifiers selected by the administrator.
- * @param array<string,mixed> $options Optional user_id and deleted_from context.
- * @return array{requested_root_count:int,root_count:int,row_count:int,image_count:int,missing_folders:int,failed_root_count:int,entries:array<int,string>,failures:array<int,array<string,mixed>>} Structured result data for the caller.
+ * @param array{user_id?:int,deleted_from?:string} $options Administrator and origin.
+ * @return array{requested_root_count:int,root_count:int,row_count:int,
+ *     image_count:int,missing_folders:int,failed_root_count:int,
+ *     entries:list<string>,failures:list<array{gallery_id:int,error:string}>}
+ *     Recoverable Trash tokens and independent per-root failures.
  */
 function move_gallery_subtrees_to_trash(
     array $galleryIds,
@@ -1301,6 +1304,8 @@ function move_gallery_subtrees_to_trash_owned(
     $imageCount = 0;
     // $missingFolders stores metadata-only roots whose folder was already absent on disk.
     $missingFolders = 0;
+    // Reuse the already captured successful subtree identities for the index.
+    $visitScopes = [];
 
     foreach ($keptRoots as $rootGallery) {
         // $folderPath stores the normalized root folder path.
@@ -1405,6 +1410,8 @@ function move_gallery_subtrees_to_trash_owned(
             $rowCount += $deletedRows;
             $imageCount += (int) ($snapshot['image_count'] ?? 0);
             $entries[] = $trashToken;
+            $visitScopes = array_merge($visitScopes, $subtreeIds,
+                [(int) ($rootGallery['parent_id'] ?? 0)]);
         } catch (Throwable $exception) {
             if ($databaseOutcomeUnknown) {
                 // Preserve PREPARING/TRASHED plus the isolated payload exactly as they stand.
@@ -1460,6 +1467,7 @@ function move_gallery_subtrees_to_trash_owned(
     }
 
     if ($entries) {
+        gallery_visit_content_update($visitScopes);
         // The trash mutations above are already durably committed. A cache/public-path refresh
         // failure must not make the caller retry an operation that has in fact succeeded.
         try {
@@ -1855,7 +1863,8 @@ function gallery_trash_refresh_after_structure_change(): void
  * maintenance reconciliation instead of guessing destructively.
  *
  * @param string $trashToken Trash entry token.
- * @param array<string,mixed> $options Reserved for future restore overrides.
+ * @param array<string,scalar|null> $options Reserved scalar restore overrides;
+ *     the current restore implementation does not consume any override keys.
  * @return array{gallery_count:int,image_count:int,root_gallery_id:int,folder_path:string,metadata_only:bool,ancestor_shells_created:int} Structured result data for the caller.
  */
 function restore_gallery_trash_entry(
@@ -2193,6 +2202,10 @@ function restore_gallery_trash_entry_owned(
             // A later maintenance/deploy cleanup may remove the non-authoritative leftover.
         }
 
+        // Finalization has committed; the index follows only restored identities.
+        gallery_visit_content_update(array_merge(
+            array_values($galleryIdsByPath), $ancestorShellIds,
+        ));
         return [
             'gallery_count' => count($galleryIdsByPath),
             'image_count' => $imageCount,

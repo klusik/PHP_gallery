@@ -947,6 +947,7 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     if ($gallery) {
         write_gallery_sidecar($gallery);
     }
+    gallery_visit_content_update([$createdGalleryId]);
     return $gallery;
 }
 
@@ -1193,6 +1194,7 @@ function create_empty_gallery_owned(array $input): array
     }
     write_gallery_sidecar($gallery);
     gallery_attachment_usage_seed_known_empty($gallery);
+    gallery_visit_content_update([(int) $gallery['id']]);
     return $gallery;
 }
 

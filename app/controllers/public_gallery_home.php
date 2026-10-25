@@ -342,6 +342,7 @@ function cms_home(): void
     }
 
     $homeCreation = public_home_admin_creation_view_model($homeGalleryCount);
+    public_gallery_visit_progress();
     \Gallery\Views\view_render_public_gallery_home([
         'site_name' => site_name(),
         'canonical_url' => url_for('home'),

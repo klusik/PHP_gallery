@@ -43,9 +43,17 @@ use function Gallery\Models\image_model_update_fields;
  * Persist semantic image editor fields and update the row timestamp.
  *
  * @param int $imageId Image identifier.
- * @param array<string,mixed> $fields Editable image column-value map.
+ * @param array{title?:string|null,description?:string|null,visibility?:string,
+ *     sort_order?:int,editorial_rating?:int|null,nsfw_enabled?:int,
+ *     thumbnail_min_size?:int|null,thumbnail_max_size?:int|null} $fields
+ *     Semantic fields admitted by the existing image model.
+ * @return void Persists the fields and refreshes this source's membership only.
  */
 function image_editor_update_fields(int $imageId, array $fields): void
 {
     image_model_update_fields($imageId, $fields, now_sql());
+    $image = find_image($imageId, true);
+    if (is_array($image)) {
+        gallery_visit_content_update([(int) $image['gallery_id']]);
+    }
 }

@@ -352,6 +352,21 @@ function presentation_gallery_attachment_usage_schema_status(): array
     );
 }
 
+/**
+ * Inspect optional server content evidence without reading visitor history.
+ * @return array{state:string,feature:string,requirements:list<array{
+ *     state:string,object_type:string,table:string,object:string,
+ *     error_code:string,diagnostic:string}>} Three-state index storage readiness.
+ */
+function presentation_gallery_visit_content_schema_status(): array
+{
+    return presentation_schema_tables_status('gallery_visit_content', [
+        'gallery_visit_content_state' => ['id', 'generation', 'revision', 'dirty'],
+        'gallery_visit_content_members' => ['node_key', 'item_key', 'lane_key', 'revision'],
+        'gallery_visit_content_pending' => ['scope_key'],
+    ]);
+}
+
 /** Return schema readiness for live music digest expansion during card reads.
  * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Required current album membership and canonical asset columns.
  */
@@ -837,6 +852,11 @@ function presentation_schema_health_definitions(): array
             'resolver' => static fn(): array =>
                 presentation_gallery_attachment_usage_music_schema_status(),
             'flag' => 'gallery_music',
+        ],
+        'presentation_gallery_visit_content' => [
+            'resolver' => static fn(): array =>
+                presentation_gallery_visit_content_schema_status(),
+            'flag' => '',
         ],
     ];
 }

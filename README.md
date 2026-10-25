@@ -60,7 +60,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.143.3
+**Current Version:** 0.144
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -167,6 +167,23 @@ language. See [manual build instructions](docs/LATEX_BUILD.md) for rebuilding
 the PDFs.
 
 ## Core Features
+
+### Browser-local gallery progress and notifications
+
+Public gallery titles carry small inline Unseen, Partial or Seen icons and an
+independent New-content sparkle. A branch is complete only after its own page
+and every navigable descendant, including placed Smart Galleries, were opened.
+The header bell opens a compact translucent panel beneath the bell with links
+to new content, **Mark all as read**, and confirmation-protected history reset.
+Authenticated administrators never see this feature, including in anonymous
+preview; logging out restores the ordinary visitor interface.
+
+History stays in one bounded installation-scoped `localStorage` record. No
+visitor database, tracking cookie, network tracker or cross-device account
+synchronization is introduced. Blocked storage remains usable for the current
+tab. Apply migration `202610250001_gallery_visit_content.php` before relying
+on New-content detection. See [architecture](ARCHITECTURE.md) and
+[coverage](TESTING.md).
 
 ### Cooperative galleries
 

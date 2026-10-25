@@ -9,9 +9,19 @@ All test commands below describe coverage owned by hosted CI; root CI-first
 rules
 control execution.
 
-For Admin UI work, read [the design contract](../../docs/ADMIN_DESIGN.md).
-New controls follow the compact media-player/WinApp appearance; legacy global
-Admin button and heading rules must not override the intended scoped design.
+For **every visible public or Admin UI change**, automatically read and apply
+[the mandatory design contract](../../docs/ADMIN_DESIGN.md). This is required
+without a user reminder. Use compact translucent media-player/WinApp surfaces,
+Theme tokens, restrained rounding and compact transparent actions. Contextual
+notifications/help open in a small panel beside their trigger, without a modal
+backdrop. A centered blocking dialog requires an explicit task requirement.
+Inspect the real desktop/narrow rendering and computed cascade before handoff;
+legacy global styles and a passing source check do not prove visual compliance.
+Use the approved visitor notification panel in `styles/public-shared.css` and
+`Gallery\Views\view_render_gallery_visit_notifications()` as the default small
+panel pattern: 42% Theme surface, readable blur, quiet line separators, small
+accent icons, outlined primary action and subordinate secondary actions/note.
+Read `docs/ADMIN_DESIGN.md` for the canonical values and responsive requirements.
 
 ## Imports, request lifecycle and presentation
 

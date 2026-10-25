@@ -875,6 +875,9 @@ function scan_gallery_refresh_after_changes(
             regenerate_public_paths();
         }
     }
+    if ($count > 0) {
+        gallery_visit_content_update([(int) $gallery['id']]);
+    }
 }
 
 /**

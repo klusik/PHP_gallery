@@ -1,0 +1,184 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/gallery_visit_progress.html
+Module Type: Browser Fixture
+Purpose: Exercise the production visitor module and real bell markup.
+Responsibilities: Verify independent statuses and a bounded nonmodal panel.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visitor progress fixture</title>
+<link rel="stylesheet" href="/base.css"><link rel="stylesheet" href="/public.css">
+<link rel="stylesheet" href="/shared.css"><link rel="stylesheet" href="/utilities.css">
+<style>
+/* Reproduce the production Theme stacking rule after shared styles. This exact
+   selector previously moved the contextual panel below the page content. */
+.public-page > :not(.theme-background-shell):not(.map-overlay):not(.lightbox) { position:relative; z-index:1; }
+:root { --panel:#fff; --ink:#172033; --accent-dark:#334d7b; --radius:16px; }
+/* The fixed Theme colors/radius and 20rem title width are layout vectors:
+   force wrapping while preserving the production Theme cascade above. */
+.fixture-card { max-width:20rem; }
+</style></head><body class="public-page">
+<header class="site-header"><span>Fixture</span><nav class="nav"><!-- VISIT_MARKUP --></nav></header>
+<main class="site-main"><article class="gallery-card fixture-card" data-visit-key="g:1">
+<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="/gallery/fixture/">A gallery title that naturally wraps across several lines</a></h2></div>
+</article><button id="outside" type="button">Other page action</button></main>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupGalleryVisitProgress} from '/visits.js';
+
+/**
+ * Bound asynchronous Web Locks, storage and rendering observations.
+ * Type: number. Units: milliseconds. Scope: one fixture assertion.
+ * Consumers: until. Rationale: 5000 allows hosted scheduling without fixed sleeps.
+ */
+const WAIT_MS = 5000;
+/**
+ * Match the production public narrow-screen breakpoint.
+ * Type: number. Units: CSS pixels. Scope: this responsive fixture.
+ * Consumers: narrow action assertions. Rationale: 640 selects the owned mobile rule.
+ */
+const NARROW_WIDTH = 640;
+/**
+ * Preserve the shared public touch interaction minimum.
+ * Type: number. Units: CSS pixels. Scope: narrow fixture controls.
+ * Consumers: action geometry assertions. Rationale: 44 is the design contract's target.
+ */
+const TOUCH_TARGET = 44;
+/**
+ * Exercise the explicitly requested long overview without a product count cap.
+ * Type: number. Units: synthetic galleries. Scope: this layout regression.
+ * Consumers: long-list fixture vector. Rationale: 50 exceeds all three viewports.
+ */
+const LONG_LIST_COUNT = 50;
+/**
+ * Allow compact viewport edge gaps and subpixel rounding in height assertions.
+ * Type: number. Units: CSS pixels. Scope: long-list viewport coverage.
+ * Consumers: panel geometry assertions. Rationale: 20 covers two 8px gaps plus rounding.
+ */
+const VIEWPORT_EDGE_ALLOWANCE = 20;
+/**
+ * Await a visible/persisted outcome using animation frames and a hard deadline.
+ * @param {function():boolean} predicate Expected production result.
+ * @param {string} message Safe fixture diagnostic on expiry.
+ * @returns {Promise<void>} Resolves after success; throws on the bounded deadline.
+ */
+async function until(predicate, message) {
+    const deadline = performance.now() + WAIT_MS;
+    while (!predicate()) {
+        if (performance.now() > deadline) throw new Error(message);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+}
+/**
+ * Assert an observable browser outcome.
+ * @param {boolean} value Production behavior or rendered geometry predicate.
+ * @param {string} message Safe fixture failure description.
+ * @returns {void} Continues on success, throws on mismatch.
+ */
+function check(value, message) { if (!value) throw new Error(message); }
+
+try {
+    const key = 'php-gallery.visit-progress.v1:/fixture';
+    const other = 'php-gallery.visit-progress.v1:/other-installation';
+    localStorage.setItem(other, 'untouched');
+    localStorage.setItem(key, JSON.stringify({v:1,epoch:'initial',g:{
+        'g:1':{o:false,b:{'m:1:0':1}},
+    }}));
+    const nodes = {
+        'g:1':{title:'Fixture',url:'/gallery/fixture/',children:[],watermark:{'m:1:0':2}},
+    };
+    setupGalleryVisitProgress({storageKey:key,opened:'',ready:true,nodes,
+        strings:{unseen:'Unseen',partial:'Partial',seen:'Seen',new:'New content',
+        empty:'No new content.',unavailable:'Storage unavailable',content_unavailable:'Index unavailable',
+        reset_confirm:'Clear fixture history?',bell:'What is new',updated:'Read',
+        mark_unseen:'Mark this gallery and its subgalleries as unvisited'}});
+    const bell = document.querySelector('[data-visit-bell]');
+    const panel = document.querySelector('[data-visit-panel]');
+    await until(() => !bell.hidden, 'The public bell was never enabled.');
+    check(document.querySelectorAll('.gallery-visit-icon').length === 3,
+        'Unseen and New title icons plus the notification icon must coexist.');
+    check(document.querySelector('[data-visit-icons]').textContent === '',
+        'Status icons must not introduce visible NEW or status text.');
+    bell.click();
+    check(!panel.hidden && getComputedStyle(panel).position === 'fixed',
+        'The notification surface must float beside its trigger despite Theme stacking.');
+    const rect = panel.getBoundingClientRect();
+    const anchor = bell.getBoundingClientRect();
+    check(rect.top >= anchor.bottom && rect.right <= document.documentElement.clientWidth,
+        'The panel must be anchored beneath the bell and contained horizontally.');
+    check(!document.querySelector('dialog[open]') && !document.querySelector('main').inert,
+        'The surrounding page must remain usable without a blocking modal.');
+    check(getComputedStyle(panel).backdropFilter !== 'none',
+        'The contextual panel must retain the shared translucent treatment.');
+    const notificationList = panel.querySelector('[data-visit-list]');
+    check(notificationList.scrollHeight <= notificationList.clientHeight,
+        'A short list must use natural panel height without a scrollbar.');
+    if (innerWidth <= NARROW_WIDTH) {
+        check([...panel.querySelectorAll('button')].every(button => button.getBoundingClientRect().height >= TOUCH_TARGET),
+            'Narrow panel actions require comfortable 44px targets.');
+    }
+    panel.querySelector('[data-visit-read-all]').click();
+    await until(() => !document.querySelector('[data-visit-icons] .is-new'),
+        'Read-all must acknowledge current content without closing the panel.');
+    check(!panel.hidden && JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'Read-all must persist direct completion in place.');
+    const stateControl = document.querySelector('[data-visit-unseen-key="g:1"]');
+    check(!stateControl.disabled && stateControl.tagName === 'BUTTON',
+        'The inline progress icon must expose an accessible undo control.');
+    stateControl.click();
+    await until(() => !JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'Clicking the progress icon must undo the branch visit.');
+    check(stateControl.disabled && !document.querySelector('[data-visit-icons] .is-new'),
+        'Undo retains content baselines and disables the already-unseen control.');
+    panel.querySelector('[data-visit-read-all]').click();
+    await until(() => JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'Explicit read-all can acknowledge a previously reset branch again.');
+    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    check(panel.hidden && document.activeElement === bell,
+        'Escape must close the panel and return focus to the bell.');
+    bell.click();
+    document.getElementById('outside').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+    check(panel.hidden, 'Outside interaction must dismiss the contextual panel.');
+    bell.click();
+    window.confirm = () => false;
+    panel.querySelector('[data-visit-reset]').click();
+    check(JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'Cancelling reset must preserve direct visits.');
+    window.confirm = () => true;
+    panel.querySelector('[data-visit-reset]').click();
+    await until(() => !JSON.parse(localStorage.getItem(key)).g['g:1'].o,
+        'Confirmed reset must return to an unvisited first observation.');
+    check(!document.querySelector('[data-visit-icons] .is-new'),
+        'Reset must initialize current content without inventing a new-content alert.');
+    check(localStorage.getItem(other) === 'untouched',
+        'Bulk acknowledgement and reset must leave other installations untouched.');
+    const longHistory = JSON.parse(localStorage.getItem(key));
+    nodes['g:1'].watermark['m:1:0']++;
+    for (let id = 2; id <= LONG_LIST_COUNT; id++) {
+        nodes[`g:${id}`] = {title:`New gallery ${id}`,url:`#gallery-${id}`,
+            children:[],watermark:{[`m:${id}:0`]:2}};
+        longHistory.g[`g:${id}`] = {o:false,b:{[`m:${id}:0`]:1}};
+    }
+    localStorage.setItem(key, JSON.stringify(longHistory));
+    window.dispatchEvent(new StorageEvent('storage',{key}));
+    await until(() => notificationList.children.length === LONG_LIST_COUNT,
+        'All authorized new-gallery links must remain in a long overview.');
+    const tall = panel.getBoundingClientRect();
+    const viewportHeight = document.documentElement.clientHeight;
+    check(tall.height >= viewportHeight - VIEWPORT_EDGE_ALLOWANCE
+        && tall.top >= 0 && tall.bottom <= viewportHeight,
+        'The panel must fill the actual viewport before introducing list scrolling.');
+    check(notificationList.scrollHeight > notificationList.clientHeight,
+        'Only the overflowing long list should scroll.');
+    check(panel.querySelector('[data-visit-read-all]').getBoundingClientRect().bottom
+        <= viewportHeight, 'Bulk actions must stay visible outside the scrolling list.');
+    document.getElementById('results').textContent = 'BROWSER PASS visitor progress and anchored panel';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL ' + error.stack;
+}
+</script></body></html>

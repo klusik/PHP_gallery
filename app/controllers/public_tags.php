@@ -169,6 +169,10 @@ function cms_tag(): void
         'back_to_top_html' => $backToTopHtml,
     ];
 
+    public_gallery_visit_progress('', array_map(
+        static fn(array $gallery): string => 'g:' . (int) $gallery['id'],
+        $visibleGalleries,
+    ));
     render_header($pageTitle);
     view_render_public_tag_page($viewModel);
     render_footer();

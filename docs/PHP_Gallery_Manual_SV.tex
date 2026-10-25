@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.143.3}
+\newcommand{\version}{0.144}
 \newcommand{\manualdate}{25~oktober~2026}
 
 \hypersetup{
@@ -1540,6 +1540,47 @@ Ge varje administratör ett eget konto där kontomodellen stöder det avsedda ar
 En besökare öppnar webbplatsens startsida eller följer en direktlänk till ett galleri eller fotografi. Sidan visar webbplatsnamn, navigering, gallerititel, beskrivning, brödsmulor, taggar, undergallerier och fotografier som besökaren har rätt att se. Skyddat innehåll kräver rätt åtkomststeg innan privat material visas.
 
 Varje galleri har en offentlig adress som kan bokmärkas eller delas. En direkt bildadress öppnar gallerisammanhanget och leder besökaren till fotografiet. Meningsfulla titlar och stabila offentliga sökvägar gör länkar begripliga i meddelanden, bokmärken och sökresultat.
+
+\subsubsection{Lokal historik och nytt innehåll}
+
+Små ikoner följer direkt efter gallerititeln även när den radbryts. En tydlig prickad
+cirkel betyder obesökt, en delvis fylld cirkel delvis besökt och en cirkel med
+diskret bock besökt. En fysisk gren är helt besökt först när dess egen sida och alla
+nåbara undergallerier har öppnats. Placerade Smart Galleries räknas som egna
+poster; deras fysiska källor markeras inte som besökta. Omslag, sökresultat och
+bakgrundsanrop räknas inte som besök.
+
+En separat gnista visar innehåll som blivit tillgängligt sedan den första
+observationen eller senaste bekräftelsen i den här webbläsaren. Den kan visas
+med alla besöksstatusar. Att öppna en förälder bekräftar inte nyheter hos
+oöppnade efterkommande gallerier. Kosmetiska ändringar och enbart borttagning
+räknas inte som nytt innehåll.
+
+Klicka på statusikonen bredvid ett korts titel för att markera galleriet och
+dess tillgängliga undergallerier som obesökta igen. Anslutna smarta gallerier
+ingår; deras status delas mellan alla placeringar. Markeringar för nytt innehåll
+bevaras. När galleriet öppnas igen räknas det som ett nytt verkligt besök.
+
+Klockan i sidhuvudet öppnar en liten genomskinlig panel direkt vid knappen,
+utan att tona ned sidan. Följ en gallerilänk för att öppna dess innehåll.
+\emph{Markera allt som läst} markerar alla just nu tillgängliga gallerier som
+besökta och bekräftar deras aktuella innehåll. \emph{Rensa besökshistoriken} kräver
+bekräftelse och återställer installationen till en obesökt första observation,
+utan att märka historiskt innehåll som nytt. Escape eller ett klick utanför
+stänger panelen. Smala skärmar behåller bekväma tryckytor. Panelen följer
+PDF-/musikpanelerna med en genomskinlig temayta, små accentikoner och en kompakt
+konturknapp för att markera allt som läst; rensning av historiken är mer diskret.
+Panelen växer med innehållet upp till fönstrets faktiska höjd, även vid
+webbläsarzoom. Först därefter rullar den kompakta listan; rubrik och åtgärder
+förblir synliga. Ingen fast gräns för antalet nyheter används.
+
+Historiken stannar i webbläsarens lokala lagring separat för varje installation.
+Den synkroniseras inte mellan enheter och skickas inte till servern. Om lagring
+blockeras fungerar den aktuella fliken fortfarande. Otillgänglig information
+om nytt innehåll visas uttryckligen som otillgänglig. Inloggade administratörer
+ser inte funktionen ens i anonym förhandsvisning; efter utloggning visas det
+vanliga besökargränssnittet. Ett framtida Viewer-konto utan administratörsrätt
+behåller samma åtskillnad mellan identiteter.
 
 \subsubsection{Ett typiskt besök}
 

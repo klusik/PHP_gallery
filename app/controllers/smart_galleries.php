@@ -2015,6 +2015,7 @@ function cms_smart_gallery(): void
             $sourceContextCardCount++;
     }
 
+    public_gallery_visit_progress('s:' . (int) $gallery['id']);
     \Gallery\Views\view_render_public_smart_gallery([
         'smart_gallery_id' => (int) $gallery['id'],
         'title' => (string) $gallery['title'],

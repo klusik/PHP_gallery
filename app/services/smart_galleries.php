@@ -1991,6 +1991,7 @@ function smart_gallery_save(array $input, int $id = 0): array
         'updated_at' => $now,
     ], $id);
     smart_gallery_graph_cache_clear();
+    gallery_visit_content_update([], [$id]);
     return (
         smart_gallery_find($id) ?? throw new InvalidArgumentException(
             'The Smart Gallery could not be loaded after saving.',
@@ -2022,12 +2023,17 @@ function smart_gallery_unique_slug(string $value, int $excludeId = 0): string
     );
 }
 
-/** Delete one Smart Gallery definition without touching images or files. */
+/**
+ * Delete one Smart Gallery definition without touching images or files.
+ * @param int $id Stable virtual gallery identity selected by the administrator.
+ * @return void Removes the definition and reconciles only its content scope.
+ */
 function smart_gallery_delete(int $id): void
 {
     smart_gallery_assert_mutation_ready('smart_gallery.delete');
     \Gallery\Models\smart_gallery_model_delete($id);
     smart_gallery_graph_cache_clear();
+    gallery_visit_content_update([], [$id]);
 }
 
 /** Duplicate a definition as a disabled private draft.
@@ -2186,6 +2192,7 @@ function smart_gallery_assign_children_to_gallery(
         now_sql(),
     );
     smart_gallery_graph_cache_clear();
+    gallery_visit_content_update([$galleryId]);
 }
 
 /** Return every physical gallery currently listing one Smart Gallery with per-parent metadata.
@@ -2276,8 +2283,10 @@ function smart_gallery_remove_from_gallery(
         $smartGalleryId,
         $galleryId,
     );
-    if ($removed)
+    if ($removed) {
         smart_gallery_graph_cache_clear();
+        gallery_visit_content_update([$galleryId]);
+    }
     return $removed;
 }
 
@@ -3465,4 +3474,8 @@ function smart_gallery_set_image_rating(int $imageId, int $rating): void
         $rating === 0 ? null : $rating,
         now_sql(),
     );
+    $image = find_image($imageId, true);
+    if (is_array($image)) {
+        gallery_visit_content_update([(int) $image['gallery_id']]);
+    }
 }

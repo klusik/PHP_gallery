@@ -40,6 +40,26 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /** @var list<array{galleries:list<int>,smart:list<int>,transaction_active:bool}> Index notifications. */
+    $musicCatalogVisitUpdates = [];
+
+    /**
+     * Capture the cross-domain index notification without loading visitor policy.
+     * The index SQL and hierarchy have their own production-owner regressions;
+     * this catalog fixture verifies that committed writes notify that boundary.
+     * @param list<int> $galleryIds Explicitly changed physical source identities.
+     * @param list<int> $smartIds Explicitly changed virtual definitions.
+     * @return void Records semantic inputs without changing content or visitors.
+     */
+    function gallery_visit_content_update(array $galleryIds, array $smartIds = []): void
+    {
+        $GLOBALS['musicCatalogVisitUpdates'][] = [
+            'galleries' => $galleryIds,
+            'smart' => $smartIds,
+            'transaction_active' => \Gallery\Core\db()->inTransaction(),
+        ];
+    }
+
     /** Provide deterministic English fallback interpolation for this isolated fixture.
      * The fixture intentionally omits language catalogs, session state and missing-key diagnostics.
      * @param string $key Translation key used when no English fallback is supplied.
@@ -141,6 +161,7 @@ namespace {
     require_once __DIR__ . '/../app/models/database_helpers.php';
     require_once __DIR__ . '/../app/models/public_search.php';
     require_once __DIR__ . '/../app/models/tags.php';
+    require_once __DIR__ . '/../app/models/galleries.php';
     require_once __DIR__ . '/../app/services/music_catalog.php';
     require_once __DIR__ . '/../app/services/gallery_music.php';
     require_once __DIR__ . '/../app/services/tag_metadata.php';
@@ -528,6 +549,11 @@ namespace {
             ]],
             $revision,
         );
+        check(in_array($galleryA,
+                $GLOBALS['musicCatalogVisitUpdates'][array_key_last($GLOBALS['musicCatalogVisitUpdates'])]['galleries'],
+                true)
+            && !$GLOBALS['musicCatalogVisitUpdates'][array_key_last($GLOBALS['musicCatalogVisitUpdates'])]['transaction_active'],
+            'A completed gallery snapshot must notify its source even after clearing its catalog dirty marker.');
         $songId = (int) $pdo->query(
             "SELECT song_id FROM music_track_instances "
             . "WHERE gallery_id = $galleryA "
@@ -718,21 +744,31 @@ namespace {
             'Song and digest bridge must collapse its three sources, retain the authorized downloadable copy, and preserve the unrelated variant.',
         );
         $projectionRevision = $projection['revision'];
+        $GLOBALS['musicCatalogVisitUpdates'] = [];
         $revision = music_catalog_set_song_title(
             $songId,
             'Bridge title revision',
             music_catalog_revision(),
         );
+        check($GLOBALS['musicCatalogVisitUpdates'] !== []
+            && $GLOBALS['musicCatalogVisitUpdates'][0]['galleries'] === []
+            && !$GLOBALS['musicCatalogVisitUpdates'][0]['transaction_active'],
+            'A cosmetic title edit must not invent dirty physical sources.');
         $changedProjection = gallery_music_merge_playlists($sourceRows);
         check(
             $changedProjection['revision'] !== $projectionRevision,
             'A logical title edit must change the merged playlist fingerprint.',
         );
-        $revision = music_catalog_set_song_title(
-            $songId,
-            '',
-            $revision,
-        );
+        // A prior interrupted snapshot is a real pending source even when the
+        // next successful catalog operation only changes display metadata.
+        \Gallery\Models\music_catalog_model_mark_gallery_dirty($galleryA);
+        $GLOBALS['musicCatalogVisitUpdates'] = [];
+        $revision = music_catalog_set_song_title($songId, '', $revision);
+        check($GLOBALS['musicCatalogVisitUpdates'] !== []
+            && in_array($galleryA, $GLOBALS['musicCatalogVisitUpdates'][0]['galleries'], true)
+            && !$GLOBALS['musicCatalogVisitUpdates'][0]['transaction_active'],
+            'Committed catalog writes must notify explicitly pending physical sources.');
+        \Gallery\Models\music_catalog_model_clear_gallery_dirty($galleryA);
 
         $tagAlphaSlug = 'music-fixture-alpha-' . $token;
         $tagBetaSlug = 'music-fixture-beta-' . $token;

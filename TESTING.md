@@ -1,5 +1,48 @@
 # Testing Guide
 
+## Visitor progress and notification bell
+
+`gallery_visit_progress_test.mjs` exercises the production browser policy:
+first-observation/visit separation, physical/Smart identity separation, deep
+bottom-up completion, independent New states, new child/root discovery,
+parent/child acknowledgement, explicit read-all, source moves, NSFW grants,
+corrupt records and concurrent reset epochs. Branch undo covers descendants,
+shared Smart identity, source/unrelated-node isolation, retained New baselines,
+stale writers in both merge directions and later genuine reopening.
+It does not use image snapshots.
+The music catalog's disposable database fixture also verifies that committed
+catalog edits notify dirty physical sources outside their transaction. Thin
+gallery writer wrappers retain their existing delegation and lifetime tests.
+Snapshot notifications retain their source after clearing a dirty marker;
+cosmetic title edits do not invent changed sources.
+`gallery_visit_content_model_test.php` exercises real isolated SQLite SQL for
+identity retention, scoped updates, unrelated-source preservation, Smart source
+moves, deletion-only publication and concurrent-generation refusal. Music
+source selection covers direct tracks, live album consumers, explicit snapshots,
+pending recovery, absent repository links and an overflow sentinel.
+`gallery_visit_controller_test.php` runs the production payload controller and
+request-mount resolver together: root/public front controllers share history,
+distinct mounts remain isolated, and Admin identity suppresses the payload even
+with anonymous preview requested.
+
+`gallery_visit_progress_browser_test.mjs` uses real bell markup and production
+CSS/JavaScript in disposable Chromium at desktop/narrow viewports. It retains
+the Theme foreground stacking selector that previously overrode fixed panel
+geometry. Assertions cover icon-only title statuses, simultaneous New, bounded
+translucent positioning, nonmodal page access, 44px narrow actions, in-place
+read-all, clickable inline branch undo, outside/Escape dismissal, focus return,
+cancelled/confirmed reset and installation isolation. Short lists must have no
+scrollbar; long synthetic lists must reach the actual viewport bound before
+scrolling, with bulk actions retained. Desktop, narrow and short CSS viewports
+exercise these independent-of-count bounds. The central registry owns these
+regressions.
+
+Manual acceptance also includes anonymous versus actual Admin identity,
+password/NSFW denial, direct unlisted navigation, hidden/prerender activation,
+real cross-tab changes, blocked/quota-exceeded storage, two installations on
+one origin, both thumbnail renderers, language labels and physical touch/assistive
+technology. Source BASIC alone does not execute these browser/database contracts.
+
 ## Cron Overview and visitor scheduler coverage
 
 `request_scheduler_test.php` owns visitor/media/status exclusions, fair bounded
@@ -997,7 +1040,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.143.3. Release verification uses the
+This guide applies to PHP Gallery Version 0.144. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

@@ -284,11 +284,17 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         'Gallery deletion is temporarily unavailable because the required database schema could not be verified.',
     );
 
+    $visitScopes = $galleryIds;
+    foreach ($galleryIds as $id) {
+        $row = find_gallery($id, true);
+        $visitScopes[] = (int) ($row['parent_id'] ?? 0);
+    }
     $deletedRows = gallery_mutation_model_delete_subtree(
         $galleryIds,
         gallery_mutation_delete_dependency_availability(),
     );
     app_settings_reset_request_cache();
+    gallery_visit_content_update($visitScopes);
     return $deletedRows;
 }
 
@@ -1052,6 +1058,8 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
         write_gallery_sidecar($updatedGallery);
     }
 
+    gallery_visit_content_update([$galleryId]);
+
     return [
         'requested' => count($normalizedIds),
         'deleted' => (int) $deletedRows,
@@ -1100,12 +1108,14 @@ function move_gallery_images(
             $destinationGalleryId,
         );
         $phase = 'move_preflight';
-        return gallery_move_images_locked(
+        $result = gallery_move_images_locked(
             $sourceGalleryId,
             $destinationGalleryId,
             $imageIds,
             $options,
         );
+        gallery_visit_content_update([$sourceGalleryId, $destinationGalleryId]);
+        return $result;
     } catch (Throwable $exception) {
         $diagnostic = $exception instanceof ImageMoveDiagnosticFailure
             ? $exception
@@ -2115,6 +2125,11 @@ function move_gallery_folder_to_parent_owned(
         }
     }
 
+    // The owned operation already resolved the full physical branch. Publish
+    // only those stable sources and the old/new placement parents after success.
+    gallery_visit_content_update(array_merge(array_keys($pathMap), [
+        (int) ($gallery['parent_id'] ?? 0), (int) ($parentId ?? 0),
+    ]));
     return [
         'moved' => true,
         'from' => $oldPath,
@@ -2368,6 +2383,18 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
     }
     if ($hierarchyChanged && public_path_schema_ready()) {
         refresh_gallery_public_paths();
+    }
+    if ($hierarchyChanged) {
+        $visitScopes = [];
+        foreach ($galleries as $gallery) {
+            $id = (int) $gallery['id'];
+            $before = (int) ($gallery['parent_id'] ?? 0);
+            $after = (int) ($desiredParentById[$id] ?? 0);
+            if ($before !== $after) {
+                array_push($visitScopes, $id, $before, $after);
+            }
+        }
+        gallery_visit_content_update($visitScopes);
     }
 }
 

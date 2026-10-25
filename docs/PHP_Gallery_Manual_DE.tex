@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.143.3}
+\newcommand{\version}{0.144}
 \newcommand{\manualdate}{25.~Oktober~2026}
 
 \hypersetup{
@@ -1605,6 +1605,51 @@ Geben Sie jedem Administrator ein eigenes Konto, sofern das Kontomodell den vorg
 Ein Besucher öffnet die Startseite oder folgt einem direkten Link zu einer Galerie oder einem Foto. Die Seite zeigt Websitename, Navigation, Galerietitel, Beschreibung, Brotkrümelnavigation, Schlagwörter, Untergalerien und Fotos, die der Besucher sehen darf. Geschützte Inhalte verlangen den passenden Zugangsschritt, bevor privates Material offengelegt wird.
 
 Jede Galerie besitzt eine öffentliche Adresse, die als Lesezeichen gespeichert oder geteilt werden kann. Eine direkte Fotoadresse öffnet den Galeriekontext und führt den Besucher zu diesem Foto. Aussagekräftige Titel und stabile öffentliche Pfade halten Links in Nachrichten, Lesezeichen und Suchergebnissen verständlich.
+
+\subsubsection{Lokaler Verlauf und neue Inhalte}
+
+Kleine Symbole folgen dem Galerietitel auch bei Zeilenumbrüchen. Ein auffälliger
+Kreis mit Punkt bedeutet unbesucht, ein teilweise gefüllter Kreis teilweise besucht und
+ein dezenter Kreis mit Häkchen besucht. Ein physischer Zweig ist erst vollständig
+besucht, wenn seine eigene Seite und alle erreichbaren Untergalerien geöffnet
+wurden. Eingebundene Smart Galleries zählen als eigene Einträge; ihre
+physischen Quellen werden dadurch nicht als besucht markiert. Titelbilder,
+Suchergebnisse und Hintergrundanfragen zählen nicht als Besuche.
+
+Ein separates Funkeln kennzeichnet neu verfügbare Inhalte seit der ersten
+Beobachtung oder letzten Bestätigung in diesem Browser und kann jeden
+Besuchsstatus begleiten. Das Öffnen eines Elternordners bestätigt keine
+Neuigkeiten in ungeöffneten Nachkommen. Kosmetische Änderungen und reine
+Löschungen sind keine Inhaltsergänzungen.
+
+Ein Klick auf das Statussymbol neben einem Kartentitel markiert die Galerie
+und ihre zugänglichen Untergalerien wieder als unbesucht. Angefügte intelligente
+Galerien sind eingeschlossen; ihr Status gilt gemeinsam für alle Platzierungen.
+Markierungen für neue Inhalte bleiben erhalten. Erneutes Öffnen einer Galerie
+zählt wieder als tatsächlicher Besuch.
+
+Die Glocke im Kopfbereich öffnet ein kleines durchscheinendes Panel direkt am
+Auslöser, ohne die Seite abzudunkeln. Ein Galerielink führt zum Inhalt;
+\emph{Alles als gelesen markieren} markiert alle derzeit verfügbaren Galerien
+als besucht und bestätigt ihre aktuellen Inhalte. \emph{Besuchsverlauf
+löschen} verlangt eine Bestätigung und setzt diese Installation auf eine
+unbesuchte Erstbeobachtung zurück, ohne historische Inhalte als neu zu melden.
+Escape oder ein Klick außerhalb schließt das Panel. Schmale Ansichten behalten
+komfortable Touch-Ziele. Das Panel folgt den PDF-/Musik-Applets mit einer
+durchscheinenden Theme-Fläche, kleinen Akzent-Symbolen und einer kompakten
+umrandeten Aktion zum Markieren aller Inhalte als gelesen; das Löschen des
+Verlaufs bleibt optisch zurückhaltender.
+Das Panel wächst mit dem Inhalt bis zur tatsächlichen Fensterhöhe, auch bei
+Browser-Zoom. Erst dann scrollt die kompakte Liste; Kopfbereich und Aktionen
+bleiben sichtbar. Es gibt keine feste Anzahl von Einträgen als Schwelle.
+
+Der Verlauf bleibt pro Installation im lokalen Speicher dieses Browsers. Er
+wird weder zwischen Geräten synchronisiert noch an den Server gesendet. Bei
+blockiertem Speicher bleibt der aktuelle Tab nutzbar. Nicht verfügbare
+Inhaltsnachweise werden ausdrücklich als nicht verfügbar angezeigt.
+Angemeldete Administratoren sehen die gesamte Funktion auch in der anonymen
+Vorschau nicht; nach der Abmeldung erscheint die normale Besucheroberfläche.
+Ein späteres Viewer-Konto ohne Adminrechte behält diese Identitätstrennung.
 
 \subsubsection{Typischer Besuch}
 

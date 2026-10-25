@@ -290,6 +290,14 @@ $registry = [
         'project_website_test.mjs' => ['browser' => true, 'timeout' => 180],
     ],
     'node_tests' => [
+        'gallery_visit_progress_test.mjs' => [],
+        // Bound the real notification panel's two responsive journeys.
+        // Type: int. Units: seconds. Scope: two disposable responsive journeys.
+        // Consumers: required browser owner. Rationale: 90 includes two browser
+        // startups, 15-second bounded fixtures and independent cleanup headroom.
+        'gallery_visit_progress_browser_test.mjs' => [
+            'browser' => true, 'php_argument' => true, 'timeout' => 90,
+        ],
         // Bound Cron Overview browser qualification.
         // Type: int. Units: seconds. Scope: one isolated Chromium fixture.
         // Consumers: central browser suite. Rationale: 90 seconds includes PHP

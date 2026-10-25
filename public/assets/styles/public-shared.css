@@ -101,6 +101,249 @@
     background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
 
+/* Visitor status is inline title punctuation, with two compact distinct shapes.
+   Type: CSS lengths. Units: em/rem. Scope: public gallery title and bell dialog.
+   Consumers: gallery-visit-progress.js.
+   Rationale: .78em glyphs follow wrapping title text without a new card row;
+   inheriting title size and raising the inline group .10em optically centers
+   the controls on the title font's final text line instead of its baseline;
+   a 24rem anchored panel and viewport bounds keep notification lists usable.
+   A 160 stacking level sits above header/cards and below the lightbox;
+   28px desktop/44px touch controls match the shared design contract.
+   The 42% Theme surface matches the PDF/music launchers; a 20px blur keeps
+   notification text readable when the panel floats above photographs. */
+.gallery-visit-icons {
+    display: inline;
+    white-space: normal;
+    font-size: inherit;
+    font-weight: normal;
+    position: relative;
+    top: -.10em;
+}
+.gallery-visit-icon {
+    display: inline-block;
+    width: 1.15em;
+    height: 1.15em;
+    margin-inline-start: .2em;
+    vertical-align: middle;
+    font-size: .78em;
+    color: var(--ink);
+    opacity: .85;
+}
+.gallery-visit-icon svg { display: block; width: 100%; height: 100%; }
+.gallery-visit-icon:is(.is-unseen, .is-partial, .is-seen, .is-new) {
+    color: var(--accent);
+    opacity: 1;
+}
+.gallery-visit-icon:is(.is-unseen, .is-new) {
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 38%, transparent));
+}
+.gallery-visit-icon.is-unseen svg { stroke-width: 2.3; }
+.gallery-visit-icon.is-seen { color: var(--public-muted-ink); opacity: .32; }
+.gallery-visit-control:is(:hover, :focus-visible) .is-seen { opacity: .8; }
+.gallery-visit-icon:is(.is-partial, .is-seen, .is-new) svg { stroke-width: 2.1; }
+.gallery-visit-icon.is-unseen circle:first-child {
+    fill: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.gallery-visit-icon:is(.is-partial, .is-seen) circle,
+.gallery-visit-icon.is-new path {
+    fill: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.gallery-visit-icon:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.gallery-visit-control {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: .25rem;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    vertical-align: middle;
+    cursor: pointer;
+}
+.gallery-visit-control .gallery-visit-icon { margin: 0; }
+.gallery-visit-control:not(:disabled):hover {
+    background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+.gallery-visit-control:disabled { cursor: default; opacity: 1; }
+.gallery-visit-control:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+.public-page .site-header .nav [data-visit-bell][hidden],
+.gallery-visit-bell-dot[hidden] { display: none !important; }
+.gallery-visit-bell { position: relative; cursor: pointer; font-family: inherit; }
+.gallery-visit-bell-dot {
+    position: absolute;
+    inset-block-start: .2rem;
+    inset-inline-end: .2rem;
+    width: .4rem;
+    height: .4rem;
+    border: 1px solid var(--panel);
+    border-radius: 50%;
+    background: var(--accent-dark, var(--ink));
+}
+/* The Theme foreground stacking selector has four class terms. This unique
+   owned ID keeps the floating surface fixed above it without global overrides. */
+.public-page > #gallery-visit-panel {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    inset: auto;
+    z-index: 160;
+    box-sizing: border-box;
+    width: min(24rem, calc(100vw - 1rem));
+    max-height: calc(100dvh - 2rem);
+    margin: 0;
+    padding: .75rem .85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--public-control-radius);
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    color: var(--ink);
+    box-shadow: 0 .35rem 1.25rem rgb(0 0 0 / 10%);
+    overflow: hidden;
+    overscroll-behavior: contain;
+    font-size: .85rem;
+    line-height: 1.45;
+}
+.gallery-visit-panel[hidden] { display: none !important; }
+.gallery-visit-panel-heading {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: .5rem;
+    padding-bottom: .45rem;
+    border-bottom: 1px solid var(--line);
+}
+.gallery-visit-panel-heading > svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: none;
+    color: var(--accent);
+}
+.gallery-visit-panel-heading h2 {
+    flex: 1;
+    margin: 0;
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: inherit;
+}
+.gallery-visit-close {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: .25rem;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.gallery-visit-close svg, .gallery-visit-action svg {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+}
+.gallery-visit-help {
+    flex: none;
+    margin: .5rem 0 0;
+    color: var(--public-muted-ink);
+    font-size: .75rem;
+}
+.gallery-visit-message {
+    flex: none;
+    margin: 0;
+    padding-block: .85rem;
+    color: var(--public-muted-ink);
+}
+.gallery-visit-message:empty { display: none; }
+.gallery-visit-notifications {
+    flex: 0 1 auto;
+    min-height: 0;
+    margin: .35rem 0;
+    padding: 0;
+    list-style: none;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+.gallery-visit-notifications:empty { display: none; }
+.gallery-visit-notifications li {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    padding: .15rem 0;
+}
+.gallery-visit-notifications a {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+    text-decoration: none;
+}
+.gallery-visit-notifications a:hover { color: var(--accent-dark, var(--ink)); }
+.gallery-visit-actions {
+    display: grid;
+    flex: none;
+    gap: .25rem;
+    padding-top: .65rem;
+    border-top: 1px solid var(--line);
+}
+.gallery-visit-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    width: 100%;
+    min-height: 28px;
+    box-sizing: border-box;
+    padding: .2rem .5rem;
+    border: 1px solid transparent;
+    border-radius: .45rem;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font: inherit;
+    cursor: pointer;
+}
+.gallery-visit-action[data-visit-read-all] {
+    border-color: var(--accent-dark, var(--ink));
+    font-weight: 600;
+}
+.gallery-visit-action[data-visit-reset] {
+    color: var(--public-muted-ink);
+    font-size: .78rem;
+}
+.gallery-visit-action:hover, .gallery-visit-close:hover {
+    background: color-mix(in srgb, var(--line) 40%, transparent);
+    color: var(--ink);
+}
+.gallery-visit-action:disabled { opacity: .5; cursor: default; }
+.gallery-visit-action:focus-visible, .gallery-visit-close:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+@media (max-width: 640px), (pointer: coarse) {
+    .gallery-visit-action, .gallery-visit-close { min-height: 44px; }
+    .gallery-visit-close { min-width: 44px; }
+    .gallery-visit-control { width: 44px; height: 44px; }
+}
+@media (forced-colors: active) {
+    .public-page .gallery-visit-icon:is(.is-unseen, .is-partial, .is-seen, .is-new) {
+        color: CanvasText;
+        opacity: 1;
+        filter: none;
+    }
+    .gallery-visit-bell-dot { background: Highlight; }
+}
+
 .public-page .public-home-search-input,
 .public-page .public-home-search-input:focus {
     color: var(--ink);

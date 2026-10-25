@@ -1,5 +1,119 @@
 # Patch notes
 
+## Version 0.144
+
+Added browser-local gallery visit progress and an independent new-content
+overview, helping visitors find material they have not explored yet without
+sending their reading history to the server.
+
+### Highlights
+
+#### Gallery progress and new content
+
+- Added compact Unseen, Partially seen and Seen icons immediately after gallery
+  titles, including wrapped titles. Physical branches include their accessible
+  descendants and attached Smart Galleries. [#293](https://github.com/klusik/PHP_gallery/issues/293)
+- Added a separate sparkle for newly available content. It can accompany any
+  visit state; adding photos to a visited gallery preserves Seen while showing
+  New until that gallery is opened again.
+- Added direct branch undo through the progress icon. Clicking a visited or
+  partially visited gallery marks its available branch unvisited again while
+  preserving its new-content baselines.
+- Added a notification bell with an anchored translucent overview, gallery
+  links, Mark all as read and confirmation-protected history clearing.
+- Made notification rows compact and let the panel grow to the actual viewport
+  height before scrolling its list, retaining the heading and actions.
+- Kept the feature hidden for authenticated administrators, including anonymous
+  previews, and separate from the Viewer Accounts identity domain.
+
+### Technical Details
+
+#### Backend
+
+- Prepared one bounded, access-authorized physical/Smart hierarchy projection
+  through the existing gallery lookup and public controller owners. Direct
+  unlisted navigation remains separate from unrelated public listings.
+- Added scoped addition/membership reconciliation after content authoring.
+  Photo/media additions, available child placements and Smart membership
+  additions advance evidence; cosmetic edits and deletion alone do not.
+- Kept transaction inspection in the gallery model and move notifications
+  inside the owned move operation, preserving thin writer wrappers and their
+  existing lock and delegation contracts for moves, Trash and restoration.
+- Captured explicit gallery, song and album consumers before catalog mutations
+  removed their links or cleared dirty markers, preserving snapshot and shared
+  music evidence without treating cosmetic title edits as new content.
+- Registered optional `gallery_visit_content` presentation-schema readiness.
+  Missing or unknown schema and dirty or oversized evidence leave normal
+  navigation available while withholding untrusted New indicators and bulk
+  acknowledgement. No visitor-side database write, tracking endpoint, polling
+  worker or persistent anonymous identifier was introduced.
+
+#### Database
+
+- Added `202610250001_gallery_visit_content.php` with
+  `gallery_visit_content_state`, `gallery_visit_content_pending` and
+  `gallery_visit_content_members`.
+- Seeded historical membership through the migration's explicit connection.
+  Bounded readiness deferral preserves a dirty index without blocking the core
+  upgrade; database failures remain subject to normal migration recovery.
+- Added generation-checked publication and bounded pending source scopes.
+  These tables retain content evidence, never visitor reading history.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/gallery-visit-progress.js` for genuine
+  visible detail visits, recursive progress, independent New propagation and
+  stable installation-scoped `localStorage`.
+- Preserved first-observation baselines without inventing historical New
+  content. Opening a parent does not acknowledge unopened descendants.
+- Added defensive storage parsing, Web Locks, cross-tab merging and ordered
+  installation/branch resets so stale tabs cannot resurrect cleared visits.
+  Blocked storage retains tab-local operation.
+- Added localized EN/CS/DE/SV labels, keyboard controls, focus return, responsive
+  touch targets, distinct status shapes and forced-color treatment.
+- Established the approved glass-panel treatment as the default contextual UI
+  reference in `AGENTS.md`, asset rules and `docs/ADMIN_DESIGN.md`.
+
+#### Tests and documentation
+
+- Added production browser-policy, SQL persistence, payload/mount and Chromium
+  regressions for recursive completion, addition-only evidence, branch undo,
+  reset merging, administrator exclusion and installation isolation.
+- Covered natural short-list height and long-list scrolling across desktop,
+  narrow and short CSS viewports while retaining bulk actions.
+- Extended the disposable music-catalog fixture to verify post-commit
+  notifications, clean snapshots and recovery of pending physical sources.
+  Added SQL vectors for direct tracks, shared albums, absent repository links
+  and bounded source overflow.
+- Updated architecture, database, testing, compatibility and all four manual
+  sources alongside the implementation.
+
+#### Release metadata
+
+- Initialized immutable origin and predecessor records for `v_0.144`, linked
+  to release-origin tracking in
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+
+- Added a local guide to unexplored galleries and newly available content,
+  including independent Smart Gallery progress.
+- Added one-click branch undo and explicit bulk acknowledgement. Shared Smart
+  placements retain one shared visit flag; their physical sources are not
+  marked visited or unvisited as a side effect.
+- Kept history private to the browser profile and installation. Cross-device
+  account synchronization was not added.
+
+#### For administrators
+
+- Kept progress and notification controls absent while signed in as an
+  administrator. Logging out restores the ordinary visitor interface.
+- Added a normal schema migration and bounded content-index updates to existing
+  authoring operations, with no new visitor tracking configuration or cron.
+
 ## Version 0.143.3
 
 Expanded PHP Gallery uploader 0.10.0 with multilingual SimBrief plan-versus-actual

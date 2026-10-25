@@ -917,6 +917,51 @@ function music_catalog_model_dirty_gallery_count(): int
     return (int) db()->query('SELECT COUNT(*) FROM music_catalog_dirty_galleries')->fetchColumn();
 }
 
+/**
+ * Read pending and explicitly affected music sources before catalog mutation.
+ * @param int $limit Maximum admitted resource IDs, plus an overflow sentinel.
+ * @param array{galleries?:list<int>,albums?:list<int>,songs?:list<int>} $scope
+ *     Semantic gallery, album or song identities changed by this operation.
+ * @param bool $repositoryReady Whether live repository/album links are verified.
+ * @return list<int> Pending or explicitly affected physical source identities.
+ */
+function music_catalog_model_visit_dirty_sources(
+    int $limit,
+    array $scope = [],
+    bool $repositoryReady = false,
+): array
+{
+    $queries = ['SELECT gallery_id FROM music_catalog_dirty_galleries'];
+    $values = [];
+    foreach (['galleries', 'albums', 'songs'] as $kind) {
+        $ids = array_values(array_unique($scope[$kind] ?? []));
+        if ($ids === [] || ($kind === 'albums' && !$repositoryReady)) {
+            continue;
+        }
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        $queries[] = match ($kind) {
+            'galleries' => 'SELECT id AS gallery_id FROM galleries '
+                . 'WHERE id IN (' . $marks . ')',
+            'albums' => 'SELECT gallery_id FROM music_gallery_album_links '
+                . 'WHERE album_id IN (' . $marks . ')',
+            'songs' => 'SELECT gallery_id FROM music_track_instances '
+                . 'WHERE song_id IN (' . $marks . ')',
+        };
+        array_push($values, ...$ids);
+        if ($kind === 'songs' && $repositoryReady) {
+            $queries[] = 'SELECT l.gallery_id FROM music_gallery_album_links l '
+                . 'JOIN music_album_songs m ON m.album_id=l.album_id '
+                . 'WHERE m.song_id IN (' . $marks . ')';
+            array_push($values, ...$ids);
+        }
+    }
+    $statement = db()->prepare('SELECT DISTINCT gallery_id FROM ('
+        . implode(' UNION ALL ', $queries) . ') visit_sources '
+        . 'ORDER BY gallery_id LIMIT ' . ($limit + 1));
+    $statement->execute($values);
+    return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+}
+
 /** Read normalized song identity and title data for physical references.
  * @param list<array{gallery_id:int,track_id:string}> $references Gallery-scoped IDs, bounded by the caller.
  * @return array<string,array{song_id:int,custom:string,indexed:string}> Rows keyed by gallery ID and track ID.

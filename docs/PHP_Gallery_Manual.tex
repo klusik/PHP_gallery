@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.143.3}
+\newcommand{\version}{0.144}
 \newcommand{\manualdate}{25 October 2026}
 
 \hypersetup{
@@ -1531,6 +1531,46 @@ Give each administrator an~individual account where the~account model supports t
 A~visitor opens the~site at~the~home page or~follows a~direct link to~a~gallery or~photograph. The~page presents the~site's name, navigation, gallery title, description, breadcrumbs, tags, child galleries, and~photographs that the~visitor is~allowed to~see. Protected content asks for~the~appropriate access step before revealing private material.
 
 Each gallery has~a~public address that can~be~bookmarked or~shared. A~direct photo address opens the~gallery context and~leads the~visitor to~that photograph. Meaningful titles and~stable public paths help links remain understandable in~messages, bookmarks, and~search results.
+
+\subsubsection{Local history and~new content}
+
+Small icons follow each gallery title, including when the~title wraps. A~bright
+dotted circle means unseen, a~part-filled circle means partially visited, and~a~quiet checked
+circle means seen. A~physical branch becomes seen only after its~own page and~all
+navigable descendants have been opened. Attached Smart Galleries count as~their
+own items; opening one does~not mark its~physical sources visited. Covers,
+search results and~background requests do~not count as~visits.
+Click the~progress icon beside a~card title to~mark that gallery and~its~available
+descendants unvisited again. This includes attached Smart Galleries, whose
+state is~shared across their placements, and~preserves New-content markers.
+Opening a~gallery again records a~new genuine visit.
+
+The~separate sparkle means newly available content since this browser's first
+observation or~last acknowledgement. It~can accompany any visit state. Opening
+a~parent does~not acknowledge new content inside unopened descendants. Cosmetic
+changes and~deletion alone do~not create additions.
+
+The~header bell opens a~small translucent panel immediately beside it, without
+dimming the~page. Follow a~gallery link to~open its~content.
+\emph{Mark all~as~read} marks all~currently available galleries visited
+and~acknowledges their current content.
+\emph{Clear seen history} asks for~confirmation and~returns this installation
+to~an~unvisited first observation, without flagging historical content as~new.
+Escape or~a~click outside closes the~panel. Narrow-screen actions retain
+comfortable touch targets. The~panel matches the~PDF/music applets with a~Theme
+glass surface, small accent icons and~a~compact outlined read-all action;
+history reset remains visually quieter.
+The~panel grows with its~content up~to~the~actual viewport height, including
+browser zoom. Only then does its~compact list scroll; heading and~actions stay
+visible. There is~no~fixed item-count threshold.
+
+History stays in~this browser's local storage, independently for~each
+installation. It~does~not synchronize between devices or~send visitor history
+to~the~server. If~storage is~blocked, the~current tab remains usable. Unavailable
+content evidence is~reported as~unavailable rather than as~no~new content.
+Authenticated administrators never see this feature, including in~anonymous
+preview; after logout they receive the~ordinary visitor interface. Any~future
+non-Admin Viewer account uses the~same separate visitor identity boundary.
 
 \subsubsection{Typical visit}
 

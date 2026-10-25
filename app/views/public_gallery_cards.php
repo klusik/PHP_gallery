@@ -87,13 +87,16 @@ function view_public_gallery_description_layout_hook(string $layout): string
  *         label:?string,visible_limit?:int,display_all?:bool,
  *         scrollbar_enabled?:bool,scrollbar_rows?:int},
  *     tag_list_html?:string,
- *     admin_controls_html?:string
+ *     admin_controls_html?:string,
+ *     visit_key?:string
  * } $viewModel Controller-prepared card state and policy-approved unique descendant media counts.
  * @return void Emits canonical card content using compatible historical CSS classes.
  */
 function view_render_public_gallery_card(array $viewModel): void
 {
     $galleryId = (int) ($viewModel['gallery_id'] ?? 0);
+    $visitAttribute = !empty($viewModel['visit_key'])
+        ? ' data-visit-key="' . e((string) $viewModel['visit_key']) . '"' : '';
     $title = (string) ($viewModel['title'] ?? '');
     $url = (string) ($viewModel['url'] ?? '');
     $visibility = (string) ($viewModel['visibility'] ?? 'unpublished');
@@ -118,7 +121,7 @@ function view_render_public_gallery_card(array $viewModel): void
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
     $collagePictureHtml = array_values(array_filter(
         (array) ($viewModel['collage_picture_html'] ?? []),
-        static fn($html): bool => is_string($html) && $html !== '',
+        static fn(mixed $html): bool => is_string($html) && $html !== '',
     ));
     $coverLoadingAttributes = (string) (
         $viewModel['cover_loading_attributes'] ?? ''
@@ -144,7 +147,7 @@ function view_render_public_gallery_card(array $viewModel): void
             . e($galleryCardClass)
             . '" data-gallery-id="'
             . $galleryId
-            . '"'
+            . '"' . $visitAttribute
             . (
                 $pictureManagerEnabled
                     ? ' data-picture-manager-gallery data-picture-manager-gallery-id="'
@@ -379,12 +382,17 @@ function view_render_gallery_media_count_badges(
 /**
  * Render one placed Smart Gallery card.
  *
- * @param array<string,mixed> $viewModel Controller-prepared Smart Gallery state.
+ * @param array{gallery_id?:int,title?:string,url?:string,description?:string,
+ *     count?:int,media_counts?:array{music?:int,pdf?:int},card_layout?:string,
+ *     cover_picture_html?:string,has_placement?:bool,placement?:string,
+ *     placement_order?:int,visit_key?:string} $viewModel Prepared virtual card.
  * @return void Emits the placed card with historical appearance-compatible class hooks.
  */
 function view_render_public_smart_gallery_card(array $viewModel): void
 {
     $smartGalleryId = (int) ($viewModel['gallery_id'] ?? 0);
+    $visitAttribute = !empty($viewModel['visit_key'])
+        ? ' data-visit-key="' . e((string) $viewModel['visit_key']) . '"' : '';
     $url = (string) ($viewModel['url'] ?? '');
     $title = (string) ($viewModel['title'] ?? '');
     $count = max(0, (int) ($viewModel['count'] ?? 0));
@@ -408,6 +416,7 @@ function view_render_public_smart_gallery_card(array $viewModel): void
             . '" data-smart-gallery-id="'
             . $smartGalleryId
             . '"'
+            . $visitAttribute
             . $placementAttributes
             . '>';
     echo

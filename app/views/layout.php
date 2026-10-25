@@ -188,7 +188,7 @@ function view_script_asset_for_context(
  * Render the prepared public/Admin document head, branding and navigation shell.
  *
  * @param string $title Page title before site branding is appended.
- * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context and ordered stylesheet URLs; direct callers must supply stylesheet URLs because asset selection belongs to the layout controller.
+ * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,visit_progress?:bool,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context and ordered stylesheet URLs; direct callers must supply stylesheet URLs because asset selection belongs to the layout controller.
  * @param string $requestUri Current request URI used for navigation state.
  * @param string $page Normalized route identifier, defaulting to the public home page.
  * @return void Emits the head, header and opening main element with manual overrides limited to public pages.
@@ -485,6 +485,9 @@ function view_render_header(
                     . '</a>';
         }
     }
+    if (!empty($model['visit_progress'])) {
+        view_render_gallery_visit_notifications();
+    }
     echo '</nav></header>';
     if ($headerBranding['separator_url'] !== '') {
         echo
@@ -521,6 +524,57 @@ function view_render_header(
     } else {
         echo '<main class="site-main">';
     }
+}
+
+/**
+ * Render an initially inert visitor bell using the existing header action chrome.
+ * @return void Emits a localized anchored panel with media-style icon actions;
+ *     JavaScript enables the bell after an authorized projection is available.
+ */
+function view_render_gallery_visit_notifications(): void
+{
+    $label = t('gallery.visit.bell', 'What is new');
+    echo '<button type="button" class="public-header-action gallery-visit-bell" '
+        . 'data-visit-bell hidden aria-haspopup="dialog" aria-expanded="false" '
+        . 'aria-controls="gallery-visit-panel" title="' . e($label)
+        . '" aria-label="' . e($label) . '">'
+        . '<span class="public-header-action-icon"><svg class="admin-menu-icon" '
+        . 'viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        . 'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
+        . 'aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18'
+        . 'c0-2-3-2-3-9M10 21h4M12 2V1"/></svg></span>'
+        . '<span class="gallery-visit-bell-dot" data-visit-bell-dot hidden '
+        . 'aria-hidden="true"></span></button>'
+        . '<section id="gallery-visit-panel" class="gallery-visit-panel" hidden '
+        . 'data-visit-panel role="dialog" aria-labelledby="gallery-visit-heading">'
+        . '<div class="gallery-visit-panel-heading"><svg viewBox="0 0 24 24" '
+        . 'fill="none" stroke="currentColor" stroke-width="1.7" '
+        . 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        . '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18'
+        . 'c0-2-3-2-3-9M10 21h4M12 2V1"/></svg>'
+        . '<h2 id="gallery-visit-heading">' . e($label)
+        . '</h2><button type="button" data-visit-close '
+        . 'class="gallery-visit-close" aria-label="'
+        . e(t('gallery.visit.close', 'Close')) . '"><svg viewBox="0 0 24 24" '
+        . 'fill="none" stroke="currentColor" stroke-width="1.7" '
+        . 'stroke-linecap="round" aria-hidden="true">'
+        . '<path d="m6 6 12 12M18 6 6 18"/></svg></button></div>'
+        . '<p class="gallery-visit-message" data-visit-message role="status"></p>'
+        . '<ul class="gallery-visit-notifications" data-visit-list></ul>'
+        . '<div class="gallery-visit-actions"><button type="button" '
+        . 'class="gallery-visit-action" data-visit-read-all>'
+        . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        . 'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
+        . 'aria-hidden="true"><path d="m3 12 4 4L17 6M11 16l3 3 8-10"/></svg>'
+        . e(t('gallery.visit.read_all', 'Mark all as read'))
+        . '</button><button type="button" class="gallery-visit-action" data-visit-reset>'
+        . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        . 'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
+        . 'aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg>'
+        . e(t('gallery.visit.reset', 'Clear seen history'))
+        . '</button></div><p class="gallery-visit-help">'
+        . e(t('gallery.visit.local', 'History is saved only in this browser.'))
+        . '</p></section>';
 }
 
 /**

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.143.3}
+\newcommand{\version}{0.144}
 \newcommand{\manualdate}{25.~října~2026}
 
 \hypersetup{
@@ -1526,6 +1526,46 @@ Každému správci přidělte vlastní účet tam, kde model účtů podporuje z
 Návštěvník otevře domovskou stránku webu nebo přejde přímým odkazem do galerie či na fotografii. Stránka představuje název webu, navigaci, název galerie, popis, drobečkovou navigaci, štítky, podřízené galerie a~fotografie, které návštěvník smí vidět. Chráněný obsah před odhalením soukromých podkladů vyžádá příslušný krok přístupu.
 
 Každá galerie má veřejnou adresu, kterou lze uložit do záložek nebo sdílet. Přímá adresa fotografie otevře kontext galerie a~dovede návštěvníka k~dané fotografii. Smysluplné názvy a~stabilní veřejné cesty pomáhají udržet odkazy srozumitelné ve zprávách, záložkách a~výsledcích vyhledávání.
+
+\subsubsection{Místní historie a~nový obsah}
+
+Malé ikonky následují přímo za názvem galerie i~při jeho zalomení. Výrazný tečkovaný
+kroužek znamená nenavštíveno, částečně vyplněný částečně navštíveno a~kroužek
+s~jemným zatržítkem navštíveno. Celá větev je navštívená až po otevření vlastní
+stránky i~všech dostupných podgalerií. Připojené Smart galerie jsou samostatné
+položky; jejich otevření neoznačí zdrojové fyzické galerie jako navštívené.
+Obálky, výsledky hledání ani požadavky na pozadí se za návštěvu nepovažují.
+
+Samostatná jiskra označuje nově dostupný obsah od prvního pozorování nebo
+posledního potvrzení v~tomto prohlížeči. Může doprovázet každý stav návštěvy.
+Otevření rodiče nepotvrdí novinky uvnitř neotevřených potomků. Kosmetické změny
+a~samotné mazání nepředstavují přírůstek obsahu.
+
+Kliknutí na stavovou ikonku u~názvu karty označí galerii a~její dostupné
+podgalerie znovu jako nenavštívené. Zahrne i~připojené chytré galerie, jejichž
+stav je společný všem umístěním; značky nového obsahu zachová. Opětovné otevření
+galerie zaznamená novou skutečnou návštěvu.
+
+Zvoneček v~záhlaví otevře malý průsvitný panel přímo u~ovladače, bez ztmavení
+stránky. Lze přejít do galerie nebo zvolit \emph{Označit vše jako přečtené},
+což označí všechny právě dostupné galerie jako navštívené a~potvrdí jejich
+aktuální obsah. \emph{Vymazat historii návštěv} vyžaduje potvrzení a~vrátí tuto
+instalaci k~nenavštívenému prvnímu pozorování; historický obsah se nepovažuje
+za nový. Panel zavře Escape nebo kliknutí mimo něj. Na úzké obrazovce mají
+akce pohodlné dotykové cíle. Panel navazuje na PDF/hudební aplety průsvitným
+povrchem tématu, malými akcentovými ikonami a~kompaktním obrysovým tlačítkem
+pro označení všeho jako přečteného; mazání historie je vizuálně méně výrazné.
+Panel roste s~obsahem až ke skutečné výšce okna včetně vlivu zoomu prohlížeče.
+Teprve poté se posouvá úsporný seznam; záhlaví a~akce zůstávají viditelné.
+Rozhoduje výška, nikoli pevný počet novinek.
+
+Historie zůstává v~místním úložišti tohoto prohlížeče zvlášť pro každou
+instalaci. Nesynchronizuje se mezi zařízeními ani se neposílá na server.
+Při blokovaném úložišti funguje v~aktuální kartě. Nedostupné údaje o~novinkách
+jsou výslovně označené jako nedostupné. Přihlášený správce celou tuto funkci
+nevidí ani v~anonymním náhledu; po odhlášení dostane běžné návštěvnické
+rozhraní. Budoucí účet návštěvníka bez oprávnění správce zachová toto oddělení
+identit.
 
 \subsubsection{Typická návštěva}
 
