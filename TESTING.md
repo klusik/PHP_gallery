@@ -1315,6 +1315,13 @@ generated data. Confirm one prepared commit above the same P, successful fresh
 BASIC-A, FULL-A and guarded develop FF. Also verify no-op preparation does not
 rewrite the branch. A green feature BASIC alone does not test this automation.
 
+After a successful normal integration and record upload, also confirm that the
+selected remote feature ref is removed. A moved source ref must survive the
+exact-SHA deletion lease; failed integration, `qualify_only`, recovery and a
+failed record upload must never reach deletion. Cleanup failure leaves the
+completed develop integration and retained evidence intact. BASIC alone does
+not execute this final cleanup step.
+
 ### Agent execution rule
 
 **GitHub Actions is the default and authoritative agent test environment.** The

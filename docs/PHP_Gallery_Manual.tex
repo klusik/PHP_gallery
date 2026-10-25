@@ -3768,6 +3768,11 @@ candidate, complete input tree and~base without another FULL. Changed inputs
 require new execution. The~publisher still checks actual owner/run identities,
 source leases and~branch protections.
 
+After successful integration and~record upload, the~workflow deletes the~selected
+remote feature branch with an~exact candidate-SHA lease. Newer commits prevent
+deletion. \codeword{qualify_only} and~\codeword{recover_existing} retain the~branch.
+Cleanup failure leaves the~completed integration and~retained evidence intact.
+
 For~an~explicit CI-only installation ahead of~a~release, base the~feature
 on~main and~dispatch \ui{Basic source checks} with \codeword{install_ci}.
 Complete FULL and~the~authoritative release audit produce a~bot PR;

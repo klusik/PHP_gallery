@@ -81,6 +81,13 @@ remain failures; use sealed execution to recover rather than rerunning tests.
 The unchanged required context is `Complete required CI matrix`, Actions app
 15368. The final integration record is retained for provenance and diagnostics.
 
+After the successful develop fast-forward and integration-record upload, the
+publisher automatically deletes only the selected remote `feature/*` branch.
+The deletion uses an exact candidate-SHA Git lease, so concurrent new commits
+refuse cleanup and remain intact. `qualify_only` and `recover_existing` keep the
+source ref. A cleanup failure does not undo the completed integration or its
+retained evidence; inspect the final step before retrying cleanup.
+
 The publisher exposes that verified FULL through both Checks and Commit
 Statuses.
 GitHub can omit dispatch-suite Checks from its branch-rule rollup despite their

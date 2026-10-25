@@ -3754,6 +3754,11 @@ samma kandidat, fullständiga indataträd och~bas utan nytt FULL.
 Ändrade indata kräver ny körning; ägare, körningar, ref-leasar och~GitHub-skydd
 kontrolleras fortfarande.
 
+Efter godkänd integration och~uppladdat integrationsbevis tar~arbetsflödet bort
+den~valda fjärrgrenen med~en lease för~exakt kandidat-SHA. Nyare committar
+förhindrar borttagningen. \codeword{qualify_only} och~\codeword{recover_existing}
+behåller grenen. Misslyckad städning lämnar integrationen och~sparade bevis intakta.
+
 För~uttryckligen begärd ren CI-installation före utgåvan skapar du
 feature-grenen från main och~startar \ui{Basic source checks} med
 \codeword{install_ci}. Fullständig FULL och~utgåveaudit skapar en bot-PR;

@@ -3731,6 +3731,11 @@ totožného kandidáta, úplného stromu vstupů a~základu bez dalšího FULL.
 Změněné vstupy vyžadují nový běh; identity vlastníků a~běhů, očekávané
 hlavy větví a~ochrany GitHubu zůstávají ověřované.
 
+Po~úspěšné integraci a~uložení záznamu workflow smaže vybranou vzdálenou
+feature větev s~podmínkou přesného SHA kandidáta. Novější commity smazání
+zablokují. \codeword{qualify_only} a~\codeword{recover_existing} větev zachovají.
+Selhání úklidu nevrací dokončenou integraci ani nemaže uložené důkazy.
+
 Pro~výslovně požadovanou instalaci samotného CI před vydáním založte feature
 z~main a~spusťte \ui{Basic source checks} s~\codeword{install_ci}.
 Úplný FULL a~autoritativní audit vytvoří bot PR; jedno skutečné lidské

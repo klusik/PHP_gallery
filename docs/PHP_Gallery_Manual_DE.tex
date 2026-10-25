@@ -3861,6 +3861,12 @@ derselben Kandidaten-, Eingabebaum- und~Basisidentität ohne erneutes FULL.
 Geänderte Eingaben erfordern neue Ausführung; Besitzer, Läufe, Ref-Leases
 und~GitHub-Schutz bleiben verbindlich.
 
+Nach erfolgreicher Integration und~Speicherung des~Nachweises löscht der~Workflow
+den~gewählten entfernten Feature-Zweig mit~einer Lease auf~die~exakte
+Kandidaten-SHA. Neuere Commits verhindern die~Löschung.
+\codeword{qualify_only} und~\codeword{recover_existing} erhalten den~Zweig.
+Ein Fehler beim Aufräumen lässt Integration und~gespeicherte Nachweise bestehen.
+
 Für~eine ausdrücklich gewünschte reine CI-Installation vor~der~Version
 erstellen Sie~den Feature-Zweig aus main und~starten
 \ui{Basic source checks} mit~\codeword{install_ci}. Vollständiges FULL und
