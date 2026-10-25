@@ -453,12 +453,60 @@ source independence and rollback on a real constraint failure.
 
 ## Optional WinApp dispatch and maps (0.6.0)
 
+The additive plan/actual owner is `winapp/uploader/flight_comparison.py`.
+Analysis schema 4 and report template 11 preserve prior PDFs/delivery receipts
+while identifying new statistical editions. Existing JSONL and dispatch
+snapshots permanently support missing pressure, Zulu-calendar, parking, navlog
+speed/wind/stage and additional schedule fields as unknown. Their absence never
+becomes a host-clock substitute, estimated fuel mass, invented block event or
+zero deviation. Retirement would require evidence that retained recordings and
+their regeneration no longer depend on these decoders; usage is unknown.
+
+Numerical flight totals require matching endpoints, one takeoff/landing and
+complete relevant original intervals. Intermediate flightplan matches require
+ordered positions within 2 NM; the older 10 NM visual overlay remains supported
+independently. Route-position graph estimates are explicitly distinct. Pressure
+comparison requires both transition references; optional channels cannot break
+core acquisition. Histogram P95 is approximate (overflow lower bound), and
+graph decimation does not alter statistical accumulators. Estimated OUT/IN
+events require stationary parking-brake/motion evidence and never identify a
+stand. Central `test_flight_comparison.py`, `test_flight_simbrief.py` and
+`test_simconnect_flight.py` own regressions. Live simulator/provider/add-on
+acceptance, usage and print acceptance remain unknown until measured.
+
+Template 11 retains original point rows when an airport occurs in both navlog
+and endpoint. Only verified duplicate airport anchors may share event time;
+unrelated intermediate matches keep strict ordering. This repairs an observed
+case where complete takeoff/landing evidence was suppressed by the duplicate
+arrival. Regression coverage retains both the duplicate and a rejected
+coincident intermediate alias. Grouped presentation preserves original phase
+statistics and weighted coverage. The renderer permanently supports labelled
+AMSL display from older recordings without using it as pressure altitude, and
+planned-only UTC when simulator UTC is absent. This keeps historical recordings
+useful without inventing unavailable sensor fields. Retirement requires evidence
+that retained recordings no longer need this display path; usage is unknown.
+
+Language rendering uses spawned isolated processes through `flight_render.py`.
+The parent prepares shared map backgrounds, retains credentials and joins every
+child before delivery or terminal error/cancellation. Running atomic editions
+may finish after cancellation; completed files remain available. Process startup
+errors require visible retry rather than a hidden serial fallback. This protects
+consistent font state, tile-cache ownership and complete-set delivery. Central
+render/workflow tests cover real child overlap and failure/cancel barriers;
+frozen Windows startup and live speedup remain unmeasured. The existing launcher
+freeze_support remains the compatibility owner for packaged process startup.
+History groups multiple versions numerically newest first without filesystem
+changes. Catalog numbers are authoritative; passive legacy numbering preserves
+the existing mtime-derived display ordering until explicit catalog organization.
+Legacy support remains permanent while retained PDFs depend on that layout;
+usage is unknown. Stable file/revision IDs preserve selection and receipts.
+
 Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,
 `flight_ui.py`, `flight_data.py` and `flight_report.py` in `winapp/uploader`.
 Legacy sessions without simbrief.json remain valid. Dispatch values are planned
 evidence and never overwrite simulator measurements. The OFP snapshot
 participates
-in the analysis checksum; template 9 prevents reuse of earlier report layouts.
+in the analysis checksum; the template identity prevents reuse of earlier layouts.
 Explicit local regeneration retains all previous PDF revisions and receipts.
 Version 0.6.1 fits both map extents independently of print DPI and omits the
 redundant capture-scope paragraph. Existing PDFs remain unchanged; actual

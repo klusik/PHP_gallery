@@ -15,7 +15,7 @@ import math
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from uploader.flight_data import FlightSample
@@ -138,6 +138,12 @@ OPTIONAL_SIMVARS = (
     ("brake_right", b"BRAKE RIGHT POSITION", b"percent"),
     ("autopilot", b"AUTOPILOT MASTER", b"bool"),
     ("load_factor", b"G FORCE", b"GForce"),
+    ("pressure_altitude", b"PRESSURE ALTITUDE", b"meters"),
+    ("parking_brake", b"BRAKE PARKING POSITION", b"bool"),
+    ("zulu_year", b"ZULU YEAR", b"number"),
+    ("zulu_month", b"ZULU MONTH OF YEAR", b"number"),
+    ("zulu_day", b"ZULU DAY OF MONTH", b"number"),
+    ("zulu_seconds", b"ZULU TIME", b"seconds"),
     ("engine_1", b"GENERAL ENG RPM:1", b"rpm"),
     ("engine_2", b"GENERAL ENG RPM:2", b"rpm"),
     ("engine_3", b"GENERAL ENG RPM:3", b"rpm"),
@@ -1018,11 +1024,37 @@ class SimConnectFlightClient:
             lights[key.removeprefix("light_")] = (
                 bool(round(value)) if value in (0.0, 1.0) else None
             )
+        # Optional Zulu calendar fields preserve the simulator date, independently
+        # of the host UTC receipt clock and normalized elapsed simulator time.
+        # Missing/expired channels deliberately leave schedule comparisons unknown.
+        simulator_utc = None
+        calendar = [self.values.get(key) for key in (
+            "zulu_year", "zulu_month", "zulu_day", "zulu_seconds",
+        )]
+        if all(value is not None and math.isfinite(value) for value in calendar):
+            year, month, day, seconds = calendar
+            try:
+                if (
+                    all(float(value).is_integer() for value in (year, month, day))
+                    and 0 <= seconds < 24 * 60 * 60  # One UTC calendar day.
+                ):
+                    simulator_utc = (
+                        datetime(int(year), int(month), int(day), tzinfo=timezone.utc)
+                        + timedelta(seconds=seconds)
+                    ).isoformat(timespec="milliseconds")
+            except (ValueError, OverflowError):
+                pass
         return FlightSample(
             session_elapsed_seconds=elapsed,
             recorded_utc=datetime.now(timezone.utc).isoformat(),
             simulator_elapsed_seconds=sim_elapsed,
             simulator_rate=rate,
+            pressure_altitude_m=self.values.get("pressure_altitude"),
+            simulator_utc=simulator_utc,
+            parking_brake=(
+                bool(round(self.values["parking_brake"]))
+                if self.values.get("parking_brake") in (0.0, 1.0) else None
+            ),
             latitude_deg=latitude if -90 <= latitude <= 90 else None,
             longitude_deg=longitude if -180 <= longitude <= 180 else None,
             altitude_m=altitude_ft * METRES_PER_FOOT,

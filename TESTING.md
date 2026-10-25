@@ -997,7 +997,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.143.2. Release verification uses the
+This guide applies to PHP Gallery Version 0.143.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1947,6 +1947,39 @@ entry point is introduced. Top-level test counts, nested subtest counts and
 class/module fixture counts remain separate; a parent with a skipped subtest
 does not become individual PASS coverage. Repeated subtest labels retain their
 observed event order instead of losing events through identity deduplication.
+
+`winapp/tests/test_flight_comparison.py` belongs to this same discovery owner.
+It replays original samples with accelerated simulator time, separates initial
+fuel loading from net burn, checks weighted MAE/RMSE/P95 and graph-only thinning,
+and refuses full-flight claims across refuelling, gaps, missing pressure/mass,
+unmatched airports and incompatible altitude references. It covers legacy
+dispatch defaults, session reanalysis, all four comparison catalogs, real vector
+charts and a PDF whose last table contains planned/actual flightplan values.
+Native-provider fixtures cover optional pressure, parking and Zulu calendar
+normalization separately. These deterministic cases do not establish live
+MSFS/add-on fuel compatibility, real OFP field availability, printed layout or
+stand detection. Hosted BASIC only checks source syntax/declarations; functional
+execution belongs to the hosted central WinApp owner during qualification.
+
+`test_flight_render.py` uses a real spawn pool and a shared marker barrier to
+prove all four language jobs overlap in distinct child processes. It verifies
+parent-thread callbacks, one shared map preparation and requested result order.
+Controlled running workers cover cancellation/error draining and retained
+successful outputs. Workflow fixtures assert that every selected render finishes
+before the first upload and that renderer failure cannot upload a partial set.
+UI fixtures cover out-of-order language completion, single-version direct files,
+descending numeric v10/v2/v1 groups under heading sorts, descendant aggregates,
+stable file selection and restored flight/version expansion. Catalog fixtures
+keep version numbers independent of file modification order and reject malformed
+catalog numbers without changing PDF bytes. This source
+coverage does not establish frozen-executable process startup, live Windows
+layout or a measured speedup on a user's machine.
+
+The same owner covers repeated navlog/airport anchors, rejected coincident
+intermediate aliases, grouped-phase total preservation, opposite fuel-stock/
+fuel-consumption color polarity and legacy AMSL/UTC table context. PDF layout
+checks inspect explicitly requested report editions separately from hosted
+qualification; rendering previews does not qualify FULL or a simulator.
 
 The native Windows update smoke remains optional and its actual skip reason is
 reported by name. Linux Python fixtures do not establish installed-Windows,

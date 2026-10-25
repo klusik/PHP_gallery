@@ -272,11 +272,16 @@ def pending_sessions(root: Path, binding: str) -> list[SessionPlan]:
 
 @dataclass
 class ReportRevision:
-    """Describe one retained PDF revision and its available language files."""
+    """Retain identity, language paths and an optional one-based display version.
+
+    Number comes from the existing catalog or its passive legacy ordering;
+    exposing it never renames files or changes delivery identities.
+    """
 
     report_id: str
     files: dict[str, Path]
     modified_utc: str = ""
+    number: int | None = None
 
 
 @dataclass
@@ -341,14 +346,15 @@ def report_file_details(pdf: Path) -> ReportFileDetails:
 
 
 def _report_catalog(directory: Path) -> tuple[Path, dict[str, JsonValue]]:
-    """Read the private filename journal after confining its storage paths.
+    """Read confined filename metadata with positive numeric version identities.
 
     Args:
         directory (Path): Owned stopped-flight session directory.
 
     Returns:
         tuple[Path, dict[str, JsonValue]]: Catalog path and revision-ID mapping;
-            each row contains number, language filenames and original sources.
+            each row has positive int number, files mapping language strings to
+            filename strings and optional sources mapping languages to originals.
 
     Raises:
         ValueError: Catalog paths redirect or the revision mapping is malformed.
@@ -367,6 +373,8 @@ def _report_catalog(directory: Path) -> tuple[Path, dict[str, JsonValue]]:
             raise ValueError("Invalid PDF revision catalog entry.")
         if re.fullmatch(r"[A-Za-z0-9_-]+", identity) is None:
             raise ValueError("Invalid PDF revision identity.")
+        if type(row.get("number")) is not int or row["number"] < 1:
+            raise ValueError("Invalid PDF revision number; restore its catalog.")
         for language, name in row["files"].items():
             if (
                 language not in REPORT_LANGUAGES or not isinstance(name, str)
@@ -528,7 +536,9 @@ def allocate_report_revision(
             directory, code, number, include_dispatch=True,
         ))
     atomic_write_json(path, {"revisions": rows})
-    return ReportRevision(report_id, {code: directory / "reports" / row["files"][code] for code in languages})
+    return ReportRevision(report_id,
+        {code: directory / "reports" / row["files"][code] for code in languages},
+        number=number)
 
 
 def report_file_label(directory: Path, revision: ReportRevision, language: str) -> str:
@@ -546,6 +556,8 @@ def report_file_label(directory: Path, revision: ReportRevision, language: str) 
     filename = revision.files[language].name
     if " - v" in filename:
         return filename
+    if revision.number is not None:
+        return _report_filename(directory, language, revision.number)
     revisions = list(reversed(report_revisions(directory)))
     number = next((
         index + 1 for index, row in enumerate(revisions)
@@ -563,9 +575,9 @@ def report_revisions(directory: Path) -> list[ReportRevision]:
         directory (Path): Owned session directory with a reports child.
 
     Returns:
-        list[ReportRevision]: Newest revisions first, with stable report identity,
-            language-to-file mappings and UTC modification timestamp; absent
-            reports produce an empty list.
+        list[ReportRevision]: Newest file modification first, with stable report
+            identity, language paths, UTC timestamp and catalog version number
+            (passive legacy ordering when uncataloged); absent reports return [].
 
     Raises:
         ValueError: A report path redirects outside its session or has an
@@ -617,16 +629,19 @@ def report_revisions(directory: Path) -> list[ReportRevision]:
             raise ValueError("Unsupported saved PDF revision identity.")
         groups.setdefault(revision, {})[language] = path
         modified[revision] = max(modified.get(revision, 0.0), path.stat().st_mtime)
+    ordered = sorted(groups, key=lambda item: (modified[item], item), reverse=True)
+    legacy_numbers = {identity: index + 1
+                      for index, identity in enumerate(reversed(ordered))}
     return [
         ReportRevision(
             identity, groups[identity],
             datetime.fromtimestamp(modified[identity], timezone.utc).isoformat(
                 timespec="seconds"
             ),
+            number=catalog[identity]["number"] if identity in catalog
+                else legacy_numbers[identity],
         )
-        for identity in sorted(
-            groups, key=lambda item: (modified[item], item), reverse=True
-        )
+        for identity in ordered
     ]
 
 

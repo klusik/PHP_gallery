@@ -24,7 +24,7 @@ import uploader.flight_ui as flight_ui
 import uploader.flight_workflow as flight_workflow
 from uploader.flight_jobs import (
     FlightPreferences, SavedFlight, SessionPlan, connection_binding,
-    ImportBindings,
+    ImportBindings, ReportFileDetails,
 )
 
 
@@ -113,6 +113,8 @@ class FlightUITests(unittest.TestCase):
         ui.report_tree = None
         ui.report_rows = {}
         ui.report_files = {}
+        ui.report_versions = {}
+        ui.report_group_files = {}
         ui.report_file_sort_keys = {}
         ui.report_button = None
         ui.keep_local_button = None
@@ -1296,6 +1298,195 @@ class FlightUITests(unittest.TestCase):
         ui.report_tree.delete.assert_not_called()
         ui.report_tree.selection_set.assert_not_called()
         ui.report_tree.item.assert_not_called()
+
+    def _history_tree(self) -> Mock:
+        """Model the Treeview operations used by passive history refresh/sort.
+
+        Returns:
+            Mock: Tree with stable IDs, nested child order, open state, labels,
+                column values and selection; no Tk window is constructed.
+        """
+        tree = Mock()
+        children: dict[str, list[str]] = {"": []}
+        parents: dict[str, str] = {}
+        labels: dict[str, str] = {}
+        expanded: set[str] = set()
+        values_by_id: dict[str, tuple[str | int, ...]] = {}
+        selected: list[str] = []
+
+        def insert(
+            parent: str, index: str, *, iid: str, text: str,
+            open: bool = False, values: tuple[str | int, ...] = (),
+        ) -> str:
+            """Insert a leaf or expandable group at the current parent's end.
+
+            Args:
+                parent (str): Parent row ID or empty root ID.
+                index (str): Treeview end position used by the controller.
+                iid (str): Stable unique row ID.
+                text (str): Display label.
+                open (bool): Whether to restore expanded state.
+                values (tuple[str | int, ...]): Six history column values.
+            Returns:
+                str: Inserted row ID.
+            """
+            children.setdefault(parent, []).append(iid)
+            children[iid] = []
+            parents[iid], labels[iid], values_by_id[iid] = parent, text, values
+            if open:
+                expanded.add(iid)
+            return iid
+
+        def item(
+            identity: str, option: str | None = None, *,
+            values: tuple[str | int, ...] | None = None,
+            open: bool | None = None,
+        ) -> str | bool | None:
+            """Read labels/expansion or replace group column values.
+
+            Args:
+                identity (str): Existing row ID.
+                option (str | None): Text/open query or None for updates.
+                values (tuple[str | int, ...] | None): Replacement column tuple.
+                open (bool | None): New expansion state when supplied.
+            Returns:
+                str | bool | None: Label/open state for a query, else None.
+            """
+            if values is not None:
+                values_by_id[identity] = values
+            if open is not None:
+                expanded.discard(identity)
+                if open:
+                    expanded.add(identity)
+            if option == "open":
+                return identity in expanded
+            return labels[identity] if option == "text" else None
+
+        def delete(identity: str) -> None:
+            """Remove a group and its descendants like Treeview.delete.
+
+            Args:
+                identity (str): Existing row ID to remove recursively.
+            Returns:
+                None: Removes descendants, parent link and expanded state.
+            """
+            for child in tuple(children[identity]):
+                delete(child)
+            children[parents.pop(identity)].remove(identity)
+            del children[identity]
+            expanded.discard(identity)
+
+        def move(identity: str, parent: str, index: int) -> None:
+            """Reorder an existing row without changing its ID or expansion.
+
+            Args:
+                identity (str): Row to move.
+                parent (str): Existing destination parent.
+                index (int): Zero-based destination position.
+            Returns:
+                None: Retains the row and all descendants.
+            """
+            children[parents[identity]].remove(identity)
+            children[parent].insert(index, identity)
+            parents[identity] = parent
+
+        tree.get_children.side_effect = lambda parent="": tuple(children[parent])
+        tree.exists.side_effect = lambda identity: identity in parents
+        tree.insert.side_effect = insert
+        tree.item.side_effect = item
+        tree.delete.side_effect = delete
+        tree.move.side_effect = move
+        tree.selection.side_effect = lambda: tuple(selected)
+        tree.selection_set.side_effect = lambda identities: selected.__setitem__(slice(None), identities)
+        tree.set.side_effect = lambda identity, column: values_by_id[identity][-1]
+        return tree
+
+    def test_history_nests_only_multiple_versions_and_preserves_selection(self) -> None:
+        """Reparent stable PDF rows into numeric descending expandable versions.
+
+        Returns:
+            None: Single editions stay directly below their flight; v10 precedes
+                v2/v1 under every sort direction and refresh retains selection
+                and expanded groups without touching any report files.
+        """
+        ui = self._ui(self._host())
+        ui.report_tree = self._history_tree()
+        ui.select_report = Mock()
+        row = SavedFlight(ui.directory / "flight", "2026-10-18T12:00:00Z",
+                          "A320", 20, report_count=1, recording_ended=True)
+        revisions = [flight_ui.ReportRevision("first", {
+            "en": row.directory / "reports" / "English - v1.pdf",
+        }, number=1)]
+        details = ReportFileDetails(3, "2026-10-18T12:00:00+00:00", False)
+        with patch.object(flight_ui, "saved_flights", return_value=[row]), \
+                patch.object(flight_ui, "report_revisions", return_value=revisions), \
+                patch.object(flight_ui, "report_file_details", return_value=details), \
+                patch.object(flight_ui, "load_dispatch", return_value=None):
+            ui.refresh_reports()
+            leaf = "pdf:flight:first:en"
+            self.assertEqual((leaf,), ui.report_tree.get_children("flight"))
+            self.assertEqual({}, ui.report_versions)
+            ui.report_tree.selection_set((leaf,))
+            ui.report_tree.item("flight", open=True)
+            # Deliberately unsorted and crossing the lexical v10/v2 boundary.
+            for number in (2, 10):
+                revisions.append(flight_ui.ReportRevision("edition-" + str(number), {
+                    "en": row.directory / "reports" / ("English - v" + str(number) + ".pdf"),
+                }, number=number))
+            ui.refresh_reports()
+            groups = ui.report_tree.get_children("flight")
+            self.assertEqual(["v10", "v2", "v1"],
+                             [ui.report_tree.item(group, "text") for group in groups])
+            self.assertEqual((leaf,), ui.report_tree.selection())
+            self.assertEqual((leaf,), ui.report_tree.get_children(groups[-1]))
+            self.assertTrue(ui.report_tree.item(groups[-1], "open"))
+            ui.report_tree.item(groups[0], open=True)
+            ui.sort_reports("#0")
+            self.assertEqual(groups, ui.report_tree.get_children("flight"))
+            ui.refresh_reports()
+            self.assertTrue(ui.report_tree.item(groups[0], "open"))
+            self.assertTrue(ui.report_tree.item("flight", "open"))
+            self.assertEqual((leaf,), ui.report_tree.selection())
+            ui.report_tree.selection_set((groups[0],))
+            self.assertIs(row, ui.selected_saved_flight())
+            ui.start_saved_upload = Mock()
+            with patch.object(flight_ui.messagebox, "showinfo") as info:
+                ui.upload_saved_pdf()
+            ui.start_saved_upload.assert_not_called()
+            self.assertEqual("select_pdf_files", info.call_args.args[1])
+            ui.report_sort_column = "pages"
+            self.assertEqual(9, ui.report_sort_key("flight")[0])
+
+    def test_parallel_progress_uses_language_results_instead_of_position(self) -> None:
+        """Display a later completed language while the first still renders.
+
+        Returns:
+            None: Czech is saved independently of English and the completed
+                file remains visible after cancellation while queued work stops.
+        """
+        ui = self._ui(self._host())
+        plan = SessionPlan(ui.directory / "flight", ui.binding(), ("en", "cs"), True)
+        progress = flight_workflow.FlightProgress(
+            phase="generating", render_session=plan.session_id,
+            rendering_languages=("en",), rendered_languages=("cs",),
+        )
+        ui.operation = SimpleNamespace(local_reports=True, saved_upload=False,
+                                       plans=[plan], snapshot=lambda: progress)
+        ui.task_tree = Mock()
+        ui.task_tree.exists.return_value = False
+        ui.task_tree.get_children.return_value = ()
+        ui.refresh_tasks()
+        states = {call.kwargs["iid"]: call.kwargs["values"][0]
+                  for call in ui.task_tree.insert.call_args_list}
+        self.assertEqual("phase_generating", states["flight-en"])
+        self.assertEqual("report_state_local", states["flight-cs"])
+        progress.phase = "cancelled"
+        ui.task_tree.insert.reset_mock()
+        ui.refresh_tasks()
+        states = {call.kwargs["iid"]: call.kwargs["values"][0]
+                  for call in ui.task_tree.insert.call_args_list}
+        self.assertEqual("phase_idle", states["flight-en"])
+        self.assertEqual("report_state_local", states["flight-cs"])
 
     def test_dialog_is_placed_near_its_invoking_window(self) -> None:
         """Center secondary windows over their owner on a large desktop.

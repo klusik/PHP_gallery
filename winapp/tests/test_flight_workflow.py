@@ -18,6 +18,7 @@ import threading
 import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Callable
 from unittest.mock import Mock, patch
 
 import uploader.flight_workflow as workflow
@@ -271,6 +272,36 @@ class FlightWorkflowTests(unittest.TestCase):
         report = ModuleType("uploader.flight_report")
         report.REPORT_TEMPLATE_VERSION = "test"
         report.render_report = Mock(side_effect=self._render_report)
+
+        def render_batch(
+            analysis: SimpleNamespace, destinations: dict[str, Path],
+            cancel: threading.Event,
+            started: Callable[[str], None],
+            completed: Callable[[str, Path], None],
+        ) -> dict[str, Path]:
+            """Isolate orchestration from the separately tested process pool.
+
+            Args:
+                analysis (SimpleNamespace): Controlled analyzed sample fixture.
+                destinations (dict[str, Path]): Reserved language PDF paths.
+                cancel (threading.Event): Cancel queued fixture work.
+                started (Callable[[str], None]): Parent progress callback.
+                completed (Callable[[str, Path], None]): Parent journal callback.
+            Returns:
+                dict[str, Path]: Finished stub PDFs, or raises on cancellation.
+            """
+            outputs = {}
+            for language, destination in destinations.items():
+                if cancel.is_set():
+                    raise InterruptedError("Cancelled queued fixture render")
+                started(language)
+                outputs[language] = report.render_report(analysis, language, destination)
+                completed(language, outputs[language])
+            return outputs
+
+        renderer = patch.object(workflow, "render_report_variants", render_batch)
+        renderer.start()
+        self.addCleanup(renderer.stop)
         return delivery, report
 
     def test_no_samples_completes_without_creating_blank_report(self) -> None:
@@ -375,6 +406,78 @@ class FlightWorkflowTests(unittest.TestCase):
             self.assertEqual(delivery.deliver_report.call_count, 2)
             self.assertEqual(worker.snapshot().phase, "error")
             revoke.assert_not_called()
+
+    def test_complete_render_set_precedes_any_delivery(self) -> None:
+        """Upload only after every selected PDF is present and journaled.
+
+        Returns:
+            None: The first transfer observes all render completions; a failed
+                language instead retains local files without starting delivery.
+        """
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as temporary:
+                plan = self._plan(Path(temporary) / "flight", languages=("en", "cs"))
+                delivery, report = self._report_modules()
+                analysis = self._analysis()
+                worker = workflow.FinalizationWorker(
+                    [plan], "https://gallery.test/api", "test-key",
+                    lambda cancel, deadline: None, lambda: None, False,
+                )
+
+                def render(
+                    data: SimpleNamespace, language: str, destination: Path,
+                ) -> Path:
+                    """Fail the second edition only in the negative case.
+
+                    Args:
+                        data (SimpleNamespace): Controlled flight analysis.
+                        language (str): Selected language.
+                        destination (Path): Reserved local PDF output.
+                    Returns:
+                        Path: Completed file, or raises for the Czech fault.
+                    """
+                    if fail and language == "cs":
+                        raise RuntimeError("Czech renderer failed")
+                    return self._render_report(data, language, destination)
+
+                def delivered(
+                    upload_url: str, api_key: str, pdf: Path, session_id: str,
+                    language: str, report_id: str,
+                    emit: Callable[[int, int], None],
+                ) -> None:
+                    """Check the render barrier at the first gallery operation.
+
+                    Args:
+                        upload_url (str): Unused fixture gallery endpoint.
+                        api_key (str): Unused fake gallery credential.
+                        pdf (Path): Completed PDF selected for upload.
+                        session_id (str): Owning local flight identity.
+                        language (str): Uploaded language.
+                        report_id (str): Stable reserved report identity.
+                        emit (Callable[[int, int], None]): Unused byte callback.
+                    Returns:
+                        None: All selected languages already have completed PDFs.
+                    """
+                    self.assertEqual(plan.languages, worker.snapshot().rendered_languages)
+                    self.assertEqual(len(plan.languages), report.render_report.call_count)
+
+                report.render_report.side_effect = render
+                delivery.deliver_report.side_effect = delivered
+                with patch.object(workflow, "analyze_session", return_value=analysis), \
+                        patch.dict("sys.modules", {
+                            "uploader.flight_delivery": delivery,
+                            "uploader.flight_report": report,
+                        }):
+                    worker.run()
+                if fail:
+                    delivery.deliver_report.assert_not_called()
+                    self.assertEqual("error", worker.snapshot().phase)
+                    self.assertEqual(("en",), worker.snapshot().rendered_languages)
+                    self.assertEqual({}, SessionPlan.load(plan.directory).receipts)
+                    self.assertEqual(1, len(report_revisions(plan.directory)))
+                else:
+                    self.assertEqual("completed", worker.snapshot().phase)
+                    self.assertEqual(len(plan.languages), delivery.deliver_report.call_count)
 
     def test_revoke_waits_for_every_plan_and_cleanup_ack(self) -> None:
         """Submit key revocation only after plans and receipts are complete.

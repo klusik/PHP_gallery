@@ -91,7 +91,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.143.2';
+const CMS_VERSION = '0.143.3';
 ```
 
 Update-related code uses:
@@ -4219,13 +4219,40 @@ Two optional planning pages retain dispatch identity, loading, fuel components,
 weights and schedule as planned evidence. New PDF reservations may add flight
 number/ICAO pair; existing catalog filenames and receipts remain stable.
 
+`flight_comparison.py` owns a second bounded streaming pass over original saved
+samples, separate from chart reduction. Its language-neutral dataclasses retain
+phase totals, metric-specific simulator-time coverage, signed/absolute/squared
+error sums, bounded weighted histograms, graph-only deviation points and ordered
+OFP passages. No persistence or remote access occurs in that service. The
+analysis schema includes this immutable comparison; rendering adds vector
+deviation/distribution pages and ends with the completed flightplan in every
+edition. Airport anchoring, continuous timing, measured fuel mass and compatible
+pressure references gate each claim independently. New optional pressure,
+parking-brake and Zulu-calendar channels remain isolated from core acquisition.
+Historic sessions remain readable without synthesizing absent measurements.
+
 `flight_jobs.py` owns persisted preferences, session plans and workspace leases.
 Its saved-PDF metadata reader tolerates missing pypdf with an unknown page
 count,
 so browsing/opening existing files does not depend on the rendering environment.
+`flight_render.py` coordinates one spawned renderer per selected language, bounded
+by the four supported languages. The parent prepares both shared map PNGs once,
+avoiding concurrent tile-cache writes; children isolate ReportLab/font state and
+receive only normalized analysis, map bytes and reserved output paths. Parent
+callbacks journal each completion in its actual finish order. All children join
+before success, error or cancellation returns; queued renders can be cancelled,
+running atomic renders finish and remain recoverable. `flight_workflow.py` starts
+gallery delivery only after this complete-set barrier; credentials/receipts stay
+in the parent. The launcher's existing freeze_support handles frozen startup.
+
 `flight_ui.py` sorts cached rows by typed UTC/count/name keys without rebuilding
 native tree items on a heading click; refresh restores expanded groups and all
-selected identities. SimBrief indicators derive from staged/current accepted
+selected identities. A single revision lists files directly below its flight;
+multiple revisions use expandable version groups in descending numeric catalog
+order regardless of heading direction. Groups do not change disk layout or
+receipt identities. Cached descendant files supply flight/group aggregates, and
+file IDs remain stable when a second version introduces the grouping level.
+SimBrief indicators derive from staged/current accepted
 plans, while historical plans appear only in the selected flight's details.
 `ui_theme.place_dialog` positions flight and update notices over their invoking
 window, with explicit parents for native confirmations and failures.

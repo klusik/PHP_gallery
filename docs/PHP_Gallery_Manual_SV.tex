@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.143.2}
+\newcommand{\version}{0.143.3}
 \newcommand{\manualdate}{25~oktober~2026}
 
 \hypersetup{
@@ -1157,7 +1157,7 @@ detta. Se \filepath{winapp/README.md}. Värdbaserade installationsbyggen använd
 uttryckligen x64 CPython 3.14.x. Före paketering kontrolleras byggtolken och
 den faktiska patchversionen, implementationen och pekarbredden i EXE genom en
 rapport före GUI-start. Felaktig eller saknad rapport blockerar förberedelsen.
-Den oberoende källversionen för programmet är 0.9.0.
+Den oberoende källversionen för programmet är 0.10.0.
 
 Den medföljande inbyggda SimConnect-DLL-filen kommer oförändrad från officiella
 MSFS 2024 SDK Core 1.7.3. Dess 84\,480 byte och SHA256 dokumenteras i
@@ -1229,6 +1229,17 @@ skapar fyra språkversioner utan bekräftelse, slutför accepterat arbete och
 obligatorisk leverans och återkallar sedan den sparade nyckeln. Detta gäller
 även när automatisk PDF-skapning är av.
 
+Valda språk skapas samtidigt i separata processer, en per språk (för närvarande
+högst fyra). Flyganalys och kartbakgrunder förbereds en gång; huvudappen laddar
+upp först när hela uppsättningen lyckats. Fel bevarar färdiga PDF-filer för
+återställning. Avbrott stoppar köade uppgifter, väntar på pågående rendering
+och behåller dess färdiga filer.
+
+Med en version visar en expanderad flygning filerna direkt. Flera versioner
+visas som expanderbara grupper, alltid numeriskt fallande (v5, v4, v3),
+oberoende av kolumnsortering. Uppdatering behåller expanderade flygningar och
+versioner samt filvalet. Denna vy flyttar eller byter inte namn på filer på disk.
+
 För en stoppad flygning skapar \ui{Skapa lokal PDF} eller \ui{Skapa lokal PDF
 igen} en ny numrerad version i \filepath{reports/}. Tidigare PDF-filer,
 rådata och uppladdningskvittenser behålls. Ingen nyckel, uppladdning eller
@@ -1267,7 +1278,8 @@ Avbrott behåller färdiga versioner. Protokollfel visar maskerad åtgärd,
 HTTP-status, innehållstyp och ett begränsat utdrag ur svaret.
 
 Utan sparad nyckel öppnar \ui{Börja flygning} API-inställningarna. Expanderade
-flygningar visar enskilda PDF-filer; dubbelklick öppnar standardvisaren.
+flygningar och eventuella versioner visar PDF-filer; dubbelklick öppnar
+standardvisaren.
 \ui{Öppna mapp med PDF-filer} går direkt till PDF-mappen. Namn innehåller UTC,
 flygplan, språk och version. En återupptagbar privat katalog ordnar äldre
 mappar utan ändrade filbytes eller uppladdningsidentiteter; JSON-filer finns
@@ -1682,6 +1694,43 @@ förklaras i diagrammet. Planvärden är inga ombordmätningar och skapar inget
 faktiskt passagerarantal eller förseningsbetyg. Äldre OFP-bilder kan läsas;
 nya fält kräver uttrycklig omläsning/import. Karthämtning gäller bara den visade
 vyn med 45 sekunders nätbudget och stopp vid första leverantörsfelet.
+
+En kopplad OFP lägger till plan-/utfallsstatistik på alla fyra språken;
+kartor, profiler och landningsdetaljer bevaras. Den avslutande färdplanstabellen
+med upprepad rubrik behåller alla OFP-punkter med planerad/faktisk tid från
+start, simulator-UTC, bränsle kvar, tryckhöjd, TAS, GS, vind och passageavstånd.
+Mellanpunkter kräver ordnade passager inom 2 NM; flygplatsrader använder
+upptäckt start/landning inom 10 NM. Saknade värden är okända. Summor och faser
+skiljer flyg-/blocktid, distans, bränsle, vikter och uppskattad försening.
+Mer bränsle vid start räknas inte som besparing.
+
+Vektorgrafer visar avvikelse för tid, bränsle ombord, startmängdsjusterad
+nettoförbrukning, tryckhöjd och ruttavstånd vid OFP-projektionspunkten.
+Dessa planskattningar skiljer sig från ordnade matchningar i sluttabellen.
+Tidsviktade histogram, medel med tecken, MAE, RMSE och absolut P95 använder
+ursprungliga observationer oberoende av grafuttunning. P95 använder klasser
+om 1 s, 0,1 NM och 25 ft; sista klassen ger en undre gräns. Orange kartsegment
+överskrider det beskrivande 5-NM-bandet; höjd använder ±300 ft. Detta är inga
+operativa gränser eller pilotbetyg. Fasmedel omfattar IAS/TAS/GS, V/S och vind
+relativt den flugna markkursen.
+
+Nya valfria tryckhöjds-, parkeringsbroms- och Zulu-kalenderdata skiljs från
+datorns UTC. Höjdskillnader kräver båda övergångshöjderna. Uppskattad OUT/IN
+kräver bekräftat stillastående/rörelse och identifierar ingen uppställningsplats.
+Flygsummor kräver matchande flygplatser, en registrerad flygning och fullständiga
+berörda data. Luckor, tankning, olika datum och äldre saknade fält döljer berörda
+slutsatser. Gamla inspelningar kan läsas; uttrycklig OFP-import/omläsning eller
+ny inspelning ger nya data. Tidigare PDF-filer och kvitton bevaras.
+
+Kompakta analysfält förenar plan, utfall och skillnad i en cell och grupperar
+korta gränsfaser med stigning, sjunkning eller ankomst. Ursprunglig statistik
+bevaras. Grönt betyder mindre tid/nettoförbrukning eller mer bränsle kvar,
+rött motsatsen. Fartspröt visar observerat min/max och viktat medel; fasstaplar
+jämför plan och utfall. Detta är inga konfidensintervall. Bekräftade dubbla
+flygplatsrader får dela samma sluttid utan att dölja giltiga summor. Saknade
+värden visas som streck. Äldre AMSL-höjder markeras med stjärna och ger inget
+tryckhöjdsdelta; utan simulator-UTC visar kolumnen uttryckligen plan-UTC.
+Saknade kanalernas sammanhang förklaras en gång.
 
 SimBrief-huvudkontrollen visar den inlästa planen; sparade flygdetaljer visar
 sin egen OFP-koppling. Slutförandet använder planen för aktuell eller enda

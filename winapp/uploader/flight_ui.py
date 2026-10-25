@@ -244,6 +244,8 @@ class FlightUI:
         self.report_tree: ttk.Treeview | None = None
         self.report_rows: dict[str, SavedFlight] = {}
         self.report_files: dict[str, tuple[str, ReportRevision, str]] = {}
+        self.report_versions: dict[str, tuple[str, ReportRevision]] = {}
+        self.report_group_files: dict[str, list[str]] = {}
         self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
         self.keep_local_button: ttk.Button | None = None
@@ -892,7 +894,7 @@ class FlightUI:
         """Prepare typed time, count or text keys from the passive catalog.
 
         Args:
-            identity (str): Cached saved-flight row or its retained PDF child.
+            identity (str): Cached flight, version group or retained PDF row.
         Returns:
             tuple[str | int, str]: Comparable value for the chosen column and
                 stable row identity; each column uses one consistent value type.
@@ -909,18 +911,22 @@ class FlightUI:
                 return (0, identity)
             text = str(self.report_tree.item(identity, "text"))
         else:
-            row = self.report_rows[identity]
+            version = self.report_versions.get(identity)
+            row = self.report_rows[version[0] if version else identity]
             stamp = row.started_utc
+            children = self.report_group_files.get(identity, [])
             if column in {"samples", "pdfs"}:
-                return (row.sample_count if column == "samples" else row.report_count, identity)
-            children = self.report_tree.get_children(identity)
+                count = (0 if version else row.sample_count) if column == "samples" else (
+                    len(children) if version else row.report_count
+                )
+                return (count, identity)
             if column == "pages":
                 return (sum(self.report_file_sort_keys[child].pages or 0
                     for child in children if child in self.report_file_sort_keys), identity)
             if column == "created":
                 stamp = max((self.report_file_sort_keys[child].created_utc
                     for child in children if child in self.report_file_sort_keys), default="")
-            text = row.aircraft
+            text = "v" + str(version[1].number) if version else row.aircraft
         if column in {"started", "created"}:
             try:
                 parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
@@ -935,18 +941,25 @@ class FlightUI:
         return (text.casefold(), identity)
 
     def apply_report_sort(self) -> None:
-        """Apply the selected column to both flight groups and their PDF children.
+        """Sort flights/files by the selected column and versions newest first.
 
         Returns:
-            None: Moves existing Treeview items and marks direction in the heading.
+            None: Moves existing items without losing expansion/selection;
+                version groups always use descending numeric version order.
         """
         tree = self.report_tree
         if tree is None or not tree.winfo_exists():
             return
-        parents = ("",) + tuple(tree.get_children())
+        parents = ("",) + tuple(tree.get_children()) + tuple(self.report_versions)
         for parent in parents:
-            ordered = sorted(tree.get_children(parent), key=self.report_sort_key,
-                             reverse=self.report_sort_descending)
+            children = tree.get_children(parent)
+            if children and all(child in self.report_versions for child in children):
+                ordered = sorted(children, key=lambda child: (
+                    self.report_versions[child][1].number or 0, child,
+                ), reverse=True)
+            else:
+                ordered = sorted(children, key=self.report_sort_key,
+                                 reverse=self.report_sort_descending)
             for position, identity in enumerate(ordered):
                 tree.move(identity, parent, position)
         for column in ("#0", "started", "samples", "pdfs", "created", "pages", "state"):
@@ -965,7 +978,11 @@ class FlightUI:
         if tree is None or not tree.winfo_exists():
             return
         selected = tree.selection()
-        expanded = {identity for identity in self.report_rows if tree.exists(identity) and tree.item(identity, "open")}
+        previous_versions = set(self.report_versions)
+        expanded = {
+            identity for identity in (*self.report_rows, *self.report_versions)
+            if tree.exists(identity) and tree.item(identity, "open")
+        }
         try:
             self.report_rows = {
                 row.directory.name: row for row in saved_flights(self.directory)
@@ -977,6 +994,8 @@ class FlightUI:
         for identity in tree.get_children():
             tree.delete(identity)
         self.report_files = {}
+        self.report_versions = {}
+        self.report_group_files = {}
         self.report_file_sort_keys = {}
         for identity, row in self.report_rows.items():
             live = bool(
@@ -1005,11 +1024,33 @@ class FlightUI:
                 started, count,
                 row.report_count, "", "", self.text("report_state_" + state),
             ))
+            self.report_group_files[identity] = []
             try:
-                for revision in report_revisions(row.directory):
+                revisions = report_revisions(row.directory)
+                multiple_versions = len(revisions) > 1
+                for revision in sorted(revisions,
+                        key=lambda item: item.number or 0, reverse=True):
+                    parent = identity
+                    if multiple_versions:
+                        parent = "version:" + identity + ":" + revision.report_id
+                        self.report_versions[parent] = (identity, revision)
+                        self.report_group_files[parent] = []
+                        tree.insert(identity, "end", iid=parent,
+                            text="v" + str(revision.number),
+                            open=parent in expanded or (
+                                parent not in previous_versions and any(
+                                    "pdf:" + identity + ":" + revision.report_id + ":" + code
+                                    in selected for code in revision.files
+                                )
+                            ),
+                            values=("", "", len(revision.files), "", "",
+                                    self.text("report_version")))
                     for language in revision.files:
                         child = "pdf:" + identity + ":" + revision.report_id + ":" + language
                         self.report_files[child] = (identity, revision, language)
+                        self.report_group_files[identity].append(child)
+                        if multiple_versions:
+                            self.report_group_files[parent].append(child)
                         filename = report_file_label(row.directory, revision, language)
                         version = filename.rsplit(" - ", 1)[-1].removesuffix(".pdf")
                         details = report_file_details(revision.files[language])
@@ -1019,15 +1060,33 @@ class FlightUI:
                         ).astimezone().strftime("%Y-%m-%d %H:%M:%S")
                         if details.estimated_time:
                             created += " *"
+                        label = language.upper() + " · " + filename
+                        if not multiple_versions:
+                            label = version + " · " + label
                         tree.insert(
-                            identity, "end", iid=child,
-                            text=version + " · " + language.upper() + " · " + filename,
+                            parent, "end", iid=child,
+                            text=label,
                             values=(
                                 "", "", "", created,
                                 details.pages if details.pages is not None else "?",
                                 "PDF",
                             ),
                         )
+                    if multiple_versions:
+                        details = [self.report_file_sort_keys[child]
+                                   for child in self.report_group_files[parent]]
+                        pages = (sum(item.pages for item in details)
+                                 if all(item.pages is not None for item in details) else "?")
+                        latest = max(details, key=lambda item: item.created_utc, default=None)
+                        created = ""
+                        if latest is not None:
+                            created = datetime.fromisoformat(
+                                latest.created_utc,
+                            ).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                            if latest.estimated_time:
+                                created += " *"
+                        tree.item(parent, values=("", "", len(details), created,
+                            pages, self.text("report_version")))
             except (OSError, ValueError) as exc:
                 self.report_detail_var.set(str(exc))
         self.apply_report_sort()
@@ -1052,6 +1111,8 @@ class FlightUI:
                 identity = selected[0]
                 if identity in self.report_files:
                     identity = self.report_files[identity][0]
+                elif identity in self.report_versions:
+                    identity = self.report_versions[identity][0]
                 return self.report_rows.get(identity)
         if (
             self.independent_operation()
@@ -1940,7 +2001,7 @@ class FlightUI:
         self.dialog.deiconify()
 
     def cancel_local_pdf(self) -> None:
-        """Cancel independent PDF work between editions, retaining finished work.
+        """Cancel queued PDF work and drain running renders, retaining results.
 
         Returns:
             None: Signals local generation or saved upload; never changes
@@ -1992,14 +2053,21 @@ class FlightUI:
                     rows.append((plan.session_id, self.text("record_flight"),
                                  self.text("phase_completed" if plan.completed else "phase_draining")))
                     continue
-                for index, language in enumerate(plan.languages):
-                    if operation.local_reports is True:
-                        state = self.text("report_state_local" if progress.done >= index + 2 else "phase_idle")
-                    else:
-                        complete = language in plan.receipts or (plan.completed and plan.local_only)
-                        state = self.text("phase_completed" if complete else "phase_idle")
-                    if progress.detail == language.upper():
-                        state = self.text("phase_" + progress.phase)
+                current = progress.render_session == plan.session_id
+                for language in plan.languages:
+                    state = self.text("phase_idle")
+                    if current and language in progress.rendered_languages:
+                        state = self.text("report_state_local" if operation.local_reports
+                                          else "phase_ready")
+                    if (current and progress.phase == "generating"
+                            and language in progress.rendering_languages):
+                        state = self.text("phase_generating")
+                    if (current and progress.phase == "uploading"
+                            and progress.detail == language.upper()):
+                        state = self.text("phase_uploading")
+                    complete = language in plan.receipts or (plan.completed and plan.local_only)
+                    if operation.local_reports is not True and complete:
+                        state = self.text("phase_completed")
                     rows.append((plan.session_id + "-" + language, language.upper(), state))
         identities = {identity for identity, _label, _state in rows}
         for identity, label, state in rows:

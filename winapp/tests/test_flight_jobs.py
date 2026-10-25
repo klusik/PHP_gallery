@@ -12,6 +12,7 @@
 """Regression coverage for durable flight plans and connection ownership."""
 
 import json
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -96,6 +97,63 @@ class FlightJobsTests(unittest.TestCase):
             rows = {row.report_id: row.files for row in report_revisions(directory)}
             self.assertEqual({"en": reports / "auto-en.pdf"}, rows["auto"])
             self.assertEqual({"cs": manual / "cs.pdf"}, rows["flight-manual-test"])
+
+    def test_catalog_exposes_reserved_numbers_independently_of_file_time(self) -> None:
+        """Keep stable version numbers when an older PDF gets a newer mtime.
+
+        Returns:
+            None: Passive catalog reads preserve reserved numbers, exact PDF
+                bytes and paths while retaining their legacy mtime list order.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "flight"
+            directory.mkdir()
+            (directory / "session.json").write_text(json.dumps({
+                "started_utc": "2026-10-18T09:46:05Z", "aircraft": "A320",
+            }), encoding="utf-8")
+            first = allocate_report_revision(directory, "first", ("en",))
+            second = allocate_report_revision(directory, "second", ("en",))
+            first.files["en"].write_bytes(b"first PDF")
+            second.files["en"].write_bytes(b"second PDF")
+            # Distinct fixed POSIX mtimes deliberately reverse revision order.
+            os.utime(first.files["en"], (200, 200))
+            os.utime(second.files["en"], (100, 100))
+            rows = report_revisions(directory)
+            self.assertEqual(["first", "second"], [row.report_id for row in rows])
+            self.assertEqual([1, 2], [row.number for row in rows])
+            self.assertEqual(first.files, rows[0].files)
+            self.assertEqual(second.files, rows[1].files)
+            self.assertEqual(b"first PDF", first.files["en"].read_bytes())
+            self.assertEqual(b"second PDF", second.files["en"].read_bytes())
+
+    def test_catalog_rejects_invalid_display_numbers_without_modifying_pdfs(self) -> None:
+        """Refuse malformed numeric versions before history tries to sort them.
+
+        Returns:
+            None: Missing, Boolean, text and nonpositive numbers raise a
+                recoverable ValueError while preserving the retained PDF.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "flight"
+            directory.mkdir()
+            (directory / "session.json").write_text(json.dumps({
+                "started_utc": "2026-10-18T09:46:05Z", "aircraft": "A320",
+            }), encoding="utf-8")
+            revision = allocate_report_revision(directory, "first", ("en",))
+            revision.files["en"].write_bytes(b"retained PDF")
+            catalog = directory / "reports" / ".metadata" / "catalog.json"
+            payload = json.loads(catalog.read_text(encoding="utf-8"))
+            # Boundary vectors are invalid display identities, never defaults.
+            for number in (None, True, "2", 0, -1):
+                with self.subTest(number=number):
+                    if number is None:
+                        payload["revisions"]["first"].pop("number")
+                    else:
+                        payload["revisions"]["first"]["number"] = number
+                    catalog.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        report_revisions(directory)
+                    self.assertEqual(b"retained PDF", revision.files["en"].read_bytes())
 
     def test_revision_catalog_refuses_redirected_pdf_files(self) -> None:
         """Reject a retained edition redirected outside its session directory.

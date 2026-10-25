@@ -20,7 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from uploader.flight_data import analyze_session
+from uploader.flight_data import FlightAnalysis, analyze_session
+from uploader.flight_render import render_report_variants
 from uploader.flight_jobs import (
     REPORT_LANGUAGES, ReportRevision, SessionPlan, connection_binding,
     read_document, report_revisions,
@@ -51,6 +52,9 @@ class FlightProgress:
     eta_seconds: float | None = None
     error: str = ""
     can_cancel: bool = True
+    render_session: str = ""
+    rendering_languages: tuple[str, ...] = ()
+    rendered_languages: tuple[str, ...] = ()
 
 
 class FinalizationWorker(threading.Thread):
@@ -397,6 +401,73 @@ class FinalizationWorker(threading.Thread):
                 except Exception:
                     pass
 
+    def render_editions(
+        self, plan: SessionPlan, analysis: FlightAnalysis, edition: ReportRevision,
+    ) -> dict[str, Path]:
+        """Render a reserved language set concurrently with parent-owned progress.
+
+        Args:
+            plan (SessionPlan): Exact session owning this render batch.
+            analysis (FlightAnalysis): Immutable serializable flight analysis.
+            edition (ReportRevision): Parent-reserved language paths and identity.
+        Returns:
+            dict[str, Path]: All successful editions in requested order after the
+                process barrier; local completed files are journaled as they finish.
+        Raises:
+            Exception: Rendering, persistence or cancellation failed after the
+                coordinator drained children and retained completed files.
+        """
+        completed: dict[str, Path] = {}
+        with self._lock:
+            self._progress.render_session = plan.session_id
+            self._progress.rendering_languages = ()
+            self._progress.rendered_languages = ()
+        self.save_local_result("generating")
+
+        def started(language: str) -> None:
+            """Publish one admitted child on the parent worker thread.
+
+            Args:
+                language (str): Supported language whose render was submitted.
+            Returns:
+                None: Adds the language to concurrent progress without Tk access.
+            """
+            with self._lock:
+                self._progress.rendering_languages += (language,)
+                detail = ", ".join(code.upper() for code in self._progress.rendering_languages)
+            self.update("generating", detail)
+
+        def finished(language: str, pdf: Path) -> None:
+            """Journal an atomic completed PDF even while other children finish.
+
+            Args:
+                language (str): Supported completed language.
+                pdf (Path): Verified PDF at its reserved destination.
+            Returns:
+                None: Updates only parent-owned local persistence and progress.
+            """
+            completed[language] = pdf
+            with self._lock:
+                self._progress.rendering_languages = tuple(
+                    code for code in self._progress.rendering_languages
+                    if code != language
+                )
+                self._progress.rendered_languages = tuple(
+                    code for code in edition.files if code in completed
+                )
+            if self.local_result is not None:
+                directory = plan.directory
+                self.local_result["files"] = [
+                    str(completed[code].relative_to(directory))
+                    for code in edition.files if code in completed
+                ]
+                self.save_local_result("generating")
+            self.update("generating", language.upper(), advance=True)
+
+        return render_report_variants(
+            analysis, edition.files, self.cancel, started, finished,
+        )
+
     def generate_local_reports(self) -> None:
         """Render a fresh local revision from a stopped immutable raw session.
 
@@ -448,17 +519,7 @@ class FinalizationWorker(threading.Thread):
         edition = allocate_report_revision(
             directory, plan.session_id + "-" + revision, plan.languages,
         )
-        from uploader.flight_report import render_report
-        files: list[JsonValue] = []
-        for language in plan.languages:
-            self.check_cancelled()
-            self.save_local_result("generating")
-            self.update("generating", language.upper())
-            pdf = render_report(analysis, language, edition.files[language])
-            files.append(str(pdf.relative_to(directory)))
-            self.local_result["files"] = list(files)
-            self.save_local_result("generating")
-            self.update("generating", language.upper(), advance=True)
+        self.render_editions(plan, analysis, edition)
         self.check_cancelled()
         self.save_local_result("completed")
         self.update("completed", str(output))
@@ -563,7 +624,6 @@ class FinalizationWorker(threading.Thread):
         )
         from uploader.flight_report import (
             REPORT_TEMPLATE_VERSION,
-            render_report,
         )
         if not plan.local_only and not check_report_capability(
             self.upload_url, self.api_key
@@ -583,14 +643,12 @@ class FinalizationWorker(threading.Thread):
             + "-" + analysis_digest[:16]
         )
         edition = allocate_report_revision(plan.directory, revision, plan.languages)
+        outputs = self.render_editions(plan, analysis, edition)
+        self.check_cancelled()
         for language in plan.languages:
             self.check_cancelled()
-            destination = edition.files[language]
-            self.update("generating", language.upper())
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            pdf = render_report(analysis, language, destination)
+            pdf = outputs[language]
             checksum = hashlib.sha256(pdf.read_bytes()).hexdigest()
-            self.update("generating", language.upper(), advance=True)
             self.check_cancelled()
             self.update("uploading", language.upper())
             if not plan.local_only and plan.receipts.get(language) != checksum:

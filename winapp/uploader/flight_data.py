@@ -18,12 +18,13 @@ from typing import Any, Iterator
 
 from uploader.models import JsonValue
 from uploader.flight_simbrief import DispatchPlan, load_dispatch
+from uploader.flight_comparison import FlightComparison, compare_flight
 
 # Identify the JSON analysis schema used by saved flight reports.
 # Type: str. Units: schema version. Scope: one analysis payload.
 # Consumers: FlightAnalysis.to_payload and report rendering.
 # Rationale: downstream consumers can distinguish compatible payload shapes.
-ANALYSIS_VERSION = "3"
+ANALYSIS_VERSION = "4"
 
 # Bound displayed trajectory points.
 # Type: int. Units: points. Scope: one analysis payload.
@@ -188,6 +189,9 @@ class FlightSample:
     fuel mass and total aircraft mass use kilograms,
     engines RPM and load factor g. Host monotonic receipt seconds and host UTC
     remain distinct from normalized simulator elapsed seconds and rate.
+    Optional pressure altitude uses metres at standard pressure; simulator_utc
+    retains the simulator calendar and parking_brake is an observed switch.
+    Their legacy absence never substitutes host time or geometric altitude.
     """
 
     session_elapsed_seconds: float
@@ -220,6 +224,9 @@ class FlightSample:
     right_brake_position: float | None = None
     autopilot_master: bool | None = None
     discontinuity_before: str | None = None
+    pressure_altitude_m: float | None = None
+    simulator_utc: str | None = None
+    parking_brake: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-compatible sample fields.
@@ -290,6 +297,7 @@ class FlightAnalysis:
     events: list[FlightPhaseEvent] = field(default_factory=list)
     simulator_build: str | None = None
     dispatch: DispatchPlan | None = None
+    comparison: FlightComparison | None = None
 
     def to_payload(self) -> dict[str, Any]:
         """Return the complete JSON-compatible analysis payload.
@@ -311,6 +319,12 @@ class FlightAnalysis:
                 latitude/longitude and optional takeoff-relative elapsed seconds,
                 altitude feet and fuel onboard in the declared OFP mass unit.
                 These planned values never replace telemetry.
+                comparison contains optional metrics (key, unit, planned,
+                actual), time-weighted phase values/coverage, ordered OFP rows
+                with optional observed passages, route/altitude error coverage,
+                exclusion counts, block/simulator UTC events and quality notes.
+                Telemetry may additionally retain pressure_altitude_m,
+                simulator_utc and parking_brake; legacy absence stays unknown.
         """
         return {
             "analysis_version": ANALYSIS_VERSION,
@@ -335,6 +349,7 @@ class FlightAnalysis:
             "warnings": list(self.warnings),
             "events": [asdict(event) for event in self.events],
             "dispatch": asdict(self.dispatch) if self.dispatch else None,
+            "comparison": asdict(self.comparison) if self.comparison else None,
         }
 
 
@@ -389,7 +404,11 @@ def _sample(row: dict[str, Any]) -> FlightSample | None:
     """Convert one persisted mapping into the typed telemetry model.
 
     Args:
-        row (dict[str, Any]): Decoded JSON sample row.
+        row (dict[str, Any]): Decoded sample with session_elapsed_seconds and
+            recorded_utc, optional SI position/motion/fuel/pressure scalars,
+            simulator_elapsed_seconds/rate/UTC, bool-or-null state switches,
+            lights mapping names to bool-or-null, engine_rpm numeric-or-null
+            list, and optional discontinuity_before text.
 
     Returns:
         FlightSample | None: Valid sample or None when required fields are absent.
@@ -438,6 +457,15 @@ def _sample(row: dict[str, Any]) -> FlightSample | None:
             if isinstance(row.get("autopilot_master"), bool) else None
         ),
         discontinuity_before=row.get("discontinuity_before") if isinstance(row.get("discontinuity_before"), str) else None,
+        pressure_altitude_m=_number(row.get("pressure_altitude_m")),
+        simulator_utc=(
+            row.get("simulator_utc")
+            if isinstance(row.get("simulator_utc"), str) else None
+        ),
+        parking_brake=(
+            row.get("parking_brake")
+            if isinstance(row.get("parking_brake"), bool) else None
+        ),
     )
 
 
@@ -1252,7 +1280,8 @@ def analyze_session(directory: Path) -> FlightAnalysis:
         directory (Path): Session directory containing checkpoint and JSONL file.
 
     Returns:
-        FlightAnalysis: Recovered summary, landing events and bounded plot samples.
+        FlightAnalysis: Recovered summary, landing events, bounded plot samples
+            and optional original-sample dispatch comparison with metric coverage.
     """
     meta: dict[str, Any] = {}
     try:
@@ -1366,7 +1395,7 @@ def analyze_session(directory: Path) -> FlightAnalysis:
     duration = _number(meta.get("ended_monotonic"))
     if duration is None:
         duration = last_elapsed if last_elapsed >= 0 else 0.0
-    return FlightAnalysis(
+    analysis = FlightAnalysis(
         session_id=str(meta.get("session_id", directory.name)),
         simulator=str(meta.get("simulator", "unknown")),
         aircraft=meta.get("aircraft") if isinstance(meta.get("aircraft"), str) else None,
@@ -1388,3 +1417,14 @@ def analyze_session(directory: Path) -> FlightAnalysis:
         events=phases.events,
         dispatch=load_dispatch(directory),
     )
+    if analysis.dispatch is not None:
+        # A second streaming pass preserves original precision for statistics;
+        # the bounded overview points above are exclusively presentation data.
+        analysis.comparison = compare_flight(
+            analysis.dispatch,
+            (_sample(row) if row is not None else None for row in _rows(directory)),
+            analysis.events,
+            analysis.landings,
+            analysis.completed,
+        )
+    return analysis

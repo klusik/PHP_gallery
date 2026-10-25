@@ -52,6 +52,8 @@ class DispatchPoint:
 
     Fuel retains the parent DispatchPlan units. Missing optional profile values
     stay None, including coordinates-only snapshots from earlier app versions.
+    Airspeeds and wind speed use knots; wind direction is true direction-from
+    in degrees. Stage retains the provider's CLB/CRZ/DSC label when supplied.
     """
 
     ident: str
@@ -60,6 +62,11 @@ class DispatchPoint:
     elapsed_seconds: float | None = None
     altitude_ft: float | None = None
     fuel_onboard: float | None = None
+    true_airspeed_kt: float | None = None
+    ground_speed_kt: float | None = None
+    wind_direction_deg: float | None = None
+    wind_speed_kt: float | None = None
+    stage: str = ""
 
 
 @dataclass
@@ -99,6 +106,15 @@ class DispatchPlan:
     fuel_contingency: str = ""
     scheduled_departure_utc: str = ""
     scheduled_arrival_utc: str = ""
+    scheduled_takeoff_utc: str = ""
+    scheduled_landing_utc: str = ""
+    block_seconds: str = ""
+    taxi_out_seconds: str = ""
+    taxi_in_seconds: str = ""
+    transition_altitude_ft: str = ""
+    arrival_transition_altitude_ft: str = ""
+    cruise_tas_kt: str = ""
+    distance_source: str = ""
 
     def save(self, directory: Path) -> None:
         """Atomically retain the exact plan attached to a single flight.
@@ -138,6 +154,10 @@ def parse_dispatch(payload: dict[str, JsonValue]) -> DispatchPlan:
             times estimated enroute/scheduled out/in, alternate airport objects
             or lists, aircraft registration,
             params units/AIRAC and navlog.fix ident/pos_lat/pos_long rows.
+            Optional times sched_off/sched_on/est_block/taxi_out/taxi_in,
+            airport trans_alt and general cruise_tas preserve schedule/reference
+            evidence. Navlog rows may also retain true_airspeed, groundspeed,
+            wind_dir/wind_spd and stage, all independently optional.
     Returns:
         DispatchPlan: Valid airport identity and bounded provider-resolved fixes.
     Raises:
@@ -252,6 +272,11 @@ def parse_dispatch(payload: dict[str, JsonValue]) -> DispatchPlan:
             points.append(DispatchPoint(
                 str(row.get("ident", row.get("icao_code", ""))), lat, lon,
                 time, altitude, fuel,
+                true_airspeed_kt=numeric(row.get("true_airspeed")),
+                ground_speed_kt=numeric(row.get("groundspeed")),
+                wind_direction_deg=numeric(row.get("wind_dir")),
+                wind_speed_kt=numeric(row.get("wind_spd")),
+                stage=(row["stage"][:MAX_OFP_TEXT] if isinstance(row.get("stage"), str) else ""),
             ))
     general = section("general")
     airline = text("general", "iata_airline", "icao_airline", "airline").upper()
@@ -301,6 +326,15 @@ def parse_dispatch(payload: dict[str, JsonValue]) -> DispatchPlan:
         fuel_contingency=text("fuel", "contingency", "plan_contingency"),
         scheduled_departure_utc=utc_time("sched_out"),
         scheduled_arrival_utc=utc_time("sched_in"),
+        scheduled_takeoff_utc=utc_time("sched_off"),
+        scheduled_landing_utc=utc_time("sched_on"),
+        block_seconds=text("times", "est_block"),
+        taxi_out_seconds=text("times", "taxi_out"),
+        taxi_in_seconds=text("times", "taxi_in"),
+        transition_altitude_ft=text("origin", "trans_alt"),
+        arrival_transition_altitude_ft=text("destination", "trans_alt"),
+        cruise_tas_kt=text("general", "cruise_tas"),
+        distance_source=("route" if text("general", "route_distance") else "air"),
     )
     for name in (item.name for item in fields(plan) if item.name != "points"):
         value = getattr(plan, name)
@@ -358,7 +392,11 @@ def load_dispatch(directory: Path) -> DispatchPlan | None:
                    and all(value is None or (not isinstance(value, bool)
                        and isinstance(value, (float, int)) and math.isfinite(value)
                        and value >= 0) for value in
-                       (p.elapsed_seconds, p.altitude_ft, p.fuel_onboard))
+                       (p.elapsed_seconds, p.altitude_ft, p.fuel_onboard,
+                        p.true_airspeed_kt, p.ground_speed_kt,
+                        p.wind_direction_deg, p.wind_speed_kt))
+                   and isinstance(p.ident, str) and len(p.ident) <= MAX_OFP_TEXT
+                   and isinstance(p.stage, str) and len(p.stage) <= MAX_OFP_TEXT
                    for p in plan.points):
             return None
         return plan
