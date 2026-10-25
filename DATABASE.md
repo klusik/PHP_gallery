@@ -1,5 +1,28 @@
 # PHP Gallery Database Documentation
 
+## Gallery content evidence, without visitor records
+
+`202610250001_gallery_visit_content.php` adds three derived tables:
+`gallery_visit_content_state` holds the singleton generation/revision lease;
+`gallery_visit_content_members` holds current node/item/authorization-lane
+membership and its addition revision; `gallery_visit_content_pending` retains
+explicitly changed scopes awaiting publication. None stores visitor identity,
+history, sessions or local acknowledgements. Gallery/source IDs stay internal
+until filtered through current visitor authorization.
+
+The migration initializes historical content transactionally through the SQL
+model on the migration-owned PDO connection. Subsequent content mutations
+preserve existing membership revisions, remove vanished members and mint new
+revisions only for new membership/availability. Publication checks its generation
+and preserves unrelated scopes. Browser GETs never repair or write these tables.
+Missing/unknown schema or unfinished evidence retains gallery navigation while
+New information is explicitly unavailable.
+An oversized seed or unfinished attachment snapshot leaves the derived index
+dirty without blocking the core upgrade. SQL/schema failures still propagate
+through normal migration recovery. After resolving data readiness, an explicit
+maintainer operation can retry `gallery_visit_content_model_seed($pdo)` on the
+same migration-owned connection; page views never perform this repair.
+
 ## Scheduler observations
 
 Cron Overview reuses domain-owned app settings and telemetry settings/job rows;

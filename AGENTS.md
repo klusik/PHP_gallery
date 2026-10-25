@@ -7,6 +7,12 @@ loaded automatically. User rules prevail.
 
 **Before writing:** verify branch authorization, find the domain owner and a
 compliant declaration, and read affected contracts from the map.
+For **every public or Admin UI change**, automatically read and follow
+[the mandatory design contract](docs/ADMIN_DESIGN.md): compact translucent
+surfaces and contextual panels anchored to their triggers. Verify the rendered
+desktop/narrow result; never wait for the user to request this or correct it.
+The approved visitor bell/PDF/music glass treatment is the default reference
+for new contextual UI; use its Theme tokens and action hierarchy automatically.
 
 **While writing:** write declarations and complete factual docs together.
 Preserve
@@ -25,7 +31,7 @@ inspect exact-SHA CI and state missing coverage.
 | PHP/MVC/runtime/capabilities/Admin | [app rules](app/AGENTS.md), [architecture](ARCHITECTURE.md) |
 | Schema/access/auth/mutation readiness | [schema policy](docs/AGENT_SCHEMA_POLICY.md), [database](DATABASE.md) |
 | Browser/assets/thumbnails/lightbox/OFP | [asset rules](public/assets/AGENTS.md) |
-| Admin UI/design/controls | [design contract](docs/ADMIN_DESIGN.md) |
+| Every public/Admin UI, panel, popup or control | [mandatory design contract](docs/ADMIN_DESIGN.md) |
 | Fixtures/children/browser harnesses | [test rules](tests/AGENTS.md), relevant [testing](TESTING.md) section |
 | CLI/audit/scanners/inventory/packaging | [tool rules](scripts/AGENTS.md) |
 | CI/evidence/preparation/integration | [CI rules](.github/AGENTS.md), [CI contract](docs/CI_COVERAGE_REUSE_CONTRACT.md) |

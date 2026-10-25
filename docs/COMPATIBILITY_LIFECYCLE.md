@@ -1,5 +1,35 @@
 # Compatibility lifecycle and retirement register
 
+## Browser-local visitor progress
+
+Owners: existing gallery/Smart SQL models, gallery lookup policy, public card
+controller, shared layout and native visitor browser module. Keep stable
+namespaced gallery IDs and a versioned installation path in localStorage; a
+future Viewer account must not be confused with the separate Admin identity.
+Cross-device/account synchronization remains outside this format.
+Root and rewritten public front controllers use the canonical request mount for
+the same history key. Windows mount aliases are case-normalized; case-sensitive
+hosts retain distinct installation paths. The live localhost journey exposed
+and verified the root/public-script alias correction.
+
+Blocked/corrupt/quota-exceeded storage permanently supports volatile tab-local
+operation without invented visits or New facts. Web Locks are preferred for
+atomic local updates; storage-event union and ordered reset epochs remain the
+supported fallback for browsers/profiles without usable locks. Random reset
+nonces are local concurrency data, never anonymous visitor identifiers and never
+sent to PHP. Neither fallback has a retirement date; deployed usage is unknown.
+Optional per-record reset order extends the existing version-one format without
+discarding previous visits. A newer branch reset overrides stale direct-open
+flags while content baselines still merge monotonically. Later genuine opens
+within that reset order are retained. The branch action never creates New or
+acknowledges existing New; shared Smart identities affect all their placements.
+Missing/unknown index schema and dirty/oversized evidence preserve ordinary
+gallery navigation and explicitly omit New evidence. Do not replace an unavailable
+watermark with generic gallery/image modification timestamps or visitor writes.
+Automated regression sources cover policy, persistence and rendered panel
+behavior. Real multi-device, private-browser, touch and assistive-technology
+acceptance remains installation-specific; BASIC does not qualify those paths.
+
 ## Persistent short presentation links
 
 Owners: existing gallery model, lightbox-settings service, public/Smart

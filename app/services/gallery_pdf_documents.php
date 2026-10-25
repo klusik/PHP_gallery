@@ -543,6 +543,8 @@ function gallery_pdf_documents_usage_publish(
             $revision,
         )) {
             error_log('PDF attachment usage projection publication was superseded.');
+        } else {
+            gallery_visit_content_update([(int) $gallery['id']]);
         }
     } catch (\Throwable) {
         error_log('PDF attachment usage projection publication failed safely.');

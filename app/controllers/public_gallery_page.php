@@ -1312,6 +1312,9 @@ function cms_gallery(): void
         ];
     }
 
+    public_gallery_visit_progress(
+        $requestedImage === null ? 'g:' . (int) $gallery['id'] : '',
+    );
     \Gallery\Views\view_render_public_gallery_detail([
         'page_title' => (string) $seo['title'],
         'gallery' => $gallery,

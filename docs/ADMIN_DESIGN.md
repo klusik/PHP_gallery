@@ -1,10 +1,39 @@
-# Admin UI design direction
+# Shared public and Admin UI design contract
 
-This document is the visual design authority for new and materially changed
-PHP Gallery Admin interfaces. Existing global Admin styles are legacy
+This document is the mandatory visual design authority for **every new or
+changed public and Admin interface**. Apply it automatically before writing UI,
+without asking the user to repeat the design requirements. Existing global
+Admin styles are legacy
 implementation constraints, not the design reference. Scope CSS to the feature
 and override those legacy rules where needed; do not redesign unrelated Admin
 pages as part of a focused change.
+
+Contextual notifications, help and small action menus use a compact translucent
+panel anchored beside or below the control that opened it. Keep the surrounding
+page visible and usable, dismiss on outside click/Escape, and return keyboard
+focus appropriately. Do not replace this interaction with a centered blocking
+modal or dimmed page unless the task explicitly requires that interaction.
+Use small transparent actions, mild rounding and Theme foreground/panel tokens.
+Automatically inspect actual desktop and narrow-screen rendering, including the
+production cascade, before handoff; source review alone is insufficient.
+
+The approved visitor notification panel is the **default reference for new
+contextual panels**, together with the PDF/music launchers. Reuse its production
+markup/CSS treatment automatically; do not invent a different popup skin.
+The panel follows the PDF/music launcher surface: mix the
+Theme panel at 42% over the page, retain readable backdrop blur, and use Theme
+line separators and compact 0.85rem heading text with a small accent icon.
+Give the read-all action the presentation launcher's transparent outlined
+treatment; keep history reset quieter and the local-storage note subordinate.
+Keep the bell a quick overview with its bulk/read-history actions; individual
+branch visit changes belong directly on the inline title status icon. Status
+glyphs stay small but distinct: dotted circle, half-filled circle, checked circle
+and sparkle. Give the unvisited state the strongest Theme accent and restrained
+glow; keep completed checkmarks quieter. Center glyphs optically on the final
+title line rather than aligning their bottoms with the text baseline.
+Let notification panels grow naturally until they fill the viewport height,
+keeping a small edge gap. Reposition upward before clipping a long list. Only
+then scroll the notification list, with the heading and bulk actions retained.
 
 ## Visual language
 

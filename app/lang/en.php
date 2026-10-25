@@ -33,6 +33,21 @@
  */
 
 return [
+    'gallery.visit.mark_unseen' => 'Mark this gallery and its subgalleries as unvisited',
+    'gallery.visit.content_unavailable' => 'New-content information is temporarily unavailable.',
+    'gallery.visit.unseen' => 'Unseen',
+    'gallery.visit.partial' => 'Partially seen',
+    'gallery.visit.seen' => 'Seen',
+    'gallery.visit.new' => 'New content',
+    'gallery.visit.empty' => 'No new content.',
+    'gallery.visit.unavailable' => 'History cannot be saved. It is available only in this tab.',
+    'gallery.visit.reset_confirm' => 'Clear seen history and content baselines for this gallery installation?',
+    'gallery.visit.bell' => 'What is new',
+    'gallery.visit.updated' => 'All available content is marked as read.',
+    'gallery.visit.close' => 'Close',
+    'gallery.visit.local' => 'History is saved only in this browser.',
+    'gallery.visit.read_all' => 'Mark all as read',
+    'gallery.visit.reset' => 'Clear seen history',
     'lightbox.map_route_start' => 'Route start',
     'lightbox.map_route_end' => 'Destination',
     'lightbox.map_waypoint' => 'Waypoint',

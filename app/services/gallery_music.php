@@ -161,12 +161,16 @@ function gallery_music_attachment_usage_publish(
     if ($revision === null) {
         return true;
     }
-    return \Gallery\Models\gallery_model_attachment_usage_replace(
+    $published = \Gallery\Models\gallery_model_attachment_usage_replace(
         $galleryId,
         'music',
         gallery_music_attachment_usage_items($state),
         $revision,
     );
+    if ($published) {
+        gallery_visit_content_update([$galleryId]);
+    }
+    return $published;
 }
 
 /** Bound galleries inspected to find one migration source per request.

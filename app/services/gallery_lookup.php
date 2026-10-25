@@ -36,6 +36,13 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use const Gallery\Models\GALLERY_VISIT_NODE_LIMIT;
+use const Gallery\Models\GALLERY_VISIT_IMAGE_LIMIT;
+use const Gallery\Models\GALLERY_VISIT_MEMBER_LIMIT;
+use const Gallery\Models\GALLERY_VISIT_LANE_LIMIT;
+use const Gallery\Models\GALLERY_VISIT_SMART_LIMIT;
+use const Gallery\Models\GALLERY_VISIT_SMART_BATCH;
+use const Gallery\Models\GALLERY_VISIT_SCOPE_LIMIT;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Models\gallery_model_public_root_rows;
 use function Gallery\Models\gallery_model_branch_descendant_rows;
@@ -608,17 +615,28 @@ function gallery_branch_attachment_usage_counts(
  *
  * @param int $id Identifier value.
  * @param bool $fresh Fresh value.
- * @return ?array Structured result data for the caller.
+ * @return GalleryDatabaseRow|null Raw gallery row, or null for a missing ID;
+ *     the concrete persistence fields are documented in models/galleries.php.
  */
 function find_gallery(int $id, bool $fresh = false): ?array
 {
-    static $cache = [];
+    $cache = &gallery_lookup_request_rows();
 
     if (!$fresh && array_key_exists($id, $cache)) {
         return $cache[$id];
     }
 
     return $cache[$id] = gallery_model_find_by_id($id);
+}
+
+/**
+ * Share the canonical request-local gallery row cache with batched readers.
+ * @return array<int,GalleryDatabaseRow|null> Raw cached identities, never HTML.
+ */
+function &gallery_lookup_request_rows(): array
+{
+    static $rows = [];
+    return $rows;
 }
 
 /**
@@ -833,4 +851,440 @@ function gallery_editor_image_page(int $galleryId, int $offset): array
         $offset,
         $pageSize,
     );
+}
+
+
+
+/**
+ * Refresh only identified authored resources and previously interrupted scopes.
+ * This is called by content owners after their own committed operation, never
+ * from a shared database callback, shared writer release, shutdown or public GET.
+ * @param list<int> $galleryIds Changed physical sources or placement parents.
+ * @param list<int> $smartIds Changed virtual definitions, empty for source edits.
+ * @return void Publishes bounded scoped evidence; failure remains explicitly
+ *     pending and does not undo the successfully authored source operation.
+ */
+function gallery_visit_content_update(array $galleryIds, array $smartIds = []): void
+{
+    try {
+        if (!gallery_visit_content_storage_available()) {
+            return;
+        }
+        $galleryIds = array_values(array_unique(array_filter(
+            $galleryIds, static fn(int $id): bool => $id > 0,
+        )));
+        $smartIds = array_values(array_unique(array_filter(
+            $smartIds, static fn(int $id): bool => $id > 0,
+        )));
+        if ($smartIds !== [] && smart_gallery_attachment_schema_ready()) {
+            $galleryIds = array_merge($galleryIds,
+                \Gallery\Models\smart_gallery_model_visit_parent_ids(
+                    $smartIds, GALLERY_VISIT_NODE_LIMIT,
+                ));
+        }
+        // A child's visibility or insertion also changes its parent's placement
+        // membership. Resolve only the explicitly changed physical identities.
+        foreach ($galleryIds as $id) {
+            $row = find_gallery($id, true);
+            if (is_array($row) && !empty($row['parent_id'])) {
+                $galleryIds[] = (int) $row['parent_id'];
+            }
+        }
+        $galleryIds = array_values(array_unique($galleryIds));
+        if ($galleryIds !== [] || $smartIds !== []) {
+            \Gallery\Models\gallery_visit_content_model_dirty($galleryIds, $smartIds);
+        }
+        if (\Gallery\Models\gallery_visit_content_model_transaction_active()) {
+            // Compound content owners publish their explicitly pending scopes
+            // after commit; do not expose an intermediate membership snapshot.
+            return;
+        }
+        $pending = \Gallery\Models\gallery_visit_content_model_pending(
+            GALLERY_VISIT_SCOPE_LIMIT,
+        );
+        // Make bounded progress even after a larger interrupted batch; the
+        // remaining durable scopes keep New evidence unavailable until recovered.
+        $pending = array_slice($pending, 0, GALLERY_VISIT_SCOPE_LIMIT);
+        if ($pending === []) {
+            return;
+        }
+        $galleryIds = [];
+        $smartIds = [];
+        foreach ($pending as $scope) {
+            if (str_starts_with($scope, 'g:')) {
+                $galleryIds[] = (int) substr($scope, 2);
+            } elseif (str_starts_with($scope, 's:')) {
+                $smartIds[] = (int) substr($scope, 2);
+            }
+        }
+        gallery_visit_content_refresh($galleryIds, $smartIds);
+    } catch (\Throwable) {
+        // Keep interruption evidence durable. A later explicit content update
+        // may recover it; ordinary visitors never write the server index.
+        error_log('Scoped gallery content evidence remains pending.');
+    }
+}
+
+/**
+ * Inspect optional index schema independently of security/access readiness.
+ * @return bool True for verified storage; missing/unknown safely omits New.
+ */
+function gallery_visit_content_storage_available(): bool
+{
+    return presentation_schema_render_available(
+        presentation_gallery_visit_content_schema_status(),
+        'gallery_visit_content.read',
+    );
+}
+
+/**
+ * Read bounded existing gallery owners and validated virtual placements.
+ * @param bool $authoring Whether to retain Smart evidence while its UI is off.
+ * @return array{galleries:array<int,GalleryDatabaseRow>,
+ *     smart:array<int,array<string,scalar|null>>,
+ *     edges:array<string,list<string>>,roots:list<string>}
+ *     Private policy inventory; callers must authorize it before serialization.
+ */
+function gallery_visit_inventory(bool $authoring = false): array
+{
+    $rows = \Gallery\Models\gallery_visit_content_model_galleries(
+        GALLERY_VISIT_NODE_LIMIT,
+    );
+    if (count($rows) > GALLERY_VISIT_NODE_LIMIT) {
+        throw new \RuntimeException('Visit hierarchy exceeds its bound.');
+    }
+    $galleries = [];
+    $edges = [];
+    $roots = [];
+    $cache = &gallery_lookup_request_rows();
+    foreach ($rows as $row) {
+        $id = (int) $row['id'];
+        $galleries[$id] = $row;
+        $cache[$id] = $row;
+        if (gallery_is_public_listed($row)) {
+            if (empty($row['parent_id'])) {
+                $roots[] = 'g:' . $id;
+            } else {
+                $edges['g:' . (int) $row['parent_id']][] = 'g:' . $id;
+            }
+        }
+    }
+    $validChains = [];
+    foreach (array_keys($galleries) as $id) {
+        $path = [];
+        $current = $id;
+        while ($current > 0 && isset($galleries[$current])
+            && !isset($validChains[$current]) && !isset($path[$current])) {
+            $path[$current] = true;
+            $current = (int) ($galleries[$current]['parent_id'] ?? 0);
+        }
+        $valid = $current === 0 || ($validChains[$current] ?? false);
+        foreach ($path as $visited => $_unused) {
+            $validChains[$visited] = $valid;
+        }
+    }
+    foreach ($validChains as $id => $valid) {
+        if (!$valid) {
+            unset($galleries[$id]);
+        }
+    }
+    $smart = [];
+    if (($authoring || feature_capability_effective_enabled('smart_galleries'))
+        && smart_gallery_schema_ready() && smart_gallery_attachment_schema_ready()) {
+        $inventory = \Gallery\Models\smart_gallery_model_visit_inventory(
+            GALLERY_VISIT_NODE_LIMIT,
+        );
+        if (count($inventory['definitions']) > GALLERY_VISIT_SMART_LIMIT
+            || count($inventory['placements']) > GALLERY_VISIT_NODE_LIMIT) {
+            throw new \RuntimeException('Visit placements exceed their bound.');
+        }
+        foreach ($inventory['definitions'] as $row) {
+            try {
+                smart_gallery_assert_runtime_safe($row);
+                $smart[(int) $row['id']] = $row;
+                if ($row['placement_mode'] === 'root') {
+                    $roots[] = 's:' . (int) $row['id'];
+                }
+            } catch (\InvalidArgumentException) {
+                // The canonical Smart owner excludes invalid/cyclic definitions.
+            }
+        }
+        foreach ($inventory['placements'] as $placement) {
+            $id = (int) $placement['smart_gallery_id'];
+            if (isset($smart[$id]) && $smart[$id]['placement_mode'] === 'gallery') {
+                $edges['g:' . (int) $placement['gallery_id']][] = 's:' . $id;
+            }
+        }
+    }
+    return compact('galleries', 'smart', 'edges', 'roots');
+}
+
+/**
+ * Admit one unique content identity into a bounded authoring snapshot.
+ * @param array<string,array{node:string,item:string,lane:string}> $members
+ *     Mutable identities keyed by node/item/lane, with no visitor information.
+ * @param string $node Stable namespaced gallery identity.
+ * @param string $item Stable image, digest or child identity.
+ * @param string $lane Source/NSFW authorization lane or direct child edge.
+ * @return void Adds the identity or throws before exceeding the snapshot bound.
+ */
+function gallery_visit_content_add(
+    array &$members, string $node, string $item, string $lane,
+): void {
+    $members[$node . '|' . $item . '|' . $lane] = compact('node', 'item', 'lane');
+    if (count($members) > GALLERY_VISIT_MEMBER_LIMIT) {
+        throw new \RuntimeException('Visit membership exceeds its bound.');
+    }
+}
+
+/**
+ * Reconcile only the specified sources/definitions after content authoring.
+ * The whole-site seed is reserved for the explicit migration repair callback.
+ * @param list<int> $galleryIds Changed physical sources and placement parents.
+ * @param list<int> $smartIds Changed virtual definitions requiring full membership.
+ * @param bool $rebuild Whether the migration explicitly requested initial seeding.
+ * @return bool True after publication; false for unavailable or concurrently
+ *     changed storage. Failures retain the durable dirty state.
+ */
+function gallery_visit_content_refresh(
+    array $galleryIds = [],
+    array $smartIds = [],
+    bool $rebuild = false,
+): bool
+{
+    if (!gallery_visit_content_storage_available()) {
+        return false;
+    }
+    $state = \Gallery\Models\gallery_visit_content_model_state();
+    $inventory = gallery_visit_inventory(true);
+    if ($rebuild) {
+        $galleryIds = array_keys($inventory['galleries']);
+        $smartIds = array_keys($inventory['smart']);
+    }
+    $members = [];
+    $images = \Gallery\Models\gallery_visit_content_model_images(
+        $galleryIds, GALLERY_VISIT_IMAGE_LIMIT,
+    );
+    if (count($images) > GALLERY_VISIT_IMAGE_LIMIT) {
+        throw new \RuntimeException('Visit images exceed their bound.');
+    }
+    foreach ($images as $image) {
+        $source = (int) $image['gallery_id'];
+        gallery_visit_content_add($members, 'g:' . $source,
+            'i:' . (int) $image['id'], 'm:' . $source . ':1');
+        gallery_visit_content_add($members, 'g:' . $source,
+            'i:' . (int) $image['id'], 'm:' . $source . ':'
+                . ((int) $image['nsfw'] === 1 ? '2' : '0'));
+    }
+    $listedIds = [];
+    foreach ($inventory['galleries'] as $id => $row) {
+        if (gallery_is_public_listed($row)) {
+            $listedIds[] = $id;
+        }
+    }
+    $fullDefinitions = [];
+    $sourceDefinitions = [];
+    foreach ($inventory['smart'] as $id => $row) {
+        $definition = ['id' => $id, 'rules' => smart_gallery_rules_from_json(
+            (string) $row['rules_json'],
+        )];
+        if (in_array($id, $smartIds, true)) {
+            $fullDefinitions[] = $definition;
+        } else {
+            $sourceDefinitions[] = $definition;
+        }
+    }
+    $virtualSources = [];
+    $groups = [
+        ['definitions' => $fullDefinitions, 'sources' => $listedIds],
+        ['definitions' => $sourceDefinitions,
+            'sources' => array_values(array_intersect($listedIds, $galleryIds))],
+    ];
+    foreach ($groups as $group) {
+        foreach (array_chunk($group['definitions'], GALLERY_VISIT_SMART_BATCH) as $batch) {
+            if ($group['sources'] === []) {
+                continue;
+            }
+            $rows = \Gallery\Models\smart_gallery_model_visit_members(
+                $batch, $group['sources'], GALLERY_VISIT_MEMBER_LIMIT,
+            );
+            if (count($rows) > GALLERY_VISIT_MEMBER_LIMIT) {
+                throw new \RuntimeException('Virtual membership exceeds its bound.');
+            }
+            foreach ($rows as $row) {
+                $source = (int) $row['gallery_id'];
+                $node = 's:' . (int) $row['smart_id'];
+                gallery_visit_content_add($members, $node, 'i:' . (int) $row['id'],
+                    'm:' . $source . ':1');
+                gallery_visit_content_add($members, $node, 'i:' . (int) $row['id'],
+                    'm:' . $source . ':' . ((int) $row['nsfw'] === 1 ? '2' : '0'));
+                $virtualSources[$source][$node] = $node;
+            }
+        }
+    }
+    $attachmentIds = array_values(array_unique(array_merge(
+        $galleryIds, array_keys($virtualSources),
+    )));
+    \Gallery\Models\gallery_visit_content_model_assert_attachment_bound($attachmentIds);
+    foreach (['pdf', 'music'] as $kind) {
+        if ($attachmentIds === []) {
+            continue;
+        }
+        $usage = gallery_model_attachment_usage_rows($attachmentIds, $kind);
+        foreach ($usage['states'] as $status) {
+            if ($status !== 'ready') {
+                throw new \RuntimeException('Attachment membership is not ready.');
+            }
+        }
+        foreach ($usage['items'] as $item) {
+            if ($item['hidden'] || !is_string($item['sha256'])) {
+                continue;
+            }
+            $source = (int) $item['gallery_id'];
+            $identity = $kind . ':' . $item['sha256'];
+            if (in_array($source, $galleryIds, true)) {
+                gallery_visit_content_add($members, 'g:' . $source,
+                    $identity, 'a:' . $source);
+            }
+            foreach ($virtualSources[$source] ?? [] as $node) {
+                gallery_visit_content_add($members, $node, $identity, 'a:' . $source);
+            }
+        }
+    }
+    foreach ($inventory['edges'] as $parent => $children) {
+        if (!in_array((int) substr($parent, 2), $galleryIds, true)) {
+            continue;
+        }
+        foreach ($children as $child) {
+            gallery_visit_content_add($members, $parent, $child, 'e:' . $child);
+        }
+    }
+    foreach ($inventory['roots'] as $child) {
+        // The synthetic installation root stores discovery baselines only; it
+        // is never a gallery visit and never appears in the notification list.
+        gallery_visit_content_add($members, 'r:0', $child, 'e:' . $child);
+    }
+    return \Gallery\Models\gallery_visit_content_model_publish(
+        $members, $state['generation'], GALLERY_VISIT_MEMBER_LIMIT,
+        $galleryIds, $smartIds, $rebuild,
+    );
+}
+
+/**
+ * Prepare one access-safe hierarchy and compact current membership watermarks.
+ * @param string $opened Authorized detail identity, or empty for listings/gates.
+ * @param list<string> $observed Independently listed public discovery cards;
+ *     each still passes the canonical access policy before entering the graph.
+ * @return array{nodes:array<string,array{row:array<string,scalar|null>,
+ *     children:list<string>,watermark:array<string,int>}>,ready:bool}
+ *     Private rows for controller URL/title preparation; no inaccessible nodes.
+ */
+function gallery_visit_projection(string $opened = '', array $observed = []): array
+{
+    $inventory = gallery_visit_inventory();
+    $allowed = [];
+    foreach ($inventory['galleries'] as $id => $row) {
+        if (visitor_can_access_gallery_without_admin_bypass($row)) {
+            $allowed['g:' . $id] = $row;
+        }
+    }
+    foreach ($inventory['smart'] as $id => $row) {
+        $allowed['s:' . $id] = $row;
+    }
+    $queue = $inventory['roots'];
+    foreach ($observed as $key) {
+        if (isset($allowed[$key])) {
+            $queue[] = $key;
+        }
+    }
+    if (isset($allowed[$opened])) {
+        $queue[] = $opened;
+    }
+    $nodes = [];
+    for ($cursor = 0; $cursor < count($queue); $cursor++) {
+        $key = $queue[$cursor];
+        if (isset($nodes[$key]) || !isset($allowed[$key])) {
+            continue;
+        }
+        $children = array_values(array_filter(
+            $inventory['edges'][$key] ?? [],
+            static fn(string $child): bool => isset($allowed[$child]),
+        ));
+        $nodes[$key] = ['row' => $allowed[$key], 'children' => $children,
+            'watermark' => []];
+        array_push($queue, ...$children);
+        if (count($nodes) > GALLERY_VISIT_NODE_LIMIT) {
+            throw new \RuntimeException('Visit projection exceeds its bound.');
+        }
+    }
+    $nodes['r:0'] = ['row' => [], 'children' => array_values(array_filter(
+        $inventory['roots'], static fn(string $key): bool => isset($nodes[$key]),
+    )), 'watermark' => []];
+    $ready = gallery_visit_content_storage_available();
+    if ($ready) {
+        $state = \Gallery\Models\gallery_visit_content_model_state();
+        $ready = !$state['dirty'] && $state['revision'] > 0;
+    }
+    if ($ready) {
+        $lanes = \Gallery\Models\gallery_visit_content_model_lanes(
+            GALLERY_VISIT_LANE_LIMIT,
+        );
+        if (count($lanes) > GALLERY_VISIT_LANE_LIMIT) {
+            throw new \RuntimeException('Visit lanes exceed their bound.');
+        }
+        $allowNsfw = visitor_can_access_nsfw_content_without_admin_bypass();
+        foreach ($lanes as $lane) {
+            $key = $lane['node_key'];
+            $name = $lane['lane_key'];
+            if (!isset($nodes[$key])) {
+                continue;
+            }
+            if (str_starts_with($name, 'e:')) {
+                if (!in_array(substr($name, 2), $nodes[$key]['children'], true)) {
+                    continue;
+                }
+            } else {
+                $parts = explode(':', $name);
+                $source = 'g:' . (int) ($parts[1] ?? 0);
+                if (!isset($allowed[$source])
+                    || ($parts[0] === 'm' && ($parts[2] ?? '0') !== '0'
+                        && !$allowNsfw)) {
+                    continue;
+                }
+            }
+            $nodes[$key]['watermark'][$name] = (int) $lane['revision'];
+        }
+        // Zero lanes record which physical sources were already authorized
+        // at observation time. They distinguish a source move from newly
+        // granted access without storing any image identities in the browser.
+        $laneCount = array_sum(array_map(
+            static fn(array $node): int => count($node['watermark']), $nodes,
+        ));
+        foreach ($nodes as $key => &$node) {
+            if ($key === 'r:0') {
+                continue;
+            }
+            $sources = str_starts_with($key, 'g:')
+                ? [(int) substr($key, 2)] : array_keys($inventory['galleries']);
+            foreach ($sources as $sourceId) {
+                $source = $inventory['galleries'][$sourceId] ?? null;
+                if (!isset($allowed['g:' . $sourceId]) || $source === null
+                    || (str_starts_with($key, 's:') && !gallery_is_public_listed($source))) {
+                    continue;
+                }
+                foreach ($allowNsfw ? ['0', '1'] : ['0'] as $class) {
+                    $name = 'm:' . $sourceId . ':' . $class;
+                    if (!array_key_exists($name, $node['watermark'])) {
+                        $node['watermark'][$name] = 0;
+                        $laneCount++;
+                    }
+                    if ($laneCount > GALLERY_VISIT_LANE_LIMIT) {
+                        throw new \RuntimeException('Visit authorization lanes exceed their bound.');
+                    }
+                }
+            }
+        }
+        unset($node);
+    }
+    return compact('nodes', 'ready');
 }

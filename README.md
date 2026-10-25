@@ -168,6 +168,23 @@ the PDFs.
 
 ## Core Features
 
+### Browser-local gallery progress and notifications
+
+Public gallery titles carry small inline Unseen, Partial or Seen icons and an
+independent New-content sparkle. A branch is complete only after its own page
+and every navigable descendant, including placed Smart Galleries, were opened.
+The header bell opens a compact translucent panel beneath the bell with links
+to new content, **Mark all as read**, and confirmation-protected history reset.
+Authenticated administrators never see this feature, including in anonymous
+preview; logging out restores the ordinary visitor interface.
+
+History stays in one bounded installation-scoped `localStorage` record. No
+visitor database, tracking cookie, network tracker or cross-device account
+synchronization is introduced. Blocked storage remains usable for the current
+tab. Apply migration `202610250001_gallery_visit_content.php` before relying
+on New-content detection. See [architecture](ARCHITECTURE.md) and
+[coverage](TESTING.md).
+
 ### Cooperative galleries
 
 Enable Cooperative galleries in Features to pair independent HTTPS installations

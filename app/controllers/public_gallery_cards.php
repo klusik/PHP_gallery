@@ -585,6 +585,7 @@ function render_gallery_card(
 
     \Gallery\Views\view_render_public_gallery_card([
         'gallery_id' => (int) $gallery['id'],
+        'visit_key' => current_user() === null ? 'g:' . (int) $gallery['id'] : '',
         'title' => (string) ($gallery['title'] ?? ''),
         'url' => gallery_public_url($gallery),
         'visibility' => $effectiveVisibility,
@@ -620,7 +621,10 @@ function render_gallery_card(
  *
  * @param array{id?:int|string,title?:string,slug?:string,description?:string,placement?:string,placement_order?:int|string} $smartGallery Smart Gallery fields used to render its card.
  * @param int $cardIndex Index used to disambiguate responsive thumbnail markup.
- * @param array<string,mixed> $cardContext Optional precomputed card summary, including validity, count, cover, and source gallery.
+ * @param array{valid?:bool,count?:int,cover?:array{id:int|string,
+ *     gallery_id:int|string,relative_path:string,filename?:string}|null,
+ *     source_gallery?:array{id?:int|string,folder_path?:string},
+ *     media_counts?:array{music:int,pdf:int}} $cardContext Precomputed summary.
  * @return void Renders the card when its placement context is valid.
  */
 function render_smart_gallery_card(
@@ -679,6 +683,7 @@ function render_smart_gallery_card(
 
     \Gallery\Views\view_render_public_smart_gallery_card([
         'gallery_id' => $smartGalleryId,
+        'visit_key' => current_user() === null ? 's:' . $smartGalleryId : '',
         'title' => (string) ($smartGallery['title'] ?? ''),
         'description' => (string) ($smartGallery['description'] ?? ''),
         'url' => url_for('smart_gallery', [
@@ -953,4 +958,76 @@ function render_public_admin_visibility_menu(
         'action_url' => $actionUrl,
         'csrf_html' => csrf_field(),
     ]);
+}
+
+/**
+ * Append browser-only history after a successful public document is prepared.
+ * Administrator identity is checked directly, independently of preview/window.
+ * @param string $opened Authorized physical/Smart detail key, or empty for a
+ *     listing, denied page or standalone-image entry without a gallery visit.
+ * @param list<string> $observed Gallery identities actually listed by another
+ *     public discovery surface; observation never counts as a direct visit.
+ * @return void Appends an escaped bounded payload and revisioned module import;
+ *     unavailable optional evidence never breaks normal public navigation.
+ */
+function public_gallery_visit_progress(string $opened = '', array $observed = []): void
+{
+    if (current_user() !== null) {
+        return;
+    }
+    try {
+        $projection = \Gallery\Services\gallery_visit_projection($opened, $observed);
+        $nodes = [];
+        foreach ($projection['nodes'] as $key => $node) {
+            $row = $node['row'];
+            $smart = str_starts_with($key, 's:');
+            $nodes[$key] = [
+                'title' => (string) ($row['title'] ?? ''),
+                'url' => $key === 'r:0' ? '' : ($smart
+                    ? url_for('smart_gallery', ['slug' => (string) $row['slug']])
+                    : gallery_public_url($row)),
+                'children' => $node['children'],
+                'watermark' => $node['watermark'],
+            ];
+        }
+        // Root and rewritten public/index.php requests share the URL owner's
+        // installation mount, never the executing script's physical directory.
+        $mount = \Gallery\Core\request_script_base_path();
+        $mount = rawurldecode($mount);
+        if (DIRECTORY_SEPARATOR === '\\') {
+            // Windows aliases /Galerie and /galerie address this same
+            // installation; case-sensitive hosting retains distinct mounts.
+            $mount = strtolower($mount);
+        }
+        $mount = $mount === '.' ? '/' : $mount;
+        $payload = json_encode([
+            'nodes' => $nodes,
+            'opened' => isset($nodes[$opened]) ? $opened : '',
+            'ready' => $projection['ready'],
+            'storageKey' => 'php-gallery.visit-progress.v1:'
+                . '/' . trim($mount, '/'),
+            'strings' => array_combine(
+                ['unseen', 'partial', 'seen', 'new', 'empty', 'unavailable',
+                    'reset_confirm', 'bell', 'updated', 'content_unavailable',
+                    'mark_unseen'],
+                array_map(static fn(string $key): string => \Gallery\Services\t(
+                    'gallery.visit.' . $key,
+                ), ['unseen', 'partial', 'seen', 'new', 'empty', 'unavailable',
+                    'reset_confirm', 'bell', 'updated', 'content_unavailable',
+                    'mark_unseen']),
+            ),
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+            | JSON_THROW_ON_ERROR);
+        $modulePath = 'assets/gallery-modules/gallery-visit-progress.js';
+        $url = \Gallery\Core\asset_url($modulePath) . '?v='
+            . filemtime(dirname(__DIR__, 2) . '/public/' . $modulePath);
+        append_cms_footer_script(
+            'import(' . json_encode($url, JSON_THROW_ON_ERROR) . ')'
+            . '.then(m=>m.setupGalleryVisitProgress(' . $payload . '))'
+            . '.catch(()=>{});',
+        );
+    } catch (\Throwable) {
+        // Optional UI may be omitted without exposing partial/private evidence.
+        error_log('Gallery visit projection is unavailable.');
+    }
 }

@@ -289,6 +289,16 @@ function sync_entity_tags(
         array_values(array_unique($tagIds)),
         $schemaState === 'available',
     );
+    if ($type === 'gallery') {
+        gallery_visit_content_update(
+            \Gallery\Models\gallery_visit_content_model_branch_sources($id),
+        );
+    } elseif ($type === 'image') {
+        $image = find_image($id, true);
+        if (is_array($image)) {
+            gallery_visit_content_update([(int) $image['gallery_id']]);
+        }
+    }
     return true;
 }
 
@@ -338,7 +348,7 @@ function mutate_image_tag(
             'created_at' => now_sql(),
         ];
     }
-    return tag_model_mutate_image_tag_atomically(
+    $result = tag_model_mutate_image_tag_atomically(
         $imageId,
         $expectedGalleryId,
         $operation,
@@ -346,6 +356,8 @@ function mutate_image_tag(
         $newTag,
         $schemaState === 'available',
     );
+    gallery_visit_content_update([$expectedGalleryId]);
+    return $result;
 }
 
 /**
@@ -1080,6 +1092,8 @@ function delete_tag_by_id(
         return ['ok' => false, 'error' => 'media_type_mismatch'];
     }
     try {
+        $visitSources = $mediaType === 'image'
+            ? \Gallery\Models\gallery_visit_content_model_tag_sources($id) : [];
         tag_model_delete_with_assignments(
             $id,
             $mediaType,
@@ -1088,6 +1102,7 @@ function delete_tag_by_id(
     } catch (Throwable) {
         return ['ok' => false, 'error' => 'delete_failed'];
     }
+    gallery_visit_content_update($visitSources);
     return ['ok' => true, 'tag' => $tag];
 }
 

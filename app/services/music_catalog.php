@@ -352,6 +352,7 @@ function music_catalog_sync_gallery_snapshot(int $galleryId, array $tracks, stri
             \Gallery\Models\music_catalog_model_prune_gallery($galleryId, $ids);
             \Gallery\Models\music_catalog_model_clear_gallery_dirty($galleryId);
         },
+        ['galleries' => [$galleryId]],
     );
     return $result['revision'];
 }
@@ -474,6 +475,7 @@ function music_catalog_restore_trash_snapshot(
                 );
             }
         },
+        ['galleries' => [$galleryId]],
     );
 }
 
@@ -481,13 +483,27 @@ function music_catalog_restore_trash_snapshot(
  * @param string $revision Expected decimal revision from the submitted form.
  * @param string $operation Stable operation name for schema diagnostics.
  * @param \Closure():int|void $mutation Persistence callback executed inside the transaction.
+ * @param array{galleries?:list<int>,albums?:list<int>,songs?:list<int>} $contentScope
+ *     Explicit content identities whose current source assignments must survive
+ *     the mutation, including removals; empty for purely cosmetic edits.
  * @return array{revision:string,value:int|null} New revision and callback result.
  * @throws \RuntimeException When schema is unavailable or the revision is stale.
  */
-function music_catalog_commit_mutation(string $revision, string $operation, \Closure $mutation): array
-{
+function music_catalog_commit_mutation(
+    string $revision,
+    string $operation,
+    \Closure $mutation,
+    array $contentScope = [],
+): array {
     music_catalog_assert_schema_ready($operation);
-    return \Gallery\Models\music_catalog_model_transaction(
+    // Capture the complete admitted source set before removals erase links;
+    // publication itself still processes only the bounded pending batch.
+    $visitSources = \Gallery\Models\music_catalog_model_visit_dirty_sources(
+        \Gallery\Models\GALLERY_VISIT_NODE_LIMIT,
+        $contentScope,
+        music_repository_schema_status()['state'] === 'available',
+    );
+    $result = \Gallery\Models\music_catalog_model_transaction(
         $revision,
         static function () use ($mutation): ?int {
             $value = $mutation();
@@ -500,6 +516,8 @@ function music_catalog_commit_mutation(string $revision, string $operation, \Clo
             return is_int($value) ? $value : null;
         },
     );
+    gallery_visit_content_update($visitSources);
+    return $result;
 }
 
 /** Return the current global optimistic revision.
@@ -947,7 +965,7 @@ function music_catalog_merge(array $songIds, int $survivorId, string $revision, 
                 $tagPolicy,
                 music_repository_is_ready_or_absent('catalog.merge'),
             );
-    });
+    }, ['songs' => $ids]);
     return $result['revision'];
 }
 
@@ -1348,6 +1366,20 @@ function music_catalog_album_delete(int $albumId, string $revision): string
     if ($albumId < 1) {
         throw new \RuntimeException('music.conflict');
     }
+    music_catalog_assert_schema_ready('catalog.album_delete');
+    // Capture linked descendant albums before the existing cascading delete.
+    $children = [];
+    foreach (music_catalog_album_tree() as $album) {
+        $children[$album['parent_id'] ?? 0][] = $album['id'];
+    }
+    $albumIds = [$albumId];
+    $seen = [];
+    for ($cursor = 0; $cursor < count($albumIds); $cursor++) {
+        $id = $albumIds[$cursor];
+        if (isset($seen[$id])) continue;
+        $seen[$id] = true;
+        array_push($albumIds, ...($children[$id] ?? []));
+    }
     $result = music_catalog_commit_mutation(
         $revision,
         'catalog.album_delete',
@@ -1356,6 +1388,7 @@ function music_catalog_album_delete(int $albumId, string $revision): string
                 'delete', $albumId, null, 0, '',
             );
         },
+        ['albums' => array_keys($seen)],
     );
     return $result['revision'];
 }
@@ -1409,6 +1442,7 @@ function music_catalog_album_song_add(
                 'song_add', $albumId, $songId, $position, '',
             );
         },
+        ['albums' => [$albumId]],
     );
     return $result['revision'];
 }
@@ -1433,6 +1467,7 @@ function music_catalog_album_song_remove(int $albumId, int $songId, string $revi
                 'song_remove', $albumId, $songId, 0, '',
             );
         },
+        ['albums' => [$albumId]],
     );
     return $result['revision'];
 }
@@ -1524,6 +1559,7 @@ function music_catalog_split(int $songId, array $trackIds, string $revision): ar
             $selected,
             music_repository_is_ready_or_absent('catalog.split'),
         ),
+        ['songs' => [$songId]],
     );
     return ['revision' => $result['revision'], 'song_id' => $result['value']];
 }

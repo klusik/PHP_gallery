@@ -75,6 +75,9 @@ function image_bulk_set_visibility(array $imageIds, string $visibility): array
         return [];
     }
     image_model_set_visibility($ids, $visibility, now_sql());
+    gallery_visit_content_update(
+        \Gallery\Models\gallery_visit_content_model_image_sources($ids),
+    );
     return $ids;
 }
 
@@ -92,6 +95,9 @@ function image_bulk_set_nsfw_enabled(array $imageIds, bool $enabled): array
         return [];
     }
     image_model_set_nsfw_enabled($ids, $enabled, now_sql());
+    gallery_visit_content_update(
+        \Gallery\Models\gallery_visit_content_model_image_sources($ids),
+    );
     return $ids;
 }
 

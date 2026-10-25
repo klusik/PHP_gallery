@@ -85,6 +85,555 @@ use function Gallery\Core\db;
 use function Gallery\Core\slugify;
 
 /**
+ * Bound the complete visitor hierarchy and authoring snapshot.
+ * Type: int. Units: galleries/edges. Scope: one projection or content update.
+ * Consumers: gallery_visit_inventory and gallery_visit_projection.
+ * Rationale: 2048 nodes bound HTML, local history and malformed hierarchy work.
+ */
+const GALLERY_VISIT_NODE_LIMIT = 2048;
+
+/**
+ * Bound image identities inspected after an explicit content mutation.
+ * Type: int. Units: images. Scope: one authoring snapshot.
+ * Consumers: gallery_visit_content_refresh.
+ * Rationale: 20000 bounds shared-host memory; overflow leaves New unavailable.
+ */
+const GALLERY_VISIT_IMAGE_LIMIT = 20000;
+
+/**
+ * Bound current direct and virtual content membership identities.
+ * Type: int. Units: memberships. Scope: one authoring snapshot.
+ * Consumers: gallery_visit_content_add and gallery_visit_content_refresh.
+ * Rationale: 50000 bounds the retained diff and PHP memory without truncation.
+ */
+const GALLERY_VISIT_MEMBER_LIMIT = 50000;
+
+/**
+ * Bound compact authorization and child-edge watermarks in public HTML.
+ * Type: int. Units: lanes. Scope: one complete visitor projection.
+ * Consumers: gallery_visit_projection.
+ * Rationale: 8192 bounds transport and storage without exposing partial evidence.
+ */
+const GALLERY_VISIT_LANE_LIMIT = 8192;
+
+/**
+ * Bound rule evaluation after authoring, separate from public card rendering.
+ * Type: int. Units: definitions. Scope: one authoring snapshot.
+ * Consumers: gallery_visit_inventory.
+ * Rationale: 128 prevents an unbounded full Smart membership rebuild.
+ */
+const GALLERY_VISIT_SMART_LIMIT = 128;
+
+/**
+ * Bound each SQL union in a content membership rebuild.
+ * Type: int. Units: definitions. Scope: one database query.
+ * Consumers: gallery_visit_content_refresh.
+ * Rationale: eight reuses small batched predicates and bounds SQL parameters.
+ */
+const GALLERY_VISIT_SMART_BATCH = 8;
+
+/**
+ * Bound recovery scopes merged into one explicit resource update.
+ * Type: int. Units: changed sources/definitions. Scope: one authoring call.
+ * Consumers: gallery_visit_content_update.
+ * Rationale: 64 admits ordinary batches while refusing an implicit site rebuild.
+ */
+const GALLERY_VISIT_SCOPE_LIMIT = 64;
+
+/**
+ * Retain the canonical JSON decoder depth for stored Smart rule documents.
+ * Type: int. Units: nested JSON containers. Scope: initial migration seeding.
+ * Consumers: gallery_visit_content_model_seed.
+ * Rationale: 512 preserves the existing decoder limit; rule grammar stays owned
+ * by the Smart compiler and does not gain additional nesting permission.
+ */
+const GALLERY_VISIT_RULE_JSON_DEPTH = 512;
+
+/**
+ * Signal bounded or unfinished optional evidence without blocking core upgrades.
+ */
+final class GalleryVisitContentNotReady extends \RuntimeException {}
+
+/**
+ * Seed an initially empty addition index on the migration's explicit connection.
+ * This one-time authoring step is independent of sessions/configuration and
+ * never runs from a visitor read. Existing successful revisions are preserved.
+ * @param PDO $pdo Installer/updater-owned database connection.
+ * @return void Seeds current identities transactionally; an oversized or failed
+ *     seed remains dirty and retryable without touching authored media.
+ */
+function gallery_visit_content_model_seed(PDO $pdo): void
+{
+    $revision = (int) $pdo->query(
+        'SELECT revision FROM gallery_visit_content_state WHERE id = 1',
+    )->fetchColumn();
+    if ($revision > 0) {
+        return;
+    }
+    $galleryIds = array_map('intval', $pdo->query(
+        'SELECT id FROM galleries ORDER BY id LIMIT ' . (GALLERY_VISIT_NODE_LIMIT + 1),
+    )->fetchAll(PDO::FETCH_COLUMN));
+    if (count($galleryIds) > GALLERY_VISIT_NODE_LIMIT
+        || (int) $pdo->query("SELECT COUNT(*) FROM images WHERE visibility = 'public'")
+            ->fetchColumn() > GALLERY_VISIT_IMAGE_LIMIT) {
+        throw new GalleryVisitContentNotReady('Initial visit content exceeds its bound.');
+    }
+    $pdo->beginTransaction();
+    try {
+        $pdo->exec('DELETE FROM gallery_visit_content_members');
+        // Revision one denotes the initial observation, not a wall-clock date.
+        $pdo->exec(
+            'INSERT INTO gallery_visit_content_members '
+            . '(node_key, item_key, lane_key, revision) '
+            . "SELECT CONCAT('g:', i.gallery_id), CONCAT('i:', i.id), "
+            . "CONCAT('m:', i.gallery_id, ':1'), 1 FROM images i "
+            . 'JOIN galleries g ON g.id = i.gallery_id WHERE i.visibility = \'public\'',
+        );
+        $listed = array_map('intval', $pdo->query(
+            "SELECT id FROM galleries WHERE visibility = 'public' "
+            . "AND access_listing = 'listed'",
+        )->fetchAll(PDO::FETCH_COLUMN));
+        $definitions = $pdo->query(
+            "SELECT id, rules_json FROM smart_galleries WHERE enabled = 1 "
+            . "AND visibility = 'public' LIMIT " . (GALLERY_VISIT_SMART_LIMIT + 1),
+        )->fetchAll(PDO::FETCH_ASSOC);
+        if (count($definitions) > GALLERY_VISIT_SMART_LIMIT) {
+            throw new GalleryVisitContentNotReady('Initial Smart inventory exceeds its bound.');
+        }
+        foreach ($definitions as $definition) {
+            $rules = json_decode((string) $definition['rules_json'], true,
+                GALLERY_VISIT_RULE_JSON_DEPTH, JSON_THROW_ON_ERROR);
+            $query = smart_gallery_model_result_query(
+                $rules, $listed, true, true, 'created_at', 'asc',
+            );
+            $insert = $pdo->prepare(
+                'INSERT INTO gallery_visit_content_members '
+                . '(node_key, item_key, lane_key, revision) SELECT ?, '
+                . "CONCAT('i:', i.id), CONCAT('m:', i.gallery_id, ':1'), 1 "
+                . 'FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE '
+                . $query['where'],
+            );
+            $insert->execute(array_merge(['s:' . (int) $definition['id']], $query['params']));
+            gallery_visit_content_model_assert_seed_bound($pdo);
+        }
+        // Lane one retains membership independent of NSFW metadata. Lane zero
+        // tracks safe availability; lane two records restricted-item presence.
+        $pdo->exec(
+            'INSERT INTO gallery_visit_content_members '
+            . '(node_key,item_key,lane_key,revision) SELECT m.node_key,m.item_key, '
+            . "CONCAT('m:',i.gallery_id,':',CASE WHEN "
+            . 'COALESCE(i.nsfw_enabled,0) <> 0 OR COALESCE(g.nsfw_enabled,0) <> 0 '
+            . 'THEN 2 ELSE 0 END),1 FROM gallery_visit_content_members m '
+            . "JOIN images i ON m.item_key=CONCAT('i:',i.id) "
+            . 'JOIN galleries g ON g.id=i.gallery_id '
+            . "WHERE m.lane_key=CONCAT('m:',i.gallery_id,':1')",
+        );
+        gallery_visit_content_model_assert_seed_bound($pdo);
+        $virtualSources = [];
+        foreach ($pdo->query(
+            "SELECT DISTINCT node_key, lane_key FROM gallery_visit_content_members "
+            . "WHERE node_key LIKE 's:%'",
+        )->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $source = (int) explode(':', $row['lane_key'])[1];
+            $virtualSources[$source][$row['node_key']] = $row['node_key'];
+        }
+        $insert = $pdo->prepare(
+            'INSERT IGNORE INTO gallery_visit_content_members '
+            . '(node_key,item_key,lane_key,revision) VALUES (?,?,?,1)',
+        );
+        if ($galleryIds !== []) {
+            gallery_visit_content_model_assert_attachment_bound($galleryIds, $pdo);
+            foreach (['pdf', 'music'] as $kind) {
+                $usage = gallery_model_attachment_usage_rows($galleryIds, $kind, $pdo);
+                foreach ($usage['states'] as $state) {
+                    if ($state !== 'ready') {
+                        throw new GalleryVisitContentNotReady('Initial attachment evidence is dirty.');
+                    }
+                }
+                foreach ($usage['items'] as $item) {
+                    if ($item['hidden'] || !is_string($item['sha256'])) {
+                        continue;
+                    }
+                    $source = (int) $item['gallery_id'];
+                    $nodes = array_merge(['g:' . $source],
+                        array_values($virtualSources[$source] ?? []));
+                    foreach ($nodes as $node) {
+                        $insert->execute([$node, $kind . ':' . $item['sha256'], 'a:' . $source]);
+                    }
+                }
+            }
+        }
+        $pdo->exec(
+            'INSERT IGNORE INTO gallery_visit_content_members '
+            . '(node_key,item_key,lane_key,revision) '
+            . "SELECT CASE WHEN parent_id IS NULL THEN 'r:0' ELSE CONCAT('g:',parent_id) END, "
+            . "CONCAT('g:',id),CONCAT('e:g:',id),1 FROM galleries "
+            . "WHERE visibility='public' AND access_listing='listed'",
+        );
+        $pdo->exec(
+            'INSERT IGNORE INTO gallery_visit_content_members '
+            . '(node_key,item_key,lane_key,revision) '
+            . "SELECT 'r:0',CONCAT('s:',id),CONCAT('e:s:',id),1 FROM smart_galleries "
+            . "WHERE enabled=1 AND visibility='public' AND placement_mode='root'",
+        );
+        $pdo->exec(
+            'INSERT IGNORE INTO gallery_visit_content_members '
+            . '(node_key,item_key,lane_key,revision) '
+            . "SELECT CONCAT('g:',p.gallery_id),CONCAT('s:',s.id),CONCAT('e:s:',s.id),1 "
+            . 'FROM smart_gallery_placements p JOIN smart_galleries s ON s.id=p.smart_gallery_id '
+            . "WHERE s.enabled=1 AND s.visibility='public' AND s.placement_mode='gallery'",
+        );
+        gallery_visit_content_model_assert_seed_bound($pdo);
+        $pdo->exec('UPDATE gallery_visit_content_state SET revision=1,dirty=0 WHERE id=1');
+        $pdo->exec('DELETE FROM gallery_visit_content_pending');
+        $pdo->commit();
+    } catch (\Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+}
+
+/**
+ * Refuse an oversized migration seed before publishing it.
+ * @param PDO $pdo Migration-owned transaction connection.
+ * @return void Continues below the retained membership bound; otherwise throws.
+ */
+function gallery_visit_content_model_assert_seed_bound(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM gallery_visit_content_members')
+        ->fetchColumn() > GALLERY_VISIT_MEMBER_LIMIT) {
+        throw new GalleryVisitContentNotReady('Initial visit membership exceeds its bound.');
+    }
+}
+
+/**
+ * Bound attachment expansion before allocating resolved digest rows.
+ * @param list<int> $galleryIds Explicit physical attachment sources.
+ * @param PDO|null $pdo Migration connection, or null for the application owner.
+ * @return void Continues below the membership bound; oversized input throws.
+ */
+function gallery_visit_content_model_assert_attachment_bound(
+    array $galleryIds, ?PDO $pdo = null,
+): void {
+    if ($galleryIds === []) {
+        return;
+    }
+    $marks = implode(',', array_fill(0, count($galleryIds), '?'));
+    $statement = ($pdo ?? db())->prepare(
+        'SELECT COALESCE(SUM(CASE WHEN album_id IS NULL THEN 1 ELSE '
+        . '(SELECT COUNT(*) FROM music_album_songs a WHERE a.album_id=u.album_id) '
+        . 'END),0) FROM gallery_attachment_usage_items u WHERE gallery_id IN ('
+        . $marks . ')',
+    );
+    $statement->execute($galleryIds);
+    if ((int) $statement->fetchColumn() > GALLERY_VISIT_MEMBER_LIMIT) {
+        throw new GalleryVisitContentNotReady('Visit attachment expansion exceeds its bound.');
+    }
+}
+
+/**
+ * Read the content index generation without changing visitor or content state.
+ * @return array{generation:int,revision:int,dirty:bool} Current index lease.
+ */
+function gallery_visit_content_model_state(): array
+{
+    $row = db()->query(
+        'SELECT generation, revision, CASE WHEN dirty <> 0 OR EXISTS '
+        . '(SELECT 1 FROM gallery_visit_content_pending) THEN 1 ELSE 0 END '
+        . 'AS dirty FROM gallery_visit_content_state WHERE id = 1',
+    )->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        throw new \RuntimeException('Content index state is unavailable.');
+    }
+    return [
+        'generation' => (int) $row['generation'],
+        'revision' => (int) $row['revision'],
+        'dirty' => (bool) $row['dirty'],
+    ];
+}
+
+/**
+ * Report whether a content owner still holds an unfinished database transaction.
+ * @return bool True while publishing a new index transaction must be deferred.
+ */
+function gallery_visit_content_model_transaction_active(): bool
+{
+    return db()->inTransaction();
+}
+
+/**
+ * Invalidate only explicitly changed content scopes for bounded reconciliation.
+ * @param list<int> $galleryIds Physical source/parent scopes that changed.
+ * @param list<int> $smartIds Virtual definitions whose rules changed.
+ * @return void Marks pending scopes, never writes visitor state.
+ */
+function gallery_visit_content_model_dirty(array $galleryIds, array $smartIds): void
+{
+    db()->exec(
+        'UPDATE gallery_visit_content_state SET generation = generation + 1 '
+        . 'WHERE id = 1',
+    );
+    $sqlite = db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    $insert = db()->prepare($sqlite
+        ? 'INSERT OR IGNORE INTO gallery_visit_content_pending (scope_key) VALUES (?)'
+        : 'INSERT IGNORE INTO gallery_visit_content_pending (scope_key) VALUES (?)');
+    foreach (['g:' => $galleryIds, 's:' => $smartIds] as $prefix => $ids) {
+        foreach ($ids as $id) {
+            $insert->execute([$prefix . $id]);
+        }
+    }
+}
+
+/**
+ * Read interrupted authored scopes without doing visitor-side reconciliation.
+ * @param int $limit Maximum scopes admitted by one content authoring update.
+ * @return list<string> Pending physical/virtual scope keys, plus sentinel.
+ */
+function gallery_visit_content_model_pending(int $limit): array
+{
+    return db()->query(
+        'SELECT scope_key FROM gallery_visit_content_pending ORDER BY scope_key '
+        . 'LIMIT ' . ($limit + 1),
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Batch source identities for explicitly changed images without N+1 lookups.
+ * @param list<int> $imageIds Stable edited image identities.
+ * @return list<int> Unique physical source identities currently owning them.
+ */
+function gallery_visit_content_model_image_sources(array $imageIds): array
+{
+    if ($imageIds === []) {
+        return [];
+    }
+    $marks = implode(',', array_fill(0, count($imageIds), '?'));
+    $statement = db()->prepare(
+        'SELECT DISTINCT gallery_id FROM images WHERE id IN (' . $marks . ')',
+    );
+    $statement->execute($imageIds);
+    return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Read sources affected by inherited gallery tags or a physical branch move.
+ * @param int $galleryId Physical root whose current folder branch is affected.
+ * @return list<int> Bounded source IDs, with an overflow sentinel if oversized.
+ */
+function gallery_visit_content_model_branch_sources(int $galleryId): array
+{
+    $statement = db()->prepare(
+        'SELECT g.id FROM galleries g JOIN galleries root ON root.id = ? '
+        . "WHERE g.id = root.id OR g.folder_path LIKE CONCAT(root.folder_path, '/%') "
+        . 'ORDER BY g.id LIMIT ' . (GALLERY_VISIT_NODE_LIMIT + 1),
+    );
+    $statement->execute([$galleryId]);
+    return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Identify sources whose Smart rule membership may change after tag deletion.
+ * @param int $tagId Existing image/gallery tag being removed by its owner.
+ * @return list<int> Bounded direct-image and inherited-gallery sources.
+ */
+function gallery_visit_content_model_tag_sources(int $tagId): array
+{
+    $statement = db()->prepare(
+        'SELECT g.id FROM galleries g WHERE EXISTS '
+        . '(SELECT 1 FROM image_tags it JOIN images i ON i.id = it.image_id '
+        . 'WHERE it.tag_id = ? AND i.gallery_id = g.id) OR EXISTS '
+        . '(SELECT 1 FROM gallery_tags gt JOIN galleries ancestor '
+        . 'ON ancestor.id = gt.gallery_id WHERE gt.tag_id = ? AND '
+        . "(g.id = ancestor.id OR g.folder_path LIKE CONCAT(ancestor.folder_path, '/%'))) "
+        . 'ORDER BY g.id LIMIT ' . (GALLERY_VISIT_NODE_LIMIT + 1),
+    );
+    $statement->execute([$tagId, $tagId]);
+    return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Read a bounded policy inventory; sensitive rows stay inside the service.
+ * @param int $limit Maximum admitted gallery rows, with one overflow sentinel.
+ * @return list<GalleryDatabaseRow> Raw gallery rows, never a public projection.
+ */
+function gallery_visit_content_model_galleries(int $limit): array
+{
+    return db()->query(
+        'SELECT * FROM galleries ORDER BY id LIMIT ' . ($limit + 1),
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Read bounded current photo membership without using modification timestamps.
+ * @param list<int> $galleryIds Explicit physical sources; empty means no images.
+ * @param int $limit Maximum admitted images, with one overflow sentinel.
+ * @return list<array{id:int|string,gallery_id:int|string,nsfw:int|string}>
+ *     Public image identities and their effective image/gallery NSFW lane.
+ */
+function gallery_visit_content_model_images(array $galleryIds, int $limit): array
+{
+    if ($galleryIds === []) {
+        return [];
+    }
+    $marks = implode(',', array_fill(0, count($galleryIds), '?'));
+    $query = db()->prepare(
+        'SELECT i.id, i.gallery_id, '
+        . 'CASE WHEN COALESCE(i.nsfw_enabled, 0) <> 0 '
+        . 'OR COALESCE(g.nsfw_enabled, 0) <> 0 THEN 1 ELSE 0 END AS nsfw '
+        . 'FROM images i INNER JOIN galleries g ON g.id = i.gallery_id '
+        . "WHERE i.visibility = 'public' AND i.gallery_id IN ($marks) "
+        . 'ORDER BY i.id LIMIT '
+        . ($limit + 1),
+    );
+    $query->execute($galleryIds);
+    return $query->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Read compact addition watermarks grouped by authorization lane.
+ * @param int $limit Maximum admitted lanes, with one overflow sentinel.
+ * @return list<array{node_key:string,lane_key:string,revision:int|string}>
+ *     Current per-source/media or direct-child watermarks; no visitor records.
+ */
+function gallery_visit_content_model_lanes(int $limit): array
+{
+    return db()->query(
+        'SELECT node_key, lane_key, MAX(revision) AS revision '
+        . 'FROM gallery_visit_content_members GROUP BY node_key, lane_key '
+        . 'LIMIT ' . ($limit + 1),
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Publish a complete membership diff only if its source generation is current.
+ * Existing members retain their first-addition revision; deletion never adds one.
+ * @param array<string,array{node:string,item:string,lane:string}> $members
+ *     Complete unique identities keyed by node/item/lane with pipe separators.
+ * @param int $generation Generation observed before constructing the snapshot.
+ * @param int $limit Maximum admitted retained members and target members.
+ * @param list<int> $galleryIds Complete physical scopes and virtual source lanes.
+ * @param list<int> $smartIds Complete virtual definition scopes.
+ * @param bool $rebuild Whether this is the explicit initial migration rebuild.
+ * @return bool True after a lease-checked publication, false for a moved lease.
+ * @throws \RuntimeException On an oversized index or unsafe nested transaction.
+ */
+function gallery_visit_content_model_publish(
+    array $members,
+    int $generation,
+    int $limit,
+    array $galleryIds,
+    array $smartIds,
+    bool $rebuild = false,
+): bool {
+    $pdo = db();
+    if ($pdo->inTransaction() || count($members) > $limit) {
+        throw new \RuntimeException('Content index publication is not ready.');
+    }
+    $pdo->beginTransaction();
+    try {
+        $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+            ? '' : ' FOR UPDATE';
+        $state = $pdo->query(
+            'SELECT generation, revision FROM gallery_visit_content_state '
+            . 'WHERE id = 1' . $lock,
+        )->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($state) || (int) $state['generation'] !== $generation) {
+            $pdo->rollBack();
+            return false;
+        }
+        $scopeSql = ["node_key = 'r:0'"];
+        $scopeParams = [];
+        foreach (['g:' => $galleryIds, 's:' => $smartIds] as $prefix => $ids) {
+            foreach ($ids as $id) {
+                $scopeSql[] = 'node_key = ?';
+                $scopeParams[] = $prefix . $id;
+            }
+        }
+        foreach ($galleryIds as $id) {
+            $scopeSql[] = "(node_key LIKE 's:%' AND (lane_key LIKE ? OR lane_key = ?))";
+            $scopeParams[] = 'm:' . $id . ':%';
+            $scopeParams[] = 'a:' . $id;
+        }
+        $where = $rebuild ? '' : ' WHERE ('
+            . ($scopeSql === [] ? '1=0' : implode(' OR ', $scopeSql)) . ')';
+        $oldQuery = $pdo->prepare(
+            'SELECT node_key, item_key, lane_key, revision '
+            . 'FROM gallery_visit_content_members' . $where
+            . ' LIMIT ' . ($limit + 1),
+        );
+        $oldQuery->execute($rebuild ? [] : $scopeParams);
+        $old = $oldQuery->fetchAll(PDO::FETCH_ASSOC);
+        if (count($old) > $limit) {
+            throw new \RuntimeException('Content index exceeds its bound.');
+        }
+        $remove = $pdo->prepare(
+            'DELETE FROM gallery_visit_content_members '
+            . 'WHERE node_key = ? AND item_key = ? AND lane_key = ?',
+        );
+        $retainedMembership = [];
+        foreach ($old as $row) {
+            if (str_starts_with($row['lane_key'], 'm:')) {
+                // A source move does not re-add an image to a Smart result that
+                // still contains it. Preserve the membership/class event across
+                // source lanes, independently of physical source identity.
+                $class = substr($row['lane_key'], strrpos($row['lane_key'], ':'));
+                $retainedMembership[$row['node_key'] . '|' . $row['item_key'] . $class]
+                    = (int) $row['revision'];
+            }
+            $key = $row['node_key'] . '|' . $row['item_key'] . '|'
+                . $row['lane_key'];
+            if (isset($members[$key])) {
+                unset($members[$key]);
+            } else {
+                $remove->execute([
+                    $row['node_key'], $row['item_key'], $row['lane_key'],
+                ]);
+            }
+        }
+        $revision = (int) $state['revision'] + 1;
+        $insert = $pdo->prepare(
+            'INSERT INTO gallery_visit_content_members '
+            . '(node_key, item_key, lane_key, revision) VALUES (?, ?, ?, ?)',
+        );
+        foreach ($members as $member) {
+            $class = substr($member['lane'], strrpos($member['lane'], ':'));
+            $memberRevision = str_starts_with($member['lane'], 'm:')
+                ? ($retainedMembership[$member['node'] . '|' . $member['item'] . $class]
+                    ?? $revision) : $revision;
+            $insert->execute([
+                $member['node'], $member['item'], $member['lane'], $memberRevision,
+            ]);
+        }
+        $pdo->prepare(
+            'UPDATE gallery_visit_content_state SET revision = ?, dirty = '
+            . ($rebuild ? '0' : 'dirty') . ' '
+            . 'WHERE id = 1 AND generation = ?',
+        )->execute([$revision, $generation]);
+        if ($rebuild) {
+            $pdo->exec('DELETE FROM gallery_visit_content_pending');
+        } else {
+            $clear = $pdo->prepare(
+                'DELETE FROM gallery_visit_content_pending WHERE scope_key = ?',
+            );
+            foreach (['g:' => $galleryIds, 's:' => $smartIds] as $prefix => $ids) {
+                foreach ($ids as $id) {
+                    $clear->execute([$prefix . $id]);
+                }
+            }
+        }
+        $pdo->commit();
+        return true;
+    } catch (\Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+}
+
+/**
  * Discover only the gallery identity attached to a globally unique code.
  * @param string $code Validated eight-character lowercase hexadecimal code.
  * @return array{gallery_kind:string,gallery_id:int|string}|null Routing identity
@@ -1113,11 +1662,14 @@ function gallery_model_attachment_usage_replace(
 /** Read digest rows for ready snapshots in the requested descendant set.
  * @param list<int> $galleryIds Descendant gallery identifiers already filtered by public access.
  * @param string $kind Attachment kind: `pdf` or `music`.
+ * @param PDO|null $connection Explicit installer/migration connection, or null
+ *     to use the configured application database.
  * @return array{states:array<int,string>,items:list<array{gallery_id:int,sha256:?string,hidden:bool}>} Snapshot statuses and canonical public-visibility source digests.
  */
 function gallery_model_attachment_usage_rows(
     array $galleryIds,
     string $kind,
+    ?PDO $connection = null,
 ): array {
     if ($galleryIds === [] || !in_array($kind, ['pdf', 'music'], true)) {
         return ['states' => [], 'items' => []];
@@ -1139,7 +1691,7 @@ function gallery_model_attachment_usage_rows(
             . 'WHEN u.album_id IS NOT NULL THEN album_asset.sha256 '
             . 'ELSE u.sha256 END'
         : 'u.sha256';
-    $items = db()->prepare(
+    $items = ($connection ?? db())->prepare(
         'SELECT s.gallery_id, s.state, ' . $digestExpression
         . ' AS sha256, u.hidden FROM gallery_attachment_usage_state s '
         . 'LEFT JOIN gallery_attachment_usage_items u '

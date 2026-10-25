@@ -102,6 +102,7 @@ function gallery_editor_update_fields(int $galleryId, array $fields): void
             }
         }
         gallery_model_update_fields($galleryId, $fields, now_sql());
+        gallery_visit_content_update([$galleryId]);
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -168,6 +169,7 @@ function gallery_editor_publish_due(array $due, string $nowUtc): void
                 now_sql(),
             )) {
                 $updated = find_gallery($galleryId, true);
+                gallery_visit_content_update([$galleryId]);
                 // The triggering render must not reuse earlier child-list rows.
                 $cache = &child_galleries_request_cache();
                 $cache = [];

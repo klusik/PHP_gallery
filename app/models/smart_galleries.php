@@ -149,6 +149,85 @@ function smart_gallery_model_all(): array
 }
 
 /**
+ * Read a bounded definition/placement inventory for visit-progress projection.
+ * @param int $limit Maximum admitted definitions or placement edges, plus sentinel.
+ * @return array{definitions:list<array<string,scalar|null>>,
+ *     placements:list<array{smart_gallery_id:int|string,gallery_id:int|string}>}
+ *     Enabled public definitions and their physical placements, never visitors.
+ */
+function smart_gallery_model_visit_inventory(int $limit): array
+{
+    return [
+        'definitions' => db()->query(
+            "SELECT * FROM smart_galleries WHERE enabled = 1 "
+            . "AND visibility = 'public' ORDER BY id LIMIT " . ($limit + 1),
+        )->fetchAll(\PDO::FETCH_ASSOC),
+        'placements' => db()->query(
+            'SELECT smart_gallery_id, gallery_id FROM smart_gallery_placements '
+            . 'ORDER BY gallery_id, smart_gallery_id LIMIT ' . ($limit + 1),
+        )->fetchAll(\PDO::FETCH_ASSOC),
+    ];
+}
+
+/**
+ * Read physical placement owners affected by explicit definition changes.
+ * @param list<int> $smartIds Changed definition identities, including disabled.
+ * @param int $limit Maximum admitted parent IDs plus overflow sentinel.
+ * @return list<int> Unique physical placement parents, without source traversal.
+ */
+function smart_gallery_model_visit_parent_ids(array $smartIds, int $limit): array
+{
+    if ($smartIds === []) {
+        return [];
+    }
+    $marks = implode(',', array_fill(0, count($smartIds), '?'));
+    $query = db()->prepare(
+        'SELECT DISTINCT gallery_id FROM smart_gallery_placements '
+        . 'WHERE smart_gallery_id IN (' . $marks . ') ORDER BY gallery_id '
+        . 'LIMIT ' . ($limit + 1),
+    );
+    $query->execute($smartIds);
+    return array_map('intval', $query->fetchAll(\PDO::FETCH_COLUMN));
+}
+
+/**
+ * Read actual Smart membership identities in one bounded union per batch.
+ * @param list<array{id:int,rules:array<string,mixed>}> $definitions Validated
+ *     definitions; each rules root is a recursive Smart group/condition tree.
+ * @param list<int> $sourceIds Public listed physical source identities.
+ * @param int $limit Maximum admitted membership rows, plus overflow sentinel.
+ * @return list<array{smart_id:int|string,id:int|string,gallery_id:int|string,
+ *     nsfw:int|string}> Image membership with separate source authorization lanes.
+ */
+function smart_gallery_model_visit_members(
+    array $definitions,
+    array $sourceIds,
+    int $limit,
+): array {
+    $selects = [];
+    $params = [];
+    foreach ($definitions as $definition) {
+        $query = smart_gallery_model_result_query(
+            $definition['rules'], $sourceIds, true, true, 'created_at', 'asc',
+        );
+        $selects[] = 'SELECT ' . (int) $definition['id'] . ' AS smart_id, '
+            . 'i.id, i.gallery_id, CASE WHEN COALESCE(i.nsfw_enabled, 0) <> 0 '
+            . 'OR COALESCE(g.nsfw_enabled, 0) <> 0 THEN 1 ELSE 0 END AS nsfw '
+            . 'FROM images i INNER JOIN galleries g ON g.id = i.gallery_id '
+            . 'WHERE ' . $query['where'];
+        $params = array_merge($params, $query['params']);
+    }
+    if ($selects === []) {
+        return [];
+    }
+    $statement = db()->prepare(
+        implode(' UNION ALL ', $selects) . ' LIMIT ' . ($limit + 1),
+    );
+    $statement->execute($params);
+    return $statement->fetchAll(\PDO::FETCH_ASSOC);
+}
+
+/**
  * Return all placement rows used to attach placement metadata to Admin definitions.
  *
  * @param bool $metadataReady Whether placement/order columns are available.

@@ -123,6 +123,7 @@ function gallery_bulk_set_visibility(
         }
         gallery_model_set_visibility($ids, $visibility, now_sql());
         gallery_bulk_refresh_sidecars($ids);
+        gallery_visit_content_update($ids);
     } finally {
         gallery_edit_writer_end($writerLock);
     }

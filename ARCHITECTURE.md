@@ -1,5 +1,75 @@
 # PHP Gallery Architecture
 
+## Visitor progress and content evidence
+
+`public_gallery_visit_progress()` prepares one authorized projection only after
+a successful Home/Gallery/Smart/Tag document. It checks the actual Admin identity,
+independently of preview flags. The gallery lookup service seeds its canonical
+request cache from one bounded gallery inventory before applying existing
+listing/password/NSFW policy. Invalid physical parent chains and invalid Smart
+relationships are excluded. Direct unlisted navigation adds only its authorized
+branch; unrelated listings receive no unlisted/private hierarchy.
+Tag cards may independently seed an authorized listed branch without creating
+a direct visit or disclosing an inaccessible ancestor.
+
+The existing gallery/Smart models own content membership SQL. A migration seeds
+historical membership once using its explicit PDO connection. Content owners
+then reconcile identified physical sources or Smart definitions only. Pending
+scopes and a generation lease prevent interrupted/concurrent work from becoming
+false evidence. Original mutations and locks remain owned by their existing
+content services. No global database observer, shared writer release hook,
+visitor write, worker or polling loop is introduced.
+The gallery model owns transaction-state inspection. Physical move notifications
+remain inside the owned operation; the public writer wrapper only acquires,
+delegates and releases its lease. Isolated catalog tests capture the semantic
+post-commit notification independently of the visitor-index regressions.
+Catalog mutations capture bounded source assignments from explicit gallery,
+album and song identities before removing links; the committed notification
+retains snapshot sources and shared-album consumers even after dirty markers
+have been cleared. Cosmetic edits introduce no additional content scope.
+
+Photo lanes retain complete membership independently of NSFW reclassification,
+plus safe availability and restricted presence. Smart members retain their
+addition revision across source moves while they remain members. Compact zero
+lanes record previously authorized sources, allowing old items made newly
+available to differ from harmless source moves. PDF/music identities use the
+existing ready attachment digest projection. Cosmetic saves and deletion-only
+diffs do not mint membership additions. The synthetic `r:0` root observes new
+top-level placements; it is never a visit or a notification entry.
+
+The native browser module derives progress/New bottom-up from current nodes and
+edges. Storage contains direct-open flags, compact watermarks and a reset epoch;
+computed states, titles, URLs and photo identities are absent. A visible,
+non-prerendered successful detail acknowledges only its own media and incoming
+placement edges. Parent opens retain unopened descendant alerts. Explicit
+read-all acknowledges the complete received authorized graph. Web Locks and
+storage-event union preserve concurrent visits; ordered epochs prevent stale
+writes from resurrecting reset history.
+Clicking a card's progress icon resets its complete currently authorized branch
+to Unseen, including attached Smart items but not their physical sources.
+Content baselines remain intact. Each affected record retains an ordered local
+reset token so stale tabs cannot restore old visit flags; later genuine visits
+can set them again. Shared Smart placements continue to share one direct flag.
+
+Admission limits live beside the gallery model: 2048 nodes/placements, 128 Smart
+definitions, eight definitions per SQL batch, 20000 source images, 50000 scoped
+memberships, 8192 public lanes and 64 pending scopes per authoring continuation.
+Overflow or dirty evidence suppresses New and its bulk acknowledgement without
+claiming that no new content exists. Browser history admits 4096 records, 16384
+lanes and one Mi UTF-16 units; no silent history expiry is applied.
+The notification panel follows the mandatory shared UI contract: compact and
+translucent, anchored to the bell, with outside/Escape dismissal, focus return
+and 44px narrow/touch actions. There is no modal backdrop.
+Panel height follows the actual CSS viewport, independently of item count and
+browser zoom. Long panels shift upward and only the compact list scrolls after
+the viewport bound is reached; the heading and actions remain visible.
+
+Runtime ownership review: this batch adds no PHP runtime file or logical module;
+it extends existing gallery, Smart, layout and presentation-policy owners. The
+previous 98-module plan and existing route/file/duplicate ratchets remain
+unchanged. Hosted preparation must establish actual dependency closure deltas;
+source BASIC and local browser smoke do not establish FULL qualification.
+
 ## Unified visitor scheduler
 
 `request_scheduler_register_visit()` is the single maintenance lifecycle entry.

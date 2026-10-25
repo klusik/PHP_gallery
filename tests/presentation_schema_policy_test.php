@@ -256,6 +256,7 @@ namespace {
         'presentation_admin_gallery_report',
         'presentation_gallery_attachment_usage',
         'presentation_gallery_attachment_usage_music',
+        'presentation_gallery_visit_content',
     ];
     presentation_policy_assert(
         array_keys($definitions) === $expectedHealthKeys,

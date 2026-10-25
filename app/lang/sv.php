@@ -33,6 +33,21 @@
  */
 
 return [
+    'gallery.visit.mark_unseen' => 'Markera galleriet och dess undergallerier som obesökta',
+    'gallery.visit.content_unavailable' => 'Information om nytt innehåll är tillfälligt otillgänglig.',
+    'gallery.visit.unseen' => 'Inte besökt',
+    'gallery.visit.partial' => 'Delvis besökt',
+    'gallery.visit.seen' => 'Besökt',
+    'gallery.visit.new' => 'Nytt innehåll',
+    'gallery.visit.empty' => 'Inget nytt innehåll.',
+    'gallery.visit.unavailable' => 'Historiken kan inte sparas och gäller bara i den här fliken.',
+    'gallery.visit.reset_confirm' => 'Rensa besökshistorik och innehållsmarkeringar för den här galleriinstallationen?',
+    'gallery.visit.bell' => 'Vad är nytt',
+    'gallery.visit.updated' => 'Allt tillgängligt innehåll har markerats som läst.',
+    'gallery.visit.close' => 'Stäng',
+    'gallery.visit.local' => 'Historiken sparas bara i den här webbläsaren.',
+    'gallery.visit.read_all' => 'Markera allt som läst',
+    'gallery.visit.reset' => 'Rensa besökshistoriken',
     'lightbox.map_route_start' => 'Ruttstart',
     'lightbox.map_route_end' => 'Destination',
     'lightbox.map_waypoint' => 'Ruttpunkt',

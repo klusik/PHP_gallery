@@ -222,6 +222,16 @@ cross-layer leakage is immediately release-blocking.
 
 ## Public Gallery Pages
 
+Visitor progress/notifications: controller preparation in
+`app/controllers/public_gallery_cards.php`; hierarchy and scoped content policy
+in `app/services/gallery_lookup.php`; SQL in `app/models/galleries.php` and
+`app/models/smart_galleries.php`; readiness in
+`app/services/presentation_schema_policy.php`; bell in `app/views/layout.php`;
+inline identities in `app/views/public_gallery_cards.php`; browser policy in
+`public/assets/gallery-modules/gallery-visit-progress.js`; styles in
+`public/assets/styles/public-shared.css`. Actual Admin identity suppresses the
+feature independently of anonymous preview.
+
 | Task | Primary files | Secondary files |
 | --- | --- | --- |
 | Home page gallery listing | `app/controllers/public_gallery.php` | `app/services/gallery_display.php`, `app/services/gallery_lookup.php`, `app/services/pagination.php` |
