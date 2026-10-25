@@ -1,30 +1,594 @@
 {
   "en": {
-    "name": "English", "title": "Your photographs. Your space.", "lead": "A gallery that lives on your hosting. Organize photographs, tell their stories and share them on your own terms.",
-    "home": "Overview", "docs": "Documentation", "features": "Capabilities", "download": "Download", "github": "GitHub", "skip": "Skip to content", "language": "Language", "eyebrow": "OPEN SOURCE · SELF HOSTED · PHP", "heroLink": "Explore the documentation", "release": "Published release", "requirements": "PHP 8.1+ · MySQL / MariaDB", "license": "MIT licensed", "intro": "Built around your photographs.", "introText": "Folders hold the originals. The database adds the stories, metadata and access rules. A small, framework-free runtime brings it all together.",
-    "items": [["01", "A home for every collection", "Nested galleries, cover images, tags and descriptions turn folders into collections worth exploring."], ["02", "Details beyond the frame", "EXIF metadata, GPS maps and a fullscreen lightbox give every photograph context."], ["03", "Share on your terms", "Public, unpublished and protected galleries keep access intentional. Optional capabilities stay under your control."], ["04", "Made for everyday hosting", "PHP and MySQL or MariaDB. No Composer, npm or application framework required to run the CMS."]],
-    "showcase": "From a photograph to a story.", "showcaseText": "Browse collections, open a photograph and follow the places behind it. Aviation galleries can also bring flight routes and SimBrief documents into the same experience.", "illustration": "Illustrative gallery preview — synthetic artwork, no private photographs.", "screenshot": "Actual interface detail: SimBrief flight-plan actions (Czech interface).", "technical": "Simple foundations. Thoughtful tools.", "technicalText": "Filesystem-first collections. Responsive thumbnails. A browser-based Admin workspace. Optional maps, voting and Windows companion tools. Choose the capabilities your installation needs.", "start": "Make room for your next collection.", "startText": "Start with the published release and the installation guide. Keep your hosting, your originals and your control.", "footer": "An independent, open-source gallery CMS by Rudolf Klusal.",
-    "docsTitle": "A clear path from download to gallery.", "docsLead": "Getting started, product manuals and release documentation in one place. Technical references stay with their canonical source.", "getting": "Getting started", "steps": [["Check your hosting", "PHP 8.1 is the compatibility minimum. Prefer a maintained PHP release. You also need MySQL or MariaDB and the extensions listed in the README."], ["Download and install", "Get the published release, follow its README and run the setup on your PHP hosting."], ["Create your first collection", "Open the Admin workspace, create a gallery and upload photographs. Use the product manual for configuration and sharing."]], "install": "Read the installation guide", "manuals": "Product manuals", "manualsText": "Complete searchable PDF manuals from the selected published release. Choose the language you prefer.", "reference": "Release & reference", "readme": "Technical README", "readmeText": "Requirements, installation and the repository overview for this release.", "notes": "Patch notes", "notesText": "The versioned change history from this release, with the canonical release page beside it.", "releasePage": "Release & downloads", "source": "Browse source", "versioned": "Links below are pinned to the published release shown here. The website refreshes after publication and daily; it never labels a development branch as a release.", "runtime": "GitHub Pages hosts this website. Run the PHP CMS on PHP hosting.", "pdf": "PDF manual", "unavailable": "Release information unavailable"
+    "name": "English",
+    "title": "Your photographs. Your space.",
+    "lead": "For moments that deserve more than a folder. Turn your photographs into a gallery you will love coming back to.",
+    "home": "Overview",
+    "docs": "Documentation",
+    "features": "Capabilities",
+    "download": "Download PHP Gallery",
+    "github": "GitHub",
+    "skip": "Skip to content",
+    "language": "Language",
+    "eyebrow": "OPEN SOURCE. SELF HOSTED.",
+    "heroLink": "Explore the real gallery",
+    "release": "Published release",
+    "requirements": "PHP 8.1+ · MySQL / MariaDB",
+    "license": "MIT licensed",
+    "intro": "Everything around the image. Nothing in its way.",
+    "introText": "From your first collection to the smallest detail. Tools to organize and share your photographs, without taking the spotlight.",
+    "items": [
+      [
+        "grid",
+        "Organize. And find.",
+        "Nested galleries, tags and Smart Galleries. A place for every photograph, even as your library grows."
+      ],
+      [
+        "expand",
+        "Browse. And feel.",
+        "Fullscreen photographs, presentations with music and maps of the places behind them. Every image has a story."
+      ],
+      [
+        "share",
+        "Share. On your terms.",
+        "Publicly, by direct link or with protection. You decide who gets to see your photographs."
+      ]
+    ],
+    "showcase": "A photograph is just the beginning.",
+    "showcaseText": "Add the story, the place or the music. Let visitors explore your gallery at their own pace.",
+    "start": "Give your photographs a home.",
+    "startText": "PHP and MySQL or MariaDB. Your hosting and open source. Start with the published release and installation guide.",
+    "footer": "An independent, open-source gallery CMS by Rudolf Klusal.",
+    "docsTitle": "A clear path from download to gallery.",
+    "docsLead": "Getting started, product manuals and release documentation in one place. Technical references stay with their canonical source.",
+    "getting": "Getting started",
+    "steps": [
+      [
+        "Check your hosting",
+        "PHP 8.1 is the compatibility minimum. Prefer a maintained PHP release. You also need MySQL or MariaDB and the extensions listed in the README."
+      ],
+      [
+        "Download and install",
+        "Get the published release, follow its README and run the setup on your PHP hosting."
+      ],
+      [
+        "Create your first collection",
+        "Open the Admin workspace, create a gallery and upload photographs. Use the product manual for configuration and sharing."
+      ]
+    ],
+    "install": "Read the installation guide",
+    "manuals": "Product manuals",
+    "manualsText": "Complete searchable PDF manuals from the selected published release. Choose the language you prefer.",
+    "reference": "Release & reference",
+    "readme": "Technical README",
+    "readmeText": "Requirements, installation and the repository overview for this release.",
+    "notes": "Patch notes",
+    "notesText": "The versioned change history from this release, with the canonical release page beside it.",
+    "releasePage": "Release & downloads",
+    "source": "Browse source",
+    "versioned": "Links below are pinned to the published release shown here. The website refreshes after publication and daily; it never labels a development branch as a release.",
+    "runtime": "GitHub Pages hosts this website. Run the PHP CMS on PHP hosting.",
+    "pdf": "PDF manual",
+    "unavailable": "Release information unavailable",
+    "heroFirst": "Your photographs.",
+    "heroSecond": "Your space.",
+    "heroFootnote": "Your hosting. Your originals. Your rules.",
+    "preview": "Explore",
+    "captureVersion": "Captured interface · 0.143.1",
+    "previewTabs": "Actual screenshots of the Gallery",
+    "expandCapture": "Enlarge screenshot",
+    "captureCaption": "Actual application screenshots · click to enlarge",
+    "foundationFiles": "Originals in your folders",
+    "foundationControl": "Access under your control",
+    "featuresEyebrow": "LESS INTERFACE. MORE PHOTOGRAPHS.",
+    "featureLinks": [
+      "Galleries & organization",
+      "See the actual lightbox",
+      "Sharing & access"
+    ],
+    "storyEyebrow": "SMALL DETAILS. A BIG DIFFERENCE.",
+    "details": [
+      [
+        "map",
+        "Places & context",
+        "EXIF metadata and GPS maps connect a photograph to its place. Aviation galleries can include routes and SimBrief documents."
+      ],
+      [
+        "music",
+        "Music, presentations & PDFs",
+        "Music tracks and PDF documents can live alongside photographs. A presentation can have its own musical accompaniment."
+      ],
+      [
+        "sliders",
+        "Only the features you need",
+        "Enable optional capabilities in the Admin workspace. Appearance, content and access rules remain under your control."
+      ]
+    ],
+    "startEyebrow": "READY FOR YOUR NEXT COLLECTION",
+    "darkTheme": "Switch this website to dark appearance",
+    "lightTheme": "Switch this website to light appearance",
+    "actualCapture": "Actual application screenshot",
+    "closeCapture": "Close preview",
+    "previousCapture": "Previous screenshot",
+    "nextCapture": "Next screenshot",
+    "captureNote": "Unaltered application screenshot. Controls inside the image are part of the capture; explore the application using the source link.",
+    "dialogHint": "Arrow keys to browse · Esc to close",
+    "captureSources": "Screenshots & their sources",
+    "captureProvenance": "Captured in Gallery 0.143.1: the public overview, lightbox and map at galerie.klusik.cz, and Music Manager in the local installation. Screenshots retain their original theme and language. The appearance switch changes this presentation website.",
+    "liveGallery": "Live gallery",
+    "captures": [
+      {
+        "tab": "Galleries",
+        "title": "Gallery overview",
+        "caption": "Gallery overview · public Gallery",
+        "alt": "Actual Flight Simulators overview in Gallery 0.143.1 with A320, A321 and A330 cards",
+        "sourceLabel": "Open the live gallery"
+      },
+      {
+        "tab": "Lightbox",
+        "title": "Photograph lightbox",
+        "caption": "Photograph lightbox · public Gallery",
+        "alt": "Actual Gallery lightbox with zoom, fullscreen, presentation and map controls",
+        "sourceLabel": "Open the live gallery"
+      },
+      {
+        "tab": "Music Manager",
+        "title": "Music Manager",
+        "caption": "Music Manager · local installation",
+        "alt": "Actual Music Manager showing the Flying album and three tracks in Gallery 0.143.1",
+        "sourceLabel": "About Music Manager"
+      },
+      {
+        "tab": "Map",
+        "title": "Gallery map",
+        "caption": "Actual gallery map · Westbound Tour, LEG 36",
+        "alt": "Actual gallery map with the Japan to China flight route and photograph locations, with OpenStreetMap attribution",
+        "sourceLabel": "Open the live gallery"
+      }
+    ]
   },
   "cs": {
-    "name": "Čeština", "title": "Vaše fotografie. Váš prostor.", "lead": "Galerie na vašem hostingu. Uspořádejte fotografie, vyprávějte jejich příběhy a sdílejte je podle svých pravidel.",
-    "home": "Přehled", "docs": "Dokumentace", "features": "Možnosti", "download": "Stáhnout", "github": "GitHub", "skip": "Přejít k obsahu", "language": "Jazyk", "eyebrow": "OTEVŘENÝ KÓD · VLASTNÍ HOSTING · PHP", "heroLink": "Prozkoumat dokumentaci", "release": "Publikované vydání", "requirements": "PHP 8.1+ · MySQL / MariaDB", "license": "Licence MIT", "intro": "Vše začíná vašimi fotografiemi.", "introText": "Složky uchovávají originály. Databáze přidává příběhy, metadata a pravidla přístupu. Malý runtime bez frameworku vše propojuje.",
-    "items": [["01", "Místo pro každou sbírku", "Vnořené galerie, titulní fotografie, štítky a popisy promění složky ve sbírky, které stojí za prohlížení."], ["02", "Podrobnosti za obrazem", "EXIF metadata, GPS mapy a prohlížeč na celou obrazovku dávají každé fotografii souvislosti."], ["03", "Sdílení podle vašich pravidel", "Veřejné, nepublikované a chráněné galerie vám dávají kontrolu nad přístupem. Volitelné funkce zapínáte vy."], ["04", "Pro běžný webhosting", "PHP a MySQL nebo MariaDB. Pro běh CMS nepotřebujete Composer, npm ani aplikační framework."]],
-    "showcase": "Od fotografie k příběhu.", "showcaseText": "Prohlížejte sbírky, otevřete fotografii a objevte místa za ní. Letecké galerie mohou propojit i letové trasy a dokumenty SimBrief.", "illustration": "Ilustrační náhled galerie — vytvořená grafika bez soukromých fotografií.", "screenshot": "Skutečný detail rozhraní: akce letového plánu SimBrief (české rozhraní).", "technical": "Jednoduché základy. Promyšlené nástroje.", "technicalText": "Sbírky založené na složkách. Responzivní náhledy. Administrace v prohlížeči. Volitelné mapy, hlasování a pomocná aplikace pro Windows. Vyberte funkce pro svou instalaci.", "start": "Prostor pro vaši další sbírku.", "startText": "Začněte publikovaným vydáním a instalační příručkou. Váš hosting, vaše originály a vaše kontrola.", "footer": "Nezávislý galerijní CMS s otevřeným kódem od Rudolfa Klusala.",
-    "docsTitle": "Přehledná cesta od stažení ke galerii.", "docsLead": "První kroky, produktové příručky a dokumentace vydání na jednom místě. Technické odkazy vedou na původní zdroje.", "getting": "První kroky", "steps": [["Ověřte hosting", "PHP 8.1 je minimum pro kompatibilitu. Preferujte udržovanou verzi PHP. Potřebujete také MySQL nebo MariaDB a rozšíření uvedená v README."], ["Stáhněte a nainstalujte", "Stáhněte publikované vydání, postupujte podle jeho README a spusťte instalaci na PHP hostingu."], ["Vytvořte první sbírku", "Otevřete administraci, vytvořte galerii a nahrajte fotografie. Nastavení a sdílení popisuje produktová příručka."]], "install": "Otevřít instalační postup", "manuals": "Produktové příručky", "manualsText": "Úplné prohledávatelné PDF příručky z vybraného publikovaného vydání. Zvolte si jazyk.", "reference": "Vydání a technické odkazy", "readme": "Technické README", "readmeText": "Požadavky, instalace a přehled repozitáře pro toto vydání.", "notes": "Poznámky k vydání", "notesText": "Historie změn přímo z tohoto vydání a odkaz na jeho oficiální stránku.", "releasePage": "Vydání a stažení", "source": "Procházet zdrojový kód", "versioned": "Odkazy níže odpovídají uvedenému publikovanému vydání. Web se obnovuje po publikaci a denně; vývojovou větev nikdy neoznačuje za vydání.", "runtime": "GitHub Pages hostuje tento web. PHP CMS provozujte na PHP hostingu.", "pdf": "PDF příručka", "unavailable": "Informace o vydání nejsou dostupné"
+    "name": "Čeština",
+    "title": "Vaše fotografie. Váš prostor.",
+    "lead": "Pro chvíle, které si zaslouží víc než složku. Vytvořte z fotografií galerii, ke které se budete rádi vracet.",
+    "home": "Přehled",
+    "docs": "Dokumentace",
+    "features": "Možnosti",
+    "download": "Stáhnout PHP Gallery",
+    "github": "GitHub",
+    "skip": "Přejít k obsahu",
+    "language": "Jazyk",
+    "eyebrow": "OTEVŘENÝ KÓD. VLASTNÍ HOSTING.",
+    "heroLink": "Prohlédnout skutečnou galerii",
+    "release": "Publikované vydání",
+    "requirements": "PHP 8.1+ · MySQL / MariaDB",
+    "license": "Licence MIT",
+    "intro": "Všechno kolem obrazu. Nic před ním.",
+    "introText": "Od první sbírky po poslední detail. Nástroje, které pomáhají uspořádat a sdílet vaše fotografie, aniž by jim braly prostor.",
+    "items": [
+      [
+        "grid",
+        "Uspořádat. A najít.",
+        "Vnořené galerie, štítky a chytré sbírky. Fotografie mají své místo, i když se vaše knihovna rozroste."
+      ],
+      [
+        "expand",
+        "Prohlížet. A prožít.",
+        "Fotografie na celé obrazovce, prezentace s hudbou i mapy míst. Ke snímkům patří i jejich příběh."
+      ],
+      [
+        "share",
+        "Sdílet. Po svém.",
+        "Veřejně, přes přímý odkaz nebo pod ochranou. O tom, kdo vaše fotografie uvidí, rozhodujete vy."
+      ]
+    ],
+    "showcase": "Fotografie je začátek.",
+    "showcaseText": "Doplňte příběh, místo nebo hudbu. A nechte návštěvníky procházet galerii vlastním tempem.",
+    "start": "Dejte fotografiím vlastní domov.",
+    "startText": "PHP a MySQL nebo MariaDB. Vlastní hosting a otevřený kód. Začněte publikovaným vydáním a průvodcem instalací.",
+    "footer": "Nezávislý galerijní CMS s otevřeným kódem od Rudolfa Klusala.",
+    "docsTitle": "Přehledná cesta od stažení ke galerii.",
+    "docsLead": "První kroky, produktové příručky a dokumentace vydání na jednom místě. Technické odkazy vedou na původní zdroje.",
+    "getting": "První kroky",
+    "steps": [
+      [
+        "Ověřte hosting",
+        "PHP 8.1 je minimum pro kompatibilitu. Preferujte udržovanou verzi PHP. Potřebujete také MySQL nebo MariaDB a rozšíření uvedená v README."
+      ],
+      [
+        "Stáhněte a nainstalujte",
+        "Stáhněte publikované vydání, postupujte podle jeho README a spusťte instalaci na PHP hostingu."
+      ],
+      [
+        "Vytvořte první sbírku",
+        "Otevřete administraci, vytvořte galerii a nahrajte fotografie. Nastavení a sdílení popisuje produktová příručka."
+      ]
+    ],
+    "install": "Otevřít instalační postup",
+    "manuals": "Produktové příručky",
+    "manualsText": "Úplné prohledávatelné PDF příručky z vybraného publikovaného vydání. Zvolte si jazyk.",
+    "reference": "Vydání a technické odkazy",
+    "readme": "Technické README",
+    "readmeText": "Požadavky, instalace a přehled repozitáře pro toto vydání.",
+    "notes": "Poznámky k vydání",
+    "notesText": "Historie změn přímo z tohoto vydání a odkaz na jeho oficiální stránku.",
+    "releasePage": "Vydání a stažení",
+    "source": "Procházet zdrojový kód",
+    "versioned": "Odkazy níže odpovídají uvedenému publikovanému vydání. Web se obnovuje po publikaci a denně; vývojovou větev nikdy neoznačuje za vydání.",
+    "runtime": "GitHub Pages hostuje tento web. PHP CMS provozujte na PHP hostingu.",
+    "pdf": "PDF příručka",
+    "unavailable": "Informace o vydání nejsou dostupné",
+    "heroFirst": "Vaše fotografie.",
+    "heroSecond": "Váš prostor.",
+    "heroFootnote": "Váš hosting. Vaše originály. Vaše pravidla.",
+    "preview": "Ukázka",
+    "captureVersion": "Zachycené rozhraní · 0.143.1",
+    "previewTabs": "Skutečné snímky Galerie",
+    "expandCapture": "Zvětšit snímek",
+    "captureCaption": "Skutečné snímky aplikace · kliknutím zvětšíte",
+    "foundationFiles": "Originály ve vašich složkách",
+    "foundationControl": "Přístup pod vaší kontrolou",
+    "featuresEyebrow": "MÉNĚ ROZHRANÍ. VÍCE FOTOGRAFIÍ.",
+    "featureLinks": [
+      "Galerie a organizace",
+      "Prohlédnout skutečný lightbox",
+      "Sdílení a přístup"
+    ],
+    "storyEyebrow": "MALÉ DETAILY. VELKÝ ROZDÍL.",
+    "details": [
+      [
+        "map",
+        "Místa a souvislosti",
+        "EXIF metadata a GPS mapy propojí snímek s místem. Letecké galerie mohou přidat i trasy a dokumenty SimBrief."
+      ],
+      [
+        "music",
+        "Hudba, prezentace i PDF",
+        "V galerii mohou vedle fotografií žít i hudební skladby a PDF dokumenty. Prezentaci lze doplnit hudebním doprovodem."
+      ],
+      [
+        "sliders",
+        "Jen funkce, které potřebujete",
+        "Volitelné funkce zapínáte v administraci. Vzhled, obsah i pravidla přístupu zůstávají pod vaší kontrolou."
+      ]
+    ],
+    "startEyebrow": "PŘIPRAVENO PRO VAŠI DALŠÍ SBÍRKU",
+    "darkTheme": "Přepnout tuto stránku na tmavý vzhled",
+    "lightTheme": "Přepnout tuto stránku na světlý vzhled",
+    "actualCapture": "Skutečný snímek aplikace",
+    "closeCapture": "Zavřít náhled",
+    "previousCapture": "Předchozí snímek",
+    "nextCapture": "Další snímek",
+    "captureNote": "Neupravený snímek aplikace. Ovládání uvnitř obrázku je součástí snímku; skutečnou aplikaci můžete prozkoumat přes odkaz na zdroj.",
+    "dialogHint": "Šipkami listujte · Esc zavře náhled",
+    "captureSources": "Snímky a jejich původ",
+    "captureProvenance": "Zachyceno v Galerii 0.143.1: veřejný přehled, lightbox a mapa na galerie.klusik.cz a Music Manager v místní instalaci. Snímky zachovávají původní motiv a jazyk. Přepínač vzhledu mění tuto prezentační stránku.",
+    "liveGallery": "Živá galerie",
+    "captures": [
+      {
+        "tab": "Galerie",
+        "title": "Přehled galerií",
+        "caption": "Přehled galerií · veřejná Galerie",
+        "alt": "Skutečný přehled Flight Simulators v Galerii 0.143.1 s kartami A320, A321 a A330",
+        "sourceLabel": "Otevřít živou galerii"
+      },
+      {
+        "tab": "Lightbox",
+        "title": "Lightbox fotografií",
+        "caption": "Lightbox fotografií · veřejná Galerie",
+        "alt": "Skutečný lightbox Galerie s přiblížením, celou obrazovkou, prezentací a mapou",
+        "sourceLabel": "Otevřít živou galerii"
+      },
+      {
+        "tab": "Správa hudby",
+        "title": "Správa hudby",
+        "caption": "Music Manager · místní instalace",
+        "alt": "Skutečný Music Manager s albem Flying a třemi skladbami v Galerii 0.143.1",
+        "sourceLabel": "Popis správy hudby"
+      },
+      {
+        "tab": "Mapa",
+        "title": "Mapa galerie",
+        "caption": "Skutečná mapa galerie · Westbound Tour, LEG 36",
+        "alt": "Skutečná mapa galerie s trasou letu z Japonska do Číny, polohami fotografií a uvedením OpenStreetMap",
+        "sourceLabel": "Otevřít živou galerii"
+      }
+    ]
   },
   "de": {
-    "name": "Deutsch", "title": "Ihre Fotos. Ihr Freiraum.", "lead": "Eine Galerie auf Ihrem eigenen Hosting. Ordnen Sie Fotos, erzählen Sie ihre Geschichten und teilen Sie sie nach Ihren Regeln.",
-    "home": "Überblick", "docs": "Dokumentation", "features": "Funktionen", "download": "Herunterladen", "github": "GitHub", "skip": "Zum Inhalt", "language": "Sprache", "eyebrow": "OPEN SOURCE · SELBST GEHOSTET · PHP", "heroLink": "Dokumentation entdecken", "release": "Veröffentlichte Version", "requirements": "PHP 8.1+ · MySQL / MariaDB", "license": "MIT-Lizenz", "intro": "Ihre Fotos im Mittelpunkt.", "introText": "Ordner bewahren die Originale. Die Datenbank ergänzt Geschichten, Metadaten und Zugriffsregeln. Eine kleine Laufzeit ohne Framework verbindet alles.",
-    "items": [["01", "Ein Zuhause für jede Sammlung", "Verschachtelte Galerien, Titelbilder, Tags und Beschreibungen machen Ordner zu sehenswerten Sammlungen."], ["02", "Mehr als ein Bild", "EXIF-Metadaten, GPS-Karten und eine Vollbildansicht geben jedem Foto einen Kontext."], ["03", "Teilen nach Ihren Regeln", "Öffentliche, unveröffentlichte und geschützte Galerien ermöglichen bewusste Zugriffsentscheidungen. Optionale Funktionen bleiben unter Ihrer Kontrolle."], ["04", "Für gewöhnliches Webhosting", "PHP und MySQL oder MariaDB. Zum Betrieb des CMS sind weder Composer noch npm oder ein Anwendungsframework nötig."]],
-    "showcase": "Vom Foto zur Geschichte.", "showcaseText": "Entdecken Sie Sammlungen, öffnen Sie ein Foto und erkunden Sie die Orte dahinter. Luftfahrtgalerien können auch Flugrouten und SimBrief-Dokumente einbeziehen.", "illustration": "Illustrative Galerievorschau — künstliche Grafik ohne private Fotos.", "screenshot": "Echtes Oberflächendetail: SimBrief-Flugplanaktionen (tschechische Oberfläche).", "technical": "Einfache Grundlagen. Durchdachte Werkzeuge.", "technicalText": "Ordnerbasierte Sammlungen. Responsive Vorschaubilder. Administration im Browser. Optionale Karten, Abstimmungen und Windows-Begleitwerkzeuge. Wählen Sie die Funktionen für Ihre Installation.", "start": "Platz für Ihre nächste Sammlung.", "startText": "Beginnen Sie mit der veröffentlichten Version und der Installationsanleitung. Ihr Hosting, Ihre Originale und Ihre Kontrolle.", "footer": "Ein unabhängiges Open-Source-Galerie-CMS von Rudolf Klusal.",
-    "docsTitle": "Ein klarer Weg vom Download zur Galerie.", "docsLead": "Erste Schritte, Produkthandbücher und Versionsdokumentation an einem Ort. Technische Referenzen bleiben an ihrer maßgeblichen Quelle.", "getting": "Erste Schritte", "steps": [["Hosting prüfen", "PHP 8.1 ist das Kompatibilitätsminimum. Bevorzugen Sie eine gepflegte PHP-Version. Sie benötigen außerdem MySQL oder MariaDB und die im README genannten Erweiterungen."], ["Herunterladen und installieren", "Laden Sie die veröffentlichte Version herunter, folgen Sie ihrem README und starten Sie die Einrichtung auf Ihrem PHP-Hosting."], ["Erste Sammlung erstellen", "Öffnen Sie die Administration, erstellen Sie eine Galerie und laden Sie Fotos hoch. Konfiguration und Freigabe erklärt das Produkthandbuch."]], "install": "Installationsanleitung lesen", "manuals": "Produkthandbücher", "manualsText": "Vollständige, durchsuchbare PDF-Handbücher der ausgewählten veröffentlichten Version. Wählen Sie Ihre Sprache.", "reference": "Version und Referenzen", "readme": "Technisches README", "readmeText": "Anforderungen, Installation und Repository-Überblick für diese Version.", "notes": "Versionshinweise", "notesText": "Der versionierte Änderungsverlauf aus dieser Version mit Link zur offiziellen Versionsseite.", "releasePage": "Version und Downloads", "source": "Quellcode ansehen", "versioned": "Die folgenden Links beziehen sich auf die hier angezeigte veröffentlichte Version. Die Website wird nach Veröffentlichung und täglich aktualisiert; Entwicklungszweige werden niemals als Release bezeichnet.", "runtime": "GitHub Pages hostet diese Website. Das PHP-CMS läuft auf PHP-Hosting.", "pdf": "PDF-Handbuch", "unavailable": "Versionsinformationen nicht verfügbar"
+    "name": "Deutsch",
+    "title": "Ihre Fotos. Ihr Freiraum.",
+    "lead": "Für Momente, die mehr als einen Ordner verdienen. Machen Sie aus Ihren Fotos eine Galerie, zu der Sie gerne zurückkehren.",
+    "home": "Überblick",
+    "docs": "Dokumentation",
+    "features": "Funktionen",
+    "download": "PHP Gallery herunterladen",
+    "github": "GitHub",
+    "skip": "Zum Inhalt",
+    "language": "Sprache",
+    "eyebrow": "OPEN SOURCE. SELBST GEHOSTET.",
+    "heroLink": "Die echte Galerie entdecken",
+    "release": "Veröffentlichte Version",
+    "requirements": "PHP 8.1+ · MySQL / MariaDB",
+    "license": "MIT-Lizenz",
+    "intro": "Alles rund ums Bild. Nichts davor.",
+    "introText": "Von der ersten Sammlung bis zum kleinsten Detail. Werkzeuge zum Ordnen und Teilen Ihrer Fotos, die den Bildern Raum lassen.",
+    "items": [
+      [
+        "grid",
+        "Ordnen. Und finden.",
+        "Verschachtelte Galerien, Tags und Smart Galleries. Jedes Foto hat seinen Platz, auch wenn Ihre Sammlung wächst."
+      ],
+      [
+        "expand",
+        "Betrachten. Und erleben.",
+        "Fotos im Vollbild, Präsentationen mit Musik und Karten der Orte dahinter. Zu jedem Bild gehört eine Geschichte."
+      ],
+      [
+        "share",
+        "Teilen. Nach Ihren Regeln.",
+        "Öffentlich, per Direktlink oder geschützt. Sie bestimmen, wer Ihre Fotos sehen darf."
+      ]
+    ],
+    "showcase": "Ein Foto ist der Anfang.",
+    "showcaseText": "Ergänzen Sie die Geschichte, den Ort oder die Musik. Lassen Sie Besucher die Galerie im eigenen Tempo entdecken.",
+    "start": "Geben Sie Ihren Fotos ein Zuhause.",
+    "startText": "PHP und MySQL oder MariaDB. Ihr Hosting und offener Quellcode. Beginnen Sie mit der veröffentlichten Version und der Installationsanleitung.",
+    "footer": "Ein unabhängiges Open-Source-Galerie-CMS von Rudolf Klusal.",
+    "docsTitle": "Ein klarer Weg vom Download zur Galerie.",
+    "docsLead": "Erste Schritte, Produkthandbücher und Versionsdokumentation an einem Ort. Technische Referenzen bleiben an ihrer maßgeblichen Quelle.",
+    "getting": "Erste Schritte",
+    "steps": [
+      [
+        "Hosting prüfen",
+        "PHP 8.1 ist das Kompatibilitätsminimum. Bevorzugen Sie eine gepflegte PHP-Version. Sie benötigen außerdem MySQL oder MariaDB und die im README genannten Erweiterungen."
+      ],
+      [
+        "Herunterladen und installieren",
+        "Laden Sie die veröffentlichte Version herunter, folgen Sie ihrem README und starten Sie die Einrichtung auf Ihrem PHP-Hosting."
+      ],
+      [
+        "Erste Sammlung erstellen",
+        "Öffnen Sie die Administration, erstellen Sie eine Galerie und laden Sie Fotos hoch. Konfiguration und Freigabe erklärt das Produkthandbuch."
+      ]
+    ],
+    "install": "Installationsanleitung lesen",
+    "manuals": "Produkthandbücher",
+    "manualsText": "Vollständige, durchsuchbare PDF-Handbücher der ausgewählten veröffentlichten Version. Wählen Sie Ihre Sprache.",
+    "reference": "Version und Referenzen",
+    "readme": "Technisches README",
+    "readmeText": "Anforderungen, Installation und Repository-Überblick für diese Version.",
+    "notes": "Versionshinweise",
+    "notesText": "Der versionierte Änderungsverlauf aus dieser Version mit Link zur offiziellen Versionsseite.",
+    "releasePage": "Version und Downloads",
+    "source": "Quellcode ansehen",
+    "versioned": "Die folgenden Links beziehen sich auf die hier angezeigte veröffentlichte Version. Die Website wird nach Veröffentlichung und täglich aktualisiert; Entwicklungszweige werden niemals als Release bezeichnet.",
+    "runtime": "GitHub Pages hostet diese Website. Das PHP-CMS läuft auf PHP-Hosting.",
+    "pdf": "PDF-Handbuch",
+    "unavailable": "Versionsinformationen nicht verfügbar",
+    "heroFirst": "Ihre Fotos.",
+    "heroSecond": "Ihr Freiraum.",
+    "heroFootnote": "Ihr Hosting. Ihre Originale. Ihre Regeln.",
+    "preview": "Einblick",
+    "captureVersion": "Aufnahme der Oberfläche · 0.143.1",
+    "previewTabs": "Echte Aufnahmen der Galerie",
+    "expandCapture": "Aufnahme vergrößern",
+    "captureCaption": "Echte Aufnahmen der Anwendung · zum Vergrößern anklicken",
+    "foundationFiles": "Originale in Ihren Ordnern",
+    "foundationControl": "Zugriff unter Ihrer Kontrolle",
+    "featuresEyebrow": "WENIGER OBERFLÄCHE. MEHR FOTOS.",
+    "featureLinks": [
+      "Galerien und Organisation",
+      "Die echte Lightbox ansehen",
+      "Teilen und Zugriff"
+    ],
+    "storyEyebrow": "KLEINE DETAILS. GROSSER UNTERSCHIED.",
+    "details": [
+      [
+        "map",
+        "Orte und Zusammenhänge",
+        "EXIF-Metadaten und GPS-Karten verbinden Fotos mit ihrem Ort. Luftfahrtgalerien können Routen und SimBrief-Dokumente ergänzen."
+      ],
+      [
+        "music",
+        "Musik, Präsentationen und PDFs",
+        "Musikstücke und PDF-Dokumente können neben Fotos in einer Galerie liegen. Präsentationen lassen sich mit Musik begleiten."
+      ],
+      [
+        "sliders",
+        "Die Funktionen, die Sie brauchen",
+        "Optionale Funktionen aktivieren Sie in der Administration. Gestaltung, Inhalte und Zugriffsregeln bleiben unter Ihrer Kontrolle."
+      ]
+    ],
+    "startEyebrow": "BEREIT FÜR IHRE NÄCHSTE SAMMLUNG",
+    "darkTheme": "Diese Website dunkel darstellen",
+    "lightTheme": "Diese Website hell darstellen",
+    "actualCapture": "Echte Aufnahme der Anwendung",
+    "closeCapture": "Vorschau schließen",
+    "previousCapture": "Vorherige Aufnahme",
+    "nextCapture": "Nächste Aufnahme",
+    "captureNote": "Unveränderte Aufnahme der Anwendung. Bedienelemente im Bild gehören zur Aufnahme; der Quelllink führt zur tatsächlichen Anwendung.",
+    "dialogHint": "Pfeiltasten zum Blättern · Esc zum Schließen",
+    "captureSources": "Aufnahmen und ihre Quellen",
+    "captureProvenance": "Aufgenommen in Gallery 0.143.1: öffentliche Übersicht, Lightbox und Karte auf galerie.klusik.cz sowie Music Manager in der lokalen Installation. Die Aufnahmen behalten ihr ursprüngliches Farbschema und ihre Sprache. Der Darstellungsschalter ändert diese Präsentationswebsite.",
+    "liveGallery": "Öffentliche Galerie",
+    "captures": [
+      {
+        "tab": "Galerien",
+        "title": "Galerieübersicht",
+        "caption": "Galerieübersicht · öffentliche Galerie",
+        "alt": "Echte Übersicht Flight Simulators in Gallery 0.143.1 mit Karten für A320, A321 und A330",
+        "sourceLabel": "Öffentliche Galerie öffnen"
+      },
+      {
+        "tab": "Lightbox",
+        "title": "Foto-Lightbox",
+        "caption": "Foto-Lightbox · öffentliche Galerie",
+        "alt": "Echte Gallery-Lightbox mit Zoom, Vollbild, Präsentation und Karte",
+        "sourceLabel": "Öffentliche Galerie öffnen"
+      },
+      {
+        "tab": "Musikverwaltung",
+        "title": "Musikverwaltung",
+        "caption": "Music Manager · lokale Installation",
+        "alt": "Echter Music Manager mit dem Album Flying und drei Titeln in Gallery 0.143.1",
+        "sourceLabel": "Über Music Manager"
+      },
+      {
+        "tab": "Karte",
+        "title": "Galeriekarte",
+        "caption": "Echte Galeriekarte · Westbound Tour, LEG 36",
+        "alt": "Echte Galeriekarte mit Flugroute von Japan nach China, Fotopositionen und OpenStreetMap-Quellenangabe",
+        "sourceLabel": "Öffentliche Galerie öffnen"
+      }
+    ]
   },
   "sv": {
-    "name": "Svenska", "title": "Dina fotografier. Ditt utrymme.", "lead": "Ett galleri på ditt eget webbhotell. Ordna fotografier, berätta deras historier och dela dem på dina villkor.",
-    "home": "Översikt", "docs": "Dokumentation", "features": "Funktioner", "download": "Ladda ner", "github": "GitHub", "skip": "Hoppa till innehåll", "language": "Språk", "eyebrow": "ÖPPEN KÄLLKOD · EGEN DRIFT · PHP", "heroLink": "Utforska dokumentationen", "release": "Publicerad version", "requirements": "PHP 8.1+ · MySQL / MariaDB", "license": "MIT-licens", "intro": "Byggt kring dina fotografier.", "introText": "Mapparna bevarar originalen. Databasen lägger till berättelser, metadata och åtkomstregler. En liten körmiljö utan ramverk binder samman allt.",
-    "items": [["01", "Ett hem för varje samling", "Nästlade gallerier, omslagsbilder, taggar och beskrivningar gör mappar till samlingar värda att utforska."], ["02", "Mer än själva bilden", "EXIF-metadata, GPS-kartor och en helskärmsvisare ger varje fotografi ett sammanhang."], ["03", "Dela på dina villkor", "Offentliga, opublicerade och skyddade gallerier ger dig kontroll över åtkomsten. Valfria funktioner styr du själv."], ["04", "För vanliga webbhotell", "PHP och MySQL eller MariaDB. Varken Composer, npm eller ett applikationsramverk behövs för att köra CMS:et."]],
-    "showcase": "Från fotografi till berättelse.", "showcaseText": "Bläddra bland samlingar, öppna ett fotografi och utforska platserna bakom det. Flyggallerier kan också samla flygrutter och SimBrief-dokument i samma upplevelse.", "illustration": "Illustrativ galleriförhandsvisning — skapad grafik utan privata fotografier.", "screenshot": "Verklig gränssnittsdetalj: SimBrief-färdplansåtgärder (tjeckiskt gränssnitt).", "technical": "Enkel grund. Genomtänkta verktyg.", "technicalText": "Mappbaserade samlingar. Responsiva miniatyrbilder. Administration i webbläsaren. Valfria kartor, omröstningar och Windows-verktyg. Välj de funktioner din installation behöver.", "start": "Plats för din nästa samling.", "startText": "Börja med den publicerade versionen och installationsguiden. Ditt webbhotell, dina original och din kontroll.", "footer": "Ett oberoende galleri-CMS med öppen källkod av Rudolf Klusal.",
-    "docsTitle": "En tydlig väg från nedladdning till galleri.", "docsLead": "Kom igång, hitta produkthandböcker och läs versionsdokumentation på ett ställe. Tekniska referenser länkar till sina ursprungliga källor.", "getting": "Kom igång", "steps": [["Kontrollera webbhotellet", "PHP 8.1 är kompatibilitetsminimum. Välj helst en underhållen PHP-version. Du behöver också MySQL eller MariaDB och tilläggen som anges i README."], ["Ladda ner och installera", "Hämta den publicerade versionen, följ dess README och kör installationen på ditt PHP-webbhotell."], ["Skapa din första samling", "Öppna administrationen, skapa ett galleri och ladda upp fotografier. Produkthandboken beskriver inställningar och delning."]], "install": "Läs installationsguiden", "manuals": "Produkthandböcker", "manualsText": "Fullständiga sökbara PDF-handböcker från den valda publicerade versionen. Välj det språk du föredrar.", "reference": "Version och referenser", "readme": "Tekniskt README", "readmeText": "Krav, installation och en översikt över kodarkivet för denna version.", "notes": "Versionsinformation", "notesText": "Ändringshistoriken från denna version med en länk till den officiella versionssidan.", "releasePage": "Version och nedladdningar", "source": "Visa källkoden", "versioned": "Länkarna nedan gäller den publicerade version som visas här. Webbplatsen uppdateras efter publicering och dagligen; en utvecklingsgren kallas aldrig för en publicerad version.", "runtime": "GitHub Pages är värd för denna webbplats. Kör PHP-CMS:et på PHP-webbhosting.", "pdf": "PDF-handbok", "unavailable": "Versionsinformation saknas"
+    "name": "Svenska",
+    "title": "Dina fotografier. Ditt utrymme.",
+    "lead": "För ögonblick som förtjänar mer än en mapp. Gör dina fotografier till ett galleri som du gärna återvänder till.",
+    "home": "Översikt",
+    "docs": "Dokumentation",
+    "features": "Funktioner",
+    "download": "Ladda ner PHP Gallery",
+    "github": "GitHub",
+    "skip": "Hoppa till innehåll",
+    "language": "Språk",
+    "eyebrow": "ÖPPEN KÄLLKOD. EGEN DRIFT.",
+    "heroLink": "Utforska det riktiga galleriet",
+    "release": "Publicerad version",
+    "requirements": "PHP 8.1+ · MySQL / MariaDB",
+    "license": "MIT-licens",
+    "intro": "Allt runt bilden. Inget i vägen.",
+    "introText": "Från den första samlingen till minsta detalj. Verktyg för att ordna och dela dina fotografier utan att ta deras plats.",
+    "items": [
+      [
+        "grid",
+        "Ordna. Och hitta.",
+        "Nästlade gallerier, taggar och Smart Galleries. Varje fotografi har sin plats, även när samlingen växer."
+      ],
+      [
+        "expand",
+        "Betrakta. Och upplev.",
+        "Fotografier i helskärm, presentationer med musik och kartor över platserna bakom dem. Varje bild har en historia."
+      ],
+      [
+        "share",
+        "Dela. På dina villkor.",
+        "Offentligt, via direktlänk eller med skydd. Du bestämmer vem som får se dina fotografier."
+      ]
+    ],
+    "showcase": "Ett fotografi är början.",
+    "showcaseText": "Lägg till historien, platsen eller musiken. Låt besökare utforska galleriet i sin egen takt.",
+    "start": "Ge dina fotografier ett hem.",
+    "startText": "PHP och MySQL eller MariaDB. Ditt webbhotell och öppen källkod. Börja med den publicerade versionen och installationsguiden.",
+    "footer": "Ett oberoende galleri-CMS med öppen källkod av Rudolf Klusal.",
+    "docsTitle": "En tydlig väg från nedladdning till galleri.",
+    "docsLead": "Kom igång, hitta produkthandböcker och läs versionsdokumentation på ett ställe. Tekniska referenser länkar till sina ursprungliga källor.",
+    "getting": "Kom igång",
+    "steps": [
+      [
+        "Kontrollera webbhotellet",
+        "PHP 8.1 är kompatibilitetsminimum. Välj helst en underhållen PHP-version. Du behöver också MySQL eller MariaDB och tilläggen som anges i README."
+      ],
+      [
+        "Ladda ner och installera",
+        "Hämta den publicerade versionen, följ dess README och kör installationen på ditt PHP-webbhotell."
+      ],
+      [
+        "Skapa din första samling",
+        "Öppna administrationen, skapa ett galleri och ladda upp fotografier. Produkthandboken beskriver inställningar och delning."
+      ]
+    ],
+    "install": "Läs installationsguiden",
+    "manuals": "Produkthandböcker",
+    "manualsText": "Fullständiga sökbara PDF-handböcker från den valda publicerade versionen. Välj det språk du föredrar.",
+    "reference": "Version och referenser",
+    "readme": "Tekniskt README",
+    "readmeText": "Krav, installation och en översikt över kodarkivet för denna version.",
+    "notes": "Versionsinformation",
+    "notesText": "Ändringshistoriken från denna version med en länk till den officiella versionssidan.",
+    "releasePage": "Version och nedladdningar",
+    "source": "Visa källkoden",
+    "versioned": "Länkarna nedan gäller den publicerade version som visas här. Webbplatsen uppdateras efter publicering och dagligen; en utvecklingsgren kallas aldrig för en publicerad version.",
+    "runtime": "GitHub Pages är värd för denna webbplats. Kör PHP-CMS:et på PHP-webbhosting.",
+    "pdf": "PDF-handbok",
+    "unavailable": "Versionsinformation saknas",
+    "heroFirst": "Dina fotografier.",
+    "heroSecond": "Ditt utrymme.",
+    "heroFootnote": "Ditt webbhotell. Dina original. Dina regler.",
+    "preview": "Förhandsvisning",
+    "captureVersion": "Avbildat gränssnitt · 0.143.1",
+    "previewTabs": "Verkliga skärmbilder av galleriet",
+    "expandCapture": "Förstora skärmbilden",
+    "captureCaption": "Verkliga skärmbilder av programmet · klicka för att förstora",
+    "foundationFiles": "Original i dina mappar",
+    "foundationControl": "Åtkomst under din kontroll",
+    "featuresEyebrow": "MINDRE GRÄNSSNITT. MER FOTOGRAFIER.",
+    "featureLinks": [
+      "Gallerier och organisation",
+      "Se den verkliga bildvisaren",
+      "Delning och åtkomst"
+    ],
+    "storyEyebrow": "SMÅ DETALJER. STOR SKILLNAD.",
+    "details": [
+      [
+        "map",
+        "Platser och sammanhang",
+        "EXIF-metadata och GPS-kartor knyter fotografier till deras platser. Flyggallerier kan också innehålla rutter och SimBrief-dokument."
+      ],
+      [
+        "music",
+        "Musik, presentationer och PDF",
+        "Musikspår och PDF-dokument kan finnas bredvid fotografierna i ett galleri. Presentationer kan få musikackompanjemang."
+      ],
+      [
+        "sliders",
+        "Funktionerna du behöver",
+        "Aktivera valfria funktioner i administrationen. Utseende, innehåll och åtkomstregler förblir under din kontroll."
+      ]
+    ],
+    "startEyebrow": "REDO FÖR DIN NÄSTA SAMLING",
+    "darkTheme": "Visa den här webbplatsen med mörkt utseende",
+    "lightTheme": "Visa den här webbplatsen med ljust utseende",
+    "actualCapture": "Verklig skärmbild av programmet",
+    "closeCapture": "Stäng förhandsvisningen",
+    "previousCapture": "Föregående skärmbild",
+    "nextCapture": "Nästa skärmbild",
+    "captureNote": "Oförändrad skärmbild av programmet. Kontrollerna i bilden hör till skärmbilden; källänken leder till det verkliga programmet.",
+    "dialogHint": "Bläddra med piltangenterna · Esc stänger",
+    "captureSources": "Skärmbilder och källor",
+    "captureProvenance": "Avbildat i Gallery 0.143.1: offentlig översikt, bildvisare och karta på galerie.klusik.cz samt Music Manager i den lokala installationen. Skärmbilderna behåller sitt ursprungliga tema och språk. Utseendeknappen ändrar den här presentationswebbplatsen.",
+    "liveGallery": "Öppna galleriet",
+    "captures": [
+      {
+        "tab": "Gallerier",
+        "title": "Galleriöversikt",
+        "caption": "Galleriöversikt · offentligt galleri",
+        "alt": "Verklig Flight Simulators-översikt i Gallery 0.143.1 med kort för A320, A321 och A330",
+        "sourceLabel": "Öppna det riktiga galleriet"
+      },
+      {
+        "tab": "Bildvisare",
+        "title": "Fotografivisare",
+        "caption": "Fotografivisare · offentligt galleri",
+        "alt": "Verklig bildvisare i Gallery med zoom, helskärm, presentation och karta",
+        "sourceLabel": "Öppna det riktiga galleriet"
+      },
+      {
+        "tab": "Musikhantering",
+        "title": "Musikhantering",
+        "caption": "Music Manager · lokal installation",
+        "alt": "Verklig Music Manager med albumet Flying och tre spår i Gallery 0.143.1",
+        "sourceLabel": "Om Music Manager"
+      },
+      {
+        "tab": "Karta",
+        "title": "Gallerikarta",
+        "caption": "Verklig gallerikarta · Westbound Tour, LEG 36",
+        "alt": "Verklig gallerikarta med flygrutt från Japan till Kina, fotopositioner och källangivelse för OpenStreetMap",
+        "sourceLabel": "Öppna det riktiga galleriet"
+      }
+    ]
   }
 }

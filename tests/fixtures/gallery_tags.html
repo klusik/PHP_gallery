@@ -576,7 +576,7 @@ async function runFixture() {
     check(heroEscape.ok && heroEscapeFinished && document.activeElement === heroSummary, 'Escape closes the hero panel and restores focus to its summary');
     setupHeroTagDisclosure();
     await settle();
-    check(JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'repeated module initialization remains geometry-idempotent');
+    check(JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'repeated module initialization remains geometry-idempotent: ' + JSON.stringify({before:beforeInit,after:snapshot('[data-fixture-case="rows-one"]'),scrollY:window.scrollY,focus:document.activeElement?.tagName}));
 
     summary.click();
     await settle();
