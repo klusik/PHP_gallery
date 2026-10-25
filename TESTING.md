@@ -976,7 +976,11 @@ It checks the explicit website-only artifact, all eight localized project
 routes,
 release-bound references and required Chromium at desktop, 390px and 320px
 widths,
-including native keyboard disclosure and focus. Missing Chromium is BLOCKED.
+including native keyboard disclosure and focus, both presentation palettes,
+composed 4.5:1 text contrast and unchanged screenshot bytes. A script-withheld
+route checks native screenshot selection and static full-image links. Enhanced
+routes check modal sources, arrows, Escape, focus restoration and viewport fit.
+Missing Chromium is BLOCKED.
 `.github/workflows/project-website.yml` owns this suite without duplicating CMS
 regressions. Feature builds produce previews; reviewed main alone can deploy
 Pages.
@@ -993,7 +997,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.143.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.143.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1092,6 +1096,13 @@ qualification.
 action in anonymous public and anonymous-preview headers, including its
 localized label/icon and exact return target, while preserving the plain Admin
 page fallback.
+
+HTTP visual-preview failures retain their bounded stage/status context and
+source location in `cache/test-audit/public-visual-preview-failure.json`, without
+HTTP/PDO response data or exception messages. Its semantic picture lookup
+accepts DOMDocument's HTML4 nesting of HTML5 `source` elements while preserving
+photo-card identity, media-URL and authorization assertions. Tag layout and
+fullscreen fixtures report their measured geometry without weakening assertions.
 
 ## Database support evidence
 

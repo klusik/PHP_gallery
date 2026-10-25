@@ -35,7 +35,9 @@ to drain already-staged updater trash independently of thumbnail maintenance.
 
 [Project website](https://klusik.github.io/PHP_gallery/) ·
 [Documentation and published-release references](https://klusik.github.io/PHP_gallery/docs/)
-— presentation in English, Czech, German and Swedish. Website source, preview,
+— translucent presentation in English, Czech, German and Swedish, with real
+application captures, optional light/dark appearance and screenshot enlargement.
+Website source, preview,
 release-link ownership and Pages activation are documented in
 [website/README.md](website/README.md).
 
@@ -58,7 +60,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.143.1
+**Current Version:** 0.143.2
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.

@@ -652,6 +652,9 @@ License: MIT License (see LICENSE file in repository)
             mode: quickTagFullscreenMode,
             nativeFullscreen: document.fullscreenElement === quickTagViewer,
             hudHidden: hudTagButton?.hidden ?? null,
+            visualViewport: window.visualViewport ? {left:visualViewport.offsetLeft,top:visualViewport.offsetTop,width:visualViewport.width,height:visualViewport.height} : null,
+            popupStyle: {left:quickTagPopover.style.left,top:quickTagPopover.style.top,position:getComputedStyle(quickTagPopover).position,margin:getComputedStyle(quickTagPopover).margin},
+            viewerRect: {left:quickTagViewer.getBoundingClientRect().left,top:quickTagViewer.getBoundingClientRect().top},
             popupParent: quickTagPopover.parentElement?.className || '',
             rect: {
                 left: quickPopoverRect.left,

@@ -673,15 +673,18 @@ try {
         @$galleryDocument->loadHTML($anonymousRoot['body']),
         'The actual anonymous gallery response is not parseable HTML.',
     );
+    // DOMDocument's HTML4 parser may nest a following img inside HTML5 source
+    // elements. Select the image descendant while retaining the actual photo
+    // card, original-media attribute, preview link, picture and src requirements.
     $photoCard = (new DOMXPath($galleryDocument))
         ->query(
-            '//article[@data-public-photo-order-item][@data-full-src][.//a[contains(concat(" ", normalize-space(@class), " "), " image-preview-link ")]//picture/img[@src]]',
+            '//article[@data-public-photo-order-item][@data-full-src][.//a[contains(concat(" ", normalize-space(@class), " "), " image-preview-link ")]//picture//img[@src]]',
         )
         ->item(0);
     $thumbnailElement = $photoCard instanceof DOMElement
         ? (new DOMXPath($galleryDocument))
             ->query(
-                './/a[contains(concat(" ", normalize-space(@class), " "), " image-preview-link ")]//picture/img[@src]',
+                './/a[contains(concat(" ", normalize-space(@class), " "), " image-preview-link ")]//picture//img[@src]',
                 $photoCard,
             )
             ->item(0)
@@ -2764,6 +2767,17 @@ try {
     echo
         "PASS visual preview refuses installed/saved imports and oversized CSS only on marked documents\n";
 } catch (Throwable $exception) {
+    // Retain only the fixture's already bounded stage/status context. The private
+    // HTTP/PDO response and exception message must never enter CI artifacts.
+    @file_put_contents(
+        dirname(__DIR__) . '/cache/test-audit/public-visual-preview-failure.json',
+        json_encode([
+            'stage' => $stage,
+            'diagnostic' => $stageDiagnostic,
+            'source' => basename($exception->getFile()),
+            'line' => $exception->getLine(),
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n",
+    );
     fwrite(
         STDERR,
         'FAIL visual preview workflow '
