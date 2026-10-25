@@ -96,6 +96,15 @@ namespace {
             if ($payload['storageKey'] !== $expected) {
                 throw new RuntimeException('History key differs across front controllers.');
             }
+            foreach (['mark_all_seen', 'mark_all_unseen', 'local'] as $key) {
+                if (($payload['strings'][$key] ?? '') !== 'gallery.visit.' . $key) {
+                    throw new RuntimeException('Bulk visit action lacks its localized payload.');
+                }
+            }
+            if (isset($payload['strings']['content_unavailable'])
+                || isset($payload['strings']['reset_confirm'])) {
+                throw new RuntimeException('Public payload retained retired warning/reset controls.');
+            }
         }
     }
 

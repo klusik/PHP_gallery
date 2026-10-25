@@ -24,8 +24,15 @@ The panel follows the PDF/music launcher surface: mix the
 Theme panel at 42% over the page, retain readable backdrop blur, and use Theme
 line separators and compact 0.85rem heading text with a small accent icon.
 Give the read-all action the presentation launcher's transparent outlined
-treatment; keep history reset quieter and the local-storage note subordinate.
-Keep the bell a quick overview with its bulk/read-history actions; individual
+treatment directly beside the notification list, shown only with unread news.
+Keep the independent visit-completion toggle in the footer and the local-storage
+note subordinate. Default to marking all galleries seen; offer the reverse only
+when every authorized gallery is seen. Neither action changes the other state.
+Omit technical index warnings from this public overview; unavailable evidence
+must not be labelled as an empty verified notification list.
+Without unread news, omit its whole heading/section and retain only the compact
+visit action, adjacent Close control and subordinate local-storage note.
+Keep the bell a quick overview with these two distinct bulk actions; individual
 branch visit changes belong directly on the inline title status icon. Status
 glyphs stay small but distinct: dotted circle, half-filled circle, checked circle
 and sparkle. Give the unvisited state the strongest Theme accent and restrained

@@ -1008,13 +1008,13 @@ function public_gallery_visit_progress(string $opened = '', array $observed = []
                 . '/' . trim($mount, '/'),
             'strings' => array_combine(
                 ['unseen', 'partial', 'seen', 'new', 'empty', 'unavailable',
-                    'reset_confirm', 'bell', 'updated', 'content_unavailable',
-                    'mark_unseen'],
+                    'bell', 'mark_unseen', 'mark_all_seen', 'mark_all_unseen',
+                    'local'],
                 array_map(static fn(string $key): string => \Gallery\Services\t(
                     'gallery.visit.' . $key,
                 ), ['unseen', 'partial', 'seen', 'new', 'empty', 'unavailable',
-                    'reset_confirm', 'bell', 'updated', 'content_unavailable',
-                    'mark_unseen']),
+                    'bell', 'mark_unseen', 'mark_all_seen', 'mark_all_unseen',
+                    'local']),
             ),
         ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
             | JSON_THROW_ON_ERROR);

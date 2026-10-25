@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.144}
+\newcommand{\version}{0.144.1}
 \newcommand{\manualdate}{25 October 2026}
 
 \hypersetup{
@@ -1552,14 +1552,18 @@ changes and~deletion alone do~not create additions.
 
 The~header bell opens a~small translucent panel immediately beside it, without
 dimming the~page. Follow a~gallery link to~open its~content.
-\emph{Mark all~as~read} marks all~currently available galleries visited
-and~acknowledges their current content.
-\emph{Clear seen history} asks for~confirmation and~returns this installation
-to~an~unvisited first observation, without flagging historical content as~new.
+\emph{Mark all~new content as~read} appears beside unread notifications
+and~acknowledges only their content, preserving gallery visit states.
+The~separate footer action defaults to~\emph{Mark all~galleries as~seen}.
+Only when every available gallery is~seen does~it~offer
+\emph{Mark all~galleries as~unseen}. Both directions preserve content markers
+and~work without a~confirmation dialog; neither dismisses notifications.
 Escape or~a~click outside closes the~panel. Narrow-screen actions retain
 comfortable touch targets. The~panel matches the~PDF/music applets with a~Theme
 glass surface, small accent icons and~a~compact outlined read-all action;
-history reset remains visually quieter.
+the~independent visit toggle remains below the~list.
+When there are~no~unread notifications, the~entire news section disappears,
+leaving only the~compact visit action, Close and~the~local-history note.
 The~panel grows with its~content up~to~the~actual viewport height, including
 browser zoom. Only then does its~compact list scroll; heading and~actions stay
 visible. There is~no~fixed item-count threshold.
@@ -1567,7 +1571,8 @@ visible. There is~no~fixed item-count threshold.
 History stays in~this browser's local storage, independently for~each
 installation. It~does~not synchronize between devices or~send visitor history
 to~the~server. If~storage is~blocked, the~current tab remains usable. Unavailable
-content evidence is~reported as~unavailable rather than as~no~new content.
+content evidence omits notifications and~their action without a~technical
+warning or~a~false empty-state claim. The~visit toggle remains usable.
 Authenticated administrators never see this feature, including in~anonymous
 preview; after logout they receive the~ordinary visitor interface. Any~future
 non-Admin Viewer account uses the~same separate visitor identity boundary.

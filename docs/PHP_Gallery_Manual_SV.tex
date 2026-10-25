@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144}
+\newcommand{\version}{0.144.1}
 \newcommand{\manualdate}{25~oktober~2026}
 
 \hypersetup{
@@ -1563,21 +1563,28 @@ bevaras. När galleriet öppnas igen räknas det som ett nytt verkligt besök.
 
 Klockan i sidhuvudet öppnar en liten genomskinlig panel direkt vid knappen,
 utan att tona ned sidan. Följ en gallerilänk för att öppna dess innehåll.
-\emph{Markera allt som läst} markerar alla just nu tillgängliga gallerier som
-besökta och bekräftar deras aktuella innehåll. \emph{Rensa besökshistoriken} kräver
-bekräftelse och återställer installationen till en obesökt första observation,
-utan att märka historiskt innehåll som nytt. Escape eller ett klick utanför
+\emph{Markera alla nyheter som lästa} visas vid olästa nyheter och bekräftar
+bara innehållet utan att ändra besöksstatus. Den separata knappen längst ned
+erbjuder normalt \emph{Markera alla gallerier som besökta}. Bara när alla
+tillgängliga gallerier är besökta erbjuder den
+\emph{Markera alla gallerier som obesökta}. Båda riktningarna behåller
+innehållsmarkeringar utan bekräftelsedialog och kvitterar inga nyheter.
+Escape eller ett klick utanför
 stänger panelen. Smala skärmar behåller bekväma tryckytor. Panelen följer
 PDF-/musikpanelerna med en genomskinlig temayta, små accentikoner och en kompakt
-konturknapp för att markera allt som läst; rensning av historiken är mer diskret.
+konturknapp för att bekräfta nyheter; den oberoende besöksknappen finns under listan.
+Utan olästa nyheter försvinner hela nyhetsdelen. Bara den kompakta besöksknappen,
+Stäng och information om lokal lagring finns kvar.
 Panelen växer med innehållet upp till fönstrets faktiska höjd, även vid
 webbläsarzoom. Först därefter rullar den kompakta listan; rubrik och åtgärder
 förblir synliga. Ingen fast gräns för antalet nyheter används.
 
 Historiken stannar i webbläsarens lokala lagring separat för varje installation.
 Den synkroniseras inte mellan enheter och skickas inte till servern. Om lagring
-blockeras fungerar den aktuella fliken fortfarande. Otillgänglig information
-om nytt innehåll visas uttryckligen som otillgänglig. Inloggade administratörer
+blockeras fungerar den aktuella fliken fortfarande. Utan tillförlitliga
+innehållsuppgifter utelämnas nyheter och deras åtgärd utan teknisk varning
+eller ett felaktigt påstående om en tom lista. Besöksknappen fungerar ändå.
+Inloggade administratörer
 ser inte funktionen ens i anonym förhandsvisning; efter utloggning visas det
 vanliga besökargränssnittet. Ett framtida Viewer-konto utan administratörsrätt
 behåller samma åtskillnad mellan identiteter.

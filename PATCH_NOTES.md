@@ -1,5 +1,91 @@
 # Patch notes
 
+## Version 0.144.1
+
+Clarified the visitor notification bell by separating unread-content
+acknowledgement from gallery visit completion and shrinking the panel when
+there were no unread notifications.
+
+### Highlights
+
+#### Independent notification and gallery actions
+
+- Renamed the notification action to Mark all new content as read and placed it
+  directly above unread entries. Acknowledging notifications preserved every
+  gallery's visit state. [#293](https://github.com/klusik/PHP_gallery/issues/293)
+- Replaced history clearing with a reversible footer action. It marked all
+  accessible galleries as seen by default and offered Mark all galleries as
+  unseen only when every gallery was already seen.
+- Preserved New-content markers in both directions of the visit toggle.
+  Completing visits no longer dismissed unread notifications.
+- Removed the entire news heading, list and acknowledgement action when there
+  were no unread entries, retaining only compact visit controls and the local
+  history note.
+- Removed technical availability warnings from the public overview while
+  retaining safe omission of unverified content evidence.
+
+### Technical Details
+
+#### Frontend and controller
+
+- Added independent `acknowledgeVisitContent()` and `toggleVisitNodesSeen()`
+  policy owners in
+  `public/assets/gallery-modules/gallery-visit-progress.js`.
+- Kept notification watermarks monotonic so an older tab could not lower a newer
+  acknowledgement. Used ordered per-record stamps for reversible bulk visits
+  without clearing content baselines, reset epochs or unrelated history.
+- Kept visit controls usable when content evidence was unavailable. Missing,
+  unknown or dirty index evidence omitted the optional news area without
+  claiming that the unread list was empty; existing bounded server diagnostics
+  and schema policies remained unchanged.
+- Updated `app/views/layout.php`, the prepared public controller payload and
+  `public/assets/styles/public-shared.css` for separate action placement,
+  compact empty panels and accurate accessible dialog names.
+- Returned focus to the visit action after the last notification action hid
+  itself. Preserved anchored translucent surfaces, keyboard dismissal, 44px
+  narrow-screen targets and viewport-bound scrolling for long lists.
+- Updated the active and fallback English, Czech, German and Swedish catalogs.
+  No database migration, visitor-history server write or new tracking endpoint
+  was added.
+
+#### Tests and documentation
+
+- Extended browser-policy regressions for independent bulk actions, partial
+  completion, both toggle directions, monotonic acknowledgements, stale-tab
+  merges, unavailable evidence, empty graphs and unrelated-history preservation.
+- Extended the real-markup Chromium fixture for action placement, focus after
+  acknowledgement, hidden empty headings, accurate dialog labels, long-list
+  geometry and quiet tab-local storage fallback.
+- Extended the public controller fixture to check both localized toggle labels
+  and exclusion of retired availability/reset controls.
+- Updated architecture, compatibility, testing, shared design guidance and all
+  four maintained manual sources to describe the separate actions.
+
+#### Release metadata
+
+- Initialized immutable origin and predecessor records for `v_0.144.1`, linked
+  to release-origin tracking in
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors
+
+- Made reading notifications independent of whether galleries had been explored.
+  The footer action prioritized completing all visits and exposed the reverse
+  operation only for an already completed set.
+- Reduced empty-panel space and removed technical messages that did not help
+  visitors browse. Browser-local visits remained usable without notification
+  evidence, and blocked storage retained a quiet current-tab lifetime note.
+- Kept history local to the browser and installation, with existing
+  administrator exclusion and gallery access rules preserved.
+
+#### For administrators and maintainers
+
+- Kept administrator-facing workflows and the database schema unchanged.
+  The changes affected the public visitor controls and their documentation.
+
 ## Version 0.144
 
 Added browser-local gallery visit progress and an independent new-content

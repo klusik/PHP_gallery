@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.144}
+\newcommand{\version}{0.144.1}
 \newcommand{\manualdate}{25.~října~2026}
 
 \hypersetup{
@@ -1547,22 +1547,29 @@ stav je společný všem umístěním; značky nového obsahu zachová. Opětovn
 galerie zaznamená novou skutečnou návštěvu.
 
 Zvoneček v~záhlaví otevře malý průsvitný panel přímo u~ovladače, bez ztmavení
-stránky. Lze přejít do galerie nebo zvolit \emph{Označit vše jako přečtené},
-což označí všechny právě dostupné galerie jako navštívené a~potvrdí jejich
-aktuální obsah. \emph{Vymazat historii návštěv} vyžaduje potvrzení a~vrátí tuto
-instalaci k~nenavštívenému prvnímu pozorování; historický obsah se nepovažuje
-za nový. Panel zavře Escape nebo kliknutí mimo něj. Na úzké obrazovce mají
+stránky. U~nepřečtených novinek je akce
+\emph{Označit všechny novinky jako přečtené}; potvrdí pouze obsahové značky
+a~zachová stav návštěv galerií. Samostatné spodní tlačítko standardně nabízí
+\emph{Označit všechny galerie jako prohlédnuté}. Jen pokud jsou všechny dostupné
+galerie prohlédnuté, změní se na
+\emph{Označit všechny galerie jako neprohlédnuté}. Oba směry zachovají novinky,
+nevyžadují potvrzovací dialog a~lze je opakovat. Panel zavře Escape nebo kliknutí
+mimo něj. Na úzké obrazovce mají
 akce pohodlné dotykové cíle. Panel navazuje na PDF/hudební aplety průsvitným
 povrchem tématu, malými akcentovými ikonami a~kompaktním obrysovým tlačítkem
-pro označení všeho jako přečteného; mazání historie je vizuálně méně výrazné.
+pro potvrzení novinek; samostatný přepínač návštěv zůstává pod seznamem.
+Pokud žádné nepřečtené novinky nejsou, celá jejich sekce zmizí. Zůstane jen
+úsporné ovládání návštěv, zavření a~poznámka o~místním ukládání.
 Panel roste s~obsahem až ke skutečné výšce okna včetně vlivu zoomu prohlížeče.
 Teprve poté se posouvá úsporný seznam; záhlaví a~akce zůstávají viditelné.
 Rozhoduje výška, nikoli pevný počet novinek.
 
 Historie zůstává v~místním úložišti tohoto prohlížeče zvlášť pro každou
 instalaci. Nesynchronizuje se mezi zařízeními ani se neposílá na server.
-Při blokovaném úložišti funguje v~aktuální kartě. Nedostupné údaje o~novinkách
-jsou výslovně označené jako nedostupné. Přihlášený správce celou tuto funkci
+Při blokovaném úložišti funguje v~aktuální kartě. Pokud nejsou podklady novinek
+dostupné, přehled ani jeho akce se nezobrazí; panel nevypisuje technické hlášky
+ani nepravdivé tvrzení, že žádné novinky nejsou. Přepínač návštěv zůstává funkční.
+Přihlášený správce celou tuto funkci
 nevidí ani v~anonymním náhledu; po odhlášení dostane běžné návštěvnické
 rozhraní. Budoucí účet návštěvníka bez oprávnění správce zachová toto oddělení
 identit.
