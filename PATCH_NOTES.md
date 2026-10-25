@@ -1,5 +1,78 @@
 # Patch notes
 
+## Version 0.143.2
+
+This release refreshed the public PHP Gallery project website with a compact
+translucent presentation and authentic application previews. Visitors can
+explore the existing Gallery interface, switch the presentation palette and
+find documentation in four languages while downloads remain bound to the
+published stable release.
+
+### Highlights
+
+#### Project website and authentic previews
+
+- Replaced the illustrated landing page with a compact glass presentation in
+  English, Czech, German and Swedish, shared with the documentation pages.
+- Added original Gallery 0.143.1 screenshots showing the public gallery
+  overview, photograph lightbox, flight-route map and Music Manager album.
+- Added screenshot source links and clear provenance. Enlargements preserved
+  the captured interface, language and colors, including map attribution.
+- Added optional light/dark website appearance and keyboard-operated screenshot
+  enlargement. Native screenshot tabs and ordinary image links remained usable
+  without JavaScript.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `website/build.mjs`, `website/content.json` and
+  `website/assets/site.css` around the approved presentation while preserving
+  all eight project-prefix routes and locale-preserving documentation links.
+- Added `website/assets/site.js` for page-local palette changes and native
+  dialog enlargement, including source metadata, arrow navigation, Escape and
+  browser focus restoration. The enhancement stored no preferences and made
+  no application requests.
+- Preserved published-release validation and immutable README, patch-note and
+  four-manual links. Screenshot version labels stayed separate from the
+  dynamically selected published version.
+
+#### Tests and documentation
+
+- Extended `tests/project_website_test.mjs` with original-image byte checks,
+  both palette contrasts composed through translucent backgrounds, native tabs
+  with the script withheld, modal source links and keyboard/focus behavior.
+- Retained desktop, 390px and 320px route checks and added dark-palette visual
+  evidence. Corrected root-fragment resolution in the existing route fixture.
+- Corrected the inherited HTTP visual-preview fixture to find semantic images
+  through legacy DOMDocument nesting of HTML5 source elements, preserving
+  media authorization, origin and no-write checks and retaining safe diagnostics.
+- Updated website maintenance and asset provenance, the main README, testing
+  documentation and the corresponding sections of all four manual sources.
+
+#### Release metadata
+
+- Initialized immutable origin and predecessor records for `v_0.143.2` and
+  refreshed generated integrity metadata. Release-origin tracking referenced
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For visitors and maintainers
+
+- Improved the project introduction and release documentation presentation with
+  previews that show actual implemented Gallery behavior and link to its
+  public source or corresponding documentation.
+- Preserved static language navigation, installation references and downloads
+  when browser JavaScript or native screenshot dialogs are unavailable.
+
+#### For gallery owners
+
+- Kept the installed PHP gallery, administrator workflows, database schema and
+  gallery themes unchanged. Website appearance controls affected the project
+  presentation only.
+
 ## Version 0.143.1
 
 Refined the presentation launch confirmation to match the compact Theme design, with clearer focus states and larger touch targets.
