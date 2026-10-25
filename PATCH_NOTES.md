@@ -1,5 +1,96 @@
 # Patch notes
 
+## Version 0.143.3
+
+Expanded PHP Gallery uploader 0.10.0 with multilingual SimBrief plan-versus-actual
+flight analysis, denser PDF reports and parallel language rendering. Saved flight
+history gained expandable version groups while retaining existing PDF files and
+upload identities.
+
+### Highlights
+
+#### Planned and recorded flight analysis
+
+- Added matching analysis in English, Czech, German and Swedish after the
+  existing maps and flight detail, ending with a completed flightplan table.
+- Compared planned and observed time, fuel, distance, altitude, speed and wind
+  where compatible observations existed. Retained planned values when actual
+  measurements or matching route passages were unavailable.
+- Added deviation profiles, weighted distributions, phase comparison bars and
+  speed ranges. Used compact panels and contextual colors, including green
+  for lower net consumption and higher remaining fuel.
+- Fixed repeated navlog/airport endpoints suppressing otherwise complete
+  takeoff/landing comparisons. Kept legacy AMSL and planned-only UTC labels
+  explicit without substituting them for pressure altitude or simulator time.
+
+#### Concurrent PDFs and versioned history
+
+- Rendered selected languages simultaneously in isolated processes, with flight
+  analysis and map backgrounds prepared once. Started gallery uploads only
+  after the complete selected language set finished successfully.
+- Preserved completed PDFs on rendering failure or cancellation and joined
+  running renderers before reporting a terminal result.
+- Displayed a single version directly under its flight and multiple versions
+  as expandable groups in descending numeric order. Preserved selected files
+  and expanded groups through refresh without moving or renaming files.
+
+### Technical Details
+
+#### Windows companion analysis and rendering
+
+- Added `winapp/uploader/flight_comparison.py` for a bounded pass over original
+  samples, separate from plot thinning. Added simulator-time-weighted bias,
+  MAE, RMSE, approximate absolute-error P95 and metric-specific coverage.
+- Extended dispatch and optional SimConnect observations with planning fields,
+  pressure altitude, parking-brake state and the simulator Zulu calendar.
+  Kept missing optional channels separate from core recording.
+- Required ordered nearby waypoint passages and compatible timing, fuel and
+  altitude evidence for comparisons. Suppressed affected totals across gaps,
+  refuelling, multiple legs, unmatched airports or incompatible references.
+- Added `winapp/uploader/flight_render.py` for spawned language workers, shared
+  prepared map images and parent-owned progress. Kept credentials, durable
+  journals and delivery receipts in the main process.
+- Updated `winapp/uploader/flight_ui.py` and `flight_jobs.py` for stable version
+  groups, descendant metadata, numeric ordering and out-of-order completion.
+  Rejected malformed catalog version numbers with recoverable errors.
+
+#### Tests and documentation
+
+- Added comparison regressions for accelerated simulator time, original-sample
+  weighting, fuel loading, missing evidence, duplicate anchors and legacy data.
+- Added a real spawned-process overlap probe and cancellation/failure barriers,
+  plus workflow tests preventing uploads of partially rendered language sets.
+- Added history tests for v10/v2/v1 ordering, selection and expansion recovery,
+  passive file preservation and catalog number validation.
+- Updated companion documentation, architecture, compatibility guidance, testing
+  references and all four maintained manual sources.
+
+#### Release metadata
+
+- Initialized immutable origin and predecessor records for `v_0.143.3`, linked
+  to release-origin tracking in
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### User Impact
+
+#### For pilots and gallery owners
+
+- Added richer flight-report comparisons and a final planned/actual flightplan
+  while preserving existing maps, earlier reports and delivery receipts.
+- Reduced serial language-render work and made repeated report generations
+  easier to browse. Existing recordings remained usable; newly required
+  evidence still needed an explicit OFP reload/import or a new recording.
+- Kept statistics descriptive, with missing evidence disclosed. Speed ranges
+  represented observed ranges rather than confidence intervals, and route
+  bands represented descriptive references rather than operational limits.
+
+#### For visitors and administrators
+
+- Kept the public gallery, administrator workflows and database schema
+  unchanged; the product changes belonged to the Windows companion and its
+  generated PDF reports.
+
 ## Version 0.143.2
 
 This release refreshed the public PHP Gallery project website with a compact
