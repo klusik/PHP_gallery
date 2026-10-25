@@ -1,5 +1,63 @@
 # Patch notes
 
+## Version 0.144.2
+
+Isolated initial visitor-content migration seeding from the runtime gallery
+model so upgrades remained reliable when older gallery code was already loaded.
+
+### Highlights
+
+#### Reliable visitor-content migration seeding
+
+- Moved initial visitor-content seeding into a dedicated migration model, avoiding
+  hidden function declarations when an older gallery model was already loaded.
+- Preserved completed seed data on replay. Oversized or incomplete optional
+  evidence left the index dirty and rolled back without blocking the core
+  upgrade; SQL errors continued to propagate and roll back.
+- Initialized immutable origin and predecessor records for `v_0.144.2`.
+  [#101](https://github.com/klusik/PHP_gallery/issues/101)
+  [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Technical Details
+
+#### Backend and database
+
+- Added `app/models/gallery_visit_content_migration.php` and updated
+  `database/migrations/202610250001_gallery_visit_content.php` to seed through a
+  migration-owned model using the callback's explicit PDO connection and frozen
+  admission limits.
+- Kept the migration model's PDF and music attachment reads independent of the
+  runtime gallery model. Seeding covered physical galleries, Smart Galleries,
+  images, attachments and placement identities.
+
+#### Tests and documentation
+
+- Added `tests/gallery_visit_migration_upgrade_test.php` and legacy-model and
+  previous-seed fixtures. Coverage exercised the real migration callback after
+  loading an older model, populated seed paths, replay, deferred attachment
+  evidence and SQL-error rollback.
+- Updated schema and compatibility contracts, architecture and database
+  documentation, testing guidance, code maps, manifests and all four maintained
+  manuals.
+
+#### Release metadata
+
+- Added `.github/release-origins/v_0.144.2.json` and
+  `.github/release-predecessors/v_0.144.2.json`.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Visitor-facing and administrator-facing behavior did not change; the release
+  changed migration seeding and its upgrade coverage.
+
+#### For maintainers
+
+- Made initial visitor-content seeding resilient to upgrades where older gallery
+  code was already loaded, with regression coverage for replay, deferred
+  evidence and rollback behavior.
+
 ## Version 0.144.1
 
 Clarified the visitor notification bell by separating unread-content

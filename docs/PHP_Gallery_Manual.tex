@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.144.1}
+\newcommand{\version}{0.144.2}
 \newcommand{\manualdate}{25 October 2026}
 
 \hypersetup{
@@ -2848,6 +2848,16 @@ select a~card first. Open help remains available until dismissed.
 \index{backup}
 
 \subsection{Migrations}
+
+Migration callbacks use explicit database connections and~independent migration
+models. Replacing files does~not reload a~runtime model already included by~the
+updater; \codeword{require\_once} retains its~old definitions. Initial content
+evidence therefore uses a~separate bootstrap with fixed migration limits.
+FULL tests execute the~real callback after an~old-model/file-swap scenario with
+populated physical galleries, Smart Galleries, PDF and~music. They also cover
+the~previous seed symbol, replay, optional readiness deferral and~SQL rollback.
+Database owners run this vector on~disposable MySQL/MariaDB; source owners use
+an~isolated SQLite adapter. Fresh-install tests remain separate coverage.
 
 Schema changes live in~timestamped PHP files under \filepath{database/migrations/}. The~migration runner prevalidates pending definitions, applies them in~filename order, and~records successful versions. New schema work receives a~new migration file so~existing installations retain a~deterministic history.\footnote{Some migrations include repair callbacks in~addition to~SQL. Compatibility tests protect partial-update scenarios where an~older runner encounters newer migration definitions.}
 

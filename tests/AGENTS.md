@@ -15,6 +15,10 @@ require a browser/database only when the behavior needs one.
 - Load the actual source owner before its first assertion. Keep shared source
   reads above all consumers, and import/fully qualify native exceptions inside
   PHP namespaces, including negative branches.
+- For migration callbacks, preload the old runtime owner before replacing its
+  bytes, then execute the real callback with populated inputs. Include an
+  undefined-call negative control, explicit PDO ownership, replay and SQL rollback;
+  a fresh-install-only test does not cover already included upgrade code.
 - Model each provider endpoint's actual response separately, including omitted
   fields; creation, collection and combined responses need not share a shape.
   Seed request-guard probes with each route's own valid base query. Compare

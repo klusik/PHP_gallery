@@ -20,8 +20,13 @@ New information is explicitly unavailable.
 An oversized seed or unfinished attachment snapshot leaves the derived index
 dirty without blocking the core upgrade. SQL/schema failures still propagate
 through normal migration recovery. After resolving data readiness, an explicit
-maintainer operation can retry `gallery_visit_content_model_seed($pdo)` on the
-same migration-owned connection; page views never perform this repair.
+maintainer operation can load `app/models/gallery_visit_content_migration.php`
+and the Smart query compiler, then retry `gallery_visit_migration_model_seed($pdo)`
+on the same explicit connection; page views never perform this repair.
+The migration-owned model is independent of `galleries.php` already loaded by
+an older updater request. Its initial admission limits and attachment SQL are
+frozen with the migration rather than delegated to changing runtime adapters.
+Completed seeds remain unchanged; unrecorded failed migrations replay normally.
 
 ## Scheduler observations
 
@@ -61,7 +66,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.144.1. Version 0.97 adds the recoverable gallery-trash
+application version 0.144.2. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in

@@ -2,6 +2,16 @@
 
 ## Browser-local visitor progress
 
+Initial evidence seeding belongs to the independent migration model, not a new
+function on the already included runtime gallery model. A reported live upgrade
+failed with reference `F05D71A153A2`, matching the absent runtime seed function;
+the packaged source contained that function. The upgrade regression reproduces
+the failure with an older loaded model and also
+rejects dependence on a previous seed symbol or runtime attachment adapter.
+Migration-specific limits and reads remain frozen to preserve pending/replayed
+upgrades. This compatibility boundary has no retirement date: old installations
+can upgrade directly. Actual hosting recovery remains installation-specific.
+
 Owners: existing gallery/Smart SQL models, gallery lookup policy, public card
 controller, shared layout and native visitor browser module. Keep stable
 namespaced gallery IDs and a versioned installation path in localStorage; a

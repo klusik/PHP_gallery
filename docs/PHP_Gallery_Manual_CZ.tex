@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.144.1}
+\newcommand{\version}{0.144.2}
 \newcommand{\manualdate}{25.~října~2026}
 
 \hypersetup{
@@ -2832,6 +2832,16 @@ přístupná až do zavření.
 \index{z00275@záloha}
 
 \subsection{Migrace}
+
+Migrační callbacky používají výslovně předané databázové spojení a~samostatné
+migrační modely. Výměna souborů znovu nenačte runtime model, který už aktualizátor
+použil; \codeword{require\_once} ponechá jeho staré definice. Úvodní index novinek
+proto používá nezávislý model s~pevnými migračními limity. FULL spouští skutečný
+callback po načtení starého modelu a~výměně souboru, s~naplněnými fyzickými
+galeriemi, chytrými galeriemi, PDF a~hudbou. Ověřuje i~starou seedovací funkci,
+opakování migrace, odklad nepřipravených volitelných podkladů a~rollback chyby SQL.
+Databázové shardy používají izolované MySQL/MariaDB; zdrojové shardy samostatný
+adaptér SQLite. Test čisté instalace zůstává samostatnou vrstvou.
 
 Změny schématu jsou v~souborech PHP s~časovým razítkem pod \filepath{database/migrations/}. Migrační nástroj předem ověřuje čekající definice, používá je v~pořadí názvů souborů a~zaznamenává úspěšné verze. Nové změny schématu dostávají nový migrační soubor, aby existující instalace zachovávaly deterministickou historii.\footnote{Některé migrace kromě SQL zahrnují opravné callbacky. Testy kompatibility chrání scénáře částečných aktualizací, v~nichž starší migrační nástroj narazí na novější definice migrací.}
 
