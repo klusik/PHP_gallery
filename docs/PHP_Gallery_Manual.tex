@@ -1149,7 +1149,7 @@ do~not~establish those results. See \filepath{winapp/README.md}.
 Hosted installers explicitly use x64 CPython 3.14.x. Before packaging,
 the~builder verifies its~interpreter and~the~actual frozen EXE's patch version,
 implementation and~pointer width through a~pre-GUI report; a~wrong or~missing
-report fails preparation. The~independent application source targets 0.9.0.
+report fails preparation. The~independent application source targets 0.10.0.
 
 The~bundled native SimConnect DLL comes unmodified from the~official
 MSFS 2024 SDK Core 1.7.3. Its~84,480 bytes and~SHA256 are~documented
@@ -1220,6 +1220,17 @@ Open app log uses the~existing log. \ui{Finish flight and create PDFs} creates
 all four editions, finishes accepted work and~required delivery, then revokes
 the~saved key without a~confirmation. It~also works with automatic creation off.
 
+Selected languages render simultaneously in separate processes, one per
+language (currently up~to four). Flight analysis and map backgrounds are prepared
+once; the~main application uploads only after the~complete set succeeds.
+Failure keeps completed PDFs for recovery. Cancellation stops queued work,
+waits for running renders and retains their finished files.
+
+With one version, expanding a~flight shows its files directly. Multiple versions
+appear as expandable groups, always numerically descending (v5, v4, v3),
+regardless of column sorting. Refresh retains expanded flights/versions and
+selected files. This display does not move or rename files on disk.
+
 For a~stopped flight, \ui{Create local PDF} or \ui{Re-create local PDF} creates
 a~numbered version under \filepath{reports/}. Earlier PDFs, raw samples,
 and upload receipts remain intact. No key is~required, no upload/revoke occurs,
@@ -1256,7 +1267,8 @@ retains finished editions. Protocol errors include redacted HTTP/action/type
 context and~a~bounded response excerpt.
 
 Without a~saved key the~main action reads \ui{Begin flight} and opens API
-settings. Expand a~flight to~see individual PDFs; double-click opens the~default
+settings. Expand a~flight and, when present, its version to~see PDFs;
+double-click opens the~default
 viewer. \ui{Open folder with PDFs} opens only the~PDF folder. Filenames contain
 recorded UTC, aircraft, language, and~version. A~restartable private catalog
 normalizes older layouts without changing bytes or~upload identity; JSONs are
@@ -1678,6 +1690,44 @@ evidence; no~actual passengers, delay score or~unrecorded fuel is~inferred.
 Earlier OFP snapshots remain readable; explicitly reload/import them to~obtain
 new fields they did~not~retain. Map requests stay limited to~the~displayed
 viewport with a~45-second network budget and~stop on~the~first provider failure.
+
+An~attached OFP adds plan-versus-actual statistics in~all four editions while
+retaining maps, profiles and~landing detail. The~final repeated-header
+flightplan keeps every OFP point with planned/actual elapsed time, simulator
+UTC, remaining fuel, pressure height, TAS, GS, wind and~passage distance.
+Intermediate matches require ordered passages within 2 NM; airport rows use
+detected takeoff/landing within 10 NM. Missing matches remain unknown.
+Summary and~phase tables distinguish airborne/block time, distance, fuel,
+weights and~estimated delays. More initial fuel is~separate from savings.
+
+Vector deviation profiles show time, fuel onboard, load-adjusted net fuel use,
+pressure height and~route separation at~projected OFP positions. These planning
+estimates differ from the~ordered final flightplan matches. Time-weighted
+histograms and~bias, MAE, RMSE and~absolute-error P95 use original saved samples,
+independently of~graph thinning. P95 uses fixed 1-second, 0.1-NM and~25-ft bins;
+the~overflow bin gives a~lower bound. Amber map segments exceed the~descriptive
+5 NM band; height uses ±300 ft. These are~comparison bands, not~operating limits
+or~pilot scores. Phase averages include IAS/TAS/GS, V/S and~track-relative wind.
+
+New optional pressure-height, parking-brake and~Zulu-calendar observations
+remain separate from host UTC. Height differences require both airport
+transition references. Estimated OUT/IN requires sustained parking/motion
+evidence and~does not~identify a~stand. Full flight totals require matched
+airports, one captured flight and~complete relevant data. Gaps, fuel increases,
+incompatible dates and~legacy missing fields suppress affected claims. Old
+recordings remain readable; explicit OFP reload/import or~a~new recording
+supplies new evidence. Earlier PDFs and~receipts remain preserved.
+
+Compact analysis panels pair plan, actual and~difference in~one cell and~group
+short boundary phases with climb, descent or~arrival. Original statistics stay
+preserved. Green indicates lower time/net consumption or~more remaining fuel;
+red indicates the~opposite. Speed whiskers show observed min/max with weighted
+means; phase range bars compare planned and~actual totals. These are~descriptive
+ranges, not~confidence intervals. Verified duplicate airport rows may share
+the~same observed endpoint without suppressing valid summaries. Missing values
+use a~dash. Legacy AMSL height is~marked with an~asterisk and~never supplies
+pressure-height errors; absent simulator UTC leaves an~explicit planned-only
+UTC column. The~missing-channel context is~explained once.
 
 The~main SimBrief control marks its loaded plan; saved-flight details show
 their own OFP attachment. Finish uses available loaded OFP for~the~current

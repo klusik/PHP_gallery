@@ -568,6 +568,9 @@ tag controller through the pagination and description-layout services.
 | Stop/finalize/revoke coordinator and shared progress | `winapp/uploader/flight_workflow.py`, `winapp/uploader/flight_ui.py` |
 | Telemetry normalization and landing analysis | `winapp/uploader/flight_data.py`, `winapp/uploader/flight_recorder.py`, `winapp/uploader/simconnect_flight.py` |
 | Multilingual chart PDF rendering | `winapp/uploader/flight_report.py`, `winapp/uploader/flight_report_translations.py`, bundled ReportLab/DejaVu assets |
+| Parallel language rendering and completion barrier | `winapp/uploader/flight_render.py`; shared parent-prepared map PNGs, isolated spawned ReportLab processes, parent completion hooks and joined cancellation/failure; `winapp/tests/test_flight_render.py` |
+| Saved flight/version/file display tree | `winapp/uploader/flight_ui.py`, numeric catalog versions in `winapp/uploader/flight_jobs.py`; direct files for one version, descending expandable versions for several; `winapp/tests/test_flight_ui.py` |
+| Raw-sample dispatch statistics and completed flightplan | `winapp/uploader/flight_comparison.py`, `winapp/tests/test_flight_comparison.py` | Simulator-time weighting, metric coverage, bounded histograms/deviation plots, ordered fix passages, estimated block events and additive legacy support. |
 | Optional dispatch snapshots, AIRAC waypoint cache and OSM report maps | `winapp/uploader/flight_simbrief.py`, `winapp/uploader/flight_navdata.py`, `winapp/uploader/flight_maps.py`, `winapp/tests/test_flight_simbrief.py` |
 | Gallery-scoped PDF API and storage policy | `app/controllers/upload_automation.php`, `app/services/upload_flight_reports.php`, shared `app/services/gallery_pdf_documents.php` |
 | Desktop report delivery client | `winapp/uploader/flight_delivery.py` |

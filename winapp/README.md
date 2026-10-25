@@ -204,8 +204,11 @@ and retains the key for retry. Abandonment does not claim server revocation.
 
 Open **PDF > Saved flights and PDFs**, or the same action in Flight settings.
 The passive tree shows session start, aircraft, checkpoint sample count, local
-PDF count and state. Expand a flight to see every retained PDF as a file,
-newest versions first. File rows begin with version/language and show actual
+PDF count and state. A flight with one version expands directly to its PDF
+files. With multiple versions it expands to version groups (v5, v4, v3…),
+each containing its language files. Versions always sort numerically newest
+first, independently of the selected column/direction. These are display groups;
+browsing does not move or rename files. File rows show language and actual
 page count (pypdf) and creation date/time including seconds in local time.
 New renders retain creation UTC in their private manifest. Older PDFs use a
 star-marked file modification timestamp; deterministic embedded PDF dates are
@@ -220,10 +223,12 @@ Click a column heading to sort flights and their retained PDFs; click again to
 reverse the direction. The initial order is newest flight first. Names sort
 without case differences, counts sort numerically, and dates use their actual
 UTC instants. Flight start now includes seconds. Created/page columns order
-groups by the newest PDF creation time/total known pages and order individual
-PDFs by those same fields. Refresh retains direction, expanded flights and
-multi-selection. Missing pypdf leaves page counts as `?`, preserving the file
-tree, timestamps and ordinary open/upload actions. Creating new PDFs requires
+flights by the newest PDF creation time/total known pages and order individual
+PDFs by those same fields; version groups keep descending version order.
+Refresh retains direction, expanded flights and
+multi-selection, including expanded version groups. Missing pypdf leaves page
+counts as `?`, preserving the file tree, timestamps and ordinary open/upload
+actions. Creating new PDFs requires
 ReportLab; a missing component gives an installation/repair message rather than
 classifying the recording as damaged.
 
@@ -246,8 +251,18 @@ remains
 explicitly incomplete; empty recordings create no blank PDF. Active or
 interrupted-unclosed recordings must first finish recording.
 
+Every selected language renders concurrently in a separate spawned process
+(one per language, currently at most four). Analysis and both map backgrounds
+are prepared once in the parent; children receive normalized flight data and
+map bytes, with isolated ReportLab font state. Only the parent owns gallery
+credentials, progress, completion journals and uploads. Automatic finalization
+waits for the complete language set before uploading any of its PDFs. A render
+failure retains successful files and prevents delivery of a partial set; process
+startup failures remain visible for retry without a serial fallback.
+
 Local work has independent `manual-report.json` phase, edition paths and error
-state. Cancellation between editions retains already completed PDFs. Local
+state. Cancellation stops queued renders and joins already running editions;
+their completed PDFs remain available. Local
 creation never resolves pending remote delivery or changes `completion.json`.
 Shutdown/update cancels and joins local rendering through existing worker
 ownership. Windows layout, installed-app recovery and live simulator acceptance
@@ -429,6 +444,73 @@ are
 always identified as planning evidence. Old dispatch snapshots remain readable,
 but need an explicit OFP reload/import to obtain fields not retained previously.
 
+### Plan-versus-actual analysis and completed flightplan
+
+Attached dispatches add the same analysis in EN/CS/DE/SV, after the existing
+maps, profiles, landing detail and planning pages. The final section is a
+repeated-header flightplan retaining every original OFP point in order:
+planned/actual elapsed time, simulator UTC date/time, remaining fuel, altitude,
+TAS, GS, wind and closest-passage separation. Intermediate fixes require an
+ordered passage within 2 NM; airport rows use detected takeoff/landing within
+10 NM. Passage values are estimates interpolated only inside a continuous
+original sample interval. Unmatched points keep their planned values.
+
+`flight_comparison.py` processes the original JSONL in a bounded second pass,
+independently of the 2,000-point overview. Means and distributions use simulator
+time, not frame counts or wall time. Summary rows distinguish airborne/block
+time, ground-track distance, trip consumption, initial/landing fuel, weights,
+reserve difference and estimated schedule delay. Full flight totals require a
+matched single takeoff/landing and complete relevant evidence. Route distance
+is never compared to the OFP's air-distance fallback. Fuel mass is measured;
+historical volume-to-mass estimates remain confined to the existing charts.
+
+Vector error profiles show time deviation, remaining-fuel deviation,
+initial-load-adjusted net consumption, pressure-height error and route
+separation at projected OFP positions. Ordered fix matches in the final table
+remain a separate, stricter comparison. The existing map highlights displayed
+segments beyond the descriptive 5 NM route band in amber. Phase tables include
+time, net fuel loss, fuel coverage, consumption per hour/NM, IAS/TAS/GS, V/S,
+and track-relative head/crosswind. OFP stage totals are shown only when their
+inputs are complete; phase boundaries remain inferred.
+
+The analysis uses compact two-column panels, paired P/A/difference cells and
+six operational phase groups instead of one row per transient detector state.
+Takeoff joins climb; approach/flare join descent; contact/rollout join arrival
+ground movement. Original phase detail and coverage remain in the analysis.
+Phase variance bars compare plan with actual; speed whiskers show observed
+min/max and a time-weighted mean body, with an explicit planned TAS reference.
+They are descriptive ranges, not confidence intervals. Lower time/net fuel use
+and higher remaining fuel are green; their opposites are red. Loading, speed
+and wind changes retain neutral meaning. No empty pressure plot is allocated
+for a legacy capture; available geometric height appears as AMSL with a `*`
+marker in the flightplan and never substitutes for pressure-height error.
+Absent simulator UTC is explained once and the UTC column shows the OFP clock;
+host receipt times never become simulator time. Missing table values use a dash.
+
+An OFP may repeat an airport in its navlog and endpoint. Verified duplicate
+airport anchors may share the same observed event time, preserving both source
+rows and complete summary metrics. Arbitrary coincident intermediate points
+still require separate chronological passages. Planned values remain visible
+when a corresponding measurement is unavailable.
+
+Signed bias, MAE, RMSE and absolute-error P95 retain metric-specific covered
+time. Time-weighted histograms use 1-second, 0.1-NM and 25-ft bins; P95 is an
+upper-bin estimate except for the overflow bin's lower bound. Graph thinning
+does not change statistics. Descriptive bands are 5 NM and ±300 ft; these are
+not operational limits, pilot scores or causal findings. Fuel loss may also
+include dumping/removal; extra fuel at takeoff is not classified as savings.
+
+New optional subscriptions retain `PRESSURE ALTITUDE`, parking brake and the
+simulator Zulu calendar independently from host UTC. Height deltas require
+pressure observations above both known airport transition altitudes. Estimated
+OUT/IN require five simulator seconds of stationary parking-brake/movement
+evidence and do not identify a stand. Simulator dates more than a day from the
+OFP suppress schedule-delay numbers. Missing data, fuel increases, clock breaks,
+multiple legs and unmatched plans are disclosed and never filled with zero.
+Old JSONL/OFP snapshots remain readable with unknown additive fields; new data
+requires a new recording or explicit OFP reload/import. Analysis schema 4 and
+template 11 distinguish new editions while preserving prior PDFs and receipts.
+
 The main SimBrief control identifies a staged plan as belonging to the next
 flight. Saved-flight details separately show whether that flight has an OFP.
 When generating saved-flight PDFs, the loaded plan is attached before the
@@ -514,14 +596,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.9.0)
+## Windows installer (next version: 0.10.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.9.0**; this source version
+Gallery CMS release. The current source targets **0.10.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.9.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.10.0/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background

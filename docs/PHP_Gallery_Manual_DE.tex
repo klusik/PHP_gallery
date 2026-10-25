@@ -1210,7 +1210,7 @@ verwenden ausdrücklich x64 CPython 3.14.x. Vor dem Verpacken werden der
 Build-Interpreter sowie tatsächliche Patchversion, Implementierung und
 Zeigerbreite im EXE durch einen Bericht vor GUI-Start geprüft. Ein falscher
 oder fehlender Bericht blockiert die Vorbereitung. Die eigenständige
-Quellversion der Anwendung ist 0.9.0.
+Quellversion der Anwendung ist 0.10.0.
 
 Die gebündelte native SimConnect-DLL stammt unverändert aus dem offiziellen
 MSFS 2024 SDK Core 1.7.3. Ihre 84\,480 Bytes und SHA256 stehen in
@@ -1287,6 +1287,18 @@ Checkpoints; App-Protokoll öffnen verwendet das bestehende Protokoll.
 erledigt angenommene Arbeit und erforderliche Übertragung, dann widerruft es
 den gespeicherten Schlüssel. Dies gilt auch bei ausgeschalteter PDF-Automatik.
 
+Gewählte Sprachen werden gleichzeitig in getrennten Prozessen erzeugt, ein
+Prozess je~Sprache (derzeit höchstens vier). Fluganalyse und Kartenhintergründe
+werden einmal vorbereitet; die~Hauptanwendung lädt erst nach Erfolg aller
+Fassungen hoch. Fehler behalten fertige PDFs zur Wiederherstellung. Abbruch
+stoppt wartende Aufgaben, wartet auf laufende Renderer und behält deren Dateien.
+
+Bei einer Version zeigt ein aufgeklappter Flug direkt die~Dateien. Mehrere
+Versionen erscheinen als aufklappbare Gruppen, immer numerisch absteigend
+(v5, v4, v3), unabhängig von der Spaltensortierung. Aktualisieren behält
+aufgeklappte Flüge/Versionen und die~Dateiauswahl. Diese Anzeige verschiebt
+oder benennt keine Dateien auf dem Datenträger um.
+
 Für einen gestoppten Flug erzeugt \ui{Lokale PDF erstellen} oder
 \ui{Lokale PDF neu erstellen} eine neue Revision in
 \filepath{reports/}. Frühere PDFs, Rohdaten und Uploadbestätigungen
@@ -1327,7 +1339,8 @@ Fassungen. Protokollfehler nennen bereinigte Aktion, HTTP-Status, Inhaltstyp
 und einen begrenzten Antwortauszug.
 
 Ohne gespeicherten Schlüssel öffnet \ui{Flug beginnen} die API-Einstellungen.
-Aufgeklappte Flüge zeigen einzelne PDFs; Doppelklick öffnet den Standardviewer.
+Flug und gegebenenfalls Version aufklappen, um einzelne PDFs zu sehen;
+Doppelklick öffnet den Standardviewer.
 \ui{Ordner mit PDFs öffnen} führt direkt zum PDF-Ordner. Namen enthalten UTC,
 Flugzeug, Sprache und Version. Ein wiederaufnehmbarer privater Katalog ordnet
 ältere Layouts ohne Änderung von Bytes oder Uploadidentitäten; JSON-Dateien
@@ -1752,6 +1765,45 @@ Bordmessungen und ergeben keine tatsächliche Passagierzahl oder Verspätungsnot
 Alte OFP-Schnappschüsse bleiben lesbar; neue Felder erfordern explizites
 Neuladen/Importieren. Kartenabrufe betreffen nur den sichtbaren Ausschnitt,
 mit 45 Sekunden Netzbudget und Abbruch nach dem ersten Anbieterfehler.
+
+Eine zugeordnete OFP ergänzt Plan-/Ist-Statistik in allen vier Sprachen;
+Karten, Profile und Landedetails bleiben erhalten. Die abschließende
+Flugplantabelle mit wiederholtem Kopf behält alle OFP-Punkte mit Plan-/Ist-Zeit
+seit Start, Simulator-UTC, Resttreibstoff, Druckhöhe, TAS, GS, Wind und
+Passageabstand. Zwischenpunkte erfordern geordnete Passagen innerhalb 2 NM;
+Flughafenwerte nutzen erkannten Start/Landung innerhalb 10 NM. Fehlendes bleibt
+unbekannt. Summen und Phasen trennen Flug-/Blockzeit, Distanz, Treibstoff,
+Gewichte und geschätzte Verspätung. Mehr Starttreibstoff gilt nicht als Einsparung.
+
+Vektorgrafiken zeigen Zeit-, Bordtreibstoff-, beladungsbereinigte
+Nettoverbrauchs-, Druckhöhen- und Routenabweichung am OFP-Projektionspunkt.
+Diese Planschätzungen unterscheiden sich von den geordneten Endtabellenwerten.
+Zeitgewichtete Histogramme, Vorzeichenmittel, MAE, RMSE und P95 des absoluten
+Fehlers nutzen ursprüngliche Messungen unabhängig von Grafikausdünnung.
+P95 verwendet Klassen von 1 s, 0,1 NM und 25 ft; die Überlaufklasse gibt eine
+Untergrenze. Orange Kartensegmente überschreiten das beschreibende 5-NM-Band;
+die Höhe verwendet ±300 ft. Dies sind keine Betriebsgrenzen oder Pilotennoten.
+Phasenmittel enthalten IAS/TAS/GS, V/S und Wind relativ zum geflogenen Kurs.
+
+Neue optionale Druckhöhen-, Parkbremsen- und Zulu-Kalenderdaten bleiben von
+Rechner-UTC getrennt. Höhendifferenzen benötigen beide Übergangshöhen.
+Geschätztes OUT/IN erfordert bestätigten Stillstand/Bewegung und identifiziert
+keinen Standplatz. Flugsummen benötigen passende Flughäfen, einen erfassten
+Flug und vollständige betreffende Daten. Lücken, Betankung, inkompatible Daten
+und alte fehlende Felder unterdrücken betroffene Aussagen. Alte Aufzeichnungen
+bleiben lesbar; expliziter OFP-Import/Neuladen oder eine neue Aufzeichnung
+liefert zusätzliche Daten. Frühere PDFs und Belege bleiben erhalten.
+
+Kompakte Analysefelder verbinden Plan, Ist und Differenz in einer Zelle und
+gruppieren kurze Grenzphasen mit Steigflug, Sinkflug oder Ankunft. Ursprüngliche
+Statistik bleibt erhalten. Grün bedeutet weniger Zeit/Nettoverbrauch oder mehr
+Resttreibstoff, Rot das Gegenteil. Geschwindigkeitsantennen zeigen beobachtete
+Minima/Maxima und gewichtete Mittel; Phasenbalken vergleichen Plan und Ist.
+Dies sind keine Konfidenzintervalle. Bestätigte doppelte Flughafenzeilen dürfen
+denselben Endzeitpunkt teilen, ohne gültige Summen zu unterdrücken. Fehlendes
+erscheint als Strich. Alte AMSL-Höhen tragen einen Stern und liefern keine
+Druckhöhendifferenz; ohne Simulator-UTC zeigt die Spalte ausdrücklich Plan-UTC.
+Der Kontext fehlender Kanäle wird einmal erklärt.
 
 Die SimBrief-Hauptsteuerung zeigt den geladenen Plan; gespeicherte Flugdetails
 zeigen die eigene OFP-Zuordnung. Abschluss nutzt den geladenen Plan für den

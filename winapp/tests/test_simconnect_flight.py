@@ -779,6 +779,32 @@ class SimConnectFlightTests(unittest.TestCase):
         self.assertNotIn("gear", provider.values)
         self.assertNotIn("gear", provider.value_timestamps)
 
+    def test_optional_pressure_and_simulator_calendar_remain_independent(self) -> None:
+        """Capture standard pressure and simulator UTC without using host UTC.
+
+        Returns:
+            None: Native pressure/calendar/parking channels survive normalization;
+                absent or invalid calendar values leave simulator UTC unknown.
+        """
+        provider, _dll = self.provider(2024)
+        provider.latest_core = (
+            49.0, 14.0, 1000.0, 850.0, 120.0, 1.0,
+            110.0, 130.0, 105.0, 0.0, 0.0, 0.0, 90.0,
+        )
+        provider.values.update({
+            "pressure_altitude": 9000.0, "parking_brake": 1.0,
+            "zulu_year": 2020.0, "zulu_month": 2.0, "zulu_day": 29.0,
+            "zulu_seconds": 3600.5,
+        })
+        sample = provider._sample_from_core(4.0)
+        self.assertEqual(9000, sample.pressure_altitude_m)
+        self.assertTrue(sample.parking_brake)
+        self.assertEqual("2020-02-29T01:00:00.500+00:00", sample.simulator_utc)
+        provider.values["zulu_day"] = 30.0
+        self.assertIsNone(provider._sample_from_core(5.0).simulator_utc)
+        provider.values.pop("zulu_year")
+        self.assertIsNone(provider._sample_from_core(6.0).simulator_utc)
+
     def test_aircraft_load_clears_old_optional_capability_values(self) -> None:
         """Prevent a new aircraft inheriting the previous aircraft's signals.
 

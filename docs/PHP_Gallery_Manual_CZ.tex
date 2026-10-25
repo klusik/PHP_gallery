@@ -1143,7 +1143,7 @@ neprokazují. Viz \filepath{winapp/README.md}. Hostované instalátory výslovn�
 používají x64 CPython 3.14.x. Před zabalením se kontroluje sestavovací interpret
 i~skutečná patch verze, implementace a~šířka ukazatele uvnitř EXE pomocí výpisu
 před spuštěním GUI. Nesprávný či chybějící výpis přípravu odmítne. Nezávislá
-zdrojová verze aplikace je 0.9.0.
+zdrojová verze aplikace je 0.10.0.
 
 Přibalená nativní DLL SimConnect pochází beze změn z~oficiálního
 MSFS 2024 SDK Core 1.7.3. Velikost 84\,480 bajtů a~SHA256 dokumentuje
@@ -1215,6 +1215,17 @@ Otevřít log aplikace používá existující log. \ui{Dokončit let a~vytvoři
 bez potvrzování vytvoří čtyři jazykové verze, dokončí přijatou práci a~povinné
 doručení, poté revokuje uložený klíč. Funguje i~při vypnuté automatické tvorbě.
 
+Vybrané jazyky se~generují současně v~samostatných procesech, jeden na~jazyk
+(nyní nejvýše čtyři). Analýza letu i~mapové podklady se~připraví jednou;
+hlavní aplikace nahraje PDF až~po~úspěšném dokončení celé sady. Při chybě
+zůstanou hotová PDF pro obnovu. Zrušení zastaví čekající práci, vyčká
+na~běžící generování a~ponechá jeho dokončené soubory.
+
+Při jediné verzi ukáže rozbalený let přímo soubory. Více verzí tvoří
+rozbalovací skupiny, vždy číselně sestupně (v5, v4, v3) bez ohledu na~řazení
+sloupců. Obnovení zachová rozbalené lety i~verze a~výběr souborů. Toto
+zobrazení nepřesouvá ani nepřejmenovává soubory na~disku.
+
 Pro zastavený let vytvoří \ui{Vytvořit místní PDF} nebo \ui{Znovu vytvořit
 místní PDF} novou číslovanou verzi v~\filepath{reports/}. Starší PDF, surové
 vzorky i~potvrzení uploadu zůstanou zachované. Klíč není potřeba, nedojde
@@ -1252,7 +1263,8 @@ Chyby protokolu uvádějí anonymizovanou akci, HTTP stav, typ obsahu a~krátký
 výpis odpovědi.
 
 Bez uloženého klíče se hlavní akce změní na~\ui{Zahájit let} a~otevře nastavení
-API. Rozbalený let ukazuje jednotlivá PDF, dvojklik otevře výchozí prohlížeč.
+API. Rozbalte let a~případnou verzi pro jednotlivá PDF; dvojklik otevře
+výchozí prohlížeč.
 \ui{Otevřít složku s~PDF} vede pouze do~složky PDF. Názvy obsahují zaznamenané
 UTC, letadlo, jazyk a~verzi. Obnovitelný soukromý katalog sjednotí starší
 rozložení beze změny obsahu nebo uploadové identity; JSONy jsou v~
@@ -1667,6 +1679,43 @@ data vysvětlí poznámka v~grafu. Plán není měření: neodvozuje cestující
 zpoždění ani nezaznamenané palivo. Starší snímky OFP lze číst; nové údaje
 získají výslovným novým načtením/importem. Síťové požadavky pokrývají pouze
 zobrazený výřez s~limitem 45 sekund a~po první chybě poskytovatele se zastaví.
+
+Připojené OFP doplní ve~všech čtyřech jazycích statistiku plánu a~skutečnosti;
+mapy, profily a~rozbor přistání zůstávají. Závěrečný letový plán s~opakovanou
+hlavičkou zachová všechny body OFP s~plánovaným/skutečným časem od~vzletu,
+UTC simulátoru, zbývajícím palivem, tlakovou výškou, TAS, GS, větrem
+a~vzdáleností průletu. Mezilehlé body vyžadují pořadí a~průlet do~2 NM;
+letiště používají rozpoznaný vzlet/přistání do~10 NM. Chybějící přiřazení
+zůstává neznámé. Souhrny a~fáze rozlišují čas ve~vzduchu/mezi stojánkami,
+vzdálenost, palivo, hmotnosti a~odhad zpoždění. Vyšší počáteční zásoba není úspora.
+
+Vektorové grafy odchylek ukazují čas, zásobu paliva, čistý úbytek očištěný
+o~počáteční zásobu, tlakovou výšku a~vzdálenost od~trasy podle průmětu na~OFP.
+Tyto plánovací odhady se~liší od~přiřazených průletů závěrečné tabulky.
+Histogramy vážené časem, průměr se~znaménkem, MAE, RMSE a~P95 absolutní
+odchylky využívají původní uložené vzorky nezávisle na~ředění grafů.
+P95 využívá intervaly 1 s, 0,1 NM a~25 ft; krajní interval udává dolní mez.
+Oranžové úseky mapy překračují popisné pásmo 5 NM, výška používá ±300 ft.
+Jde o~srovnání, nikoli provozní limity či~skóre pilota. Fáze obsahují průměry
+IAS/TAS/GS, V/S a~vítr vůči skutečné trati.
+
+Nové volitelné údaje tlakové výšky, parkovací brzdy a~kalendáře Zulu zůstávají
+oddělené od~UTC počítače. Výškové rozdíly potřebují obě přechodové výšky letišť.
+Odhad OUT/IN vyžaduje souvislé stání/pohyb a~neurčuje konkrétní stojánku.
+Celkové srovnání potřebuje odpovídající letiště, jediný zachycený let a~úplná
+příslušná data. Výpadky, doplnění paliva, nesrovnatelné datum a~chybějící starší
+údaje potlačí příslušné závěry. Staré záznamy lze dále číst; nové důkazy dodá
+výslovné načtení/import OFP nebo nový záznam. Starší PDF a~potvrzení zůstávají.
+
+Kompaktní panely spojují plán, skutečnost a~rozdíl v~jedné buňce a~krátké
+hraniční fáze seskupují se~stoupáním, klesáním či~příletem. Původní statistiky
+zůstávají. Zelená znamená nižší čas/čistou spotřebu nebo více zbývajícího paliva,
+červená opak. Rychlostní vousy ukazují naměřené minimum/maximum a~vážený průměr;
+fázové pruhy porovnávají plán a~skutečnost. Nejde o~intervaly spolehlivosti.
+Ověřené duplicitní letištní řádky mohou sdílet koncový okamžik bez~potlačení
+platných souhrnů. Chybějící hodnota má pomlčku. Starší výška AMSL je označená
+hvězdičkou a~nevytváří tlakové odchylky; bez~UTC simulátoru sloupec výslovně
+ukazuje pouze plánované UTC. Kontext chybějících kanálů se~vysvětlí jednou.
 
 Hlavní ovládání SimBriefu ukazuje načtený plán; detail uloženého letu ukazuje
 jeho vlastní OFP. Dokončení použije načtený plán pro aktuální nebo jediný

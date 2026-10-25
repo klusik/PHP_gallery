@@ -100,6 +100,36 @@ class FlightDispatchTests(unittest.TestCase):
             self.assertEqual("", recovered.flight_number)
             self.assertIsNone(recovered.points[1].elapsed_seconds)
 
+    def test_comparison_fields_survive_provider_normalization(self) -> None:
+        """Retain optional speed/wind/reference fields without altering old plans.
+
+        Returns:
+            None: OFP schedule, stage, wind, TAS and ground-distance provenance
+                normalize independently; absent fields keep additive defaults.
+        """
+        plan = parse_dispatch({
+            "origin": {"icao_code": "AAAA", "pos_lat": 0, "pos_long": 0,
+                       "trans_alt": "6000"},
+            "destination": {"icao_code": "BBBB", "pos_lat": 1, "pos_long": 1,
+                            "trans_alt": "5000"},
+            "params": {"units": "kgs"},
+            "general": {"route_distance": "80", "cruise_tas": "420"},
+            "times": {"sched_off": "1792900000", "taxi_out": "600"},
+            "navlog": {"fix": {"ident": "TEST", "pos_lat": 0.5,
+                "pos_long": 0.5, "true_airspeed": "420", "groundspeed": "400",
+                "wind_dir": "270", "wind_spd": "30", "stage": "CRZ"}},
+        })
+        point = plan.points[1]
+        self.assertEqual((420, 400, 270, 30, "CRZ"), (
+            point.true_airspeed_kt, point.ground_speed_kt,
+            point.wind_direction_deg, point.wind_speed_kt, point.stage,
+        ))
+        self.assertEqual("6000", plan.transition_altitude_ft)
+        self.assertEqual("5000", plan.arrival_transition_altitude_ft)
+        self.assertEqual("route", plan.distance_source)
+        self.assertEqual("600", plan.taxi_out_seconds)
+        self.assertTrue(plan.scheduled_takeoff_utc.endswith("+00:00"))
+
     def test_map_print_size_has_native_pixels_and_density_metadata(self) -> None:
         """Create a ten-by-five-inch map directly at the requested print density.
 
