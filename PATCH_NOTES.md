@@ -1,5 +1,23 @@
 # Patch notes
 
+## Version 0.144.11
+
+This release recorded release-origin and predecessor metadata without changing
+application behavior.
+
+### Highlights
+
+- Recorded release metadata only; no product behavior changes were evidenced.
+
+### Technical Details
+
+- Added `.github/release-origins/v_0.144.11.json` and
+  `.github/release-predecessors/v_0.144.11.json`.
+
+### User Impact
+
+- No direct visitor or administrator behavior changes were evidenced.
+
 ## Version 0.144.10
 
 Fixed automatic updates that stopped while waiting to activate a prepared
