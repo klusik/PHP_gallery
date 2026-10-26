@@ -1,5 +1,26 @@
 # Patch notes
 
+## Version 0.144.9
+
+Recorded the release origin and predecessor metadata for v0.144.9.
+
+### Highlights
+
+#### Release metadata
+
+- Added immutable origin and predecessor records for this release.
+
+### Technical Details
+
+#### Release metadata
+
+- Added `.github/release-origins/v_0.144.9.json` and
+  `.github/release-predecessors/v_0.144.9.json`.
+
+### User Impact
+
+- Visitor and administrator behavior did not change.
+
 ## Version 0.144.8
 
 Fixed automatic-update activation waiting behind continuing website traffic and
