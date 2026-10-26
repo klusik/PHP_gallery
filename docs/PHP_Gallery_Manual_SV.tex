@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.12}
+\newcommand{\version}{0.144.13}
 \newcommand{\manualdate}{26~oktober~2026}
 
 \hypersetup{
@@ -3331,10 +3331,20 @@ faktiska tidigare programfiler och~kanalinställningar, även borttagna filer
 och~borttagning av nyskapade sökvägar. Båda identiteter, arkiv, säkerhetskopior
 och~diagnoser bevaras. Ett misslyckat återställningsjobb skapar inget nytt.
 
+Den enda offentliga underhållsbrytaren är \codeword{maintenance.lock}
+i installationens rot. Även en manuellt skapad tom fil aktiverar underhåll;
+när den tas bort slutar manuellt underhåll. Jobb och återställningsbevis ensamma
+stänger inte webbplatsen. Granska jobbet före borttagning av dess markör efter
+ett avbrutet skrivsteg. Äldre markörer importeras före åtkomst och deras exakta
+byte bevaras privat. Markören ingår inte i paket eller filåterställning.
+Bekräftad körmiljö avslutar det isolerade automatiska återställningsfönstret.
+Programfiler uppdateras fortfarande på sin vanliga plats.
+
 Filåterställning kräver verifierade säkerhetskopior, matchande faktiskt schema
 och~migreringshistorik samt bevis på att migreringar inte haft effekter.
-Delade körningslås avslutas före aktivering; stödda målpaket håller spärren
-till jobbets slut. Vanlig körning under observationsfönstret gör återställning
+Delade körningslås avslutas före aktivering. Spärren behålls genom migreringar
+och nödvändigt slutförande. Därefter bekräftas en användbar körmiljö och
+webbplatsen öppnas före fysisk rensning, som kan vänta eller pausas under drift. Vanlig körning under observationsfönstret gör återställning
 osäker även med oförändrat schema. Påbörjade overifierade migreringar,
 okänd databas, saknade bevis och~äldre paket utan protokollet förblir
 misslyckade med reparationsanvisningar. Databasmigreringar och~programdata

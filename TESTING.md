@@ -1059,7 +1059,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.144.12. Release verification uses the
+This guide applies to PHP Gallery Version 0.144.13. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4862,8 +4862,13 @@ browser HTML, three-second refresh, retry/no-store/noindex headers, empty HEAD,
 unchanged plain replies for JSON/media/POST and absence of reflected request or
 private job data. Refused requests must leave the runtime lease absent and job
 state untouched. Removing only the owned gate restores a normal response at the
-same URL. The fixture uses no installed configuration, database or external
-assets. Desktop and narrow rendering are reviewed separately from HTTP evidence.
+same URL. It also exercises an empty root `maintenance.lock`, active-job/window records
+without a marker, exact-byte legacy marker import and committed-runtime stale
+marker retirement while cleanup is still running. The real recovery fixture
+refuses commit before migrations/finalization, commits through the production
+owners, pauses cleanup, admits an independent public reader and refuses an
+isolated rollback claim after reopening. The fixture uses no installed
+configuration, database or external assets. Desktop and narrow rendering are reviewed separately from HTTP evidence.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a

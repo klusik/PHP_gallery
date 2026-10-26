@@ -102,9 +102,23 @@ protected from pruning; completed child diagnostics also have a compact source
 receipt. A bounded 32-commit exclusion list and highest failed stable version
 prevent automatic reinstall of known bad sources.
 
+The early-runtime owner permanently imports old `cache/updates/activation.json`
+markers before admission, exclusively creates the canonical marker without
+overwriting another owner, and preserves exact legacy bytes in private receipts.
+This bridge supports older workers during an in-place upgrade. It can retire
+only after evidence proves no supported installed worker publishes the old name;
+that usage evidence is currently unknown. Empty manual markers remain supported.
+The marker is excluded from Git and all package/rollback ownership. Existing
+HTTP fixtures cover manual presence/removal, old marker import and active jobs
+without maintenance; real updater/SQL fixtures cover critical refusal and public
+admission during paused cleanup. Production transition acceptance is pending.
+
 The runtime lease is permanent cooperative protection for Gallery HTTP/CLI
-processes. An activation gate persists until a new job completes; existing
-legacy gates still honor their original activation-complete receipt. Authenticated
+processes. The sole public gate is root `maintenance.lock`. New jobs persist
+`runtime_committed` after migrations and required finalization, close the
+rollback window and reopen before physical cleanup. A paused or failed cleanup
+does not recreate maintenance or claim an isolated rollback baseline. Existing
+legacy gates retain their original completion semantics. Authenticated
 Admin updater/private ticket admission retains all later authentication checks.
 Unknown storage and ordinary runtime use refuse unsafe restoration. External
 writers require operator coordination. Gated failed jobs need hosting CLI cron

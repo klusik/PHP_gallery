@@ -298,6 +298,12 @@ $assert(
 $marker['recovery_isolation'] = true;
 $assert(!\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
     'An isolated job must stay gated after file activation but before migrations complete.');
+$job['stage'] = 'cleanup';
+$job['checkpoints']['runtime_committed'] = true;
+file_put_contents($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json', json_encode($job));
+$assert(\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
+    'A durably committed runtime must reopen before physical cleanup completes.');
+unset($job['checkpoints']['runtime_committed']);
 $job['status'] = 'completed';
 file_put_contents($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json', json_encode($job));
 $assert(\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),

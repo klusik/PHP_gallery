@@ -35,6 +35,9 @@ require a browser/database only when the behavior needs one.
   do not establish child dependencies. Assert the child's real exit status,
   stderr and persisted evidence; synchronize exact success markers with
   coverage.
+- Refresh the parent's PHP stat cache before asserting paths changed by an
+  independent HTTP server or worker. A successful child unlink does not clear
+  a previously cached positive `is_file()` result in the parent process.
 - Read a whole split module with `module_source()` from
   `support/module_source.php`.
   Never require a part outside its module. Preserve path-depth regression

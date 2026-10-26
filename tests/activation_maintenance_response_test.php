@@ -15,6 +15,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../app/early_runtime.php';
+require_once __DIR__ . '/../app/release_file_policy.php';
 
 /**
  * Bound startup and each request to the disposable early-runtime server.
@@ -46,7 +47,7 @@ function maintenance_response_assert(bool $condition, string $message): void
 }
 
 /**
- * Read one actual early-runtime HTTP response without following redirects.
+ * Read a real early-runtime response and refresh external filesystem observations.
  * @param string $url Owned loopback server URL.
  * @param string $method HTTP method to exercise, including HEAD and POST.
  * @param string $accept Requested response representation.
@@ -65,6 +66,10 @@ function maintenance_http_response(
         'timeout' => MAINTENANCE_HTTP_TIMEOUT_SECONDS,
     ]]);
     $body = file_get_contents($url, false, $context);
+    // The server is a separate PHP process. Its marker rename/unlink does not
+    // invalidate this parent's positive stat cache, including the preceding
+    // refusal assertion that deliberately observed a still-existing old gate.
+    clearstatcache();
     return [
         'body' => (string) $body,
         'headers' => array_map('strtolower', $http_response_header ?? []),
@@ -72,7 +77,15 @@ function maintenance_http_response(
 }
 
 $root = sys_get_temp_dir() . '/gallery-maintenance-' . bin2hex(random_bytes(8));
+maintenance_response_assert(
+    !\Gallery\Core\release_file_policy_is_production_path('maintenance.lock')
+        && !\Gallery\Core\release_file_policy_is_updater_path('maintenance.lock')
+        && \Gallery\Core\release_file_policy_is_protected_path('maintenance.lock')
+        && !\Gallery\Core\release_file_policy_is_integrity_path('maintenance.lock'),
+    'The installation-owned maintenance switch entered package or rollback ownership.',
+);
 $jobId = '20261026000000-abcdef123456';
+$replacementId = '20261026000001-abcdef123457';
 $updates = $root . '/cache/updates';
 // Purpose: confine disposable gate state to the executing account.
 // Type: int. Units: POSIX permission bits. Scope: this fixture's random root.
@@ -83,7 +96,7 @@ $job = ['id' => $jobId, 'status' => 'running', 'checkpoints' => []];
 $marker = ['job_id' => $jobId, 'recovery_isolation' => true];
 file_put_contents($updates . '/jobs/' . $jobId . '/job.json',
     json_encode($job, JSON_THROW_ON_ERROR));
-file_put_contents($updates . '/activation.json',
+file_put_contents($root . '/maintenance.lock',
     json_encode($marker, JSON_THROW_ON_ERROR));
 $reservation = stream_socket_server('tcp://127.0.0.1:0', $error, $message);
 maintenance_response_assert(is_resource($reservation),
@@ -164,18 +177,94 @@ try {
         && $head['body'] === '', 'HEAD emitted a maintenance document body.');
     maintenance_response_assert(
         !is_file($updates . '/runtime-use.lock')
-            && is_file($updates . '/activation.json')
+            && is_file($root . '/maintenance.lock')
             && json_decode(file_get_contents($updates . '/jobs/' . $jobId
                 . '/job.json'), true, flags: JSON_THROW_ON_ERROR) === $job,
         'Presentation admitted a runtime reader or changed the active job.',
     );
-    unlink($updates . '/activation.json');
+    unlink($root . '/maintenance.lock');
     $finished = maintenance_http_response($url, 'GET', 'text/html');
     maintenance_response_assert(
         str_contains($finished['headers'][0] ?? '', '200')
             && $finished['body'] === "OK\n",
         'The same URL did not return normally after maintenance ended.',
     );
+    // Active jobs and rollback evidence alone never switch maintenance on.
+    file_put_contents($updates . '/active-job.json',
+        json_encode(['job_id' => $jobId], JSON_THROW_ON_ERROR));
+    file_put_contents($updates . '/rollback-window.json',
+        json_encode(['job_id' => $jobId], JSON_THROW_ON_ERROR));
+    $background = maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert($background['body'] === "OK\n"
+        && str_contains($background['headers'][0] ?? '', '200'),
+        'An active job or rollback window independently enabled maintenance.');
+    // An operator can create an empty marker: existence is sufficient, with no
+    // job discovery, executable PHP contents or hidden expiry requirement.
+    file_put_contents($root . '/maintenance.lock', '');
+    $manual = maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert(str_contains($manual['headers'][0] ?? '', '503'),
+        'An empty manual maintenance.lock did not close public admission.');
+    unlink($root . '/maintenance.lock');
+
+    // Import a still-running old worker's exact marker before admitting any
+    // new-runtime request, and retain its bytes outside the public switch.
+    $legacyBytes = json_encode($marker, JSON_THROW_ON_ERROR);
+    file_put_contents($updates . '/activation.json', $legacyBytes);
+    $legacy = maintenance_http_response($url, 'GET', 'text/html');
+    $receipt = $updates . '/legacy-activation-'
+        . hash('sha256', $legacyBytes) . '.json';
+    maintenance_response_assert(str_contains($legacy['headers'][0] ?? '', '503')
+        && file_get_contents($root . '/maintenance.lock') === $legacyBytes
+        && !is_file($updates . '/activation.json')
+        && file_get_contents($receipt) === $legacyBytes,
+        'A legacy marker opened the runtime or lost its original bytes.');
+    $newMarker = $marker + ['updated_at' => time()];
+    $newBytes = json_encode($newMarker, JSON_THROW_ON_ERROR);
+    file_put_contents($root . '/maintenance.lock', $newBytes);
+    file_put_contents($updates . '/activation.json', $legacyBytes);
+    maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert(!is_file($updates . '/activation.json')
+        && file_get_contents($root . '/maintenance.lock') === $newBytes,
+        'A later marker timestamp prevented retirement or overwrote the owner.');
+
+    // An unrelated owner cannot discard legacy isolation. Only the old job's
+    // durable cancelled/superseded link authorizes retiring that old marker.
+    mkdir($updates . '/jobs/' . $replacementId, $directoryMode);
+    $replacement = ['id' => $replacementId, 'status' => 'running', 'checkpoints' => []];
+    file_put_contents($updates . '/jobs/' . $replacementId . '/job.json',
+        json_encode($replacement, JSON_THROW_ON_ERROR));
+    file_put_contents($root . '/maintenance.lock',
+        json_encode(['job_id' => $replacementId, 'recovery_isolation' => true], JSON_THROW_ON_ERROR));
+    file_put_contents($updates . '/activation.json', $legacyBytes);
+    maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert(is_file($updates . '/activation.json'),
+        'An unrelated canonical owner discarded unverified legacy isolation.');
+    $superseded = $job;
+    $superseded['status'] = 'cancelled';
+    $superseded['result']['superseded_by'] = $replacementId;
+    file_put_contents($updates . '/jobs/' . $jobId . '/job.json',
+        json_encode($superseded, JSON_THROW_ON_ERROR));
+    maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert(!is_file($updates . '/activation.json')
+        && file_get_contents($receipt) === $legacyBytes,
+        'A durably superseded legacy marker could resurrect after recovery.');
+    unlink($root . '/maintenance.lock');
+    $retired = maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert($retired['body'] === "OK\n",
+        'Retained legacy evidence recreated maintenance after marker removal.');
+
+    // A durable runtime commit permits stale-marker retirement while physical
+    // cleanup is still running; file activation alone above did not do so.
+    $job['stage'] = 'cleanup';
+    $job['checkpoints']['runtime_committed'] = true;
+    file_put_contents($updates . '/jobs/' . $jobId . '/job.json',
+        json_encode($job, JSON_THROW_ON_ERROR));
+    file_put_contents($root . '/maintenance.lock', $legacyBytes);
+    $cleanup = maintenance_http_response($url, 'GET', 'text/html');
+    maintenance_response_assert($cleanup['body'] === "OK\n"
+        && !is_file($root . '/maintenance.lock')
+        && is_file($receipt),
+        'A committed runtime remained closed during background cleanup.');
     echo "Activation maintenance HTML, wire headers and non-replaying replies: PASS\n";
 } finally {
     if (is_resource($process)) {
@@ -183,11 +272,18 @@ try {
         proc_close($process);
     }
     // Remove only known files beneath the random fixture-owned installation.
-    foreach ([$updates . '/activation.json', $updates . '/runtime-use.lock',
-        $updates . '/jobs/' . $jobId . '/job.json', $root . '/server.log'] as $file) {
+    foreach (array_merge([$root . '/maintenance.lock', $updates . '/runtime-use.lock',
+        $updates . '/activation.json', $updates . '/active-job.json',
+        $updates . '/rollback-window.json',
+        $updates . '/jobs/' . $jobId . '/runtime-used.json',
+        $updates . '/jobs/' . $jobId . '/worker.lock',
+        $updates . '/jobs/' . $replacementId . '/job.json',
+        $updates . '/jobs/' . $jobId . '/job.json', $root . '/server.log'],
+        glob($updates . '/legacy-activation-*.json') ?: []) as $file) {
         if (is_file($file)) { unlink($file); }
     }
-    foreach ([$updates . '/jobs/' . $jobId, $updates . '/jobs', $updates,
+    foreach ([$updates . '/jobs/' . $jobId, $updates . '/jobs/' . $replacementId,
+        $updates . '/jobs', $updates,
         $root . '/cache', $root] as $directory) {
         if (is_dir($directory)) { rmdir($directory); }
     }

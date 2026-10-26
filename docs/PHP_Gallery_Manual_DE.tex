@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.144.12}
+\newcommand{\version}{0.144.13}
 \newcommand{\manualdate}{26.~Oktober~2026}
 
 \hypersetup{
@@ -3434,10 +3434,22 @@ Dateien und~Entfernung neu angelegter Pfade. Beide Identitäten, Archive,
 Sicherungen und~Diagnosen bleiben erhalten. Ein fehlgeschlagener Rücksetzauftrag
 erzeugt keinen weiteren.
 
+Der einzige öffentliche Wartungsschalter ist \codeword{maintenance.lock}
+im Installationsverzeichnis. Auch eine manuell angelegte leere Datei aktiviert
+Wartung; ihre Entfernung beendet manuelle Wartung. Aufträge und
+Rücksetzbelege allein sperren die Website nicht. Prüfen Sie nach unterbrochenen
+Schreibvorgängen den Auftrag vor dem Entfernen seines Markers. Alte Marker
+werden vor dem Zugriff übernommen; ihre exakten Bytes bleiben privat erhalten.
+Der Marker gehört weder zum Paket noch zum Dateirücksetzen. Die bestätigte
+Laufzeit beendet das isolierte automatische Rücksetzfenster. Programmdateien
+werden weiterhin an ihrem bisherigen Ort ersetzt.
+
 Dateiwiederherstellung verlangt geprüfte Sicherungen, tatsächliche
 Schema-/Historiengleichheit und~nachweislich wirkungslose Migrationen.
 Geteilte Laufzeitsperren müssen vor Aktivierung enden; unterstützte Zielpakete
-halten die Sperre bis zum Auftragsabschluss. Gewöhnlicher Betrieb im
+halten die Sperre durch Migrationen und notwendige Finalisierung. Danach wird
+die nutzbare Laufzeit bestätigt und die Website vor der physischen Bereinigung
+geöffnet. Die Bereinigung kann im laufenden Betrieb warten oder pausieren. Gewöhnlicher Betrieb im
 Beobachtungsfenster macht Rücksetzen auch bei gleichem Schema unsicher.
 Begonnene ungeprüfte Migrationen, unbekannter Datenbankzustand, fehlende Belege
 und~ältere Pakete ohne Protokoll bleiben mit Reparaturanleitung fehlgeschlagen.

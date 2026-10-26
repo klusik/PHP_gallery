@@ -35,7 +35,10 @@ Updater recovery reads the complete bounded migration ledger, including
 Versioned evidence distinguishes intentionally retired migration files using
 the installed manifest from missing/corrupt declared files. Historical rows
 remain intact and non-pending; no migration or schema change is introduced by
-this updater repair. Old saved evidence retains its original comparison
+this updater repair. A finalized runtime commits only after forward migrations
+complete; its isolation window closes before physical cleanup. Subsequent public
+traffic therefore cannot be treated as an untouched automatic rollback window.
+Old saved evidence retains its original comparison
 contract; absent historical evidence is never reconstructed as a past DB fact.
 
 
@@ -75,7 +78,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.144.12. Version 0.97 adds the recoverable gallery-trash
+application version 0.144.13. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in

@@ -1284,6 +1284,47 @@ namespace {
         // publisher bytes before draining instead of rereading deleted staging.
         $expectedOrdinaryCss = file_get_contents(
             $ordinaryRoot . '/public/assets/styles/utilities.css');
+        // Drive the actual critical owners to their durable commit, then pause
+        // cleanup. Another process must already be able to use the website.
+        $ordinaryState = \Gallery\Services\application_update_load_job($ordinary['id']);
+        recovery_check(\Gallery\Services\application_update_job_activate($ordinaryState),
+            'Prepared ordinary activation did not acquire the drained runtime.');
+        recovery_refuses(static function () use (&$ordinaryState): void {
+            \Gallery\Services\application_update_runtime_commit($ordinaryState);
+        }, 'Runtime reopened before migrations and finalization.');
+        recovery_check(is_file($root . '/maintenance.lock'),
+            'Critical activation stopped using the sole root maintenance marker.');
+        $migrated = false;
+        for ($slice = 0; $slice < RECOVERY_FIXTURE_DRAIN_SLICES; $slice++) {
+            if (\Gallery\Services\application_update_job_migrate_slice($ordinaryState)) {
+                $migrated = true;
+                break;
+            }
+        }
+        recovery_check($migrated && is_file($root . '/maintenance.lock'),
+            'Migration completion lost maintenance before finalization.');
+        \Gallery\Services\application_update_job_finalize($ordinaryState);
+        \Gallery\Services\application_update_runtime_commit($ordinaryState);
+        \Gallery\Services\application_update_runtime_commit($ordinaryState);
+        recovery_check($ordinaryState['stage'] === 'cleanup'
+            && !empty($ordinaryState['checkpoints']['runtime_committed'])
+            && !is_file($root . '/maintenance.lock')
+            && is_dir($ordinaryRoot)
+            && is_file(\Gallery\Services\application_update_job_dir($ordinary['id'])
+                . '/runtime-window-closed.json'),
+            'The usable runtime was not committed before physical cleanup.');
+        \Gallery\Services\application_update_control_pause($ordinary['id']);
+        $pausedCleanup = \Gallery\Services\application_update_process_job($ordinary['id']);
+        $publicCleanup = recovery_worker_probe($root, $token, $ordinary['id'], true);
+        recovery_check($pausedCleanup['status'] === 'paused'
+            && $pausedCleanup['stage'] === 'cleanup'
+            && $publicCleanup['body'] === 'Ordinary request admitted.'
+            && $publicCleanup['runtime_lease_held'],
+            'Paused background cleanup still closed ordinary website requests.');
+        recovery_refuses(static function () use ($ordinaryState): void {
+            \Gallery\Services\application_update_assert_rollback_database($ordinaryState);
+        }, 'Runtime commit retained an unverified isolated rollback claim.');
+        \Gallery\Services\application_update_control_pause($ordinary['id'], true);
         $ordinaryResult = recovery_drain($ordinary['id']);
         recovery_check($ordinaryResult['status'] === 'completed'
             && $ordinaryResult['result']['version'] === '1.2.1'

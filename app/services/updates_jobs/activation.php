@@ -46,11 +46,14 @@ use ZipArchive;
 use function Gallery\Core\run_migrations_bounded;
 
 /**
- * Return the durable activation marker path in the existing updater workspace.
+ * Resolve the sole maintenance marker and import old installed-worker state.
+ * @return string Absolute installation-root maintenance.lock path.
  */
 function application_update_activation_gate_path(): string
 {
-    return application_update_jobs_root() . '/activation.json';
+    $root = application_update_project_root();
+    \Gallery\EarlyRuntime\import_legacy_activation_gate($root);
+    return \Gallery\EarlyRuntime\activation_gate_path($root);
 }
 
 /**
@@ -615,6 +618,31 @@ function application_update_job_finalize(array &$job): void
 }
 
 /**
+ * Commit a usable runtime before resumable physical cleanup begins.
+ *
+ * The durable checkpoint is written before closing the rollback observation
+ * window and removing the owned maintenance marker. Replay may finish those
+ * retirements, but may never infer that the previous isolated rollback window
+ * remains safe after public admission. No database migration is reversed.
+ * @param array{id:string,operation:string,stage:string,checkpoints:array{finalized?:bool,migrations_complete?:bool,runtime_committed?:bool,...<string,mixed>},...<string,mixed>} $job Finalized owner, updated with its cleanup stage and runtime commit.
+ * @return void Persists the usable-runtime boundary and retires only its gate.
+ * @throws RuntimeException When finalization or forward migrations are unfinished.
+ */
+function application_update_runtime_commit(array &$job): void
+{
+    if (empty($job['checkpoints']['finalized'])
+        || (($job['operation'] ?? '') !== 'rollback'
+            && empty($job['checkpoints']['migrations_complete']))) {
+        throw new RuntimeException('Runtime cannot reopen before migrations and finalization complete.');
+    }
+    $job['stage'] = 'cleanup';
+    $job['checkpoints']['runtime_committed'] = true;
+    application_update_save_job($job);
+    application_update_runtime_window_close($job);
+    application_update_activation_gate_clear((string) $job['id']);
+}
+
+/**
  * Transfer a partial source activation gate only to its verified rollback.
  * @param array<string,mixed> $job Active automatic rollback with complete ready verification.
  * @return void Preserves the gate until the same rollback durably finishes activation.
@@ -727,8 +755,8 @@ function application_update_start_recovery_replacement(
         $source = application_update_active_job();
         $markers = [];
         $owners = $source !== null ? [(string) $source['id']] : [];
-        foreach (['activation.json', 'rollback-window.json'] as $name) {
-            $path = application_update_jobs_root() . '/' . $name;
+        foreach (['activation.json' => application_update_activation_gate_path(),
+            'rollback-window.json' => application_update_jobs_root() . '/rollback-window.json'] as $name => $path) {
             if (is_file($path)) {
                 $bytes = file_get_contents($path);
                 if ($bytes === false) {
@@ -892,8 +920,8 @@ function application_update_manual_deployment_gate(array &$job): bool
             throw new RuntimeException('Manual deployment has not been accepted for forward completion.');
         }
         $sourceId = (string) ($job['manual_deployment_source_job_id'] ?? '');
-        foreach (['activation.json', 'rollback-window.json'] as $name) {
-            $path = application_update_jobs_root() . '/' . $name;
+        foreach (['activation.json' => application_update_activation_gate_path(),
+            'rollback-window.json' => application_update_jobs_root() . '/rollback-window.json'] as $name => $path) {
             if (!is_file($path)) {
                 continue;
             }
@@ -1244,10 +1272,13 @@ function application_update_recovery_ready_slice(array &$job, array $budget): bo
 /**
  * Check the unchanged database required before restoring previous files.
  * @param array<string,mixed> $source Original job with a pre-activation witness.
- * @return void Refuses entered/unproven migrations or changed database evidence.
+ * @return void Refuses committed public runtime, entered/unproven migrations or changed database evidence.
  */
 function application_update_assert_rollback_database(array $source): void
 {
+    if (!empty($source['checkpoints']['runtime_committed'])) {
+        throw new RuntimeException('Recovery runtime was already committed for public use.');
+    }
     $id = (string) $source['id'];
     $directory = application_update_job_dir($id);
     $window = application_update_read_json(application_update_jobs_root() . '/rollback-window.json');
