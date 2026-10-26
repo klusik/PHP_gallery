@@ -3398,6 +3398,11 @@ trafik inte hindrar starten. Aktivering och migreringar väntar sedan på redan
 pågående begäranden. Väntan på övertagande visas och fortsätter
 automatiskt. Även automatiska uppdateringar stänger tillträdet innan de väntar
 på befintliga läsare, så nya besökare inte fördröjer aktiveringen obegränsat.
+Med stängd spärr behåller privata arbetare en efterföljare medan gamla läsare
+avslutas; ett nytt besök behövs inte. Överlämningen väntar en sekund efter att
+låsen släppts. Administratörens konfigurerade sessionsnamn bevaras även efter
+sessionsstängning för bakgrundsarbete. Startloggen anger målversionen; en separat
+sluthändelse anger föregående och installerad version först efter beständigt slut.
 FTP-försök igen granskar installerade filer i stället för att hämta.
 Databasmigreringar körs framåt; databasändringar återställs aldrig.
 \ui{Pausa} gäller nästa säkra

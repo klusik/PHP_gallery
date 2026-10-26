@@ -4055,6 +4055,8 @@
     "admin.updates.log_autoupdate_dry_run_checked": "Der Trockenlauf der automatischen Aktualisierung hat nach einer neueren stabilen Version gesucht, ohne sie zu installieren.",
     "admin.updates.log_autoupdate_dry_run_failed": "Trockenlauf der automatischen Aktualisierung fehlgeschlagen.",
     "admin.updates.log_autoupdate_failed": "Automatisches Anwendungsupdate fehlgeschlagen.",
+    "admin.updates.log_autoupdate_started": "Die automatische Aktualisierung auf {version} wurde gestartet; die Installation läuft noch.",
+    "admin.updates.log_autoupdate_completed": "Die automatische Aktualisierung wurde abgeschlossen: {version}.",
     "admin.updates.log_autoupdate_installed": "Automatisches Anwendungsupdate hat eine neuere stabile Version installiert.",
     "admin.updates.log_beta_installed": "Der Admin hat einen Beta-Build der Anwendung installiert.",
     "admin.updates.log_beta_reverted": "Der Admin hat den Beta-Build der Anwendung vom Kopf des stabilen Branches wiederhergestellt.",

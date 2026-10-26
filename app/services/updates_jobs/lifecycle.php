@@ -423,6 +423,34 @@ function application_update_process_job(
                 application_update_activation_gate_clear((string) $job['id']);
                 application_update_set_last_job((string) $job['id']);
                 application_update_clear_active_job_if((string) $job['id']);
+                if (($job['trigger'] ?? '') === 'background'
+                    && ($job['operation'] ?? '') === 'stable_update'
+                    && function_exists(__NAMESPACE__ . '\\admin_log_event')) {
+                    try {
+                        admin_log_event(
+                            'info',
+                            'update.autoupdate_completed',
+                            function_exists(__NAMESPACE__ . '\\t')
+                                ? t('admin.updates.log_autoupdate_completed',
+                                    'Automatic update completed: {version}.',
+                                    ['version' => (string) ($job['result']['version'] ?? '')])
+                                : 'Automatic update completed: '
+                                    . (string) ($job['result']['version'] ?? '') . '.',
+                            [
+                                'job_id' => $job['id'],
+                                'operation' => $job['operation'],
+                                'installed_version' => (string) ($job['result']['version'] ?? ''),
+                                'previous_version' => (string) ($job['installed_version_at_start'] ?? ''),
+                                'target_version' => (string) ($job['parameters']['target_version'] ?? ''),
+                                'files_copied' => (int) ($job['result']['files_copied'] ?? 0),
+                            ],
+                            ['category' => 'update', 'severity' => 'notice'],
+                        );
+                    } catch (Throwable) {
+                        // A logging outage must not turn completed work into a
+                        // failed update. The durable result remains available.
+                    }
+                }
                 break;
             } else {
                 throw new RuntimeException(

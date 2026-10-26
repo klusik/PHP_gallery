@@ -3392,6 +3392,12 @@ before existing requests drain, so~ongoing traffic cannot prevent its~start.
 Actual activation and~migrations wait for~those requests to~finish.
 Ordinary automatic updates also close admission before waiting for~existing
 readers, so~new visitors cannot indefinitely delay activation.
+While the~gate is~closed, private workers retain a~paced successor when waiting
+for~old readers; another visitor is~not~required. A~one-second handoff delay
+runs after locks are~released. The~configured Admin session name survives
+post-response session close, keeping authenticated recovery reachable.
+The~start log names the~target version; a~separate completion event records
+the~previous and~installed versions only after durable completion.
 Busy takeover is~shown explicitly and~continues
 automatically. FTP retry rechecks installed files instead of~downloading.
 Recovery runs forward migrations; database changes are~never reversed.

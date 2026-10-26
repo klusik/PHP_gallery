@@ -615,13 +615,17 @@ function application_autoupdate_run_installing_check_locked(
             'info',
             'update.autoupdate_started',
             t(
-                'admin.updates.log_autoupdate_installed',
-                'Automatic application update started a resumable stable release job.',
+                'admin.updates.log_autoupdate_started',
+                'Automatic update to {version} started; installation is still in progress.',
+                ['version' => (string) ($job['parameters']['target_version'] ?? '')],
             ),
             [
                 'job_id' => (string) $job['id'],
                 'stage' => (string) $job['stage'],
                 'status' => (string) $job['status'],
+                'installed_version' => (string) ($job['installed_version_at_start'] ?? ''),
+                'target_version' => (string) ($job['parameters']['target_version'] ?? ''),
+                'branch' => (string) ($job['parameters']['branch'] ?? ''),
             ],
             ['category' => 'update', 'severity' => 'notice'],
         );

@@ -4842,6 +4842,19 @@ An ordinary background update with mismatched publisher hashes reaches activatio
 under a held shared reader. Its real gate refuses an independent new reader with
 503 before another lease is taken. After the old reader releases, the actual
 activation/migration/finalization pipeline completes and removes the gate.
+Job creation additionally retains its configured session name with no active
+session. Durable background stable completion logs previous/installed versions
+once; terminal status reads do not repeat that event.
+
+The real HTTP continuation fixture now crosses the actual early gate. It seeds
+the receipt of a yielded runtime drain before its real cleanup hops, refuses an
+ordinary follow-up with 503 and still completes private single-use successors
+without another admitted visit. Existing worker contention, replay, capability
+OFF and forbidden-maintenance negatives remain unchanged.
+The request-latency contract permits only the guarded private drain delay after
+lock release; visitor discovery and ordinary worker handoffs remain unpaced.
+The real handoff callback also acquires both kernel locks, proving that the
+predecessor released its chain and worker ownership before delivery.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a

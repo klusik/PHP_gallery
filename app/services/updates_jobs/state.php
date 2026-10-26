@@ -422,8 +422,10 @@ function application_update_create_job(
         'checkpoints' => ['migrations_started' => false],
         'error' => null,
         'result' => [],
-        'admin_session_name' => session_status() === PHP_SESSION_ACTIVE
-            ? session_name() : '',
+        // Discovery runs after session_write_close(). The configured name is
+        // still available and is not a credential; keep it for authenticated
+        // Admin recovery admission even when no session remains active here.
+        'admin_session_name' => session_name(),
     ];
     application_update_save_job($job);
     return $job;

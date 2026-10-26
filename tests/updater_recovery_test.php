@@ -1239,7 +1239,10 @@ namespace {
         file_put_contents($ordinaryRoot . '/public/assets/styles/utilities.css',
             "\n/* Archive content accepted without the publisher sweep. */\n", FILE_APPEND);
         $ordinary['stage'] = 'package_validate';
-        $ordinary['admin_session_name'] = 'PHPSESSID';
+        recovery_check(session_status() !== PHP_SESSION_ACTIVE
+            && $ordinary['admin_session_name'] === session_name()
+            && $ordinary['admin_session_name'] !== '',
+            'Post-response job creation lost the configured Admin session name.');
         \Gallery\Services\application_update_save_job($ordinary);
         \Gallery\Services\application_update_set_active_job($ordinary['id']);
         $beforeActivation = file_get_contents($root . '/app/bootstrap.php');
@@ -1260,7 +1263,7 @@ namespace {
             recovery_check($ordinaryWait['runtime_waiting']
                 && $ordinaryWait['stage'] === 'activate'
                 && $admission['job_id'] === $ordinary['id']
-                && $admission['admin_session_name'] === 'PHPSESSID'
+                && $admission['admin_session_name'] === $ordinary['admin_session_name']
                 && !empty($admission['recovery_isolation'])
                 && empty($ordinaryState['checkpoints']['activation_started'])
                 && !isset($ordinaryState['checkpoints']['recovery_verify_index'])
@@ -1289,6 +1292,14 @@ namespace {
             && !is_file(\Gallery\Services\application_update_activation_gate_path()),
             'Ordinary background activation failed to finish after its reader drained: '
                 . json_encode($ordinaryResult['error']));
+        \Gallery\Services\application_update_process_job($ordinary['id']);
+        $completionEvents = array_values(array_filter($GLOBALS['recovery_log_events'],
+            static fn(array $event): bool => $event['event'] === 'update.autoupdate_completed'
+                && $event['context']['job_id'] === $ordinary['id']));
+        recovery_check(count($completionEvents) === 1
+            && $completionEvents[0]['context']['installed_version'] === '1.2.1'
+            && $completionEvents[0]['context']['previous_version'] === '1.2.0',
+            'Automatic completion lacks exact versions or was logged again on a passive terminal read.');
         echo "Updater recovery integration tests passed.\n";
     } finally {
         $GLOBALS['recovery_pdo'] = null;

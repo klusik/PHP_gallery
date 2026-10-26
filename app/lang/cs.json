@@ -4055,6 +4055,8 @@
     "admin.updates.log_autoupdate_dry_run_checked": "Suchá kontrola automatických aktualizací ověřila dostupnost novější stabilní verze bez instalace.",
     "admin.updates.log_autoupdate_dry_run_failed": "Suchá kontrola automatických aktualizací selhala.",
     "admin.updates.log_autoupdate_failed": "Automatická aktualizace aplikace selhala.",
+    "admin.updates.log_autoupdate_started": "Automatická aktualizace na {version} byla zahájena; instalace ještě probíhá.",
+    "admin.updates.log_autoupdate_completed": "Automatická aktualizace byla dokončena: {version}.",
     "admin.updates.log_autoupdate_installed": "Automatická aktualizace aplikace nainstalovala novější stabilní vydání.",
     "admin.updates.log_beta_installed": "Administrátor nainstaloval beta sestavení aplikace.",
     "admin.updates.log_beta_reverted": "Administrátor obnovil stabilní sestavení aplikace z hlavní větve.",

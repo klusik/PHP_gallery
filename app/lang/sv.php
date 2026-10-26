@@ -1622,4 +1622,6 @@ return [
     'admin.updates.recovery_restored' => 'Det misslyckade försöket har frigjorts och tidigare programfiler finns på plats. Felaktig version eller commit är utesluten från automatisk installation; aktiverade kontroller kan installera en nyare stabil version.',
     'admin.updates.recovery_backup_blocked' => 'Automatisk återställning är stoppad: säkerhetskopian saknas, är ofullständig eller skadad. Bevara jobbet och säkerhetskopian. En administratör måste återställa ett fullständigt verifierat tillstånd eller installera en kompatibel version i underhållsläge.',
     'admin.updates.recovery_started' => 'Automatisk återställning har ett separat jobb: {job}. Öppna Uppdateringar igen för att följa det. Ursprungligt fel och dess bevis bevaras.',
+    'admin.updates.log_autoupdate_started' => 'Den automatiska uppdateringen till {version} har startat; installationen pågår fortfarande.',
+    'admin.updates.log_autoupdate_completed' => 'Den automatiska uppdateringen har slutförts: {version}.',
 ];

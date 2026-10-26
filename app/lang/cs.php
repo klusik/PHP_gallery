@@ -1680,4 +1680,6 @@ return [
     'admin.updates.recovery_restored' => 'Selhaný pokus byl uvolněný a předchozí soubory aplikace jsou na místě. Vadná verze nebo commit jsou vyřazené z automatické instalace; zapnuté automatické kontroly mohou nainstalovat novější stabilní vydání.',
     'admin.updates.recovery_backup_blocked' => 'Automatický rollback je zastavený: záloha chybí, je neúplná nebo poškozená. Zachovejte úlohu a zálohu. Správce musí získat úplný ověřený snímek nebo v režimu údržby nasadit kompatibilní vydání.',
     'admin.updates.recovery_started' => 'Automatický rollback má samostatnou úlohu: {job}. Pro její sledování znovu otevřete Aktualizace. Původní chyba i její důkazy zůstávají zachované.',
+    'admin.updates.log_autoupdate_started' => 'Automatická aktualizace na {version} byla zahájena; instalace ještě probíhá.',
+    'admin.updates.log_autoupdate_completed' => 'Automatická aktualizace byla dokončena: {version}.',
 ];

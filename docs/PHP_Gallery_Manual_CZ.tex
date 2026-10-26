@@ -3370,6 +3370,11 @@ požadavků, aby provoz nebránil jeho zahájení. Samotná aktivace a~migrace p
 na~dokončení již rozpracovaných požadavků.
 Také běžný autoupdate uzavře příchod nových požadavků před čekáním
 na~rozpracované; návštěvy tak nemohou aktivaci donekonečna oddalovat.
+Při uzavřené bráně soukromé workery pokračují i~po~čekání na~staré požadavky;
+další návštěva není nutná. Předání se~po~uvolnění zámků zpomalí o~jednu sekundu.
+Název adminové relace se~zachová i~po~jejím uzavření před prací na~pozadí,
+takže ověřený správce dosáhne na~obnovu. Log zahájení uvádí cílovou verzi;
+samostatný záznam dokončení uvádí předchozí a~nainstalovanou verzi až~po~dokončení.
 Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
 znovu zpracuje nahrané soubory místo stahování. Dokončí se~dopředné migrace;
 databázové změny se~nevracejí.

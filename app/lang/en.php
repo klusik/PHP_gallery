@@ -1685,4 +1685,6 @@ return [
     'admin.updates.recovery_restored' => 'The failed attempt has been released and the previous application files are in place. Its failed version or commit is excluded from automatic installation; enabled automatic checks can install a newer stable release.',
     'admin.updates.recovery_backup_blocked' => 'Automatic rollback stopped: the backup is missing, incomplete or corrupt. Preserve the job and backup. The administrator must recover a complete verified snapshot or deploy a compatible release in maintenance mode.',
     'admin.updates.recovery_started' => 'Automatic rollback has a separate job: {job}. Reopen Updates to follow that job. The original failure and its evidence remain preserved.',
+    'admin.updates.log_autoupdate_started' => 'Automatic update to {version} started; installation is still in progress.',
+    'admin.updates.log_autoupdate_completed' => 'Automatic update completed: {version}.',
 ];

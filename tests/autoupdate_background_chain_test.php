@@ -85,12 +85,29 @@ namespace {
     // the actual installation while exercising production persistence code.
     define('CACHE_LIFECYCLE_TEST_ROOT', $root);
     require_once __DIR__ . '/../app/services/updates.php';
+    $jobId = '20261019000000-abcdef123456';
     $queue = [];
-    $deliver = static function (string $ticket) use (&$queue): bool {
+    $deliver = static function (string $ticket) use (&$queue, $jobId): bool {
+        $chainLock = \Gallery\Services\application_update_acquire_lock(
+            \Gallery\Services\application_update_jobs_root()
+                . '/background-chain.lock',
+        );
+        $workerLock = \Gallery\Services\application_update_acquire_lock(
+            \Gallery\Services\application_update_job_dir($jobId)
+                . '/worker.lock',
+        );
+        try {
+            update_chain_assert(
+                $chainLock !== null && $workerLock !== null,
+                'A successor was delivered while its predecessor held ownership.',
+            );
+        } finally {
+            \Gallery\Services\application_update_release_lock($workerLock);
+            \Gallery\Services\application_update_release_lock($chainLock);
+        }
         $queue[] = $ticket;
         return true;
     };
-    $jobId = '20261019000000-abcdef123456';
     $job = [
         'id' => $jobId,
         'operation' => 'stable_update',

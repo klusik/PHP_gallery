@@ -67,6 +67,15 @@ now covers an actual background job with an existing reader, independent new
 reader refusal, disabled sweep cursors and successful completion after release.
 The updated behavior has not yet been verified on production hosting.
 
+The live 0.144.8 to 0.144.9 test exposed a stopped private chain at an owned
+pre-activation drain, with no migration intent or activation writes and an empty
+Admin session name. The updater owner now preserves configured session names
+after session close and retains paced private successors for progressed,
+gate-closed runtime waits. This is permanent support for visitor-triggered
+post-response updates; public visits cannot restart work while gated. No-progress
+worker-lock contention and failed jobs still stop. The HTTP fixture covers the
+real early gate and successors; production acceptance of this repair is pending.
+
 Pre-activation failures release only the active pointer. Post-activation rollback
 uses one independent child and the verified original snapshot, preserving both
 identities, archives, hashes and diagnostics. It requires protocol-1 runtime

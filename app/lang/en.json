@@ -4055,6 +4055,8 @@
     "admin.updates.log_autoupdate_dry_run_checked": "Automatic update dry run checked for a newer stable release without installing it.",
     "admin.updates.log_autoupdate_dry_run_failed": "Automatic update dry run failed.",
     "admin.updates.log_autoupdate_failed": "Automatic application update failed.",
+    "admin.updates.log_autoupdate_started": "Automatic update to {version} started; installation is still in progress.",
+    "admin.updates.log_autoupdate_completed": "Automatic update completed: {version}.",
     "admin.updates.log_autoupdate_installed": "Automatic application update installed a newer stable release.",
     "admin.updates.log_beta_installed": "Admin installed a beta application build.",
     "admin.updates.log_beta_reverted": "Admin restored beta application build from the stable branch head.",

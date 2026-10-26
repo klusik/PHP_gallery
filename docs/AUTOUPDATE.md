@@ -100,14 +100,21 @@ Before first ordinary activation, the prepared job publishes its activation gate
 before trying the exclusive `runtime-use.lock`. New ordinary requests receive
 503 before taking a shared lease, while existing readers finish. This ordering
 prevents continuing visitor traffic from starving activation. It also applies
-when an older persisted job next reaches activation. Busy ownership yields without
-consuming a failure retry or spinning a continuation chain. A durable
+when an older persisted job next reaches activation. Worker-lock contention yields
+without consuming a failure retry. A durable
 `rollback-window.json` is opened before file changes. Packages declaring
 isolation protocol 1 and entering it from bootstrap preserve the activation gate
 through migrations/finalization/cleanup, until job completion. Normal HTTP/CLI
 work receives a private 503 while gated. Authenticated Admin update requests and
 a correctly hashed, unexpired, job-bound private updater ticket may bootstrap;
 normal controller authentication, CSRF and maintenance-token checks still apply.
+
+A progressed worker waiting for runtime readers behind its own closed admission
+gate retains a private successor. The handoff pauses for one second after
+releasing both worker and chain locks; public visits are not needed to restart
+it. An occupied worker that made no progress still stops the chain. Discovery
+retains the configured Admin session name after `session_write_close()`, keeping
+authenticated status/recovery reachable during post-response automatic updates.
 
 Admission of ordinary runtime during an open window leaves a permanent
 `runtime-used.json` witness before application/domain work. This invalidates
@@ -168,6 +175,13 @@ paths, SQL, credentials and tokens are excluded. Supported historical missing
 migrations produce a nonblocking notice with their ledger identities.
 
 ### Integrity, discovery and operations
+
+`update.autoupdate_started` reports the target version and says installation is
+still running; its context includes installed/target versions and branch.
+`update.autoupdate_completed` is emitted only after a background stable job is
+durably completed, with previous/installed/target versions and copied-file count.
+Reading an already completed job does not emit completion again. Log insertion
+failure cannot convert a completed update into failure.
 
 `APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED` defaults to `false` until an
 explicit future change enables it. The publisher verifier remains implemented,
