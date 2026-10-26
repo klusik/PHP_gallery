@@ -74,7 +74,20 @@ after session close and retains paced private successors for progressed,
 gate-closed runtime waits. This is permanent support for visitor-triggered
 post-response updates; public visits cannot restart work while gated. No-progress
 worker-lock contention and failed jobs still stop. The HTTP fixture covers the
-real early gate and successors; production acceptance of this repair is pending.
+real early gate and successors. The live 0.144.10 to 0.144.11 update completed
+with the Admin Updates page open; its completion record reported the target
+version, five copied files and no migrations. This establishes that deployment
+path on production, without independently proving operation with no Admin page.
+
+The early-runtime owner permanently supports a self-contained English HTML
+maintenance fallback for browser GET/HEAD requests. Application locale and Theme
+storage are unavailable while files are replaced, so inline fallback tokens use
+the browser's light/dark preference. The existing three-second retry interval
+also refreshes GET documents; machine and POST replies remain plain and cannot
+replay a form. The gate, HTTP 503 and authenticated recovery admission remain
+unchanged. Actual HTTP fixtures cover headers, representation, HEAD, no lease
+admission and return to the same URL after gate removal. The maintainer reviewed
+the local demo; production verification of this presentation remains pending.
 
 Pre-activation failures release only the active pointer. Post-activation rollback
 uses one independent child and the verified original snapshot, preserving both

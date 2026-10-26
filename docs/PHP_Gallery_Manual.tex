@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.144.11}
+\newcommand{\version}{0.144.12}
 \newcommand{\manualdate}{26 October 2026}
 
 \hypersetup{
@@ -3398,6 +3398,11 @@ runs after locks are~released. The~configured Admin session name survives
 post-response session close, keeping authenticated recovery reachable.
 The~start log names the~target version; a~separate completion event records
 the~previous and~installed versions only after durable completion.
+During activation, visitors see a~compact English maintenance page instead
+of~a~plain server message. It~refreshes the~current page every three seconds,
+even without JavaScript, and~offers \ui{Try again}.
+The~self-contained light/dark layout needs no~database or~application assets.
+HTTP 503 remains in~effect; POST and~machine replies never refresh automatically.
 Busy takeover is~shown explicitly and~continues
 automatically. FTP retry rechecks installed files instead of~downloading.
 Recovery runs forward migrations; database changes are~never reversed.

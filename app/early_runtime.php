@@ -376,19 +376,111 @@ function activation_admin_recovery_allowed(array $marker): bool
 }
 
 /**
- * Emit the dependency-free activation 503 response.
+ * Purpose: retain the short retry interval at the activation response boundary.
+ * Type: int. Units: seconds. Scope: one refused early-runtime HTTP request.
+ * Consumers: emit_activation_unavailable(), Retry-After and HTML refresh.
+ * Rationale: 3 preserves the existing retry advice and returns visitors promptly
+ * after activation without loading mutable application files or a polling script.
+ */
+const ACTIVATION_RETRY_AFTER_SECONDS = 3;
+
+/**
+ * Emit a self-contained maintenance page or the retained plain activation reply.
+ *
+ * Only browser GET/HEAD requests accepting HTML receive the maintenance page.
+ * Its English fallback and inline style remain usable before application locale,
+ * Theme and database owners can safely load. POST and machine clients never
+ * receive an automatic refresh, preventing form replay during activation.
+ *
+ * @return void Emits HTTP 503 with retry/no-store advice; HEAD has no body.
  */
 function emit_activation_unavailable(): void
 {
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $html = in_array($method, ['GET', 'HEAD'], true)
+        && !request_expects_json()
+        && str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')),
+            'text/html');
+    $retrySeconds = ACTIVATION_RETRY_AFTER_SECONDS;
     if (!headers_sent()) {
         http_response_code(503);
-        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Type: ' . ($html ? 'text/html' : 'text/plain')
+            . '; charset=utf-8');
         header('Cache-Control: no-store, private, max-age=0');
         header('Pragma: no-cache');
-        header('Retry-After: 3');
+        header('Retry-After: ' . $retrySeconds);
         header('X-Content-Type-Options: nosniff');
+        header('X-Robots-Tag: noindex, nofollow');
+        if ($html) {
+            header("Content-Security-Policy: default-src 'none'; "
+                . "style-src 'unsafe-inline'; base-uri 'none'; "
+                . "form-action 'none'; frame-ancestors 'none'");
+        }
     }
-    echo "Service temporarily unavailable.\n";
+    if ($method === 'HEAD') {
+        return;
+    }
+    if (!$html) {
+        echo "Service temporarily unavailable.\n";
+        return;
+    }
+    echo <<<HTML
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="refresh" content="{$retrySeconds}">
+<title>Brief maintenance</title>
+<style>
+:root { color-scheme: light dark; --ink: #202c3c; --panel: #fff;
+    --accent: #355fa3; --page: #edf2f7; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+    padding: 24px; background: var(--page); color: var(--ink);
+    font: 400 1rem/1.6 system-ui, sans-serif; }
+.maintenance { width: 100%; max-width: 34rem; padding: 24px;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+    border-radius: 8px; border-top: 2px solid var(--accent);
+    backdrop-filter: blur(12px); }
+h1 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+    font-size: 1.3rem; line-height: 1.4; font-weight: 600; }
+svg { flex: none; width: 20px; height: 20px; color: var(--accent); }
+p { margin: 0 0 12px; }
+.note { font-size: .875rem;
+    color: color-mix(in srgb, var(--ink) 75%, var(--panel)); }
+a { display: inline-flex; align-items: center; min-height: 32px;
+    padding: 3px 12px; border: 1px solid currentColor; border-radius: 6px;
+    color: var(--ink); background: transparent; text-decoration: none;
+    font-size: .875rem; }
+a:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-color-scheme: dark) {
+    :root { --ink: #edf2f8; --panel: #202b3a;
+        --accent: #9bbef8; --page: #111923; }
+}
+@media (max-width: 640px) {
+    body { padding: 16px; }
+    .maintenance { padding: 20px; }
+    a { min-height: 44px; }
+}
+</style>
+</head>
+<body>
+<main class="maintenance">
+<h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/>
+    <path d="M12 7v5l3 2"/></svg>We’ll be right back</h1>
+<p>The gallery is being updated. Please come back shortly.</p>
+<p class="note">This page will refresh automatically.</p>
+<a href="">Try again</a>
+</main>
+</body>
+</html>
+HTML;
 }
 
 /**

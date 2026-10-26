@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.11';
+const CMS_VERSION = '0.144.12';
 ```
 
 Update-related code uses:
@@ -2981,6 +2981,14 @@ exclusive ownership, yields on contention and opens a durable observation window
 before file changes. Protocol-1 target packages preserve the gate until completion,
 including migrations and cleanup. Authenticated Admin update requests and
 unexpired hashed job-bound private tickets retain their later controller checks.
+The existing dependency-free early response owner presents a compact maintenance
+document for browser GET/HEAD requests accepting HTML. Its inline style uses
+light/dark fallback tokens because configured Theme/localization owners cannot
+load safely during file replacement. The English document refreshes the current
+GET URL after the existing three-second retry interval, with no scripts or
+external assets. HEAD has no body; POST and machine requests retain plain 503
+responses without automatic replay. Cache, noindex and restrictive HTML content
+policy headers keep this temporary response private and self-contained.
 Ordinary admission during an open window records a durable use witness. Any such
 use, a closed/missing window or an older unsupported package prevents automatic
 rollback. Actual fresh schema/ledger equality and explicit zero migration effects

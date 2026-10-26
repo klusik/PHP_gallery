@@ -1059,7 +1059,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.144.11. Release verification uses the
+This guide applies to PHP Gallery Version 0.144.12. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4855,6 +4855,15 @@ The request-latency contract permits only the guarded private drain delay after
 lock release; visitor discovery and ordinary worker handoffs remain unpaced.
 The real handoff callback also acquires both kernel locks, proving that the
 predecessor released its chain and worker ownership before delivery.
+
+`activation_maintenance_response_test.php` starts the actual early-runtime probe
+on an ephemeral loopback port and a random private installation. It checks the
+browser HTML, three-second refresh, retry/no-store/noindex headers, empty HEAD,
+unchanged plain replies for JSON/media/POST and absence of reflected request or
+private job data. Refused requests must leave the runtime lease absent and job
+state untouched. Removing only the owned gate restores a normal response at the
+same URL. The fixture uses no installed configuration, database or external
+assets. Desktop and narrow rendering are reviewed separately from HTTP evidence.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a

@@ -2175,6 +2175,7 @@
     "source_review_files": [
         "tests/AGENTS.md",
         "tests/SAFARI_LEAFLET_MARKER_MANUAL_TEST.md",
+        "tests/activation_maintenance_response_test.php",
         "tests/admin_auth_mvc_boundary_test.php",
         "tests/admin_browser_pdf_upload_stream_scenarios.mjs",
         "tests/admin_content_display_test.php",

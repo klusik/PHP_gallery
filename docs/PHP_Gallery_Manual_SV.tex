@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.11}
+\newcommand{\version}{0.144.12}
 \newcommand{\manualdate}{26~oktober~2026}
 
 \hypersetup{
@@ -3403,6 +3403,11 @@ avslutas; ett nytt besök behövs inte. Överlämningen väntar en sekund efter 
 låsen släppts. Administratörens konfigurerade sessionsnamn bevaras även efter
 sessionsstängning för bakgrundsarbete. Startloggen anger målversionen; en separat
 sluthändelse anger föregående och installerad version först efter beständigt slut.
+Under aktiveringen ser besökare en kompakt engelsk underhållssida i stället
+för ett enkelt servermeddelande. Den aktuella sidan laddas om var tredje sekund,
+även utan JavaScript, och erbjuder \ui{Try again}. Den fristående ljusa eller
+mörka utformningen behöver varken databas eller programfiler. HTTP 503 behålls;
+POST- och maskinsvar upprepas aldrig automatiskt.
 FTP-försök igen granskar installerade filer i stället för att hämta.
 Databasmigreringar körs framåt; databasändringar återställs aldrig.
 \ui{Pausa} gäller nästa säkra

@@ -109,6 +109,17 @@ work receives a private 503 while gated. Authenticated Admin update requests and
 a correctly hashed, unexpired, job-bound private updater ticket may bootstrap;
 normal controller authentication, CSRF and maintenance-token checks still apply.
 
+Ordinary browser GET requests accepting HTML display a compact "We'll be right
+back" maintenance page with inline light/dark styling and a Try again link.
+The current GET URL refreshes after three seconds, including without JavaScript.
+HTTP 503, private no-store and retry advice remain; robots receive noindex advice.
+HEAD has no body. POST, JSON and media clients retain the plain unavailable
+reply without a refresh, so maintenance cannot automatically replay form data.
+The early page intentionally uses English fallback text and browser color
+preferences: configured Theme, translations, database and mutable assets cannot
+be loaded at this isolation boundary. The response does not open admission or
+change updater ownership.
+
 A progressed worker waiting for runtime readers behind its own closed admission
 gate retains a private successor. The handoff pauses for one second after
 releasing both worker and chain locks; public visits are not needed to restart
