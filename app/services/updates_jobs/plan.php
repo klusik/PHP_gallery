@@ -609,7 +609,8 @@ function application_update_job_stage_files_slice(
             $sourceRoot
             . '/'
             . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        if (!empty($job['recovery_override'])) {
+        if (!empty($job['recovery_override'])
+            || !empty($job['checkpoints']['publisher_integrity_disabled'])) {
             // Pin copy bytes without consulting the publisher's core manifest.
             $job['checkpoints']['recovery_hashes'][$relative] =
                 application_update_recovery_raw_hash($source);

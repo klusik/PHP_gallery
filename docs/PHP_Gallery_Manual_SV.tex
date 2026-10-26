@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.7}
+\newcommand{\version}{0.144.8}
 \newcommand{\manualdate}{26~oktober~2026}
 
 \hypersetup{
@@ -3320,7 +3320,9 @@ Misslyckade jobb från automatik, Admin/API och~Advanced-commit-installationer
 får tre återförsök vid tillfälliga fel efter 60, 120 och~240 sekunder.
 Odefinierade funktioner och~deterministiska integritetsfel upprepar inte
 samma trasiga paket. Nya jobb binder en verifierad oföränderlig GitHub-commit
-och~kontrollerar hela manifestet och~förberedda filer. Övriga resurser
+men manifestkontrollen är bevarad och avstängd tills den uttryckligen aktiveras.
+Det korta steget heter \ui{Preparing package}; kopiering och aktivering
+kontrollerar de överförda byten. Övriga resurser
 och~säkerhetskopior bevarar exakta byte med råa SHA-256-identiteter.
 Tidigast 600 sekunder
 efter första felet frigör ett orört jobb före aktivering sin aktiva plats.
@@ -3385,14 +3387,18 @@ kontrollpunkt; deras poster och spärrbevis bevaras och ett nytt framåtjobb bö
 skriver över alla programfiler i paketet, även vid samma version. Det ersätter
 också fastnade eller pausade jobb utan FTP. Båda åtgärderna bevarar konfiguration,
 media, extra lokala filer och säkerhetskopior. Innehållsskillnader loggas som
-varningar med relativ filidentitet och förväntad/faktisk hash; automatiska
-uppdateringar behåller strikt verifiering. Säkra arkivsökvägar, nödvändiga filer
-och körningslås gäller fortfarande. Även ett saknat, oläsbart eller inaktuellt
+varningar med relativ filidentitet och förväntad/faktisk hash när den valfria
+kontrollen är på. Dess genomgångar är nu avstängda för alla installationsjobb.
+Säkra arkivsökvägar, nödvändiga filer
+och körningslås gäller fortfarande. När den valfria kontrollen är på ger även
+ett saknat, oläsbart eller inaktuellt
 manifest ger bara en varning och stoppar ingen av återställningsåtgärderna.
 Återställning stänger först tillträdet för nya besöksbegäranden, så fortsatt
 trafik inte hindrar starten. Aktivering och migreringar väntar sedan på redan
 pågående begäranden. Väntan på övertagande visas och fortsätter
-automatiskt. FTP-försök igen granskar installerade filer i stället för att hämta.
+automatiskt. Även automatiska uppdateringar stänger tillträdet innan de väntar
+på befintliga läsare, så nya besökare inte fördröjer aktiveringen obegränsat.
+FTP-försök igen granskar installerade filer i stället för att hämta.
 Databasmigreringar körs framåt; databasändringar återställs aldrig.
 \ui{Pausa} gäller nästa säkra
 kontrollpunkt i varje steg; \ui{Fortsätt uppdateringen} återupptar samma jobb.

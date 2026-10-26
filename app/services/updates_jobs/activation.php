@@ -60,7 +60,7 @@ function application_update_activation_gate_path(): string
  * job is never overwritten because doing so could reopen a partially activated
  * release without proving that the earlier job reached activation_complete.
  *
- * @param array<string,mixed> $job Durable update job state.
+ * @param array{id:string,trigger?:string,admin_session_name?:string,checkpoints?:array{runtime_guard_open?:bool,recovery_admission_closed?:bool},...<string,mixed>} $job Durable owner with session-name and admission receipts.
  * @return void Persists or verifies the activation ownership marker for this job.
  */
 function application_update_activation_gate_begin(array $job): void
@@ -95,23 +95,20 @@ function application_update_activation_gate_begin(array $job): void
         'trigger' => (string) ($job['trigger'] ?? ''),
         'started_at' => (int) ($existing['started_at'] ?? time()),
         'updated_at' => time(),
-        'recovery_isolation' => !empty($job['checkpoints']['runtime_guard_open']),
+        'recovery_isolation' => !empty($job['checkpoints']['runtime_guard_open'])
+            || !empty($job['checkpoints']['recovery_admission_closed']),
     ];
 
     // The session name is not an authentication secret. Persisting it lets the early
     // gate recognize a pre-existing authenticated Admin session even when an automatic
     // update was initiated by an anonymous request. The session id itself is never stored.
-    if (session_status() === PHP_SESSION_ACTIVE) {
-        $sessionName = session_name();
-        if (
-            $sessionName !== ''
-            && preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) === 1
-        ) {
-            $payload['admin_session_name'] = $sessionName;
-        }
-    } elseif (isset($existing['admin_session_name'])) {
-        $payload['admin_session_name'] =
-            (string) $existing['admin_session_name'];
+    // Background workers have no active browser session. Keep the creator's
+    // session name so authenticated Admin status remains reachable while gated.
+    $sessionName = session_status() === PHP_SESSION_ACTIVE ? session_name()
+        : (string) ($existing['admin_session_name'] ?? $job['admin_session_name'] ?? '');
+    if ($sessionName !== ''
+        && preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) === 1) {
+        $payload['admin_session_name'] = $sessionName;
     }
 
     application_update_write_json_atomic($path, $payload);
@@ -218,6 +215,14 @@ function application_update_activation_priority(string $path): int
  */
 function application_update_job_activate(array &$job): bool
 {
+    if (($job['operation'] ?? '') !== 'rollback') {
+        // Close admission before waiting for the exclusive lease: new visitors
+        // must not continuously replace readers that have already finished.
+        // This receipt does not claim that activation or migration has started.
+        $job['checkpoints']['recovery_admission_closed'] = true;
+        application_update_save_job($job);
+        application_update_activation_gate_begin($job);
+    }
     $runtimeLock = application_update_acquire_lock(application_update_jobs_root() . '/runtime-use.lock');
     if ($runtimeLock === null) {
         $job['checkpoints']['runtime_lease_busy'] = true;
@@ -268,7 +273,8 @@ function application_update_job_activate(array &$job): bool
             }
             if (!empty($job['automatic_rollback'])
                 || (($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
-                $expected = !empty($job['recovery_override'])
+                $expected = (!empty($job['recovery_override'])
+                    || !empty($job['checkpoints']['publisher_integrity_disabled']))
                     ? (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? '')
                     : ($relative === 'app/core-manifest.json'
                     ? (string) ($job['checkpoints']['recovery_manifest_identity'] ?? '')
@@ -1176,9 +1182,11 @@ function application_update_recovery_assert_compatible(array $job, string $sourc
  */
 function application_update_recovery_ready_slice(array &$job, array $budget): bool
 {
-    if (!empty($job['recovery_override'])) {
+    if (!empty($job['recovery_override'])
+        || !empty($job['checkpoints']['publisher_integrity_disabled'])) {
         // Staging already committed each complete copy and recorded its actual
-        // raw bytes. Explicit recovery does not run another manifest sweep.
+        // raw bytes. A disabled publisher pass or explicit recovery needs no
+        // second package-wide sweep before the actual activation copy checks.
         $job['checkpoints']['recovery_ready_verified'] = true;
         application_update_save_job($job);
         return true;

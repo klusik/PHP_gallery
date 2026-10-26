@@ -1059,7 +1059,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.144.7. Release verification uses the
+This guide applies to PHP Gallery Version 0.144.8. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4832,10 +4832,16 @@ forces unavailable Admin logging to verify redacted PHP-log fallback. The
 browser explains a retained 631/632 processing counter, displays runtime
 contention as waiting and completes through serialized continuations.
 Explicit FTP reset also completes without a manifest, and stable replacement
-copies a malformed manifest as selected source bytes while logging its warning.
+copies a malformed manifest as selected source bytes with the publisher sweep off.
 A real shared reader remains held while reset allocates a new owner and closes
 admission; only migration waits, then completes after that reader releases.
-Ordinary corrupt-package rejection remains a separate negative assertion.
+The retained opt-in publisher verifier still rejects corrupt bytes when called
+directly. Job-driven publisher/FTP sweeps are disabled until explicitly enabled;
+fixtures assert absent sweep cursors and no diagnostic warning events.
+An ordinary background update with mismatched publisher hashes reaches activation
+under a held shared reader. Its real gate refuses an independent new reader with
+503 before another lease is taken. After the old reader releases, the actual
+activation/migration/finalization pipeline completes and removes the gate.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a

@@ -401,7 +401,7 @@ namespace {
     ]);
     update_ui_assert(
         $stopped['display_title'] === 'Update stopped'
-            && $stopped['stage_label'] === 'Verifying integrity',
+            && $stopped['stage_label'] === 'Preparing package',
         'A failed checkpoint must be labelled stopped rather than running.',
     );
     $paused = \Gallery\Controllers\cms_update_job_view_model([

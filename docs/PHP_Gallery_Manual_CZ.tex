@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.144.7}
+\newcommand{\version}{0.144.8}
 \newcommand{\manualdate}{26.~října~2026}
 
 \hypersetup{
@@ -3295,8 +3295,10 @@ Aktivace aktualizace používá schválenou aktualizační podmnožinu produkčn
 Selhané úlohy z~automatiky, Admin/API i~Advanced commit ID mají tři pokusy
 po~přechodné chybě s~odstupem 60, 120 a~240 sekund. Nedefinovaná funkce
 a~deterministická chyba integrity neopakují stejný vadný balíček.
-Nové úlohy připnou neměnný ověřený GitHub commit a~ověří celý manifest
-i~připravené soubory. Prostředky mimo core manifest a~zálohy mají navíc
+Nové úlohy připnou neměnný ověřený GitHub commit. Kontrola integrity vydavatele
+zůstává v~kódu, ale je~vypnutá až~do~výslovného zapnutí. Krátká fáze má~popisek
+\ui{Preparing package}; při kopírování a~aktivaci se~ověří skutečně přenesené bajty.
+Prostředky mimo core manifest a~zálohy mají navíc
 identitu přesných bajtů pomocí raw SHA-256. Nejdříve 600 sekund od~prvního
 selhání nedotčená úloha
 před aktivací uvolní aktivní místo. Bezpečné selhání po~aktivaci vytvoří
@@ -3358,12 +3360,16 @@ dopředné dokončení. \ui{Nainstalovat stable} je~dostupné vždy: stáhne pos
 stable a~přepíše všechny aplikační soubory balíku i~při stejné verzi. Převezme
 i~zaseklou či~pozastavenou úlohu bez potřeby FTP. Obě akce zachovají konfiguraci,
 média, místní soubory navíc a~zálohy. Rozdíly obsahu jsou upozornění s~relativní
-cestou a~očekávaným i~skutečným otiskem v~logu; běžné automatické aktualizace
-zůstávají přísně ověřované. Ochrana cest, povinné soubory a~vlastnictví běhu
-platí dál. Chybějící, nečitelný či~zastaralý manifest je~také pouze warning
+cestou a~očekávaným i~skutečným otiskem v~logu při zapnuté volitelné kontrole.
+Její průchody jsou nyní vypnuté pro~všechny instalační úlohy.
+Ochrana cest, povinné soubory a~vlastnictví běhu
+platí dál. Při zapnuté volitelné kontrole je~chybějící, nečitelný
+či~zastaralý manifest také pouze warning
 a~nezastaví ani jednu obnovu. Reset nejprve pozastaví příchod návštěvnických
 požadavků, aby provoz nebránil jeho zahájení. Samotná aktivace a~migrace počkají
 na~dokončení již rozpracovaných požadavků.
+Také běžný autoupdate uzavře příchod nových požadavků před čekáním
+na~rozpracované; návštěvy tak nemohou aktivaci donekonečna oddalovat.
 Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
 znovu zpracuje nahrané soubory místo stahování. Dokončí se~dopředné migrace;
 databázové změny se~nevracejí.

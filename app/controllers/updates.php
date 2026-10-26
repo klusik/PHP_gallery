@@ -331,7 +331,7 @@ function cms_update_stage_label(string $stage): string
         'download' => 'Downloading package',
         'archive_validate' => 'Checking archive',
         'extract' => 'Extracting package',
-        'package_validate' => 'Verifying integrity',
+        'package_validate' => 'Preparing package',
         'plan' => 'Preparing activation plan',
         'stage_files' => 'Staging files',
         'backup' => 'Preparing rollback data',

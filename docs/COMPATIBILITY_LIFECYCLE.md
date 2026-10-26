@@ -7,14 +7,17 @@ local file differences and old stuck jobs. Reset/finish FTP and Install stable
 supersede active and gate-owner jobs under real worker/runtime locks, retain
 original records, backups and marker bytes, and complete forward migrations.
 Stable recovery overwrites all declared files even at the current version;
-all manifest failures are warnings, including missing, malformed, stale or
+when enabled, all manifest diagnostics are warnings, including missing, malformed, stale or
 version-mismatched metadata. Content warnings retain relative file/hash evidence;
 metadata warnings retain the exception owner and reference. Neither vetoes
 forward recovery. Staging independently pins the selected actual source bytes.
 Reset closes ordinary admission before draining existing readers so visitor
 traffic cannot starve takeover; actual writes retain the exclusive runtime lease.
-Safe paths, required files and runtime ownership remain enforced. Ordinary
-automatic updates retain strict content verification. Explicit recovery has no
+Safe paths, required files and runtime ownership remain enforced. Publisher
+content sweeps and FTP diagnostic sweeps are currently disabled by
+`APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED = false` until explicitly enabled;
+the verifier is retained. Actual copy hashes, DB/backup recovery evidence and
+obsolete-file policy remain separate. Explicit recovery has no
 automatic previous-database rollback; a newer manual tree prevents old package
 replay. The fallback owner is the existing updater service and remains supported
 while FTP and historical job records are supported; no retirement is inferred.
@@ -43,8 +46,9 @@ manual work retains its owner.
 An admitted failed-job retry may autonomously finish later slices while keeping
 its original manual trigger; it does not enable takeover of ordinary paused work.
 
-New jobs pin a full trusted GitHub commit and verify complete core-policy
-manifest coverage and staged identities. Non-core assets retain the canonical
+New jobs pin a full trusted GitHub commit and preserve actual staged identities.
+The retained optional verifier can check complete core-policy manifest coverage
+when explicitly enabled. Non-core assets retain the canonical
 package policy and exact-byte raw SHA-256 identities; original snapshots also
 use raw hashes so binary/line-ending mutations cannot disappear in text
 normalization. Legacy moving-branch failures without immutable identity
@@ -53,6 +57,15 @@ non-retryable even when its original record says otherwise. Persisted legacy job
 retain their manifest compatibility reader; it is never applied to new jobs.
 The English service fallback remains supported for direct CLI consumers without
 a translation owner; normal Admin uses all four maintained catalogs.
+
+Ordinary package activation closes admission before requesting the exclusive
+runtime lease, including jobs already waiting at `activate` after an FTP code
+replacement. Existing readers may finish; new ordinary requests receive 503
+before acquiring a shared lease. Rollback ownership/evidence rules are preserved.
+The live 0.144.6 to 0.144.7 job demonstrated repeated runtime waits; the fixture
+now covers an actual background job with an existing reader, independent new
+reader refusal, disabled sweep cursors and successful completion after release.
+The updated behavior has not yet been verified on production hosting.
 
 Pre-activation failures release only the active pointer. Post-activation rollback
 uses one independent child and the verified original snapshot, preserving both

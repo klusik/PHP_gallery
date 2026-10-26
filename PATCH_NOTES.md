@@ -1,5 +1,64 @@
 # Patch notes
 
+## Version 0.144.8
+
+Fixed automatic-update activation waiting behind continuing website traffic and
+disabled the optional publisher-integrity sweeps until explicitly re-enabled.
+
+### Highlights
+
+#### Automatic update activation
+
+- Closed admission to new ordinary requests before waiting for the exclusive
+  activation lock, allowing existing requests to finish without new visitors
+  continuously extending the wait.
+- Preserved the originating session name in background activation gates so
+  authenticated Admin update status and recovery remained reachable.
+
+#### Disabled optional integrity sweeps
+
+- Kept the publisher verifier implemented behind
+  `APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED = false`.
+- Skipped publisher and ready sweeps for newly validated installation jobs,
+  including FTP diagnostics, until the flag was explicitly enabled again.
+- Renamed the short preparation stage to Preparing package.
+
+### Technical Details
+
+#### Backend and browser
+
+- Updated `app/services/updates_jobs/activation.php` to publish the owned
+  admission gate before requesting exclusive runtime ownership for ordinary
+  package activation.
+- Pinned actual selected source bytes during staging and checked those copy
+  identities at activation when the publisher sweep was disabled.
+- Retained required application files, archive-path and ownership checks,
+  database and backup recovery evidence, and obsolete-file policy.
+- Preserved the disabled-sweep choice in job checkpoints and cleared it when
+  package preparation restarted.
+- Updated both server and browser stage labels and advanced the updater module
+  import revision.
+
+#### Tests and documentation
+
+- Added a real background-update scenario with a held ordinary reader, refusal
+  of an independent new reader before it acquired a shared lease, and successful
+  completion after the existing reader released.
+- Verified that disabled sweep cursors and diagnostic warnings were absent while
+  the retained opt-in verifier still rejected mismatched content.
+- Updated the operational references and all four manual source editions.
+
+### User Impact
+
+#### For administrators and visitors
+
+- Removed the source of indefinite activation waits caused by newly arriving
+  ordinary requests.
+- Kept installation-time publisher sweeps disabled across subsequent versions
+  until explicitly re-enabled, while preserving the verifier for future use.
+- Kept the existing temporary unavailable response during the prepared activation
+  window and allowed already-running requests to finish before file replacement.
+
 ## Version 0.144.7
 
 Recorded the immutable origin and predecessor metadata for this release.

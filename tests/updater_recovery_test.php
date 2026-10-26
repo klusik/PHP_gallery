@@ -135,10 +135,24 @@ namespace {
      */
     const RECOVERY_FIXTURE_DRAIN_SLICES = 40;
 
-    if (($argv[1] ?? '') === '--worker-probe') {
+    if (in_array($argv[1] ?? '', ['--worker-probe', '--admission-probe'], true)) {
         $childRoot = \GalleryWorkflow\validateFixture((string) ($argv[2] ?? ''),
             (string) ($argv[3] ?? ''));
         define('CACHE_LIFECYCLE_TEST_ROOT', $childRoot);
+        if ($argv[1] === '--admission-probe') {
+            require_once dirname(__DIR__) . '/app/early_runtime.php';
+            ob_start();
+            register_shutdown_function(static function (): void {
+                $body = (string) ob_get_clean();
+                echo json_encode(['status' => (string) http_response_code(),
+                    'body' => $body,
+                    'runtime_lease_held' => isset($GLOBALS['gallery_updater_runtime_lease'])],
+                    JSON_THROW_ON_ERROR);
+            });
+            \Gallery\EarlyRuntime\updater_runtime_enter($childRoot);
+            echo 'Ordinary request admitted.';
+            exit(0);
+        }
         require_once dirname(__DIR__) . '/app/services/updates.php';
         echo json_encode(\Gallery\Services\application_update_process_job(
             (string) ($argv[4] ?? ''),
@@ -205,11 +219,13 @@ namespace {
      * @param string $root Verified disposable installation root.
      * @param string $token Matching fixture ownership token.
      * @param string $jobId Job whose kernel worker lock is held by the parent.
-     * @return array{status:string,...<string,mixed>} Actual public worker response.
+     * @param bool $probeAdmission Whether to probe ordinary runtime admission instead of processing a worker.
+     * @return array{status:string,body?:string,runtime_lease_held?:bool,...<string,mixed>} Public worker state or isolated runtime response.
      */
-    function recovery_worker_probe(string $root, string $token, string $jobId): array
+    function recovery_worker_probe(string $root, string $token, string $jobId, bool $probeAdmission = false): array
     {
-        $process = proc_open([PHP_BINARY, __FILE__, '--worker-probe', $root, $token, $jobId],
+        $process = proc_open([PHP_BINARY, __FILE__,
+            $probeAdmission ? '--admission-probe' : '--worker-probe', $root, $token, $jobId],
             [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
         recovery_check(is_resource($process), 'Cannot start confined worker.');
         fclose($pipes[0]);
@@ -994,7 +1010,7 @@ namespace {
             && $manualResult['result']['backup'] === ''
             && file_get_contents($localExtension) === '<?php /* unmanaged local extension */'
             && file_get_contents($oldProof) === 'preserved original backup'
-            && in_array('public/assets/styles/utilities.css', $manualResult['integrity_warnings'], true)
+            && $manualResult['integrity_warnings'] === []
             && !is_file(\Gallery\Services\application_update_activation_gate_path()),
             'FTP overlay completion deleted extras/backups, restored old code or retained the gate.');
 
@@ -1021,15 +1037,15 @@ namespace {
             $readerWait = \Gallery\Services\application_update_process_job($readerReset['id']);
             recovery_check($readerWait['status'] === 'running'
                 && $readerWait['runtime_waiting']
-                && in_array('app/core-manifest.json', $readerWait['integrity_warnings'], true),
+                && $readerWait['integrity_warnings'] === [],
                 'FTP metadata stopped recovery or migration ignored an existing reader.');
             $warningEvents = array_values(array_filter($GLOBALS['recovery_log_events'],
                 static fn(array $event): bool => $event['event'] === 'update.recovery_validation_warning'
                     && $event['context']['job_id'] === $readerReset['id']));
-            recovery_check($warningEvents !== []
-                && $warningEvents[0]['context']['reason'] === 'missing_manifest'
-                && $warningEvents[0]['context']['outcome'] === 'continuing',
-                'Manifest diagnostics did not log a useful warning with continued outcome.');
+            recovery_check($warningEvents === []
+                && !isset(\Gallery\Services\application_update_load_job($readerReset['id'])
+                    ['checkpoints']['recovery_verify_index']),
+                'Disabled publisher verification still ran a diagnostic sweep.');
         } finally {
             flock($reader, LOCK_UN);
             fclose($reader);
@@ -1156,7 +1172,7 @@ namespace {
         try {
             \Gallery\Services\application_update_recovery_verify_package($strictJob, $strictRoot,
                 \Gallery\Services\application_update_time_budget());
-            throw new \RuntimeException('Ordinary package accepted corrupt bytes.');
+            throw new \RuntimeException('Retained opt-in verifier accepted corrupt bytes.');
         } catch (\Gallery\Services\ApplicationUpdateFileIntegrityException $difference) {
             \Gallery\Services\application_update_record_failure_diagnostic($strictJob,
                 $difference, 'INTEGRITY');
@@ -1191,7 +1207,7 @@ namespace {
             ], JSON_THROW_ON_ERROR));
         recovery_check($stableResult['status'] === 'completed'
             && $stableResult['result']['files_copied'] === count($stablePaths)
-            && in_array('app/core-manifest.json', $stableResult['integrity_warnings'], true)
+            && $stableResult['integrity_warnings'] === []
             && file_get_contents($root . '/public/assets/styles/utilities.css')
                 === file_get_contents($stableRoot . '/public/assets/styles/utilities.css')
             && file_get_contents($oldProof) === 'preserved original backup'
@@ -1200,6 +1216,79 @@ namespace {
             && !is_file(\Gallery\Services\application_update_jobs_root() . '/rollback-window.json')
             && !$stableResult['can_rollback'],
             'Stable replacement failed, skipped same-version files, deleted evidence or left isolation open.');
+
+        // Reproduce the actual ordinary background path, without recovery
+        // override. A pre-existing reader may finish, but new readers must
+        // receive 503 before taking another shared lease. The disabled sweep
+        // must not run even when publisher hashes differ from selected bytes.
+        file_put_contents($root . '/app/core-manifest.json', $savedManifest);
+        $ordinary = \Gallery\Services\application_update_create_job('stable_update',
+            ['branch' => 'main', 'target_version' => '1.2.1'], 'background');
+        $ordinaryRoot = \Gallery\Services\application_update_job_dir($ordinary['id'])
+            . '/extract/release';
+        foreach (\Gallery\Core\release_file_policy_paths($repositoryRoot, 'updater') as $relative) {
+            \Gallery\Services\application_update_ensure_dir(dirname($ordinaryRoot . '/' . $relative));
+            copy($repositoryRoot . '/' . $relative, $ordinaryRoot . '/' . $relative);
+        }
+        file_put_contents($ordinaryRoot . '/app/bootstrap.php', str_replace(
+            "'1.2.0'", "'1.2.1'", (string) file_get_contents($root . '/app/bootstrap.php')));
+        $ordinaryManifest = json_decode($savedManifest, true, flags: JSON_THROW_ON_ERROR);
+        $ordinaryManifest['version'] = '1.2.1';
+        file_put_contents($ordinaryRoot . '/app/core-manifest.json',
+            json_encode($ordinaryManifest, JSON_THROW_ON_ERROR));
+        file_put_contents($ordinaryRoot . '/public/assets/styles/utilities.css',
+            "\n/* Archive content accepted without the publisher sweep. */\n", FILE_APPEND);
+        $ordinary['stage'] = 'package_validate';
+        $ordinary['admin_session_name'] = 'PHPSESSID';
+        \Gallery\Services\application_update_save_job($ordinary);
+        \Gallery\Services\application_update_set_active_job($ordinary['id']);
+        $beforeActivation = file_get_contents($root . '/app/bootstrap.php');
+        $ordinaryReader = fopen(\Gallery\Services\application_update_jobs_root()
+            . '/runtime-use.lock', 'c+');
+        recovery_check(is_resource($ordinaryReader) && flock($ordinaryReader, LOCK_SH | LOCK_NB),
+            'Cannot hold the ordinary request preceding automatic activation.');
+        try {
+            for ($slice = 0; $slice < RECOVERY_FIXTURE_DRAIN_SLICES; $slice++) {
+                $ordinaryWait = \Gallery\Services\application_update_process_job($ordinary['id']);
+                recovery_check($ordinaryWait['status'] === 'running',
+                    'Ordinary background preparation stopped: ' . json_encode($ordinaryWait['error']));
+                if ($ordinaryWait['runtime_waiting']) { break; }
+            }
+            $ordinaryState = \Gallery\Services\application_update_load_job($ordinary['id']);
+            $admission = \Gallery\Services\application_update_read_json(
+                \Gallery\Services\application_update_activation_gate_path());
+            recovery_check($ordinaryWait['runtime_waiting']
+                && $ordinaryWait['stage'] === 'activate'
+                && $admission['job_id'] === $ordinary['id']
+                && $admission['admin_session_name'] === 'PHPSESSID'
+                && !empty($admission['recovery_isolation'])
+                && empty($ordinaryState['checkpoints']['activation_started'])
+                && !isset($ordinaryState['checkpoints']['recovery_verify_index'])
+                && !isset($ordinaryState['checkpoints']['recovery_ready_index'])
+                && !empty($ordinaryState['checkpoints']['publisher_integrity_disabled'])
+                && file_get_contents($root . '/app/bootstrap.php') === $beforeActivation,
+                'Ordinary activation failed to close admission before waiting or ran a disabled sweep.');
+            $blockedReader = recovery_worker_probe($root, $token, $ordinary['id'], true);
+            recovery_check($blockedReader['status'] === '503'
+                && !$blockedReader['runtime_lease_held']
+                && str_contains($blockedReader['body'], 'Service temporarily unavailable'),
+                'A new ordinary reader prolonged the activation drain.');
+        } finally {
+            flock($ordinaryReader, LOCK_UN);
+            fclose($ordinaryReader);
+        }
+        // Successful ordinary cleanup removes extract/. Capture the expected
+        // publisher bytes before draining instead of rereading deleted staging.
+        $expectedOrdinaryCss = file_get_contents(
+            $ordinaryRoot . '/public/assets/styles/utilities.css');
+        $ordinaryResult = recovery_drain($ordinary['id']);
+        recovery_check($ordinaryResult['status'] === 'completed'
+            && $ordinaryResult['result']['version'] === '1.2.1'
+            && file_get_contents($root . '/public/assets/styles/utilities.css')
+                === $expectedOrdinaryCss
+            && !is_file(\Gallery\Services\application_update_activation_gate_path()),
+            'Ordinary background activation failed to finish after its reader drained: '
+                . json_encode($ordinaryResult['error']));
         echo "Updater recovery integration tests passed.\n";
     } finally {
         $GLOBALS['recovery_pdo'] = null;
