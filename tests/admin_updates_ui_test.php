@@ -387,6 +387,9 @@ namespace {
         ),
         'Diagnostics must follow primary controls.',
     );
+    update_ui_assert(str_contains($html, 'value="finish_manual_deployment"')
+        && str_contains($html, 'data-update-manual-deployment'),
+        'Advanced tools must retain FTP completion while an old job exists.');
     $stopped = \Gallery\Controllers\cms_update_job_view_model([
         'id' => 'old-job',
         'status' => 'failed',

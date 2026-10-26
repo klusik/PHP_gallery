@@ -33,6 +33,20 @@ import {setupAdminUpdateNotes, refreshUpdateNotes} from './admin-update-notes.js
 
 const ACTIVE_REQUESTS = new Map();
 /**
+ * Space ordinary updater continuations without concurrent browser requests.
+ * Type: number. Units: milliseconds. Scope: one running job in this document.
+ * Consumers: scheduleContinuation().
+ * Rationale: 250 ms preserves the installed cadence after useful worker slices.
+ */
+const CONTINUATION_DELAY_MS = 250;
+/**
+ * Reduce polling while another request owns the activation runtime lease.
+ * Type: number. Units: milliseconds. Scope: one waiting job in this document.
+ * Consumers: scheduleContinuation().
+ * Rationale: 2000 ms avoids four idle worker requests per second while waiting.
+ */
+const RUNTIME_WAIT_DELAY_MS = 2000;
+/**
  * Purpose: Serialize passive summary requests for each current DOM fragment.
  * Units: one completed job ID or discovery marker per pending summary request.
  * Scope: this browser document; detached fragments are weakly held.
@@ -100,7 +114,7 @@ function ensureScopeMarkup(scope) {
         </div>
         <div class="admin-update-job-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-update-job-progress></span></div>
         <p class="muted" data-update-job-message></p>
-        <details class="admin-update-job-details"><summary>Status · <code data-update-job-code></code></summary><p class="muted"><strong>Stage:</strong> <span data-update-job-stage></span> · <strong>Attempts:</strong> <span data-update-job-attempts></span></p></details>
+        <details class="admin-update-job-details"><summary>Status · <code data-update-job-code></code></summary><p class="muted"><strong data-update-job-stage-label>Stage:</strong> <span data-update-job-stage></span> · <strong data-update-job-runs-label>Processing runs:</strong> <span data-update-job-attempts></span></p><p class="muted" data-update-job-runs-hint></p></details>
         <div class="notice" data-update-job-error hidden></div>
         <div class="notice" data-update-job-complete hidden>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>
         <div class="notice" data-update-job-cancelled hidden>Prepared update cancelled before activation. No application files were changed.</div>
@@ -142,7 +156,8 @@ function syncReleaseControls(job) {
             form.hidden = true;
         }
         for (const button of form.querySelectorAll('button, input[type="submit"]')) {
-            button.disabled = job.status === 'running';
+            button.disabled = job.status === 'running'
+                && !form.hasAttribute('data-update-manual-deployment');
         }
     }
     for (const summary of document.querySelectorAll('[data-update-release-summary]')) {
@@ -245,7 +260,7 @@ async function checkRelease(summary, force = false) {
  * Status and Advanced tools intentionally contain the same job surface so an
  * operation remains visible in the tab where the administrator launched it.
  * @param {HTMLElement} scope Owned synchronized surface.
- * @param {{id:string, status:string, stage?:string, attempts?:number, progress?:{percent:number, message:string}, error?:{message:string, reference:string}, can_cancel?:boolean, can_rollback?:boolean, can_resume?:boolean}} job Durable public job state.
+ * @param {{id:string, status:string, stage?:string, attempts?:number, runtime_waiting?:boolean, progress?:{percent:number, message:string}, error?:{message:string, reference:string}, can_cancel?:boolean, can_rollback?:boolean, can_resume?:boolean}} job Durable public job state.
  * @return {void} Updates presentation and available recovery controls.
  */
 function renderJobInScope(scope, job) {
@@ -263,15 +278,25 @@ function renderJobInScope(scope, job) {
     if (percentLabel) percentLabel.textContent = `${safePercent}%`;
     scope.querySelector('[data-update-job-title]').textContent = stageLabel(job.stage);
     const page = scope.closest('.admin-updates-page');
+    const runsLabel = scope.querySelector('[data-update-job-runs-label]');
+    if (runsLabel) runsLabel.textContent = (page?.dataset.updateJobRunsLabel || 'Processing runs') + ':';
+    const runsHint = scope.querySelector('[data-update-job-runs-hint]');
+    if (runsHint) runsHint.textContent = page?.dataset.updateJobRunsHint
+        || 'Short processing requests, including waits. This is not the number of errors or Retry clicks.';
+    const stageHeading = scope.querySelector('[data-update-job-stage-label]');
+    if (stageHeading) stageHeading.textContent = (page?.dataset.updateJobStageLabel || 'Stage') + ':';
     const title = scope.querySelector('[data-update-job-title]');
     if (job.status === 'failed') title.textContent = page?.dataset.updateJobFailedLabel || 'Update stopped';
+    if (job.status === 'paused') title.textContent = page?.dataset.updateJobPausedLabel || 'Update paused';
     if (job.status === 'cancelled') title.textContent = page?.dataset.updateJobCancelledLabel || 'Update cancelled';
     if (job.status === 'completed') title.textContent = page?.dataset.updateJobCompletedLabel || 'Update completed';
     const code = scope.querySelector('[data-update-job-code]') || scope.querySelector('.admin-update-job-heading code');
     if (code) code.textContent = String(job.id);
     scope.querySelector('[data-update-job-stage]').textContent = stageLabel(job.stage);
     scope.querySelector('[data-update-job-attempts]').textContent = String(job.attempts || 0);
-    scope.querySelector('[data-update-job-message]').textContent = String(progress.message || 'Update job is ready to continue.');
+    scope.querySelector('[data-update-job-message]').textContent = job.runtime_waiting
+        ? page?.dataset.updateJobWaitingRuntime || 'Waiting for other website requests to finish. The update will continue automatically.'
+        : String(progress.message || 'Update job is ready to continue.');
     const progressBar = scope.querySelector('[data-update-job-progress]');
     if (progressBar) progressBar.style.width = `${safePercent}%`;
     const progressShell = progressBar?.parentElement;
@@ -292,17 +317,29 @@ function renderJobInScope(scope, job) {
     const actions = scope.querySelector('[data-update-job-actions]');
     if (actions) {
         actions.replaceChildren();
+        if (job.status === 'running' || job.status === 'paused') {
+            const control = document.createElement('button');
+            control.type = 'button';
+            control.className = 'button secondary';
+            control.textContent = job.status === 'paused'
+                ? page?.dataset.updateJobResume || 'Continue update'
+                : page?.dataset.updateJobPause || 'Pause';
+            control.dataset.updateJobControlAction = job.status === 'paused' ? 'job_resume' : 'job_pause';
+            actions.append(control);
+        }
         if (job.status === 'failed' && job.can_resume !== false) {
             const retry = document.createElement('button');
             retry.type = 'button';
             retry.className = 'button secondary';
-            retry.textContent = 'Retry from checkpoint';
+            retry.textContent = page?.dataset.updateJobRetry || 'Try to continue';
             retry.dataset.updateJobRetry = String(job.id);
             actions.append(retry);
         } else if (job.status === 'running') {
             const status = document.createElement('span');
             status.className = 'muted';
-            status.textContent = 'Continuing automatically while this panel remains open.';
+            status.textContent = job.runtime_waiting
+                ? page?.dataset.updateJobWaitingRuntime || 'Waiting for other website requests to finish.'
+                : page?.dataset.updateJobContinuing || 'The update is continuing automatically.';
             actions.append(status);
         }
         if (job.can_cancel) {
@@ -356,7 +393,14 @@ function endpointFor(formOrScope) {
     return window.location.href;
 }
 
-/** Schedule the next bounded request for a running updater job. */
+/**
+ * Schedule one continuation with slower polling during runtime contention.
+ * @param {{id:string,status:string,runtime_waiting?:boolean}} job Last worker state.
+ * @param {string} endpoint Same-origin updater action URL.
+ * @param {string} csrfToken Authenticated form token.
+ * @param {Document|Element} context Current updater presentation container.
+ * @returns {void} Schedules at most one in-flight continuation for this job.
+ */
 function scheduleContinuation(job, endpoint, csrfToken, context = document) {
     if (!job?.id || job.status !== 'running' || ACTIVE_REQUESTS.has(String(job.id))) {
         return;
@@ -365,15 +409,18 @@ function scheduleContinuation(job, endpoint, csrfToken, context = document) {
     const controller = new AbortController();
     ACTIVE_REQUESTS.set(id, controller);
     window.setTimeout(async () => {
+        if (controller.signal.aborted) return;
         try {
             const next = await postJob(endpoint, csrfToken, 'job_continue', id);
+            if (controller.signal.aborted) return;
             renderJob(next, context);
-            ACTIVE_REQUESTS.delete(id);
+            if (ACTIVE_REQUESTS.get(id) === controller) ACTIVE_REQUESTS.delete(id);
             if (next.status === 'running') {
                 scheduleContinuation(next, endpoint, csrfToken, context);
             }
         } catch (error) {
-            ACTIVE_REQUESTS.delete(id);
+            if (controller.signal.aborted) return;
+            if (ACTIVE_REQUESTS.get(id) === controller) ACTIVE_REQUESTS.delete(id);
             const scope = findUpdateScope(context) || findUpdateScope(document);
             const errorBox = scope?.querySelector('[data-update-job-error]');
             if (errorBox) {
@@ -381,7 +428,7 @@ function scheduleContinuation(job, endpoint, csrfToken, context = document) {
                 errorBox.hidden = false;
             }
         }
-    }, 250);
+    }, job.runtime_waiting ? RUNTIME_WAIT_DELAY_MS : CONTINUATION_DELAY_MS);
 }
 
 /**
@@ -415,15 +462,24 @@ async function handleStartForm(form) {
     }
 }
 
-/** Retry a failed updater job from its saved checkpoint. */
-async function retryJob(button) {
+/**
+ * Submit one explicit pause, resume or retry without closing the drawer.
+ * @param {HTMLButtonElement} button Delegated job control.
+ * @param {string} action Owned job_retry, job_pause or job_resume action.
+ * @returns {Promise<void>} Renders the durable result and resumes running work.
+ */
+async function retryJob(button, action = 'job_retry') {
     const scope = button.closest('[data-update-job-scope]');
     const id = String(button.dataset.updateJobRetry || scope?.dataset.updateJobId || '');
     const csrfToken = csrfTokenFrom(scope || document);
     if (!id || !csrfToken) return;
+    if (action === 'job_pause') {
+        ACTIVE_REQUESTS.get(id)?.abort();
+        ACTIVE_REQUESTS.delete(id);
+    }
     button.disabled = true;
     try {
-        const job = await postJob(window.location.href, csrfToken, 'job_retry', id);
+        const job = await postJob(window.location.href, csrfToken, action, id);
         renderJob(job, scope || document);
         scheduleContinuation(job, window.location.href, csrfToken, scope || document);
     } catch (error) {
@@ -536,6 +592,11 @@ export function setupAdminUpdateJobs() {
     });
 
     document.addEventListener('click', /** Route dynamic recovery and passive-summary controls. @param {MouseEvent} event Delegated click. @return {void} Dispatches the owned updater action. */ (event) => {
+        const control = event.target instanceof Element ? event.target.closest('[data-update-job-control-action]') : null;
+        if (control instanceof HTMLButtonElement) {
+            retryJob(control, control.dataset.updateJobControlAction);
+            return;
+        }
         const button = event.target instanceof Element ? event.target.closest('[data-update-job-retry]') : null;
         if (button instanceof HTMLButtonElement) {
             retryJob(button);

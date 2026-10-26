@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.updates.pause' => 'Pause',
+    'admin.updates.resume' => 'Continue update',
+    'admin.updates.pause_hint' => 'The job pauses at the next safe checkpoint in any stage. Files, backups and the activation gate are preserved. Continue resumes the same job.',
+    'admin.updates.version_commit_help' => 'Install a chosen Git commit, including an older release commit. Enter its commit ID. This pins the selected code; database migrations are not reversed and older code may require a compatible database backup.',
+    'admin.updates.manual_deployment_title' => 'Finish FTP update',
+    'admin.updates.manual_deployment_hint' => 'After uploading the complete release ZIP by overwriting files, finish here. Existing local files, the old job and backups are preserved. The installed package is verified and forward migrations are completed.',
+    'admin.updates.job_runs_label' => 'Processing runs',
+    'admin.updates.job_runs_hint' => 'Short processing requests for this job, including waits. This is not the number of errors or clicks on Try to continue.',
+    'admin.updates.job_stage_label' => 'Stage',
+    'admin.updates.job_waiting_runtime' => 'Waiting for other website requests to finish. The update will continue automatically.',
+    'admin.updates.job_continuing' => 'The update is continuing automatically.',
+    'admin.updates.job_retry' => 'Try to continue',
+    'admin.updates.job_retry_scheduled' => 'Continuing from the last saved step.',
     'gallery.visit.mark_unseen' => 'Mark this gallery and its subgalleries as unvisited',
     'gallery.visit.unseen' => 'Unseen',
     'gallery.visit.partial' => 'Partially seen',

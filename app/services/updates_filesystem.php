@@ -151,9 +151,10 @@ function application_update_assert_project_root(string $root): void
  * Validate that the extracted archive looks like a PHP Gallery repository snapshot.
  *
  * @param string $sourceRoot Source root value.
+ * @param bool $installedOverlay Whether this is an installed FTP overlay whose unowned local files must be preserved.
  * @return void Refuses incomplete application archives before activation.
  */
-function application_update_assert_source_root(string $sourceRoot): void
+function application_update_assert_source_root(string $sourceRoot, bool $installedOverlay = false): void
 {
     // $requiredPaths stores files that must exist before the active installation is touched.
     $requiredPaths = [
@@ -252,7 +253,11 @@ function application_update_assert_source_root(string $sourceRoot): void
 
     // Current source archives activate the exact reviewed updater inventory; older
     // stable archives remain compatible through their bounded core-manifest list.
-    release_file_policy_archive_updater_paths($sourceRoot);
+    if ($installedOverlay) {
+        \Gallery\Core\release_file_policy_paths($sourceRoot, 'updater');
+    } else {
+        release_file_policy_archive_updater_paths($sourceRoot);
+    }
 }
 
 /**

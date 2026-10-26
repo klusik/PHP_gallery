@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.3';
+const CMS_VERSION = '0.144.4';
 ```
 
 Update-related code uses:
@@ -2869,6 +2869,32 @@ deployment architecture such as versioned release directories plus an atomic
 symlink/document-root switch, which many shared hosts do not provide.
 
 ### Migrations, rollback, and recovery
+
+FTP overlays use an explicit `manual_deploy` job in the same installer engine.
+Installed declared files are verified independently of strict incoming archive
+membership, so local legacy extras survive. It preserves the previous job and
+gate/window records, verifies all delivered bytes before taking over matching
+ownership, and advances directly to bounded forward migrations/finalization.
+It performs no package activation or obsolete-file pruning. A detected newer
+manual tree blocks old package continuation and automatic rollback. Pause uses
+a durable request file and the existing worker lock; every stage honors the
+request at its next safe boundary. Paused jobs remain active and gated when
+necessary. Explicit resume retains their identity and safety evidence.
+
+Recovery DB witness format 2 retains the complete ordered ledger with applied
+timestamps and fresh actual schema, plus applied-file hashes and installed
+manifest identity. Applied versions intentionally absent from that manifest
+have an explicit null hash; declared missing/corrupt migration files still
+refuse. Unversioned witnesses keep their original all-hash/version/schema
+contract. The SQL model owns ledger reads; the updater service owns file proof.
+An old `activate` stage without gate/intent is only an unchanged candidate:
+start, worker and exclusive runtime locks plus complete original/backup byte
+and created-path absence proof are required before releasing its pointer.
+No DB rollback or application replacement occurs on that recovery path.
+Authenticated Admin mutations release their own bootstrap read lease only after
+Admin/CSRF/capability checks, including a first start with no active job.
+Package verification publishes its durable cursor as current-stage progress;
+every stage transition resets counters rather than inheriting completed work.
 
 The updater calls `run_migrations_bounded(1)`. `schema_migrations` is the
 durable migration-file checkpoint. The complete pending definition set is

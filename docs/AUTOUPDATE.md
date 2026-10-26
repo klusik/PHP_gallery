@@ -81,6 +81,7 @@ worker lock serialize the decision.
 | Proven boundary | Automatic action after retries/timeout |
 | --- | --- |
 | Before activation, with no conflicting activation marker | Release the active pointer; application files were untouched. Retain the failed job and artifacts. |
+| Old `activate` checkpoint, no activation intent/gate or migration intent, complete original-byte proof under start/worker/exclusive runtime locks | Release only the active pointer after every planned original and backup matches and every originally absent path remains absent. Retain all artifacts. Stage name alone proves neither partial activation nor safety. |
 | Partial or completed activation, no migration effects, isolated runtime and complete verified backup | Create one independently identified rollback job restoring the actual previous application snapshot. |
 | Entered/unverified migration, changed/unknown DB, normal runtime use, unsupported isolation or missing/corrupt backup | Keep the failed state, show the reason and maintenance repair steps; continue due metadata discovery where reachable. |
 
@@ -122,6 +123,47 @@ intent or a completed runner receipt listing zero executed migrations. An
 interrupted migration can already have committed DDL without a ledger row; it
 remains unverified. No generic post-migration compatibility claim is made.
 
+Database evidence format 2 includes the ordered complete ledger (versions and
+applied timestamps), actual schema fingerprint, applied-file hashes and the
+installed manifest identity. A historical applied version absent from that
+manifest is recorded explicitly with a null file hash. It stays in the ledger
+and never becomes pending again. A file declared by the installed manifest
+must exist with its declared bytes; unknown inventory, unsafe paths or corrupt
+bytes refuse activation. The incoming package cannot prove historical absence
+in the installed release. Unversioned saved witnesses retain their original
+versions/schema/all-file-hashes checks; they never acquire invented timestamps
+or null absence evidence. Unknown witness formats fail closed.
+
+The initial authenticated Admin start request may have bootstrapped before an
+active job existed. After Admin, CSRF and installer-capability checks, its
+controller releases only its own shared runtime lease before starting work.
+Later Admin/AJAX requests use the same boundary. The post-response scheduler
+releases its request lease after domain handling; private workers require their
+job-bound ticket and maintenance token; the dedicated CLI declares its trusted
+worker bootstrap. Other HTTP/CLI leases continue to block activation. A saved
+`runtime_lease_busy` flag alone is not proof of a deadlock or live lock owner.
+
+Integrity progress uses the durable verified-file cursor and file count for
+each package slice. Entering a new checkpoint resets the previous counters and
+message, so extraction's 100% is never displayed as verification progress.
+The normal interaction stays Update followed by automatic continuation. Details
+label the lifetime `attempts` value as **Processing runs** and explain that it
+counts short worker requests, including waits, rather than errors or Retry
+clicks. Retry continues the same job and retains that count. Runtime contention
+shows explicit waiting and polls every two seconds instead of every 250 ms.
+Unknown local files outside updater ownership are preserved and do not become
+installation blockers merely because they are PHP files.
+
+`update.worker_failed` is emitted by the worker, including non-Admin paths. It
+records job/stage/reference, exception class, owner basename/line, processing
+and automatic-retry counts and activation/backup/migration receipts. Migration
+evidence failures add a validated version identity and missing/changed reason.
+The same bounded receipt stays privately in `job.json`, outside public result
+data. Confirmed Admin log insertion is checked; unavailable logging falls back
+to PHP's error log without blocking checkpoint persistence. Raw exception text,
+paths, SQL, credentials and tokens are excluded. Supported historical missing
+migrations produce a nonblocking notice with their ledger identities.
+
 ### Integrity, discovery and operations
 
 Every new package job requires complete normalized SHA-256 core-manifest coverage
@@ -158,6 +200,38 @@ bounded CLI/Admin route. Writable protected cache and working cooperative
 
 ## Already stuck installations
 
+### Overwrite-only FTP completion
+
+Upload the complete verified release ZIP over the installed application while
+hosting maintenance is enabled and update workers are stopped. Preserve local
+configuration, media and private data. No preparatory deletion of old PHP files,
+jobs, packages or backups is required. In Admin > Updates > Advanced tools,
+choose **Finish FTP update**. The canonical updater creates a resumable
+`manual_deploy` job, retaining the old source and its original markers. It
+verifies the installed inventory/manifest without treating unlisted local files
+as archive members, transfers only a matching old gate, runs bounded forward
+migrations, reconciles channel metadata and closes the gate after completion.
+It neither reactivates the old package nor performs obsolete-file pruning.
+An incomplete upload remains stopped and can be explicitly retried after the
+remaining files are uploaded. A newer/unknown already-entered migration target
+cannot be reversed by adopting older code. Foreign or corrupt gate ownership
+still requires operator assessment.
+
+Newer manually installed code prevents old downloaded jobs and their automatic
+rollback from replacing it. The installed version is read from disk rather than
+an already-loaded old bootstrap constant. New jobs also retain their starting
+installed version; legacy jobs retain validated target evidence. Old source
+identities and backups remain available for diagnosis after manual completion.
+
+**Pause** requests the next safe checkpoint in every stage, including activation
+and migrations. It never kills PHP inside a file rename or SQL statement. A
+partial activation remains gated while paused. **Continue update** resumes the
+same ID; it does not clear rollback or migration evidence. An in-flight browser
+continuation cannot replace a newer explicit paused state. Advanced commit-ID
+installation accepts older supported release commits as well as newer commits;
+it pins the chosen code and never reverses DB migrations. Older code may require
+a compatible coordinated database/files backup.
+
 Publishing a release cannot install this mechanism into an older stuck updater.
 An old job also lacks the new proof. In particular a migrated `0.144.1` failure
 with reference `F05D71A153A2` is **not automatically repaired**, including by
@@ -175,11 +249,11 @@ An administrator can perform a coordinated manual forward repair:
    migrations or restore application files alone.
 3. Verify and deploy the **complete compatible fixed release** using supported
    manual deployment, preserving configuration, media and updater evidence.
-   Run forward migrations and verify schema and application in maintenance mode.
-4. Only after verified repair, with all workers stopped, archive the matching old
-   `active-job.json` pointer beside its failed job. Keep the job and package.
-   Never discard a live activation gate without reconciling its exact owner and
-   the complete installed tree. Restore scheduling and perform fresh discovery.
+   Use **Finish FTP update** to verify the uploaded tree and complete forward
+   migrations, preserving local extras and the old recovery records.
+4. Verify schema/application and completed channel metadata in maintenance mode.
+   Matching old activation ownership is reconciled by that completion job;
+   never manually discard a live gate. Restore scheduling and fresh discovery.
 
 If compatibility cannot be established, retain maintenance mode and obtain
 specialist repair or coordinated database/files restoration. This is a manual
@@ -191,3 +265,58 @@ The optional `scripts/application_update.php` runner remains supported for
 installations that already use external scheduling. It is not required for the
 visitor-started chain. Normal installations receive recovery through a complete
 release; older stuck installations need the assessment above.
+
+### Recovery of the reported c2e2bc77 installation
+
+The operator reports installed beta commit
+`c2e2bc776b727ef95ae2a2a20c4acc4c6da62513` (version 0.144.2), intending
+to move to the separately prepared 0.144.4 release. Its updater contains the
+same unconditional applied-migration-file hash requirement. The supplied
+historical `20261026045933-1aae433301a9` snapshot targets 0.144.3 at
+`9ffb0ed97163c120f7ab699922ea1c920d3fdb70`. Reference `F8D315905480` matches
+the missing-target path exception. The snapshot has complete backup/ready
+verification and explicit `migrations_started=false`, but no database baseline
+or open runtime window. Its five planned files are `ARCHITECTURE.md`,
+`PATCH_NOTES.md`, `README.md`, `app/core-manifest.json` and `app/bootstrap.php`.
+The exact missing path and present production state are unknown. The removed
+experimental migration files are a supported plausible cause, not an observed
+production ledger. Attempts count worker requests, not failures.
+
+Before any deployment, the administrator should:
+
+1. Put the host in maintenance mode outside Gallery, stop cron/private workers
+   and wait for active PHP requests to drain. Preserve a consistent DB/files
+   backup, installed manifest, the full job directory (including extracted and
+   ready files and original backup), active/last pointers, activation/window
+   markers and chain diagnostics. Preserve lock files; stale diagnostic lease
+   JSON is never a reason to delete a kernel lock.
+2. Read the current job, ledger and actual schema. Compare the installed
+   manifest's declared migrations with disk and the complete ledger. Obtain the
+   private server log for the reference if available; do not delete historical
+   rows. Under start, job-worker and exclusive runtime ownership, check for a
+   gate, activation intent/completion and migration intent. Verify metadata
+   identity, all five planned originals against their retained backup hashes,
+   obsolete originals and absence of every created path. Missing evidence or
+   any changed byte requires partial-activation/DB assessment, not a guess from
+   `stage=activate`. Preserve this pre-deployment comparison before replacing
+   files. The fixed recovery owner automates this comparison when already
+   installed; the old c2e2bc77 owner cannot do so.
+3. After separate release/deployment approval, verify the complete published
+   0.144.4 package and its immutable commit/manifest. Deploy that complete
+   compatible release through manual maintenance deployment, preserving
+   configuration, galleries/media, data, jobs and backups. Do not copy only
+   bootstrap/updater files, repoint the old package or ask Retry to turn its
+   pinned 0.144.3 into 0.144.4. The old updater cannot bootstrap this fix itself.
+4. Keep maintenance enabled and use **Finish FTP update** in Advanced tools.
+   It verifies the whole uploaded release, preserves old jobs/backups/local
+   files and completes forward migrations without replaying the 0.144.3
+   package. Verify schema, login, gallery reads and package integrity afterwards.
+5. Reopen the fixed Updates page, verify reconciled 0.144.4/stable metadata and
+   no active old job, restore the intended automatic-update preference and
+   scheduling, then perform fresh discovery. On an owned staging copy first,
+   exercise an update from the c2e2bc77 ledger with historical rows retained.
+   Production acceptance and hosting lock behavior remain operator checks.
+
+Publishing 0.144.4, integrating this branch and deploying production are
+separate approvals. No production action or successful live upgrade is claimed
+by the supplied snapshot or the disposable regression suite.

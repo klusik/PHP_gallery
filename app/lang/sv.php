@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.updates.pause' => 'Pausa',
+    'admin.updates.resume' => 'Fortsätt uppdateringen',
+    'admin.updates.pause_hint' => 'Jobbet pausas vid nästa säkra kontrollpunkt i valfritt steg. Filer, säkerhetskopior och aktiveringsspärren bevaras. Fortsätt återupptar samma jobb.',
+    'admin.updates.version_commit_help' => 'Installera en vald Git-commit, även från en äldre utgåva. Ange dess commit-ID. Koden låses till detta val; databasmigreringar återställs inte och äldre kod kan kräva en kompatibel databassäkerhetskopia.',
+    'admin.updates.manual_deployment_title' => 'Slutför FTP-uppdatering',
+    'admin.updates.manual_deployment_hint' => 'Slutför här efter att hela utgåvans ZIP har skrivits över. Extra lokala filer, det gamla jobbet och säkerhetskopior bevaras. Det installerade paketet verifieras och framåtmigreringar slutförs.',
+    'admin.updates.job_runs_label' => 'Bearbetningskörningar',
+    'admin.updates.job_runs_hint' => 'Korta bearbetningsanrop för detta jobb, inklusive väntan. Detta räknar varken fel eller klick på Försök fortsätta.',
+    'admin.updates.job_stage_label' => 'Steg',
+    'admin.updates.job_waiting_runtime' => 'Väntar på att andra webbplatsanrop ska avslutas. Uppdateringen fortsätter automatiskt.',
+    'admin.updates.job_continuing' => 'Uppdateringen fortsätter automatiskt.',
+    'admin.updates.job_retry' => 'Försök fortsätta',
+    'admin.updates.job_retry_scheduled' => 'Fortsätter från det senast sparade steget.',
     'gallery.visit.mark_unseen' => 'Markera galleriet och dess undergallerier som obesökta',
     'gallery.visit.unseen' => 'Inte besökt',
     'gallery.visit.partial' => 'Delvis besökt',

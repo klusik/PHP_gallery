@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.updates.pause' => 'Pozastavit',
+    'admin.updates.resume' => 'Pokračovat v aktualizaci',
+    'admin.updates.pause_hint' => 'Úloha se v libovolné fázi pozastaví na nejbližším bezpečném kontrolním bodě. Soubory, zálohy i aktivační brána zůstanou zachované. Pokračovat obnoví stejnou úlohu.',
+    'admin.updates.version_commit_help' => 'Nainstalujte zvolený Git commit, včetně commitu staršího vydání. Zadejte jeho ID. Zvolený kód se připne; databázové migrace se nevracejí a starší kód může vyžadovat kompatibilní zálohu databáze.',
+    'admin.updates.manual_deployment_title' => 'Dokončit aktualizaci přes FTP',
+    'admin.updates.manual_deployment_hint' => 'Po přepsání souborů celým ZIPem vydání dokončete aktualizaci zde. Místní soubory navíc, stará úloha i zálohy zůstanou zachované. Ověří se nahraný balík a dokončí dopředné migrace.',
+    'admin.updates.job_runs_label' => 'Spuštění zpracování',
+    'admin.updates.job_runs_hint' => 'Počet krátkých spuštění zpracování této úlohy, včetně čekání. Nejde o počet chyb ani stisknutí tlačítka Zkusit pokračovat.',
+    'admin.updates.job_stage_label' => 'Fáze',
+    'admin.updates.job_waiting_runtime' => 'Čeká se na dokončení ostatních požadavků webu. Aktualizace bude pokračovat automaticky.',
+    'admin.updates.job_continuing' => 'Aktualizace pokračuje automaticky.',
+    'admin.updates.job_retry' => 'Zkusit pokračovat',
+    'admin.updates.job_retry_scheduled' => 'Pokračování z posledního uloženého kroku.',
     'gallery.visit.mark_unseen' => 'Označit galerii včetně podgalerií jako nenavštívenou',
     'gallery.visit.unseen' => 'Nenavštíveno',
     'gallery.visit.partial' => 'Částečně navštíveno',

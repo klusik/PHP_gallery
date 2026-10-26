@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.3}
+\newcommand{\version}{0.144.4}
 \newcommand{\manualdate}{26~oktober~2026}
 
 \hypersetup{
@@ -3343,6 +3343,26 @@ en nyare stabil version. Fel bakom stängd spärr behöver hostingens CLI-cron
 eller en autentiserad Admin-begäran; nekade besökare kör inte schemaläggaren.
 Ingen worker väntar passivt under återförsöksfördröjningen.
 
+Utförda migreringar förblir historik när deras filer avsiktligt har tagits bort
+ur det installerade manifestet. Databasbevis i format~2 bevarar hela historiken
+med tidsstämplar och det faktiska schemat; historisk frånvaro anges uttryckligen.
+Saknade deklarerade filer eller ändrade byte nekar fortfarande aktivering.
+Gamla sparade bevis behåller sina ursprungliga strikta jämförelser.
+En gammal kontrollpunkt \codeword{activate} bevisar inte ensam delvis
+aktivering: frigivning av pekaren kräver oförändrade original, verifierade
+säkerhetskopior och fortsatt frånvaro av nya sökvägar under start-, worker-
+och exklusivt körningslås. Admin-begäran släpper sitt eget läslås först efter
+autentisering och CSRF. Integritetsförloppet visar filverifieringens markör;
+varje nytt steg nollställer tidigare räknare. Kompakta förloppsytor förblir
+synkroniserade på dator och smal skärm.
+Den normala åtgärden är fortfarande Uppdatera med automatisk fortsättning.
+Bearbetningskörningar räknar korta anrop inklusive väntan; Försök fortsätta
+behåller samma jobb och räknare. Väntan på andra anrop visas uttryckligen och
+använder långsammare avfrågning. Ohanterade lokala PHP-filer bevaras.
+Privat worker-diagnostik anger steg, referens, undantagsklass, ägarfil och rad,
+säkerhetsbevis och vid behov validerad migreringsidentitet. Om Admin-loggen
+inte är tillgänglig används PHP:s fellogg utan att arbetet blockeras.
+
 En äldre fastnad uppdaterare får inte mekanismen genom enbart publicering.
 Stoppa workers i underhållsläge, bevara samordnade säkerhetskopior och~alla
 felbevis, fastställ faktisk databaskompatibilitet, installera hela den verifierade
@@ -3351,6 +3371,21 @@ reparation får administratören arkivera den matchande gamla aktiva pekaren.
 Byt inte bara bootstrap, ändra jobbets mål/paket, ta bort en aktiv
 aktiveringsspärr eller återställ enbart programfiler. Se
 \filepath{docs/AUTOUPDATE.md} för fullständig procedur och~begränsningar.
+
+Förfarandet i \filepath{docs/AUTOUPDATE.md} omfattar den rapporterade
+installationen \codeword{c2e2bc77} med dess äldre låsta jobb: efter separat
+godkännande distribueras hela den kompatibla korrigerade utgåvan i underhåll,
+det gamla jobbet bevaras och dess ägare stäms av först efter verifierad
+framåtreparation. Försök igen ändrar aldrig jobbets mål.
+Vid överskrivande FTP-distribution laddas hela den verifierade utgåvan upp
+utan att gamla lokala filer, jobb eller säkerhetskopior raderas.
+Välj \ui{Slutför FTP-uppdatering} i Advanced tools: samma installerare
+verifierar levererade filer, bevarar gamla jobb och tillhörande spärrbevis,
+kör framåtmigreringar och stämmer av kanalen. Det gamla paketet aktiveras
+inte och föråldrade filer rensas inte. \ui{Pausa} gäller nästa säkra
+kontrollpunkt i varje steg; \ui{Fortsätt uppdateringen} återupptar samma jobb.
+Delvis aktivering förblir spärrad. Äldre stödda utgåve-commits kan också väljas;
+migreringar återställs aldrig och en kompatibel databasbackup kan behövas.
 
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}

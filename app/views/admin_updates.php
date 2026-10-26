@@ -440,7 +440,9 @@ function view_render_update_job_card(
         '<p class="muted" data-update-job-message>'
             . e(
                 (string) (
-                    $progress['message'] ?? 'Update job is ready to continue.'
+                    !empty($job['runtime_waiting'])
+                        ? t('admin.updates.job_waiting_runtime')
+                        : ($progress['message'] ?? 'Update job is ready to continue.')
                 ),
             )
             . '</p>';
@@ -449,11 +451,17 @@ function view_render_update_job_card(
             . e(t('admin.updates.status', 'Status'))
             . ' · <code data-update-job-code>'
             . e((string) ($job['id'] ?? ''))
-            . '</code></summary><p class="muted"><strong>Stage:</strong> <span data-update-job-stage>'
+            . '</code></summary><p class="muted"><strong data-update-job-stage-label>'
+            . e(t('admin.updates.job_stage_label', 'Stage'))
+            . ':</strong> <span data-update-job-stage>'
             . e((string) ($job['stage_label'] ?? ''))
-            . '</span> · <strong>Attempts:</strong> <span data-update-job-attempts>'
+            . '</span> · <strong data-update-job-runs-label>'
+            . e(t('admin.updates.job_runs_label', 'Processing runs'))
+            . ':</strong> <span data-update-job-attempts>'
             . e((string) (int) ($job['attempts'] ?? 0))
-            . '</span></p></details>';
+            . '</span></p><p class="muted" data-update-job-runs-hint>'
+            . e(t('admin.updates.job_runs_hint'))
+            . '</p></details>';
     if (!empty($job['error']) && is_array($job['error'])) {
         echo
             '<div class="notice" data-update-job-error>'
@@ -473,7 +481,18 @@ function view_render_update_job_card(
             . ((string) ($job['status'] ?? '') === 'cancelled' ? '' : ' hidden')
             . '>Prepared update cancelled before activation. No application files were changed.</div>';
     echo '<div data-update-job-actions>';
-    if ($installerEnabled && !empty($job['can_resume'])) {
+    if ($installerEnabled && in_array($job['status'] ?? '', ['running', 'paused'], true)) {
+        $paused = ($job['status'] ?? '') === 'paused';
+        echo '<form method="post" class="inline-action-form" data-update-job-control>'
+            . $csrfHtml . '<input type="hidden" name="job_id" value="'
+            . e((string) ($job['id'] ?? ''))
+            . '"><input type="hidden" name="update_action" value="'
+            . ($paused ? 'job_resume' : 'job_pause')
+            . '"><button type="submit" class="button secondary">'
+            . e(t($paused ? 'admin.updates.resume' : 'admin.updates.pause'))
+            . '</button></form>';
+    }
+    if ($installerEnabled && !empty($job['can_resume']) && ($job['status'] ?? '') !== 'paused') {
         echo
             '<form method="post" class="inline-action-form" data-update-job-control>'
                 . $csrfHtml;
@@ -493,7 +512,7 @@ function view_render_update_job_card(
             '<button type="submit" class="button secondary">'
                 . e(
                     (string) ($job['status'] ?? '') === 'failed'
-                        ? 'Retry from checkpoint'
+                        ? t('admin.updates.job_retry', 'Try to continue')
                         : 'Continue update',
                 )
                 . '</button>';
@@ -1061,7 +1080,22 @@ function view_render_admin_update_page(array $viewModel): void
             . e(t('admin.updates.job_completed_title', 'Update completed'))
             . '" data-update-job-cancelled-label="'
             . e(t('admin.updates.job_cancelled_title', 'Update cancelled'))
-            . '">';
+            . '"';
+    foreach ([
+        'runs-label' => 'job_runs_label',
+        'runs-hint' => 'job_runs_hint',
+        'stage-label' => 'job_stage_label',
+        'waiting-runtime' => 'job_waiting_runtime',
+        'continuing' => 'job_continuing',
+        'retry' => 'job_retry',
+        'pause' => 'pause',
+        'resume' => 'resume',
+        'paused-label' => 'job_paused_title',
+    ] as $attribute => $key) {
+        echo ' data-update-job-' . $attribute . '="'
+            . e(t('admin.updates.' . $key)) . '"';
+    }
+    echo '>';
     echo
         '<section class="hero admin-update-hero"><div><p class="admin-kicker">'
             . e(t('admin.updates.kicker', 'Application maintenance'))
@@ -1374,11 +1408,21 @@ function view_render_admin_update_page(array $viewModel): void
     view_render_update_job_card($activeUpdateJob, $installerEnabled, $csrfHtml);
     echo '<div class="admin-maintenance-grid admin-update-tools-grid">';
     if ($installerEnabled) {
+        echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>'
+            . e(t('admin.updates.manual_deployment_title'))
+            . '</strong><p class="muted">'
+            . e(t('admin.updates.manual_deployment_hint'))
+            . '</p><form method="post" data-update-job-form data-update-manual-deployment>'
+            . $csrfHtml
+            . '<input type="hidden" name="update_action" value="finish_manual_deployment">'
+            . '<button type="submit" class="button secondary">'
+            . e(t('admin.updates.manual_deployment_title'))
+            . '</button></form></article>';
         echo
             '<article class="admin-maintenance-card admin-update-tool-card"><strong>'
                 . e(t('admin.updates.beta_build'))
                 . '</strong><span>'
-                . e(t('admin.updates.beta_code_help'))
+                . e(t('admin.updates.version_commit_help'))
                 . '</span>';
         echo
             '<form method="post" class="form-grid" data-update-job-form>'

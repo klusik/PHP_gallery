@@ -60,6 +60,29 @@ function schema_inspection_model_migration_versions(int $limit): array
 }
 
 /**
+ * Read all ledger fields used by the versioned updater recovery witness.
+ * @param int $limit Maximum admitted rows; an extra row detects truncation.
+ * @return list<array{version:string,applied_at:string}> Ordered audit records.
+ * @throws \RuntimeException When complete evidence exceeds the bound.
+ */
+function schema_inspection_model_migration_ledger(int $limit): array
+{
+    $statement = db()->prepare(
+        'SELECT version,applied_at FROM schema_migrations ORDER BY version LIMIT ?',
+    );
+    $statement->bindValue(1, $limit + 1, PDO::PARAM_INT);
+    $statement->execute();
+    $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+    if (count($rows) > $limit) {
+        throw new \RuntimeException('Recovery migration ledger exceeds its bound.');
+    }
+    return array_map(static fn(array $row): array => [
+        'version' => (string) $row['version'],
+        'applied_at' => (string) $row['applied_at'],
+    ], $rows);
+}
+
+/**
  * Fingerprint complete bounded column/index definitions for recovery checks.
  * @param int $limit Maximum metadata rows admitted per schema inventory.
  * @return string SHA-256 fingerprint of actual ordered database definitions.

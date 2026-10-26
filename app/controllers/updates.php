@@ -365,6 +365,7 @@ function cms_update_job_view_model(
     );
     $job['auto_resume'] = $backgroundEnabled || empty($job['background']);
     $job['display_title'] = match ((string) ($job['status'] ?? '')) {
+        'paused' => t('admin.updates.job_paused_title', 'Update paused'),
         'failed' => t('admin.updates.job_failed_title', 'Update stopped'),
         'cancelled' => t(
             'admin.updates.job_cancelled_title',
@@ -480,6 +481,9 @@ function cms_admin_update(): void
                 'job_continue',
                 'job_retry',
                 'job_rollback',
+                'finish_manual_deployment',
+                'job_pause',
+                'job_resume',
             ];
             if (
                 in_array($action, $installerMutationActions, true)
@@ -491,6 +495,12 @@ function cms_admin_update(): void
                     'admin.features.built_in_update_installer.disabled_action',
                     'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.',
                 ));
+            }
+            if (in_array($action, $installerMutationActions, true)) {
+                // Admin and CSRF checks above establish updater-only work.
+                // The first start request bootstrapped before any active job
+                // existed and may still own a shared ordinary-runtime lease.
+                \Gallery\EarlyRuntime\updater_runtime_leave();
             }
             if ($action === 'autoupdate_settings') {
                 $submittedInterval =
@@ -548,6 +558,17 @@ function cms_admin_update(): void
                         'backup' => (string) $result['backup'],
                     ],
                 );
+            } elseif ($action === 'job_pause' || $action === 'job_resume') {
+                $jobId = trim((string) ($_POST['job_id'] ?? ''));
+                $job = \Gallery\Services\application_update_control_pause($jobId, $action === 'job_resume');
+                if (($job['status'] ?? '') === 'running') {
+                    $job = application_update_process_job($jobId, 7.0);
+                }
+                if (cms_update_async_request()) {
+                    cms_update_json_job_response($job);
+                    return;
+                }
+                $_SESSION['admin_update_notice'] = t('admin.updates.pause_hint');
             } elseif ($action === 'job_cancel') {
                 $jobId = trim((string) ($_POST['job_id'] ?? ''));
                 $job = application_update_cancel_job($jobId);
@@ -567,6 +588,19 @@ function cms_admin_update(): void
                     return;
                 }
                 $_SESSION['admin_update_notice'] = 'Prepared update cancelled before activation. No application files were changed.';
+            } elseif ($action === 'finish_manual_deployment') {
+                $job = \Gallery\Services\application_update_start_manual_deployment();
+                if (($job['operation'] ?? '') === 'manual_deploy' && ($job['status'] ?? '') === 'failed') {
+                    $job = application_update_retry_job((string) $job['id']);
+                }
+                if (($job['operation'] ?? '') === 'manual_deploy') {
+                    $job = application_update_process_job((string) $job['id'], 7.0);
+                }
+                if (cms_update_async_request()) {
+                    cms_update_json_job_response($job);
+                    return;
+                }
+                $_SESSION['admin_update_notice'] = t('admin.updates.manual_deployment_hint');
             } elseif ($action === 'job_rollback') {
                 $jobId = trim((string) ($_POST['job_id'] ?? ''));
                 $job = application_update_start_rollback_job($jobId, 'admin');

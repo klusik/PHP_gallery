@@ -1,5 +1,120 @@
 # Patch notes
 
+## Version 0.144.4
+
+Improved application-update reliability on long-lived installations, added
+resumable completion of overwrite-only FTP deployments and made updater
+progress, pausing and failure diagnostics clearer.
+
+### Highlights
+
+#### Recovery on long-lived installations
+
+- Fixed the updater's rejection of historical applied migrations whose files
+  were intentionally removed from the installed release. Preserved the complete
+  migration ledger and actual schema evidence while continuing to reject
+  missing declared migration files and altered migration bytes.
+- Distinguished an old `activate` checkpoint from proven partial activation.
+  Untouched attempts could release their active ownership only after locked
+  verification of original files, retained backups and originally absent paths.
+- Released the initial authenticated Admin request's own shared runtime lease
+  before updater work, preventing that request from blocking its activation.
+
+#### Overwrite-only FTP completion
+
+- Added Finish FTP update in Advanced tools for a complete release uploaded by
+  overwriting files. Verified declared installed files without rejecting
+  unrelated local files left by older installations.
+- Preserved the old job, package, backups and matching activation records,
+  completed forward migrations and reconciled release/channel metadata without
+  replaying the old downloaded package or pruning obsolete application files.
+- Prevented an older job or its automatic rollback from replacing a detected
+  newer manual deployment. Incomplete FTP uploads remained explicitly
+  retryable after the remaining files were uploaded.
+
+#### Pausing and understandable progress
+
+- Added Pause and Continue controls at safe checkpoint boundaries in every
+  stage. Preserved the same job identity, backups and activation isolation while
+  paused, without killing PHP inside file replacement or migration execution.
+- Replaced the misleading Attempts label with Processing runs and explained
+  that the lifetime counter includes short worker requests and waiting, rather
+  than counting errors or Retry clicks.
+- Displayed the durable verified-file cursor during integrity verification,
+  reset stale counters when stages changed and showed explicit runtime waiting
+  with slower continuation polling.
+- Clarified that Advanced commit installation can select an older supported
+  release commit. Kept the database migration and compatibility limitations
+  explicit.
+
+#### Actionable failure diagnostics
+
+- Added private worker failure receipts with job, stage, reference, exception
+  class, owner file/line, worker/retry counters and relevant safety receipts.
+  Migration-evidence failures identified the validated migration version.
+- Checked Admin log insertion and retained a redacted PHP-log fallback.
+  Disabled or failing logging could not prevent durable failure checkpoints.
+  Excluded raw exception text, private paths, SQL and credentials.
+
+### Technical Details
+
+#### Backend
+
+- Extended the existing updater owners in `app/services/updates_jobs/` and their
+  Admin controller rather than introducing a separate installer pipeline.
+- Added resumable `manual_deploy` verification and forward completion, retained
+  strict incoming-archive validation and separately tolerated unlisted files
+  in installed FTP overlays.
+- Added durable pause requests, worker-serialized resume and browser suppression
+  of delayed continuation responses after an explicit pause.
+
+#### Database
+
+- Added no application tables, columns or migration files.
+- Added evidence format 2 with a fingerprint of complete ordered migration audit
+  rows including applied timestamps, actual schema definitions, exact-byte
+  applied migration hashes and installed-manifest evidence of historical
+  absence.
+- Preserved unversioned recovery-witness readers and strict rollback refusal
+  for changed or unknown database state, unverified migration effects,
+  ordinary runtime use and incomplete or corrupt backups.
+
+#### Frontend and documentation
+
+- Updated synchronized server/browser updater cards, FTP completion and pause
+  controls, all four language catalogs and browser import cache invalidation.
+- Updated architecture, recovery/testing references and all four maintained
+  manual sources with FTP, pause, historical-ledger and diagnostic behavior.
+
+#### Tests
+
+- Extended updater recovery coverage for historical ledger rows, missing or
+  changed migration files, changed ledger/schema evidence, legacy witnesses,
+  repeated continuation, real locks and negative rollback scenarios.
+- Added a real declared-file FTP overlay with retained local PHP and old backup
+  bytes, forward completion through the actual state machine and pausing at
+  every stage.
+- Covered unavailable Admin/PHP logging, private diagnostic redaction,
+  synchronized desktop/narrow progress, runtime waiting and delayed browser
+  responses during pause/resume.
+
+### User Impact
+
+#### For visitors
+
+- Preserved activation maintenance boundaries while application files or
+  forward migration completion were unfinished or paused.
+
+#### For administrators
+
+- Enabled completion of a complete FTP overwrite without preparatory deletion
+  of local legacy files, update jobs or backups.
+- Made continuation counts, verification progress, waiting and pausing
+  understandable and retained diagnostic evidence for failed attempts.
+- Kept database migrations forward-only; selecting older code did not imply
+  that a newer database could be safely reversed or used without a compatible
+  backup.
+
 ## Version 0.144.3
 
 Improved failed-update recovery with bounded retries, verified file rollback

@@ -791,8 +791,10 @@ function application_update_job_validate_package_slice(
     array $budget,
 ): bool {
     $jobDir = application_update_job_dir((string) $job['id']);
-    $sourceRoot = application_update_extracted_root($jobDir . '/extract');
-    application_update_assert_source_root($sourceRoot);
+    $manual = ($job['operation'] ?? '') === 'manual_deploy';
+    $sourceRoot = $manual ? application_update_project_root()
+        : application_update_extracted_root($jobDir . '/extract');
+    application_update_assert_source_root($sourceRoot, $manual);
     $job['checkpoints']['source_root'] = $sourceRoot;
 
     $bootstrapVersion = application_update_version_from_local_bootstrap($sourceRoot
@@ -825,8 +827,8 @@ function application_update_job_validate_package_slice(
         }
     }
 
-    if (($job['recovery_schema'] ?? 0) === 1
-        && !application_update_recovery_verify_package($job, $sourceRoot, $budget)) {
+    if ((($job['recovery_schema'] ?? 0) === 1 || $manual)
+        && !application_update_recovery_verify_package($job, $sourceRoot, $budget, $manual)) {
         return false;
     }
 
@@ -882,6 +884,7 @@ function application_update_recovery_hash_matches(string $expected, string $path
  * @param array<string,mixed> $job Recovery job with durable verification cursor.
  * @param string $root Validated extracted package root.
  * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Bounded worker opportunity.
+ * @param bool $installedOverlay Whether only declared installed files belong to verification, preserving local extras.
  * @return bool True after all managed files pass; false yields the cursor.
  * @throws RuntimeException On missing coverage, changed manifest or bad bytes.
  */
@@ -889,6 +892,7 @@ function application_update_recovery_verify_package(
     array &$job,
     string $root,
     array $budget,
+    bool $installedOverlay = false,
 ): bool {
     $path = $root . '/app/core-manifest.json';
     $size = filesize($path);
@@ -906,7 +910,7 @@ function application_update_recovery_verify_package(
         throw new RuntimeException('Recovery package manifest identity is invalid.');
     }
     $job['checkpoints']['recovery_manifest_identity'] = $identity;
-    $files = application_update_release_files($root);
+    $files = application_update_release_files($root, $installedOverlay);
     $index = (int) ($job['checkpoints']['recovery_verify_index'] ?? 0);
     $processed = 0;
     while ($index < count($files)
@@ -929,6 +933,12 @@ function application_update_recovery_verify_package(
         $processed++;
     }
     $job['checkpoints']['recovery_verify_index'] = $index;
+    $job['progress'] = [
+        'current' => $index,
+        'total' => count($files),
+        'message' => 'Verifying package file integrity.',
+        'unit' => 'files',
+    ];
     application_update_save_job($job);
     return $index === count($files);
 }

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.144.3}
+\newcommand{\version}{0.144.4}
 \newcommand{\manualdate}{26.~Oktober~2026}
 
 \hypersetup{
@@ -3448,6 +3448,28 @@ Sperre benötigen Hosting-CLI-Cron oder einen authentifizierten Admin-Aufruf;
 abgewiesene Besucher starten keinen Scheduler. Kein Worker wartet untätig
 während der Verzögerung.
 
+Ausgeführte Migrationen bleiben Historie, wenn ihre Dateien absichtlich aus
+dem installierten Manifest entfernt wurden. Datenbankbelege im Format~2
+behalten die vollständige Historie mit Zeitstempeln und das tatsächliche Schema;
+historisches Fehlen wird ausdrücklich erfasst. Fehlende deklarierte Dateien
+oder geänderte Bytes verweigern weiterhin die Aktivierung. Alte Belege behalten
+ihre ursprünglichen strengen Vergleiche. Ein alter Kontrollpunkt
+\codeword{activate} beweist allein keine Teilaktivierung: Die Zeigerfreigabe
+verlangt unveränderte Originale, geprüfte Sicherungen und weiterhin fehlende
+neue Pfade unter Start-, Worker- und exklusiver Laufzeitsperre. Admin-Anfragen
+geben ihre eigene Lesesperre erst nach Authentifizierung und CSRF frei.
+Der Integritätsfortschritt zeigt den Dateiprüfzeiger; jeder neue Schritt setzt
+vorherige Zähler zurück. Kompakte Anzeigen bleiben auf Desktop und schmalen
+Bildschirmen synchron.
+Die normale Aktion bleibt Aktualisieren mit automatischer Fortsetzung.
+Verarbeitungsläufe zählt kurze Anfragen einschließlich Warten; Wiederholen
+behält denselben Auftrag und Zähler. Warten auf andere Anfragen wird
+ausdrücklich mit langsamerer Abfrage angezeigt. Nicht verwaltete lokale
+PHP-Dateien bleiben erhalten. Private Worker-Diagnosen nennen Schritt,
+Referenz, Ausnahmeklasse, Besitzerdatei und Zeile, Sicherheitsbelege und gegebenenfalls
+die validierte Migrationskennung. Ein nicht verfügbarer Admin-Log nutzt das
+PHP-Fehlerprotokoll, ohne die Arbeit zu blockieren.
+
 Ein älterer blockierter Updater erhält den Mechanismus nicht durch bloße
 Veröffentlichung. Im Wartungsmodus Worker stoppen, koordinierte Sicherungen
 und~Fehlerbelege behalten, tatsächliche Datenbankkompatibilität prüfen, eine
@@ -3457,6 +3479,22 @@ Administrator den passenden alten aktiven Zeiger archivieren. Nicht nur Bootstra
 ersetzen, Auftragsziel/Paket ändern, eine aktive Aktivierungssperre entfernen
 oder nur Dateien zurückspielen. Ablauf und~Grenzen stehen in
 \filepath{docs/AUTOUPDATE.md}.
+Der Ablauf umfasst die gemeldete Installation \codeword{c2e2bc77} mit ihrem
+älteren festgelegten Auftrag: Nach gesonderter Freigabe die vollständige
+kompatible korrigierte Version im Wartungsmodus bereitstellen, den alten
+Auftrag bewahren und seinen Besitzer erst nach geprüfter Vorwärtsreparatur
+abgleichen. Wiederholen ändert niemals das Auftragsziel.
+Bei überschreibender FTP-Bereitstellung die vollständige geprüfte Version
+ohne Löschen alter lokaler Dateien, Aufträge oder Sicherungen hochladen.
+Unter Advanced tools \ui{FTP-Aktualisierung abschließen} wählen: Der gleiche
+Installer prüft gelieferte Dateien, erhält alte Aufträge und passende
+Sperrbelege, führt Vorwärtsmigrationen aus und gleicht den Kanal ab.
+Er aktiviert kein altes Paket und bereinigt keine überholten Dateien.
+\ui{Pausieren} gilt am nächsten sicheren Kontrollpunkt jedes Schritts;
+\ui{Aktualisierung fortsetzen} führt denselben Auftrag weiter. Eine teilweise
+Aktivierung bleibt gesperrt. Auch ältere unterstützte Release-Commits sind
+wählbar; Migrationen werden nicht zurückgenommen und eine kompatible
+Datenbanksicherung kann erforderlich sein.
 
 \subsection{Integritätsmanifest}
 \index{k00156@Kernmanifest}

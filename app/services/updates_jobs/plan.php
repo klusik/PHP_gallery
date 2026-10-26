@@ -54,11 +54,14 @@ use function Gallery\Core\run_migrations_bounded;
  * Return incoming release files in deterministic activation order.
  *
  * @param string $sourceRoot Extracted source root.
+ * @param bool $installedOverlay Whether unlisted installed files are outside this verification set.
  * @return array<int,string> Project-relative files.
  */
-function application_update_release_files(string $sourceRoot): array
+function application_update_release_files(string $sourceRoot, bool $installedOverlay = false): array
 {
-    $files = release_file_policy_archive_updater_paths($sourceRoot)['files'];
+    $files = $installedOverlay
+        ? \Gallery\Core\release_file_policy_paths($sourceRoot, 'updater')
+        : release_file_policy_archive_updater_paths($sourceRoot)['files'];
 
     usort($files, static function (string $left, string $right): int {
         $priority = static function (string $path): int {
