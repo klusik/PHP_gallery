@@ -1,5 +1,82 @@
 # Patch notes
 
+## Version 0.144.13
+
+Shortened updater maintenance to the critical file, migration, and finalization
+steps, and made the installation-root `maintenance.lock` the sole public
+maintenance switch. Application files continued to be updated in place.
+
+### Highlights
+
+#### One maintenance marker and earlier reopening
+
+- Added support for an empty, manually created `maintenance.lock` in the
+  installation root. Removing that operator-created file ended manual
+  maintenance; active jobs and rollback records alone did not enable it.
+- Reopened the website after completed migrations and required finalization,
+  before physical updater cleanup. Cleanup could then continue, pause, or retry
+  while ordinary visitors used the committed runtime.
+- Preserved maintenance during critical activation and unsafe interrupted
+  recovery. Kept download, extraction, and ordinary preparation outside that
+  maintenance interval.
+
+### Technical Details
+
+#### Backend and recovery
+
+- Updated `app/early_runtime.php` and the updater service to use the canonical
+  root marker. Imported legacy `cache/updates/activation.json` before runtime
+  admission, preserved its exact bytes in private receipts, and avoided
+  overwriting manual or unrelated marker ownership.
+- Guarded legacy marker retirement with the old job's worker lock and recognized
+  durable same-job or superseded-job ownership, preventing old marker evidence
+  from recreating maintenance after its canonical owner completed.
+- Added `application_update_runtime_commit()` after migrations and finalization.
+  Persisted `runtime_committed`, closed the rollback observation window, and
+  removed only the updater-owned maintenance marker before entering cleanup.
+- Replayed committed-runtime retirement before paused or failed cleanup handling.
+  Refused an isolated automatic rollback claim after reopening to public use.
+- Kept runtime lease failures without a maintenance marker as infrastructure
+  errors rather than an independent maintenance switch.
+- Excluded `maintenance.lock` from tracked files, deployment packages, integrity
+  ownership, and rollback payloads. Kept manual markers without a blind expiry.
+
+#### Tests
+
+- Extended real HTTP fixtures for empty manual markers, normal admission without
+  a marker, legacy import and ownership, committed stale-marker retirement, and
+  the existing HTML, HEAD, POST, and machine-response contracts.
+- Extended the real updater and SQL recovery fixture to refuse premature runtime
+  commit, execute activation through finalization, admit an independent public
+  process during paused cleanup, refuse post-commit isolated rollback, and resume
+  cleanup to completion.
+- Invalidated the HTTP fixture's parent-process filesystem stat cache after
+  server responses so marker-removal assertions observed current disk state.
+
+#### Documentation
+
+- Updated architecture, database recovery, testing, updater, and compatibility
+  documentation, together with the English, Czech, German, and Swedish manuals.
+- Documented the remaining critical maintenance interval, manual marker handling,
+  legacy compatibility, and the end of isolated rollback eligibility at runtime
+  commit. No schema migration or release-directory switching was introduced.
+
+### User Impact
+
+#### For visitors
+
+- Reduced the updater's closed interval by allowing website use during physical
+  cleanup. Critical file replacement, migrations, and required finalization
+  still used the existing maintenance response.
+
+#### For administrators
+
+- Added a single installation-root file for manual maintenance control and kept
+  updater ownership and recovery evidence available after interruptions.
+- Kept paused or retried post-commit cleanup from prolonging maintenance.
+  Required inspection of an updater-owned marker and its job before manual
+  removal during an interrupted critical write.
+
 ## Version 0.144.12
 
 During activation maintenance, HTML visitors received a self-contained page with
