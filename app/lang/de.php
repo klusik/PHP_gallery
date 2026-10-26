@@ -1628,4 +1628,6 @@ return [
     'admin.updates.recovery_restored' => 'Der fehlgeschlagene Versuch wurde freigegeben; die vorherigen Anwendungsdateien sind vorhanden. Fehlerhafte Version oder Commit sind von automatischer Installation ausgeschlossen; aktivierte Prüfungen können eine neuere stabile Version installieren.',
     'admin.updates.recovery_backup_blocked' => 'Das automatische Rollback ist gestoppt: Die Sicherung fehlt, ist unvollständig oder beschädigt. Auftrag und Sicherung behalten. Ein Administrator muss einen vollständigen verifizierten Stand wiederherstellen oder im Wartungsmodus eine kompatible Version bereitstellen.',
     'admin.updates.recovery_started' => 'Das automatische Rollback hat einen eigenen Auftrag: {job}. Updates erneut öffnen, um ihn zu verfolgen. Der ursprüngliche Fehler und seine Belege bleiben erhalten.',
+    'admin.updates.log_autoupdate_started' => 'Die automatische Aktualisierung auf {version} wurde gestartet; die Installation läuft noch.',
+    'admin.updates.log_autoupdate_completed' => 'Die automatische Aktualisierung wurde abgeschlossen: {version}.',
 ];

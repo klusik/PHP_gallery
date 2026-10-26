@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.144.9}
+\newcommand{\version}{0.144.10}
 \newcommand{\manualdate}{26.~Oktober~2026}
 
 \hypersetup{
@@ -3506,6 +3506,12 @@ Zugang neuer Besucheranfragen, damit laufender Verkehr den Start nicht verhinder
 Erst Aktivierung und Migrationen warten auf bereits laufende Anfragen.
 Auch automatische Updates schließen den Zugang vor dem Warten auf alte Leser,
 damit neue Besucher die Aktivierung nicht unbegrenzt verzögern.
+Bei geschlossener Sperre behalten private Worker während des Wartens einen
+Folgeauftrag; ein weiterer Besucher ist nicht nötig. Die Übergabe wartet nach
+Freigabe der Schlösser eine Sekunde. Der konfigurierte Admin-Sitzungsname bleibt
+auch nach dem Sitzungsschluss für Hintergrundarbeit erhalten. Das Startprotokoll
+nennt die Zielversion; ein separates Abschlussereignis nennt vorherige und
+installierte Version erst nach dauerhaftem Abschluss.
 Warten auf Übernahme wird angezeigt und automatisch fortgesetzt. FTP-Wiederholen
 prüft installierte Dateien statt herunterzuladen. Datenbankmigrationen laufen
 nur vorwärts; Datenbankänderungen werden nicht zurückgenommen.

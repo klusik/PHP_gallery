@@ -95,6 +95,16 @@ const APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES = 65536;
 const APPLICATION_UPDATE_CHAIN_SLICE_SECONDS = 3.0;
 
 /**
+ * Purpose: pace private continuations while activation drains old readers.
+ * Type: int. Units: microseconds. Scope: one gate-closed background handoff.
+ * Consumers: application_update_background_chain_run().
+ * Rationale: 1000000 microseconds limits waiting successors to about one per
+ * second without depending on visitors that the activation gate now refuses.
+ * The delay runs after both worker and chain locks have been released.
+ */
+const APPLICATION_UPDATE_CHAIN_DRAIN_DELAY_US = 1_000_000;
+
+/**
  * Recover a handed-off ticket when no worker arrival was recorded.
  * Type: int. Units: seconds. Scope: one installation-wide queued handoff.
  * Consumers: background chain start/run ticket admission.

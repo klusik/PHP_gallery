@@ -8,8 +8,8 @@
  * Module Type: Regression Test
  *
  * Purpose:
- *   Prevents automatic-update optimizations from spawning loopback HTTP requests
- *   back into the same shared-host PHP worker pool.
+ *   Preserves bounded deferred discovery and authenticated private continuations
+ *   without adding activation-drain delays to visitor requests.
  *
  * Responsibilities:
  *   - Preserve the established automatic update lifecycle
@@ -101,7 +101,6 @@ assert_autoupdate_request_latency_safety(
             $backgroundSource,
             'application_update_release_lock($lock);',
         )
-        && !php_source_contains($backgroundSource, 'sleep(')
         && strpos(
             $maintenanceController,
             'if (!site_maintenance_token_is_valid($token))',
@@ -110,7 +109,34 @@ assert_autoupdate_request_latency_safety(
             $maintenanceController,
             'application_update_background_chain_run(',
         ),
-    'Autonomous updater work must consume hashed single-use tickets after authentication, release its chain lock before handoff and never sleep between worker slices.',
+    'Autonomous updater work must consume hashed single-use tickets after authentication and release its chain lock before handoff.',
+);
+
+// A closed gate refuses the visitors that formerly restarted a yielded drain.
+// Permit one paced private successor, after both locks have been released;
+// keep ordinary slices and all public discovery free of this delay.
+assert_autoupdate_request_latency_safety(
+    preg_match_all(
+        '/\b(?:u?sleep|time_nanosleep|time_sleep_until)\s*\(/',
+        $backgroundSource,
+    ) === 1
+        && php_source_contains(
+            $backgroundSource,
+            "} finally {
+                application_update_release_lock(\$lock);
+            }
+            if (\$nextTicket !== '' && \$runtimeDrain) {
+                usleep(APPLICATION_UPDATE_CHAIN_DRAIN_DELAY_US);
+            }
+            \$queued = \$nextTicket !== ''
+                && application_update_background_chain_deliver(
+                    \$nextTicket,
+                    \$deliver,
+                );",
+        )
+        && !php_source_contains($serviceSource, 'sleep(')
+        && !php_source_contains($bootstrapSource, 'sleep('),
+    'Only the private closed-gate drain handoff may pause, once and after releasing ownership; visitor discovery and normal slices must remain unpaced.',
 );
 
 assert_autoupdate_request_latency_safety(

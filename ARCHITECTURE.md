@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.9';
+const CMS_VERSION = '0.144.10';
 ```
 
 Update-related code uses:
@@ -2865,6 +2865,15 @@ completion; legacy jobs use their activation-complete receipt. The authenticated
 remains reachable so an interrupted activation can continue. Existing requests
 finish before the exclusive lease allows file publication. New visitors can no
 longer indefinitely replace the readers that have already finished.
+
+While that owned gate is closed, a worker that progressed into a runtime wait
+keeps its private continuation, paced by a one-second delay after lock release.
+Stopping on this wait would deadlock with public requests already refused by
+the gate. No-progress worker-lock contention still stops as before. Job creation
+captures the configured session name even after the visitor session is closed;
+actual authenticated Admin session verification remains mandatory at admission.
+Start and durable completion are separate automatic-update log events, including
+the target and actual installed versions.
 
 A portable PHP application on ordinary shared hosting cannot atomically exchange
 an entire non-symlink directory tree. Therefore a process termination inside

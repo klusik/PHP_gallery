@@ -167,6 +167,12 @@ try {
     );
     // No cookie, JavaScript, Admin page or follow-up visitor request participates.
     file_get_contents($base . '/visit', false, $context);
+    $gatedBody = file_get_contents($base . '/after-gate', false, $context);
+    update_chain_http_assert(
+        str_contains($http_response_header[0] ?? '', '503')
+            && str_contains((string) $gatedBody, 'Service temporarily unavailable'),
+        'The ordinary follow-up did not encounter the real activation gate.',
+    );
     do {
         $completed = \Gallery\Services\application_update_load_job($jobId);
         if (
@@ -181,7 +187,7 @@ try {
     update_chain_http_assert(
         $completed['status'] === 'completed'
             && $completed['attempts'] > 1,
-        'One visitor did not finish real independent updater slices: '
+        'A closed-gate runtime wait lost its independent HTTP successors: '
             . json_encode($completed)
             . '\nOwned server: '
             . file_get_contents($root . '/server.log'),

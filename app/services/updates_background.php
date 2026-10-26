@@ -148,7 +148,7 @@ function application_update_background_chain_start(callable $deliver): array
  * Consume one authenticated handoff and advance only its original active job.
  * @param string $ticket Private single-use token normalized by the HTTP controller.
  * @param callable(string):bool $deliver Configured-origin transport for the next reserved token.
- * @return array{ok:bool,queued:bool,reason:string} Safe admission/worker result without tokens, paths or raw exceptions; queued only proves request delivery.
+ * @return array{ok:bool,queued:bool,reason:string} Safe admission/worker result without tokens, paths or raw exceptions; queued only proves request delivery. Closed-gate runtime waits retain paced successors after releasing locks.
  */
 function application_update_background_chain_run(
     string $ticket,
@@ -173,6 +173,7 @@ function application_update_background_chain_run(
         ];
     }
     $nextTicket = '';
+    $runtimeDrain = false;
     try {
         $path = application_update_jobs_root() . '/background-chain.json';
         $record = application_update_read_json($path);
@@ -209,9 +210,12 @@ function application_update_background_chain_run(
             APPLICATION_UPDATE_CHAIN_SLICE_SECONDS,
         );
         $job = application_update_active_job();
+        $runtimeDrain = application_update_background_job_eligible($job)
+            && !empty($job['checkpoints']['runtime_lease_busy'])
+            && !empty($job['checkpoints']['recovery_admission_closed']);
         $continues =
             application_update_background_job_eligible($job)
-            && empty($job['checkpoints']['runtime_lease_busy'])
+            && (empty($job['checkpoints']['runtime_lease_busy']) || $runtimeDrain)
             && ($record['job_id'] ?? '') === $job['id']
             && (int) ($job['attempts'] ?? 0) > $attempts;
         $record['queued_until'] = 0;
@@ -224,8 +228,9 @@ function application_update_background_chain_run(
             $record['last_dispatch_at'] = time();
             $reason = 'update_chain_queued';
         }
-        // Failed/busy work stops this chain. Later opportunities use bounded
-        // retry backoff or separate due discovery; no timer keeps PHP waiting.
+        // Failed work and occupied workers stop. A progressed runtime-drain
+        // slice must retain its successor: public admission is already closed,
+        // so another visitor cannot restart a stopped activation chain.
         $record['last_error'] = ($job['status'] ?? '') === 'failed'
             ? 'update_chain_worker_failed'
             : '';
@@ -249,6 +254,9 @@ function application_update_background_chain_run(
         application_update_release_lock($lock);
     }
     // Release the chain lock before a successor can arrive; never wait for it.
+    if ($nextTicket !== '' && $runtimeDrain) {
+        usleep(APPLICATION_UPDATE_CHAIN_DRAIN_DELAY_US);
+    }
     $queued =
         $nextTicket !== ''
         && application_update_background_chain_deliver($nextTicket, $deliver);

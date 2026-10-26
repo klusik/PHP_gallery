@@ -4055,6 +4055,8 @@
     "admin.updates.log_autoupdate_dry_run_checked": "Torrkörning av automatisk uppdatering kontrollerade en nyare stabil release utan att installera den.",
     "admin.updates.log_autoupdate_dry_run_failed": "Torrkörning av automatisk uppdatering misslyckades.",
     "admin.updates.log_autoupdate_failed": "Automatisk programuppdatering misslyckades.",
+    "admin.updates.log_autoupdate_started": "Den automatiska uppdateringen till {version} har startat; installationen pågår fortfarande.",
+    "admin.updates.log_autoupdate_completed": "Den automatiska uppdateringen har slutförts: {version}.",
     "admin.updates.log_autoupdate_installed": "Automatisk programuppdatering installerade en nyare stabil release.",
     "admin.updates.log_beta_installed": "Administratören installerade en beta-version av programmet.",
     "admin.updates.log_beta_reverted": "Administratören återställde beta-versionen av programmet från den stabila grenens HEAD.",
