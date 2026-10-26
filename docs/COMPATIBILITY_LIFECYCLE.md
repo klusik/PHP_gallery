@@ -2,6 +2,16 @@
 
 ## Failed updater jobs
 
+Overwrite-only FTP recovery is owned by the existing updater service. Old local
+files and private job/backup state remain supported. Explicit manual completion
+verifies the installed declared file set, preserves old gate/window receipts,
+runs forward migrations and reconciles the new release without an old-package
+replay. New jobs capture starting installed versions; legacy jobs use validated
+targets. Pause preserves every checkpoint and never opens a partial activation.
+Regression includes a real-file overlay with local extras, retained backups,
+all-stage pause and delayed browser responses. Live FTP transfer order and
+production DB compatibility remain unverified; no historical path is retired.
+
 Owners: update lifecycle/recovery services, early runtime isolation and the
 schema-inspection SQL model. Recovery covers failed background, Admin/API and
 Advanced commit-ID jobs while preserving their origin and saved preferences.
@@ -1726,6 +1736,32 @@ not a source parser or a commitment to remove anything on a calendar date.
   explicitly retired. Do not mass-convert immutable historical migrations.
 
 ### DB-2 — Applied migration ledger rows with no current file
+
+Updater owner: `updates_jobs/activation.php` with the schema-inspection model.
+The c2e2bc77/0.144.3 updater incorrectly required every historical file;
+the supplied F8D315905480 job supports this failure path but does not identify
+the exact missing file or production ledger. Evidence format 2 preserves all
+rows/timestamps and schema, records manifest-proven historical absence as null
+and rejects missing declared files. Unversioned saved witnesses retain their
+strict original checks; unknown formats refuse. The recovery integration
+fixture covers actual historical SQL rows, file corruption, changed ledger and
+schema, legacy witnesses and completed rollback. Live upgrade acceptance is
+unknown. Permanent support follows the ledger contract; removing the reader
+requires proof that no supported stored recovery witness needs it.
+
+Legacy `activate` checkpoints without a first-write receipt require complete
+original-byte/backup proof under all three owner locks before pointer release.
+New activation intent is persisted before the gate. The fixed Admin controller
+also hands off its initial bootstrap lease after authentication and CSRF.
+Disposable byte/lock/adverse-state fixtures cover both; real hosting use is
+unverified. Retain the old-checkpoint path while deployed unfinished jobs exist.
+The public `attempts` field keeps its historical lifetime worker-request
+meaning; new labels explain it and runtime waiting is additive. Missing waiting
+fields in old jobs default to false. All four catalogs and synchronized
+server/browser cards retain support for already stored jobs. Worker failures
+gain a private structured receipt and confirmed-log/PHP-log fallback, without
+changing public error redaction. The disposable fixture covers logging failure
+and absence of secrets; actual hosting PHP-log delivery remains unverified.
 
 - **Reason / protected scenario:** An already-applied `schema_migrations` row
   remains history even when its migration file has been removed; it must not

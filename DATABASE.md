@@ -30,6 +30,15 @@ Completed seeds remain unchanged; unrecorded failed migrations replay normally.
 
 ## Scheduler observations
 
+Updater recovery reads the complete bounded migration ledger, including
+`applied_at`, and actual column/index definitions without changing them.
+Versioned evidence distinguishes intentionally retired migration files using
+the installed manifest from missing/corrupt declared files. Historical rows
+remain intact and non-pending; no migration or schema change is introduced by
+this updater repair. Old saved evidence retains its original comparison
+contract; absent historical evidence is never reconstructed as a past DB fact.
+
+
 Cron Overview reuses domain-owned app settings and telemetry settings/job rows;
 it adds no scheduling table or migration. The telemetry model reads only the
 latest `telemetry.maintenance` attempt by descending ID, preserving unknown or

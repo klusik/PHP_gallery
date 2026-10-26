@@ -3340,6 +3340,26 @@ and~install a~newer stable release. Gated failures need hosting CLI cron
 or~an~authenticated Admin request; denied visitors cannot run the~scheduler.
 No~idle worker waits through backoff.
 
+Applied migration rows remain history when their files were intentionally
+retired from the~installed manifest. Database evidence format~2 retains
+the~complete ledger with timestamps and~actual schema, recording that absence
+explicitly. Missing declared files and~changed bytes still refuse activation;
+old saved witnesses retain their original strict comparisons.
+An~old \codeword{activate} checkpoint alone does~not~prove partial activation:
+pointer release requires unchanged originals, verified backups and~absent
+created paths under start, worker and~exclusive runtime locks. Admin requests
+release their own bootstrap read lease only after authentication and~CSRF.
+Integrity progress shows the~verified-file cursor; entering each new stage
+resets the~previous counters. The~compact progress surfaces remain synchronized
+on~desktop and~narrow screens.
+The~normal action remains Update followed by~automatic continuation.
+Details call the~lifetime counter Processing runs: it~includes short worker
+requests and~waits, and~Retry keeps the~same job and~count. Waiting for~other
+requests is~explicit and~uses slower polling. Unmanaged local PHP files remain
+preserved. Private worker diagnostics include stage/reference, exception owner
+and~line, safety receipts and~the~validated migration identity when relevant;
+unavailable Admin logging falls back to~the~PHP error log without blocking work.
+
 An~older stuck updater does~not~receive this mechanism merely because a~new
 release is~published. In~maintenance mode, stop workers, preserve coordinated
 backups and~all failed-job evidence, establish actual database compatibility,
@@ -3348,6 +3368,19 @@ Only after verified repair may~the~administrator archive the~matching old active
 pointer. Never replace only the~bootstrap, edit a~job's target/package, discard
 a~live activation gate or~restore application files alone. See
 \filepath{docs/AUTOUPDATE.md} for~the~complete repair procedure and~limits.
+That procedure includes the~reported \codeword{c2e2bc77} installation and
+its pinned older job: after separate approval, deploy the~complete compatible
+fixed release in~maintenance mode, preserve the~old job and~reconcile its
+owner only after verified forward repair. Retry never changes a~job's target.
+For~overwrite-only FTP deployment, upload the~complete verified release without
+deleting old local files, jobs or~backups. In~Advanced tools choose
+\ui{Finish FTP update}; the~same engine verifies delivered files, preserves
+the~old job and~matching gate receipts, runs forward migrations and~reconciles
+the~channel. It~does not~reactivate the~old package or~prune obsolete files.
+\ui{Pause} works at~the~next safe checkpoint in~every stage;
+\ui{Continue update} resumes the~same job. A~partial activation stays gated.
+Advanced commit installation also accepts older supported release commits;
+database migrations are~never reversed and~a~compatible DB backup may~be~needed.
 
 \subsection{Integrity manifest}
 \index{core manifest}

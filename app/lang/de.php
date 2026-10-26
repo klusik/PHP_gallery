@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.updates.pause' => 'Pausieren',
+    'admin.updates.resume' => 'Aktualisierung fortsetzen',
+    'admin.updates.pause_hint' => 'Der Auftrag pausiert in jedem Schritt am nächsten sicheren Kontrollpunkt. Dateien, Sicherungen und Aktivierungssperre bleiben erhalten. Fortsetzen führt denselben Auftrag weiter.',
+    'admin.updates.version_commit_help' => 'Einen gewählten Git-Commit installieren, auch aus einer älteren Version. Commit-ID eingeben. Der Code wird festgelegt; Datenbankmigrationen werden nicht zurückgenommen und älterer Code kann eine kompatible Datenbanksicherung benötigen.',
+    'admin.updates.manual_deployment_title' => 'FTP-Aktualisierung abschließen',
+    'admin.updates.manual_deployment_hint' => 'Nach dem Überschreiben mit der vollständigen Release-ZIP hier abschließen. Zusätzliche lokale Dateien, alter Auftrag und Sicherungen bleiben erhalten. Das installierte Paket wird geprüft und Vorwärtsmigrationen werden abgeschlossen.',
+    'admin.updates.job_runs_label' => 'Verarbeitungsläufe',
+    'admin.updates.job_runs_hint' => 'Kurze Verarbeitungsanfragen für diesen Auftrag, einschließlich Wartezeiten. Dies zählt weder Fehler noch Klicks auf Fortsetzung versuchen.',
+    'admin.updates.job_stage_label' => 'Schritt',
+    'admin.updates.job_waiting_runtime' => 'Andere Website-Anfragen müssen zuerst enden. Die Aktualisierung wird automatisch fortgesetzt.',
+    'admin.updates.job_continuing' => 'Die Aktualisierung wird automatisch fortgesetzt.',
+    'admin.updates.job_retry' => 'Fortsetzung versuchen',
+    'admin.updates.job_retry_scheduled' => 'Fortsetzung ab dem letzten gespeicherten Schritt.',
     'gallery.visit.mark_unseen' => 'Diese Galerie mit ihren Untergalerien als unbesucht markieren',
     'gallery.visit.unseen' => 'Noch nicht besucht',
     'gallery.visit.partial' => 'Teilweise besucht',

@@ -19,7 +19,7 @@ License: MIT
 <main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="updates" data-admin-side-panel-title="Updates">Open updates</a></main>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
-import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261016-readability-v1';
+import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261026-updater-progress-v1';
 import {setupAdminNavdataUpdateFeedback} from '/public/assets/gallery-modules/admin-navdata-update.js?v=20261002-navdata-ajax-v1';
 import {setupAdminRouteNavdata} from '/public/assets/gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
@@ -31,6 +31,10 @@ let reads = 0;
 let failRead = false;
 let failJob = false;
 let recoveryBlocked = false;
+let releaseVerification;
+let pauseScenario = false;
+let pauseResumed = false;
+let releasePausedContinuation;
 const recoveryGuidance = 'Automatic recovery stopped: database compatibility is unverified. Preserve the job and backups. Verify the database and deploy a compatible release in maintenance mode; resume forward migrations. Do not restore application files alone.';
 const fixtureFetch = window.fetch.bind(window);
 let holdRead = false;
@@ -94,6 +98,11 @@ function navdata(returnPage = 'admin') {
  * @param {string} status Durable lifecycle state. @return {{id:string, status:string, stage:string, progress:{percent:number, message:string}, error?:{message:string,reference:string,retryable:boolean}, can_resume:boolean, can_cancel:boolean, can_rollback:boolean}} Job state.
  */
 function job(status) {
+    if (status === 'running' && starts === 1) {
+        return {id:'fixture-1',status,stage:'package_validate',attempts:631,
+            progress:{percent:37,current:370,total:1000,message:'Verifying package file integrity.'},
+            can_resume:true,can_cancel:true,can_rollback:false};
+    }
     if (recoveryBlocked && status === 'failed') {
         return {id:'fixture-' + starts, status, stage:'migrate',
             progress:{percent:42,message:'Stopped.'},
@@ -137,7 +146,24 @@ window.fetch = /** Intercept only fixture endpoints; no updater files or GitHub 
         if (action === 'check_due') { periodicChecks++; return json({ok:true, html:summary(true), notes_html:notes('old')}); }
         if (action === 'force_check') { forcedChecks++; return json({ok:true, html:summary(false), notes_html:notes('new')}); }
         if (action === 'stable_update') { starts++; return json({ok: true, job: job('running')}); }
-        if (action === 'job_continue') { continuations++; return json({ok: true, job: job(failJob ? 'failed' : 'completed')}); }
+        if (action === 'job_pause') return json({ok:true,job:{...job('running'),status:'paused'}});
+        if (action === 'job_resume') {
+            pauseResumed = true;
+            return json({ok:true,job:job('running')});
+        }
+        if (action === 'job_continue') {
+            continuations++;
+            if (pauseScenario && !pauseResumed) return new Promise(resolve => {
+                releasePausedContinuation = () => resolve(json({ok:true,job:job('running')}));
+            });
+            if (starts === 1) return new Promise(resolve => {
+                releaseVerification = () => resolve(json({ok:true,job:continuations === 1
+                    ? {...job('running'),stage:'activate',runtime_waiting:true,attempts:632,
+                        progress:{percent:0,message:'Waiting for other website requests to finish.'}}
+                    : job('completed')}));
+            });
+            return json({ok: true, job: job(failJob ? 'failed' : 'completed')});
+        }
         if (action === 'job_cancel') return json({ok: true, job: job('cancelled')});
         throw new Error('Unexpected fixture mutation');
     }
@@ -179,6 +205,38 @@ try {
     form.requestSubmit();
     await until(/** Wait for production progress rendering. @return {boolean} Whether worker is running. */ () => scope.dataset.updateJobStatus === 'running');
     check(form.querySelector('button').disabled, 'Update stays disabled throughout the running job');
+    await until(() => Boolean(releaseVerification));
+    // Render real production progress styles at desktop and narrow widths.
+    for (const width of [1280, 390]) {
+        await fixtureFetch('/__viewport?width=' + width);
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        for (const currentScope of panel.querySelectorAll('[data-update-job-scope]')) {
+            check(currentScope.querySelector('[data-update-job-title]').textContent === 'Verifying integrity'
+                && currentScope.querySelector('[data-update-job-percent]').textContent === '37%'
+                && currentScope.querySelector('[role="progressbar"]').getAttribute('aria-valuenow') === '37'
+                && currentScope.querySelector('[data-update-job-message]').textContent === 'Verifying package file integrity.',
+                width + ' integrity progress uses current counters in both cards');
+            check(currentScope.querySelector('[data-update-job-runs-label]').textContent === 'Processing runs:'
+                && currentScope.querySelector('[data-update-job-attempts]').textContent === '631'
+                && currentScope.querySelector('[data-update-job-runs-hint]').textContent.includes('not the number of errors'),
+                width + ' processing counter explains continuations without calling them failed attempts');
+            const bounds = currentScope.getBoundingClientRect();
+            check(bounds.left >= -1 && bounds.right <= innerWidth + 1
+                && currentScope.scrollWidth <= currentScope.clientWidth + 1,
+                width + ' integrity progress fits the production drawer');
+        }
+    }
+    await fixtureFetch('/__viewport?width=1280');
+    const finishVerification = releaseVerification;
+    releaseVerification = null;
+    finishVerification();
+    await until(() => scope.querySelector('[data-update-job-message]').textContent.includes('Waiting for other website requests'));
+    check(scope.querySelector('[data-update-job-percent]').textContent === '0%'
+        && scope.querySelector('[data-update-job-attempts]').textContent === '632'
+        && scope.querySelector('[data-update-job-error]').hidden,
+        'Runtime contention is visible waiting, not stale success or an installation failure');
+    await until(() => Boolean(releaseVerification));
+    releaseVerification();
     await until(/** Wait for passive completion rendering. @return {boolean} Whether refreshed summary arrived. */ () => release.dataset.updateStatusJob === 'fixture-1');
     check(!release.querySelector('[data-update-job-form]'), 'Update disappears after completion without Force check');
     releaseNotes();
@@ -186,7 +244,7 @@ try {
     check(panel.querySelector('[data-patch-notes-input]').value === 'new' && panel.querySelector('[data-patch-notes-fragment]').textContent === 'Notes new', 'Completion refreshes selected notes and suppresses stale selection responses');
     check(scope.querySelector('[data-update-job-complete]').hidden === false, 'Completion is visible in dynamically created cards');
     check(panel.querySelectorAll('[data-update-job-scope][data-update-job-status="completed"]').length === 2, 'Status and Advanced progress remain synchronized');
-    check(starts === 1 && continuations === 1 && reads === 1, 'One start, one continuation and one passive read complete the workflow');
+    check(starts === 1 && continuations === 2 && reads === 1, 'One start, two serialized continuations and one passive read complete the workflow');
     check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Completion keeps URL and drawer open');
     release.querySelector('[data-update-check-form]').requestSubmit();
     await until(/** Await explicit asynchronous discovery. @return {boolean} Whether Force check settled. */ () => forcedChecks === 1 && !release.hasAttribute('aria-busy'));
@@ -249,6 +307,24 @@ try {
             width + ' stopped recovery preserves drawer and URL');
     }
     await fixtureFetch('/__viewport?width=1280');
+    recoveryBlocked = false;
+    failJob = false;
+    holdRead = false;
+    pauseScenario = true;
+    release.innerHTML = summary(true);
+    release.querySelector('[data-update-job-form]').requestSubmit();
+    await until(() => Boolean(releasePausedContinuation));
+    scope.querySelector('[data-update-job-control-action="job_pause"]').click();
+    await until(() => scope.dataset.updateJobStatus === 'paused');
+    releasePausedContinuation();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    check(scope.dataset.updateJobStatus === 'paused'
+        && scope.querySelector('[data-update-job-title]').textContent === 'Update paused',
+        'Late continuation cannot overwrite an explicit paused state');
+    scope.querySelector('[data-update-job-control-action="job_resume"]').click();
+    await until(() => scope.dataset.updateJobStatus === 'completed');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false',
+        'Pause and resume preserve the drawer, URL and original job');
     panel.querySelector('[data-navdata-update-form]').requestSubmit();
     await until(/** Wait for AJAX import. @return {boolean} Whether held import started. */ () => Boolean(releaseNavdata));
     check(panel.querySelector('[data-navdata-update-submit]').disabled && location.href === originalUrl, 'Navdata import paints progress without navigation');

@@ -45,6 +45,74 @@ use Throwable;
 use ZipArchive;
 use function Gallery\Core\run_migrations_bounded;
 
+/** Carry bounded migration identity to private diagnostics without raw paths. */
+final class ApplicationUpdateMigrationEvidenceException extends RuntimeException
+{
+    /**
+     * Identify one refused migration observation for the worker log.
+     * @param string $reason missing_file or changed_file evidence category.
+     * @param string $migrationVersion Validated applied ledger identity.
+     * @return void Initializes safe diagnostic fields and a generic error.
+     */
+    public function __construct(
+        public readonly string $reason,
+        public readonly string $migrationVersion,
+    ) {
+        parent::__construct('Recovery applied migration evidence is invalid.');
+    }
+}
+
+/**
+ * Retain an actionable private failure receipt and attempt normal Admin logging.
+ * @param array{id:string,stage:string,checkpoints:array<string,mixed>,...<string,mixed>} $job Failed worker state, updated with a private diagnostic receipt.
+ * @param Throwable $exception Failure contributing class and owner filename only.
+ * @param string $reference Public-safe correlation reference from the reducer.
+ * @return void Persists no secrets; log failure falls back to the PHP error log.
+ */
+function application_update_record_failure_diagnostic(
+    array &$job, Throwable $exception, string $reference,
+): void {
+    $diagnostic = [
+        'job_id' => (string) $job['id'],
+        'stage' => (string) $job['stage'],
+        'reference' => $reference,
+        'exception_class' => get_class($exception),
+        'owner_file' => basename($exception->getFile()),
+        'owner_line' => $exception->getLine(),
+        'processing_runs' => (int) ($job['attempts'] ?? 0),
+        'automatic_retries' => (int) ($job['auto_retries'] ?? 0),
+        'backup_complete' => !empty($job['checkpoints']['backup_complete']),
+        'activation_started' => $job['checkpoints']['activation_started'] ?? null,
+        'activation_complete' => !empty($job['checkpoints']['activation_complete']),
+        'migrations_started' => $job['checkpoints']['migrations_started'] ?? null,
+        'runtime_lease_busy' => !empty($job['checkpoints']['runtime_lease_busy']),
+    ];
+    if ($exception instanceof ApplicationUpdateMigrationEvidenceException
+        && in_array($exception->reason, ['missing_file', 'changed_file'], true)
+        && preg_match('/^[0-9]{12}_[a-z0-9_]+$/D', $exception->migrationVersion) === 1) {
+        $diagnostic['migration_evidence'] = $exception->reason;
+        $diagnostic['migration_version'] = $exception->migrationVersion;
+    }
+    $job['last_failure_diagnostic'] = $diagnostic;
+    try {
+        if (function_exists(__NAMESPACE__ . '\\admin_log_event_result')) {
+            $receipt = admin_log_event_result('error', 'update.worker_failed',
+                'Application update worker stopped; inspect correlated stage and evidence.',
+                $diagnostic, ['category' => 'update', 'severity' => 'error']);
+            if (!empty($receipt['ok'])) {
+                return;
+            }
+        }
+    } catch (Throwable) {
+        // Diagnostic storage must never replace the original failure/checkpoint.
+    }
+    try {
+        error_log('[PHP Gallery] update.worker_failed ' . json_encode($diagnostic));
+    } catch (Throwable) {
+        // Disabled host logging must not prevent saving the private job receipt.
+    }
+}
+
 /**
  * Return a short safe reference for an internal updater failure.
  *
@@ -95,6 +163,9 @@ function application_update_safe_error(mixed $error): array
         $retryable = false;
     } elseif (str_contains($lower, 'quarantined')) {
         $message = 'This update commit failed previously and is excluded from automatic installation. Select a newer verified release.';
+        $retryable = false;
+    } elseif (str_contains($lower, 'newer manual deployment')) {
+        $message = 'New application files were uploaded manually. Use Finish FTP update in Advanced tools to verify them and complete forward migrations. The older package will not be resumed.';
         $retryable = false;
     } elseif (str_contains($lower, 'recovery')) {
         $message = 'Automatic recovery could not verify the package, database or backup safety. Preserve the jobs and backups and ask the administrator to verify a compatible release in maintenance mode.';
@@ -151,6 +222,12 @@ function application_update_safe_error(mixed $error): array
  */
 function application_update_job_error_retryable(array $job): bool
 {
+    if (($job['operation'] ?? '') === 'manual_deploy'
+        && ($job['stage'] ?? '') === 'package_validate') {
+        // An incomplete FTP overlay can be completed by its operator.
+        // Explicit retry always restarts complete byte verification.
+        return true;
+    }
     if (!empty($job['result']['superseded_by'])
         || !empty($job['result']['recovery_released'])
         || !empty($job['automatic_rollback_reservation'])) {

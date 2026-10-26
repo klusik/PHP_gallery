@@ -255,7 +255,7 @@ function application_update_release_lock($handle): void
  * Return a public/Admin-safe update job projection.
  *
  * @param array{id?:string,operation?:string,trigger?:string,status?:string,stage?:string,progress?:array<string,int|string|float|bool|null>,created_at?:int,updated_at?:int,started_at?:int,finished_at?:int,attempts?:int,error?:array{message?:string,reference?:string,retryable?:bool}|null,result?:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,checkpoints?:array<string,bool>,runtime_limits?:array<string,int|string|bool>} $job Private durable job state fields used in the public projection.
- * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public-safe job state for JSON, UI, and logging.
+ * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,runtime_waiting:bool,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public-safe job state; attempts counts worker slices, and runtime_waiting reports the last activation lock observation.
  */
 function application_update_job_public_state(array $job): array
 {
@@ -316,17 +316,20 @@ function application_update_job_public_state(array $job): array
         'started_at' => (int) ($job['started_at'] ?? 0),
         'finished_at' => (int) ($job['finished_at'] ?? 0),
         'attempts' => (int) ($job['attempts'] ?? 0),
+        'runtime_waiting' => ($job['status'] ?? '') === 'running'
+            && !empty($job['checkpoints']['runtime_lease_busy']),
         'error' => $publicError,
         'result' => isset($job['result']) && is_array($job['result'])
             ? $job['result']
             : [],
         'can_resume' =>
-            (string) ($job['status'] ?? '') === 'running'
+            in_array((string) ($job['status'] ?? ''), ['running', 'paused'], true)
                 || (
                     (string) ($job['status'] ?? '') === 'failed'
                     && application_update_job_error_retryable($job)
                 ),
         'can_cancel' =>
+            ($job['operation'] ?? '') !== 'manual_deploy' &&
             empty($job['result']['superseded_by'])
                 && empty($job['automatic_rollback'])
                 && empty($job['result']['recovery_released']) && in_array(
@@ -340,6 +343,7 @@ function application_update_job_public_state(array $job): array
                     || $index < (int) array_search('activate', $stages, true)
                 ),
         'can_rollback' =>
+            ($job['operation'] ?? '') !== 'manual_deploy' &&
             empty($job['result']['superseded_by'])
                 && (($job['recovery_schema'] ?? 0) !== 1
                     || ($job['status'] ?? '') === 'completed')
@@ -405,6 +409,9 @@ function application_update_create_job(
         'updated_at' => $now,
         'finished_at' => 0,
         'attempts' => 0,
+        'installed_version_at_start' => application_update_version_from_local_bootstrap(
+            application_update_project_root() . '/app/bootstrap.php',
+        ) ?? '',
         'auto_retries' => 0,
         'parameters' => $parameters,
         'runtime_limits' => application_update_runtime_limits(),

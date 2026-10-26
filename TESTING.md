@@ -4787,7 +4787,37 @@ fetches retain the active session by posting to the current origin.
 
 ### Resumable application-update verification
 
+The recovery fixture overlays the real declared updater file set in its owned
+installation, retains extra local PHP and old backup bytes, simulates a legacy
+active/gated job, and completes the new manual FTP operation through the real
+state machine. It also requests pausing at every stage before executing its
+next checkpoint and resumes the same final-stage job. Browser coverage rejects
+a delayed continuation overwriting an explicit pause, then resumes in place.
+The installed-overlay path retains strict hashes and required-file presence;
+downloaded archives retain their separate unexpected-file rejection.
+
 `tests/updater_recovery_test.php` is discovered by the central FULL PHP registry.
+It also recreates the old producer's untouched `activate` boundary without a
+database witness, verifies original/created/obsolete paths and backup metadata,
+and refuses changed bytes, missing backups, activation or migration intent and
+held runtime ownership. Repeated release remains idempotent. Historical ledger
+rows without current files complete real rollback; declared missing/corrupt
+migrations, changed applied timestamps/versions/schema, unavailable installed
+inventory and unsupported witness formats refuse. Unversioned complete-hash
+witnesses remain accepted. Initial-request lease handoff is exercised with real
+kernel locks; controller ordering, post-response scheduler, private tickets and
+trusted CLI admission retain their respective transport coverage.
+The real browser drawer fixture holds integrity work at 37%, checks both
+synchronized cards and the production cascade at 1280/390 pixels, then releases
+completion. Package verification's expired/resumed cursor is checked through
+the real service and public-state projection. Live c2e2bc77 to 0.144.4 deployment
+is not performed by these disposable tests; follow `docs/AUTOUPDATE.md`.
+The fixture also preserves an unmanaged local PHP extension through real
+rollback, checks private worker diagnostics and exact migration identity, and
+forces unavailable Admin logging to verify redacted PHP-log fallback. The
+browser explains a retained 631/632 processing counter, displays runtime
+contention as waiting and completes through serialized continuations.
+
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a
 copied actual migration runner in an owned temporary installation. Database

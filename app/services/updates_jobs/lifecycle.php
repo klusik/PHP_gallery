@@ -191,7 +191,7 @@ function application_update_start_rollback_job(
         );
     }
     $observed = application_update_load_job($sourceJobId);
-    if (($observed['status'] ?? '') === 'failed'
+    if (($observed['status'] ?? '') !== 'completed'
         && ($observed['recovery_schema'] ?? 0) === 1) {
         application_update_assert_rollback_database($observed);
         if (!application_update_failed_recovery_due($observed, time())) {
@@ -308,6 +308,12 @@ function application_update_process_job(
             // retries can discard untrusted partial artifacts before execution resumes.
             return application_update_job_public_state($job);
         }
+        if (($job['status'] ?? '') === 'paused') {
+            return application_update_job_public_state($job);
+        }
+        if (application_update_manual_deployment_detected($job)) {
+            throw new RuntimeException('A newer manual deployment must be completed instead of resuming this package.');
+        }
         if (!empty($job['slice_open'])) {
             // Holding worker.lock proves the prior process no longer owns it.
             // A killed slice must enter the same bounded failure policy, rather
@@ -322,6 +328,10 @@ function application_update_process_job(
         $budget = application_update_time_budget($budgetSeconds);
 
         while (application_update_budget_allows($budget, 0.75)) {
+            if (is_file($jobDir . '/pause-requested.json')) {
+                $job['status'] = 'paused';
+                break;
+            }
             $stage = (string) ($job['stage'] ?? 'download');
             $next = null;
 
@@ -347,7 +357,15 @@ function application_update_process_job(
                 )) {
                     break;
                 }
-                $next = 'plan';
+                if (($job['operation'] ?? '') === 'manual_deploy') {
+                    $job['checkpoints']['manual_deployment_verified'] = true;
+                    if (!application_update_manual_deployment_gate($job)) {
+                        break;
+                    }
+                    $next = 'migrate';
+                } else {
+                    $next = 'plan';
+                }
             } elseif ($stage === 'plan') {
                 application_update_job_build_plan($job);
                 $next = 'stage_files';
@@ -381,7 +399,8 @@ function application_update_process_job(
                 application_update_job_finalize($job);
                 $next = 'cleanup';
             } elseif ($stage === 'cleanup') {
-                if (!application_update_job_cleanup($job, $budget)) {
+                if (($job['operation'] ?? '') !== 'manual_deploy'
+                    && !application_update_job_cleanup($job, $budget)) {
                     break;
                 }
                 $next = 'completed';
@@ -408,19 +427,32 @@ function application_update_process_job(
             }
 
             if ($next !== null) {
-                if (!application_update_job_transition_allowed($stage, $next)) {
+                $manualForward = ($job['operation'] ?? '') === 'manual_deploy'
+                    && $stage === 'package_validate' && $next === 'migrate'
+                    && !empty($job['checkpoints']['manual_deployment_verified'])
+                    && !empty($job['checkpoints']['runtime_guard_open']);
+                if (!$manualForward && !application_update_job_transition_allowed($stage, $next)) {
                     throw new RuntimeException(
                         'Update job attempted an invalid stage transition.',
                     );
                 }
                 $job['stage'] = $next;
-                $job['progress']['message'] =
-                    'Checkpoint completed: ' . $stage . '.';
+                // The new stage must never inherit the prior stage's 100%.
+                $job['progress'] = [
+                    'current' => 0,
+                    'total' => 0,
+                    'percent' => 0,
+                    'message' => 'Starting checkpoint: ' . $next . '.',
+                ];
                 application_update_save_job($job);
             }
         }
 
         $job['slice_open'] = false;
+        if (($job['status'] ?? '') === 'running'
+            && is_file($jobDir . '/pause-requested.json')) {
+            $job['status'] = 'paused';
+        }
         application_update_save_job($job);
         return application_update_job_public_state($job);
     } catch (Throwable $exception) {
@@ -428,6 +460,7 @@ function application_update_process_job(
             ? $job
             : application_update_load_job($jobId);
         $safe = application_update_safe_error($exception);
+        application_update_record_failure_diagnostic($job, $exception, $safe['reference']);
         $job['status'] = 'failed';
         $job['slice_open'] = false;
         $job['error'] = [
@@ -512,7 +545,7 @@ function application_update_cancel_job(string $jobId): array
         if (!empty($job['result']['superseded_by'])) {
             return application_update_job_public_state($job);
         }
-        if (!empty($job['automatic_rollback'])) {
+        if (!empty($job['automatic_rollback']) || ($job['operation'] ?? '') === 'manual_deploy') {
             throw new RuntimeException('Automatic rollback must be continued to a safe checkpoint, not cancelled.');
         }
         $stages = application_update_job_stages();
@@ -691,7 +724,9 @@ function application_update_retry_job(string $jobId, bool $automatic = false): a
         $job['progress'] = [
             'current' => 0,
             'total' => 0,
-            'message' => 'Retry scheduled from the last safe checkpoint.',
+            'message' => function_exists(__NAMESPACE__ . '\\t')
+                ? t('admin.updates.job_retry_scheduled')
+                : 'Continuing from the last saved step.',
         ];
         application_update_save_job($job);
         application_update_set_active_job($jobId);
@@ -746,6 +781,46 @@ function application_update_continue_background_job(float $budgetSeconds = 3.0):
 // Recovery responsibilities stay with their existing updater domain owner.
 
 /**
+ * Request checkpoint-safe pausing or explicitly resume the same preserved job.
+ * @param string $jobId Existing active job identity.
+ * @param bool $resume Whether to resume rather than request a pause.
+ * @return array<string,mixed> Public current job; busy resume preserves ownership.
+ */
+function application_update_control_pause(string $jobId, bool $resume = false): array
+{
+    $start = application_update_acquire_lock(application_update_jobs_root() . '/start.lock');
+    if ($start === null) {
+        return application_update_job_public_state(application_update_load_job($jobId));
+    }
+    $worker = null;
+    try {
+        $job = application_update_load_job($jobId);
+        if ((application_update_active_job()['id'] ?? '') !== $jobId
+            || application_update_job_terminal($job)) {
+            return application_update_job_public_state($job);
+        }
+        $path = application_update_job_dir($jobId) . '/pause-requested.json';
+        if (!$resume) {
+            application_update_write_json_atomic($path, ['job_id' => $jobId, 'at' => time()]);
+        } else {
+            $worker = application_update_acquire_lock(application_update_job_dir($jobId) . '/worker.lock');
+            if ($worker === null || ($job['status'] ?? '') !== 'paused') {
+                return application_update_job_public_state($job);
+            }
+            if (is_file($path) && !unlink($path)) {
+                throw new RuntimeException('Could not resume the paused update checkpoint.');
+            }
+            $job['status'] = 'running';
+            application_update_save_job($job);
+        }
+        return application_update_job_public_state($job);
+    } finally {
+        application_update_release_lock($worker);
+        application_update_release_lock($start);
+    }
+}
+
+/**
  * Remember failed source identities without changing their job or package.
  * @param array<string,mixed> $source Failed original update job.
  * @return void Stores bounded commit exclusions and a stable-version floor.
@@ -793,6 +868,12 @@ function application_update_recover_failed_job(
 ): array
 {
     $source = application_update_load_job($jobId);
+    if (($source['operation'] ?? '') === 'manual_deploy'
+        || application_update_manual_deployment_detected($source)) {
+        // FTP completion is explicit forward work. Never restore an old backup
+        // over a newly uploaded release or abandon its preserved gate.
+        return application_update_job_public_state($source);
+    }
     if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
         && !feature_capability_effective_enabled('built_in_update_installer')) {
         return application_update_job_public_state($source);
@@ -810,6 +891,7 @@ function application_update_recover_failed_job(
         return application_update_job_public_state($source);
     }
     $worker = null;
+    $runtime = null;
     try {
         $active = application_update_active_job();
         if (($active['id'] ?? '') !== $jobId) {
@@ -824,6 +906,25 @@ function application_update_recover_failed_job(
             return application_update_job_public_state($source);
         }
         $boundary = application_update_recovery_boundary($source);
+        if ($boundary === 'activation_not_started_candidate') {
+            $runtime = application_update_acquire_lock(
+                application_update_jobs_root() . '/runtime-use.lock',
+            );
+            if ($runtime === null) {
+                return application_update_job_public_state($source);
+            }
+            try {
+                application_update_assert_activation_unchanged($source);
+                application_update_runtime_window_close($source);
+                $source['result']['activation_unchanged_verified'] = true;
+                $boundary = 'pre_activation';
+            } catch (Throwable $exception) {
+                $source['recovery_blocked'] = 'activation_unchanged_unverified';
+                $source['result']['recovery_failure'] = application_update_safe_error($exception);
+                application_update_save_job($source);
+                return application_update_job_public_state($source);
+            }
+        }
         if ($boundary === 'pre_activation') {
             application_update_quarantine_failed_source($source);
             $source['result']['recovery_released'] = true;
@@ -894,6 +995,7 @@ function application_update_recover_failed_job(
         application_update_set_active_job($rollbackId);
         return application_update_job_public_state($rollback);
     } finally {
+        application_update_release_lock($runtime);
         application_update_release_lock($worker);
         application_update_release_lock($start);
     }

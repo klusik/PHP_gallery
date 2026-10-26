@@ -712,6 +712,8 @@ if (class_exists(ZipArchive::class)) {
 $root = dirname(__DIR__);
 // The updater job service is split into part files; assert against the whole module.
 $jobsSource = module_source($root . '/app/services/updates_jobs.php');
+$filesystemSource = (string) file_get_contents($root
+    . '/app/services/updates_filesystem.php');
 $installSource = (string) file_get_contents($root
     . '/app/services/updates_install.php');
 $requestSource = (string) file_get_contents($root
@@ -731,6 +733,18 @@ $patchNotesSource = (string) file_get_contents($root
     . '/app/services/updates_patch_notes.php');
 $cliSource = (string) file_get_contents($root
     . '/scripts/application_update.php');
+$adminUpdateBody = gallery_writer_functions($controllerSource)['cms_admin_update']['body'] ?? '';
+$adminPosition = strpos($adminUpdateBody, 'require_admin();');
+$csrfPosition = strpos($adminUpdateBody, 'verify_csrf();');
+$handoffPosition = strpos($adminUpdateBody, '\\Gallery\\EarlyRuntime\\updater_runtime_leave();');
+$workerPosition = strpos($adminUpdateBody, 'application_update_process_job(');
+assert_updater_resumable(
+    is_int($adminPosition) && is_int($csrfPosition)
+        && is_int($handoffPosition) && is_int($workerPosition)
+        && $adminPosition < $csrfPosition && $csrfPosition < $handoffPosition
+        && $handoffPosition < $workerPosition,
+    'Admin updater must release its own lease only after authentication/CSRF and before processing.',
+);
 assert_updater_resumable(
     php_source_contains($jobsSource, "'download',")
         && php_source_contains($jobsSource, "'activate',")
@@ -785,9 +799,15 @@ assert_updater_resumable(
     )
         && php_source_contains(
             $jobsSource,
-            'application_update_assert_source_root($sourceRoot);',
-        ),
-    'Temporary manifest bypass no longer preserves source-root validation.',
+            'application_update_assert_source_root($sourceRoot, $manual);',
+        )
+        && php_source_contains($jobsSource,
+            "\$manual = (\$job['operation'] ?? '') === 'manual_deploy';")
+        && php_source_contains($filesystemSource,
+            'bool $installedOverlay = false')
+        && php_source_contains($filesystemSource,
+            'release_file_policy_archive_updater_paths($sourceRoot);'),
+    'Archive and FTP validation must preserve required paths and the strict archive default.',
 );
 assert_updater_resumable(
     php_source_contains(
@@ -1005,8 +1025,6 @@ foreach ([
     );
 }
 
-$filesystemSource = (string) file_get_contents($root
-    . '/app/services/updates_filesystem.php');
 assert_updater_resumable(
     php_source_contains(
         $jobsSource,
@@ -1056,9 +1074,9 @@ assert_updater_resumable(
 assert_updater_resumable(
     php_source_contains(
         $jobsSource,
-        'if (!application_update_job_cleanup($job, $budget))',
+        "if ((\$job['operation'] ?? '') !== 'manual_deploy' && !application_update_job_cleanup(\$job, \$budget))",
     ),
-    'Updater cleanup no longer yields across bounded worker slices.',
+    'Ordinary cleanup must remain bounded; only FTP completion preserves its existing payloads.',
 );
 assert_updater_resumable(
     php_source_contains($filesystemSource, "'github-api'")

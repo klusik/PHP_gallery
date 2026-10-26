@@ -88,7 +88,7 @@ import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20261002-theme-language-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261021-smart-photo-tags-v2';
-import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20261016-readability-v1';
+import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20261026-updater-progress-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20261003-admin-scoped-i18n-v1';
 import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4';

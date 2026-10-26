@@ -3318,6 +3318,26 @@ novější stabilní verzi. Selhání za~zavřenou bránou potřebuje hostingov�
 nebo ověřený požadavek správce; odmítnutý návštěvník nespustí plánovač.
 Žádný nečinný worker nečeká během backoffu.
 
+Záznamy provedených migrací zůstávají historií i~po~záměrném odstranění
+souboru z~manifestu instalované verze. Formát databázových důkazů~2 uchovává
+úplný ledger včetně časů a~skutečné schéma; historickou absenci označí
+výslovně. Chybějící deklarovaný soubor či~změněné bajty aktivaci odmítnou.
+Staré uložené důkazy zachovávají původní přísné porovnání.
+Samotný starý kontrolní bod \codeword{activate} nedokazuje částečnou aktivaci:
+uvolnění ukazatele vyžaduje shodu původních souborů a~ověřených záloh
+i~nepřítomnost nových cest pod startovacím, pracovním a~výlučným běhovým
+zámkem. Admin požadavek uvolní vlastní čtecí zámek až~po~ověření správce
+a~CSRF. Průběh integrity ukazuje kurzor ověřených souborů; nová fáze
+vynuluje předchozí čítače. Kompaktní průběh je~synchronizovaný na~desktopu
+i~úzkém zobrazení.
+Běžná akce zůstává Aktualizovat a~automaticky pokračovat. Podrobnosti čítač
+označují jako Spuštění zpracování: zahrnuje krátké požadavky i~čekání,
+opakování zachová stejnou úlohu a~počet. Čekání na~ostatní požadavky
+je~výslovné a~používá pomalejší dotazování. Nespravované místní PHP soubory
+zůstávají zachované. Soukromá diagnostika workeru obsahuje fázi, referenci,
+třídu chyby, vlastníka a~řádek, bezpečnostní důkazy a~případně ověřenou
+identitu migrace. Nedostupný Admin log využije PHP error log a~neblokuje práci.
+
 Starší zaseknutý updater nezíská mechanismus pouhým publikováním vydání.
 V~režimu údržby zastavte workery, zachovejte souběžné zálohy a~všechny důkazy
 selhané úlohy, ověřte skutečnou kompatibilitu databáze, nasaďte celé ověřené
@@ -3326,6 +3346,19 @@ opravě smí správce archivovat odpovídající starý aktivní ukazatel. Nemě
 pouze bootstrap ani cíl/balíček úlohy; neodstraňujte živou aktivační bránu
 ani neobnovujte pouze soubory. Úplný postup a~omezení uvádí
 \filepath{docs/AUTOUPDATE.md}.
+Postup zahrnuje nahlášenou instalaci \codeword{c2e2bc77} se~starším
+připnutým jobem: po~samostatném schválení se~v~údržbě nasadí celé
+kompatibilní opravené vydání, zachová starý job a~jeho vlastnictví se~vypořádá
+až~po~ověřené dopředné opravě. Retry nikdy nezmění cíl úlohy.
+Při překryvném FTP nasazení nahrajte celé ověřené vydání bez mazání starých
+místních souborů, úloh či~záloh. V~Advanced tools vyberte
+\ui{Dokončit aktualizaci přes FTP}; stejný engine ověří dodané soubory,
+zachová starou úlohu a~doklady odpovídající brány, provede dopředné migrace
+a~sladí kanál. Neaktivuje starý balík a~neprořezává zastaralé soubory.
+\ui{Pozastavit} funguje na~nejbližším bezpečném bodě v~každé fázi;
+\ui{Pokračovat v~aktualizaci} obnoví stejnou úlohu. Částečná aktivace
+zůstává za~bránou. Instalace commitu podporuje i~starší podporovaná vydání;
+migrace se~nevracejí a~může být nutná kompatibilní záloha databáze.
 
 \subsection{Manifest integrity}
 \index{m00077@manifest jádra}
