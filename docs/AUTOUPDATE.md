@@ -166,13 +166,14 @@ migrations produce a nonblocking notice with their ledger identities.
 
 ### Integrity, discovery and operations
 
-Every new package job requires complete normalized SHA-256 core-manifest coverage
+Ordinary new package jobs require complete normalized SHA-256 core-manifest coverage
 according to the canonical integrity policy. Other updater-owned package assets
 (such as vendor licenses or binary resources) retain trusted-origin/archive
 validation and receive private raw SHA-256 identities before staging. Snapshot
 hashes also preserve exact original bytes. Normalization cannot hide a change
-to a binary resource or rollback snapshot. All jobs retain
-matching version/algorithm and the existing origin/path/permission/size checks.
+to a binary resource or rollback snapshot. Ordinary jobs retain
+matching version/algorithm; explicit Admin recovery treats manifest diagnostics
+as warnings as described below. All jobs retain origin/path/permission/size checks.
 Only already persisted legacy jobs retain their prior compatibility reader.
 Package and ready/backup checks hash at most forty files per bounded slice,
 persist cursors and recheck prepared bytes at activation. Missing/changed backup
@@ -207,7 +208,9 @@ configuration, media and private data; no preparatory deletion is required.
 Choose **Reset updater / finish FTP update** on the job card or in Advanced
 tools. It starts a fresh `manual_deploy` job, stops the old active and gate-owner
 jobs under their worker locks, preserves their records/backups and the exact old
-marker bytes, then adopts isolation for bounded forward migrations/finalization.
+marker bytes, then closes admission before waiting for existing ordinary readers
+to drain. Only activation/migrations take the exclusive runtime lease; continued
+visitor traffic cannot starve reset before its new job is created.
 An in-flight rename or migration finishes before takeover. The browser shows
 why replacement is waiting and repeats the replacement action, never the old
 worker. Reset never deletes the job history or reverses database migrations.
@@ -220,13 +223,18 @@ newer-version check, comparison against the damaged installation, historical DB
 rollback witness or old job checkpoint is required. It preserves configuration,
 media, unlisted local files and backups; obsolete-file pruning is skipped.
 
-For these explicit Admin recoveries, manifest content differences are warning
-receipts with repository-relative file identity and expected/actual digests,
+For these explicit Admin recoveries, all manifest checks are advisory. A missing,
+malformed, stale or version-mismatched manifest is logged as
+`update.recovery_validation_warning`; recovery continues. Content differences
+are warning receipts with repository-relative file identity and expected/actual digests,
 shown in the job and logged as `update.file_integrity_warning`. The actual
 selected bytes remain pinned through staging and activation. Ordinary automatic
 and package updates retain strict manifest checking. Trusted HTTPS download,
-safe ZIP paths, bounded extraction, required files, valid inventory/manifest
-structure, runtime ownership and actual migration execution remain enforced.
+safe ZIP paths, bounded extraction, required application files, runtime ownership
+and actual migration execution remain enforced. Publisher metadata is not a
+prerequisite: an optional inventory selects existing safe files, with safe source
+enumeration when it is unavailable. Staging pins the actual selected bytes,
+including the manifest itself, independently of diagnostic results.
 A failed FTP retry restarts installed-file verification, never archive download.
 A new reset supersedes even an interrupted recovery. Old DB effects are retained;
 there is no automatic rollback from an explicit recovery with no old DB witness.

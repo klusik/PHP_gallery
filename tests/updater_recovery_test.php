@@ -66,8 +66,9 @@ namespace Gallery\Services {
     /** Assert known schema for the actual activation gate. @param array{state:string} $status Observation. @param string $operation Operation. @param string $message Safe refusal. @return void Throws for unknown evidence. */
     function mutation_schema_assert_known(array $status, string $operation, string $message): void
     { if ($status['state'] === 'unknown') { throw new \RuntimeException($message); } }
-    /** Record no external logs. @param string $level Severity. @param string $event Name. @param string $message Safe message. @param array<string,scalar|list<string>|null> $context Context. @param array<string,string> $options Log options. @return void Isolates integration logs. */
-    function admin_log_event(string $level, string $event, string $message, array $context = [], array $options = []): void {}
+    /** Capture safe updater logs without external persistence. @param string $level Severity. @param string $event Name. @param string $message Safe message. @param array<string,scalar|list<string>|null> $context Context. @param array<string,string> $options Log options. @return void Retains isolated structured evidence. */
+    function admin_log_event(string $level, string $event, string $message, array $context = [], array $options = []): void
+    { $GLOBALS['recovery_log_events'][] = ['event' => $event, 'context' => $context]; }
     /** Capture the real worker diagnostic transport without external persistence.
      * @param string $level Event severity.
      * @param string $event Owner event identity.
@@ -997,6 +998,46 @@ namespace {
             && !is_file(\Gallery\Services\application_update_activation_gate_path()),
             'FTP overlay completion deleted extras/backups, restored old code or retained the gate.');
 
+        // A real ordinary reader must not prevent Reset from closing admission.
+        // Only migration waits for that reader; missing publisher metadata is
+        // diagnostic and cannot strand the newly allocated forward recovery.
+        $reader = fopen(\Gallery\Services\application_update_jobs_root()
+            . '/runtime-use.lock', 'c+');
+        recovery_check(is_resource($reader) && flock($reader, LOCK_SH | LOCK_NB),
+            'Cannot establish the ordinary reader for reset takeover.');
+        $savedManifest = file_get_contents($root . '/app/core-manifest.json');
+        unlink($root . '/app/core-manifest.json');
+        try {
+            $readerReset = \Gallery\Services\application_update_start_manual_deployment(true);
+            $readerState = \Gallery\Services\application_update_load_job($readerReset['id']);
+            $admission = \Gallery\Services\application_update_read_json(
+                \Gallery\Services\application_update_activation_gate_path());
+            recovery_check($readerReset['status'] === 'running'
+                && empty($readerReset['replacement_waiting'])
+                && empty($readerState['checkpoints']['runtime_guard_open'])
+                && $admission['job_id'] === $readerReset['id']
+                && !empty($admission['recovery_isolation']),
+                'An ordinary reader starved reset before admission could close.');
+            $readerWait = \Gallery\Services\application_update_process_job($readerReset['id']);
+            recovery_check($readerWait['status'] === 'running'
+                && $readerWait['runtime_waiting']
+                && in_array('app/core-manifest.json', $readerWait['integrity_warnings'], true),
+                'FTP metadata stopped recovery or migration ignored an existing reader.');
+            $warningEvents = array_values(array_filter($GLOBALS['recovery_log_events'],
+                static fn(array $event): bool => $event['event'] === 'update.recovery_validation_warning'
+                    && $event['context']['job_id'] === $readerReset['id']));
+            recovery_check($warningEvents !== []
+                && $warningEvents[0]['context']['reason'] === 'missing_manifest'
+                && $warningEvents[0]['context']['outcome'] === 'continuing',
+                'Manifest diagnostics did not log a useful warning with continued outcome.');
+        } finally {
+            flock($reader, LOCK_UN);
+            fclose($reader);
+        }
+        recovery_check(recovery_drain($readerReset['id'])['status'] === 'completed',
+            'Missing manifest or drained runtime reader prevented FTP completion.');
+        file_put_contents($root . '/app/core-manifest.json', $savedManifest);
+
         // A paused migration from an unknown/newer old target and a malformed
         // gate cannot veto an explicit operator forward repair. Preserve its
         // exact evidence instead of trying to prove a historical rollback.
@@ -1052,13 +1093,15 @@ namespace {
         $retryState['status'] = 'failed';
         $retryState['checkpoints']['recovery_manifest_identity'] = 'old-upload';
         $retryState['checkpoints']['manual_deployment_verified'] = true;
+        $retryState['checkpoints']['manual_deployment_accepted'] = true;
         $retryState['error'] = ['message' => 'Previous upload differed.', 'reference' => 'FF5BC089547B'];
         \Gallery\Services\application_update_save_job($retryState);
         $retried = \Gallery\Services\application_update_retry_job($retry['id']);
         $retryState = \Gallery\Services\application_update_load_job($retry['id']);
         recovery_check($retried['stage'] === 'package_validate'
             && !isset($retryState['checkpoints']['recovery_manifest_identity'])
-            && empty($retryState['checkpoints']['manual_deployment_verified']),
+            && empty($retryState['checkpoints']['manual_deployment_verified'])
+            && empty($retryState['checkpoints']['manual_deployment_accepted']),
             'FTP retry resumed a download or trusted old upload verification.');
 
         // Explicit replacement must wait for the real predecessor worker lock,
@@ -1134,6 +1177,9 @@ namespace {
         recovery_check(\Gallery\Services\gallery_edit_schema_state() === 'available',
             'The stable fixture did not observe its actual revision column.');
         $stableState['stage'] = 'package_validate';
+        // Explicit stable installation also survives malformed publisher
+        // metadata: copy these actual bytes, log a warning, finish forward.
+        file_put_contents($stableRoot . '/app/core-manifest.json', '{invalid manifest');
         \Gallery\Services\application_update_save_job($stableState);
         $stableResult = recovery_drain($stable['id']);
         $terminalState = \Gallery\Services\application_update_load_job($stable['id']);
@@ -1145,7 +1191,7 @@ namespace {
             ], JSON_THROW_ON_ERROR));
         recovery_check($stableResult['status'] === 'completed'
             && $stableResult['result']['files_copied'] === count($stablePaths)
-            && in_array('public/assets/styles/utilities.css', $stableResult['integrity_warnings'], true)
+            && in_array('app/core-manifest.json', $stableResult['integrity_warnings'], true)
             && file_get_contents($root . '/public/assets/styles/utilities.css')
                 === file_get_contents($stableRoot . '/public/assets/styles/utilities.css')
             && file_get_contents($oldProof) === 'preserved original backup'

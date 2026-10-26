@@ -464,6 +464,7 @@ function cms_admin_update(): void
             )
         ) {
             // Keep other tabs and public pages usable during GitHub I/O.
+            \Gallery\EarlyRuntime\updater_runtime_leave();
             session_write_close();
             $checked = (string) $_POST['update_action'] === 'check_due'
                 ? application_update_check_if_due()
@@ -645,7 +646,8 @@ function cms_admin_update(): void
                         ['category' => 'update', 'severity' => 'notice'],
                     );
                     $_SESSION['admin_update_notice'] = 'Update job completed successfully.';
-                } elseif ((string) ($job['status'] ?? '') === 'failed') {
+                } elseif ((string) ($job['status'] ?? '') === 'failed'
+                    && empty($job['replacement_waiting'])) {
                     admin_log_event(
                         'warning',
                         'update.job_failed',
@@ -684,7 +686,8 @@ function cms_admin_update(): void
                 if (empty($job['replacement_waiting'])) {
                     $job = application_update_process_job((string) $job['id'], 7.0);
                 }
-                if ((string) ($job['status'] ?? '') === 'failed') {
+                if ((string) ($job['status'] ?? '') === 'failed'
+                    && empty($job['replacement_waiting'])) {
                     admin_log_event(
                         'warning',
                         'update.job_failed',

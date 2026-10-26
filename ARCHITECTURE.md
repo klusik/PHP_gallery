@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.5';
+const CMS_VERSION = '0.144.6';
 ```
 
 Update-related code uses:
@@ -2806,8 +2806,10 @@ uncompressed data. Its central-directory scan checkpoints every 500 entries.
 `extract` writes one entry through a `.part` file and checkpoints the entry
 index. `package_validate` requires the complete PHP Gallery source-root
 contract and the selected stable target floor. Persisted legacy jobs retain their
-compatibility reader. Every new package job requires complete normalized manifest
-coverage and bounded verification, repeated on staged bytes before activation.
+compatibility reader. Ordinary new package jobs require complete normalized
+manifest coverage and bounded verification, repeated on staged bytes before
+activation. Explicit Admin recovery uses warning-only manifest diagnostics and
+pins the selected actual source bytes instead, as described below.
 Canonical non-core assets use private exact-byte SHA-256 identities; snapshots
 also use raw hashes rather than text normalization.
 New package jobs pin a full trusted GitHub commit;
@@ -2872,16 +2874,22 @@ symlink/document-root switch, which many shared hosts do not provide.
 
 Explicit Admin FTP completion and Install stable share recovery replacement
 ownership in the existing updater engine. The start lock, predecessor/gate-owner
-worker locks and exclusive runtime lease serialize takeover. Old records,
+worker locks serialize takeover. Admission closes before existing shared readers
+drain; the exclusive runtime lease protects actual activation and migrations.
+Ordinary visitor traffic therefore cannot starve allocation of a new reset.
+Old records,
 backups and raw marker receipts are preserved, predecessors become cancelled
 with a successor link, and a fresh isolated job starts. Busy workers receive a
 checkpoint pause request; the UI repeats the requested replacement action.
 FTP completion skips package activation; stable recovery downloads one pinned
 stable commit and overwrites every declared file, including same-version bytes.
-Both preserve unlisted files and skip obsolete-file pruning. Manifest content
-differences become per-file warning receipts only for explicit recoveries; actual
-staged bytes remain pinned. Ordinary update validation is unchanged. Explicit
-recovery never claims automatic rollback without a historical DB witness.
+Both preserve unlisted files and skip obsolete-file pruning. All manifest
+diagnostics, including absent/invalid metadata and content differences, become
+warning receipts only for explicit recoveries. Metadata cannot veto installation;
+actual source bytes are independently pinned through staging and activation.
+Safe paths and required runtime files remain mandatory. Ordinary update
+validation is unchanged. Explicit recovery never claims automatic rollback
+without a historical DB witness.
 Newer manually installed code prevents old package continuation. Pause/resume
 preserves ordinary checkpoints, while Reset starts a new linked identity.
 

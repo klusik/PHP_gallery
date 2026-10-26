@@ -7,7 +7,12 @@ local file differences and old stuck jobs. Reset/finish FTP and Install stable
 supersede active and gate-owner jobs under real worker/runtime locks, retain
 original records, backups and marker bytes, and complete forward migrations.
 Stable recovery overwrites all declared files even at the current version;
-manifest content differences are warnings with exact relative file/hash evidence.
+all manifest failures are warnings, including missing, malformed, stale or
+version-mismatched metadata. Content warnings retain relative file/hash evidence;
+metadata warnings retain the exception owner and reference. Neither vetoes
+forward recovery. Staging independently pins the selected actual source bytes.
+Reset closes ordinary admission before draining existing readers so visitor
+traffic cannot starve takeover; actual writes retain the exclusive runtime lease.
 Safe paths, required files and runtime ownership remain enforced. Ordinary
 automatic updates retain strict content verification. Explicit recovery has no
 automatic previous-database rollback; a newer manual tree prevents old package
@@ -17,7 +22,8 @@ while FTP and historical job records are supported; no retirement is inferred.
 The 0.144.4 live incident confirmed a modified `public/assets/styles/utilities.css`
 and a manual completion stopped before migrations (reference `FF5BC089547B`).
 The old retry incorrectly selected download for FTP work. Regression covers this
-CSS warning, correct retry stage, lock contention, same-version stable overwrite,
+CSS warning, missing FTP manifest, malformed stable manifest, correct retry stage,
+worker contention, admission closure with a live reader, same-version stable overwrite,
 old gate takeover, retained extras/backups, all-stage pause and delayed browser
 responses. Live deployment of the repaired version and production database
 compatibility remain unverified until the operator installs and finishes it.

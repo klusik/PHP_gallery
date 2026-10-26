@@ -361,7 +361,7 @@ function application_update_process_job(
                     break;
                 }
                 if (($job['operation'] ?? '') === 'manual_deploy') {
-                    $job['checkpoints']['manual_deployment_verified'] = true;
+                    $job['checkpoints']['manual_deployment_accepted'] = true;
                     if (!application_update_manual_deployment_gate($job)) {
                         break;
                     }
@@ -433,7 +433,7 @@ function application_update_process_job(
             if ($next !== null) {
                 $manualForward = ($job['operation'] ?? '') === 'manual_deploy'
                     && $stage === 'package_validate' && $next === 'migrate'
-                    && !empty($job['checkpoints']['manual_deployment_verified'])
+                    && !empty($job['checkpoints']['manual_deployment_accepted'])
                     && !empty($job['checkpoints']['runtime_guard_open']);
                 if (!$manualForward && !application_update_job_transition_allowed($stage, $next)) {
                     throw new RuntimeException(
@@ -724,7 +724,10 @@ function application_update_retry_job(string $jobId, bool $automatic = false): a
             }
             $job['stage'] = ($job['operation'] ?? '') === 'manual_deploy'
                 ? 'package_validate' : 'download';
-            unset($job['checkpoints']['manual_deployment_verified'], $job['integrity_warnings']);
+            unset($job['checkpoints']['manual_deployment_verified'],
+                $job['checkpoints']['manual_deployment_accepted'],
+                $job['checkpoints']['core_manifest_not_required'],
+                $job['integrity_warnings']);
         }
         $job['status'] = 'running';
         $job['error'] = null;

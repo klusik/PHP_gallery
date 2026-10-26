@@ -512,6 +512,16 @@ function updater_runtime_enter(string $projectRoot): void
         || updater_worker_allowed($projectRoot, $owner))) {
         return;
     }
+    // A recovery drain closes new admission before it can acquire exclusive
+    // runtime ownership. Existing requests finish under their old shared lease.
+    // Refuse new ordinary requests before taking another shared lease, retaining
+    // the second check below for a gate published during this admission race.
+    $gate = read_json_file($base . '/activation.json');
+    if (is_array($gate) && !empty($gate['recovery_isolation'])
+        && !activation_job_is_complete($projectRoot, $gate)) {
+        emit_activation_unavailable();
+        exit();
+    }
     if (!is_dir($base) && !@mkdir($base, UPDATER_RUNTIME_DIRECTORY_MODE, true)
         && !is_dir($base)) {
         throw new \RuntimeException('Updater runtime isolation storage is unavailable.');

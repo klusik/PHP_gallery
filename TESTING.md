@@ -1059,7 +1059,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.144.5. Release verification uses the
+This guide applies to PHP Gallery Version 0.144.6. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4831,6 +4831,11 @@ rollback, checks private worker diagnostics and exact migration identity, and
 forces unavailable Admin logging to verify redacted PHP-log fallback. The
 browser explains a retained 631/632 processing counter, displays runtime
 contention as waiting and completes through serialized continuations.
+Explicit FTP reset also completes without a manifest, and stable replacement
+copies a malformed manifest as selected source bytes while logging its warning.
+A real shared reader remains held while reset allocates a new owner and closes
+admission; only migration waits, then completes after that reader releases.
+Ordinary corrupt-package rejection remains a separate negative assertion.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a

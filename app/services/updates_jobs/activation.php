@@ -268,9 +268,11 @@ function application_update_job_activate(array &$job): bool
             }
             if (!empty($job['automatic_rollback'])
                 || (($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
-                $expected = $relative === 'app/core-manifest.json'
+                $expected = !empty($job['recovery_override'])
+                    ? (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? '')
+                    : ($relative === 'app/core-manifest.json'
                     ? (string) ($job['checkpoints']['recovery_manifest_identity'] ?? '')
-                    : (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? '');
+                    : (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? ''));
                 if ($expected === ''
                     || !application_update_recovery_hash_matches($expected, $ready)) {
                     throw new RuntimeException('Recovery prepared file failed integrity verification.');
@@ -688,7 +690,8 @@ function application_update_start_manual_deployment(bool $restart = false): arra
  * Replace stopped or running updater ownership with an explicit Admin recovery.
  *
  * Worker locks let an in-flight rename or migration finish before takeover.
- * The runtime lease keeps public admission closed throughout gate transfer.
+ * Admission closes before runtime readers drain; activation/migrations retain
+ * exclusive runtime ownership before changing installed files or schema.
  * Old jobs, packages, backups and gate receipts remain available for diagnosis.
  * This permanently supports repairs after overwrite-only FTP deployment and
  * forced stable installation, without pretending the old database can roll back.
@@ -753,21 +756,11 @@ function application_update_start_recovery_replacement(
                     ?? application_update_load_job($owner));
                 $waiting['replacement_waiting'] = true;
                 $waiting['replacement_action'] = $action;
+                $waiting['replacement_waiting_on'] = 'worker';
                 return $waiting;
             }
             $locks[] = $worker;
         }
-        $runtime = application_update_acquire_lock(application_update_jobs_root() . '/runtime-use.lock');
-        if ($runtime === null) {
-            if ($source === null) {
-                throw new RuntimeException('Website requests are finishing. Try recovery again.');
-            }
-            $waiting = application_update_job_public_state($source);
-            $waiting['replacement_waiting'] = true;
-            $waiting['replacement_action'] = $action;
-            return $waiting;
-        }
-        $locks[] = $runtime;
         if ($source !== null) {
             $source = application_update_load_job((string) $source['id']);
         }
@@ -820,8 +813,10 @@ function application_update_start_recovery_replacement(
                 throw new RuntimeException('Could not preserve replaced updater marker.');
             }
         }
-        // This Admin recovery adopts isolation, not the predecessor's rollback
-        // claim. No historical database witness is required to install forward.
+        // Close admission before waiting for ordinary readers. Taking the
+        // exclusive runtime lease first can starve forever on an active site.
+        // Worker locks exclude old updater writes; the actual activation or
+        // FTP migration still takes that exclusive lease after readers drain.
         application_update_write_json_atomic(application_update_jobs_root() . '/rollback-window.json', [
             'job_id' => $job['id'], 'admin_session_name' => $job['admin_session_name'],
             'opened_at' => time(),
@@ -831,7 +826,8 @@ function application_update_start_recovery_replacement(
             'admin_session_name' => $job['admin_session_name'],
             'recovery_isolation' => true, 'started_at' => time(), 'updated_at' => time(),
         ]);
-        $job['checkpoints']['runtime_guard_open'] = true;
+        $job['checkpoints']['recovery_admission_closed'] = true;
+        $job['checkpoints']['runtime_guard_open'] = false;
         $job['checkpoints']['runtime_guard_protocol'] = 1;
         application_update_save_job($job);
         foreach (array_unique($owners) as $owner) {
@@ -856,6 +852,7 @@ function application_update_start_recovery_replacement(
                 admin_log_event('info', 'update.recovery_replacement_started',
                     'Admin recovery replaced the previous updater ownership.',
                     ['job_id' => $job['id'], 'operation' => $operation,
+                        'manifest_policy' => 'not_required_for_explicit_recovery',
                         'previous_jobs' => array_values(array_unique($owners))],
                     ['category' => 'update', 'severity' => 'notice']);
             } catch (Throwable) {
@@ -872,8 +869,8 @@ function application_update_start_recovery_replacement(
 }
 
 /**
- * Gate forward migrations only after the complete installed overlay is verified.
- * @param array{id:string,manual_deployment_source_job_id?:string,checkpoints:array<string,mixed>,...<string,mixed>} $job Verified manual deployment, updated with isolation ownership.
+ * Gate forward migrations for accepted FTP files without a publisher manifest.
+ * @param array{id:string,manual_deployment_source_job_id?:string,checkpoints:array<string,mixed>,...<string,mixed>} $job Explicit manual deployment, updated after old readers finish.
  * @return bool False while an ordinary request owns the runtime; true when gated.
  */
 function application_update_manual_deployment_gate(array &$job): bool
@@ -885,11 +882,8 @@ function application_update_manual_deployment_gate(array &$job): bool
         return false;
     }
     try {
-        $root = application_update_project_root();
-        if (empty($job['checkpoints']['manual_deployment_verified'])
-            || ($job['checkpoints']['recovery_manifest_identity'] ?? '')
-                !== application_update_manifest_hash($root . '/app/core-manifest.json')) {
-            throw new RuntimeException('Manual deployment verification is incomplete.');
+        if (empty($job['checkpoints']['manual_deployment_accepted'])) {
+            throw new RuntimeException('Manual deployment has not been accepted for forward completion.');
         }
         $sourceId = (string) ($job['manual_deployment_source_job_id'] ?? '');
         foreach (['activation.json', 'rollback-window.json'] as $name) {
@@ -1182,6 +1176,13 @@ function application_update_recovery_assert_compatible(array $job, string $sourc
  */
 function application_update_recovery_ready_slice(array &$job, array $budget): bool
 {
+    if (!empty($job['recovery_override'])) {
+        // Staging already committed each complete copy and recorded its actual
+        // raw bytes. Explicit recovery does not run another manifest sweep.
+        $job['checkpoints']['recovery_ready_verified'] = true;
+        application_update_save_job($job);
+        return true;
+    }
     if (empty($job['automatic_rollback'])
         && !(($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
         return true;
@@ -1342,6 +1343,21 @@ function application_update_runtime_window_begin(array &$job): void
     $existing = application_update_read_json($path);
     if ($existing !== [] && ($existing['job_id'] ?? '') !== $job['id']) {
         throw new RuntimeException('Another recovery runtime window is active.');
+    }
+    if (!empty($job['recovery_override'])) {
+        $gate = application_update_read_json(application_update_activation_gate_path());
+        if (($existing['job_id'] ?? '') !== $job['id']
+            || ($gate['job_id'] ?? '') !== $job['id']
+            || empty($gate['recovery_isolation'])) {
+            throw new RuntimeException('Explicit recovery admission is missing. Reset the updater.');
+        }
+        // Called under the actual exclusive activation lease: prior readers
+        // have now drained. Never inspect a publisher manifest or manufacture
+        // an old database witness for this forward-only operation.
+        $job['checkpoints']['runtime_guard_open'] = true;
+        $job['checkpoints']['runtime_guard_protocol'] = 1;
+        application_update_save_job($job);
+        return;
     }
     if (!empty($job['checkpoints']['runtime_guard_open'])) {
         if (($existing['job_id'] ?? '') !== $job['id']) {

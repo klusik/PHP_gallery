@@ -54,14 +54,30 @@ use function Gallery\Core\run_migrations_bounded;
  * Return incoming release files in deterministic activation order.
  *
  * @param string $sourceRoot Extracted source root.
- * @param bool $installedOverlay Whether unlisted installed files are outside this verification set.
+ * @param bool $installedOverlay Whether to select actual safe source files without requiring publisher metadata; an optional inventory only limits development-file membership.
  * @return array<int,string> Project-relative files.
  */
 function application_update_release_files(string $sourceRoot, bool $installedOverlay = false): array
 {
-    $files = $installedOverlay
-        ? \Gallery\Core\release_file_policy_paths($sourceRoot, 'updater')
-        : release_file_policy_archive_updater_paths($sourceRoot)['files'];
+    if ($installedOverlay) {
+        $files = array_values(array_filter(
+            \Gallery\Core\release_file_policy_archive_owned_candidates($sourceRoot),
+            static fn(string $path): bool => release_file_policy_is_updater_path($path),
+        ));
+        // Optional selection metadata avoids deploying repository-only tools.
+        // Its absence, invalid JSON or missing listed files cannot veto recovery.
+        $inventory = application_update_read_json($sourceRoot . '/app/production-files.json');
+        $listed = $inventory['updater_files'] ?? null;
+        if (is_array($listed)) {
+            $listed = array_values(array_filter($listed, 'is_string'));
+            $selected = array_values(array_intersect($files, $listed));
+            if ($selected !== []) {
+                $files = $selected;
+            }
+        }
+    } else {
+        $files = release_file_policy_archive_updater_paths($sourceRoot)['files'];
+    }
 
     usort($files, static function (string $left, string $right): int {
         $priority = static function (string $path): int {
@@ -593,7 +609,11 @@ function application_update_job_stage_files_slice(
             $sourceRoot
             . '/'
             . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        if (!empty($job['automatic_rollback'])
+        if (!empty($job['recovery_override'])) {
+            // Pin copy bytes without consulting the publisher's core manifest.
+            $job['checkpoints']['recovery_hashes'][$relative] =
+                application_update_recovery_raw_hash($source);
+        } elseif (!empty($job['automatic_rollback'])
             || (($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
             $expected = $relative === 'app/core-manifest.json'
                 ? (string) ($job['checkpoints']['recovery_manifest_identity'] ?? '')

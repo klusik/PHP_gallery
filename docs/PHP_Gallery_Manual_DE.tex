@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.144.5}
+\newcommand{\version}{0.144.6}
 \newcommand{\manualdate}{26.~Oktober~2026}
 
 \hypersetup{
@@ -3496,6 +3496,10 @@ Konfiguration, Medien, zusätzliche lokale Dateien und Sicherungen.
 Inhaltsunterschiede werden mit relativem Dateinamen und erwartetem/tatsächlichem
 Hash als Warnungen protokolliert; automatische Updates bleiben streng geprüft.
 Sichere Archivpfade, Pflichtdateien und Laufzeitsperren gelten weiterhin.
+Auch ein fehlendes, unlesbares oder veraltetes Manifest ist nur eine Warnung
+und stoppt keine der beiden Wiederherstellungen. Reset schließt zunächst den
+Zugang neuer Besucheranfragen, damit laufender Verkehr den Start nicht verhindert.
+Erst Aktivierung und Migrationen warten auf bereits laufende Anfragen.
 Warten auf Übernahme wird angezeigt und automatisch fortgesetzt. FTP-Wiederholen
 prüft installierte Dateien statt herunterzuladen. Datenbankmigrationen laufen
 nur vorwärts; Datenbankänderungen werden nicht zurückgenommen.
