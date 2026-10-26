@@ -39,6 +39,56 @@ use PDO;
 use function Gallery\Core\db;
 
 /**
+ * Read a complete bounded migration ledger without changing database state.
+ * @param int $limit Maximum admitted migration records; overflow is refused.
+ * @return list<string> Ordered applied migration identities.
+ * @throws \RuntimeException When the ledger exceeds its admission budget.
+ */
+function schema_inspection_model_migration_versions(int $limit): array
+{
+    $statement = db()->prepare(
+        'SELECT version FROM schema_migrations ORDER BY version LIMIT ?',
+    );
+    // One extra row distinguishes complete evidence from an unsafe truncation.
+    $statement->bindValue(1, $limit + 1, PDO::PARAM_INT);
+    $statement->execute();
+    $versions = array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN));
+    if (count($versions) > $limit) {
+        throw new \RuntimeException('Recovery migration ledger exceeds its bound.');
+    }
+    return $versions;
+}
+
+/**
+ * Fingerprint complete bounded column/index definitions for recovery checks.
+ * @param int $limit Maximum metadata rows admitted per schema inventory.
+ * @return string SHA-256 fingerprint of actual ordered database definitions.
+ * @throws \RuntimeException When metadata is incomplete or exceeds the bound.
+ */
+function schema_inspection_model_recovery_schema(int $limit): string
+{
+    $definitions = [];
+    foreach ([
+        'SELECT TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,'
+            . 'EXTRA,COLLATION_NAME FROM information_schema.COLUMNS '
+            . 'WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,ORDINAL_POSITION LIMIT ?',
+        'SELECT TABLE_NAME,INDEX_NAME,NON_UNIQUE,SEQ_IN_INDEX,COLUMN_NAME,SUB_PART '
+            . 'FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() '
+            . 'ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX LIMIT ?',
+    ] as $query) {
+        $statement = db()->prepare($query);
+        $statement->bindValue(1, $limit + 1, PDO::PARAM_INT);
+        $statement->execute();
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+        if ($rows === [] || count($rows) > $limit) {
+            throw new \RuntimeException('Recovery schema inventory is incomplete.');
+        }
+        $definitions[] = $rows;
+    }
+    return hash('sha256', json_encode($definitions, JSON_THROW_ON_ERROR));
+}
+
+/**
  * Return column metadata rows for a bounded validated table list.
  *
  * @param array<int,string> $tables Table names to inspect.

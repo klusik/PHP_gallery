@@ -62,6 +62,16 @@ foreach (patch_notes_ai_required_sections() as $heading) {
         );
     }
 }
+try {
+    patch_notes_ai_validate_response('0.124.1', "NOTES_REVIEW_REQUIRED\r\n");
+    throw new RuntimeException('An explicit review request was accepted as notes.');
+} catch (RuntimeException $exception) {
+    $check(
+        $exception->getMessage()
+            === 'Release-note generation requested external editorial review.',
+        'A provider review request must reach the existing invalid-prose handoff.',
+    );
+}
 $refused = static function (
     array $command,
     int $limit,
@@ -195,7 +205,8 @@ try {
     }
     $write(
         $fixture . '/PATCH_NOTES.md',
-        "# Patch notes\n\n## Version 0.122.1\n\n### Highlights\n- Previous completed release.\n",
+        "# Patch notes\n\n## Version 0.122.1\n\n### Highlights\n"
+            . "- Previous completed release. Ref [#456](https://github.com/klusik/PHP_gallery/issues/456).\n",
     );
     $write($fixture . '/public/assets/large.js', "// Previous source.\n");
     $write($fixture . '/zz-later-feature.txt', "Previous feature.\n");
@@ -233,6 +244,18 @@ try {
         'Add large source and later feature',
         '-m',
         'Refs #123',
+    ]);
+    // Retain historical release-process references as quoted evidence, while
+    // associating them only with their own bookkeeping commit and paths.
+    $originPath = '.github/release-origins/v_0.123.json';
+    $write($fixture . '/' . $originPath, "{\"version\":\"0.123\"}\n");
+    $gitRun(['add', $originPath]);
+    $gitRun([
+        'commit',
+        '--quiet',
+        '--no-gpg-sign',
+        '-m',
+        'Initialize immutable origin for v_0.123 (Refs #101, #133)',
     ]);
 
     $promptPath = $fixture . '/prompt.txt';
@@ -290,6 +313,30 @@ try {
                 '+Later feature supported by commit metadata.',
             ),
         'The complete diff must include later file content as well as full commit metadata and changed paths.',
+    );
+    $featureContext = strpos($prompt, 'SUBJECT Add large source and later feature');
+    $originContext = strpos($prompt, 'SUBJECT Initialize immutable origin');
+    $featureEvidence = $featureContext === false || $originContext === false
+        ? ''
+        : substr($prompt, $featureContext, $originContext - $featureContext);
+    $check(
+        str_contains($featureEvidence, 'Refs #123')
+            && preg_match(
+                '/CHANGED_PATHS_FOR_COMMIT [a-f0-9]{40}\n/',
+                $featureEvidence,
+            ) === 1
+            && str_contains($featureEvidence, "M\tzz-later-feature.txt")
+            && str_contains($prompt, "A\t" . $originPath)
+            && str_contains($prompt, '(Refs #101, #133)')
+            && str_contains($prompt, '[#456]'),
+        'Each candidate reference needs its own real commit paths; historical metadata and style evidence remain complete.',
+    );
+    $check(
+        str_contains($contract, 'Mere presence of a number is insufficient')
+            && str_contains($contract, 'Do not inherit their issue links')
+            && str_contains($contract, 'Routine release origin/predecessor/version/manifest bookkeeping')
+            && str_contains($contract, 'NOTES_REVIEW_REQUIRED'),
+        'The actual generation contract must distinguish current issue work, historical examples and an explicit review handoff.',
     );
     $check(
         !str_contains($prompt, 'EXCLUDED_PDF_CONTENT')

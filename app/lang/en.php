@@ -1661,4 +1661,10 @@ return [
     'admin.maintenance_center.runtime.lifecycle_deferred' => 'Cache cleanup has unfinished or unavailable work. Maintenance continues; see Admin Logs for details.',
     'admin.maintenance_center.runtime.music_orphans_removed' => 'Removed {count} catalog record(s) without originals.',
     'admin.maintenance_center.runtime.lifecycle_progress' => 'Cache cleanup slice {slice}/{limit}: {files} removed, {bytes} bytes reclaimed.',
+    'admin.updates.recovery_database_blocked' => 'Automatic rollback stopped: database migration effects or compatibility are unverified. Preserve the job and backups. The administrator must inspect the database and interrupted migration, then deploy a verified compatible release in maintenance mode and continue forward migrations. Database migrations are not reversed.',
+    'admin.updates.recovery_limit' => 'Automatic rollback could not finish. Preserve both jobs and backups. Correct backup integrity or hosting permissions. Use Retry only when it is offered; otherwise deploy a verified compatible release in maintenance mode before another update.',
+    'admin.updates.recovery_waiting' => 'Update stopped. Recovery allows up to three retries and, after a ten-minute failure timeout, restores previous files only with verified database safety. Keep the job and backups. An authenticated Updates request or configured hosting CLI worker must provide a later opportunity while the site is gated.',
+    'admin.updates.recovery_restored' => 'The failed attempt has been released and the previous application files are in place. Its failed version or commit is excluded from automatic installation; enabled automatic checks can install a newer stable release.',
+    'admin.updates.recovery_backup_blocked' => 'Automatic rollback stopped: the backup is missing, incomplete or corrupt. Preserve the job and backup. The administrator must recover a complete verified snapshot or deploy a compatible release in maintenance mode.',
+    'admin.updates.recovery_started' => 'Automatic rollback has a separate job: {job}. Reopen Updates to follow that job. The original failure and its evidence remain preserved.',
 ];

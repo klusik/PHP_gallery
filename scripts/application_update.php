@@ -13,7 +13,7 @@
  * Responsibilities:
  *   - Continue an existing background update for one bounded worker slice
  *   - Start a due stable automatic update when the site is otherwise idle
- *   - Never advance Admin/manual beta jobs from unattended cron
+ *   - Preserve running manual ownership while repairing failed jobs of every origin
  *   - Emit only redacted updater state suitable for hosting cron logs
  *
  * Author:
@@ -37,6 +37,14 @@ gallery_require_cli_sapi();
 
 // Prevent bootstrap's browser-request auto-update hook from treating this CLI process as a GET request.
 $_SERVER['REQUEST_METHOD'] = 'CLI';
+/**
+ * Identify this trusted updater-only CLI bootstrap to the isolation protocol.
+ * Type: bool. Units: trusted-entry flag. Scope: this PHP process only.
+ * Consumers: early runtime shared-lease admission.
+ * Rationale: true exempts the dedicated updater from holding its own read lease;
+ * ordinary CLI entry points keep their leases and cannot self-exempt over HTTP.
+ */
+define('GALLERY_UPDATER_WORKER', true);
 
 require __DIR__ . '/../app/bootstrap_full.php';
 
@@ -82,6 +90,30 @@ $budgetSeconds = max(1.0, min(12.0, application_update_cli_number_option(
 $forceCheck = in_array('--force-check', $arguments, true);
 
 try {
+    $recoveryActive = application_update_active_job();
+    if ($recoveryActive !== null && (($recoveryActive['status'] ?? '') === 'failed'
+        || !empty($recoveryActive['automatic_rollback'])
+        || !empty($recoveryActive['automatic_repair_continuation'])
+        || (!empty($recoveryActive['slice_open'])
+            && (int) ($recoveryActive['slice_recovery_at'] ?? PHP_INT_MAX) <= time()))) {
+        // Repairing an already started operation is independent of permission
+        // to discover/install another release or to replace a beta pin.
+        $recoveryWasDue = \Gallery\Services\application_update_failed_recovery_due($recoveryActive, time());
+        $recoveryJob = application_update_continue_background_job($budgetSeconds)
+            ?? application_update_job_public_state($recoveryActive);
+        $recoveryFailed = ($recoveryJob['status'] ?? '') === 'failed'
+            && empty($recoveryJob['result']['recovery_released']);
+        if ($recoveryFailed && !$recoveryWasDue
+            && application_autoupdate_enabled() && !application_update_beta_active()
+            && ($forceCheck || application_autoupdate_discovery_due(
+                time(), application_update_discovery_last_attempt_at(),
+            ))) {
+            application_autoupdate_run_installing_check($forceCheck, time());
+        }
+        echo json_encode(['ok' => !$recoveryFailed, 'job' => $recoveryJob],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        exit($recoveryFailed ? 1 : 0);
+    }
     if (!application_autoupdate_enabled()) {
         echo
             json_encode([
@@ -104,6 +136,12 @@ try {
     $active = application_update_active_job();
     if ($active !== null) {
         if ((string) ($active['trigger'] ?? '') !== 'background') {
+            if (($active['status'] ?? '') === 'failed'
+                && ($forceCheck || application_autoupdate_discovery_due(
+                    time(), application_update_discovery_last_attempt_at(),
+                ))) {
+                application_autoupdate_run_installing_check($forceCheck, time());
+            }
             echo
                 json_encode([
                     'ok' => true,
@@ -113,9 +151,19 @@ try {
                 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
             exit(0);
         }
-        $job = application_update_continue_background_job(
-            $budgetSeconds,
-        ) ?? application_update_job_public_state($active);
+        if (($active['status'] ?? '') === 'failed'
+            && ($forceCheck || application_autoupdate_discovery_due(
+                time(), application_update_discovery_last_attempt_at(),
+            ))) {
+            application_autoupdate_run_installing_check($forceCheck, time());
+            $job = application_update_job_public_state(
+                application_update_active_job() ?? $active,
+            );
+        } else {
+            $job = application_update_continue_background_job(
+                $budgetSeconds,
+            ) ?? application_update_job_public_state($active);
+        }
         echo
             json_encode([
                 'ok' => true,

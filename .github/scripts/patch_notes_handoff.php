@@ -194,6 +194,8 @@ function patch_notes_handoff_bundle(
         "# Continue release-note assembly\n\n"
             . "1. Give prompt.txt to your chosen AI. It includes the template and complete source diff.\n"
             . "2. Review its single-line JSON response; preserve the identity fields.\n"
+            . '   Link every issue actually addressed by a current change '
+            . "beside that change; incidental or inherited references do not qualify.\n"
             . "3. Open Release qualification > Run workflow, select {$identity['release_branch']},\n"
             . "   paste the JSON into external_notes and run. Leave notes_mode as auto.\n\n"
             . "If the Run workflow button is not registered on main yet, save the JSON as response.json\n"

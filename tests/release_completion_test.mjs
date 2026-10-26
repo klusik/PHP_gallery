@@ -21,9 +21,16 @@ for (const scenario of ['normal','interrupted','parallel','unapproved','red','re
     const f=lifecycleFixture();
     try {
         const initialized=startNewRelease({version:'1.2.1',selected:f.selected},f.repository,f);
+        const originWrite=f.state.writes.find(write=>write.path.endsWith('/git/commits'));
+        assert.equal(originWrite.payload.message,'Initialize immutable origin for v_1.2.1',
+            'Routine release commits must not inject historical issue references.');
         const record=f.prepare(initialized);
         assert.equal(inspectReadiness(f.repository,f.api).main.status,'VERIFIED');
-        const pr=openQualifiedPullRequest(record,f.repository,'## Version 1.2.1\nReviewed fixture notes',f);
+        const notes='## Version 1.2.1\nReviewed fix [#101](https://github.com/fixture/gallery/issues/101).';
+        const pr=openQualifiedPullRequest(record,f.repository,notes,f);
+        const proposal=f.state.writes.find(write=>write.path.endsWith('/pulls'));
+        assert.ok(proposal.payload.body.endsWith(notes),
+            'Release PRs must preserve contextual note links without appending a fixed issue footer.');
         const count=f.state.writes.length;
         assert.equal(openQualifiedPullRequest(record,f.repository,'Reviewed fixture notes',f).number,pr.number);
         assert.equal(f.state.writes.length,count,'No duplicate PR is created.');

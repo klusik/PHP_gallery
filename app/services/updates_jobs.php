@@ -43,6 +43,8 @@ namespace Gallery\Services;
 
 // Keep active/last state lookups available without including worker state-machine parts.
 require_once __DIR__ . '/updates_job_lookup.php';
+require_once dirname(__DIR__) . '/early_runtime.php';
+require_once __DIR__ . '/../models/schema_inspection.php';
 
 /**
  * Bound retries of an atomic updater checkpoint commit on Windows.
@@ -100,6 +102,94 @@ const APPLICATION_UPDATE_CHAIN_LEASE_SECONDS = 120;
  *   preserving the existing request-driven worker fallback.
  */
 const APPLICATION_UPDATE_CHAIN_RETRY_SECONDS = 30;
+
+/**
+ * Limit unattended retries of one failed job without resetting its identity.
+ * Type: int. Units: retries. Scope: one durable background update job.
+ * Consumers: retry admission and failed-job guidance.
+ * Rationale: three retries tolerate transient hosting faults without looping
+ * forever over the same package, including failures with changing references.
+ */
+const APPLICATION_UPDATE_AUTO_RETRY_LIMIT = 3;
+
+/**
+ * Space unattended attempts after caught failures.
+ * Type: int. Units: seconds. Scope: one failed update or automatic rollback.
+ * Consumers: automatic retry admission (60, 120 and 240 seconds).
+ * Rationale: a sixty-second initial delay preserves hosting recovery time;
+ * the finite retry cap also bounds the exponential calculation.
+ */
+const APPLICATION_UPDATE_AUTO_RETRY_DELAY_SECONDS = 60;
+
+/**
+ * Wait before abandoning a failed attempt or restoring its previous files.
+ * Type: int. Units: seconds. Scope: the first caught failure of one update job.
+ * Consumers: automatic rollback admission for every original trigger.
+ * Rationale: 600 seconds leaves time for 60/120/240-second transient retries;
+ * recovery still needs a later worker opportunity and verified database safety.
+ */
+const APPLICATION_UPDATE_RECOVERY_TIMEOUT_SECONDS = 600;
+
+/**
+ * Bound the automatic installer exclusion index without removing job evidence.
+ * Type: int. Units: full GitHub commit identities. Scope: one installation.
+ * Consumers: failed-source quarantine and immutable download admission.
+ * Rationale: 32 recent bad commits bound preference storage; all original failed
+ * jobs and the highest failed stable version remain independently preserved.
+ */
+const APPLICATION_UPDATE_FAILED_COMMIT_LIMIT = 32;
+
+/**
+ * Bound migration evidence admitted for verified file recovery.
+ * Type: int. Units: migration records. Scope: one updater database snapshot.
+ * Consumers: schema inspection model and recovery compatibility checks.
+ * Rationale: 1024 exceeds the maintained migration chain while refusing
+ * oversized or unexpected ledgers instead of truncating safety evidence.
+ */
+const APPLICATION_UPDATE_RECOVERY_MIGRATION_LIMIT = 1024;
+
+/**
+ * Bound complete schema metadata read before restoring prior files.
+ * Type: int. Units: metadata rows. Scope: each column/index inventory.
+ * Consumers: recovery database evidence model.
+ * Rationale: 16384 rows exceeds the shipped schema; overflow refuses recovery
+ * rather than hashing incomplete evidence on large shared databases.
+ */
+const APPLICATION_UPDATE_RECOVERY_SCHEMA_ROWS = 16384;
+
+/**
+ * Keep stable commit resolution within an ordinary background slice.
+ * Type: int. Units: seconds. Scope: one first-download GitHub API call.
+ * Consumers: immutable archive source selection.
+ * Rationale: two seconds bounds metadata I/O before package streaming begins.
+ */
+const APPLICATION_UPDATE_COMMIT_LOOKUP_SECONDS = 2;
+
+/**
+ * Bound recovery package hashing before yielding a durable cursor.
+ * Type: int. Units: files. Scope: one recovery package validation slice.
+ * Consumers: full recovery manifest verification.
+ * Rationale: forty files plus the elapsed-time gate fit shared-host slices.
+ */
+const APPLICATION_UPDATE_RECOVERY_VERIFY_FILES = 40;
+
+/**
+ * Bound the recovery manifest before decoding it.
+ * Type: int. Units: bytes. Scope: one validated recovery package manifest.
+ * Consumers: recovery package integrity admission.
+ * Rationale: eight MiB exceeds the maintained manifest without admitting a
+ * full archive entry's allocation as unbounded JSON safety evidence.
+ */
+const APPLICATION_UPDATE_RECOVERY_MANIFEST_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Bound authored runtime protocol declarations inspected before activation.
+ * Type: int. Units: bytes per file. Scope: early runtime and bootstrap readers.
+ * Consumers: automatic recovery observation-window admission.
+ * Rationale: 65536 bytes covers these small entry files; larger declarations
+ * cannot establish rollback compatibility through an unbounded allocation.
+ */
+const APPLICATION_UPDATE_RECOVERY_PROTOCOL_BYTES = 65536;
 
 // This module is split into focused part files under app/services/updates_jobs/.
 // Per-request time budget and runtime limit resolution.

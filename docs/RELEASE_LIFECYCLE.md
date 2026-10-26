@@ -91,13 +91,27 @@ release timestamp. Production inventory precedes final complete-file manifest
 generation. Conditional installer generation preserves the separate WinApp
 version.
 
-Patch-note evidence keeps complete commit metadata and the full Git source diff.
+Patch-note evidence keeps complete commit metadata, changed paths for each
+commit and the full Git source diff. References are candidates until their
+originating commit purpose and paths match a concrete described release change.
+Link every directly addressed issue/PR beside that change; previous release
+notes provide style only. Historical examples and routine release bookkeeping
+do not establish current issue work. Initialization and the release PR wrapper
+add no fixed issue references. Older issues remain eligible for actual new work.
+
 Before any provider setup/request, automatic routing admits at most 100000 diff
 bytes, 20 source files and 180000 prompt bytes; larger changes export external
 evidence. Missing credentials, explicit external mode, provider installation or
 request failure (including exhausted allowance), timeout and invalid provider
 prose also produce **NOTES_PENDING**. The token's presence is not a quota check.
 No billing credentials or new qualification are introduced.
+
+An exact `NOTES_REVIEW_REQUIRED` response from an extraction/reduction pass or
+final synthesis also requests this handoff. Validators reject the signal as
+incomplete evidence/prose, so no partial notes are applied. The prompt requests
+it when grounded generation or a material issue relationship cannot be resolved
+reliably. Both Copilot and external AI receive the contextual reference policy;
+format validation does not prove a model's semantic judgment.
 
 This state retains the immutable origin and a 30-day Actions handoff artifact,
 then ends successfully without qualification, manual builds, prepared commits,

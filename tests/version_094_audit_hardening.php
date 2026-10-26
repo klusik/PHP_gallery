@@ -256,14 +256,13 @@ $assert(
     str_contains($updaterSource, "'install.php', 'reset.php' => 45"),
     'Direct HTTP utility entrypoints must activate after the early gate and public front controller.',
 );
+// Check ordering inside activation itself. Isolated jobs also clear the gate
+// after final completion in the separate lifecycle owner, before this part is
+// concatenated by module_source; module concatenation is not execution order.
+$activationSource = file_get_contents($root . '/app/services/updates_jobs/activation.php') ?: '';
 $assert(
-    strpos(
-        $updaterSource,
-        "\$job['checkpoints']['activation_complete'] = true;",
-    ) < strpos(
-        $updaterSource,
-        "application_update_activation_gate_clear((string) \$job['id']);",
-    ),
+    strpos($activationSource, "\$job['checkpoints']['activation_complete'] = true;")
+        < strpos($activationSource, "application_update_activation_gate_clear((string) \$job['id']);"),
     'Updater must durably checkpoint complete activation before clearing the gate.',
 );
 
@@ -296,6 +295,13 @@ $assert(
     \Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
     'Durable activation_complete checkpoint must be recognized.',
 );
+$marker['recovery_isolation'] = true;
+$assert(!\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
+    'An isolated job must stay gated after file activation but before migrations complete.');
+$job['status'] = 'completed';
+file_put_contents($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json', json_encode($job));
+$assert(\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
+    'Durable isolated job completion must permit ordinary runtime admission.');
 @unlink($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json');
 @unlink($tmp . '/cache/updates/activation.json');
 @rmdir($tmp . '/cache/updates/jobs/' . $marker['job_id']);

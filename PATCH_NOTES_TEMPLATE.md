@@ -110,9 +110,9 @@ Reference complete paths from repository root whenever possible.
 
 ### Issue and pull-request references
 
-- When a change has an available, evidenced issue or pull-request reference,
-  include a clickable Markdown link beside the relevant change or feature group.
-  A bare `#70` is not sufficient.
+- Link every evidenced issue or pull request directly addressed by a concrete
+  change in this release, beside that change or feature group. Explain the
+  delivered behavior so the relationship is clear. A bare `#70` is insufficient.
 - Use the canonical URL for the actual repository, for example
   `[#70](https://github.com/klusik/PHP_gallery/issues/70)` or
   `[PR #77](https://github.com/klusik/PHP_gallery/pull/77)`.
@@ -120,6 +120,16 @@ Reference complete paths from repository root whenever possible.
   task context. Resolve the repository from its configured remote; distinguish
   issues from pull requests and retain the repository identity for
   cross-repository references.
+- Treat reference mentions as candidates: match each to its commit's purpose,
+  changed paths and the current source diff. A number appearing somewhere in
+  the evidence does not establish a relationship to every change in the release.
+- Previous release notes provide style only. Historical documentation, fixture
+  examples and routine release origin/predecessor/version/manifest bookkeeping
+  do not establish current issue work. Do not present routine bookkeeping as a
+  newly implemented feature or repeat the issues that introduced that process.
+- Apply the same contextual rule to open, closed and previously referenced
+  issues. A new fix to an older issue may qualify; its status or age alone does
+  not establish or remove relevance. There is no fixed required issue list.
 - If several references apply, link each one separately. An optional references
   list may supplement links beside the changes.
 - Do not invent references, substitute an unrelated issue, or imply that an

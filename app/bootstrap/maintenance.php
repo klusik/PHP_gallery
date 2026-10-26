@@ -72,7 +72,7 @@ function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
 }
 
 /**
- * Hand a running automatic stable update to independent workers after a visit.
+ * Hand a running automatic stable update or automatic rollback to workers.
  * @param Kernel|null $kernel Optional selective loader; full-bootstrap callers already own worker dependencies.
  * @return void Registers one successful-response handoff, excluding CLI, manual jobs, failed responses and fatal requests.
  */
@@ -84,8 +84,10 @@ function cms_register_update_background_continuation(?Kernel $kernel = null): vo
     $job = \Gallery\Services\application_update_active_job();
     if (
         $job === null
-        || ($job['trigger'] ?? '') !== 'background'
-        || ($job['operation'] ?? '') !== 'stable_update'
+        || (empty($job['automatic_repair_continuation'])
+            && (($job['trigger'] ?? '') !== 'background'
+                || (($job['operation'] ?? '') !== 'stable_update'
+                    && !(($job['operation'] ?? '') === 'rollback' && !empty($job['automatic_rollback'])))))
         || ($job['status'] ?? '') !== 'running'
         || \Gallery\Services\application_update_background_chain_pending(
             (string) $job['id'],

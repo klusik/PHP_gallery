@@ -1656,4 +1656,10 @@ return [
     'admin.maintenance_center.runtime.lifecycle_deferred' => 'Čištění cache má nedokončenou nebo nedostupnou práci. Údržba pokračuje; podrobnosti jsou v Admin logu.',
     'admin.maintenance_center.runtime.music_orphans_removed' => 'Odstraněno {count} záznamů katalogu bez originálu.',
     'admin.maintenance_center.runtime.lifecycle_progress' => 'Čištění cache, dávka {slice}/{limit}: odstraněno {files}, uvolněno {bytes} bajtů.',
+    'admin.updates.recovery_database_blocked' => 'Automatický rollback je zastavený: účinky databázových migrací nebo kompatibilita nejsou ověřené. Zachovejte úlohu a zálohy. Správce musí prověřit databázi a přerušenou migraci, v režimu údržby nasadit ověřené kompatibilní vydání a pokračovat v dopředných migracích. Databázové migrace se nevracejí.',
+    'admin.updates.recovery_limit' => 'Automatický rollback se nepodařilo dokončit. Zachovejte obě úlohy a zálohy. Opravte integritu zálohy nebo oprávnění hostingu. Opakování použijte jen tehdy, pokud je nabídnuto; jinak před další aktualizací nasaďte ověřené kompatibilní vydání v režimu údržby.',
+    'admin.updates.recovery_waiting' => 'Aktualizace stojí. Obnova dovolí nejvýše tři pokusy a po desetiminutovém timeoutu selhání obnoví původní soubory pouze při ověřené bezpečnosti databáze. Zachovejte úlohu a zálohy. Za zavřenou bránou musí další příležitost dodat ověřený požadavek na stránku Aktualizace nebo nastavený hostingový CLI worker.',
+    'admin.updates.recovery_restored' => 'Selhaný pokus byl uvolněný a předchozí soubory aplikace jsou na místě. Vadná verze nebo commit jsou vyřazené z automatické instalace; zapnuté automatické kontroly mohou nainstalovat novější stabilní vydání.',
+    'admin.updates.recovery_backup_blocked' => 'Automatický rollback je zastavený: záloha chybí, je neúplná nebo poškozená. Zachovejte úlohu a zálohu. Správce musí získat úplný ověřený snímek nebo v režimu údržby nasadit kompatibilní vydání.',
+    'admin.updates.recovery_started' => 'Automatický rollback má samostatnou úlohu: {job}. Pro její sledování znovu otevřete Aktualizace. Původní chyba i její důkazy zůstávají zachované.',
 ];

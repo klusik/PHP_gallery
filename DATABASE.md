@@ -66,7 +66,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.144.2. Version 0.97 adds the recoverable gallery-trash
+application version 0.144.3. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -446,6 +446,20 @@ Applied migrations are recorded in:
 ```sql
 schema_migrations(version, applied_at)
 ```
+
+Updater recovery adds no table or migration. Private checkpoints retain fresh
+bounded actual column/index definitions and the complete migration ledger,
+queried by `app/models/schema_inspection.php`. Equality is necessary but does not
+prove data compatibility: post-activation restoration also requires cooperative
+runtime isolation, an open unused observation window, proven zero migration
+effects and complete verified original files. Migration intent is durable before
+runner invocation; an interrupted callback can commit DDL without a ledger row.
+Only not-started intent or a completed zero-work runner receipt is admitted.
+Unknown/oversized metadata, changed schema, ordinary runtime use and missing old
+proof refuse automatic file rollback. No migration or application data is
+reversed. After a safe rollback the next stable discovery may skip the failed
+release; blocked jobs still permit availability checks. See
+[recovery and manual repair](docs/AUTOUPDATE.md).
 
 The standalone `install.php` runner executes the complete chain before writing
 configuration or creating the administrator. The layout-semantics repair

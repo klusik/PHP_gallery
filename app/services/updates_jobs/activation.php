@@ -95,6 +95,7 @@ function application_update_activation_gate_begin(array $job): void
         'trigger' => (string) ($job['trigger'] ?? ''),
         'started_at' => (int) ($existing['started_at'] ?? time()),
         'updated_at' => time(),
+        'recovery_isolation' => !empty($job['checkpoints']['runtime_guard_open']),
     ];
 
     // The session name is not an authentication secret. Persisting it lets the early
@@ -142,7 +143,7 @@ function application_update_activation_gate_clear(string $jobId): void
  * @param array<string,mixed> $job Durable update job with id, status and checkpoints for prepared source, backup and verification; no raw request data.
  * @return void Refuses activation when package, backup, runtime or gallery-write enforcement is not verified.
  */
-function application_update_job_assert_ready(array $job): void
+function application_update_job_assert_ready(array &$job): void
 {
     if (empty($job['checkpoints']['backup_complete'])) {
         throw new RuntimeException('Rollback snapshot is not complete.');
@@ -164,10 +165,19 @@ function application_update_job_assert_ready(array $job): void
             throw new RuntimeException('Prepared activation file is missing.');
         }
     }
+    if ((!empty($job['automatic_rollback'])
+            || (($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback'))
+        && empty($job['checkpoints']['recovery_ready_verified'])) {
+        throw new RuntimeException('Recovery readiness verification is incomplete.');
+    }
     application_update_assert_activation_schema_known(
         'application_update.job_activation_ready',
     );
     application_update_assert_gallery_edit_enforcement(
+        (string) ($job['checkpoints']['source_root'] ?? ''),
+    );
+    application_update_recovery_assert_compatible(
+        $job,
         (string) ($job['checkpoints']['source_root'] ?? ''),
     );
 }
@@ -204,123 +214,149 @@ function application_update_activation_priority(string $path): int
  * prepared release hash as already committed.
  *
  * @param array<string,mixed> $job Job state with an id and activation_files/obsolete_paths checkpoints, updated by reference as activation progress is saved.
- * @return void Completes activation or throws when a prepared target cannot be safely committed.
+ * @return bool True after activation; false yields while another runtime holds a shared lease.
  */
-function application_update_job_activate(array &$job): void
+function application_update_job_activate(array &$job): bool
 {
-    application_update_job_assert_ready($job);
-    application_update_activation_gate_begin($job);
-    $jobDir = application_update_job_dir((string) $job['id']);
-    $root = application_update_project_root();
-    $files = array_values(
-        (array) ($job['checkpoints']['activation_files'] ?? []),
-    );
-    usort($files, static function (string $left, string $right): int {
-        $comparison = application_update_activation_priority(
-            $left,
-        ) <=> application_update_activation_priority($right);
-        return $comparison !== 0 ? $comparison : strcmp($left, $right);
-    });
+    $runtimeLock = application_update_acquire_lock(application_update_jobs_root() . '/runtime-use.lock');
+    if ($runtimeLock === null) {
+        $job['checkpoints']['runtime_lease_busy'] = true;
+        application_update_save_job($job);
+        return false;
+    }
+    try {
+        unset($job['checkpoints']['runtime_lease_busy']);
+        application_update_runtime_window_begin($job);
+        application_update_job_assert_ready($job);
+        application_update_rollback_gate_takeover($job);
+        application_update_activation_gate_begin($job);
+        $jobDir = application_update_job_dir((string) $job['id']);
+        $root = application_update_project_root();
+        $files = array_values(
+            (array) ($job['checkpoints']['activation_files'] ?? []),
+        );
+        usort($files, static function (string $left, string $right): int {
+            $comparison = application_update_activation_priority(
+                $left,
+            ) <=> application_update_activation_priority($right);
+            return $comparison !== 0 ? $comparison : strcmp($left, $right);
+        });
 
-    $activated = 0;
-    foreach ($files as $relative) {
-        application_update_assert_safe_target($jobDir, 'ready/' . $relative);
-        application_update_assert_safe_target($root, $relative, true);
-        $ready =
-            $jobDir
-            . '/ready/'
-            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        $destination =
-            $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        $readyHash = hash_file('sha256', $ready);
-        if ($readyHash === false) {
-            throw new RuntimeException(
-                'Could not verify prepared activation file.',
-            );
-        }
-        if (is_file($destination)) {
-            $destinationHash = hash_file('sha256', $destination);
-            if (
-                $destinationHash !== false
-                && hash_equals($readyHash, $destinationHash)
-            ) {
-                $activated++;
-                continue;
+        $activated = 0;
+        foreach ($files as $relative) {
+            application_update_assert_safe_target($jobDir, 'ready/' . $relative);
+            application_update_assert_safe_target($root, $relative, true);
+            $ready =
+                $jobDir
+                . '/ready/'
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            $destination =
+                $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            $readyHash = hash_file('sha256', $ready);
+            if ($readyHash === false) {
+                throw new RuntimeException(
+                    'Could not verify prepared activation file.',
+                );
             }
-        } elseif (is_dir($destination)) {
-            throw new RuntimeException(
-                'Cannot replace an active directory with a file.',
-            );
+            if (!empty($job['automatic_rollback'])
+                || (($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
+                $expected = $relative === 'app/core-manifest.json'
+                    ? (string) ($job['checkpoints']['recovery_manifest_identity'] ?? '')
+                    : (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? '');
+                if ($expected === ''
+                    || !application_update_recovery_hash_matches($expected, $ready)) {
+                    throw new RuntimeException('Recovery prepared file failed integrity verification.');
+                }
+            }
+            if (is_file($destination)) {
+                $destinationHash = hash_file('sha256', $destination);
+                if (
+                    $destinationHash !== false
+                    && hash_equals($readyHash, $destinationHash)
+                ) {
+                    $activated++;
+                    continue;
+                }
+            } elseif (is_dir($destination)) {
+                throw new RuntimeException(
+                    'Cannot replace an active directory with a file.',
+                );
+            }
+
+            application_update_ensure_dir(dirname($destination));
+            $temporary =
+                dirname($destination)
+                . '/.php-gallery-activate-'
+                . bin2hex(random_bytes(6))
+                . '.tmp';
+            $temporaryRelative = dirname(str_replace(
+                '/',
+                DIRECTORY_SEPARATOR,
+                $relative,
+            ));
+            $temporaryRelative =
+                (
+                    $temporaryRelative === '.'
+                        ? ''
+                        : str_replace(DIRECTORY_SEPARATOR, '/', $temporaryRelative)
+                        . '/'
+                )
+                . basename($temporary);
+            application_update_assert_safe_target($root, $temporaryRelative, true);
+            if (!copy($ready, $temporary)) {
+                throw new RuntimeException(
+                    'Could not prepare active file replacement.',
+                );
+            }
+            if (!hash_equals(
+                $readyHash,
+                (string) hash_file('sha256', $temporary),
+            )) {
+                @unlink($temporary);
+                throw new RuntimeException(
+                    'Active file replacement failed integrity verification.',
+                );
+            }
+            application_update_assert_safe_target($root, $relative, true);
+            application_update_assert_safe_target($root, $temporaryRelative);
+            if (!rename($temporary, $destination)) {
+                @unlink($temporary);
+                throw new RuntimeException(
+                    'Could not atomically replace an active application file.',
+                );
+            }
+            application_update_invalidate_opcache_for_path($destination);
+            $activated++;
         }
 
-        application_update_ensure_dir(dirname($destination));
-        $temporary =
-            dirname($destination)
-            . '/.php-gallery-activate-'
-            . bin2hex(random_bytes(6))
-            . '.tmp';
-        $temporaryRelative = dirname(str_replace(
-            '/',
-            DIRECTORY_SEPARATOR,
-            $relative,
-        ));
-        $temporaryRelative =
-            (
-                $temporaryRelative === '.'
-                    ? ''
-                    : str_replace(DIRECTORY_SEPARATOR, '/', $temporaryRelative)
-                    . '/'
-            )
-            . basename($temporary);
-        application_update_assert_safe_target($root, $temporaryRelative, true);
-        if (!copy($ready, $temporary)) {
-            throw new RuntimeException(
-                'Could not prepare active file replacement.',
-            );
+        foreach ((array) (
+            $job['checkpoints']['obsolete_paths'] ?? []
+        ) as $relative) {
+            $relative = (string) $relative;
+            application_update_assert_safe_target($root, $relative, true);
+            $path = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            if (file_exists($path) || is_link($path)) {
+                application_update_assert_safe_target($root, $relative);
+                application_update_remove_path($path);
+            }
         }
-        if (!hash_equals(
-            $readyHash,
-            (string) hash_file('sha256', $temporary),
-        )) {
-            @unlink($temporary);
-            throw new RuntimeException(
-                'Active file replacement failed integrity verification.',
-            );
+
+        $job['checkpoints']['activation_complete'] = true;
+        $job['checkpoints']['activated_files'] = $activated;
+        $job['progress'] = [
+            'current' => $activated,
+            'total' => count($files),
+            'message' => 'Prepared release activated.',
+            'unit' => 'files',
+        ];
+        application_update_save_job($job);
+        if (empty($job['checkpoints']['runtime_guard_open'])) {
+            application_update_activation_gate_clear((string) $job['id']);
         }
-        application_update_assert_safe_target($root, $relative, true);
-        application_update_assert_safe_target($root, $temporaryRelative);
-        if (!rename($temporary, $destination)) {
-            @unlink($temporary);
-            throw new RuntimeException(
-                'Could not atomically replace an active application file.',
-            );
-        }
-        application_update_invalidate_opcache_for_path($destination);
-        $activated++;
+        return true;
+    } finally {
+        application_update_release_lock($runtimeLock);
     }
-
-    foreach ((array) (
-        $job['checkpoints']['obsolete_paths'] ?? []
-    ) as $relative) {
-        $relative = (string) $relative;
-        application_update_assert_safe_target($root, $relative, true);
-        $path = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        if (file_exists($path) || is_link($path)) {
-            application_update_assert_safe_target($root, $relative);
-            application_update_remove_path($path);
-        }
-    }
-
-    $job['checkpoints']['activation_complete'] = true;
-    $job['checkpoints']['activated_files'] = $activated;
-    $job['progress'] = [
-        'current' => $activated,
-        'total' => count($files),
-        'message' => 'Prepared release activated.',
-        'unit' => 'files',
-    ];
-    application_update_save_job($job);
-    application_update_activation_gate_clear((string) $job['id']);
 }
 
 /**
@@ -345,6 +381,10 @@ function application_update_job_migrate_slice(array &$job): bool
         application_update_save_job($job);
         return true;
     }
+    // Commit intent before the runner can bootstrap its ledger or execute DDL.
+    // A crash after this write is deliberately unverified for file recovery.
+    $job['checkpoints']['migrations_started'] = true;
+    application_update_save_job($job);
     $result = run_migrations_bounded(1);
     $ran = array_values((array) ($result['ran'] ?? []));
     $allRan = array_values(array_merge(
@@ -361,7 +401,12 @@ function application_update_job_migrate_slice(array &$job): bool
         'unit' => 'migrations',
     ];
     application_update_save_job($job);
-    return (int) ($result['remaining'] ?? 0) === 0;
+    $complete = (int) ($result['remaining'] ?? 0) === 0;
+    if ($complete) {
+        $job['checkpoints']['migrations_complete'] = true;
+        application_update_save_job($job);
+    }
+    return $complete;
 }
 
 /**
@@ -538,5 +583,375 @@ function application_update_job_finalize(array &$job): void
         ],
     ]);
     $job['checkpoints']['finalized'] = true;
+    if (!empty($job['automatic_rollback'])) {
+        $source = application_update_load_job((string) $job['parameters']['source_job_id']);
+        $source['result']['recovery_released'] = true;
+        $source['result']['recovery_rollback_job_id'] = (string) $job['id'];
+        $source['result']['recovery_restored_at'] = time();
+        $source['result']['recovery_outcome'] = 'previous_files_restored';
+        $source['result']['restored_version'] = $version;
+        $source['finished_at'] = time();
+        application_update_save_job($source);
+        $job['result']['recovery_outcome'] = 'previous_files_restored';
+    }
     application_update_save_job($job);
+}
+
+/**
+ * Transfer a partial source activation gate only to its verified rollback.
+ * @param array<string,mixed> $job Active automatic rollback with complete ready verification.
+ * @return void Preserves the gate until the same rollback durably finishes activation.
+ */
+function application_update_rollback_gate_takeover(array $job): void
+{
+    if (empty($job['automatic_rollback']) || !is_file(application_update_activation_gate_path())) {
+        return;
+    }
+    $lock = application_update_acquire_lock(application_update_jobs_root() . '/start.lock');
+    if ($lock === null) {
+        throw new RuntimeException('Rollback activation ownership is busy.');
+    }
+    try {
+        $marker = application_update_read_json(application_update_activation_gate_path());
+        $owner = (string) ($marker['job_id'] ?? '');
+        if ($owner === (string) $job['id']) {
+            return;
+        }
+        if (($job['checkpoints']['recovery_ready_verified'] ?? false) !== true
+            || $owner !== (string) ($job['parameters']['source_job_id'] ?? '')
+            || (application_update_active_job()['id'] ?? '') !== (string) $job['id']) {
+            throw new RuntimeException('Rollback activation ownership cannot be verified.');
+        }
+        application_update_assert_rollback_database(application_update_load_job($owner));
+        $marker['job_id'] = (string) $job['id'];
+        $marker['trigger'] = 'background';
+        $marker['updated_at'] = time();
+        application_update_write_json_atomic(application_update_activation_gate_path(), $marker);
+    } finally {
+        application_update_release_lock($lock);
+    }
+}
+
+
+// Recovery responsibilities stay with their existing updater domain owner.
+
+/**
+ * Observe migration evidence without running migrations or interpreting PHP.
+ * @param string $root Installed or validated package root for applied files.
+ * @param bool $includeHashes Whether installed migration bytes should also be captured.
+ * @return array{state:string,versions:list<string>,hashes:array<string,string>,schema:string} Known ledger, optional applied migration hashes and actual column/index fingerprint.
+ * @throws RuntimeException When evidence is unknown, oversized or incomplete.
+ */
+function application_update_recovery_database_evidence(string $root, bool $includeHashes = true): array
+{
+    // Bypass request-local observations at this irreversible boundary.
+    schema_inspection_reset_request_cache();
+    $state = (string) (application_update_activation_schema_status()['state']
+        ?? 'unknown');
+    if (!in_array($state, ['available', 'missing'], true)) {
+        throw new RuntimeException('Recovery database evidence is unknown.');
+    }
+    $versions = $state === 'missing' ? []
+        : \Gallery\Models\schema_inspection_model_migration_versions(
+            APPLICATION_UPDATE_RECOVERY_MIGRATION_LIMIT,
+        );
+    $hashes = [];
+    foreach ($versions as $version) {
+        if (!$includeHashes) {
+            continue;
+        }
+        if (preg_match('/^[0-9]{12}_[a-z0-9_]+$/D', $version) !== 1) {
+            throw new RuntimeException('Recovery migration identity is invalid.');
+        }
+        $relative = 'database/migrations/' . $version . '.php';
+        application_update_assert_safe_target($root, $relative);
+        $hashes[$version] = application_update_manifest_hash($root . '/' . $relative);
+    }
+    return [
+        'state' => $state,
+        'versions' => $versions,
+        'hashes' => $hashes,
+        'schema' => \Gallery\Models\schema_inspection_model_recovery_schema(
+            APPLICATION_UPDATE_RECOVERY_SCHEMA_ROWS,
+        ),
+    ];
+}
+
+/**
+ * Classify the proven boundary of a failed source, without changing its state.
+ * @param array<string,mixed> $job Failed source and durable activation evidence.
+ * @param string $successorId Optional owner of a replayed successor gate.
+ * @return string pre_activation, rollback_safe, or a stable blocking reason.
+ */
+function application_update_recovery_boundary(array $job, string $successorId = ''): string
+{
+    $stage = (string) ($job['stage'] ?? '');
+    $stages = application_update_job_stages();
+    $index = array_search($stage, $stages, true);
+    $activation = array_search('activate', $stages, true);
+    $marker = application_update_activation_gate_path();
+    $gate = is_file($marker) ? application_update_read_json($marker) : null;
+    if ($gate !== null && (!is_array($gate) || $gate === []
+        || (string) ($gate['job_id'] ?? '') === ''
+        || !in_array((string) ($gate['job_id'] ?? ''),
+            [(string) ($job['id'] ?? ''), $successorId], true))) {
+        return 'activation_owner_unverified';
+    }
+    if (!is_int($index) || !is_int($activation)) {
+        return 'unknown_checkpoint';
+    }
+    if ($index < $activation && $gate === null
+        && empty($job['checkpoints']['activation_complete'])) {
+        return 'pre_activation';
+    }
+    // A missing witness is never upgraded into proof that a migration did not run.
+    $noMigrationRan = ($job['checkpoints']['migrations_complete'] ?? false) === true
+        && ($job['result']['migrations'] ?? null) === [];
+    if (($job['checkpoints']['migrations_started'] ?? null) !== false
+        && !$noMigrationRan) {
+        return 'migration_state_unverified';
+    }
+    if (($job['checkpoints']['backup_complete'] ?? false) !== true
+        || empty($job['checkpoints']['database_before_activation'])) {
+        return 'backup_or_database_unverified';
+    }
+    return 'rollback_safe';
+}
+
+/**
+ * Require proven rollback compatibility and immutable source backup metadata.
+ * @param array{automatic_rollback?:bool,id:string,recovery?:array{source_job_id?:string},checkpoints:array<string,mixed>,...<string,mixed>} $job Ordinary package or linked automatic rollback.
+ * @param string $sourceRoot Validated package or indexed original snapshot root.
+ * @return void Refuses unknown DB/runtime state or missing backup evidence; bounded byte verification belongs to the ready slice.
+ */
+function application_update_recovery_assert_compatible(array $job, string $sourceRoot): void
+{
+    if (empty($job['automatic_rollback'])) {
+        return;
+    }
+    $sourceId = (string) ($job['recovery']['source_job_id'] ?? '');
+    $source = application_update_load_job($sourceId);
+    if (($source['result']['superseded_by'] ?? '') !== ($job['id'] ?? '')
+        || application_update_recovery_boundary($source, (string) $job['id']) !== 'rollback_safe') {
+        throw new RuntimeException('Recovery rollback ownership or checkpoint changed.');
+    }
+    application_update_assert_rollback_database($source);
+    $directory = application_update_job_dir($sourceId);
+    if ($sourceRoot !== $directory . '/rollback/original') {
+        throw new RuntimeException('Recovery rollback source identity changed.');
+    }
+    $metadata = application_update_read_json($directory . '/rollback/metadata.json');
+    $hashes = $metadata['hashes'] ?? null;
+    if (($metadata['job_id'] ?? '') !== $sourceId
+        || ($source['checkpoints']['backup_metadata_identity'] ?? '')
+            !== application_update_manifest_hash($directory . '/rollback/metadata.json')
+        || !is_array($hashes)
+        || $hashes !== ($source['checkpoints']['backup_hashes'] ?? null)) {
+        throw new RuntimeException('Recovery rollback evidence is missing or corrupt.');
+    }
+    foreach ((array) ($source['checkpoints']['backup_items'] ?? []) as $relative) {
+        if (empty($source['checkpoints']['created_paths'][$relative])
+            && !isset($hashes[$relative])) {
+            throw new RuntimeException('Recovery rollback evidence is incomplete.');
+        }
+    }
+    foreach ($hashes as $relative => $hash) {
+        application_update_assert_safe_target($directory, 'rollback/original/' . $relative);
+        if (!is_file($directory . '/rollback/original/' . $relative)) {
+            throw new RuntimeException('Recovery rollback file is missing.');
+        }
+    }
+    if (!empty($job['checkpoints']['recovery_ready_verified'])
+        && ($job['checkpoints']['recovery_backup_identity'] ?? '')
+            !== application_update_manifest_hash($directory . '/rollback/metadata.json')) {
+        throw new RuntimeException('Recovery rollback evidence changed after verification.');
+    }
+}
+
+/**
+ * Verify prepared files and retained source backups in resumable ready slices.
+ * @param array{id:string,checkpoints:array<string,mixed>,...<string,mixed>} $job Recovery job with staged manifest hashes and a durable cursor.
+ * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Bounded worker opportunity.
+ * @return bool True after all bytes pass; false preserves a ready-stage cursor.
+ * @throws RuntimeException When any immutable evidence or file hash changes.
+ */
+function application_update_recovery_ready_slice(array &$job, array $budget): bool
+{
+    if (empty($job['automatic_rollback'])
+        && !(($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
+        return true;
+    }
+    application_update_recovery_assert_compatible($job,
+        (string) ($job['checkpoints']['source_root'] ?? ''));
+    $directory = application_update_job_dir((string) $job['id']);
+    $items = [];
+    foreach ((array) ($job['checkpoints']['activation_files'] ?? []) as $relative) {
+        $expected = $relative === 'app/core-manifest.json'
+            ? (string) ($job['checkpoints']['recovery_manifest_identity'] ?? '')
+            : (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? '');
+        $items[] = [$directory, 'ready/' . $relative, $expected];
+    }
+    if (!empty($job['automatic_rollback'])) {
+        $sourceDirectory = application_update_job_dir((string) $job['recovery']['source_job_id']);
+        $metadata = application_update_read_json($sourceDirectory . '/rollback/metadata.json');
+        $identity = application_update_manifest_hash($sourceDirectory . '/rollback/metadata.json');
+        if (($job['checkpoints']['recovery_backup_identity'] ?? $identity) !== $identity) {
+            throw new RuntimeException('Recovery rollback evidence changed during verification.');
+        }
+        $job['checkpoints']['recovery_backup_identity'] = $identity;
+        foreach ((array) ($metadata['hashes'] ?? []) as $relative => $hash) {
+            $items[] = [$sourceDirectory, 'rollback/original/' . $relative, (string) $hash];
+        }
+    }
+    $index = (int) ($job['checkpoints']['recovery_ready_index'] ?? 0);
+    $processed = 0;
+    while ($index < count($items)
+        && $processed < APPLICATION_UPDATE_RECOVERY_VERIFY_FILES
+        && application_update_budget_allows($budget, 0.7)) {
+        [$base, $relative, $expected] = $items[$index];
+        application_update_assert_safe_target($base, $relative);
+        if ($expected === '' || !is_file($base . '/' . $relative)
+            || !application_update_recovery_hash_matches($expected, $base . '/' . $relative)) {
+            throw new RuntimeException('Recovery safety file failed integrity verification.');
+        }
+        $index++;
+        $processed++;
+    }
+    $job['checkpoints']['recovery_ready_index'] = $index;
+    $job['checkpoints']['recovery_ready_verified'] = $index === count($items);
+    $job['progress'] = [
+        'current' => $index, 'total' => count($items),
+        'message' => 'Verifying recovery files and retained backups.', 'unit' => 'files',
+    ];
+    application_update_save_job($job);
+    return $job['checkpoints']['recovery_ready_verified'];
+}
+
+/**
+ * Check the unchanged database required before restoring previous files.
+ * @param array<string,mixed> $source Original job with a pre-activation witness.
+ * @return void Refuses entered/unproven migrations or changed database evidence.
+ */
+function application_update_assert_rollback_database(array $source): void
+{
+    $id = (string) $source['id'];
+    $directory = application_update_job_dir($id);
+    $window = application_update_read_json(application_update_jobs_root() . '/rollback-window.json');
+    if (($source['checkpoints']['runtime_guard_protocol'] ?? 0) !== 1
+        || empty($source['checkpoints']['runtime_guard_open'])
+        || ($window['job_id'] ?? '') !== $id
+        || is_file($directory . '/runtime-used.json')
+        || is_file($directory . '/runtime-window-closed.json')) {
+        throw new RuntimeException('Recovery database writes cannot be excluded: runtime isolation is unverified.');
+    }
+    $baseline = $source['checkpoints']['database_before_activation'] ?? null;
+    if (!is_array($baseline)) {
+        throw new RuntimeException('Recovery database baseline is missing.');
+    }
+    $started = $source['checkpoints']['migrations_started'] ?? null;
+    $noMigrationsRan = ($source['checkpoints']['migrations_complete'] ?? false) === true
+        && ($source['result']['migrations'] ?? null) === [];
+    if ($started !== false && !$noMigrationsRan) {
+        throw new RuntimeException('Recovery database migration effects are unverified.');
+    }
+    $hashes = $baseline['hashes'] ?? null;
+    if (!is_array($hashes) || array_keys($hashes) !== ($baseline['versions'] ?? null)) {
+        throw new RuntimeException('Recovery applied migration file evidence is incomplete.');
+    }
+    foreach ($hashes as $version => $expected) {
+        if (preg_match('/^[0-9]{12}_[a-z0-9_]+$/D', (string) $version) !== 1) {
+            throw new RuntimeException('Recovery applied migration identity is invalid.');
+        }
+        $relative = 'database/migrations/' . $version . '.php';
+        $fileRoot = isset($source['checkpoints']['backup_hashes'][$relative])
+            ? $directory . '/rollback/original' : application_update_project_root();
+        application_update_assert_safe_target($fileRoot, $relative);
+        if (!is_string($expected)
+            || !hash_equals($expected, application_update_manifest_hash($fileRoot . '/' . $relative))) {
+            throw new RuntimeException('Recovery applied migration file changed.');
+        }
+    }
+    // Active files may be a mixed tree. Their hashes cannot establish database
+    // rollback safety; the original backup hashes establish restored file bytes.
+    unset($baseline['hashes']);
+    $actual = application_update_recovery_database_evidence(
+        application_update_project_root(), false,
+    );
+    unset($actual['hashes']);
+    if ($actual !== $baseline) {
+        throw new RuntimeException('Recovery database state changed.');
+    }
+}
+
+/**
+ * Open a rollback observation window while holding exclusive runtime ownership.
+ * @param array<string,mixed> $job Active job with verified staged package checkpoints.
+ * @return void Persists pre-activation DB and cooperative isolation evidence once.
+ */
+function application_update_runtime_window_begin(array &$job): void
+{
+    if (!empty($job['automatic_rollback'])) {
+        application_update_assert_rollback_database(application_update_load_job(
+            (string) $job['parameters']['source_job_id'],
+        ));
+        $job['checkpoints']['runtime_guard_open'] = true;
+        return;
+    }
+    if (($job['recovery_schema'] ?? 0) !== 1) {
+        return;
+    }
+    $path = application_update_jobs_root() . '/rollback-window.json';
+    $existing = application_update_read_json($path);
+    if ($existing !== [] && ($existing['job_id'] ?? '') !== $job['id']) {
+        throw new RuntimeException('Another recovery runtime window is active.');
+    }
+    if (!empty($job['checkpoints']['runtime_guard_open'])) {
+        if (($existing['job_id'] ?? '') !== $job['id']) {
+            throw new RuntimeException('Recovery runtime window is missing.');
+        }
+        return;
+    }
+    $root = (string) ($job['checkpoints']['source_root'] ?? '');
+    $early = is_file($root . '/app/early_runtime.php')
+        ? (string) file_get_contents($root . '/app/early_runtime.php', false, null,
+            0, APPLICATION_UPDATE_RECOVERY_PROTOCOL_BYTES) : '';
+    $bootstrap = is_file($root . '/app/bootstrap.php')
+        ? (string) file_get_contents($root . '/app/bootstrap.php', false, null,
+            0, APPLICATION_UPDATE_RECOVERY_PROTOCOL_BYTES) : '';
+    // A trusted package's protocol declaration is an authored compatibility
+    // promise, independently checked after complete package byte verification.
+    // Legacy packages may still install, but cannot promise automatic rollback.
+    $job['checkpoints']['runtime_guard_protocol'] =
+        str_contains($early, 'const UPDATER_RUNTIME_ISOLATION_PROTOCOL = 1;')
+        && str_contains($bootstrap, 'updater_runtime_enter(') ? 1 : 0;
+    $job['checkpoints']['database_before_activation'] =
+        application_update_recovery_database_evidence(application_update_project_root());
+    application_update_write_json_atomic($path, [
+        'job_id' => (string) $job['id'],
+        'admin_session_name' => (string) ($job['admin_session_name'] ?? ''),
+        'opened_at' => time(),
+    ]);
+    $job['checkpoints']['runtime_guard_open'] = true;
+    application_update_save_job($job);
+}
+
+/**
+ * Retire a completed isolation window without losing the historical safety receipt.
+ * @param array<string,mixed> $job Completed original or automatic rollback job.
+ * @return void Closes only the matching window; preserves evidence before unlink.
+ */
+function application_update_runtime_window_close(array $job): void
+{
+    $sourceId = !empty($job['automatic_rollback'])
+        ? (string) $job['parameters']['source_job_id'] : (string) $job['id'];
+    $path = application_update_jobs_root() . '/rollback-window.json';
+    $window = application_update_read_json($path);
+    if (($window['job_id'] ?? '') !== $sourceId) {
+        return;
+    }
+    application_update_write_json_atomic(application_update_job_dir($sourceId)
+        . '/runtime-window-closed.json', ['completed_job_id' => (string) $job['id'], 'at' => time()]);
+    if (!@unlink($path) && is_file($path)) {
+        throw new RuntimeException('Recovery runtime window could not be closed.');
+    }
 }

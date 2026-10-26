@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.144.2}
-\newcommand{\manualdate}{25.~října~2026}
+\newcommand{\version}{0.144.3}
+\newcommand{\manualdate}{26.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -3292,7 +3292,40 @@ Před aktivací ověření archivu aktualizátoru vyžaduje také úplné nové 
 
 Aktivace aktualizace používá schválenou aktualizační podmnožinu produkčního seznamu. Seznam příchozího vydání uvádí zdroje WinApp odděleně, aby jej starší nainstalovaný updater mohl ověřit před instalací nového čtecího kódu. Updater CMS tyto zdroje neinstaluje. Starší zdrojové archivy bez tohoto seznamu zachovávají omezenou kompatibilní cestu podle svého vlastněného manifestu; poškozený přítomný seznam se odmítne. Odstranění zastaralých souborů vyžaduje důkaz předchozího vlastnictví a~zachovává neznámé místní soubory. Návrat souborů používá serverem zapsaný index zálohy a~odmítá neindexované soubory i~cesty přesměrované symbolickými odkazy nebo junctions ve Windows. Tato ochrana souborů nevrací databázové migrace.
 
-Pokud aktualizace skončila před aktivací, zrušte starou úlohu, vynuťte novou kontrolu vydání a~spusťte novou stabilní aktualizaci, jakmile je opravené vydání dostupné. Opakování úlohy může zachovat její původní cílovou verzi.
+Selhané úlohy z~automatiky, Admin/API i~Advanced commit ID mají tři pokusy
+po~přechodné chybě s~odstupem 60, 120 a~240 sekund. Nedefinovaná funkce
+a~deterministická chyba integrity neopakují stejný vadný balíček.
+Nové úlohy připnou neměnný ověřený GitHub commit a~ověří celý manifest
+i~připravené soubory. Prostředky mimo core manifest a~zálohy mají navíc
+identitu přesných bajtů pomocí raw SHA-256. Nejdříve 600 sekund od~prvního
+selhání nedotčená úloha
+před aktivací uvolní aktivní místo. Bezpečné selhání po~aktivaci vytvoří
+jednu samostatnou úlohu návratu skutečných předchozích spravovaných souborů
+a~nastavení kanálu: vrátí i~odstraněné soubory a~odstraní nově vytvořené cesty.
+Obě identity, archivy, zálohy a~diagnostika zůstávají zachované.
+Selhaný rollback nevytváří další rollback.
+
+Obnova souborů vyžaduje ověřené zálohy, shodu skutečného schématu a~ledgeru
+a~důkaz nulových účinků migrací. Před aktivací doběhnou sdílené běhové zámky;
+podporovaný cílový balíček drží bránu až~do~dokončení úlohy.
+Běžný provoz v~pozorovacím okně zneplatní bezpečnost návratu i~při stejném
+schématu. Zahájené neověřené migrace, neznámá databáze, chybějící důkaz
+či~starší nepodporovaný balíček zůstávají selhané s~postupem opravy.
+Databázové migrace ani aplikační data se~nevracejí. Vypnutá automatika
+a~beta stále brání nové automatické instalaci; vypnutá capability zastaví
+instalátor. Po~bezpečném návratu lze přeskočit známé vadné vydání a~instalovat
+novější stabilní verzi. Selhání za~zavřenou bránou potřebuje hostingový CLI cron
+nebo ověřený požadavek správce; odmítnutý návštěvník nespustí plánovač.
+Žádný nečinný worker nečeká během backoffu.
+
+Starší zaseknutý updater nezíská mechanismus pouhým publikováním vydání.
+V~režimu údržby zastavte workery, zachovejte souběžné zálohy a~všechny důkazy
+selhané úlohy, ověřte skutečnou kompatibilitu databáze, nasaďte celé ověřené
+kompatibilní opravené vydání a~proveďte dopředné migrace. Teprve po~ověřené
+opravě smí správce archivovat odpovídající starý aktivní ukazatel. Neměňte
+pouze bootstrap ani cíl/balíček úlohy; neodstraňujte živou aktivační bránu
+ani neobnovujte pouze soubory. Úplný postup a~omezení uvádí
+\filepath{docs/AUTOUPDATE.md}.
 
 \subsection{Manifest integrity}
 \index{m00077@manifest jádra}
@@ -3731,6 +3764,11 @@ totožného kandidáta, úplného stromu vstupů a~základu bez dalšího FULL.
 Změněné vstupy vyžadují nový běh; identity vlastníků a~běhů, očekávané
 hlavy větví a~ochrany GitHubu zůstávají ověřované.
 
+Po~úspěšné integraci a~uložení záznamu workflow smaže vybranou vzdálenou
+feature větev s~podmínkou přesného SHA kandidáta. Novější commity smazání
+zablokují. \codeword{qualify_only} a~\codeword{recover_existing} větev zachovají.
+Selhání úklidu nevrací dokončenou integraci ani nemaže uložené důkazy.
+
 Pro~výslovně požadovanou instalaci samotného CI před vydáním založte feature
 z~main a~spusťte \ui{Basic source checks} s~\codeword{install_ci}.
 Úplný FULL a~autoritativní audit vytvoří bot PR; jedno skutečné lidské
@@ -3792,6 +3830,17 @@ jazykové příručky, sestaví jejich PDF uzamčeným TinyTeX toolchainem
 s~reprodukovatelným časem a~nakonec obnoví inventář a~úplný manifest.
 Změněné vstupy WinApp vyžadují instalátor; jinak se~zachová jeho
 samostatná verze a~ověřené existující soubory.
+
+Nové patch notes odkazují na~každé doložené issue či~PR přímo řešené popsanou
+změnou daného vydání. Úplná metadata obsahují změněné cesty každého commitu
+pro~porovnání se~zdrojovým diffem a~souhrny podkladů. Starší poznámky slouží
+jen jako vzor stylu; historické příklady ani rutinní release metadata
+nedokládají aktuální práci na~issue. Zprávy inicializace releasu ani obal PR
+nepřidávají pevné reference. Skutečná nová práce na~starším issue může odkaz mít.
+Pokud extrakci, sloučení podkladů či~podložené generování nelze spolehlivě
+dokončit, například kvůli nevyřešené zásadní vazbě issue na~změnu, může Copilot
+vrátit \codeword{NOTES_REVIEW_REQUIRED}. Validace pak použije stejné předání
+externí AI přes JSON popsané níže. Kontrola formátu neprokazuje věcnou relevanci.
 
 Hotový redakční text zůstává zachován; jinak se~použije ohraničené
 generování Copilotem z~úplných Git podkladů. Automatická cesta připustí nejvýše

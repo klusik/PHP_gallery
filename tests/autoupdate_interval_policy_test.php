@@ -28,6 +28,13 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    /** Observe isolated recovery admission without loading workers.
+     * @param array<string,mixed> $job Active fixture job.
+     * @param int $now Current Unix time.
+     * @return bool Fixture-controlled retry/rollback admission.
+     */
+    function application_update_failed_recovery_due(array $job, int $now): bool
+    { return !empty($GLOBALS['autoupdate_fixture_recovery_due']); }
     /** Return an isolated saved preference. @param string $key Setting key. @param string $default Fallback. @return string Saved value. */
     function app_setting(string $key, string $default = ''): string
     {
@@ -439,6 +446,36 @@ namespace {
                 '',
             ) === '',
             'Success must reset consecutive secondary failures.',
+        );
+        $GLOBALS['autoupdate_fixture_settings'] = [];
+        $GLOBALS['autoupdate_fixture_active_job'] = [
+            'id' => 'failed-stable', 'status' => 'failed',
+            'trigger' => 'background', 'operation' => 'stable_update',
+        ];
+        $checksBeforeRecovery = count($GLOBALS['autoupdate_fixture_install_checks']);
+        $slicesBeforeRecovery = count($GLOBALS['autoupdate_fixture_continue_budgets']);
+        \Gallery\Services\application_autoupdate_maybe_run(300, 'GET', $loader);
+        autoupdate_interval_assert(
+            count($GLOBALS['autoupdate_fixture_install_checks']) === $checksBeforeRecovery + 1
+                && count($GLOBALS['autoupdate_fixture_continue_budgets']) === $slicesBeforeRecovery,
+            'A failed stable job must allow due discovery without combining a worker slice.',
+        );
+        \Gallery\Services\application_autoupdate_maybe_run(300, 'GET', $loader);
+        autoupdate_interval_assert(
+            count($GLOBALS['autoupdate_fixture_install_checks']) === $checksBeforeRecovery + 1,
+            'A stopped job must retain the normal discovery interval.',
+        );
+        $GLOBALS['autoupdate_fixture_settings'] = [];
+        \Gallery\Services\application_autoupdate_maybe_run(300, 'POST', $loader);
+        autoupdate_interval_assert(
+            count($GLOBALS['autoupdate_fixture_install_checks']) === $checksBeforeRecovery + 1,
+            'Recovery discovery must not run on unsafe HTTP methods.',
+        );
+        $GLOBALS['autoupdate_fixture_active_job']['trigger'] = 'api';
+        \Gallery\Services\application_autoupdate_maybe_run(300, 'GET', $loader);
+        autoupdate_interval_assert(
+            count($GLOBALS['autoupdate_fixture_install_checks']) === $checksBeforeRecovery + 2,
+            'A failed manual job must permit metadata discovery without takeover.',
         );
     } finally {
         @unlink(

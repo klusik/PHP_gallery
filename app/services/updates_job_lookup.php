@@ -97,11 +97,12 @@ function application_update_load_job(string $jobId): array
  * Return whether a job state no longer requires worker execution.
  *
  * @param array<string,mixed> $job Persisted updater job state.
- * @return bool True for completed or cancelled jobs.
+ * @return bool True for completed/cancelled work or a failed attempt whose recovery durably released ownership.
  */
 function application_update_job_terminal(array $job): bool
 {
-    return in_array(
+    return (($job['status'] ?? '') === 'failed'
+            && !empty($job['result']['recovery_released'])) || in_array(
         (string) ($job['status'] ?? ''),
         ['completed', 'cancelled'],
         true,
@@ -125,15 +126,42 @@ function application_update_active_job(): ?array
     try {
         $job = application_update_load_job($jobId);
     } catch (Throwable) {
-        @unlink($pointerPath);
+        application_update_lookup_release_active($jobId);
         return null;
     }
 
     if (application_update_job_terminal($job)) {
-        @unlink($pointerPath);
+        application_update_lookup_release_active($jobId);
         return null;
     }
     return $job;
+}
+
+/**
+ * Release only the observed active identity while excluding new starts.
+ * @param string $jobId Identity observed by a lookup or completing worker.
+ * @return void Removes only that pointer; a busy start owner leaves it intact.
+ */
+function application_update_lookup_release_active(string $jobId): void
+{
+    $lock = fopen(application_update_jobs_root() . '/start.lock', 'c');
+    if ($lock === false) {
+        return;
+    }
+    if (!flock($lock, LOCK_EX | LOCK_NB)) {
+        fclose($lock);
+        return;
+    }
+    try {
+        $path = application_update_jobs_root() . '/active-job.json';
+        $pointer = application_update_read_json($path);
+        if (hash_equals((string) ($pointer['job_id'] ?? ''), $jobId)) {
+            @unlink($path);
+        }
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
 }
 
 /**

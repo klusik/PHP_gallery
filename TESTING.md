@@ -1059,7 +1059,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.144.2. Release verification uses the
+This guide applies to PHP Gallery Version 0.144.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1315,6 +1315,13 @@ generated data. Confirm one prepared commit above the same P, successful fresh
 BASIC-A, FULL-A and guarded develop FF. Also verify no-op preparation does not
 rewrite the branch. A green feature BASIC alone does not test this automation.
 
+After a successful normal integration and record upload, also confirm that the
+selected remote feature ref is removed. A moved source ref must survive the
+exact-SHA deletion lease; failed integration, `qualify_only`, recovery and a
+failed record upload must never reach deletion. Cleanup failure leaves the
+completed develop integration and retained evidence intact. BASIC alone does
+not execute this final cleanup step.
+
 ### Agent execution rule
 
 **GitHub Actions is the default and authoritative agent test environment.** The
@@ -1438,6 +1445,17 @@ Feature CI verifies
 deterministic chunk orchestration but cannot validate Copilot entitlement,
 provider quotas or editorial quality without a release run using
 `COPILOT_GITHUB_TOKEN`.
+
+The real Git evidence fixture separates a feature reference and its changed
+paths from a historical origin-only reference and previous-release style links.
+It retains every quoted byte while checking the contextual output contract.
+Digest and final-prose validation reject an exact `NOTES_REVIEW_REQUIRED`
+response so the existing provider-failure path can export external work;
+external JSON cannot apply that signal as completed notes. The handoff fixture
+retains the same relevance instructions and source identity. The real-Git
+release completion fixture verifies that new origin messages and PR wrappers
+inject no historical references while preserving contextual links in supplied
+notes. These checks do not prove semantic issue selection by a real model.
 
 The release-note evidence regression also verifies that the generation contract
 and validator share all three mandatory main headings, including for
@@ -4768,6 +4786,37 @@ alias/scheme used in development or hosting and confirm server-rendered form
 fetches retain the active session by posting to the current origin.
 
 ### Resumable application-update verification
+
+`tests/updater_recovery_test.php` is discovered by the central FULL PHP registry.
+It executes real persistence, worker/kernel locks, discovery, manifest checks,
+staging, backups, atomic rollback activation, settings reconciliation and a
+copied actual migration runner in an owned temporary installation. Database
+owners use private opt-in MySQL/MariaDB databases; source owners use SQLite
+with syntax/metadata adaptation. All original launch modes, Advanced beta,
+OFF/beta preference preservation, new-version discovery, failed-commit exclusion,
+reservation replay, repeated recovery, finite retries, missing/corrupt backup,
+actual schema changes without ledger changes and unknown DB state are covered.
+Actual undefined callback migration and transient replay verify deterministic
+stop, no unnecessary rollback and exactly-once ledger completion. Runtime-use
+witnesses invalidate unchanged-schema proofs, live read leases block activation
+and legacy missing protocol is refused. Non-core binary resources remain
+admitted by canonical package policy, while a CRLF-to-LF binary corruption
+that collides under text normalization is rejected by actual staging.
+Independent subprocess contention
+checks the actual worker lock. Interrupted slice receipts enter bounded recovery.
+The central scheduler fixture verifies failed rather than pending state and
+honors OFF without hiding safety recovery or inventing blocked deadlines.
+The existing Admin drawer fixture renders stopped guidance at desktop/narrow
+widths, with no new controls or CSS. These fixtures do not establish production
+hosting, arbitrary external writers or post-migration data compatibility.
+
+The readability regression disables Python bytecode writes before importing
+repository tools. Its PHP bridge also uses `-B`, preserving a pristine package
+checkout for concurrent updater safety tests. The production inventory continues
+to reject unexpected files, including `scripts/__pycache__/*.pyc`; do not add a
+production bypass or remove that negative check to accommodate fixture pollution.
+This fixture isolation has no additional TeX manual impact: the product and
+maintainer qualification behavior documented in all four manuals is unchanged.
 
 Do not run destructive update tests against a real installation. Automated
 updater tests must use temporary directories, fake job state, corrupt synthetic

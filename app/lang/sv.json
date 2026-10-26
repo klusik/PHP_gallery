@@ -1,4 +1,10 @@
 {
+    "admin.updates.recovery_database_blocked": "Automatisk återställning är stoppad: migreringseffekter eller databaskompatibilitet är inte verifierade. Bevara jobbet och säkerhetskopiorna. En administratör måste kontrollera databasen och avbruten migrering, installera en verifierad kompatibel version i underhållsläge och fortsätta framåtmigreringar. Databasmigreringar återställs inte.",
+    "admin.updates.recovery_limit": "Automatisk återställning kunde inte slutföras. Bevara båda jobben och säkerhetskopiorna. Korrigera säkerhetskopians integritet eller hostingens behörigheter. Använd Försök igen endast när det erbjuds; installera annars en verifierad kompatibel version i underhållsläge före nästa uppdatering.",
+    "admin.updates.recovery_waiting": "Uppdateringen står still. Återställning tillåter högst tre försök och återställer tidigare filer efter tio minuters felväntetid endast med verifierad databassäkerhet. Bevara jobb och säkerhetskopior. Bakom stängd spärr måste en autentiserad Updates-begäran eller konfigurerad CLI-worker ge nästa tillfälle.",
+    "admin.updates.recovery_restored": "Det misslyckade försöket har frigjorts och tidigare programfiler finns på plats. Felaktig version eller commit är utesluten från automatisk installation; aktiverade kontroller kan installera en nyare stabil version.",
+    "admin.updates.recovery_backup_blocked": "Automatisk återställning är stoppad: säkerhetskopian saknas, är ofullständig eller skadad. Bevara jobbet och säkerhetskopian. En administratör måste återställa ett fullständigt verifierat tillstånd eller installera en kompatibel version i underhållsläge.",
+    "admin.updates.recovery_started": "Automatisk återställning har ett separat jobb: {job}. Öppna Uppdateringar igen för att följa det. Ursprungligt fel och dess bevis bevaras.",
     "gallery.visit.mark_unseen": "Markera galleriet och dess undergallerier som obesökta",
     "gallery.visit.unseen": "Inte besökt",
     "gallery.visit.partial": "Delvis besökt",

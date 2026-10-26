@@ -18,6 +18,13 @@ import sys
 import tempfile
 import unittest
 
+# Keep imported repository tools from leaving unowned distribution artifacts.
+# Type: bool. Units: bytecode-write flag. Scope: this regression process only.
+# Consumers: Python imports of readability_report and readability_documents.
+# Rationale: True disables new .pyc writes before these imports; parallel updater
+# safety tests must inspect a checkout containing only its actual package files.
+sys.dont_write_bytecode = True
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import readability_report as reporter

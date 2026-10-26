@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.2}
-\newcommand{\manualdate}{25~oktober~2026}
+\newcommand{\version}{0.144.3}
+\newcommand{\manualdate}{26~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -3316,7 +3316,41 @@ Före aktivering kräver uppdaterarens arkivkontroll också hela den nya begära
 
 Uppdateringsaktivering använder den granskade uppdaterardelmängden av produktionslistan. Inkommande listor anger WinApp-källor separat så att äldre installerade uppdaterare kan kontrollera utgåvan innan dess läskod installeras. CMS-uppdateraren installerar inte dessa källor. Äldre källarkiv utan lista behåller en begränsad kompatibilitetsväg utifrån sitt ägda manifest; en befintlig ogiltig lista nekas. Rensning av föråldrade filer kräver tidigare ägarbevis och bevarar okända lokala filer. Filåterställning använder det servergenererade säkerhetskopieindexet och nekar oindexerade filer samt sökvägar som omdirigeras via symboliska länkar eller Windows-junctions. Dessa filskydd återställer inte databasmigreringar.
 
-Om en uppdatering stoppades före aktivering, avbryt det gamla jobbet, tvinga fram en ny utgåvekontroll och starta en ny stabil uppdatering när den korrigerade utgåvan är tillgänglig. Ett nytt försök kan behålla jobbets ursprungliga målversion.
+Misslyckade jobb från automatik, Admin/API och~Advanced-commit-installationer
+får tre återförsök vid tillfälliga fel efter 60, 120 och~240 sekunder.
+Odefinierade funktioner och~deterministiska integritetsfel upprepar inte
+samma trasiga paket. Nya jobb binder en verifierad oföränderlig GitHub-commit
+och~kontrollerar hela manifestet och~förberedda filer. Övriga resurser
+och~säkerhetskopior bevarar exakta byte med råa SHA-256-identiteter.
+Tidigast 600 sekunder
+efter första felet frigör ett orört jobb före aktivering sin aktiva plats.
+Ett säkert fel efter aktivering skapar ett separat återställningsjobb för
+faktiska tidigare programfiler och~kanalinställningar, även borttagna filer
+och~borttagning av nyskapade sökvägar. Båda identiteter, arkiv, säkerhetskopior
+och~diagnoser bevaras. Ett misslyckat återställningsjobb skapar inget nytt.
+
+Filåterställning kräver verifierade säkerhetskopior, matchande faktiskt schema
+och~migreringshistorik samt bevis på att migreringar inte haft effekter.
+Delade körningslås avslutas före aktivering; stödda målpaket håller spärren
+till jobbets slut. Vanlig körning under observationsfönstret gör återställning
+osäker även med oförändrat schema. Påbörjade overifierade migreringar,
+okänd databas, saknade bevis och~äldre paket utan protokollet förblir
+misslyckade med reparationsanvisningar. Databasmigreringar och~programdata
+återställs aldrig. Avstängd automatik och~beta förhindrar nya automatiska
+installationer; avstängd capability stoppar installeraren. Efter säker
+återställning kan upptäckt hoppa över kända felversioner och~installera
+en nyare stabil version. Fel bakom stängd spärr behöver hostingens CLI-cron
+eller en autentiserad Admin-begäran; nekade besökare kör inte schemaläggaren.
+Ingen worker väntar passivt under återförsöksfördröjningen.
+
+En äldre fastnad uppdaterare får inte mekanismen genom enbart publicering.
+Stoppa workers i underhållsläge, bevara samordnade säkerhetskopior och~alla
+felbevis, fastställ faktisk databaskompatibilitet, installera hela den verifierade
+kompatibla korrigerade versionen och~kör framåtmigreringar. Först efter verifierad
+reparation får administratören arkivera den matchande gamla aktiva pekaren.
+Byt inte bara bootstrap, ändra jobbets mål/paket, ta bort en aktiv
+aktiveringsspärr eller återställ enbart programfiler. Se
+\filepath{docs/AUTOUPDATE.md} för fullständig procedur och~begränsningar.
 
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}
@@ -3754,6 +3788,11 @@ samma kandidat, fullständiga indataträd och~bas utan nytt FULL.
 Ändrade indata kräver ny körning; ägare, körningar, ref-leasar och~GitHub-skydd
 kontrolleras fortfarande.
 
+Efter godkänd integration och~uppladdat integrationsbevis tar~arbetsflödet bort
+den~valda fjärrgrenen med~en lease för~exakt kandidat-SHA. Nyare committar
+förhindrar borttagningen. \codeword{qualify_only} och~\codeword{recover_existing}
+behåller grenen. Misslyckad städning lämnar integrationen och~sparade bevis intakta.
+
 För~uttryckligen begärd ren CI-installation före utgåvan skapar du
 feature-grenen från main och~startar \ui{Basic source checks} med
 \codeword{install_ci}. Fullständig FULL och~utgåveaudit skapar en bot-PR;
@@ -3814,6 +3853,18 @@ manualutgåvorna, bygger deras PDF med~låst TinyTeX och~reproducerbar tid
 och~skapar till~sist inventering och~fullständigt manifest.
 Ändrade WinApp-indata kräver installeraren; annars bevaras dess oberoende
 version och~verifierade befintliga filer.
+
+Nya patch notes länkar varje belagt issue eller~PR direkt vid~den ändring
+som~behandlar det~i~aktuell release. Fullständiga commitmetadata innehåller varje
+commits ändrade sökvägar för~jämförelse med~källdiff och~underlagssammandrag.
+Tidigare anteckningar ger~endast stil; historiska exempel och~rutinmässiga
+releasemetadata belägger inget aktuellt issuearbete. Originmeddelanden
+och~PR-omslag lägger inte till fasta referenser. Nytt arbete med~äldre issues
+kan~fortfarande länkas. Kan~Copilot inte slutföra extraktion, sammanställning
+eller~belagd syntes tillförlitligt, exempelvis vid~en väsentlig oklar
+issuekoppling, får~det~returnera \codeword{NOTES_REVIEW_REQUIRED}.
+Valideringen använder då~samma externa JSON-överlämning som~beskrivs nedan.
+Formatkontroller bevisar inte semantisk relevans.
 
 Färdig redaktionell text bevaras; annars används begränsad Copilot-generering
 med~fullständiga Git-underlag. Före leverantörsinstallationen tillåter automatiken

@@ -1,5 +1,59 @@
 # Compatibility lifecycle and retirement register
 
+## Failed updater jobs
+
+Owners: update lifecycle/recovery services, early runtime isolation and the
+schema-inspection SQL model. Recovery covers failed background, Admin/API and
+Advanced commit-ID jobs while preserving their origin and saved preferences.
+Three transient retries use 60/120/240-second backoff; file restoration becomes
+eligible 600 seconds after the first failure. A killed slice is converted into
+bounded failure recovery rather than replayed indefinitely. Running paused
+manual work retains its owner.
+An admitted failed-job retry may autonomously finish later slices while keeping
+its original manual trigger; it does not enable takeover of ordinary paused work.
+
+New jobs pin a full trusted GitHub commit and verify complete core-policy
+manifest coverage and staged identities. Non-core assets retain the canonical
+package policy and exact-byte raw SHA-256 identities; original snapshots also
+use raw hashes so binary/line-ending mutations cannot disappear in text
+normalization. Legacy moving-branch failures without immutable identity
+cannot receive a different package on retry. Reference `F05D71A153A2` is
+non-retryable even when its original record says otherwise. Persisted legacy jobs
+retain their manifest compatibility reader; it is never applied to new jobs.
+The English service fallback remains supported for direct CLI consumers without
+a translation owner; normal Admin uses all four maintained catalogs.
+
+Pre-activation failures release only the active pointer. Post-activation rollback
+uses one independent child and the verified original snapshot, preserving both
+identities, archives, hashes and diagnostics. It requires protocol-1 runtime
+isolation, no ordinary-runtime-use witness, fresh matching actual schema/ledger,
+proven zero migration effects and complete verified backups. Migration intent
+without a completed zero-work receipt is unverified. Missing legacy evidence or
+unsupported target protocol stops automatic file rollback. Database migrations
+are never reversed and ordinary application data is never restored from a dump.
+Failed rollback cannot spawn another rollback. Failed-source artifacts remain
+protected from pruning; completed child diagnostics also have a compact source
+receipt. A bounded 32-commit exclusion list and highest failed stable version
+prevent automatic reinstall of known bad sources.
+
+The runtime lease is permanent cooperative protection for Gallery HTTP/CLI
+processes. An activation gate persists until a new job completes; existing
+legacy gates still honor their original activation-complete receipt. Authenticated
+Admin updater/private ticket admission retains all later authentication checks.
+Unknown storage and ordinary runtime use refuse unsafe restoration. External
+writers require operator coordination. Gated failed jobs need hosting CLI cron
+or an authenticated Admin opportunity, since denied visitors cannot run the
+scheduler; no idle backoff timer is promised.
+
+The reported 0.144.1 failure and manual file rollback demonstrate the deployment
+bootstrap limitation: publishing code cannot replace an updater that never
+installs it. Existing stuck jobs lack the new proof. Use coordinated manual
+forward repair in `docs/AUTOUPDATE.md`; copying updater files, editing a job
+target or merely restoring files cannot prove database compatibility.
+Disposable fixtures exercise real SQL replay, locks and file activation.
+Live hosting, external writes, production data compatibility and actual
+deployment acceptance remain unknown; no usage assumption retires legacy readers.
+
 ## Browser-local visitor progress
 
 Initial evidence seeding belongs to the independent migration model, not a new
@@ -455,6 +509,20 @@ source/response drift and dispatch-origin reuse. Actual provider consumption,
 quota exhaustion, first-install GitHub input UI and live continuation acceptance
 remain unknown until a maintainer release exercises them. No historical release,
 tag, approved tree, asset or source-qualification protocol is retired.
+
+The same owners retain contextual issue references in the canonical prompt and
+external bundle. Per-commit changed paths preserve the reference-to-change
+context; old style examples and routine release bookkeeping confer no current
+issue relevance. Fixed historical references are no longer added to new origin
+commits or PR wrappers. Already completed notes and historical commits remain
+authoritative; there is no issue-number blacklist. An exact
+`NOTES_REVIEW_REQUIRED` model response permanently supports explicit inability
+to extract/consolidate evidence or produce grounded notes, including a material
+unresolved issue relationship. Existing validation routes it to the same
+source-bound JSON handoff. Deterministic fixtures cover signal rejection and
+unchanged transport/provenance; live model judgment and use remain unknown until
+release acceptance. Retain external support while provider/context limitations
+or maintainer editorial review may require it.
 
 ## Telemetry storage and historical aggregates
 

@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.2';
+const CMS_VERSION = '0.144.3';
 ```
 
 Update-related code uses:
@@ -2773,8 +2773,8 @@ update for rollback controls.
 Normal worker invocations use a wall-clock budget of at most 12 seconds and
 normally 7 to 8 seconds in Admin or CLI, with smaller request-triggered
 background slices. If PHP has a finite `max_execution_time`, the requested
-budget leaves a five-second reserve. Enabled request-time automatic discovery is
-throttled to once per hour per installation; GitHub rate-limit headers and
+budget leaves a five-second reserve. Enabled request-time automatic discovery
+uses the saved 5/15/30/60-minute interval, default five minutes; GitHub headers and
 server-provided backoff windows remain authoritative. Remote release-metadata
 discovery is separately bounded to approximately eight seconds and divides the
 remaining budget across unprobed stable branches; a discovery invocation that
@@ -2805,12 +2805,13 @@ than 20,000 entries, files above 32 MiB, and more than 512 MiB total
 uncompressed data. Its central-directory scan checkpoints every 500 entries.
 `extract` writes one entry through a `.part` file and checkpoints the entry
 index. `package_validate` requires the complete PHP Gallery source-root
-contract, verifies every `app/core-manifest.json` hash in bounded batches using
-streaming hashes, checks version markers and the selected stable target floor,
-and rejects any installable release file missing from the manifest. A
-deterministic manifest/hash/version mismatch is marked non-retryable: the Admin
-must cancel it and choose a newly published build instead of repeatedly
-downloading identical invalid bytes.
+contract and the selected stable target floor. Persisted legacy jobs retain their
+compatibility reader. Every new package job requires complete normalized manifest
+coverage and bounded verification, repeated on staged bytes before activation.
+Canonical non-core assets use private exact-byte SHA-256 identities; snapshots
+also use raw hashes rather than text normalization.
+New package jobs pin a full trusted GitHub commit;
+retry never changes that identity to a moving branch's newer contents.
 
 The Admin renders synchronized durable job cards in both the Status and Advanced
 tools tabs. Browser updates fan each checkpoint result out to both copies, so
@@ -2855,8 +2856,8 @@ Immediately before publication, the updater atomically writes
 `cache/updates/activation.json`. The early runtime checks this marker before
 loading the mutable application graph and returns `503 Service Unavailable` with
 `Cache-Control: no-store` while activation is incomplete. Corrupt or incomplete
-marker state fails closed. The gate clears only after durable activation
-completion is recorded, while the authenticated updater recovery/status path
+marker state fails closed. New jobs retain the gate through durable job
+completion; legacy jobs use their activation-complete receipt. The authenticated updater recovery/status path
 remains reachable so an interrupted activation can continue.
 
 A portable PHP application on ordinary shared hosting cannot atomically exchange
@@ -2890,8 +2891,9 @@ requires schema reversal.
 
 Failures before `activate` leave active application files untouched. Retry of
 download/archive/extraction/package-validation failures discards untrusted
-package artifacts, validators, and extraction checkpoints and restarts from a
-fresh trusted archive URL. Failures after validation retain prepared release and
+package artifacts, validators, and extraction checkpoints and restarts from
+the same immutable commit URL. Legacy moving-branch preparation failures remain
+stopped when that identity is unavailable. Failures after validation retain release and
 rollback data and retry the failed checkpoint. A failed or running
 pre-activation job may be cancelled, which removes transient artifacts and frees
 the active-job slot without changing application files. Cancellation is
@@ -2903,6 +2905,53 @@ ownership from another active job, and completion clears `active-job.json` only
 if the pointer still names that completing job. Lock-file JSON is diagnostic
 only, so a terminated PHP process releases the real kernel lock automatically
 and stale metadata does not require unsafe lock deletion.
+
+Existing `updates_jobs/download.php` and `activation.php` own package/backup
+verification; `errors.php` and `lifecycle.php` own timeout, quarantine and one automatic
+rollback child for every launch mode. Undefined functions and deterministic
+integrity failures stop same-package repetition. Transient failures allow three
+automatic attempts after 60/120/240 seconds. At least 600 seconds after first
+failure, pre-activation work releases the active pointer without changing files;
+safe post-activation work creates an independent rollback of the actual original
+snapshot. Failed identities, diagnostics, archive and backups remain intact.
+The child reservation precedes allocation and pointer publication under start
+and source-worker locks. A failed rollback cannot spawn another rollback.
+
+An open-slice receipt detects PHP termination even without a caught exception.
+A later exclusive worker converts it into bounded failure handling. Running
+manual jobs remain owned by their caller unless an open slice exceeds its
+durable recovery deadline. Failed manual jobs participate in safety recovery,
+including Advanced commit installs, without enabling discovery or changing
+saved beta/stable preferences. Capability OFF remains authoritative.
+
+Early runtime and bootstrap hold shared request leases; activation requires
+exclusive ownership, yields on contention and opens a durable observation window
+before file changes. Protocol-1 target packages preserve the gate until completion,
+including migrations and cleanup. Authenticated Admin update requests and
+unexpired hashed job-bound private tickets retain their later controller checks.
+Ordinary admission during an open window records a durable use witness. Any such
+use, a closed/missing window or an older unsupported package prevents automatic
+rollback. Actual fresh schema/ledger equality and explicit zero migration effects
+are additionally required; no-migration intent is committed before the runner.
+Database migrations and domain data are never reversed. Arbitrary external
+database writers require operator coordination.
+
+Rollback validates the complete original snapshot, stages its indexed files and
+uses the existing atomic activation engine. It restores prior channel settings,
+overwritten/deleted files and removes newly created paths. It keeps its own
+backup of the failed tree. Unverified DB/backup state stays visibly failed with
+localized maintenance repair steps. Due discovery may still cache newer stable
+availability independently. Once restored/released, automatic stable admission
+skips the highest failed version and a bounded 32-commit exclusion list.
+Autoupdate OFF/beta still prevent new automatic installation.
+
+Recovery adds no runtime part file or logical module: it reuses existing updater
+owners, adds two read-only queries to the existing schema model and cooperative
+lease handling to the existing early-runtime file. Generated-plan, duplicate/include
+and route ratchets must establish actual counts without raising baselines.
+The new gate remains closed after a failure, so autonomous recovery while gated
+requires hosting CLI cron or authenticated Admin work; public 503 requests cannot
+run the scheduler. See [deployment and legacy limits](docs/AUTOUPDATE.md).
 
 ### Browser and background execution
 

@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.144.2}
-\newcommand{\manualdate}{25 October 2026}
+\newcommand{\version}{0.144.3}
+\newcommand{\manualdate}{26 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -3314,7 +3314,40 @@ Before activation, updater archive validation also requires the~complete new req
 
 Updater activation uses the~reviewed updater subset of~the~production inventory. Incoming inventories list WinApp sources separately so~older installed updaters can~validate the~release before installing its reader. The~CMS updater does~not~install those sources. Older source archives without that inventory retain a~bounded path based on~their owned manifest; a~malformed present inventory is~refused. Obsolete cleanup requires prior ownership evidence and~preserves unknown local files. Rollback uses the~server-written snapshot index and~refuses unindexed files or~paths redirected by~symbolic links or~Windows junctions. These file safeguards do~not~reverse database migrations.
 
-If~an~update stopped before activation, cancel the~old job, force a~fresh release check, and~start a~new stable update once the~corrected release is~available. Retrying a~job may~retain its original target version.
+Failed jobs from automatic, Admin/API and~Advanced commit installs share
+three transient retries after 60, 120 and~240 seconds. Undefined functions
+and~deterministic integrity failures do~not~repeat the~same defective package.
+New jobs pin an~immutable trusted GitHub commit and~verify the~complete manifest
+and~staged bytes. Non-core assets and~rollback snapshots additionally preserve
+exact bytes through raw SHA-256 identities. At~least 600 seconds after the~first
+failure, an~untouched
+pre-activation job releases its active slot. A~safe post-activation failure
+creates one separate rollback job restoring the~actual previous managed files
+and~channel settings, including deleted files and~removal of~newly created paths.
+Both identities, archives, backups and~diagnostics remain preserved.
+A~failed rollback cannot create another rollback.
+
+File restoration requires verified backup bytes, matching actual schema/ledger
+and~proof that no~migration effects occurred. Shared runtime leases drain before
+activation; supported target packages keep the~gate closed until job completion.
+Ordinary use during the~observation window invalidates rollback safety even
+with unchanged schema. Entered/unverified migrations, unknown DB state, missing
+proof or~unsupported older packages stay failed with repair instructions.
+Database migrations and~application data are~never reversed. Automatic discovery
+OFF and~beta still prevent new automatic installation; capability OFF stops
+installer work. After safe restoration, discovery can~skip known failed versions
+and~install a~newer stable release. Gated failures need hosting CLI cron
+or~an~authenticated Admin request; denied visitors cannot run the~scheduler.
+No~idle worker waits through backoff.
+
+An~older stuck updater does~not~receive this mechanism merely because a~new
+release is~published. In~maintenance mode, stop workers, preserve coordinated
+backups and~all failed-job evidence, establish actual database compatibility,
+deploy the~complete verified compatible fixed release and~run forward migrations.
+Only after verified repair may~the~administrator archive the~matching old active
+pointer. Never replace only the~bootstrap, edit a~job's target/package, discard
+a~live activation gate or~restore application files alone. See
+\filepath{docs/AUTOUPDATE.md} for~the~complete repair procedure and~limits.
 
 \subsection{Integrity manifest}
 \index{core manifest}
@@ -3768,6 +3801,11 @@ candidate, complete input tree and~base without another FULL. Changed inputs
 require new execution. The~publisher still checks actual owner/run identities,
 source leases and~branch protections.
 
+After successful integration and~record upload, the~workflow deletes the~selected
+remote feature branch with an~exact candidate-SHA lease. Newer commits prevent
+deletion. \codeword{qualify_only} and~\codeword{recover_existing} retain the~branch.
+Cleanup failure leaves the~completed integration and~retained evidence intact.
+
 For~an~explicit CI-only installation ahead of~a~release, base the~feature
 on~main and~dispatch \ui{Basic source checks} with \codeword{install_ci}.
 Complete FULL and~the~authoritative release audit produce a~bot PR;
@@ -3830,6 +3868,17 @@ editions, compiles their PDFs with the~locked TinyTeX toolchain and~reproducible
 timestamp, and~refreshes inventory and~the~complete-file manifest last.
 Changed WinApp inputs require the~installer; unchanged inputs retain its
 independent version and~verified existing assets.
+
+New patch notes link every evidenced issue or~PR directly addressed by~a~described
+change in~that release. Complete commit metadata includes changed paths
+for~each commit, supporting comparison with the~source diff and~evidence digests.
+Previous notes supply style only; historical examples and~routine release
+bookkeeping establish no~current issue work. Release origin messages and~PR
+wrappers add~no~fixed references. Actual new~work on~older issues remains eligible.
+Copilot may~return \codeword{NOTES_REVIEW_REQUIRED} when extraction,
+consolidation or~grounded synthesis cannot finish reliably, including
+an~unresolved material issue relationship. Validation then uses the~same external
+JSON handoff described below. Format checks do~not~prove semantic relevance.
 
 Editorial notes preserve completed maintainer prose or~use the~existing
 bounded Copilot generation from complete Git evidence. Automatic work admits

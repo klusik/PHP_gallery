@@ -24,7 +24,7 @@ function request_scheduler_visit_allowed(
 ): bool {
     return !$passive && in_array($method, ['GET', 'HEAD'], true)
         && (in_array($page, ['home', 'gallery', 'smart_gallery', 'tag'], true)
-            || in_array($page, ['admin', 'admin_logs', 'admin_cron_overview'], true));
+            || in_array($page, ['admin', 'admin_logs', 'admin_cron_overview', 'admin_update'], true));
 }
 
 /**
@@ -42,7 +42,8 @@ function request_scheduler_register_visit(
     // The integrated publication owner must finish its tiny indexed transition
     // before the triggering response discovers galleries. It shares this one
     // lifecycle entry; heavy owners still run only after the response.
-    if (!$passive && in_array($method, ['GET', 'HEAD'], true)
+    $updaterOnly = $page === 'admin_update';
+    if (!$updaterOnly && !$passive && in_array($method, ['GET', 'HEAD'], true)
         && $loadDependencies !== null) {
         $loadDependencies('site-request-trigger');
         gallery_publication_request($method, $loadDependencies);
@@ -51,8 +52,10 @@ function request_scheduler_register_visit(
         || !request_scheduler_visit_allowed($page, $method, $passive)) {
         return;
     }
-    site_maintenance_register_foreground_observation($page);
-    register_shutdown_function(static function () use ($loadDependencies): void {
+    if (!$updaterOnly) {
+        site_maintenance_register_foreground_observation($page);
+    }
+    register_shutdown_function(static function () use ($loadDependencies, $updaterOnly): void {
         $error = error_get_last();
         if (\Gallery\Core\response_status_code() < 200
             || \Gallery\Core\response_status_code() >= 400
@@ -68,7 +71,12 @@ function request_scheduler_register_visit(
                 $loadDependencies('archive-request-trigger');
             }
             $detached = site_maintenance_finish_response_before_background_work();
-            request_scheduler_tick($loadDependencies, '', $detached);
+            // The authenticated updater page can traverse an isolation gate.
+            // It must not publish galleries or admit unrelated maintenance.
+            // Run its bounded due update directly after output, retaining the
+            // scheduler ticket/claim checks without a gated HTTP round trip.
+            request_scheduler_tick($loadDependencies, '',
+                $detached || $updaterOnly, $updaterOnly ? 'updates' : '');
         } catch (\Throwable) {
             // Scheduling failures preserve the completed response. Expiring
             // tickets and the next visit recover without suppressing a domain.

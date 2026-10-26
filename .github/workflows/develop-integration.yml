@@ -7,6 +7,7 @@
 #   - Select a single source commit directly above observed develop and resolve its latest BASIC evidence
 #   - Execute the owner-selected main or feature workflow and retain complete exact-candidate evidence
 #   - Run the complete reusable matrix on the final candidate before a normal develop fast-forward
+#   - Delete the unchanged integrated feature ref after retaining its integration record
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 name: Integrate into develop
@@ -507,3 +508,19 @@ jobs:
           path: ${{ runner.temp }}/develop-integration.json
           if-no-files-found: error
           retention-days: 90
+      - name: Delete integrated source branch
+        if: ${{ success() && !inputs.qualify_only && !inputs.recover_existing }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
+          CANDIDATE_SHA: ${{ needs.publish-candidate.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${SOURCE_BRANCH}" == feature/* ]]
+          test -n "${CANDIDATE_SHA}"
+          gh auth setup-git
+          # Atomically refuse deletion if newer work reached the source branch.
+          git push --force-with-lease="refs/heads/${SOURCE_BRANCH}:${CANDIDATE_SHA}" \
+            origin ":refs/heads/${SOURCE_BRANCH}"
+          echo "Deleted integrated source branch: ${SOURCE_BRANCH}." >> "${GITHUB_STEP_SUMMARY}"

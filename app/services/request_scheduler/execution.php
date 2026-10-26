@@ -37,17 +37,25 @@ function request_scheduler_select(
  * Admit at most one existing task through the shared visitor/hosting-cron seam.
  * @param callable(string):mixed|null $loadDependencies Selective runtime loader.
  * @param string $requested Stable task ID for an authorized manual timing override; empty admits due work only.
- * @param bool $afterResponse Whether an existing server primitive has already finished this response; true may execute the selected bounded owner directly, without an HTTP handoff.
+ * @param bool $afterResponse Whether domain output is complete and a detached response or authenticated updater shutdown permits one bounded direct owner without an HTTP handoff.
+ * @param string $only Optional allowlisted owner restriction without overriding its due time or enablement; empty retains fair selection across owners.
  * @return array{ok:bool,outcome:string,task?:string} Safe admission or actual bounded owner outcome without private tickets or errors.
  */
 function request_scheduler_tick(
     ?callable $loadDependencies = null, string $requested = '',
-    bool $afterResponse = false,
+    bool $afterResponse = false, string $only = '',
 ): array {
+    if ($only !== '' && !isset(request_scheduler_task_names()[$only])) {
+        return ['ok' => false, 'outcome' => 'skipped'];
+    }
     if ($requested !== '' && !isset(request_scheduler_task_names()[$requested])) {
         return ['ok' => false, 'outcome' => 'skipped'];
     }
     $rows = request_scheduler_snapshot($loadDependencies);
+    if ($only !== '') {
+        $rows = array_values(array_filter($rows,
+            static fn(array $row): bool => ($row['id'] ?? '') === $only));
+    }
     $state = request_scheduler_read_state();
     if (request_scheduler_select($rows, $state['turns'] ?? [], time(), $requested) === null) {
         return ['ok' => true, 'outcome' => 'skipped'];
@@ -62,6 +70,10 @@ function request_scheduler_tick(
             return ['ok' => true, 'outcome' => 'busy'];
         }
         $rows = request_scheduler_snapshot($loadDependencies);
+        if ($only !== '') {
+            $rows = array_values(array_filter($rows,
+                static fn(array $row): bool => ($row['id'] ?? '') === $only));
+        }
         $id = request_scheduler_select($rows, $state['turns'] ?? [], time(), $requested);
         if ($id === null) {
             return ['ok' => true, 'outcome' => 'skipped'];
@@ -202,17 +214,30 @@ function request_scheduler_execute_owner(
         return request_scheduler_outcome($result);
     }
     if ($id === 'updates') {
+        // Domain handling has finished before this post-response owner runs.
+        // Release our shared request lease before attempting exclusive activation.
+        \Gallery\EarlyRuntime\updater_runtime_leave();
         if ($loadDependencies !== null) {
             $loadDependencies('updater-work');
         }
         $active = application_update_active_job();
         if ($active !== null) {
+            $attemptsBefore = (int) ($active['attempts'] ?? 0);
             application_autoupdate_maybe_run(
                 application_autoupdate_interval_seconds(), 'GET', $loadDependencies);
             application_update_background_chain_start(
                 static fn(string $ticket): bool =>
                     site_maintenance_fire_background_worker(false, '', $ticket));
-            return 'continued';
+            $after = application_update_active_job();
+            if ($after === null) {
+                return 'completed';
+            }
+            if (($after['status'] ?? '') === 'failed') {
+                return 'failed';
+            }
+            return ($after['id'] ?? '') !== ($active['id'] ?? '')
+                || (int) ($after['attempts'] ?? 0) > $attemptsBefore
+                    ? 'continued' : 'skipped';
         }
         $before = application_update_discovery_last_attempt_at();
         if (application_update_beta_active()) {
