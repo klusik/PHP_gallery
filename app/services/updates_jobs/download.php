@@ -778,10 +778,12 @@ function application_update_manifest_hash(string $path): string
  * Validate the extracted package before activation.
  *
  * Core-manifest verification is temporarily disabled for legacy persisted jobs.
- * New recovery-aware jobs observe every declared file; explicit Admin recovery
- * records content differences as warnings and pins the observed bytes instead.
- * Archive entry validation,
- * source-root validation, updater-managed path filtering, schema preflight, and
+ * Explicit Admin FTP/stable recovery treats manifest checks as diagnostics:
+ * their failures become warnings and never stop forward installation.
+ * Independent runtime files and safe paths remain required. Ordinary jobs
+ * retain strict publisher verification.
+ * Archive entry validation, source-root validation, updater-managed path
+ * filtering, schema preflight, and
  * activation rollback remain enforced by their owning stages.
  *
  * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
@@ -797,12 +799,63 @@ function application_update_job_validate_package_slice(
     $sourceRoot = $manual ? application_update_project_root()
         : application_update_extracted_root($jobDir . '/extract');
     $recovery = $manual || !empty($job['recovery_override']);
-    application_update_assert_source_root($sourceRoot, $recovery);
+    application_update_assert_source_root($sourceRoot, $recovery, !$recovery);
     $job['checkpoints']['source_root'] = $sourceRoot;
 
     $bootstrapVersion = application_update_version_from_local_bootstrap($sourceRoot
         . '/app/bootstrap.php');
     $job['checkpoints']['validated_version'] = $bootstrapVersion ?? '';
+    if ($recovery) {
+        try {
+            if (!is_file($sourceRoot . '/app/core-manifest.json')) {
+                throw new RuntimeException('Recovery diagnostic manifest is missing.');
+            }
+            if (!application_update_recovery_verify_package(
+                $job, $sourceRoot, $budget, true,
+            )) {
+                return false;
+            }
+        } catch (Throwable $warning) {
+            $safe = application_update_safe_error($warning);
+            // Use the existing redaction owner for exception references. Only
+            // the observed file presence becomes a reason, never raw host text.
+            $reason = is_file($sourceRoot . '/app/core-manifest.json')
+                ? 'invalid_or_inconsistent_manifest' : 'missing_manifest';
+            $context = [
+                'job_id' => $job['id'],
+                'stage' => 'package_validate',
+                'integrity_file' => 'app/core-manifest.json',
+                'reason' => $reason,
+                'reference' => $safe['reference'],
+                'exception_class' => get_class($warning),
+                'owner_file' => basename($warning->getFile()),
+                'owner_line' => $warning->getLine(),
+                'outcome' => 'continuing',
+            ];
+            $job['integrity_warnings']['app/core-manifest.json'] = $context;
+            try {
+                if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
+                    admin_log_event(
+                        'warning', 'update.recovery_validation_warning',
+                        'Recovery validation reported a warning; installation continues.',
+                        $context, ['category' => 'update', 'severity' => 'warning'],
+                    );
+                }
+            } catch (Throwable) {
+                // The saved warning survives unavailable host logging.
+            }
+        }
+        // These observations cannot veto the explicit Admin overwrite intent.
+        // Staging pins the actual selected bytes independently of this metadata.
+        $job['checkpoints']['core_manifest_not_required'] = true;
+        $job['progress'] = [
+            'current' => 1, 'total' => 1,
+            'message' => 'Recovery source accepted; diagnostic warnings do not stop installation.',
+            'unit' => 'step',
+        ];
+        application_update_save_job($job);
+        return true;
+    }
     if ((string) ($job['operation'] ?? '') === 'stable_update') {
         $validatedVersion = (string) $job['checkpoints']['validated_version'];
         if (
@@ -830,8 +883,8 @@ function application_update_job_validate_package_slice(
         }
     }
 
-    if ((($job['recovery_schema'] ?? 0) === 1 || $manual)
-        && !application_update_recovery_verify_package($job, $sourceRoot, $budget, $recovery)) {
+    if (($job['recovery_schema'] ?? 0) === 1
+        && !application_update_recovery_verify_package($job, $sourceRoot, $budget)) {
         return false;
     }
 

@@ -152,9 +152,14 @@ function application_update_assert_project_root(string $root): void
  *
  * @param string $sourceRoot Source root value.
  * @param bool $installedOverlay Whether this is an installed FTP overlay whose unowned local files must be preserved.
+ * @param bool $publisherMetadataRequired Whether ordinary installation requires the publisher manifest/inventory; explicit Admin recovery skips only those metadata conditions.
  * @return void Refuses incomplete application archives before activation.
  */
-function application_update_assert_source_root(string $sourceRoot, bool $installedOverlay = false): void
+function application_update_assert_source_root(
+    string $sourceRoot,
+    bool $installedOverlay = false,
+    bool $publisherMetadataRequired = true,
+): void
 {
     // $requiredPaths stores files that must exist before the active installation is touched.
     $requiredPaths = [
@@ -227,6 +232,11 @@ function application_update_assert_source_root(string $sourceRoot, bool $install
         'public/assets/styles.css',
     ];
     foreach ($requiredPaths as $requiredPath) {
+        if (!$publisherMetadataRequired && $requiredPath === 'app/core-manifest.json') {
+            // Explicit overwrite/FTP recovery does not depend on this publisher
+            // sidecar. Every independent runtime/path prerequisite stays below.
+            continue;
+        }
         // $absolutePath stores the required file inside the extracted release snapshot.
         $absolutePath =
             $sourceRoot
@@ -253,6 +263,9 @@ function application_update_assert_source_root(string $sourceRoot, bool $install
 
     // Current source archives activate the exact reviewed updater inventory; older
     // stable archives remain compatible through their bounded core-manifest list.
+    if (!$publisherMetadataRequired) {
+        return;
+    }
     if ($installedOverlay) {
         \Gallery\Core\release_file_policy_paths($sourceRoot, 'updater');
     } else {

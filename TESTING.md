@@ -4831,6 +4831,11 @@ rollback, checks private worker diagnostics and exact migration identity, and
 forces unavailable Admin logging to verify redacted PHP-log fallback. The
 browser explains a retained 631/632 processing counter, displays runtime
 contention as waiting and completes through serialized continuations.
+Explicit FTP reset also completes without a manifest, and stable replacement
+copies a malformed manifest as selected source bytes while logging its warning.
+A real shared reader remains held while reset allocates a new owner and closes
+admission; only migration waits, then completes after that reader releases.
+Ordinary corrupt-package rejection remains a separate negative assertion.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a

@@ -799,7 +799,7 @@ assert_updater_resumable(
     )
         && php_source_contains(
             $jobsSource,
-            'application_update_assert_source_root($sourceRoot, $recovery);',
+            'application_update_assert_source_root($sourceRoot, $recovery, !$recovery);',
         )
         && php_source_contains($jobsSource,
             "\$manual = (\$job['operation'] ?? '') === 'manual_deploy';")

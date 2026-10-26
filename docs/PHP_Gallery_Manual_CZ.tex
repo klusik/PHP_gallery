@@ -3360,7 +3360,11 @@ i~zaseklou či~pozastavenou úlohu bez potřeby FTP. Obě akce zachovají konfig
 média, místní soubory navíc a~zálohy. Rozdíly obsahu jsou upozornění s~relativní
 cestou a~očekávaným i~skutečným otiskem v~logu; běžné automatické aktualizace
 zůstávají přísně ověřované. Ochrana cest, povinné soubory a~vlastnictví běhu
-platí dál. Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
+platí dál. Chybějící, nečitelný či~zastaralý manifest je~také pouze warning
+a~nezastaví ani jednu obnovu. Reset nejprve pozastaví příchod návštěvnických
+požadavků, aby provoz nebránil jeho zahájení. Samotná aktivace a~migrace počkají
+na~dokončení již rozpracovaných požadavků.
+Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
 znovu zpracuje nahrané soubory místo stahování. Dokončí se~dopředné migrace;
 databázové změny se~nevracejí.
 \ui{Pozastavit} funguje na~nejbližším bezpečném bodě v~každé fázi;

@@ -3387,7 +3387,11 @@ också fastnade eller pausade jobb utan FTP. Båda åtgärderna bevarar konfigur
 media, extra lokala filer och säkerhetskopior. Innehållsskillnader loggas som
 varningar med relativ filidentitet och förväntad/faktisk hash; automatiska
 uppdateringar behåller strikt verifiering. Säkra arkivsökvägar, nödvändiga filer
-och körningslås gäller fortfarande. Väntan på övertagande visas och fortsätter
+och körningslås gäller fortfarande. Även ett saknat, oläsbart eller inaktuellt
+manifest ger bara en varning och stoppar ingen av återställningsåtgärderna.
+Återställning stänger först tillträdet för nya besöksbegäranden, så fortsatt
+trafik inte hindrar starten. Aktivering och migreringar väntar sedan på redan
+pågående begäranden. Väntan på övertagande visas och fortsätter
 automatiskt. FTP-försök igen granskar installerade filer i stället för att hämta.
 Databasmigreringar körs framåt; databasändringar återställs aldrig.
 \ui{Pausa} gäller nästa säkra
