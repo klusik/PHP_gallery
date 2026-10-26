@@ -778,7 +778,9 @@ function application_update_manifest_hash(string $path): string
  * Validate the extracted package before activation.
  *
  * Core-manifest verification is temporarily disabled for legacy persisted jobs.
- * New recovery-aware jobs require complete verification. Archive entry validation,
+ * New recovery-aware jobs observe every declared file; explicit Admin recovery
+ * records content differences as warnings and pins the observed bytes instead.
+ * Archive entry validation,
  * source-root validation, updater-managed path filtering, schema preflight, and
  * activation rollback remain enforced by their owning stages.
  *
@@ -794,7 +796,8 @@ function application_update_job_validate_package_slice(
     $manual = ($job['operation'] ?? '') === 'manual_deploy';
     $sourceRoot = $manual ? application_update_project_root()
         : application_update_extracted_root($jobDir . '/extract');
-    application_update_assert_source_root($sourceRoot, $manual);
+    $recovery = $manual || !empty($job['recovery_override']);
+    application_update_assert_source_root($sourceRoot, $recovery);
     $job['checkpoints']['source_root'] = $sourceRoot;
 
     $bootstrapVersion = application_update_version_from_local_bootstrap($sourceRoot
@@ -828,7 +831,7 @@ function application_update_job_validate_package_slice(
     }
 
     if ((($job['recovery_schema'] ?? 0) === 1 || $manual)
-        && !application_update_recovery_verify_package($job, $sourceRoot, $budget, $manual)) {
+        && !application_update_recovery_verify_package($job, $sourceRoot, $budget, $recovery)) {
         return false;
     }
 
@@ -884,8 +887,8 @@ function application_update_recovery_hash_matches(string $expected, string $path
  * @param array<string,mixed> $job Recovery job with durable verification cursor.
  * @param string $root Validated extracted package root.
  * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Bounded worker opportunity.
- * @param bool $installedOverlay Whether only declared installed files belong to verification, preserving local extras.
- * @return bool True after all managed files pass; false yields the cursor.
+ * @param bool $installedOverlay Whether declared files belong to explicit recovery, preserving extras and recording manifest differences as warnings.
+ * @return bool True after every managed file is observed/pinned; false yields the cursor. Ordinary jobs reject differences; explicit recovery records warnings.
  * @throws RuntimeException On missing coverage, changed manifest or bad bytes.
  */
 function application_update_recovery_verify_package(
@@ -902,8 +905,10 @@ function application_update_recovery_verify_package(
     $manifest = application_update_read_json($path);
     $identity = application_update_manifest_hash($path);
     $previous = (string) ($job['checkpoints']['recovery_manifest_identity'] ?? $identity);
-    if ($identity !== $previous
-        || ($manifest['algorithm'] ?? '') !== 'sha256'
+    if ($identity !== $previous) {
+        throw new RuntimeException('Recovery package manifest changed during verification. Restart the recovery.');
+    }
+    if (($manifest['algorithm'] ?? '') !== 'sha256'
         || ($manifest['hash_mode'] ?? '') !== 'normalized-text-sha256'
         || ($manifest['version'] ?? '') !== ($job['checkpoints']['validated_version'] ?? '')
         || !is_array($manifest['files'] ?? null)) {
@@ -923,9 +928,22 @@ function application_update_recovery_verify_package(
             $core = \Gallery\Core\release_file_policy_is_integrity_path($relative);
             $expected = $core ? (string) ($manifest['files'][$relative] ?? '')
                 : application_update_recovery_raw_hash($root . '/' . $relative);
+            $actual = $core ? application_update_manifest_hash($root . '/' . $relative)
+                : $expected;
             if (($core && preg_match('/^sha256:[a-f0-9]{64}$/D', $expected) !== 1)
-                || !application_update_recovery_hash_matches($expected, $root . '/' . $relative)) {
-                throw new RuntimeException('Recovery package failed core-manifest integrity validation.');
+                || !hash_equals($expected, $actual)) {
+                $difference = new ApplicationUpdateFileIntegrityException(
+                    $relative,
+                    preg_match('/^sha256:[a-f0-9]{64}$/D', $expected) === 1 ? $expected : '',
+                    $actual,
+                );
+                if (!$installedOverlay) {
+                    throw $difference;
+                }
+                application_update_record_integrity_warning($job, $difference);
+                // Explicit recovery installs the selected bytes; later staging
+                // still pins those exact bytes instead of accepting a new change.
+                $expected = application_update_recovery_raw_hash($root . '/' . $relative);
             }
             $job['checkpoints']['recovery_hashes'][$relative] = $expected;
         }

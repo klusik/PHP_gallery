@@ -29,7 +29,8 @@ function gallery_writer_check(bool $condition, string $message): void
 }
 
 /**
- * Read named function declarations and bodies without counting braces inside strings/comments.
+ * Read named namespace functions, excluding methods in class-like scopes.
+ * Braces inside strings/comments do not change the owning declaration scope.
  *
  * @param string $source Complete entry-point and ordered part-file source.
  * @return array<string,array{declaration:string,body:string,doc:string}> Named function source.
@@ -39,8 +40,33 @@ function gallery_writer_functions(string $source): array
     $tokens = token_get_all($source);
     $functions = [];
     $doc = '';
+    $scopeDepth = 0;
+    $classScopes = [];
+    $classPending = false;
+    $previousSignificant = null;
     for ($index = 0, $count = count($tokens); $index < $count; $index++) {
         $token = $tokens[$index];
+        if (is_array($token)
+            && in_array($token[0], [T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM], true)
+            && $previousSignificant !== T_DOUBLE_COLON) {
+            $classPending = true;
+        }
+        if ($token === '{') {
+            $scopeDepth++;
+            if ($classPending) {
+                $classScopes[] = $scopeDepth;
+                $classPending = false;
+            }
+        } elseif ($token === '}') {
+            if (end($classScopes) === $scopeDepth) {
+                array_pop($classScopes);
+            }
+            $scopeDepth--;
+        }
+        if (!is_array($token) || !in_array($token[0],
+            [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            $previousSignificant = is_array($token) ? $token[0] : $token;
+        }
         if (is_array($token) && $token[0] === T_DOC_COMMENT) {
             $doc = $token[1];
         }
@@ -66,12 +92,17 @@ function gallery_writer_functions(string $source): array
         $declaration = '';
         for (
             $cursor = $index;
-            $cursor < $count && $tokens[$cursor] !== '{';
+            $cursor < $count && $tokens[$cursor] !== '{' && $tokens[$cursor] !== ';';
             $cursor++
         ) {
             $declaration .= is_array($tokens[$cursor])
                 ? $tokens[$cursor][1]
                 : $tokens[$cursor];
+        }
+        if (($tokens[$cursor] ?? null) === ';' && $classScopes !== []) {
+            $index = $cursor;
+            $doc = '';
+            continue;
         }
         $body = '';
         $depth = 0;
@@ -101,6 +132,11 @@ function gallery_writer_functions(string $source): array
             $depth === 0 && $body !== '',
             'Unbalanced function: ' . $name,
         );
+        if ($classScopes !== []) {
+            $index = $cursor;
+            $doc = '';
+            continue;
+        }
         gallery_writer_check(
             !isset($functions[$name]),
             'Duplicate function: ' . $name,

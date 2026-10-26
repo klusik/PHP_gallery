@@ -294,7 +294,7 @@ function cms_update_start_job_for_action(string $action): array
         );
     }
     if ($action === 'beta_revert') {
-        return application_update_start_job('stable_restore', [], 'admin');
+        return \Gallery\Services\application_update_start_recovery_replacement('stable_restore');
     }
     if ($action === 'clean_reinstall') {
         if (
@@ -482,6 +482,7 @@ function cms_admin_update(): void
                 'job_retry',
                 'job_rollback',
                 'finish_manual_deployment',
+                'reset_updater',
                 'job_pause',
                 'job_resume',
             ];
@@ -588,12 +589,9 @@ function cms_admin_update(): void
                     return;
                 }
                 $_SESSION['admin_update_notice'] = 'Prepared update cancelled before activation. No application files were changed.';
-            } elseif ($action === 'finish_manual_deployment') {
-                $job = \Gallery\Services\application_update_start_manual_deployment();
-                if (($job['operation'] ?? '') === 'manual_deploy' && ($job['status'] ?? '') === 'failed') {
-                    $job = application_update_retry_job((string) $job['id']);
-                }
-                if (($job['operation'] ?? '') === 'manual_deploy') {
+            } elseif (in_array($action, ['finish_manual_deployment', 'reset_updater'], true)) {
+                $job = \Gallery\Services\application_update_start_manual_deployment(true);
+                if (empty($job['replacement_waiting']) && ($job['operation'] ?? '') === 'manual_deploy') {
                     $job = application_update_process_job((string) $job['id'], 7.0);
                 }
                 if (cms_update_async_request()) {
@@ -683,7 +681,9 @@ function cms_admin_update(): void
                 true,
             )) {
                 $job = cms_update_start_job_for_action($action);
-                $job = application_update_process_job((string) $job['id'], 7.0);
+                if (empty($job['replacement_waiting'])) {
+                    $job = application_update_process_job((string) $job['id'], 7.0);
+                }
                 if ((string) ($job['status'] ?? '') === 'failed') {
                     admin_log_event(
                         'warning',

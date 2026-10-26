@@ -559,9 +559,13 @@ function application_update_reconcile_server_policy_files(
  * Validate and return one active updater job's release/rollback filesystem context.
  *
  * @param array<string,mixed> $job Update job state.
+ * @param string|null $projectRoot Validated installation root from the updater; null retains the dependency-light legacy bootstrap root.
  * @return array<string,string>|null Reconciliation context, or null when not applicable.
  */
-function application_update_server_policy_job_context(array $job): ?array
+function application_update_server_policy_job_context(
+    array $job,
+    ?string $projectRoot = null,
+): ?array
 {
     $operation = (string) ($job['operation'] ?? '');
     if (
@@ -579,7 +583,10 @@ function application_update_server_policy_job_context(array $job): ?array
         );
     }
 
-    $projectRoot = dirname(__DIR__, 2);
+    // Older migration/bootstrap callers load this owner without the complete
+    // updater. Keep their established root; the full installer passes its own
+    // validated root so every job stage uses the same filesystem context.
+    $projectRoot ??= dirname(__DIR__, 2);
     $jobDir = $projectRoot . '/cache/updates/jobs/' . $jobId;
     $sourceRoot = (string) ($job['checkpoints']['source_root'] ?? '');
     $realJobDir = realpath($jobDir);
@@ -627,13 +634,15 @@ function application_update_server_policy_job_context(array $job): ?array
  *
  * @param array<string,mixed> $job Active update job.
  * @param bool $bootstrapSafety Respect one-generation custom-file safeguards.
- * @return array<string,mixed> Reconciliation diagnostics.
+ * @param string|null $projectRoot Validated updater installation root; null preserves the standalone legacy bootstrap root.
+ * @return array{checked:int,updated:int,unchanged:int,missing_from_release:int,skipped_customized:int,updated_files:list<string>,skipped_customized_files:list<string>} Reconciliation counts and safe relative file identities.
  */
 function application_update_reconcile_server_policy_files_for_job(
     array $job,
     bool $bootstrapSafety,
+    ?string $projectRoot = null,
 ): array {
-    $context = application_update_server_policy_job_context($job);
+    $context = application_update_server_policy_job_context($job, $projectRoot);
     if ($context === null) {
         return [
             'checked' => 0,

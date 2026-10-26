@@ -63,8 +63,6 @@ namespace Gallery\Services {
     /** Observe explicit schema state without caching. @return array{state:string} Fixture readiness. */
     function application_update_activation_schema_status(): array
     { return ['state' => $GLOBALS['recovery_schema_state'] ?? 'available']; }
-    /** Invalidate no fixture observations. @return void No cache is retained. */
-    function schema_inspection_reset_request_cache(): void {}
     /** Assert known schema for the actual activation gate. @param array{state:string} $status Observation. @param string $operation Operation. @param string $message Safe refusal. @return void Throws for unknown evidence. */
     function mutation_schema_assert_known(array $status, string $operation, string $message): void
     { if ($status['state'] === 'unknown') { throw new \RuntimeException($message); } }
@@ -168,6 +166,12 @@ namespace {
          */
         public function prepare(string $query, array $options = []): \PDOStatement|false
         {
+            if ($this->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'sqlite'
+                && str_contains($query, 'information_schema.COLUMNS')
+                && str_contains($query, 'COLUMN_NAME = ?')) {
+                // Observe the actual SQLite column; do not stub schema readiness.
+                return parent::prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ? LIMIT 1');
+            }
             if ($this->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'sqlite'
                 && str_contains($query, 'information_schema.')) {
                 $query = "SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name LIMIT ?";
@@ -418,6 +422,8 @@ namespace {
             copy(dirname(__DIR__) . '/app/' . $file, $root . '/app/' . $file);
         }
         require_once $root . '/app/migrations.php';
+        require_once dirname(__DIR__) . '/app/models/schema_inspection.php';
+        require_once dirname(__DIR__) . '/app/services/schema_inspection.php';
         require_once dirname(__DIR__) . '/app/services/updates.php';
         $pdo->exec('CREATE TABLE schema_migrations (version VARCHAR(64) PRIMARY KEY,applied_at DATETIME NOT NULL)');
         $localExtension = $root . '/app/local_extension.php';
@@ -978,6 +984,8 @@ namespace {
         $manual = \Gallery\Services\application_update_start_manual_deployment();
         recovery_check(\Gallery\Services\application_update_start_manual_deployment()['id'] === $manual['id'],
             'Repeated FTP completion allocated another owner.');
+        $cssPath = $root . '/public/assets/styles/utilities.css';
+        file_put_contents($cssPath, "\n/* Local hosting stylesheet difference. */\n", FILE_APPEND);
         $manualResult = recovery_drain($manual['id']);
         recovery_check($manualResult['status'] === 'completed'
             && $manualResult['result']['version'] === '1.2.0'
@@ -985,8 +993,167 @@ namespace {
             && $manualResult['result']['backup'] === ''
             && file_get_contents($localExtension) === '<?php /* unmanaged local extension */'
             && file_get_contents($oldProof) === 'preserved original backup'
+            && in_array('public/assets/styles/utilities.css', $manualResult['integrity_warnings'], true)
             && !is_file(\Gallery\Services\application_update_activation_gate_path()),
             'FTP overlay completion deleted extras/backups, restored old code or retained the gate.');
+
+        // A paused migration from an unknown/newer old target and a malformed
+        // gate cannot veto an explicit operator forward repair. Preserve its
+        // exact evidence instead of trying to prove a historical rollback.
+        $interrupted = recovery_source('migrate', 'admin', 'manual_deploy');
+        $interrupted['status'] = 'paused';
+        $interrupted['checkpoints']['migrations_started'] = true;
+        $interrupted['checkpoints']['validated_version'] = '9.9.0';
+        \Gallery\Services\application_update_save_job($interrupted);
+        $brokenMarker = '{"job_id":"interrupted legacy marker';
+        file_put_contents(\Gallery\Services\application_update_activation_gate_path(), $brokenMarker);
+        $reset = \Gallery\Services\application_update_start_manual_deployment(true);
+        recovery_check($reset['id'] !== $interrupted['id'] && $reset['attempts'] === 0
+            && \Gallery\Services\application_update_load_job($interrupted['id'])['status'] === 'cancelled'
+            && file_get_contents(\Gallery\Services\application_update_job_dir($reset['id'])
+                . '/superseded-activation.json') === $brokenMarker,
+            'Reset retained a stuck owner or discarded malformed historical evidence.');
+
+        // Cover both takeover crash boundaries: an initial zero-slice child
+        // lacking its link, and a linked child already owning only one marker.
+        foreach ([false, true] as $partialMarker) {
+            $predecessor = \Gallery\Services\application_update_active_job();
+            $reserved = \Gallery\Services\application_update_create_job('manual_deploy', [], 'admin');
+            $predecessor['replacement_reservations']['manual_deploy'] = $reserved['id'];
+            \Gallery\Services\application_update_save_job($predecessor);
+            $preservedWindow = '';
+            if ($partialMarker) {
+                $reserved['replaces_job_id'] = $predecessor['id'];
+                $reserved['recovery_override'] = true;
+                $reserved['stage'] = 'package_validate';
+                \Gallery\Services\application_update_save_job($reserved);
+                $windowPath = \Gallery\Services\application_update_jobs_root() . '/rollback-window.json';
+                $preservedWindow = (string) file_get_contents($windowPath);
+                file_put_contents(\Gallery\Services\application_update_job_dir($reserved['id'])
+                    . '/superseded-rollback-window.json', $preservedWindow);
+                \Gallery\Services\application_update_write_json_atomic($windowPath,
+                    ['job_id' => $reserved['id']]);
+            }
+            $continued = \Gallery\Services\application_update_start_manual_deployment(true);
+            recovery_check($continued['id'] === $reserved['id']
+                && $continued['status'] === 'running'
+                && \Gallery\Services\application_update_load_job($predecessor['id'])['status'] === 'cancelled',
+                'Interrupted takeover lost its reservation or cancelled its own child.');
+            if ($partialMarker) {
+                recovery_check(file_get_contents(\Gallery\Services\application_update_job_dir($reserved['id'])
+                    . '/superseded-rollback-window.json') === $preservedWindow,
+                    'Replayed takeover overwrote the original marker receipt.');
+            }
+        }
+
+        // A failed FTP verification retries installed files, never a download.
+        $retry = \Gallery\Services\application_update_start_manual_deployment(true);
+        $retryState = \Gallery\Services\application_update_load_job($retry['id']);
+        $retryState['status'] = 'failed';
+        $retryState['checkpoints']['recovery_manifest_identity'] = 'old-upload';
+        $retryState['checkpoints']['manual_deployment_verified'] = true;
+        $retryState['error'] = ['message' => 'Previous upload differed.', 'reference' => 'FF5BC089547B'];
+        \Gallery\Services\application_update_save_job($retryState);
+        $retried = \Gallery\Services\application_update_retry_job($retry['id']);
+        $retryState = \Gallery\Services\application_update_load_job($retry['id']);
+        recovery_check($retried['stage'] === 'package_validate'
+            && !isset($retryState['checkpoints']['recovery_manifest_identity'])
+            && empty($retryState['checkpoints']['manual_deployment_verified']),
+            'FTP retry resumed a download or trusted old upload verification.');
+
+        // Explicit replacement must wait for the real predecessor worker lock,
+        // then own both gates without resuming the old installer.
+        $worker = \Gallery\Services\application_update_acquire_lock(
+            \Gallery\Services\application_update_job_dir($retry['id']) . '/worker.lock');
+        $waiting = \Gallery\Services\application_update_start_recovery_replacement('stable_restore');
+        recovery_check(!empty($waiting['replacement_waiting'])
+            && $waiting['replacement_action'] === 'beta_revert'
+            && is_file(\Gallery\Services\application_update_job_dir($retry['id']) . '/pause-requested.json'),
+            'Stable recovery raced an in-flight worker or silently continued it.');
+        \Gallery\Services\application_update_release_lock($worker);
+        $stable = \Gallery\Services\application_update_start_recovery_replacement('stable_restore');
+        recovery_check($stable['id'] !== $retry['id']
+            && \Gallery\Services\application_update_load_job($retry['id'])['status'] === 'cancelled'
+            && \Gallery\Services\application_update_process_job($retry['id'])['status'] === 'cancelled'
+            && !empty(\Gallery\Services\application_update_load_job($stable['id'])['recovery_override']),
+            'Explicit stable installation retained the old active job.');
+
+        // Confine the transport boundary: seed a complete real source tree with
+        // a small synthetic inventory. The actual validation, plan, backup,
+        // staged-byte verification, activation and migration owners still run.
+        $stableRoot = \Gallery\Services\application_update_job_dir($stable['id']) . '/extract/release';
+        foreach (\Gallery\Core\release_file_policy_paths($repositoryRoot, 'updater') as $relative) {
+            \Gallery\Services\application_update_ensure_dir(dirname($stableRoot . '/' . $relative));
+            copy($repositoryRoot . '/' . $relative, $stableRoot . '/' . $relative);
+        }
+        $stablePaths = ['app/bootstrap.php', 'app/core-manifest.json',
+            'app/production-files.json', 'index.php', 'public/assets/styles/utilities.css'];
+        file_put_contents($stableRoot . '/app/production-files.json', json_encode([
+            'schema_version' => 1, 'production_files' => $stablePaths,
+            'updater_files' => $stablePaths, 'source_review_files' => [],
+        ], JSON_THROW_ON_ERROR));
+        // The same version is deliberate: Install stable must still overwrite.
+        copy($root . '/app/bootstrap.php', $stableRoot . '/app/bootstrap.php');
+        $stableHashes = [];
+        foreach ($stablePaths as $relative) {
+            if ($relative !== 'app/core-manifest.json') {
+                $stableHashes[$relative] = \Gallery\Services\application_update_manifest_hash($stableRoot . '/' . $relative);
+            }
+        }
+        file_put_contents($stableRoot . '/app/core-manifest.json', json_encode([
+            'version' => '1.2.0', 'algorithm' => 'sha256',
+            'hash_mode' => 'normalized-text-sha256', 'files' => $stableHashes,
+        ], JSON_THROW_ON_ERROR));
+        file_put_contents($stableRoot . '/public/assets/styles/utilities.css', "\n/* Publisher difference. */\n", FILE_APPEND);
+        $strictJob = \Gallery\Services\application_update_load_job($stable['id']);
+        $strictJob['checkpoints']['validated_version'] = '1.2.0';
+        $strictRoot = \Gallery\Services\application_update_job_dir($stable['id']) . '/strict';
+        recovery_package($strictRoot);
+        file_put_contents($strictRoot . '/app/payload.php', '<?php /* changed publisher bytes */');
+        try {
+            \Gallery\Services\application_update_recovery_verify_package($strictJob, $strictRoot,
+                \Gallery\Services\application_update_time_budget());
+            throw new \RuntimeException('Ordinary package accepted corrupt bytes.');
+        } catch (\Gallery\Services\ApplicationUpdateFileIntegrityException $difference) {
+            \Gallery\Services\application_update_record_failure_diagnostic($strictJob,
+                $difference, 'INTEGRITY');
+            recovery_check($strictJob['last_failure_diagnostic']['integrity_file'] === 'app/payload.php'
+                && $strictJob['last_failure_diagnostic']['expected_hash'] !== $strictJob['last_failure_diagnostic']['actual_hash']
+                && str_contains(\Gallery\Services\application_update_safe_error($difference)['message'], 'app/payload.php'),
+                'Integrity failure lost actionable relative file/hash evidence.');
+        }
+        $stableState = \Gallery\Services\application_update_load_job($stable['id']);
+        require_once dirname(__DIR__) . '/app/services/gallery_edit_concurrency.php';
+        recovery_check(\Gallery\Services\gallery_edit_schema_state() === 'missing',
+            'The stable fixture must expose missing revision enforcement before provisioning.');
+        // Earlier fixtures need only the ledger. Stable activation additionally
+        // requires the already-applied gallery revision schema, so provision its
+        // real table rather than labelling an absent column as available.
+        $pdo->exec('CREATE TABLE galleries (id INTEGER PRIMARY KEY, edit_revision BIGINT NOT NULL DEFAULT 1)');
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        recovery_check(\Gallery\Services\gallery_edit_schema_state() === 'available',
+            'The stable fixture did not observe its actual revision column.');
+        $stableState['stage'] = 'package_validate';
+        \Gallery\Services\application_update_save_job($stableState);
+        $stableResult = recovery_drain($stable['id']);
+        $terminalState = \Gallery\Services\application_update_load_job($stable['id']);
+        recovery_check($stableResult['status'] === 'completed',
+            'Stable replacement terminal state: ' . json_encode([
+                'status' => $stableResult['status'], 'stage' => $stableResult['stage'],
+                'error' => $stableResult['error'],
+                'diagnostic' => $terminalState['last_failure_diagnostic'] ?? null,
+            ], JSON_THROW_ON_ERROR));
+        recovery_check($stableResult['status'] === 'completed'
+            && $stableResult['result']['files_copied'] === count($stablePaths)
+            && in_array('public/assets/styles/utilities.css', $stableResult['integrity_warnings'], true)
+            && file_get_contents($root . '/public/assets/styles/utilities.css')
+                === file_get_contents($stableRoot . '/public/assets/styles/utilities.css')
+            && file_get_contents($oldProof) === 'preserved original backup'
+            && is_file($localExtension)
+            && !is_file(\Gallery\Services\application_update_activation_gate_path())
+            && !is_file(\Gallery\Services\application_update_jobs_root() . '/rollback-window.json')
+            && !$stableResult['can_rollback'],
+            'Stable replacement failed, skipped same-version files, deleted evidence or left isolation open.');
         echo "Updater recovery integration tests passed.\n";
     } finally {
         $GLOBALS['recovery_pdo'] = null;

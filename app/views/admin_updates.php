@@ -472,15 +472,27 @@ function view_render_update_job_card(
     } else {
         echo '<div class="notice" data-update-job-error hidden></div>';
     }
+    $warnings = (array) ($job['integrity_warnings'] ?? []);
+    echo '<div class="notice" data-update-job-warnings'
+        . ($warnings === [] ? ' hidden' : '') . '>'
+        . e(t('admin.updates.integrity_warnings')) . ' '
+        . e(implode(', ', $warnings)) . '</div>';
     echo
         '<div class="notice" data-update-job-complete'
             . ((string) ($job['status'] ?? '') === 'completed' ? '' : ' hidden')
-            . '>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>';
+            . '>' . e(t('admin.updates.job_completed_title')) . '</div>';
     echo
         '<div class="notice" data-update-job-cancelled'
             . ((string) ($job['status'] ?? '') === 'cancelled' ? '' : ' hidden')
-            . '>Prepared update cancelled before activation. No application files were changed.</div>';
+            . '>' . e(t('admin.updates.job_cancelled_title')) . '</div>';
     echo '<div data-update-job-actions>';
+    if ($installerEnabled && !empty($job['can_reset'])) {
+        echo '<form method="post" class="inline-action-form" data-update-job-form data-update-manual-deployment>'
+            . $csrfHtml
+            . '<input type="hidden" name="update_action" value="reset_updater">'
+            . '<button type="submit" class="button secondary">'
+            . e(t('admin.updates.manual_deployment_title')) . '</button></form>';
+    }
     if ($installerEnabled && in_array($job['status'] ?? '', ['running', 'paused'], true)) {
         $paused = ($job['status'] ?? '') === 'paused';
         echo '<form method="post" class="inline-action-form" data-update-job-control>'
@@ -1091,6 +1103,9 @@ function view_render_admin_update_page(array $viewModel): void
         'pause' => 'pause',
         'resume' => 'resume',
         'paused-label' => 'job_paused_title',
+        'reset' => 'manual_deployment_title',
+        'replacement-waiting' => 'replacement_waiting',
+        'warnings' => 'integrity_warnings',
     ] as $attribute => $key) {
         echo ' data-update-job-' . $attribute . '="'
             . e(t('admin.updates.' . $key)) . '"';
@@ -1439,24 +1454,22 @@ function view_render_admin_update_page(array $viewModel): void
                 . e(t('admin.updates.install_beta'))
                 . '</button>';
         echo '</form></article>';
-        if ($betaActive) {
-            echo
-                '<article class="admin-maintenance-card admin-update-tool-card"><strong>'
-                    . e(t('admin.updates.restore_stable'))
-                    . '</strong><span>'
-                    . e(t('admin.updates.restore_stable_help'))
-                    . '</span>';
-            echo
-                '<form method="post" class="form-grid" data-update-job-form>'
-                    . $csrfHtml;
-            echo
-                '<input type="hidden" name="update_action" value="beta_revert">';
-            echo
-                '<button type="submit" class="button secondary">'
-                    . e(t('admin.updates.restore_stable'))
-                    . '</button>';
-            echo '</form></article>';
-        }
+        echo
+            '<article class="admin-maintenance-card admin-update-tool-card"><strong>'
+                . e(t('admin.updates.restore_stable'))
+                . '</strong><span>'
+                . e(t('admin.updates.restore_stable_help'))
+                . '</span>';
+        echo
+            '<form method="post" class="form-grid" data-update-job-form data-update-recovery>'
+                . $csrfHtml;
+        echo
+            '<input type="hidden" name="update_action" value="beta_revert">';
+        echo
+            '<button type="submit" class="button secondary">'
+                . e(t('admin.updates.restore_stable'))
+                . '</button>';
+        echo '</form></article>';
     } else {
         echo
             '<article class="admin-maintenance-card admin-update-tool-card"><strong>'

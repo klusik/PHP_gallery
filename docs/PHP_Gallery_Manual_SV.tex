@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.4}
+\newcommand{\version}{0.144.5}
 \newcommand{\manualdate}{26~oktober~2026}
 
 \hypersetup{
@@ -3377,12 +3377,20 @@ installationen \codeword{c2e2bc77} med dess äldre låsta jobb: efter separat
 godkännande distribueras hela den kompatibla korrigerade utgåvan i underhåll,
 det gamla jobbet bevaras och dess ägare stäms av först efter verifierad
 framåtreparation. Försök igen ändrar aldrig jobbets mål.
-Vid överskrivande FTP-distribution laddas hela den verifierade utgåvan upp
-utan att gamla lokala filer, jobb eller säkerhetskopior raderas.
-Välj \ui{Slutför FTP-uppdatering} i Advanced tools: samma installerare
-verifierar levererade filer, bevarar gamla jobb och tillhörande spärrbevis,
-kör framåtmigreringar och stämmer av kanalen. Det gamla paketet aktiveras
-inte och föråldrade filer rensas inte. \ui{Pausa} gäller nästa säkra
+Vid överskrivande FTP-distribution laddas hela utgåvan upp utan att gamla filer,
+jobb eller säkerhetskopior raderas. Välj \ui{Återställ uppdateraren / slutför FTP}
+på jobbkortet eller i Advanced tools. Föregående jobb stoppas vid en säker
+kontrollpunkt; deras poster och spärrbevis bevaras och ett nytt framåtjobb börjar.
+\ui{Installera stable} är alltid tillgängligt, hämtar senaste stabila grenen och
+skriver över alla programfiler i paketet, även vid samma version. Det ersätter
+också fastnade eller pausade jobb utan FTP. Båda åtgärderna bevarar konfiguration,
+media, extra lokala filer och säkerhetskopior. Innehållsskillnader loggas som
+varningar med relativ filidentitet och förväntad/faktisk hash; automatiska
+uppdateringar behåller strikt verifiering. Säkra arkivsökvägar, nödvändiga filer
+och körningslås gäller fortfarande. Väntan på övertagande visas och fortsätter
+automatiskt. FTP-försök igen granskar installerade filer i stället för att hämta.
+Databasmigreringar körs framåt; databasändringar återställs aldrig.
+\ui{Pausa} gäller nästa säkra
 kontrollpunkt i varje steg; \ui{Fortsätt uppdateringen} återupptar samma jobb.
 Delvis aktivering förblir spärrad. Äldre stödda utgåve-commits kan också väljas;
 migreringar återställs aldrig och en kompatibel databasbackup kan behövas.

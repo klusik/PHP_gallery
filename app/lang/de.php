@@ -33,12 +33,17 @@
  */
 
 return [
+    'admin.updates.recovery_manual_action' => 'Mit Updater zurücksetzen / FTP abschließen die hochgeladenen Dateien erneut bearbeiten oder mit Stable installieren das neueste stabile Paket einspielen. Alte Aufträge und Sicherungen bleiben erhalten; Datenbankmigrationen werden nicht rückgängig gemacht.',
+    'admin.updates.integrity_warnings' => 'Dateiunterschiede als Warnungen protokolliert; Wiederherstellung läuft weiter:',
+    'admin.updates.replacement_waiting' => 'Der laufende Updater-Aufruf wird vor dem Zurücksetzen beendet. Die Wiederherstellung startet automatisch.',
+    'admin.updates.restore_stable_help' => 'Stoppt den vorherigen Auftrag, lädt den neuesten stabilen Branch-Stand und überschreibt alle Anwendungsdateien aus dem Paket, auch bei gleicher Version. Dateiunterschiede sind Warnungen. Konfiguration, Medien, zusätzliche lokale Dateien und alte Sicherungen bleiben erhalten. Datenbankmigrationen werden nicht rückgängig gemacht.',
+    'admin.updates.restore_stable' => 'Stable installieren',
     'admin.updates.pause' => 'Pausieren',
     'admin.updates.resume' => 'Aktualisierung fortsetzen',
     'admin.updates.pause_hint' => 'Der Auftrag pausiert in jedem Schritt am nächsten sicheren Kontrollpunkt. Dateien, Sicherungen und Aktivierungssperre bleiben erhalten. Fortsetzen führt denselben Auftrag weiter.',
     'admin.updates.version_commit_help' => 'Einen gewählten Git-Commit installieren, auch aus einer älteren Version. Commit-ID eingeben. Der Code wird festgelegt; Datenbankmigrationen werden nicht zurückgenommen und älterer Code kann eine kompatible Datenbanksicherung benötigen.',
-    'admin.updates.manual_deployment_title' => 'FTP-Aktualisierung abschließen',
-    'admin.updates.manual_deployment_hint' => 'Nach dem Überschreiben mit der vollständigen Release-ZIP hier abschließen. Zusätzliche lokale Dateien, alter Auftrag und Sicherungen bleiben erhalten. Das installierte Paket wird geprüft und Vorwärtsmigrationen werden abgeschlossen.',
+    'admin.updates.manual_deployment_title' => 'Updater zurücksetzen / FTP abschließen',
+    'admin.updates.manual_deployment_hint' => 'Stoppt den vorherigen Auftrag und schließt die per FTP hochgeladenen Dateien ab. Dateiunterschiede werden als Warnungen protokolliert. Alte Aufträge, Sicherungen, Konfiguration und Medien bleiben erhalten; Vorwärtsmigrationen werden vor Freigabe der Website abgeschlossen.',
     'admin.updates.job_runs_label' => 'Verarbeitungsläufe',
     'admin.updates.job_runs_hint' => 'Kurze Verarbeitungsanfragen für diesen Auftrag, einschließlich Wartezeiten. Dies zählt weder Fehler noch Klicks auf Fortsetzung versuchen.',
     'admin.updates.job_stage_label' => 'Schritt',

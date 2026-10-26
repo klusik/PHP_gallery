@@ -33,12 +33,17 @@
  */
 
 return [
+    'admin.updates.recovery_manual_action' => 'Pomocí Resetovat updater / dokončit FTP aktualizaci znovu zpracujte nahrané soubory, nebo pomocí Nainstalovat stable přepište aplikaci posledním stable balíkem. Staré úlohy i zálohy zůstanou; databázové migrace se nevracejí.',
+    'admin.updates.integrity_warnings' => 'Rozdíly souborů zapsané jako upozornění; obnova pokračuje:',
+    'admin.updates.replacement_waiting' => 'Čeká se na dokončení právě běžícího požadavku updateru před resetem. Obnova se spustí automaticky.',
+    'admin.updates.restore_stable_help' => 'Zastaví předchozí úlohu, stáhne poslední stable a přepíše všechny aplikační soubory z balíku, i když je tato verze již nainstalovaná. Rozdíly souborů jsou upozornění. Konfigurace, média, místní soubory navíc i staré zálohy zůstanou. Databázové migrace se nevracejí.',
+    'admin.updates.restore_stable' => 'Nainstalovat stable',
     'admin.updates.pause' => 'Pozastavit',
     'admin.updates.resume' => 'Pokračovat v aktualizaci',
     'admin.updates.pause_hint' => 'Úloha se v libovolné fázi pozastaví na nejbližším bezpečném kontrolním bodě. Soubory, zálohy i aktivační brána zůstanou zachované. Pokračovat obnoví stejnou úlohu.',
     'admin.updates.version_commit_help' => 'Nainstalujte zvolený Git commit, včetně commitu staršího vydání. Zadejte jeho ID. Zvolený kód se připne; databázové migrace se nevracejí a starší kód může vyžadovat kompatibilní zálohu databáze.',
-    'admin.updates.manual_deployment_title' => 'Dokončit aktualizaci přes FTP',
-    'admin.updates.manual_deployment_hint' => 'Po přepsání souborů celým ZIPem vydání dokončete aktualizaci zde. Místní soubory navíc, stará úloha i zálohy zůstanou zachované. Ověří se nahraný balík a dokončí dopředné migrace.',
+    'admin.updates.manual_deployment_title' => 'Resetovat updater / dokončit FTP aktualizaci',
+    'admin.updates.manual_deployment_hint' => 'Zastaví předchozí úlohu updateru a dokončí soubory nahrané přes FTP. Rozdíly souborů jsou upozornění. Staré úlohy, zálohy, konfigurace i média zůstanou; před otevřením webu se dokončí dopředné migrace.',
     'admin.updates.job_runs_label' => 'Spuštění zpracování',
     'admin.updates.job_runs_hint' => 'Počet krátkých spuštění zpracování této úlohy, včetně čekání. Nejde o počet chyb ani stisknutí tlačítka Zkusit pokračovat.',
     'admin.updates.job_stage_label' => 'Fáze',

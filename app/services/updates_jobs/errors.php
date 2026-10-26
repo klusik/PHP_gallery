@@ -62,6 +62,55 @@ final class ApplicationUpdateMigrationEvidenceException extends RuntimeException
     }
 }
 
+/** Identify publisher file differences using safe repository-relative paths. */
+final class ApplicationUpdateFileIntegrityException extends RuntimeException
+{
+    /**
+     * Carry actionable file evidence without server paths or exception text.
+     * @param string $relativeFile Validated updater-owned relative file identity.
+     * @param string $expectedHash Manifest SHA-256, or empty for missing coverage.
+     * @param string $actualHash Complete observed normalized SHA-256.
+     * @return void Initializes bounded evidence and the stable failure reference.
+     */
+    public function __construct(
+        public readonly string $relativeFile,
+        public readonly string $expectedHash,
+        public readonly string $actualHash,
+    ) {
+        parent::__construct('Recovery package failed core-manifest integrity validation.');
+    }
+}
+
+/**
+ * Retain a non-blocking difference for an explicitly requested recovery.
+ * @param array{id:string,checkpoints:array<string,mixed>,...<string,mixed>} $job Admin recovery state with private per-file evidence.
+ * @param ApplicationUpdateFileIntegrityException $difference Validated file identity and publisher/observed digests.
+ * @return void Stores deduplicated evidence and attempts a correlated warning log.
+ */
+function application_update_record_integrity_warning(
+    array &$job,
+    ApplicationUpdateFileIntegrityException $difference,
+): void {
+    $path = $difference->relativeFile;
+    $diagnostic = [
+        'job_id' => $job['id'], 'stage' => (string) $job['stage'],
+        'integrity_file' => $path,
+        'expected_hash' => $difference->expectedHash,
+        'actual_hash' => $difference->actualHash,
+        'policy' => 'explicit_admin_recovery',
+    ];
+    $job['integrity_warnings'][$path] = $diagnostic;
+    if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
+        try {
+            admin_log_event('warning', 'update.file_integrity_warning',
+                'Admin recovery continues with a recorded file difference.',
+                $diagnostic, ['category' => 'update', 'severity' => 'warning']);
+        } catch (Throwable) {
+            // The private durable warning is authoritative when logging fails.
+        }
+    }
+}
+
 /**
  * Retain an actionable private failure receipt and attempt normal Admin logging.
  * @param array{id:string,stage:string,checkpoints:array<string,mixed>,...<string,mixed>} $job Failed worker state, updated with a private diagnostic receipt.
@@ -92,6 +141,11 @@ function application_update_record_failure_diagnostic(
         && preg_match('/^[0-9]{12}_[a-z0-9_]+$/D', $exception->migrationVersion) === 1) {
         $diagnostic['migration_evidence'] = $exception->reason;
         $diagnostic['migration_version'] = $exception->migrationVersion;
+    }
+    if ($exception instanceof ApplicationUpdateFileIntegrityException) {
+        $diagnostic['integrity_file'] = $exception->relativeFile;
+        $diagnostic['expected_hash'] = $exception->expectedHash;
+        $diagnostic['actual_hash'] = $exception->actualHash;
     }
     $job['last_failure_diagnostic'] = $diagnostic;
     try {
@@ -151,7 +205,11 @@ function application_update_safe_error(mixed $error): array
 
     $retryable = !($error instanceof \Error)
         && !str_contains($lower, 'call to undefined function');
-    if (
+    if ($error instanceof ApplicationUpdateFileIntegrityException) {
+        $message = application_update_manifest_mismatch_message()
+            . ' File: ' . $error->relativeFile . '.';
+        $retryable = false;
+    } elseif (
         str_contains($lower, 'failed core-manifest integrity validation')
         || str_contains(
             $lower,
@@ -325,7 +383,10 @@ function application_update_failed_recovery_due(array $job, int $now): bool
 function application_update_recovery_guidance(array $job): string
 {
     $parameters = [];
-    if (!empty($job['result']['recovery_released'])) {
+    if (($job['operation'] ?? '') === 'manual_deploy' || !empty($job['recovery_override'])) {
+        $key = 'admin.updates.recovery_manual_action';
+        $message = 'Use Reset updater / finish FTP update to recheck uploaded files, or Install stable to replace application files with the latest stable package. Old jobs and backups are kept; database migrations are not reversed.';
+    } elseif (!empty($job['result']['recovery_released'])) {
         $key = 'admin.updates.recovery_restored';
         $message = 'The failed attempt has been released and the previous application files are in place. Its failed version or commit is excluded from automatic installation; enabled automatic checks can install a newer stable release.';
     } elseif (!empty($job['automatic_rollback'])) {

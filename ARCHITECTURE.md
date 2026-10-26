@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.4';
+const CMS_VERSION = '0.144.5';
 ```
 
 Update-related code uses:
@@ -2870,16 +2870,20 @@ symlink/document-root switch, which many shared hosts do not provide.
 
 ### Migrations, rollback, and recovery
 
-FTP overlays use an explicit `manual_deploy` job in the same installer engine.
-Installed declared files are verified independently of strict incoming archive
-membership, so local legacy extras survive. It preserves the previous job and
-gate/window records, verifies all delivered bytes before taking over matching
-ownership, and advances directly to bounded forward migrations/finalization.
-It performs no package activation or obsolete-file pruning. A detected newer
-manual tree blocks old package continuation and automatic rollback. Pause uses
-a durable request file and the existing worker lock; every stage honors the
-request at its next safe boundary. Paused jobs remain active and gated when
-necessary. Explicit resume retains their identity and safety evidence.
+Explicit Admin FTP completion and Install stable share recovery replacement
+ownership in the existing updater engine. The start lock, predecessor/gate-owner
+worker locks and exclusive runtime lease serialize takeover. Old records,
+backups and raw marker receipts are preserved, predecessors become cancelled
+with a successor link, and a fresh isolated job starts. Busy workers receive a
+checkpoint pause request; the UI repeats the requested replacement action.
+FTP completion skips package activation; stable recovery downloads one pinned
+stable commit and overwrites every declared file, including same-version bytes.
+Both preserve unlisted files and skip obsolete-file pruning. Manifest content
+differences become per-file warning receipts only for explicit recoveries; actual
+staged bytes remain pinned. Ordinary update validation is unchanged. Explicit
+recovery never claims automatic rollback without a historical DB witness.
+Newer manually installed code prevents old package continuation. Pause/resume
+preserves ordinary checkpoints, while Reset starts a new linked identity.
 
 Recovery DB witness format 2 retains the complete ordered ledger with applied
 timestamps and fresh actual schema, plus applied-file hashes and installed
