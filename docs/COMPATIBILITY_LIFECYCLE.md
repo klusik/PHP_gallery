@@ -2,15 +2,30 @@
 
 ## Failed updater jobs
 
-Overwrite-only FTP recovery is owned by the existing updater service. Old local
-files and private job/backup state remain supported. Explicit manual completion
-verifies the installed declared file set, preserves old gate/window receipts,
-runs forward migrations and reconciles the new release without an old-package
-replay. New jobs capture starting installed versions; legacy jobs use validated
-targets. Pause preserves every checkpoint and never opens a partial activation.
-Regression includes a real-file overlay with local extras, retained backups,
-all-stage pause and delayed browser responses. Live FTP transfer order and
-production DB compatibility remain unverified; no historical path is retired.
+Explicit Admin recovery permanently supports overwrite-only FTP deployments,
+local file differences and old stuck jobs. Reset/finish FTP and Install stable
+supersede active and gate-owner jobs under real worker/runtime locks, retain
+original records, backups and marker bytes, and complete forward migrations.
+Stable recovery overwrites all declared files even at the current version;
+manifest content differences are warnings with exact relative file/hash evidence.
+Safe paths, required files and runtime ownership remain enforced. Ordinary
+automatic updates retain strict content verification. Explicit recovery has no
+automatic previous-database rollback; a newer manual tree prevents old package
+replay. The fallback owner is the existing updater service and remains supported
+while FTP and historical job records are supported; no retirement is inferred.
+
+The 0.144.4 live incident confirmed a modified `public/assets/styles/utilities.css`
+and a manual completion stopped before migrations (reference `FF5BC089547B`).
+The old retry incorrectly selected download for FTP work. Regression covers this
+CSS warning, correct retry stage, lock contention, same-version stable overwrite,
+old gate takeover, retained extras/backups, all-stage pause and delayed browser
+responses. Live deployment of the repaired version and production database
+compatibility remain unverified until the operator installs and finishes it.
+Server-policy reconciliation keeps its dependency-light legacy bootstrap root
+when no root is supplied; the full updater passes its validated installation root.
+This preserves old migration callers without loading the full updater into an
+already active old PHP request. The reconciliation service owns this permanent
+compatibility default; removal requires proof those bootstrap callers are retired.
 
 Owners: update lifecycle/recovery services, early runtime isolation and the
 schema-inspection SQL model. Recovery covers failed background, Admin/API and

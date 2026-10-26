@@ -526,19 +526,19 @@ function application_update_job_build_plan(array &$job): void
     );
     application_update_assert_gallery_edit_enforcement($sourceRoot);
     application_update_recovery_assert_compatible($job, $sourceRoot);
-    $releaseFiles = application_update_release_files($sourceRoot);
+    $releaseFiles = application_update_release_files($sourceRoot, !empty($job['recovery_override']));
     if ($releaseFiles === []) {
         throw new RuntimeException(
             'Validated update package contains no installable files.',
         );
     }
-    $files = application_update_changed_release_files(
+    $files = !empty($job['recovery_override']) ? $releaseFiles : application_update_changed_release_files(
         $sourceRoot,
         $root,
         $releaseFiles,
     );
     $cleanUnexpected = !empty($job['parameters']['clean_unexpected_files']);
-    $obsolete = application_update_obsolete_paths(
+    $obsolete = !empty($job['recovery_override']) ? [] : application_update_obsolete_paths(
         $sourceRoot,
         $root,
         $cleanUnexpected,

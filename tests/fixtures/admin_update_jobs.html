@@ -19,7 +19,7 @@ License: MIT
 <main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="updates" data-admin-side-panel-title="Updates">Open updates</a></main>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
-import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261026-updater-progress-v1';
+import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261026-updater-reset-v2';
 import {setupAdminNavdataUpdateFeedback} from '/public/assets/gallery-modules/admin-navdata-update.js?v=20261002-navdata-ajax-v1';
 import {setupAdminRouteNavdata} from '/public/assets/gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
@@ -35,6 +35,8 @@ let releaseVerification;
 let pauseScenario = false;
 let pauseResumed = false;
 let releasePausedContinuation;
+let replacementRequests = 0;
+let releaseReplacedContinuation;
 const recoveryGuidance = 'Automatic recovery stopped: database compatibility is unverified. Preserve the job and backups. Verify the database and deploy a compatible release in maintenance mode; resume forward migrations. Do not restore application files alone.';
 const fixtureFetch = window.fetch.bind(window);
 let holdRead = false;
@@ -81,7 +83,10 @@ function markup() {
         + '<div data-update-release-summary data-update-status-url="/fixture-summary">' + summary(true) + '</div>'
         + '<p data-update-status-error hidden>Check failed <button type="button" data-update-status-refresh>Retry</button></p>'
         + '<section class="admin-update-job" data-update-job-scope hidden></section></div>'
-        + '<section class="admin-update-job" data-update-job-scope hidden></section><div data-update-patch-notes>' + notes('old') + '</div>' + navdata() + '</div>';
+        + '<section class="admin-update-job" data-update-job-scope hidden></section>'
+        + '<form action="/fixture-action" method="post" data-update-job-form data-update-manual-deployment><input name="csrf_token" value="fixture-csrf"><input name="update_action" value="finish_manual_deployment"><button>Reset / finish FTP</button></form>'
+        + '<form action="/fixture-action" method="post" data-update-job-form data-update-recovery><input name="csrf_token" value="fixture-csrf"><input name="update_action" value="beta_revert"><button>Install stable</button></form>'
+        + '<div data-update-patch-notes>' + notes('old') + '</div>' + navdata() + '</div>';
 }
 /** Build a replaceable notes viewer. @param {string} version Displayed release. @return {string} Synthetic picker. */
 function notes(version) {
@@ -146,12 +151,30 @@ window.fetch = /** Intercept only fixture endpoints; no updater files or GitHub 
         if (action === 'check_due') { periodicChecks++; return json({ok:true, html:summary(true), notes_html:notes('old')}); }
         if (action === 'force_check') { forcedChecks++; return json({ok:true, html:summary(false), notes_html:notes('new')}); }
         if (action === 'stable_update') { starts++; return json({ok: true, job: job('running')}); }
+        if (action === 'finish_manual_deployment' || action === 'reset_updater') {
+            replacementRequests++;
+            return json({ok:true,job:replacementRequests === 1
+                ? {...job('failed'),replacement_waiting:true,replacement_action:'reset_updater'}
+                : {id:'replacement-job',status:'running',stage:'package_validate',can_reset:true,
+                    integrity_warnings:['public/assets/styles/utilities.css'],
+                    progress:{percent:50,message:'Finishing uploaded files.'}}});
+        }
+        if (action === 'beta_revert') return json({ok:true,job:{id:'stable-replacement',
+            status:'running',stage:'download',can_reset:true,
+            progress:{percent:0,message:'Installing latest stable.'}}});
         if (action === 'job_pause') return json({ok:true,job:{...job('running'),status:'paused'}});
         if (action === 'job_resume') {
             pauseResumed = true;
             return json({ok:true,job:job('running')});
         }
         if (action === 'job_continue') {
+            if (options.body.get('job_id') === 'replacement-job') return new Promise(resolve => {
+                releaseReplacedContinuation = () => resolve(json({ok:true,job:{id:'replacement-job',
+                    status:'failed',stage:'migrate',error:{message:'Obsolete response',reference:'OLD'}}}));
+            });
+            if (options.body.get('job_id') === 'stable-replacement') return json({ok:true,job:{
+                id:'stable-replacement',status:'completed',stage:'completed',
+                integrity_warnings:['public/assets/styles/utilities.css'],progress:{percent:100,message:'Stable installed.'}}});
             continuations++;
             if (pauseScenario && !pauseResumed) return new Promise(resolve => {
                 releasePausedContinuation = () => resolve(json({ok:true,job:job('running')}));
@@ -205,6 +228,9 @@ try {
     form.requestSubmit();
     await until(/** Wait for production progress rendering. @return {boolean} Whether worker is running. */ () => scope.dataset.updateJobStatus === 'running');
     check(form.querySelector('button').disabled, 'Update stays disabled throughout the running job');
+    check(!panel.querySelector('[data-update-manual-deployment] button').disabled
+        && !panel.querySelector('[data-update-recovery] button').disabled,
+        'Recovery actions remain available while another job runs');
     await until(() => Boolean(releaseVerification));
     // Render real production progress styles at desktop and narrow widths.
     for (const width of [1280, 390]) {
@@ -325,6 +351,33 @@ try {
     await until(() => scope.dataset.updateJobStatus === 'completed');
     check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false',
         'Pause and resume preserve the drawer, URL and original job');
+    panel.querySelector('[data-update-manual-deployment]').requestSubmit();
+    await until(() => scope.querySelector('[data-update-job-title]').textContent.includes('previous updater'));
+    check(scope.querySelector('[data-update-job-error]').hidden,
+        'Waiting replacement explains ownership instead of showing the old error');
+    await until(() => Boolean(releaseReplacedContinuation));
+    check(replacementRequests === 2 && scope.dataset.updateJobId === 'replacement-job'
+        && scope.querySelector('[data-update-job-control-action="reset_updater"]'),
+        'Pending recovery retries replacement and exposes Reset on the new job');
+    for (const width of [1280, 390]) {
+        await fixtureFetch('/__viewport?width=' + width);
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const warning = scope.querySelector('[data-update-job-warnings]');
+        check(!warning.hidden && warning.textContent.includes('public/assets/styles/utilities.css')
+            && warning.scrollWidth <= warning.clientWidth + 1,
+            width + ' warning and recovery controls fit the production drawer');
+        check(!panel.querySelector('[data-update-recovery] button').disabled,
+            width + ' stable recovery remains enabled during FTP completion');
+    }
+    panel.querySelector('[data-update-recovery]').requestSubmit();
+    await until(() => scope.dataset.updateJobId === 'stable-replacement'
+        && scope.dataset.updateJobStatus === 'completed');
+    releaseReplacedContinuation();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    check(scope.dataset.updateJobId === 'stable-replacement'
+        && scope.dataset.updateJobStatus === 'completed'
+        && location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false',
+        'A replaced FTP response cannot overwrite stable completion or navigate away');
     panel.querySelector('[data-navdata-update-form]').requestSubmit();
     await until(/** Wait for AJAX import. @return {boolean} Whether held import started. */ () => Boolean(releaseNavdata));
     check(panel.querySelector('[data-navdata-update-submit]').disabled && location.href === originalUrl, 'Navdata import paints progress without navigation');

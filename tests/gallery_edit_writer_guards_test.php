@@ -20,6 +20,25 @@ require_once __DIR__ . '/support/gallery_edit_writer_source.php';
 require_once __DIR__ . '/support/php_source.php';
 require_once __DIR__ . '/support/gallery_edit_writer_inventory.php';
 
+// Constructors in separate class scopes are legal; namespace functions remain
+// uniquely indexed. Class-name constants must not open a declaration scope.
+$scopeFunctions = gallery_writer_functions('<?php
+class FirstScope { public function __construct() {} }
+class SecondScope { public function __construct() {} }
+interface ScopeContract { public function __construct(); }
+$type = FirstScope::class;
+function namespace_probe(): void { $value = "{"; }
+');
+gallery_writer_check(array_keys($scopeFunctions) === ['namespace_probe'],
+    'Class methods or ::class tokens corrupted namespace function extraction.');
+try {
+    gallery_writer_functions('<?php function duplicated() {} function duplicated() {}');
+    throw new RuntimeException('Duplicate namespace functions were accepted.');
+} catch (RuntimeException $scopeError) {
+    gallery_writer_check($scopeError->getMessage() === 'Duplicate function: duplicated',
+        'Source extraction must retain genuine duplicate-function rejection.');
+}
+
 /**
  * Exercise the exact public wrapper with local seams instead of production persistence.
  *

@@ -116,8 +116,9 @@ function ensureScopeMarkup(scope) {
         <p class="muted" data-update-job-message></p>
         <details class="admin-update-job-details"><summary>Status · <code data-update-job-code></code></summary><p class="muted"><strong data-update-job-stage-label>Stage:</strong> <span data-update-job-stage></span> · <strong data-update-job-runs-label>Processing runs:</strong> <span data-update-job-attempts></span></p><p class="muted" data-update-job-runs-hint></p></details>
         <div class="notice" data-update-job-error hidden></div>
-        <div class="notice" data-update-job-complete hidden>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>
-        <div class="notice" data-update-job-cancelled hidden>Prepared update cancelled before activation. No application files were changed.</div>
+        <div class="notice" data-update-job-warnings hidden></div>
+        <div class="notice" data-update-job-complete hidden>Update completed successfully.</div>
+        <div class="notice" data-update-job-cancelled hidden>Update job stopped.</div>
         <div data-update-job-actions></div>`;
 }
 
@@ -157,7 +158,8 @@ function syncReleaseControls(job) {
         }
         for (const button of form.querySelectorAll('button, input[type="submit"]')) {
             button.disabled = job.status === 'running'
-                && !form.hasAttribute('data-update-manual-deployment');
+                && !form.hasAttribute('data-update-manual-deployment')
+                && !form.hasAttribute('data-update-recovery');
         }
     }
     for (const summary of document.querySelectorAll('[data-update-release-summary]')) {
@@ -260,7 +262,7 @@ async function checkRelease(summary, force = false) {
  * Status and Advanced tools intentionally contain the same job surface so an
  * operation remains visible in the tab where the administrator launched it.
  * @param {HTMLElement} scope Owned synchronized surface.
- * @param {{id:string, status:string, stage?:string, attempts?:number, runtime_waiting?:boolean, progress?:{percent:number, message:string}, error?:{message:string, reference:string}, can_cancel?:boolean, can_rollback?:boolean, can_resume?:boolean}} job Durable public job state.
+ * @param {{id:string, status:string, stage?:string, attempts?:number, runtime_waiting?:boolean, replacement_waiting?:boolean, integrity_warnings?:string[], can_reset?:boolean, progress?:{percent:number, message:string}, error?:{message:string, reference:string}, can_cancel?:boolean, can_rollback?:boolean, can_resume?:boolean}} job Durable public job state.
  * @return {void} Updates presentation and available recovery controls.
  */
 function renderJobInScope(scope, job) {
@@ -290,11 +292,15 @@ function renderJobInScope(scope, job) {
     if (job.status === 'paused') title.textContent = page?.dataset.updateJobPausedLabel || 'Update paused';
     if (job.status === 'cancelled') title.textContent = page?.dataset.updateJobCancelledLabel || 'Update cancelled';
     if (job.status === 'completed') title.textContent = page?.dataset.updateJobCompletedLabel || 'Update completed';
+    if (job.replacement_waiting) title.textContent = page?.dataset.updateJobReplacementWaiting
+        || 'Waiting for the previous updater request to finish before reset.';
     const code = scope.querySelector('[data-update-job-code]') || scope.querySelector('.admin-update-job-heading code');
     if (code) code.textContent = String(job.id);
     scope.querySelector('[data-update-job-stage]').textContent = stageLabel(job.stage);
     scope.querySelector('[data-update-job-attempts]').textContent = String(job.attempts || 0);
-    scope.querySelector('[data-update-job-message]').textContent = job.runtime_waiting
+    scope.querySelector('[data-update-job-message]').textContent = job.replacement_waiting
+        ? page?.dataset.updateJobReplacementWaiting || 'Waiting to replace the previous updater job.'
+        : job.runtime_waiting
         ? page?.dataset.updateJobWaitingRuntime || 'Waiting for other website requests to finish. The update will continue automatically.'
         : String(progress.message || 'Update job is ready to continue.');
     const progressBar = scope.querySelector('[data-update-job-progress]');
@@ -306,7 +312,13 @@ function renderJobInScope(scope, job) {
     if (errorBox) {
         const reference = String(job.error?.reference || '');
         errorBox.textContent = job.error ? `${String(job.error.message || 'Update failed.')} Reference: ${reference}` : '';
-        errorBox.hidden = !job.error;
+        errorBox.hidden = !job.error || Boolean(job.replacement_waiting);
+    }
+    const warnings = scope.querySelector('[data-update-job-warnings]');
+    if (warnings) {
+        warnings.textContent = (page?.dataset.updateJobWarnings || 'File differences recorded as warnings:')
+            + ' ' + (job.integrity_warnings || []).join(', ');
+        warnings.hidden = !job.integrity_warnings?.length;
     }
 
     const completeBox = scope.querySelector('[data-update-job-complete]');
@@ -317,6 +329,15 @@ function renderJobInScope(scope, job) {
     const actions = scope.querySelector('[data-update-job-actions]');
     if (actions) {
         actions.replaceChildren();
+        if (job.replacement_waiting) return;
+        if (job.can_reset && !job.replacement_waiting) {
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.className = 'button secondary';
+            reset.textContent = page?.dataset.updateJobReset || 'Reset updater / finish FTP update';
+            reset.dataset.updateJobControlAction = 'reset_updater';
+            actions.append(reset);
+        }
         if (job.status === 'running' || job.status === 'paused') {
             const control = document.createElement('button');
             control.type = 'button';
@@ -395,14 +416,14 @@ function endpointFor(formOrScope) {
 
 /**
  * Schedule one continuation with slower polling during runtime contention.
- * @param {{id:string,status:string,runtime_waiting?:boolean}} job Last worker state.
+ * @param {{id:string,status:string,runtime_waiting?:boolean,replacement_waiting?:boolean,replacement_action?:string}} job Last worker state and optional pending replacement action.
  * @param {string} endpoint Same-origin updater action URL.
  * @param {string} csrfToken Authenticated form token.
  * @param {Document|Element} context Current updater presentation container.
  * @returns {void} Schedules at most one in-flight continuation for this job.
  */
 function scheduleContinuation(job, endpoint, csrfToken, context = document) {
-    if (!job?.id || job.status !== 'running' || ACTIVE_REQUESTS.has(String(job.id))) {
+    if (!job?.id || (job.status !== 'running' && !job.replacement_waiting) || ACTIVE_REQUESTS.has(String(job.id))) {
         return;
     }
     const id = String(job.id);
@@ -411,11 +432,12 @@ function scheduleContinuation(job, endpoint, csrfToken, context = document) {
     window.setTimeout(async () => {
         if (controller.signal.aborted) return;
         try {
-            const next = await postJob(endpoint, csrfToken, 'job_continue', id);
+            const next = await postJob(endpoint, csrfToken,
+                job.replacement_waiting ? job.replacement_action : 'job_continue', id);
             if (controller.signal.aborted) return;
             renderJob(next, context);
             if (ACTIVE_REQUESTS.get(id) === controller) ACTIVE_REQUESTS.delete(id);
-            if (next.status === 'running') {
+            if (next.status === 'running' || next.replacement_waiting) {
                 scheduleContinuation(next, endpoint, csrfToken, context);
             }
         } catch (error) {
@@ -428,7 +450,7 @@ function scheduleContinuation(job, endpoint, csrfToken, context = document) {
                 errorBox.hidden = false;
             }
         }
-    }, job.runtime_waiting ? RUNTIME_WAIT_DELAY_MS : CONTINUATION_DELAY_MS);
+    }, job.runtime_waiting || job.replacement_waiting ? RUNTIME_WAIT_DELAY_MS : CONTINUATION_DELAY_MS);
 }
 
 /**
@@ -441,6 +463,10 @@ async function handleStartForm(form) {
     const csrfToken = csrfTokenFrom(form);
     if (!csrfToken) return;
     const body = new FormData(form);
+    if (['reset_updater', 'finish_manual_deployment', 'beta_revert'].includes(body.get('update_action'))) {
+        for (const controller of ACTIVE_REQUESTS.values()) controller.abort();
+        ACTIVE_REQUESTS.clear();
+    }
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
     buttons.forEach((button) => { button.disabled = true; });
     try {
@@ -458,14 +484,15 @@ async function handleStartForm(form) {
         }
     } finally {
         const running = findUpdateScope(document)?.dataset.updateJobStatus === 'running';
-        buttons.forEach(/** Preserve running-job button state after the first response. @param {HTMLButtonElement|HTMLInputElement} button Submitted control. @return {void} Updates disabled state. */ (button) => { button.disabled = running; });
+        const recovery = form.matches('[data-update-manual-deployment], [data-update-recovery]');
+        buttons.forEach(/** Preserve recovery controls while a new job runs. @param {HTMLButtonElement|HTMLInputElement} button Submitted control. @return {void} Updates disabled state. */ (button) => { button.disabled = running && !recovery; });
     }
 }
 
 /**
  * Submit one explicit pause, resume or retry without closing the drawer.
  * @param {HTMLButtonElement} button Delegated job control.
- * @param {string} action Owned job_retry, job_pause or job_resume action.
+ * @param {string} action Owned job_retry, job_pause, job_resume or reset_updater action.
  * @returns {Promise<void>} Renders the durable result and resumes running work.
  */
 async function retryJob(button, action = 'job_retry') {
@@ -473,7 +500,7 @@ async function retryJob(button, action = 'job_retry') {
     const id = String(button.dataset.updateJobRetry || scope?.dataset.updateJobId || '');
     const csrfToken = csrfTokenFrom(scope || document);
     if (!id || !csrfToken) return;
-    if (action === 'job_pause') {
+    if (action === 'job_pause' || action === 'reset_updater') {
         ACTIVE_REQUESTS.get(id)?.abort();
         ACTIVE_REQUESTS.delete(id);
     }
@@ -585,7 +612,14 @@ export function setupAdminUpdateJobs() {
                     renderJob(job, form.closest('[data-admin-side-panel-content]') || document);
                     scheduleContinuation(job, endpointFor(form), csrfToken, form.closest('[data-admin-side-panel-content]') || document);
                 })
-                .catch(() => {});
+                .catch((error) => {
+                    const scope = findUpdateScope(form.closest('[data-admin-side-panel-content]') || document);
+                    const errorBox = scope?.querySelector('[data-update-job-error]');
+                    if (errorBox) {
+                        errorBox.textContent = error instanceof Error ? error.message : 'The updater control failed.';
+                        errorBox.hidden = false;
+                    }
+                });
             return;
         }
         handleStartForm(form);

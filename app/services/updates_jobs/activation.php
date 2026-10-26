@@ -446,7 +446,7 @@ function application_update_job_finalize(array &$job): void
             'updated_files' => [],
             'skipped_customized_files' => [],
         ]
-        : application_update_reconcile_server_policy_files_for_job($job, false);
+        : application_update_reconcile_server_policy_files_for_job($job, false, $root);
 
     application_update_invalidate_opcache($root, $sourceRoot);
     application_patch_notes_clear_cache();
@@ -651,13 +651,16 @@ function application_update_rollback_gate_takeover(array $job): void
  */
 function application_update_manual_deployment_detected(array $job): bool
 {
-    if (($job['operation'] ?? '') === 'manual_deploy') {
-        return false;
-    }
     $installed = application_update_version_from_local_bootstrap(
         application_update_project_root() . '/app/bootstrap.php',
     );
     $target = (string) ($job['checkpoints']['validated_version'] ?? '');
+    if (($job['operation'] ?? '') === 'manual_deploy') {
+        // Another FTP overlay invalidates even a previously verified manual
+        // completion. Its old migration/finalization stage must not run blind.
+        return $installed !== null && $target !== ''
+            && version_compare($installed, $target, '!=');
+    }
     if ($installed === null || ($target !== '' && version_compare($installed, $target, '=='))) {
         return false;
     }
@@ -672,83 +675,198 @@ function application_update_manual_deployment_detected(array $job): bool
 }
 
 /**
- * Start explicit forward completion of an FTP overlay, retaining the old job.
- * @return array<string,mixed> Public manual-deployment job, or unchanged busy owner.
+ * Start explicit forward completion of an FTP overlay, retaining old evidence.
+ * @param bool $restart Whether the Admin explicitly requests a fresh replacement.
+ * @return array<string,mixed> Public replacement, existing manual owner, or waiting state.
  */
-function application_update_start_manual_deployment(): array
+function application_update_start_manual_deployment(bool $restart = false): array
 {
+    return application_update_start_recovery_replacement('manual_deploy', $restart);
+}
+
+/**
+ * Replace stopped or running updater ownership with an explicit Admin recovery.
+ *
+ * Worker locks let an in-flight rename or migration finish before takeover.
+ * The runtime lease keeps public admission closed throughout gate transfer.
+ * Old jobs, packages, backups and gate receipts remain available for diagnosis.
+ * This permanently supports repairs after overwrite-only FTP deployment and
+ * forced stable installation, without pretending the old database can roll back.
+ *
+ * @param string $operation manual_deploy for installed files or stable_restore for GitHub stable.
+ * @param bool $restart Whether to supersede an existing manual completion too.
+ * @return array<string,mixed> Safe new job or old state with replacement_waiting and replacement_action.
+ * @throws RuntimeException When ownership or durable storage cannot be acquired safely.
+ */
+function application_update_start_recovery_replacement(
+    string $operation,
+    bool $restart = true,
+): array
+{
+    if (!in_array($operation, ['manual_deploy', 'stable_restore'], true)) {
+        throw new RuntimeException('Unsupported recovery replacement operation.');
+    }
     if (!feature_capability_effective_enabled('built_in_update_installer')) {
         throw new RuntimeException('Built-in Update Installer is disabled.');
     }
     $start = application_update_acquire_lock(application_update_jobs_root() . '/start.lock');
     if ($start === null) {
-        throw new RuntimeException('Manual deployment ownership is busy.');
+        throw new RuntimeException('Updater replacement ownership is busy. Try again.');
     }
-    $worker = null;
+    $locks = [];
     try {
         $source = application_update_active_job();
-        if ($source === null) {
-            $orphan = application_update_read_json(application_update_activation_gate_path());
-            if ($orphan === []) {
-                $orphan = application_update_read_json(application_update_jobs_root() . '/rollback-window.json');
-            }
-            $orphanId = (string) ($orphan['job_id'] ?? '');
-            if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $orphanId) === 1
-                && is_file(application_update_job_state_path($orphanId))) {
-                $source = application_update_load_job($orphanId);
+        $markers = [];
+        $owners = $source !== null ? [(string) $source['id']] : [];
+        foreach (['activation.json', 'rollback-window.json'] as $name) {
+            $path = application_update_jobs_root() . '/' . $name;
+            if (is_file($path)) {
+                $bytes = file_get_contents($path);
+                if ($bytes === false) {
+                    throw new RuntimeException('Could not preserve existing updater marker bytes.');
+                }
+                $markers[$name] = $bytes;
+                $marker = application_update_read_json($path);
+                $owner = (string) ($marker['job_id'] ?? '');
+                if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $owner) === 1) {
+                    $owners[] = $owner;
+                    if ($source === null && is_file(application_update_job_state_path($owner))) {
+                        $source = application_update_load_job($owner);
+                    }
+                }
             }
         }
-        if (($source['operation'] ?? '') === 'manual_deploy') {
+        if (!$restart && $operation === 'manual_deploy'
+            && ($source['operation'] ?? '') === 'manual_deploy'
+            && ($source['status'] ?? '') === 'running') {
             return application_update_job_public_state($source);
         }
-        if ($source !== null) {
-            $worker = application_update_acquire_lock(application_update_job_dir($source['id']) . '/worker.lock');
+        $action = $operation === 'manual_deploy' ? 'reset_updater' : 'beta_revert';
+        foreach (array_unique($owners) as $owner) {
+            $worker = application_update_acquire_lock(application_update_job_dir($owner) . '/worker.lock');
             if ($worker === null) {
-                return application_update_job_public_state($source);
+                // A separate marker requests a checkpoint pause without rewriting
+                // job.json while its current worker still owns that file.
+                application_update_write_json_atomic(application_update_job_dir($owner)
+                    . '/pause-requested.json', ['requested_at' => time()]);
+                $waiting = application_update_job_public_state($source
+                    ?? application_update_load_job($owner));
+                $waiting['replacement_waiting'] = true;
+                $waiting['replacement_action'] = $action;
+                return $waiting;
             }
-            $source = application_update_load_job($source['id']);
-            $installed = application_update_version_from_local_bootstrap(
-                application_update_project_root() . '/app/bootstrap.php',
-            );
-            $previousTarget = (string) ($source['checkpoints']['validated_version'] ?? '');
-            if ($installed === null || (!empty($source['checkpoints']['migrations_started'])
-                && ($previousTarget === '' || version_compare($previousTarget, $installed, '>')))) {
-                throw new RuntimeException('Manual deployment cannot reverse newer or unknown migration effects.');
+            $locks[] = $worker;
+        }
+        $runtime = application_update_acquire_lock(application_update_jobs_root() . '/runtime-use.lock');
+        if ($runtime === null) {
+            if ($source === null) {
+                throw new RuntimeException('Website requests are finishing. Try recovery again.');
+            }
+            $waiting = application_update_job_public_state($source);
+            $waiting['replacement_waiting'] = true;
+            $waiting['replacement_action'] = $action;
+            return $waiting;
+        }
+        $locks[] = $runtime;
+        if ($source !== null) {
+            $source = application_update_load_job((string) $source['id']);
+        }
+        $reservation = (string) ($source['replacement_reservations'][$operation] ?? '');
+        if ($reservation !== '' && is_file(application_update_job_state_path($reservation))) {
+            $reserved = application_update_load_job($reservation);
+            if (($reserved['status'] ?? '') !== 'running') {
+                $reservation = '';
             }
         }
-        $reservation = (string) ($source['manual_deployment_reservation'] ?? '');
         if ($reservation === '') {
             $reservation = gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
             if ($source !== null) {
-                $source['manual_deployment_reservation'] = $reservation;
+                $source['replacement_reservations'][$operation] = $reservation;
                 application_update_save_job($source);
             }
         }
         if (is_file(application_update_job_state_path($reservation))) {
             $job = application_update_load_job($reservation);
-            if (($job['operation'] ?? '') !== 'manual_deploy'
-                || ($job['manual_deployment_source_job_id'] ?? '') !== ($source['id'] ?? '')) {
-                throw new RuntimeException('Manual deployment reservation is inconsistent.');
+            if (!array_key_exists('replaces_job_id', $job)
+                && ($job['operation'] ?? '') === $operation
+                && ($job['trigger'] ?? '') === 'admin'
+                && ($job['status'] ?? '') === 'running'
+                && ($job['stage'] ?? '') === 'download'
+                && ($job['attempts'] ?? -1) === 0) {
+                // create_job persists its initial state before this owner can
+                // add the link. The parent's exact reservation proves that
+                // zero-slice child belongs to this interrupted takeover.
+                $job['replaces_job_id'] = (string) ($source['id'] ?? '');
+            }
+            if (($job['operation'] ?? '') !== $operation
+                || ($job['replaces_job_id'] ?? '') !== ($source['id'] ?? '')) {
+                throw new RuntimeException('Updater replacement reservation is inconsistent.');
             }
         } else {
-            $job = application_update_create_job('manual_deploy', [], 'admin', $reservation);
+            $parameters = $operation === 'manual_deploy' ? []
+                : application_update_job_parameters('stable_restore', []);
+            $job = application_update_create_job($operation, $parameters, 'admin', $reservation);
         }
-        $job['stage'] = 'package_validate';
+        $job['recovery_override'] = true;
+        $job['replaces_job_id'] = (string) ($source['id'] ?? '');
+        $job['stage'] = $operation === 'manual_deploy' ? 'package_validate' : 'download';
         $job['manual_deployment_source_job_id'] = (string) ($source['id'] ?? '');
+        // Publish the complete reservation/link before either global marker.
+        // A killed takeover can then adopt the same fully identified child.
         application_update_save_job($job);
-        if ($source !== null) {
-            $source['manual_deployment_previous_status'] ??= $source['status'];
-            if (!application_update_job_terminal($source)) {
-                $source['status'] = 'failed';
+        foreach ($markers as $name => $bytes) {
+            $receipt = application_update_job_dir($job['id']) . '/superseded-' . $name;
+            if (!is_file($receipt) && file_put_contents($receipt, $bytes, LOCK_EX) === false) {
+                throw new RuntimeException('Could not preserve replaced updater marker.');
             }
-            $source['result']['superseded_by'] = $job['id'];
-            $source['result']['manual_deployment_successor'] = $job['id'];
-            application_update_save_job($source);
+        }
+        // This Admin recovery adopts isolation, not the predecessor's rollback
+        // claim. No historical database witness is required to install forward.
+        application_update_write_json_atomic(application_update_jobs_root() . '/rollback-window.json', [
+            'job_id' => $job['id'], 'admin_session_name' => $job['admin_session_name'],
+            'opened_at' => time(),
+        ]);
+        application_update_write_json_atomic(application_update_activation_gate_path(), [
+            'schema' => 1, 'job_id' => $job['id'], 'trigger' => 'admin',
+            'admin_session_name' => $job['admin_session_name'],
+            'recovery_isolation' => true, 'started_at' => time(), 'updated_at' => time(),
+        ]);
+        $job['checkpoints']['runtime_guard_open'] = true;
+        $job['checkpoints']['runtime_guard_protocol'] = 1;
+        application_update_save_job($job);
+        foreach (array_unique($owners) as $owner) {
+            if ($owner === $job['id']) {
+                // A crash may already have transferred one global marker to
+                // this reservation. Its child is not a predecessor to cancel.
+                continue;
+            }
+            if (!is_file(application_update_job_state_path($owner))) {
+                continue;
+            }
+            $previous = application_update_load_job($owner);
+            $previous['replacement_previous_status'] ??= $previous['status'];
+            $previous['status'] = 'cancelled';
+            $previous['finished_at'] = time();
+            $previous['result']['superseded_by'] = $job['id'];
+            application_update_save_job($previous);
         }
         application_update_set_active_job($job['id']);
+        if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
+            try {
+                admin_log_event('info', 'update.recovery_replacement_started',
+                    'Admin recovery replaced the previous updater ownership.',
+                    ['job_id' => $job['id'], 'operation' => $operation,
+                        'previous_jobs' => array_values(array_unique($owners))],
+                    ['category' => 'update', 'severity' => 'notice']);
+            } catch (Throwable) {
+                // Durable links and preserved markers do not depend on logging.
+            }
+        }
         return application_update_job_public_state($job);
     } finally {
-        application_update_release_lock($worker);
+        foreach (array_reverse($locks) as $lock) {
+            application_update_release_lock($lock);
+        }
         application_update_release_lock($start);
     }
 }

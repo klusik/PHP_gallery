@@ -348,6 +348,7 @@ namespace {
             ],
             'attempts' => 3,
             'can_resume' => true,
+            'can_reset' => true,
         ],
     ]);
     ob_start();
@@ -390,6 +391,9 @@ namespace {
     update_ui_assert(str_contains($html, 'value="finish_manual_deployment"')
         && str_contains($html, 'data-update-manual-deployment'),
         'Advanced tools must retain FTP completion while an old job exists.');
+    update_ui_assert($xpath->query('//*[@data-update-job-scope]//input[@value="reset_updater"]')->length === 2
+        && $xpath->query('//form[@data-update-recovery]//input[@value="beta_revert"]')->length === 1,
+        'Both job cards need Reset and stable recovery must remain available outside beta.');
     $stopped = \Gallery\Controllers\cms_update_job_view_model([
         'id' => 'old-job',
         'status' => 'failed',

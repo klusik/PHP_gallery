@@ -3350,11 +3350,19 @@ Postup zahrnuje nahlášenou instalaci \codeword{c2e2bc77} se~starším
 připnutým jobem: po~samostatném schválení se~v~údržbě nasadí celé
 kompatibilní opravené vydání, zachová starý job a~jeho vlastnictví se~vypořádá
 až~po~ověřené dopředné opravě. Retry nikdy nezmění cíl úlohy.
-Při překryvném FTP nasazení nahrajte celé ověřené vydání bez mazání starých
-místních souborů, úloh či~záloh. V~Advanced tools vyberte
-\ui{Dokončit aktualizaci přes FTP}; stejný engine ověří dodané soubory,
-zachová starou úlohu a~doklady odpovídající brány, provede dopředné migrace
-a~sladí kanál. Neaktivuje starý balík a~neprořezává zastaralé soubory.
+Při překryvném FTP nasazení nahrajte celé vydání bez mazání starých místních
+souborů, úloh či~záloh. U~úlohy nebo v~Advanced tools zvolte
+\ui{Resetovat updater / dokončit FTP aktualizaci}. Předchozí úlohy se~zastaví
+v~bezpečném bodě, zachovají se~jejich záznamy a~doklady brány a~začne nové
+dopředné dokončení. \ui{Nainstalovat stable} je~dostupné vždy: stáhne poslední
+stable a~přepíše všechny aplikační soubory balíku i~při stejné verzi. Převezme
+i~zaseklou či~pozastavenou úlohu bez potřeby FTP. Obě akce zachovají konfiguraci,
+média, místní soubory navíc a~zálohy. Rozdíly obsahu jsou upozornění s~relativní
+cestou a~očekávaným i~skutečným otiskem v~logu; běžné automatické aktualizace
+zůstávají přísně ověřované. Ochrana cest, povinné soubory a~vlastnictví běhu
+platí dál. Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
+znovu zpracuje nahrané soubory místo stahování. Dokončí se~dopředné migrace;
+databázové změny se~nevracejí.
 \ui{Pozastavit} funguje na~nejbližším bezpečném bodě v~každé fázi;
 \ui{Pokračovat v~aktualizaci} obnoví stejnou úlohu. Částečná aktivace
 zůstává za~bránou. Instalace commitu podporuje i~starší podporovaná vydání;

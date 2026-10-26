@@ -799,7 +799,7 @@ assert_updater_resumable(
     )
         && php_source_contains(
             $jobsSource,
-            'application_update_assert_source_root($sourceRoot, $manual);',
+            'application_update_assert_source_root($sourceRoot, $recovery);',
         )
         && php_source_contains($jobsSource,
             "\$manual = (\$job['operation'] ?? '') === 'manual_deploy';")
@@ -1074,9 +1074,9 @@ assert_updater_resumable(
 assert_updater_resumable(
     php_source_contains(
         $jobsSource,
-        "if ((\$job['operation'] ?? '') !== 'manual_deploy' && !application_update_job_cleanup(\$job, \$budget))",
+        "if ((\$job['operation'] ?? '') !== 'manual_deploy' && empty(\$job['recovery_override']) && !application_update_job_cleanup(\$job, \$budget))",
     ),
-    'Ordinary cleanup must remain bounded; only FTP completion preserves its existing payloads.',
+    'Ordinary cleanup must remain bounded; explicit recovery preserves existing payloads and backups.',
 );
 assert_updater_resumable(
     php_source_contains($filesystemSource, "'github-api'")

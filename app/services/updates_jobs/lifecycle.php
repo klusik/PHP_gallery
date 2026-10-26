@@ -208,6 +208,9 @@ function application_update_start_rollback_job(
     }
     try {
         $source = application_update_load_job($sourceJobId);
+        if (!empty($source['recovery_override'])) {
+            throw new RuntimeException('Explicit recovery has no verified previous-database rollback baseline.');
+        }
         if (!empty($source['result']['superseded_by'])) {
             throw new RuntimeException('This update was superseded by a recovery job. Review that job first.');
         }
@@ -400,6 +403,7 @@ function application_update_process_job(
                 $next = 'cleanup';
             } elseif ($stage === 'cleanup') {
                 if (($job['operation'] ?? '') !== 'manual_deploy'
+                    && empty($job['recovery_override'])
                     && !application_update_job_cleanup($job, $budget)) {
                     break;
                 }
@@ -545,7 +549,8 @@ function application_update_cancel_job(string $jobId): array
         if (!empty($job['result']['superseded_by'])) {
             return application_update_job_public_state($job);
         }
-        if (!empty($job['automatic_rollback']) || ($job['operation'] ?? '') === 'manual_deploy') {
+        if (!empty($job['automatic_rollback']) || !empty($job['recovery_override'])
+            || ($job['operation'] ?? '') === 'manual_deploy') {
             throw new RuntimeException('Automatic rollback must be continued to a safe checkpoint, not cancelled.');
         }
         $stages = application_update_job_stages();
@@ -717,7 +722,9 @@ function application_update_retry_job(string $jobId, bool $automatic = false): a
             ] as $key) {
                 unset($job['checkpoints'][$key]);
             }
-            $job['stage'] = 'download';
+            $job['stage'] = ($job['operation'] ?? '') === 'manual_deploy'
+                ? 'package_validate' : 'download';
+            unset($job['checkpoints']['manual_deployment_verified'], $job['integrity_warnings']);
         }
         $job['status'] = 'running';
         $job['error'] = null;
@@ -869,6 +876,7 @@ function application_update_recover_failed_job(
 {
     $source = application_update_load_job($jobId);
     if (($source['operation'] ?? '') === 'manual_deploy'
+        || !empty($source['recovery_override'])
         || application_update_manual_deployment_detected($source)) {
         // FTP completion is explicit forward work. Never restore an old backup
         // over a newly uploaded release or abandon its preserved gate.

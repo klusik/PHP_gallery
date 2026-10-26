@@ -202,20 +202,36 @@ bounded CLI/Admin route. Writable protected cache and working cooperative
 
 ### Overwrite-only FTP completion
 
-Upload the complete verified release ZIP over the installed application while
-hosting maintenance is enabled and update workers are stopped. Preserve local
-configuration, media and private data. No preparatory deletion of old PHP files,
-jobs, packages or backups is required. In Admin > Updates > Advanced tools,
-choose **Finish FTP update**. The canonical updater creates a resumable
-`manual_deploy` job, retaining the old source and its original markers. It
-verifies the installed inventory/manifest without treating unlisted local files
-as archive members, transfers only a matching old gate, runs bounded forward
-migrations, reconciles channel metadata and closes the gate after completion.
-It neither reactivates the old package nor performs obsolete-file pruning.
-An incomplete upload remains stopped and can be explicitly retried after the
-remaining files are uploaded. A newer/unknown already-entered migration target
-cannot be reversed by adopting older code. Foreign or corrupt gate ownership
-still requires operator assessment.
+Upload the complete release ZIP over the installed application. Preserve local
+configuration, media and private data; no preparatory deletion is required.
+Choose **Reset updater / finish FTP update** on the job card or in Advanced
+tools. It starts a fresh `manual_deploy` job, stops the old active and gate-owner
+jobs under their worker locks, preserves their records/backups and the exact old
+marker bytes, then adopts isolation for bounded forward migrations/finalization.
+An in-flight rename or migration finishes before takeover. The browser shows
+why replacement is waiting and repeats the replacement action, never the old
+worker. Reset never deletes the job history or reverses database migrations.
+
+**Install stable** is always available in Advanced tools, including when the
+installed version is current or a job is stopped, paused or running. It performs
+the same ownership replacement, downloads the configured stable branch head at
+one pinned commit and overwrites every packaged application file. No FTP step,
+newer-version check, comparison against the damaged installation, historical DB
+rollback witness or old job checkpoint is required. It preserves configuration,
+media, unlisted local files and backups; obsolete-file pruning is skipped.
+
+For these explicit Admin recoveries, manifest content differences are warning
+receipts with repository-relative file identity and expected/actual digests,
+shown in the job and logged as `update.file_integrity_warning`. The actual
+selected bytes remain pinned through staging and activation. Ordinary automatic
+and package updates retain strict manifest checking. Trusted HTTPS download,
+safe ZIP paths, bounded extraction, required files, valid inventory/manifest
+structure, runtime ownership and actual migration execution remain enforced.
+A failed FTP retry restarts installed-file verification, never archive download.
+A new reset supersedes even an interrupted recovery. Old DB effects are retained;
+there is no automatic rollback from an explicit recovery with no old DB witness.
+Interrupted takeover reuses its journaled zero-slice child, including a partially
+transferred gate, without cancelling that child or overwriting original receipts.
 
 Newer manually installed code prevents old downloaded jobs and their automatic
 rollback from replacing it. The installed version is read from disk rather than

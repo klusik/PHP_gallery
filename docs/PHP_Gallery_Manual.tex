@@ -3372,11 +3372,19 @@ That procedure includes the~reported \codeword{c2e2bc77} installation and
 its pinned older job: after separate approval, deploy the~complete compatible
 fixed release in~maintenance mode, preserve the~old job and~reconcile its
 owner only after verified forward repair. Retry never changes a~job's target.
-For~overwrite-only FTP deployment, upload the~complete verified release without
-deleting old local files, jobs or~backups. In~Advanced tools choose
-\ui{Finish FTP update}; the~same engine verifies delivered files, preserves
-the~old job and~matching gate receipts, runs forward migrations and~reconciles
-the~channel. It~does not~reactivate the~old package or~prune obsolete files.
+For~overwrite-only FTP deployment, upload the~complete release without deleting
+old local files, jobs or~backups. Choose \ui{Reset updater / finish FTP update}
+on~the~job card or~in~Advanced tools. It~stops previous jobs at~a~safe boundary,
+preserves their records and~gate receipts, then starts fresh forward completion.
+\ui{Install stable} is~always available and~downloads the~latest stable branch
+head, overwriting every packaged file even at~the~same version. It~also replaces
+stuck or~paused jobs without requiring FTP. Both actions preserve configuration,
+media, unlisted local files and~backups. File-content differences are~warnings
+with the~relative file and~expected/actual digests in~the~log; normal automatic
+updates retain strict verification. Safe archive paths, required files and~runtime
+ownership remain enforced. Busy takeover is~shown explicitly and~continues
+automatically. FTP retry rechecks installed files instead of~downloading.
+Recovery runs forward migrations; database changes are~never reversed.
 \ui{Pause} works at~the~next safe checkpoint in~every stage;
 \ui{Continue update} resumes the~same job. A~partial activation stays gated.
 Advanced commit installation also accepts older supported release commits;

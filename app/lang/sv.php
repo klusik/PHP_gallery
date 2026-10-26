@@ -33,12 +33,17 @@
  */
 
 return [
+    'admin.updates.recovery_manual_action' => 'Använd Återställ uppdateraren / slutför FTP för de uppladdade filerna eller Installera stable för att skriva över programmet med senaste stabila paketet. Gamla jobb och säkerhetskopior bevaras; databasmigreringar återställs inte.',
+    'admin.updates.integrity_warnings' => 'Filskillnader loggade som varningar; återställningen fortsätter:',
+    'admin.updates.replacement_waiting' => 'Väntar på att det pågående uppdateringsanropet ska avslutas före återställningen. Återställningen startar automatiskt.',
+    'admin.updates.restore_stable_help' => 'Stoppar föregående jobb, hämtar senaste stabila grenen och skriver över alla programfiler i paketet, även vid samma version. Filskillnader är varningar. Konfiguration, media, extra lokala filer och gamla säkerhetskopior bevaras. Databasmigreringar återställs inte.',
+    'admin.updates.restore_stable' => 'Installera stable',
     'admin.updates.pause' => 'Pausa',
     'admin.updates.resume' => 'Fortsätt uppdateringen',
     'admin.updates.pause_hint' => 'Jobbet pausas vid nästa säkra kontrollpunkt i valfritt steg. Filer, säkerhetskopior och aktiveringsspärren bevaras. Fortsätt återupptar samma jobb.',
     'admin.updates.version_commit_help' => 'Installera en vald Git-commit, även från en äldre utgåva. Ange dess commit-ID. Koden låses till detta val; databasmigreringar återställs inte och äldre kod kan kräva en kompatibel databassäkerhetskopia.',
-    'admin.updates.manual_deployment_title' => 'Slutför FTP-uppdatering',
-    'admin.updates.manual_deployment_hint' => 'Slutför här efter att hela utgåvans ZIP har skrivits över. Extra lokala filer, det gamla jobbet och säkerhetskopior bevaras. Det installerade paketet verifieras och framåtmigreringar slutförs.',
+    'admin.updates.manual_deployment_title' => 'Återställ uppdateraren / slutför FTP',
+    'admin.updates.manual_deployment_hint' => 'Stoppar föregående jobb och slutför filerna som laddats upp via FTP. Filskillnader loggas som varningar. Gamla jobb, säkerhetskopior, konfiguration och media bevaras; framåtmigreringar slutförs innan webbplatsen öppnas.',
     'admin.updates.job_runs_label' => 'Bearbetningskörningar',
     'admin.updates.job_runs_hint' => 'Korta bearbetningsanrop för detta jobb, inklusive väntan. Detta räknar varken fel eller klick på Försök fortsätta.',
     'admin.updates.job_stage_label' => 'Steg',

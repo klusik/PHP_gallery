@@ -4793,8 +4793,22 @@ active/gated job, and completes the new manual FTP operation through the real
 state machine. It also requests pausing at every stage before executing its
 next checkpoint and resumes the same final-stage job. Browser coverage rejects
 a delayed continuation overwriting an explicit pause, then resumes in place.
-The installed-overlay path retains strict hashes and required-file presence;
-downloaded archives retain their separate unexpected-file rejection.
+Explicit FTP/stable recovery records differing file hashes as warnings while
+preserving required-file/path checks and pinning the actual selected bytes.
+The fixture covers the live stylesheet mismatch, a failed FTP retry restarting
+verification instead of download, real predecessor worker contention, stable
+replacement at the same version, all declared files being copied, preserved
+local extras/backups and final gate closure. Ordinary package corrupt-byte
+rejection remains a negative control, including relative file/hash diagnostics.
+Stable activation provisions and observes a real gallery revision column in the
+fixture; a missing-column negative runs first. Source extraction distinguishes
+class methods from namespace functions while retaining global duplicate refusal.
+Server-policy finalization receives the same validated installation root as the
+other updater stages; legacy standalone bootstrap callers keep their old default.
+No additional TeX manual impact: this root handoff confines fixture resources
+without changing the documented production recovery workflow.
+Browser coverage includes reset controls, enabled stable recovery during old
+work, pending ownership takeover and retained desktop/narrow drawer layout.
 
 `tests/updater_recovery_test.php` is discovered by the central FULL PHP registry.
 It also recreates the old producer's untouched `activate` boundary without a
