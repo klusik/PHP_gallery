@@ -55,6 +55,13 @@ function application_update_job_archive_url(array $job): string
 {
     $operation = (string) ($job['operation'] ?? '');
     $parameters = (array) ($job['parameters'] ?? []);
+    $commit = (string) ($job['checkpoints']['archive_commit'] ?? '');
+    if ($commit !== '') {
+        if (preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1) {
+            throw new RuntimeException('Persisted update commit identity is invalid.');
+        }
+        return application_update_commit_zip_url($commit);
+    }
     if ($operation === 'beta_install') {
         return application_update_commit_zip_url(
             (string) ($parameters['commit'] ?? ''),
@@ -79,6 +86,43 @@ function application_update_job_download_slice(array &$job, array $budget): bool
     $jobDir = application_update_job_dir((string) $job['id']);
     $archivePath = $jobDir . '/package.zip';
     $offset = is_file($archivePath) ? (int) filesize($archivePath) : 0;
+    if (($job['recovery_schema'] ?? 0) === 1
+        && ($job['operation'] ?? '') !== 'rollback'
+        && empty($job['checkpoints']['archive_commit'])) {
+        $branch = ($job['operation'] ?? '') === 'beta_install'
+            ? (string) ($job['parameters']['commit'] ?? '')
+            : (string) ($job['parameters']['branch'] ?? '');
+        if (($job['operation'] ?? '') !== 'beta_install') {
+            application_update_assert_allowed_branch($branch);
+        }
+        $timeout = application_update_remote_timeout_seconds(
+            (float) $budget['deadline'], APPLICATION_UPDATE_COMMIT_LOOKUP_SECONDS,
+        );
+        if ($timeout <= 0) {
+            return false;
+        }
+        $response = cms_github_api_get(
+            'https://api.github.com/repos/' . \Gallery\Core\CMS_GITHUB_REPOSITORY
+                . '/commits/' . rawurlencode($branch),
+            $timeout,
+            ['Accept: application/vnd.github+json'],
+            true,
+        );
+        $payload = json_decode((string) $response['body'], true);
+        $commit = (string) ($payload['sha'] ?? '');
+        if (preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1) {
+            throw new RuntimeException('Stable GitHub commit identity is unavailable.');
+        }
+        $job['checkpoints']['archive_commit'] = $commit;
+        application_update_save_job($job);
+        $excluded = json_decode(app_setting('application_update_failed_commits', '[]'), true);
+        if (($job['trigger'] ?? '') === 'background' && ($job['operation'] ?? '') === 'stable_update'
+            && is_array($excluded) && in_array($commit, $excluded, true)) {
+            throw new RuntimeException('This previously failed update commit is quarantined.');
+        }
+        // Resolve and stream in different slices, preserving the I/O budget.
+        return false;
+    }
     $url = trim((string) ($job['checkpoints']['archive_url'] ?? ''));
     if ($url === '') {
         // Keep the same trusted archive URL across continuation requests. The
@@ -94,6 +138,10 @@ function application_update_job_download_slice(array &$job, array $budget): bool
         throw new RuntimeException(
             'Persisted update archive source is not trusted.',
         );
+    }
+    if (!empty($job['checkpoints']['archive_commit'])
+        && $url !== application_update_job_archive_url($job)) {
+        throw new RuntimeException('Persisted update archive identity changed.');
     }
 
     // Keep each external I/O call below the normal worker slice.
@@ -729,7 +777,8 @@ function application_update_manifest_hash(string $path): string
 /**
  * Validate the extracted package before activation.
  *
- * Core-manifest verification is temporarily disabled. Archive entry validation,
+ * Core-manifest verification is temporarily disabled for legacy persisted jobs.
+ * New recovery-aware jobs require complete verification. Archive entry validation,
  * source-root validation, updater-managed path filtering, schema preflight, and
  * activation rollback remain enforced by their owning stages.
  *
@@ -776,6 +825,11 @@ function application_update_job_validate_package_slice(
         }
     }
 
+    if (($job['recovery_schema'] ?? 0) === 1
+        && !application_update_recovery_verify_package($job, $sourceRoot, $budget)) {
+        return false;
+    }
+
     unset(
         $job['checkpoints']['manifest_files'],
         $job['checkpoints']['verify_index'],
@@ -788,4 +842,93 @@ function application_update_job_validate_package_slice(
     ];
     application_update_save_job($job);
     return true;
+}
+
+
+// Recovery responsibilities stay with their existing updater domain owner.
+
+/**
+ * Fingerprint exact bytes outside the publisher's normalized text manifest.
+ * @param string $path Existing validated regular file path.
+ * @return string Private sha256-raw digest preserving binary and snapshot bytes.
+ * @throws RuntimeException When the complete file cannot be read.
+ */
+function application_update_recovery_raw_hash(string $path): string
+{
+    $hash = hash_file('sha256', $path);
+    if ($hash === false) {
+        throw new RuntimeException('Recovery file bytes could not be verified.');
+    }
+    return 'sha256-raw:' . $hash;
+}
+
+/**
+ * Verify a stored typed digest without normalizing binary or snapshot bytes.
+ * @param string $expected Publisher normalized digest or private exact-byte digest.
+ * @param string $path Existing safe regular file path.
+ * @return bool True only for a valid digest type and matching complete bytes.
+ */
+function application_update_recovery_hash_matches(string $expected, string $path): bool
+{
+    if (preg_match('/^sha256-raw:[a-f0-9]{64}$/D', $expected) === 1) {
+        return hash_equals($expected, application_update_recovery_raw_hash($path));
+    }
+    return preg_match('/^sha256:[a-f0-9]{64}$/D', $expected) === 1
+        && hash_equals($expected, application_update_manifest_hash($path));
+}
+
+/**
+ * Verify publisher-owned core coverage and pin other trusted package bytes.
+ * @param array<string,mixed> $job Recovery job with durable verification cursor.
+ * @param string $root Validated extracted package root.
+ * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Bounded worker opportunity.
+ * @return bool True after all managed files pass; false yields the cursor.
+ * @throws RuntimeException On missing coverage, changed manifest or bad bytes.
+ */
+function application_update_recovery_verify_package(
+    array &$job,
+    string $root,
+    array $budget,
+): bool {
+    $path = $root . '/app/core-manifest.json';
+    $size = filesize($path);
+    if ($size === false || $size > APPLICATION_UPDATE_RECOVERY_MANIFEST_BYTES) {
+        throw new RuntimeException('Recovery package manifest is oversized or missing.');
+    }
+    $manifest = application_update_read_json($path);
+    $identity = application_update_manifest_hash($path);
+    $previous = (string) ($job['checkpoints']['recovery_manifest_identity'] ?? $identity);
+    if ($identity !== $previous
+        || ($manifest['algorithm'] ?? '') !== 'sha256'
+        || ($manifest['hash_mode'] ?? '') !== 'normalized-text-sha256'
+        || ($manifest['version'] ?? '') !== ($job['checkpoints']['validated_version'] ?? '')
+        || !is_array($manifest['files'] ?? null)) {
+        throw new RuntimeException('Recovery package manifest identity is invalid.');
+    }
+    $job['checkpoints']['recovery_manifest_identity'] = $identity;
+    $files = application_update_release_files($root);
+    $index = (int) ($job['checkpoints']['recovery_verify_index'] ?? 0);
+    $processed = 0;
+    while ($index < count($files)
+        && $processed < APPLICATION_UPDATE_RECOVERY_VERIFY_FILES
+        && application_update_budget_allows($budget, 0.7)) {
+        $relative = $files[$index];
+        // The manifest cannot contain a hash of its own final bytes.
+        if ($relative !== 'app/core-manifest.json') {
+            application_update_assert_safe_target($root, $relative);
+            $core = \Gallery\Core\release_file_policy_is_integrity_path($relative);
+            $expected = $core ? (string) ($manifest['files'][$relative] ?? '')
+                : application_update_recovery_raw_hash($root . '/' . $relative);
+            if (($core && preg_match('/^sha256:[a-f0-9]{64}$/D', $expected) !== 1)
+                || !application_update_recovery_hash_matches($expected, $root . '/' . $relative)) {
+                throw new RuntimeException('Recovery package failed core-manifest integrity validation.');
+            }
+            $job['checkpoints']['recovery_hashes'][$relative] = $expected;
+        }
+        $index++;
+        $processed++;
+    }
+    $job['checkpoints']['recovery_verify_index'] = $index;
+    application_update_save_job($job);
+    return $index === count($files);
 }

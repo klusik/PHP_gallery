@@ -95,6 +95,7 @@ namespace Gallery\Models {
     }
 }
 namespace {
+    require_once __DIR__ . '/../app/early_runtime.php';
     require_once __DIR__ . '/../app/release_file_policy.php';
     require_once __DIR__ . '/../app/services/updates_path_safety.php';
     require_once __DIR__ . '/../app/services/updates_request.php';
@@ -137,6 +138,9 @@ namespace {
     try {
         foreach (['GET', 'HEAD'] as $method) {
             scheduler_check(\Gallery\Services\request_scheduler_visit_allowed('gallery', $method), 'Crawler-compatible HTML visit rejected.');
+            scheduler_check(\Gallery\Services\request_scheduler_visit_allowed('admin_update', $method)
+                && !\Gallery\Services\request_scheduler_visit_allowed('admin_update', $method, true),
+                'Updater page recovery or passive checkpoint isolation regressed.');
         }
         foreach (['media', 'thumb', 'site_maintenance_cron', 'request_scheduler_cron', 'admin_cron_status'] as $page) {
             scheduler_check(!\Gallery\Services\request_scheduler_visit_allowed($page, 'GET'), 'Passive/private route admitted.');
@@ -212,6 +216,9 @@ namespace {
         $before = count($GLOBALS['scheduler_dispatched']);
         scheduler_check(\Gallery\Services\request_scheduler_tick()['outcome'] === 'skipped', 'Configured updater cadence ignored.');
         scheduler_check(count($GLOBALS['scheduler_dispatched']) === $before, 'Non-due tick dispatched work.');
+        scheduler_check(\Gallery\Services\request_scheduler_tick(null, '', true, 'updates')['outcome'] === 'skipped'
+            && $GLOBALS['scheduler_owner_runs'] === 1,
+            'Restricting an authenticated updater opportunity bypassed its due interval.');
         $forced = \Gallery\Services\request_scheduler_tick(null, 'updates');
         scheduler_check($forced['outcome'] === 'started', 'Explicit timing override rejected.');
         $ticket = end($GLOBALS['scheduler_dispatched']);
@@ -251,6 +258,25 @@ namespace {
             && count($GLOBALS['scheduler_dispatched']) === $before,
             'Finished-response scheduling depends on a loopback transport or repeats work.');
         echo "PASS central scheduler passive state, fair admission, cadence, locks, tickets, retries, direct after-response execution and hosting token lifecycle\n";
+        $jobId = '20300101000000-abcdef123456';
+        mkdir($directory . '/cache/updates/jobs/' . $jobId, 0700, true);
+        file_put_contents($directory . '/cache/updates/active-job.json',
+            json_encode(['job_id' => $jobId], JSON_THROW_ON_ERROR));
+        $failure = ['id' => $jobId, 'status' => 'failed', 'stage' => 'migrate',
+            'trigger' => 'admin', 'recovery_not_before' => $now + 60];
+        file_put_contents($directory . '/cache/updates/jobs/' . $jobId . '/job.json',
+            json_encode($failure, JSON_THROW_ON_ERROR));
+        $GLOBALS['scheduler_settings']['application_autoupdate_enabled'] = '0';
+        $failedRow = \Gallery\Services\request_scheduler_observe_task('updates', $now);
+        scheduler_check($failedRow['enabled'] && $failedRow['state'] === 'failed'
+            && $failedRow['next_at'] === $now + 60,
+            'A failed manual job was hidden as pending/disabled while safety recovery was due.');
+        $failure['recovery_blocked'] = 'database_unverified';
+        file_put_contents($directory . '/cache/updates/jobs/' . $jobId . '/job.json',
+            json_encode($failure, JSON_THROW_ON_ERROR));
+        $blockedRow = \Gallery\Services\request_scheduler_observe_task('updates', $now);
+        scheduler_check($blockedRow['state'] === 'failed' && $blockedRow['next_at'] === null,
+            'An unverified database invented a pending continuation deadline.');
     } finally {
         scheduler_remove_fixture($directory);
     }

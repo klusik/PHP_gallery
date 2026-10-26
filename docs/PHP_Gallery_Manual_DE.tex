@@ -3417,7 +3417,46 @@ Vor der Aktivierung verlangt die Archivprüfung des Aktualisierers auch den voll
 
 Die Update-Aktivierung verwendet die geprüfte Updater-Teilmenge des Produktionsinventars. Eingehende Inventare führen WinApp-Quellen getrennt auf, damit ältere installierte Updater das Release vor der Installation seines Lesecodes prüfen können. Der CMS-Updater installiert diese Quellen nicht. Ältere Quellarchive ohne Inventar behalten einen begrenzten Kompatibilitätspfad anhand ihres eigenen Manifests; ein vorhandenes ungültiges Inventar wird abgelehnt. Das Entfernen veralteter Dateien erfordert frühere Eigentumsnachweise und bewahrt unbekannte lokale Dateien. Die Dateiwiederherstellung nutzt den serverseitig geschriebenen Sicherungsindex und lehnt nicht indexierte Dateien sowie durch symbolische Links oder Windows-Junctions umgeleitete Pfade ab. Diese Dateisicherung macht Datenbankmigrationen nicht rückgängig.
 
-Wenn ein Update vor der Aktivierung gestoppt wurde, brechen Sie den alten Auftrag ab, erzwingen Sie eine neue Release-Prüfung und starten Sie ein neues stabiles Update, sobald das korrigierte Release verfügbar ist. Ein erneuter Versuch kann die ursprüngliche Zielversion des Auftrags beibehalten.
+Fehlgeschlagene Aufträge aus Automatik, Admin/API und~Advanced-Commit-Installationen
+erhalten drei Wiederholungen vorübergehender Fehler nach 60, 120 und~240
+Sekunden. Undefinierte Funktionen und~deterministische Integritätsfehler
+wiederholen dasselbe defekte Paket nicht. Neue Aufträge binden einen geprüften
+unveränderlichen GitHub-Commit und~prüfen Manifest und~bereitgestellte Dateien
+vollständig. Nicht-Core-Ressourcen und~Sicherungen erhalten zusätzlich
+Raw-SHA-256-Identitäten ihrer exakten Bytes. Frühestens 600 Sekunden nach dem
+ersten Fehler gibt ein vor
+Aktivierung unveränderter Auftrag den aktiven Platz frei. Ein sicherer Fehler
+nach Aktivierung erzeugt einen getrennten Rücksetzauftrag für tatsächliche
+vorherige Programmdateien und~Kanaleinstellungen, einschließlich gelöschter
+Dateien und~Entfernung neu angelegter Pfade. Beide Identitäten, Archive,
+Sicherungen und~Diagnosen bleiben erhalten. Ein fehlgeschlagener Rücksetzauftrag
+erzeugt keinen weiteren.
+
+Dateiwiederherstellung verlangt geprüfte Sicherungen, tatsächliche
+Schema-/Historiengleichheit und~nachweislich wirkungslose Migrationen.
+Geteilte Laufzeitsperren müssen vor Aktivierung enden; unterstützte Zielpakete
+halten die Sperre bis zum Auftragsabschluss. Gewöhnlicher Betrieb im
+Beobachtungsfenster macht Rücksetzen auch bei gleichem Schema unsicher.
+Begonnene ungeprüfte Migrationen, unbekannter Datenbankzustand, fehlende Belege
+und~ältere Pakete ohne Protokoll bleiben mit Reparaturanleitung fehlgeschlagen.
+Datenbankmigrationen und~Anwendungsdaten werden nie zurückgesetzt.
+Ausgeschaltete Automatik und~Beta verhindern weiterhin neue automatische
+Installationen; ausgeschaltete Capability stoppt den Installer.
+Nach sicherer Rückkehr kann die Prüfung defekte Versionen überspringen
+und~eine neuere stabile Version installieren. Fehler hinter geschlossener
+Sperre benötigen Hosting-CLI-Cron oder einen authentifizierten Admin-Aufruf;
+abgewiesene Besucher starten keinen Scheduler. Kein Worker wartet untätig
+während der Verzögerung.
+
+Ein älterer blockierter Updater erhält den Mechanismus nicht durch bloße
+Veröffentlichung. Im Wartungsmodus Worker stoppen, koordinierte Sicherungen
+und~Fehlerbelege behalten, tatsächliche Datenbankkompatibilität prüfen, eine
+vollständige verifizierte kompatible korrigierte Version bereitstellen und
+Vorwärtsmigrationen ausführen. Erst nach geprüfter Reparatur darf der
+Administrator den passenden alten aktiven Zeiger archivieren. Nicht nur Bootstrap
+ersetzen, Auftragsziel/Paket ändern, eine aktive Aktivierungssperre entfernen
+oder nur Dateien zurückspielen. Ablauf und~Grenzen stehen in
+\filepath{docs/AUTOUPDATE.md}.
 
 \subsection{Integritätsmanifest}
 \index{k00156@Kernmanifest}

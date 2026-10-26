@@ -46,6 +46,8 @@ function request_scheduler_read_scalars(string $relative): array
         'job_id', 'id', 'status', 'stage', 'queued_until', 'updated_at',
         'started_at', 'finished_at', 'next_run_at', 'last_attempt_at',
         'last_success_at', 'last_progress_at', 'running', 'next_due', 'blocked',
+        'trigger', 'recovery_not_before', 'recovery_blocked', 'slice_open', 'slice_recovery_at',
+        'automatic_repair_continuation',
     ]);
     $scalars = array_intersect_key(array_filter($data,
         static fn(mixed $value): bool => is_scalar($value) || $value === null), $allowed);
@@ -134,11 +136,25 @@ function request_scheduler_observe_task(string $id, int $now): array
                     $row['enabled'] = feature_capability_effective_enabled(
                         'built_in_update_installer');
                     $row['state'] = ($job['status'] ?? '') === 'running'
-                        ? 'running' : 'paused';
+                        ? 'running' : (($job['status'] ?? '') === 'failed' ? 'failed' : 'paused');
                     $chain = request_scheduler_read_scalars(
                         'cache/updates/background-chain.json');
                     $row['next_at'] = max($now,
                         (int) ($chain['queued_until'] ?? 0));
+                    if (($job['status'] ?? '') === 'failed') {
+                        $discoveryAt = application_autoupdate_enabled()
+                            ? ($last > 0 ? $last + application_autoupdate_interval_seconds() : $now)
+                            : null;
+                        $recoveryAt = !empty($job['recovery_blocked']) ? null
+                            : max($now, (int) ($job['recovery_not_before'] ?? $now));
+                        $row['next_at'] = $discoveryAt === null ? $recoveryAt
+                            : ($recoveryAt === null ? $discoveryAt : min($discoveryAt, $recoveryAt));
+                    } elseif (($job['trigger'] ?? '') !== 'background'
+                        && empty($job['automatic_repair_continuation'])) {
+                        // Running manual jobs retain their authenticated UI owner.
+                        $row['next_at'] = !empty($job['slice_open'])
+                            ? max($now, (int) ($job['slice_recovery_at'] ?? PHP_INT_MAX)) : null;
+                    }
                     $row['detail'] = (string) ($job['stage'] ?? '');
                     $row['last_at'] = max($row['last_at'] ?? 0,
                         request_scheduler_timestamp($job['updated_at']
@@ -146,8 +162,10 @@ function request_scheduler_observe_task(string $id, int $now): array
                     $row['cadence'] = 0;
                 }
             }
-            $row['next_at'] = max($row['next_at'],
-                (int) app_setting('application_autoupdate_lock_until', '0'));
+            if ($row['next_at'] !== null) {
+                $row['next_at'] = max($row['next_at'],
+                    (int) app_setting('application_autoupdate_lock_until', '0'));
+            }
             break;
         case 'logs':
             $state = request_scheduler_read_scalars(

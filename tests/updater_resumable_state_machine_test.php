@@ -844,11 +844,11 @@ assert_updater_resumable(
 assert_updater_resumable(
     php_source_contains(
         $jobsSource,
-        "(time() - (int) (\$job['updated_at'] ?? 0)) < 60",
+        'application_update_auto_retry_due($job, time())',
     )
         && php_source_contains(
             $jobsSource,
-            "application_update_retry_job((string) \$job['id'])",
+            'application_update_retry_job($jobId, true)',
         ),
     'Background failure recovery bypasses safe retry cleanup or retry backoff.',
 );

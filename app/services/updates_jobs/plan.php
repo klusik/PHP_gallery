@@ -522,6 +522,7 @@ function application_update_job_build_plan(array &$job): void
         'application_update.job_activation',
     );
     application_update_assert_gallery_edit_enforcement($sourceRoot);
+    application_update_recovery_assert_compatible($job, $sourceRoot);
     $releaseFiles = application_update_release_files($sourceRoot);
     if ($releaseFiles === []) {
         throw new RuntimeException(
@@ -589,6 +590,16 @@ function application_update_job_stage_files_slice(
             $sourceRoot
             . '/'
             . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        if (!empty($job['automatic_rollback'])
+            || (($job['recovery_schema'] ?? 0) === 1 && ($job['operation'] ?? '') !== 'rollback')) {
+            $expected = $relative === 'app/core-manifest.json'
+                ? (string) ($job['checkpoints']['recovery_manifest_identity'] ?? '')
+                : (string) ($job['checkpoints']['recovery_hashes'][$relative] ?? '');
+            if ($expected === ''
+                || !application_update_recovery_hash_matches($expected, $source)) {
+                throw new RuntimeException('Recovery source file failed integrity verification.');
+            }
+        }
         $destination =
             $jobDir
             . '/ready/'
@@ -778,6 +789,13 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
         );
         if (!$existed) {
             $createdPaths[$relative] = true;
+        } elseif (is_file($backupRoot . '/' . $relative)) {
+            $sourceHash = application_update_recovery_raw_hash($root . '/' . $relative);
+            $backupHash = application_update_recovery_raw_hash($backupRoot . '/' . $relative);
+            if (!hash_equals($sourceHash, $backupHash)) {
+                throw new RuntimeException('Rollback snapshot failed integrity verification.');
+            }
+            $job['checkpoints']['backup_hashes'][$relative] = $backupHash;
         }
         $index++;
         $processed++;
@@ -795,6 +813,7 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
     if ($index >= count($items)) {
         $metadata = [
             'job_id' => (string) $job['id'],
+            'hashes' => (array) ($job['checkpoints']['backup_hashes'] ?? []),
             'created_at' => time(),
             'created_paths' => array_keys($createdPaths),
             'activation_files' => array_values(
@@ -822,6 +841,8 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
             $jobDir . '/rollback/metadata.json',
             $metadata,
         );
+        $job['checkpoints']['backup_metadata_identity'] =
+            application_update_manifest_hash($jobDir . '/rollback/metadata.json');
         $job['checkpoints']['backup_complete'] = true;
         application_update_save_job($job);
         return true;

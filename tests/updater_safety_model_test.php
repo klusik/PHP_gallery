@@ -51,6 +51,14 @@ use function Gallery\Services\application_update_misplaced_project_paths;
 use function Gallery\Services\application_update_remove_malformed_root_files;
 
 $root = dirname(__DIR__);
+$unexpectedFixturePaths = array_values(array_diff(
+    \Gallery\Core\release_file_policy_archive_owned_candidates($root),
+    \Gallery\Core\release_file_policy_paths($root, 'updater'),
+));
+if ($unexpectedFixturePaths !== []) {
+    throw new RuntimeException('Source-checkout updater fixture contains unowned files: '
+        . implode(', ', $unexpectedFixturePaths));
+}
 application_update_assert_source_root($root);
 
 $misplaced = application_update_misplaced_project_paths($root);

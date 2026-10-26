@@ -187,8 +187,9 @@ function application_autoupdate_discovery_due(
  *
  * This routine is intentionally conservative: it runs only on safe browser reads,
  * never changes the admin checkbox when beta code is active, and throttles remote
- * checks to one attempt per installation per configured interval. Active jobs are
- * continued before method and preference checks. The optional loader lets the runtime
+ * checks to one attempt per installation per configured interval. Running jobs
+ * keep continuation priority; stopped jobs allow separate due discovery.
+ * The optional loader lets the runtime
  * kernel provide the heavy updater module only when an active job or due check needs it.
  *
  * @param int $ttlSeconds Legacy caller argument kept for compatibility; saved preference is authoritative.
@@ -212,10 +213,37 @@ function application_autoupdate_maybe_run(
     // Continue persisted work before checking method and preference, preserving legacy behavior.
     $activeJob = application_update_active_job();
     if ($activeJob !== null) {
+        if (($activeJob['status'] ?? '') === 'failed') {
+            if ($loadDependencies !== null) {
+                $loadDependencies('updater-work');
+            }
+            if (application_update_failed_recovery_due($activeJob, time())) {
+                application_update_continue_background_job(3.0);
+                return;
+            }
+        }
+        if (($activeJob['status'] ?? '') === 'failed'
+            && in_array(strtoupper(trim($requestMethod)), ['GET', 'HEAD'], true)
+            && application_autoupdate_enabled()
+            && application_autoupdate_discovery_due(
+                time(), application_update_discovery_last_attempt_at(),
+            )) {
+            if ($loadDependencies !== null) {
+                $loadDependencies('updater-work');
+            }
+            // Do not spend a worker slice and a discovery budget together.
+            if (application_update_beta_active()) {
+                application_autoupdate_dry_run(false, time());
+            } else {
+                application_autoupdate_run_installing_check(false, time());
+            }
+            return;
+        }
         // A live server chain already owns this job's next slice. Public visits
         // keep rendering; an expired/lost lease restores the legacy fallback.
         if (
-            ($activeJob['trigger'] ?? '') === 'background'
+            (($activeJob['trigger'] ?? '') === 'background'
+                || !empty($activeJob['automatic_repair_continuation']))
             && application_update_background_chain_pending(
                 (string) $activeJob['id'],
             )

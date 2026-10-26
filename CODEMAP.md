@@ -660,12 +660,14 @@ for diagnostics and targeted operations.
 | GitHub API helper/cache | `app/services/github.php` | Shared GitHub metadata/content transport, conditional validators, enforced primary/secondary backoff. |
 | Update status/service router | `app/services/updates.php`, `app/services/updates_status.php`, `app/services/updates_remote.php` | Bounded release discovery and updater service composition. |
 | Resumable update state machine | `app/services/updates_jobs.php` (parts in `app/services/updates_jobs/`) | Durable jobs, bounded download/archive/extract/verify/stage/backup checkpoints, Range/If-Range resume, worker locks, pre-activation cancellation, changed-file activation, migration continuation, rollback and cleanup. |
+| Failed updater recovery | Existing `updates_jobs/{errors,lifecycle,activation,download,state}.php` owners, `app/early_runtime.php`, `app/models/schema_inspection.php` | Bounded retries/timeout, runtime isolation, independently identified verified file rollback for all launch modes, immutable commits, failure exclusions, preserved evidence and clear DB-safety refusal. |
 | Update install/background entry points | `app/services/updates_request.php`, `app/services/updates_install.php`, `scripts/application_update.php` | Validated 300/900/1800/3600-second saved interval (default 300), GET/HEAD/CLI parity, shared nonblocking discovery lock and bounded active-job continuation; metadata/package work stay separate. |
 | Admin update UI | `app/controllers/updates.php`, `public/assets/gallery-modules/admin-update-jobs.js` | Authenticated CSRF-protected start/continue/retry/cancel/rollback controls with delegated in-panel progress refresh, passive completion release-summary refresh/retry and non-JavaScript POST fallback. |
 | Visitor-started automatic continuation | `app/bootstrap/maintenance.php`, `app/services/updates_background.php`, `app/services/updates_job_lookup.php`, `app/controllers/site_maintenance.php` | One admitted visit hands stable installation to sequential authenticated HTTP slices; hashed single-use tickets, nonblocking chain/worker locks, lease recovery and no browser polling. See `docs/AUTOUPDATE.md`. |
 | Patch notes | `PATCH_NOTES.md` | Release-note source, not modified as part of updater hardening. |
 | Release metadata | `release-metadata.json` | Version/channel metadata consumed during discovery. |
 | Updater safety regression tests | `tests/updater_safety_model_test.php`, `tests/updater_resumable_state_machine_test.php` | State, interruption, locking, package, rollback, migration, synchronized Status/Advanced progress UI, deterministic non-retryable manifest failures, and redaction contracts. |
+| Recovery integration | `tests/updater_recovery_test.php`, `tests/fixtures/updater_recovery_migration.php` | Real isolated job/lock/activation/migration owners, interrupted linking and DDL, newer discovery, malformed package/backup/DB refusal and finite replay. |
 
 ## Language and Translations
 

@@ -558,7 +558,8 @@ function application_autoupdate_run_installing_check_locked(
     }
     // A manual or concurrent automatic installer can claim the job slot between
     // the lightweight request/CLI precheck and the serialized discovery.
-    if (application_update_active_job() !== null) {
+    $active = application_update_active_job();
+    if ($active !== null && ($active['status'] ?? '') !== 'failed') {
         return application_autoupdate_status();
     }
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
@@ -579,14 +580,30 @@ function application_autoupdate_run_installing_check_locked(
             return application_autoupdate_status();
         }
 
-        $job = application_update_start_job(
-            'stable_update',
-            [
-                'branch' => (string) ($status['branch'] ?? ''),
-                'target_version' => (string) ($status['latest_version'] ?? ''),
-            ],
-            'background',
-        );
+        if (!application_autoupdate_enabled() || application_update_beta_active()) {
+            return application_autoupdate_status();
+        }
+        if ($active !== null) {
+            set_app_setting('application_autoupdate_last_result',
+                'recovery_waiting:' . (string) $active['id']);
+            return application_autoupdate_status();
+        }
+        $excluded = application_update_normalize_version(app_setting(
+            'application_update_failed_stable_version', '',
+        ));
+        if ($excluded !== null && version_compare((string) $status['latest_version'], $excluded, '<=')) {
+            set_app_setting('application_autoupdate_last_result', 'failed_version_excluded:' . $excluded);
+            return application_autoupdate_status();
+        }
+        $job = application_update_start_job('stable_update', [
+            'branch' => (string) ($status['branch'] ?? ''),
+            'target_version' => (string) ($status['latest_version'] ?? ''),
+        ], 'background');
+        if (($job['status'] ?? '') !== 'running') {
+            set_app_setting('application_autoupdate_last_result',
+                'recovery_blocked:' . (string) $job['id']);
+            return application_autoupdate_status();
+        }
         // Do not combine remote discovery and package processing in one request.
         // A successful visitor response hands the persisted job to independent
         // authenticated worker slices. Later visits remain the recovery path.

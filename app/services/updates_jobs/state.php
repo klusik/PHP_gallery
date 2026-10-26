@@ -200,24 +200,7 @@ function application_update_set_active_job(?string $jobId): void
  */
 function application_update_clear_active_job_if(string $jobId): void
 {
-    $lock = application_update_acquire_lock(
-        application_update_jobs_root() . '/start.lock',
-        15,
-    );
-    if ($lock === null) {
-        // Leaving a terminal pointer in place is safe because active_job() removes
-        // terminal pointers on the next serialized start/status pass.
-        return;
-    }
-    try {
-        $path = application_update_jobs_root() . '/active-job.json';
-        $pointer = application_update_read_json($path);
-        if (hash_equals((string) ($pointer['job_id'] ?? ''), $jobId)) {
-            @unlink($path);
-        }
-    } finally {
-        application_update_release_lock($lock);
-    }
+    application_update_lookup_release_active($jobId);
 }
 
 /**
@@ -305,9 +288,19 @@ function application_update_job_public_state(array $job): array
         $publicError !== null
         && !application_update_job_error_retryable($job)
     ) {
-        $publicError['message'] =
-            application_update_manifest_mismatch_message();
+        // Preserve the manifest-specific message only for legacy manifest
+        // failures; deterministic PHP/migration errors need their own guidance.
+        if (!array_key_exists('retryable', $publicError)
+            && empty($job['result']['superseded_by'])
+            && empty($job['checkpoints']['archive_url'])
+            && ($publicError['reference'] ?? '') !== 'F05D71A153A2') {
+            $publicError['message'] = application_update_manifest_mismatch_message();
+        }
         $publicError['retryable'] = false;
+    }
+    if ($publicError !== null && ($job['status'] ?? '') === 'failed') {
+        $publicError['message'] = (string) ($publicError['message'] ?? '')
+            . ' ' . application_update_recovery_guidance($job);
     }
 
     return [
@@ -334,7 +327,9 @@ function application_update_job_public_state(array $job): array
                     && application_update_job_error_retryable($job)
                 ),
         'can_cancel' =>
-            in_array(
+            empty($job['result']['superseded_by'])
+                && empty($job['automatic_rollback'])
+                && empty($job['result']['recovery_released']) && in_array(
                 (string) ($job['status'] ?? ''),
                 ['running', 'failed'],
                 true,
@@ -345,7 +340,10 @@ function application_update_job_public_state(array $job): array
                     || $index < (int) array_search('activate', $stages, true)
                 ),
         'can_rollback' =>
-            (string) ($job['operation'] ?? '') !== 'rollback'
+            empty($job['result']['superseded_by'])
+                && (($job['recovery_schema'] ?? 0) !== 1
+                    || ($job['status'] ?? '') === 'completed')
+                && (string) ($job['operation'] ?? '') !== 'rollback'
                 && !empty($job['checkpoints']['backup_complete'])
                 && (
                     in_array(
@@ -364,4 +362,59 @@ function application_update_job_public_state(array $job): array
         'background' => (string) ($job['trigger'] ?? '') === 'background',
         'runtime_limits' => (array) ($job['runtime_limits'] ?? []),
     ];
+}
+
+
+// Recovery responsibilities stay with their existing updater domain owner.
+
+/**
+ * Prepare a new private job without changing the globally active pointer.
+ * @param string $operation Validated updater operation.
+ * @param array<string,scalar|null> $parameters Normalized semantic parameters.
+ * @param string $trigger Normalized api, admin or background ownership.
+ * @param string $reservedId Already journaled successor identity, or empty for a fresh ordinary job.
+ * @return array<string,mixed> Durable private job with its own workspace.
+ */
+function application_update_create_job(
+    string $operation,
+    array $parameters,
+    string $trigger,
+    string $reservedId = '',
+): array {
+    $jobId = $reservedId !== '' ? $reservedId
+        : gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
+    if (is_file(application_update_job_state_path($jobId))) {
+        throw new RuntimeException('Update job identity already exists.');
+    }
+    $jobDir = application_update_job_dir($jobId);
+    foreach (['extract', 'ready', 'rollback/original'] as $directory) {
+        application_update_ensure_dir($jobDir . '/' . $directory);
+    }
+    $now = time();
+    $job = [
+        'schema' => 1,
+        'recovery_schema' => 1,
+        'id' => $jobId,
+        'operation' => $operation,
+        'trigger' => in_array($trigger, ['api', 'admin', 'background'], true)
+            ? $trigger : 'api',
+        'status' => 'running',
+        'stage' => $operation === 'rollback' ? 'plan' : 'download',
+        'created_at' => $now,
+        'started_at' => $now,
+        'updated_at' => $now,
+        'finished_at' => 0,
+        'attempts' => 0,
+        'auto_retries' => 0,
+        'parameters' => $parameters,
+        'runtime_limits' => application_update_runtime_limits(),
+        'progress' => ['current' => 0, 'total' => 0, 'message' => 'Update job created.'],
+        'checkpoints' => ['migrations_started' => false],
+        'error' => null,
+        'result' => [],
+        'admin_session_name' => session_status() === PHP_SESSION_ACTIVE
+            ? session_name() : '',
+    ];
+    application_update_save_job($job);
+    return $job;
 }

@@ -472,6 +472,7 @@ return [
             'Gallery\\Services\\admin_test_run_record_db_transaction',
         ],
         'Gallery\\Services\\application_autoupdate_maybe_run' => [
+            'Gallery\\Services\\application_update_failed_recovery_due',
             'Gallery\\Services\\application_update_continue_background_job',
             'Gallery\\Services\\application_autoupdate_dry_run',
             'Gallery\\Services\\application_autoupdate_run_installing_check',

@@ -1141,10 +1141,21 @@ settings.
 
 #### Updating the Application
 
+Failed automatic, manual and Advanced commit installs receive bounded transient
+retries. After a ten-minute failure timeout, an untouched job releases its slot
+or a verified separate rollback restores previous managed files and channel
+settings. Runtime isolation, unchanged actual DB evidence, zero migration effects
+and intact backups are mandatory. Unverified states remain failed with repair
+steps; migrations and application data are never reversed. Later discovery can
+skip failed versions and install a newer stable release. Existing stuck updaters
+do not acquire this mechanism by publication. See
+[safety, hosting cron and manual repair](docs/AUTOUPDATE.md).
+
 Public entry points load a dependency-free early runtime guard before the normal
 bootstrap. During the updater's file-activation critical section, new requests
 receive a private, non-cacheable `503 Service Unavailable` response until
-activation is durably complete; authenticated update recovery/status requests
+the new job is durably complete (legacy jobs use activation completion);
+authenticated update recovery/status requests
 remain available. The guard also converts uncaught and catchable fatal PHP
 failures to bounded `500` responses where PHP can still control the response.
 Production hosting must keep `display_errors` disabled so the PHP runtime does

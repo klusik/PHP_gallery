@@ -153,45 +153,8 @@ function application_update_start_job(
             $operation,
             $parameters,
         );
-        $jobId = gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
-        $jobDir = application_update_job_dir($jobId);
-        application_update_ensure_dir($jobDir);
-        application_update_ensure_dir($jobDir . '/extract');
-        application_update_ensure_dir($jobDir . '/ready');
-        application_update_ensure_dir($jobDir . '/rollback/original');
-
-        $now = time();
-        $job = [
-            'schema' => 1,
-            'id' => $jobId,
-            'operation' => $operation,
-            'trigger' => in_array(
-                $trigger,
-                ['api', 'admin', 'background'],
-                true,
-            )
-                ? $trigger
-                : 'api',
-            'status' => 'running',
-            'stage' => $operation === 'rollback' ? 'plan' : 'download',
-            'created_at' => $now,
-            'started_at' => $now,
-            'updated_at' => $now,
-            'finished_at' => 0,
-            'attempts' => 0,
-            'parameters' => $parameters,
-            'runtime_limits' => application_update_runtime_limits(),
-            'progress' => [
-                'current' => 0,
-                'total' => 0,
-                'message' => 'Update job created.',
-            ],
-            'checkpoints' => [],
-            'error' => null,
-            'result' => [],
-        ];
-        application_update_save_job($job);
-        application_update_set_active_job($jobId);
+        $job = application_update_create_job($operation, $parameters, $trigger);
+        application_update_set_active_job((string) $job['id']);
         return application_update_job_public_state($job);
     } finally {
         application_update_release_lock($startLock);
@@ -227,6 +190,15 @@ function application_update_start_rollback_job(
             'Rollback source job identifier is invalid.',
         );
     }
+    $observed = application_update_load_job($sourceJobId);
+    if (($observed['status'] ?? '') === 'failed'
+        && ($observed['recovery_schema'] ?? 0) === 1) {
+        application_update_assert_rollback_database($observed);
+        if (!application_update_failed_recovery_due($observed, time())) {
+            throw new RuntimeException('Failed update safety recovery is waiting for its bounded retry/timeout policy.');
+        }
+        return application_update_recover_failed_job($sourceJobId);
+    }
     $startLock = application_update_acquire_lock(
         application_update_jobs_root() . '/start.lock',
         15,
@@ -236,6 +208,9 @@ function application_update_start_rollback_job(
     }
     try {
         $source = application_update_load_job($sourceJobId);
+        if (!empty($source['result']['superseded_by'])) {
+            throw new RuntimeException('This update was superseded by a recovery job. Review that job first.');
+        }
         if (empty($source['checkpoints']['backup_complete'])) {
             throw new RuntimeException('Rollback snapshot is not complete.');
         }
@@ -272,36 +247,10 @@ function application_update_start_rollback_job(
             application_update_set_active_job(null);
         }
 
-        $jobId = gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
-        $jobDir = application_update_job_dir($jobId);
-        application_update_ensure_dir($jobDir . '/ready');
-        application_update_ensure_dir($jobDir . '/rollback/original');
-        $now = time();
-        $job = [
-            'schema' => 1,
-            'id' => $jobId,
-            'operation' => 'rollback',
-            'trigger' => in_array($trigger, ['api', 'admin'], true)
-                ? $trigger
-                : 'api',
-            'status' => 'running',
-            'stage' => 'plan',
-            'created_at' => $now,
-            'started_at' => $now,
-            'updated_at' => $now,
-            'finished_at' => 0,
-            'attempts' => 0,
-            'parameters' => ['source_job_id' => $sourceJobId],
-            'runtime_limits' => application_update_runtime_limits(),
-            'progress' => [
-                'current' => 0,
-                'total' => 0,
-                'message' => 'Rollback job created.',
-            ],
-            'checkpoints' => [],
-            'error' => null,
-            'result' => [],
-        ];
+        $job = application_update_create_job('rollback',
+            ['source_job_id' => $sourceJobId],
+            in_array($trigger, ['api', 'admin'], true) ? $trigger : 'api');
+        $jobId = (string) $job['id'];
         application_update_save_job($job);
         application_update_set_active_job($jobId);
         return application_update_job_public_state($job);
@@ -359,6 +308,15 @@ function application_update_process_job(
             // retries can discard untrusted partial artifacts before execution resumes.
             return application_update_job_public_state($job);
         }
+        if (!empty($job['slice_open'])) {
+            // Holding worker.lock proves the prior process no longer owns it.
+            // A killed slice must enter the same bounded failure policy, rather
+            // than silently replaying one checkpoint forever.
+            throw new RuntimeException('Previous update worker was interrupted before its slice closed.');
+        }
+        $job['slice_open'] = true;
+        $job['slice_started_at'] = time();
+        $job['slice_recovery_at'] = time() + APPLICATION_UPDATE_RECOVERY_TIMEOUT_SECONDS;
         $job['attempts'] = (int) ($job['attempts'] ?? 0) + 1;
         application_update_save_job($job);
         $budget = application_update_time_budget($budgetSeconds);
@@ -404,10 +362,15 @@ function application_update_process_job(
                 }
                 $next = 'ready';
             } elseif ($stage === 'ready') {
+                if (!application_update_recovery_ready_slice($job, $budget)) {
+                    break;
+                }
                 application_update_job_assert_ready($job);
                 $next = 'activate';
             } elseif ($stage === 'activate') {
-                application_update_job_activate($job);
+                if (!application_update_job_activate($job)) {
+                    break;
+                }
                 $next = 'migrate';
             } elseif ($stage === 'migrate') {
                 if (!application_update_job_migrate_slice($job)) {
@@ -433,6 +396,8 @@ function application_update_process_job(
                     'unit' => 'job',
                 ];
                 application_update_save_job($job);
+                application_update_runtime_window_close($job);
+                application_update_activation_gate_clear((string) $job['id']);
                 application_update_set_last_job((string) $job['id']);
                 application_update_clear_active_job_if((string) $job['id']);
                 break;
@@ -455,6 +420,8 @@ function application_update_process_job(
             }
         }
 
+        $job['slice_open'] = false;
+        application_update_save_job($job);
         return application_update_job_public_state($job);
     } catch (Throwable $exception) {
         $job = isset($job) && is_array($job)
@@ -462,6 +429,7 @@ function application_update_process_job(
             : application_update_load_job($jobId);
         $safe = application_update_safe_error($exception);
         $job['status'] = 'failed';
+        $job['slice_open'] = false;
         $job['error'] = [
             'message' => $safe['message'],
             'reference' => $safe['reference'],
@@ -469,6 +437,24 @@ function application_update_process_job(
             'stage' => (string) ($job['stage'] ?? ''),
             'at' => time(),
         ];
+        // Persist bounded evidence independently of successful slice counts.
+        // Retry cannot erase or reset a recurring failure's automatic budget.
+        $job['failures'][] = $job['error'];
+        $job['result']['first_failure'] ??= $job['error'];
+        $job['failure_first_at'] ??= $job['error']['at'];
+        $retries = max(0, (int) ($job['auto_retries'] ?? 0));
+        $job['recovery_not_before'] = $safe['retryable']
+            && $retries < APPLICATION_UPDATE_AUTO_RETRY_LIMIT
+                ? $job['error']['at'] + APPLICATION_UPDATE_AUTO_RETRY_DELAY_SECONDS * (2 ** $retries)
+                : (int) $job['failure_first_at'] + APPLICATION_UPDATE_RECOVERY_TIMEOUT_SECONDS;
+        if (($job['operation'] ?? '') === 'rollback'
+            && (!$safe['retryable'] || $retries >= APPLICATION_UPDATE_AUTO_RETRY_LIMIT)) {
+            $job['recovery_blocked'] = 'rollback_failed';
+        }
+        $job['failures'] = array_slice(
+            $job['failures'],
+            -(APPLICATION_UPDATE_AUTO_RETRY_LIMIT + 1),
+        );
         application_update_save_job($job);
         return application_update_job_public_state($job);
     } finally {
@@ -522,6 +508,12 @@ function application_update_cancel_job(string $jobId): array
         $job = application_update_load_job($jobId);
         if (application_update_job_terminal($job)) {
             return application_update_job_public_state($job);
+        }
+        if (!empty($job['result']['superseded_by'])) {
+            return application_update_job_public_state($job);
+        }
+        if (!empty($job['automatic_rollback'])) {
+            throw new RuntimeException('Automatic rollback must be continued to a safe checkpoint, not cancelled.');
         }
         $stages = application_update_job_stages();
         $stageIndex = array_search(
@@ -588,9 +580,10 @@ function application_update_cancel_job(string $jobId): array
  * the fully validated/staged/backup state and replay only the failed stage.
  *
  * @param string $jobId Job identifier.
+ * @param bool $automatic Whether bounded unattended retry admission is required.
  * @return array<string,mixed> Public job state, with result.last_failure retaining the preceding safe error message/reference, stage, at epoch and retryable flag when a retry clears the current error.
  */
-function application_update_retry_job(string $jobId): array
+function application_update_retry_job(string $jobId, bool $automatic = false): array
 {
     if (
         function_exists(__NAMESPACE__
@@ -631,6 +624,15 @@ function application_update_retry_job(string $jobId): array
         if (!application_update_job_error_retryable($job)) {
             return application_update_job_public_state($job);
         }
+        if ($automatic && !application_update_auto_retry_due($job, time())) {
+            return application_update_job_public_state($job);
+        }
+        if ($automatic) {
+            $job['auto_retries'] = max(0, (int) ($job['auto_retries'] ?? 0)) + 1;
+            // Retain the original trigger while letting safety repair finish
+            // more than one slice of an already failed manual operation.
+            $job['automatic_repair_continuation'] = true;
+        }
         $stage = (string) ($job['stage'] ?? '');
         // Retain owner-redacted failure evidence when retry clears the live error.
         $job['result']['last_failure'] = (array) (
@@ -641,6 +643,12 @@ function application_update_retry_job(string $jobId): array
             ['download', 'archive_validate', 'extract', 'package_validate'],
             true,
         )) {
+            if (empty($job['checkpoints']['archive_commit'])
+                && !empty($job['checkpoints']['archive_url'])) {
+                // Legacy moving-branch downloads cannot establish the original
+                // package identity. Keep their artifacts for a new linked job.
+                return application_update_job_public_state($job);
+            }
             foreach ([
                 $jobDir . '/package.zip',
                 $jobDir . '/extract',
@@ -667,6 +675,12 @@ function application_update_retry_job(string $jobId): array
                 'verify_index',
                 'manifest_files',
                 'validated_version',
+                'recovery_manifest_identity',
+                'recovery_hashes',
+                'recovery_verify_index',
+                'recovery_ready_index',
+                'recovery_ready_verified',
+                'recovery_backup_identity',
             ] as $key) {
                 unset($job['checkpoints'][$key]);
             }
@@ -691,30 +705,33 @@ function application_update_retry_job(string $jobId): array
 }
 
 /**
- * Advance the active background stable update for a very small request-time slice.
+ * Advance background work or safety recovery for any failed/interrupted origin.
  *
- * Caught failures are retried only through application_update_retry_job(), which
- * applies the stage-specific cleanup policy. A short backoff avoids hammering a
- * failing transport or filesystem on every incidental page request.
+ * Caught failures use bounded retry and timeout admission. Discovery is
+ * independent of the stopped job; safe rollback has its own preserved identity.
  *
  * @param float $budgetSeconds Background slice budget.
- * @return array<string,mixed>|null Safe job state, or null when no background job is active.
+ * @return array<string,mixed>|null Safe retry, rollback or stopped job; null for idle or an ordinary paused manual job.
  */
 function application_update_continue_background_job(float $budgetSeconds = 3.0): ?array
 {
     $job = application_update_active_job();
-    if ($job === null || (string) ($job['trigger'] ?? '') !== 'background') {
+    if ($job === null) {
         return null;
     }
 
     if ((string) ($job['status'] ?? '') === 'failed') {
-        if ((time() - (int) ($job['updated_at'] ?? 0)) < 60) {
-            return application_update_job_public_state($job);
-        }
-        $job = application_update_retry_job((string) $job['id']);
-    } else {
-        $job = application_update_job_public_state($job);
+        return application_update_recover_failed_job((string) $job['id'], $budgetSeconds);
     }
+    if (($job['trigger'] ?? '') !== 'background'
+        && empty($job['automatic_repair_continuation'])) {
+        if (($job['status'] ?? '') === 'running' && !empty($job['slice_open'])
+            && (int) ($job['slice_recovery_at'] ?? PHP_INT_MAX) <= time()) {
+            return application_update_process_job((string) $job['id'], $budgetSeconds);
+        }
+        return null;
+    }
+    $job = application_update_job_public_state($job);
 
     if ((string) ($job['status'] ?? '') === 'running') {
         return application_update_process_job(
@@ -723,4 +740,161 @@ function application_update_continue_background_job(float $budgetSeconds = 3.0):
         );
     }
     return $job;
+}
+
+
+// Recovery responsibilities stay with their existing updater domain owner.
+
+/**
+ * Remember failed source identities without changing their job or package.
+ * @param array<string,mixed> $source Failed original update job.
+ * @return void Stores bounded commit exclusions and a stable-version floor.
+ */
+function application_update_quarantine_failed_source(array $source): void
+{
+    $commit = (string) ($source['checkpoints']['archive_commit'] ?? '');
+    if (preg_match('/^[a-f0-9]{40}$/D', $commit) === 1) {
+        $stored = json_decode(app_setting('application_update_failed_commits', '[]'), true);
+        $commits = is_array($stored) ? $stored : [];
+        $commits = array_values(array_filter($commits, static fn(mixed $value): bool =>
+            is_string($value) && preg_match('/^[a-f0-9]{40}$/D', $value) === 1));
+        $commits = array_values(array_unique(array_merge([$commit], $commits)));
+        set_app_setting('application_update_failed_commits', (string) json_encode(
+            array_slice($commits, 0, APPLICATION_UPDATE_FAILED_COMMIT_LIMIT),
+            JSON_THROW_ON_ERROR,
+        ));
+    }
+    if (($source['operation'] ?? '') === 'stable_update') {
+        $version = application_update_normalize_version((string) (
+            $source['parameters']['target_version']
+                ?? $source['checkpoints']['validated_version'] ?? ''
+        ));
+        $previous = application_update_normalize_version(app_setting(
+            'application_update_failed_stable_version', '',
+        ));
+        if ($version !== null && ($previous === null || version_compare($version, $previous, '>'))) {
+            set_app_setting('application_update_failed_stable_version', $version);
+        }
+    }
+    application_update_write_json_atomic(application_update_jobs_root() . '/last-failed-job.json', [
+        'job_id' => (string) $source['id'], 'updated_at' => time(),
+    ]);
+}
+
+/**
+ * Retry or reserve one automatic rollback after a mature original failure.
+ * @param string $jobId Original failed job, regardless of its launch mode.
+ * @param float $budgetSeconds Maximum retry worker slice.
+ * @return array<string,mixed> Public retry, rollback, released or safely blocked job.
+ */
+function application_update_recover_failed_job(
+    string $jobId,
+    float $budgetSeconds = APPLICATION_UPDATE_CHAIN_SLICE_SECONDS,
+): array
+{
+    $source = application_update_load_job($jobId);
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('built_in_update_installer')) {
+        return application_update_job_public_state($source);
+    }
+    if (application_update_auto_retry_due($source, time())) {
+        $retried = application_update_retry_job($jobId, true);
+        return ($retried['status'] ?? '') === 'running'
+            ? application_update_process_job($jobId, $budgetSeconds) : $retried;
+    }
+    if (!application_update_failed_recovery_due($source, time())) {
+        return application_update_job_public_state($source);
+    }
+    $start = application_update_acquire_lock(application_update_jobs_root() . '/start.lock');
+    if ($start === null) {
+        return application_update_job_public_state($source);
+    }
+    $worker = null;
+    try {
+        $active = application_update_active_job();
+        if (($active['id'] ?? '') !== $jobId) {
+            return application_update_job_public_state($active ?? $source);
+        }
+        $worker = application_update_acquire_lock(application_update_job_dir($jobId) . '/worker.lock');
+        if ($worker === null) {
+            return application_update_job_public_state($source);
+        }
+        $source = application_update_load_job($jobId);
+        if (!application_update_failed_recovery_due($source, time())) {
+            return application_update_job_public_state($source);
+        }
+        $boundary = application_update_recovery_boundary($source);
+        if ($boundary === 'pre_activation') {
+            application_update_quarantine_failed_source($source);
+            $source['result']['recovery_released'] = true;
+            $source['result']['recovery_outcome'] = 'unchanged_before_activation';
+            $source['finished_at'] = time();
+            application_update_save_job($source);
+            application_update_set_active_job(null);
+            return application_update_job_public_state($source);
+        }
+        if ($boundary !== 'rollback_safe') {
+            $source['recovery_blocked'] = $boundary;
+            application_update_save_job($source);
+            return application_update_job_public_state($source);
+        }
+        $safetyArea = 'database_unverified';
+        try {
+            application_update_assert_rollback_database($source);
+            $safetyArea = 'backup_unverified';
+            $metadataPath = application_update_job_dir($jobId) . '/rollback/metadata.json';
+            $metadata = application_update_read_json($metadataPath);
+            if (($metadata['job_id'] ?? '') !== $jobId
+                || ($source['checkpoints']['backup_metadata_identity'] ?? '')
+                    !== application_update_manifest_hash($metadataPath)
+                || !is_array($metadata['hashes'] ?? null)
+                || $metadata['hashes'] !== ($source['checkpoints']['backup_hashes'] ?? null)) {
+                throw new RuntimeException('Recovery backup metadata is missing or corrupt.');
+            }
+        } catch (Throwable $exception) {
+            $source['recovery_blocked'] = $safetyArea;
+            $source['result']['recovery_failure'] = application_update_safe_error($exception);
+            application_update_save_job($source);
+            return application_update_job_public_state($source);
+        }
+        $reservation = $source['automatic_rollback_reservation'] ?? null;
+        if ($reservation === null) {
+            $reservation = gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
+            if (is_dir(application_update_job_dir($reservation))) {
+                throw new RuntimeException('Recovery rollback identity already exists.');
+            }
+            $source['automatic_rollback_reservation'] = $reservation;
+            application_update_save_job($source);
+        }
+        $rollbackId = (string) $reservation;
+        $parameters = ['source_job_id' => $jobId];
+        if (is_file(application_update_job_state_path($rollbackId))) {
+            $rollback = application_update_load_job($rollbackId);
+            if (($rollback['operation'] ?? '') !== 'rollback'
+                || ($rollback['parameters'] ?? []) !== $parameters
+                || ($rollback['trigger'] ?? '') !== 'background'
+                || ($rollback['status'] ?? '') !== 'running') {
+                throw new RuntimeException('Recovery rollback reservation is inconsistent.');
+            }
+        } else {
+            $rollback = application_update_create_job('rollback', $parameters,
+                'background', $rollbackId);
+        }
+        $rollback['automatic_rollback'] = true;
+        $rollback['recovery'] = ['source_job_id' => $jobId,
+            'boundary' => 'rollback_safe', 'depth' => 1, 'kind' => 'automatic_rollback'];
+        $rollback['checkpoints']['recovery_hashes'] = $metadata['hashes'];
+        $rollback['checkpoints']['recovery_manifest_identity'] =
+            (string) ($metadata['hashes']['app/core-manifest.json'] ?? '');
+        $rollback['result']['recovery_source_job_id'] = $jobId;
+        application_update_save_job($rollback);
+        application_update_quarantine_failed_source($source);
+        $source['result']['superseded_by'] = $rollbackId;
+        application_update_save_job($source);
+        application_update_set_active_job($rollbackId);
+        return application_update_job_public_state($rollback);
+    } finally {
+        application_update_release_lock($worker);
+        application_update_release_lock($start);
+    }
 }

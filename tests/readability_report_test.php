@@ -30,6 +30,8 @@ if ($python === null) {
 }
 $process = \PhpGallery\Audit\run_process(
     array_merge($python, [
+        // Preserve the same import isolation for the regression entry itself.
+        '-B',
         __DIR__ . '/readability_report_test.py',
     ]),
     dirname(__DIR__),

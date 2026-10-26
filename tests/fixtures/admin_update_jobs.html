@@ -30,6 +30,9 @@ let continuations = 0;
 let reads = 0;
 let failRead = false;
 let failJob = false;
+let recoveryBlocked = false;
+const recoveryGuidance = 'Automatic recovery stopped: database compatibility is unverified. Preserve the job and backups. Verify the database and deploy a compatible release in maintenance mode; resume forward migrations. Do not restore application files alone.';
+const fixtureFetch = window.fetch.bind(window);
 let holdRead = false;
 let releaseRead;
 let releaseNotes;
@@ -88,9 +91,15 @@ function navdata(returnPage = 'admin') {
         + '<dl class="admin-navdata-import-metrics"><div><dt>Local points</dt><dd>111,384</dd></div><div><dt>Last update</dt><dd>2026-10-02 12:00:00</dd></div><div><dt>Airport identifiers</dt><dd>100,851</dd></div><div><dt>Navaids</dt><dd>10,533</dd></div></dl></article>';
 }
 /** Return a synthetic durable job.
- * @param {string} status Durable lifecycle state. @return {{id:string, status:string, stage:string, progress:{percent:number, message:string}, can_resume:boolean, can_cancel:boolean, can_rollback:boolean}} Job state.
+ * @param {string} status Durable lifecycle state. @return {{id:string, status:string, stage:string, progress:{percent:number, message:string}, error?:{message:string,reference:string,retryable:boolean}, can_resume:boolean, can_cancel:boolean, can_rollback:boolean}} Job state.
  */
 function job(status) {
+    if (recoveryBlocked && status === 'failed') {
+        return {id:'fixture-' + starts, status, stage:'migrate',
+            progress:{percent:42,message:'Stopped.'},
+            error:{message:recoveryGuidance,reference:'F05D71A153A2',retryable:false},
+            can_resume:false,can_cancel:false,can_rollback:false};
+    }
     return {id: 'fixture-' + starts, status, stage: status === 'completed' ? 'completed' : 'download',
         progress: {percent: status === 'completed' ? 100 : 42, message: 'Fixture progress'},
         can_resume: status !== 'completed', can_cancel: status === 'failed', can_rollback: status === 'completed'};
@@ -218,6 +227,28 @@ try {
     check(release.querySelector('[data-update-job-form]') !== null && release.dataset.updateStatusJob === 'fixture-2', 'Old completion cannot overwrite a newer job');
     await until(/** Let final bounded continuation settle. @return {boolean} Whether newer worker stopped. */ () => scope.dataset.updateJobStatus === 'failed');
     check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Every tested transition preserves URL and drawer');
+    recoveryBlocked = true;
+    release.innerHTML = summary(true);
+    release.querySelector('[data-update-job-form]').requestSubmit();
+    await until(() => scope.dataset.updateJobStatus === 'failed'
+        && scope.querySelector('[data-update-job-error]').textContent.includes('F05D71A153A2'));
+    check(scope.querySelector('[data-update-job-error]').textContent.includes(recoveryGuidance)
+        && scope.querySelector('[data-update-job-retry]') === null,
+        'Unverified migration shows concrete guidance and offers no same-package retry');
+    // Representative production desktop/narrow widths are layout vectors.
+    for (const width of [1280, 390]) {
+        const response = await fixtureFetch('/__viewport?width=' + width);
+        check(response.ok, 'Owned viewport adapter accepts recovery layout vector');
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const errorBox = scope.querySelector('[data-update-job-error]');
+        const bounds = errorBox.getBoundingClientRect();
+        check(!errorBox.hidden && bounds.width > 0 && bounds.left >= -1
+            && bounds.right <= innerWidth + 1 && errorBox.scrollWidth <= errorBox.clientWidth + 1,
+            width + ' recovery guidance wraps inside the production drawer');
+        check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false',
+            width + ' stopped recovery preserves drawer and URL');
+    }
+    await fixtureFetch('/__viewport?width=1280');
     panel.querySelector('[data-navdata-update-form]').requestSubmit();
     await until(/** Wait for AJAX import. @return {boolean} Whether held import started. */ () => Boolean(releaseNavdata));
     check(panel.querySelector('[data-navdata-update-submit]').disabled && location.href === originalUrl, 'Navdata import paints progress without navigation');

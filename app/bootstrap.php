@@ -50,6 +50,9 @@ const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
+require_once __DIR__ . '/early_runtime.php';
+\Gallery\EarlyRuntime\updater_runtime_enter(dirname(__DIR__));
+
 require_once __DIR__ . '/runtime/autoload.php';
 require_once __DIR__ . '/runtime/bridge.php';
 

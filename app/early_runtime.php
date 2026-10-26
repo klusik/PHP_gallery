@@ -303,7 +303,7 @@ function read_json_file(string $path): ?array
  *
  * @param string $projectRoot Absolute path to the project root.
  * @param array<string,mixed> $marker Activation marker data read from disk.
- * @return bool True only when the matching durable job records activation complete.
+ * @return bool True for a completed isolated job or legacy activation-complete receipt.
  */
 function activation_job_is_complete(string $projectRoot, array $marker): bool
 {
@@ -328,7 +328,9 @@ function activation_job_is_complete(string $projectRoot, array $marker): bool
     return (
         is_array($job)
             && hash_equals($jobId, (string) ($job['id'] ?? ''))
-            && !empty($job['checkpoints']['activation_complete'])
+            && (!empty($marker['recovery_isolation'])
+                ? ($job['status'] ?? '') === 'completed'
+                : !empty($job['checkpoints']['activation_complete']))
     );
 }
 
@@ -392,8 +394,8 @@ function emit_activation_unavailable(): void
 /**
  * Fail new ordinary HTTP requests closed while a release activation is in progress.
  *
- * A marker is cleared here only when the durable job state explicitly records
- * activation_complete. Missing, corrupt, or incomplete job state remains gated so
+ * New isolated jobs remain gated until completion; legacy jobs use the durable
+ * activation_complete receipt. Missing, corrupt, or incomplete state remains gated so
  * an interrupted mixed-version release cannot silently reopen to public traffic.
  *
  * @param string $projectRoot Absolute path to the project root.
@@ -401,6 +403,7 @@ function emit_activation_unavailable(): void
  */
 function enforce_activation_gate(string $projectRoot): void
 {
+    updater_runtime_enter($projectRoot);
     if (PHP_SAPI === 'cli') {
         return;
     }
@@ -421,10 +424,135 @@ function enforce_activation_gate(string $projectRoot): void
         }
     }
 
-    if (is_array($marker) && activation_admin_recovery_allowed($marker)) {
+    if (is_array($marker) && (activation_admin_recovery_allowed($marker)
+        || updater_worker_allowed($projectRoot, $marker))) {
         return;
     }
 
     emit_activation_unavailable();
     exit();
+}
+
+/**
+ * Identify the cooperative request isolation contract in verified packages.
+ * Type: int. Units: protocol revision. Scope: application bootstrap and updater.
+ * Consumers: activation and rollback admission.
+ * Rationale: revision 1 promises shared request leases and durable use witnesses;
+ * older packages cannot establish this proof merely by having a valid manifest.
+ */
+const UPDATER_RUNTIME_ISOLATION_PROTOCOL = 1;
+
+/**
+ * Use the established group-writable cache directory permission.
+ * Type: int. Units: POSIX permission bits. Scope: updater bootstrap cache only.
+ * Consumers: updater_runtime_enter().
+ * Rationale: 0775 preserves hosting group access; the existing cache web policy
+ * protects contents, and this mode grants no access to application credentials.
+ */
+const UPDATER_RUNTIME_DIRECTORY_MODE = 0775;
+
+/**
+ * Validate a private updater handoff before exempting its bootstrap from use tracking.
+ * @param string $projectRoot Absolute installation root.
+ * @param array<string,mixed> $owner Gate/window/job with its server-generated job_id.
+ * @return bool True for an unexpired hashed ticket bound to this job or its rollback.
+ */
+function updater_worker_allowed(string $projectRoot, array $owner): bool
+{
+    if (($_GET['page'] ?? '') !== 'site_maintenance_cron'
+        || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST'
+        || array_diff(array_keys($_GET), ['page']) !== []
+        || array_diff(array_keys($_POST), ['update_ticket']) !== []) {
+        return false;
+    }
+    $ticket = $_POST['update_ticket'] ?? null;
+    if (!is_string($ticket) || preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1) {
+        return false;
+    }
+    $base = rtrim($projectRoot, '/\\') . '/cache/updates';
+    $chain = read_json_file($base . '/background-chain.json');
+    $active = read_json_file($base . '/active-job.json');
+    $id = (string) ($chain['job_id'] ?? '');
+    if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $id) !== 1
+        || ($active['job_id'] ?? '') !== $id
+        || (int) ($chain['queued_until'] ?? 0) <= time()
+        || !hash_equals((string) ($chain['ticket_hash'] ?? ''), hash('sha256', $ticket))) {
+        return false;
+    }
+    $job = read_json_file($base . '/jobs/' . $id . '/job.json');
+    $ownerId = (string) ($owner['job_id'] ?? '');
+    return ($job['status'] ?? '') === 'running'
+        && ($id === $ownerId || (!empty($job['automatic_rollback'])
+            && ($job['parameters']['source_job_id'] ?? '') === $ownerId));
+}
+
+/**
+ * Acquire a shared runtime lease and record admission during a rollback window.
+ * @param string $projectRoot Absolute installation root.
+ * @return void Holds a request-local lease until shutdown; refuses unwitnessed use.
+ */
+function updater_runtime_enter(string $projectRoot): void
+{
+    if (isset($GLOBALS['gallery_updater_runtime_lease'])
+        || (defined('GALLERY_UPDATER_WORKER') && GALLERY_UPDATER_WORKER === true)) {
+        return;
+    }
+    $base = rtrim($projectRoot, '/\\') . '/cache/updates';
+    $owner = read_json_file($base . '/rollback-window.json');
+    if ($owner === null) {
+        $active = read_json_file($base . '/active-job.json');
+        $id = (string) ($active['job_id'] ?? '');
+        if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $id) === 1) {
+            $job = read_json_file($base . '/jobs/' . $id . '/job.json');
+            $owner = ['job_id' => $id,
+                'admin_session_name' => (string) ($job['admin_session_name'] ?? '')];
+        }
+    }
+    if (is_array($owner) && (activation_admin_recovery_allowed($owner)
+        || updater_worker_allowed($projectRoot, $owner))) {
+        return;
+    }
+    if (!is_dir($base) && !@mkdir($base, UPDATER_RUNTIME_DIRECTORY_MODE, true)
+        && !is_dir($base)) {
+        throw new \RuntimeException('Updater runtime isolation storage is unavailable.');
+    }
+    $lease = @fopen($base . '/runtime-use.lock', 'c+b');
+    if ($lease === false || !flock($lease, LOCK_SH | LOCK_NB)) {
+        if (is_resource($lease)) { fclose($lease); }
+        emit_activation_unavailable();
+        exit();
+    }
+    $GLOBALS['gallery_updater_runtime_lease'] = $lease;
+    register_shutdown_function(__NAMESPACE__ . '\\updater_runtime_leave');
+    $gate = read_json_file($base . '/activation.json');
+    if (is_array($gate) && !empty($gate['recovery_isolation'])
+        && !activation_job_is_complete($projectRoot, $gate)) {
+        emit_activation_unavailable();
+        exit();
+    }
+    // Read only after taking the shared lock: activation creates the window
+    // under its exclusive lock, so admission cannot race past the witness.
+    if (is_file($base . '/rollback-window.json')) {
+        $window = read_json_file($base . '/rollback-window.json');
+        $id = (string) ($window['job_id'] ?? '');
+        if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $id) !== 1
+            || @file_put_contents($base . '/jobs/' . $id . '/runtime-used.json',
+                json_encode(['at' => time()], JSON_THROW_ON_ERROR), LOCK_EX) === false) {
+            throw new \RuntimeException('Updater runtime use cannot be witnessed.');
+        }
+    }
+}
+
+/**
+ * Release the request lease after domain handling, before post-response update work.
+ * @return void Releases an owned resource once; repeated calls are harmless.
+ */
+function updater_runtime_leave(): void
+{
+    $lease = $GLOBALS['gallery_updater_runtime_lease'] ?? null;
+    unset($GLOBALS['gallery_updater_runtime_lease']);
+    if (is_resource($lease)) {
+        flock($lease, LOCK_UN);
+        fclose($lease);
+    }
 }

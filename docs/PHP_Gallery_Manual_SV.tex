@@ -3316,7 +3316,41 @@ Före aktivering kräver uppdaterarens arkivkontroll också hela den nya begära
 
 Uppdateringsaktivering använder den granskade uppdaterardelmängden av produktionslistan. Inkommande listor anger WinApp-källor separat så att äldre installerade uppdaterare kan kontrollera utgåvan innan dess läskod installeras. CMS-uppdateraren installerar inte dessa källor. Äldre källarkiv utan lista behåller en begränsad kompatibilitetsväg utifrån sitt ägda manifest; en befintlig ogiltig lista nekas. Rensning av föråldrade filer kräver tidigare ägarbevis och bevarar okända lokala filer. Filåterställning använder det servergenererade säkerhetskopieindexet och nekar oindexerade filer samt sökvägar som omdirigeras via symboliska länkar eller Windows-junctions. Dessa filskydd återställer inte databasmigreringar.
 
-Om en uppdatering stoppades före aktivering, avbryt det gamla jobbet, tvinga fram en ny utgåvekontroll och starta en ny stabil uppdatering när den korrigerade utgåvan är tillgänglig. Ett nytt försök kan behålla jobbets ursprungliga målversion.
+Misslyckade jobb från automatik, Admin/API och~Advanced-commit-installationer
+får tre återförsök vid tillfälliga fel efter 60, 120 och~240 sekunder.
+Odefinierade funktioner och~deterministiska integritetsfel upprepar inte
+samma trasiga paket. Nya jobb binder en verifierad oföränderlig GitHub-commit
+och~kontrollerar hela manifestet och~förberedda filer. Övriga resurser
+och~säkerhetskopior bevarar exakta byte med råa SHA-256-identiteter.
+Tidigast 600 sekunder
+efter första felet frigör ett orört jobb före aktivering sin aktiva plats.
+Ett säkert fel efter aktivering skapar ett separat återställningsjobb för
+faktiska tidigare programfiler och~kanalinställningar, även borttagna filer
+och~borttagning av nyskapade sökvägar. Båda identiteter, arkiv, säkerhetskopior
+och~diagnoser bevaras. Ett misslyckat återställningsjobb skapar inget nytt.
+
+Filåterställning kräver verifierade säkerhetskopior, matchande faktiskt schema
+och~migreringshistorik samt bevis på att migreringar inte haft effekter.
+Delade körningslås avslutas före aktivering; stödda målpaket håller spärren
+till jobbets slut. Vanlig körning under observationsfönstret gör återställning
+osäker även med oförändrat schema. Påbörjade overifierade migreringar,
+okänd databas, saknade bevis och~äldre paket utan protokollet förblir
+misslyckade med reparationsanvisningar. Databasmigreringar och~programdata
+återställs aldrig. Avstängd automatik och~beta förhindrar nya automatiska
+installationer; avstängd capability stoppar installeraren. Efter säker
+återställning kan upptäckt hoppa över kända felversioner och~installera
+en nyare stabil version. Fel bakom stängd spärr behöver hostingens CLI-cron
+eller en autentiserad Admin-begäran; nekade besökare kör inte schemaläggaren.
+Ingen worker väntar passivt under återförsöksfördröjningen.
+
+En äldre fastnad uppdaterare får inte mekanismen genom enbart publicering.
+Stoppa workers i underhållsläge, bevara samordnade säkerhetskopior och~alla
+felbevis, fastställ faktisk databaskompatibilitet, installera hela den verifierade
+kompatibla korrigerade versionen och~kör framåtmigreringar. Först efter verifierad
+reparation får administratören arkivera den matchande gamla aktiva pekaren.
+Byt inte bara bootstrap, ändra jobbets mål/paket, ta bort en aktiv
+aktiveringsspärr eller återställ enbart programfiler. Se
+\filepath{docs/AUTOUPDATE.md} för fullständig procedur och~begränsningar.
 
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}

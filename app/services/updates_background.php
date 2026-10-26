@@ -18,14 +18,16 @@ namespace Gallery\Services;
 
 /**
  * Determine whether an active job belongs to unattended stable installation.
- * @param array{id?:string,trigger?:string,operation?:string,status?:string}|null $job Active private job, or null when idle.
- * @return bool True only for a running background stable-update job with an enabled installer capability.
+ * @param array{id?:string,trigger?:string,operation?:string,status?:string,automatic_rollback?:bool,automatic_repair_continuation?:bool}|null $job Active private job, or null when idle.
+ * @return bool True for running automatic stable/rollback work or an admitted failed-job repair, with the installer capability enabled.
  */
 function application_update_background_job_eligible(?array $job): bool
 {
     return $job !== null
-        && ($job['trigger'] ?? '') === 'background'
-        && ($job['operation'] ?? '') === 'stable_update'
+        && (!empty($job['automatic_repair_continuation'])
+            || (($job['trigger'] ?? '') === 'background'
+                && (($job['operation'] ?? '') === 'stable_update'
+                    || (($job['operation'] ?? '') === 'rollback' && !empty($job['automatic_rollback'])))))
         && ($job['status'] ?? '') === 'running'
         && feature_capability_effective_enabled('built_in_update_installer');
 }
@@ -209,6 +211,7 @@ function application_update_background_chain_run(
         $job = application_update_active_job();
         $continues =
             application_update_background_job_eligible($job)
+            && empty($job['checkpoints']['runtime_lease_busy'])
             && ($record['job_id'] ?? '') === $job['id']
             && (int) ($job['attempts'] ?? 0) > $attempts;
         $record['queued_until'] = 0;
@@ -221,8 +224,8 @@ function application_update_background_chain_run(
             $record['last_dispatch_at'] = time();
             $reason = 'update_chain_queued';
         }
-        // A failed or busy slice stops this chain; the existing visitor retry owner
-        // retains its sixty-second backoff and package-stage cleanup policy.
+        // Failed/busy work stops this chain. Later opportunities use bounded
+        // retry backoff or separate due discovery; no timer keeps PHP waiting.
         $record['last_error'] = ($job['status'] ?? '') === 'failed'
             ? 'update_chain_worker_failed'
             : '';
