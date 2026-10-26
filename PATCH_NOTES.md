@@ -1,5 +1,76 @@
 # Patch notes
 
+## Version 0.144.6
+
+Made explicit FTP and stable-update recovery less dependent on publisher metadata while preserving strict checks for ordinary package and automatic updates. Improved recovery startup while requests were active and clarified pending replacement behavior in the Admin update flow.
+
+### Highlights
+
+#### More resilient explicit recovery
+
+- Allowed explicit FTP completion and stable-update recovery to proceed when
+  publisher manifests or inventory were missing, malformed, stale, or
+  inconsistent. Logged those checks as warnings while retaining required-file,
+  safe-path, and runtime-ownership checks.
+- Staged and verified the selected source bytes independently of manifest
+  metadata. Used an optional production inventory when usable, otherwise
+  enumerated safe updater-owned candidates.
+- Preserved unlisted local files and backups, skipped obsolete-file pruning,
+  and allowed stable recovery to replace declared files even at the same
+  version.
+
+#### Recovery startup and Admin status
+
+- Closed admission to new ordinary requests before waiting for existing readers
+  to drain during reset, preventing visitor traffic from starving recovery
+  startup.
+- Kept activation and migrations waiting for readers and requiring exclusive
+  runtime ownership.
+- Distinguished recovery replacement waiting on a worker from job failure in
+  the Admin update flow, and released the updater runtime lease before GitHub
+  update-check requests.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/updates_filesystem.php` and updater job services to
+  make recovery manifest checks advisory while keeping ordinary package and
+  automatic-update verification strict.
+- Updated `app/early_runtime.php` to close request admission before draining
+  existing readers during reset.
+- Updated `app/controllers/updates.php` to handle pending worker replacement
+  and release the runtime lease before update-check I/O.
+
+#### Tests
+
+- Extended recovery coverage for FTP recovery without a manifest, stable
+  recovery with malformed manifest metadata, and admission closure with a live
+  reader.
+- Retained coverage rejecting corrupt ordinary packages.
+
+#### Documentation
+
+- Updated `ARCHITECTURE.md`, `docs/AUTOUPDATE.md`,
+  `docs/COMPATIBILITY_LIFECYCLE.md`, `TESTING.md`, and the English, Czech,
+  German, and Swedish TeX manuals.
+
+### User Impact
+
+#### For administrators
+
+- Could complete explicit FTP or stable recovery despite unusable publisher
+  metadata, with those checks recorded as warnings rather than blocking
+  recovery.
+- Saw pending worker replacement handled as waiting rather than as a job
+  failure. Ordinary package and automatic updates continued to require strict
+  manifest verification.
+
+#### For visitors
+
+- Reset stopped admitting new shared requests while existing readers drained.
+  No other visitor-facing behavior change was evidenced.
+
 ## Version 0.144.5
 
 Improved recovery from stuck application-update jobs and overwrite-only FTP
