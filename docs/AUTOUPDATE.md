@@ -96,8 +96,11 @@ has its own finite transient budget and cannot create another rollback.
 
 ### Actual database safety
 
-Before first activation, an exclusive `runtime-use.lock` waits for existing
-ordinary request/CLI shared leases to drain. Busy ownership yields without
+Before first ordinary activation, the prepared job publishes its activation gate
+before trying the exclusive `runtime-use.lock`. New ordinary requests receive
+503 before taking a shared lease, while existing readers finish. This ordering
+prevents continuing visitor traffic from starving activation. It also applies
+when an older persisted job next reaches activation. Busy ownership yields without
 consuming a failure retry or spinning a continuation chain. A durable
 `rollback-window.json` is opened before file changes. Packages declaring
 isolation protocol 1 and entering it from bootstrap preserve the activation gate
@@ -166,17 +169,19 @@ migrations produce a nonblocking notice with their ledger identities.
 
 ### Integrity, discovery and operations
 
-Ordinary new package jobs require complete normalized SHA-256 core-manifest coverage
-according to the canonical integrity policy. Other updater-owned package assets
-(such as vendor licenses or binary resources) retain trusted-origin/archive
-validation and receive private raw SHA-256 identities before staging. Snapshot
-hashes also preserve exact original bytes. Normalization cannot hide a change
-to a binary resource or rollback snapshot. Ordinary jobs retain
-matching version/algorithm; explicit Admin recovery treats manifest diagnostics
-as warnings as described below. All jobs retain origin/path/permission/size checks.
+`APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED` defaults to `false` until an
+explicit future change enables it. The publisher verifier remains implemented,
+but package and ready stages do not run its file sweeps, including FTP diagnostics.
+The Admin calls this short stage **Preparing package**. Installation uses the
+selected trusted archive bytes and pins exact copy hashes during staging and
+activation. Required runtime files, archive ownership/paths, transport limits,
+backup/DB recovery evidence and removal policy remain enforced. Release-time
+manifest generation, package-build checks and the separate Integrity tool remain
+available. Re-enabling the flag restores the retained publisher verifier for
+newly validated jobs; it does not reinterpret already staged checkpoints.
 Only already persisted legacy jobs retain their prior compatibility reader.
-Package and ready/backup checks hash at most forty files per bounded slice,
-persist cursors and recheck prepared bytes at activation. Missing/changed backup
+Staging and backup work remains bounded and activation rechecks prepared bytes.
+Missing/changed backup
 metadata or bytes stop before active file mutation.
 
 After release or successful rollback, discovery may install a strictly newer
@@ -223,13 +228,13 @@ newer-version check, comparison against the damaged installation, historical DB
 rollback witness or old job checkpoint is required. It preserves configuration,
 media, unlisted local files and backups; obsolete-file pruning is skipped.
 
-For these explicit Admin recoveries, all manifest checks are advisory. A missing,
+When the optional verifier is enabled, explicit Admin manifest checks are advisory. A missing,
 malformed, stale or version-mismatched manifest is logged as
 `update.recovery_validation_warning`; recovery continues. Content differences
 are warning receipts with repository-relative file identity and expected/actual digests,
 shown in the job and logged as `update.file_integrity_warning`. The actual
-selected bytes remain pinned through staging and activation. Ordinary automatic
-and package updates retain strict manifest checking. Trusted HTTPS download,
+selected bytes remain pinned through staging and activation. With the flag
+disabled, both the ordinary sweep and these diagnostics are skipped. Trusted HTTPS download,
 safe ZIP paths, bounded extraction, required application files, runtime ownership
 and actual migration execution remain enforced. Publisher metadata is not a
 prerequisite: an optional inventory selects existing safe files, with safe source

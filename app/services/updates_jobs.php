@@ -41,6 +41,15 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+/**
+ * Purpose: retain the optional publisher-manifest sweep without running it in jobs.
+ * Type: bool. Units: enabled/disabled. Scope: newly validated installation jobs.
+ * Consumers: package acceptance and exact-byte staging/activation.
+ * Rationale: false remains the default until explicitly re-enabled; required
+ * files, archive paths, database recovery evidence and removal policy stay intact.
+ */
+const APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED = false;
+
 // Keep active/last state lookups available without including worker state-machine parts.
 require_once __DIR__ . '/updates_job_lookup.php';
 require_once dirname(__DIR__) . '/early_runtime.php';

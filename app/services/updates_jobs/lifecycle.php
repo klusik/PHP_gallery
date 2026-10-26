@@ -719,6 +719,7 @@ function application_update_retry_job(string $jobId, bool $automatic = false): a
                 'recovery_ready_index',
                 'recovery_ready_verified',
                 'recovery_backup_identity',
+                'publisher_integrity_disabled',
             ] as $key) {
                 unset($job['checkpoints'][$key]);
             }

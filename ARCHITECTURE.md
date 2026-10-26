@@ -2806,10 +2806,11 @@ uncompressed data. Its central-directory scan checkpoints every 500 entries.
 `extract` writes one entry through a `.part` file and checkpoints the entry
 index. `package_validate` requires the complete PHP Gallery source-root
 contract and the selected stable target floor. Persisted legacy jobs retain their
-compatibility reader. Ordinary new package jobs require complete normalized
-manifest coverage and bounded verification, repeated on staged bytes before
-activation. Explicit Admin recovery uses warning-only manifest diagnostics and
-pins the selected actual source bytes instead, as described below.
+compatibility reader. The publisher verifier is retained behind
+`APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED`, currently `false` until explicitly
+enabled. Package and ready sweeps are skipped; staging and activation pin/check
+the actual selected source bytes. Archive ownership, required files and DB/backup
+recovery evidence remain separate enforced contracts.
 Canonical non-core assets use private exact-byte SHA-256 identities; snapshots
 also use raw hashes rather than text normalization.
 New package jobs pin a full trusted GitHub commit;
@@ -2854,13 +2855,16 @@ already equals the prepared file is treated as completed, so a killed activation
 can continue without rewriting work already committed. Obsolete managed paths
 are removed only after prepared replacements have been processed.
 
-Immediately before publication, the updater atomically writes
+Before waiting for ordinary readers to finish, the prepared job atomically writes
 `cache/updates/activation.json`. The early runtime checks this marker before
-loading the mutable application graph and returns `503 Service Unavailable` with
+acquiring a shared lease or loading the mutable application graph and returns
+`503 Service Unavailable` with
 `Cache-Control: no-store` while activation is incomplete. Corrupt or incomplete
 marker state fails closed. New jobs retain the gate through durable job
 completion; legacy jobs use their activation-complete receipt. The authenticated updater recovery/status path
-remains reachable so an interrupted activation can continue.
+remains reachable so an interrupted activation can continue. Existing requests
+finish before the exclusive lease allows file publication. New visitors can no
+longer indefinitely replace the readers that have already finished.
 
 A portable PHP application on ordinary shared hosting cannot atomically exchange
 an entire non-symlink directory tree. Therefore a process termination inside
@@ -2884,11 +2888,12 @@ checkpoint pause request; the UI repeats the requested replacement action.
 FTP completion skips package activation; stable recovery downloads one pinned
 stable commit and overwrites every declared file, including same-version bytes.
 Both preserve unlisted files and skip obsolete-file pruning. All manifest
-diagnostics, including absent/invalid metadata and content differences, become
+diagnostics, when enabled, including absent/invalid metadata and content differences, become
 warning receipts only for explicit recoveries. Metadata cannot veto installation;
 actual source bytes are independently pinned through staging and activation.
 Safe paths and required runtime files remain mandatory. Ordinary update
-validation is unchanged. Explicit recovery never claims automatic rollback
+validation uses the same disabled publisher-sweep flag. Explicit recovery never
+claims automatic rollback
 without a historical DB witness.
 Newer manually installed code prevents old package continuation. Pause/resume
 preserves ordinary checkpoints, while Reset starts a new linked identity.

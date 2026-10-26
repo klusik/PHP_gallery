@@ -19,7 +19,7 @@ License: MIT
 <main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="updates" data-admin-side-panel-title="Updates">Open updates</a></main>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
-import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261026-updater-reset-v2';
+import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261026-activation-drain-v4';
 import {setupAdminNavdataUpdateFeedback} from '/public/assets/gallery-modules/admin-navdata-update.js?v=20261002-navdata-ajax-v1';
 import {setupAdminRouteNavdata} from '/public/assets/gallery-modules/admin-route-navdata.js?v=20261005-route-navdata-v2';
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
@@ -237,7 +237,7 @@ try {
         await fixtureFetch('/__viewport?width=' + width);
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         for (const currentScope of panel.querySelectorAll('[data-update-job-scope]')) {
-            check(currentScope.querySelector('[data-update-job-title]').textContent === 'Verifying integrity'
+            check(currentScope.querySelector('[data-update-job-title]').textContent === 'Preparing package'
                 && currentScope.querySelector('[data-update-job-percent]').textContent === '37%'
                 && currentScope.querySelector('[role="progressbar"]').getAttribute('aria-valuenow') === '37'
                 && currentScope.querySelector('[data-update-job-message]').textContent === 'Verifying package file integrity.',

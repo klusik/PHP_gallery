@@ -3317,8 +3317,10 @@ Updater activation uses the~reviewed updater subset of~the~production inventory.
 Failed jobs from automatic, Admin/API and~Advanced commit installs share
 three transient retries after 60, 120 and~240 seconds. Undefined functions
 and~deterministic integrity failures do~not~repeat the~same defective package.
-New jobs pin an~immutable trusted GitHub commit and~verify the~complete manifest
-and~staged bytes. Non-core assets and~rollback snapshots additionally preserve
+New jobs pin an~immutable trusted GitHub commit. The~publisher integrity sweep
+is~retained but~disabled until explicitly enabled; the~short stage is~labelled
+\ui{Preparing package}. Staging and~activation check actual copy bytes.
+Non-core assets and~rollback snapshots additionally preserve
 exact bytes through raw SHA-256 identities. At~least 600 seconds after the~first
 failure, an~untouched
 pre-activation job releases its active slot. A~safe post-activation failure
@@ -3380,12 +3382,16 @@ preserves their records and~gate receipts, then starts fresh forward completion.
 head, overwriting every packaged file even at~the~same version. It~also replaces
 stuck or~paused jobs without requiring FTP. Both actions preserve configuration,
 media, unlisted local files and~backups. File-content differences are~warnings
-with the~relative file and~expected/actual digests in~the~log; normal automatic
-updates retain strict verification. Safe archive paths, required files and~runtime
-ownership remain enforced. A~missing, malformed or~stale manifest also becomes
+with the~relative file and~expected/actual digests in~the~log when the~optional
+verifier is~enabled. Its~sweeps are~currently disabled for~all installation jobs.
+Safe archive paths, required files and~runtime
+ownership remain enforced. With the~optional verifier enabled, a~missing,
+malformed or~stale manifest also becomes
 a~warning and~cannot stop either recovery action. Reset closes visitor admission
 before existing requests drain, so~ongoing traffic cannot prevent its~start.
 Actual activation and~migrations wait for~those requests to~finish.
+Ordinary automatic updates also close admission before waiting for~existing
+readers, so~new visitors cannot indefinitely delay activation.
 Busy takeover is~shown explicitly and~continues
 automatically. FTP retry rechecks installed files instead of~downloading.
 Recovery runs forward migrations; database changes are~never reversed.

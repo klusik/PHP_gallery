@@ -55,11 +55,21 @@ const RUNTIME_WAIT_DELAY_MS = 2000;
  * @type {WeakMap<Element, string>}
  */
 const SUMMARY_REQUESTS = new WeakMap();
+/**
+ * Purpose: name durable updater stages consistently in synchronized progress cards.
+ * Type: Readonly<Record<string, string>>.
+ * Units: one English display label per durable stage identifier.
+ * Scope: updater progress rendering in this Admin browser module.
+ * Consumers: stageLabel(), used for job titles and current-stage text.
+ * Rationale: a fixed label map keeps stored machine identifiers independent
+ * from readable progress text, including the disabled publisher sweep.
+ * @type {Readonly<Record<string, string>>}
+ */
 const STAGE_LABELS = {
     download: 'Downloading package',
     archive_validate: 'Checking archive',
     extract: 'Extracting package',
-    package_validate: 'Verifying integrity',
+    package_validate: 'Preparing package',
     plan: 'Preparing activation plan',
     stage_files: 'Staging files',
     backup: 'Preparing rollback data',

@@ -780,8 +780,8 @@ function application_update_manifest_hash(string $path): string
  * Core-manifest verification is temporarily disabled for legacy persisted jobs.
  * Explicit Admin FTP/stable recovery treats manifest checks as diagnostics:
  * their failures become warnings and never stop forward installation.
- * Independent runtime files and safe paths remain required. Ordinary jobs
- * retain strict publisher verification.
+ * The optional publisher sweep is disabled until explicitly re-enabled.
+ * Independent runtime files and safe paths remain required.
  * Archive entry validation, source-root validation, updater-managed path
  * filtering, schema preflight, and
  * activation rollback remain enforced by their owning stages.
@@ -801,16 +801,18 @@ function application_update_job_validate_package_slice(
     $recovery = $manual || !empty($job['recovery_override']);
     application_update_assert_source_root($sourceRoot, $recovery, !$recovery);
     $job['checkpoints']['source_root'] = $sourceRoot;
+    $verifyPublisher = APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED;
+    $job['checkpoints']['publisher_integrity_disabled'] = !$verifyPublisher;
 
     $bootstrapVersion = application_update_version_from_local_bootstrap($sourceRoot
         . '/app/bootstrap.php');
     $job['checkpoints']['validated_version'] = $bootstrapVersion ?? '';
     if ($recovery) {
         try {
-            if (!is_file($sourceRoot . '/app/core-manifest.json')) {
+            if ($verifyPublisher && !is_file($sourceRoot . '/app/core-manifest.json')) {
                 throw new RuntimeException('Recovery diagnostic manifest is missing.');
             }
-            if (!application_update_recovery_verify_package(
+            if ($verifyPublisher && !application_update_recovery_verify_package(
                 $job, $sourceRoot, $budget, true,
             )) {
                 return false;
@@ -883,7 +885,7 @@ function application_update_job_validate_package_slice(
         }
     }
 
-    if (($job['recovery_schema'] ?? 0) === 1
+    if ($verifyPublisher && ($job['recovery_schema'] ?? 0) === 1
         && !application_update_recovery_verify_package($job, $sourceRoot, $budget)) {
         return false;
     }
