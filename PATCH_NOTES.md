@@ -1,5 +1,27 @@
 # Patch notes
 
+## Version 0.144.14
+
+Recorded the release origin and predecessor metadata for Version 0.144.14.
+
+### Highlights
+
+#### Release metadata
+
+- Initialized the immutable origin record and predecessor record for this release.
+
+### Technical Details
+
+#### Release process
+
+- Added `.github/release-origins/v_0.144.14.json` and
+  `.github/release-predecessors/v_0.144.14.json`.
+
+### User Impact
+
+- No direct visitor or administrator behavior changed; this release updated
+  release metadata only.
+
 ## Version 0.144.13
 
 Shortened updater maintenance to the critical file, migration, and finalization
