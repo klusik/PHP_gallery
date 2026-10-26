@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.144.12
+
+During activation maintenance, HTML visitors received a self-contained page with
+a retry option while the service remained unavailable.
+
+### Highlights
+
+- Added a self-contained English maintenance page for browser GET requests that
+  accept HTML. It included light and dark styling, a “Try again” link, and a
+  three-second refresh of the current URL.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/early_runtime.php` to serve the maintenance page with HTTP 503,
+  `noindex`, and restrictive content-policy headers, without using a database
+  or external assets.
+- Kept HEAD responses bodyless. POST, non-HTML, and JSON requests retained the
+  plain unavailable response without automatic refresh.
+- Kept presentation separate from updater state: it did not admit a runtime
+  reader or change updater job state.
+
+#### Tests
+
+- Added `tests/activation_maintenance_response_test.php` to cover response
+  content and headers, HEAD and machine/POST behavior, unchanged gate and job
+  state, and normal responses after gate removal.
+
+#### Documentation
+
+- Updated `ARCHITECTURE.md`, `TESTING.md`, `docs/AUTOUPDATE.md`,
+  `docs/COMPATIBILITY_LIFECYCLE.md`, and the English, Czech, German, and
+  Swedish manuals.
+
+### User Impact
+
+- Visitors using HTML-capable browsers saw maintenance guidance and could retry
+  or wait for the page to refresh; the service still returned HTTP 503.
+- No direct administrator behavior change was evidenced.
+
 ## Version 0.144.11
 
 This release recorded release-origin and predecessor metadata without changing
