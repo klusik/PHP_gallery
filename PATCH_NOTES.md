@@ -1,5 +1,23 @@
 # Patch notes
 
+## Version 0.144.7
+
+Recorded the immutable origin and predecessor metadata for this release.
+
+### Highlights
+
+- Added release origin and predecessor records for `v_0.144.7`.
+
+### Technical Details
+
+- Added `.github/release-origins/v_0.144.7.json` and
+  `.github/release-predecessors/v_0.144.7.json`.
+
+### User Impact
+
+- Visitor and administrator behavior did not change. The release metadata
+  provides maintainers with origin and predecessor records.
+
 ## Version 0.144.6
 
 Made explicit FTP and stable-update recovery less dependent on publisher metadata while preserving strict checks for ordinary package and automatic updates. Improved recovery startup while requests were active and clarified pending replacement behavior in the Admin update flow.
