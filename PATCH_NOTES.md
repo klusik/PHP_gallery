@@ -1,5 +1,134 @@
 # Patch notes
 
+## Version 0.144.3
+
+Improved failed-update recovery with bounded retries, verified file rollback
+and durable evidence of migration and runtime activity. Corrected release-note
+references and added safe cleanup of successfully integrated feature branches.
+
+### Highlights
+
+#### Bounded recovery of failed updates
+
+- Added recovery for failed automatic, Admin/API and Advanced commit-ID update
+  jobs while preserving their original trigger and saved update preferences.
+  Running or ordinarily paused manual jobs retained their authenticated owner.
+- Limited transient failures to three automatic retries with 60-, 120- and
+  240-second backoff. Preserved the total retry budget across intermediate
+  progress and explicit retries, and detected interrupted worker slices through
+  durable receipts.
+- Stopped automatic retries for undefined functions, deterministic integrity
+  failures and the known legacy failure reference `F05D71A153A2`.
+- Made abandonment eligible after at least ten minutes from the first caught
+  failure. Pre-activation recovery released the active pointer while retaining
+  the failed job and artifacts; eligible post-activation failures created one
+  independently identified rollback job.
+
+#### Verified rollback and runtime isolation
+
+- Restricted automatic file rollback to a complete verified original snapshot,
+  cooperative runtime isolation, unchanged actual database schema and migration
+  ledger, and proof that no migration effects or ordinary runtime use occurred.
+  Missing or uncertain evidence kept the failed state with repair guidance.
+- Restored overwritten and removed managed files, removed files created by the
+  failed update and restored saved stable/beta settings. Preserved configuration,
+  media, failure evidence and the database; migrations were never reversed.
+- Kept protocol-1 activation isolated through migration and final cleanup.
+  Ordinary HTTP/CLI work received a private 503 while gated; authenticated Admin
+  updater requests and valid private worker tickets retained their subsequent
+  authentication and authorization checks.
+- Reused a durable rollback reservation after interrupted recovery, preserving
+  the source and child identities. Prevented failed rollback jobs from spawning
+  another rollback.
+
+#### Release and integration workflow improvements
+
+- Bound release-note issue and pull-request references to each commit's purpose,
+  changed paths and current release diff. Removed inherited fixed issue links
+  from new origin commits and release PR wrappers while preserving historical
+  notes and completed editorial content.
+- Routed an explicit `NOTES_REVIEW_REQUIRED` model response through the existing
+  source-bound external JSON handoff, retaining provider limits and provenance
+  validation.
+- Added deletion of the selected remote feature branch after successful develop
+  publication and retention of its integration record. Used an exact
+  candidate-SHA lease to preserve concurrent commits and retained branches for
+  qualification-only and recovery modes.
+
+### Technical Details
+
+#### Updater backend and package integrity
+
+- Updated `app/services/updates_jobs/activation.php`,
+  `app/services/updates_jobs/lifecycle.php`,
+  `app/services/updates_jobs/errors.php` and their state, lookup and background
+  owners to retain failure deadlines, recovery boundaries and linked rollback
+  receipts under the existing start and worker locks.
+- Pinned new update jobs to full trusted GitHub commit identities. Required
+  complete normalized core-manifest coverage, retained raw SHA-256 identities
+  for non-core package assets and original snapshots, and verified prepared
+  bytes before activation. Persisted legacy jobs retained their compatibility
+  reader; moving-branch failures without immutable identity remained stopped.
+- Added shared ordinary-runtime leases and exclusive activation ownership in
+  `app/early_runtime.php`. Busy leases yielded without consuming a failure retry
+  or continuing a spinning worker chain.
+- Added fresh bounded schema/index and migration-ledger evidence through
+  `app/models/schema_inspection.php`, including applied migration file hashes.
+  Unknown or changed database evidence refused restoration. Recorded migration
+  intent before execution and accepted only not-started intent or a completed
+  zero-migration receipt for automatic rollback. Added no production database
+  migration or table.
+
+#### Scheduling and diagnostics
+
+- Kept failed jobs visibly failed in scheduler status and allowed independently
+  throttled availability discovery while repair remained blocked. Excluded the
+  highest failed stable version and up to 32 recent failed full commits from
+  automatic reinstallation while preserving explicit manual selection.
+- Added one due updater-only opportunity after a complete authenticated Updates
+  page response. Kept AJAX/status reads passive and prevented that opportunity
+  from publishing galleries or running unrelated maintenance.
+- Updated `scripts/application_update.php` and all four language catalogs for
+  recovery outcomes and safe repair guidance. Preserved the installer capability
+  OFF boundary and existing stable-channel discovery preferences.
+
+#### Tests and documentation
+
+- Added `tests/updater_recovery_test.php` and a disposable migration fixture for
+  actual SQL, file activation, bounded retries, interrupted recovery, independent
+  rollback identity, lock contention and restoration integrity. Covered refusal
+  after runtime use, uncertain or changed migration evidence, unsupported
+  isolation and missing or corrupt backups.
+- Extended scheduler, autoupdate interval, resumable-state, safety-model and
+  Admin browser fixtures, plus contextual release-note and completion tests.
+- Updated updater operations, architecture, database and compatibility guidance,
+  testing references, CI/release documentation and all four maintained manual
+  sources.
+
+### User Impact
+
+#### For visitors
+
+- Reduced the need for manual intervention after recoverable update failures
+  once the new recovery mechanism was installed. Protected in-flight activation
+  with temporary maintenance responses instead of admitting ordinary runtime
+  work into an unverified rollback window.
+
+#### For administrators and maintainers
+
+- Added bounded repair and explicit refusal reasons without silently enabling
+  automatic updates or changing the selected channel. Failed source jobs and
+  their artifacts remained available for diagnosis.
+- Documented that gated outages needed hosting CLI/cron or an authenticated
+  Admin opportunity for later recovery: backoff eligibility did not create an
+  idle timer, and denied visitors could not run the scheduler.
+- Documented coordinated manual forward repair for already stuck installations,
+  including the migrated `0.144.1` failure. Publishing this release or copying
+  updater files alone did not install missing recovery proof or establish
+  database compatibility.
+- Improved the relevance of newly generated release notes and retired only
+  successfully integrated, unchanged feature refs through the reviewed workflow.
+
 ## Version 0.144.2
 
 Isolated initial visitor-content migration seeding from the runtime gallery
