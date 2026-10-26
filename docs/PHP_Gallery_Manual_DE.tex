@@ -3512,6 +3512,12 @@ Freigabe der Schlösser eine Sekunde. Der konfigurierte Admin-Sitzungsname bleib
 auch nach dem Sitzungsschluss für Hintergrundarbeit erhalten. Das Startprotokoll
 nennt die Zielversion; ein separates Abschlussereignis nennt vorherige und
 installierte Version erst nach dauerhaftem Abschluss.
+Während der Aktivierung sehen Besucher eine kompakte englische Wartungsseite
+statt einer schlichten Servermeldung. Sie lädt die aktuelle Seite alle drei
+Sekunden neu, auch ohne JavaScript, und bietet \ui{Try again}.
+Die eigenständige helle oder dunkle Darstellung benötigt weder Datenbank noch
+Anwendungsdateien. HTTP 503 bleibt erhalten; POST- und Maschinenantworten werden
+nicht automatisch wiederholt.
 Warten auf Übernahme wird angezeigt und automatisch fortgesetzt. FTP-Wiederholen
 prüft installierte Dateien statt herunterzuladen. Datenbankmigrationen laufen
 nur vorwärts; Datenbankänderungen werden nicht zurückgenommen.

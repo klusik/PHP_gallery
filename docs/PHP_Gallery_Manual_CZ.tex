@@ -3375,6 +3375,11 @@ další návštěva není nutná. Předání se~po~uvolnění zámků zpomalí o
 Název adminové relace se~zachová i~po~jejím uzavření před prací na~pozadí,
 takže ověřený správce dosáhne na~obnovu. Log zahájení uvádí cílovou verzi;
 samostatný záznam dokončení uvádí předchozí a~nainstalovanou verzi až~po~dokončení.
+Při aktivaci návštěvníci uvidí přehlednou anglickou stránku údržby místo
+strohé serverové hlášky. Aktuální stránka se~obnovuje každé tři sekundy
+i~bez~JavaScriptu a~nabízí \ui{Try again}. Samostatný světlý či~tmavý vzhled
+nepotřebuje databázi ani soubory aplikace. HTTP 503 zůstává; odpovědi
+na~POST a~strojové požadavky se~nikdy automaticky neopakují.
 Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
 znovu zpracuje nahrané soubory místo stahování. Dokončí se~dopředné migrace;
 databázové změny se~nevracejí.

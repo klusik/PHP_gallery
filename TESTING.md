@@ -4856,6 +4856,15 @@ lock release; visitor discovery and ordinary worker handoffs remain unpaced.
 The real handoff callback also acquires both kernel locks, proving that the
 predecessor released its chain and worker ownership before delivery.
 
+`activation_maintenance_response_test.php` starts the actual early-runtime probe
+on an ephemeral loopback port and a random private installation. It checks the
+browser HTML, three-second refresh, retry/no-store/noindex headers, empty HEAD,
+unchanged plain replies for JSON/media/POST and absence of reflected request or
+private job data. Refused requests must leave the runtime lease absent and job
+state untouched. Removing only the owned gate restores a normal response at the
+same URL. The fixture uses no installed configuration, database or external
+assets. Desktop and narrow rendering are reviewed separately from HTTP evidence.
+
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a
 copied actual migration runner in an owned temporary installation. Database
