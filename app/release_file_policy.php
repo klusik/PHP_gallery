@@ -236,6 +236,7 @@ function release_file_policy_is_production_path(string $relativePath): bool
             $relativePath,
             [
                 'config.php',
+                'maintenance.lock',
                 'app/bootstrap/config.php',
                 'public/assets/custom.css',
                 'public/assets/custom-overrides.css',
@@ -563,6 +564,7 @@ function release_file_policy_is_updater_path(string $relativePath): bool
             $relativePath,
             [
                 'config.php',
+                'maintenance.lock',
                 'app/bootstrap/config.php',
                 'public/assets/custom.css',
                 'public/assets/custom-overrides.css',
@@ -624,6 +626,7 @@ function release_file_policy_is_protected_path(string $relativePath): bool
         $portablePath,
         [
             'config.php',
+            'maintenance.lock',
             'app/bootstrap/config.php',
             'public/assets/custom.css',
             'public/assets/custom-overrides.css',
@@ -675,6 +678,7 @@ function release_file_policy_is_integrity_path(string $relativePath): bool
         $relativePath === ''
         || $relativePath === 'app/core-manifest.json'
         || $relativePath === 'config.php'
+        || $relativePath === 'maintenance.lock'
         || $relativePath === 'app/bootstrap/config.php'
         || $relativePath === 'public/assets/custom.css'
         || $relativePath === 'public/assets/custom-overrides.css'

@@ -263,7 +263,7 @@ function application_update_start_rollback_job(
 }
 
 /**
- * Advance one update job within a bounded normal-work slice.
+ * Advance one update job and reopen committed runtime before bounded cleanup.
  *
  * Activation is the only intentionally non-yielding stage. It consists only of
  * local prepared file replacements and deletions, with rollback data already
@@ -305,6 +305,12 @@ function application_update_process_job(
             // A non-active job must never mutate application files concurrently
             // with the globally active update, even if its id is addressed directly.
             return application_update_job_public_state($job);
+        }
+        if (!empty($job['checkpoints']['runtime_committed'])) {
+            // Replay a lost response after the usable runtime was committed.
+            // Cleanup failure/pause must never prolong or recreate maintenance.
+            application_update_runtime_window_close($job);
+            application_update_activation_gate_clear((string) $job['id']);
         }
         if ((string) ($job['status'] ?? '') === 'failed') {
             // Caught failures require application_update_retry_job() so package-stage
@@ -400,6 +406,7 @@ function application_update_process_job(
                 $next = 'finalize';
             } elseif ($stage === 'finalize') {
                 application_update_job_finalize($job);
+                application_update_runtime_commit($job);
                 $next = 'cleanup';
             } elseif ($stage === 'cleanup') {
                 if (($job['operation'] ?? '') !== 'manual_deploy'

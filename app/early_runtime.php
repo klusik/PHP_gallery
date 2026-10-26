@@ -261,22 +261,114 @@ function register_emergency_handler(): void
 }
 
 /**
- * Return the updater activation marker path without loading updater services.
+ * Return the sole public maintenance marker without loading updater services.
  *
  * @param string $projectRoot Absolute path to the project root.
- * @return string Absolute path to the activation marker.
+ * @return string Absolute path to the installation's maintenance.lock file.
  */
 function activation_gate_path(string $projectRoot): string
 {
     return (
         rtrim($projectRoot, '/\\')
             . DIRECTORY_SEPARATOR
-            . 'cache'
-            . DIRECTORY_SEPARATOR
-            . 'updates'
-            . DIRECTORY_SEPARATOR
-            . 'activation.json'
+            . 'maintenance.lock'
     );
+}
+
+/**
+ * Import a pre-existing activation marker before admitting the new runtime.
+ *
+ * Old installed workers can still publish activation.json while replacing this
+ * file. Exclusive creation publishes the canonical gate without overwriting a
+ * manual marker or another owner. Exact original bytes remain in a private
+ * content-addressed receipt; only maintenance.lock controls public admission.
+ * @param string $projectRoot Absolute installation root being bootstrapped.
+ * @return void Imports legacy bytes once, or leaves an existing canonical owner.
+ * @throws \RuntimeException When a legacy marker cannot be safely preserved.
+ */
+function import_legacy_activation_gate(string $projectRoot): void
+{
+    $legacy = rtrim($projectRoot, '/\\') . '/cache/updates/activation.json';
+    if (!is_file($legacy)) {
+        return;
+    }
+    $bytes = file_get_contents($legacy);
+    if ($bytes === false) {
+        throw new \RuntimeException('Legacy maintenance state cannot be read.');
+    }
+    $path = activation_gate_path($projectRoot);
+    if (!file_exists($path)) {
+        $handle = @fopen($path, 'x+b');
+        if (is_resource($handle)) {
+            try {
+                // An incomplete write remains a closed marker. Never delete it
+                // on failure and accidentally admit a partly activated tree.
+                if (fwrite($handle, $bytes) !== strlen($bytes)
+                    || !fflush($handle)) {
+                    throw new \RuntimeException('Legacy maintenance state cannot be imported.');
+                }
+            } finally {
+                fclose($handle);
+            }
+        } elseif (!is_file($path)) {
+            throw new \RuntimeException('The maintenance marker cannot be created.');
+        }
+    }
+    $old = json_decode($bytes, true);
+    $oldId = is_array($old) ? (string) ($old['job_id'] ?? '') : '';
+    $currentBytes = is_file($path) ? file_get_contents($path) : false;
+    if ($currentBytes !== $bytes) {
+        $current = is_string($currentBytes) ? json_decode($currentBytes, true) : null;
+        $currentId = is_array($current) ? (string) ($current['job_id'] ?? '') : '';
+        if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $oldId) !== 1
+            || preg_match('/^\d{14}-[a-f0-9]{12}$/D', $currentId) !== 1) {
+            // A manual marker wins without discarding unknown old ownership.
+            return;
+        }
+        if ($oldId !== $currentId) {
+            $oldJob = read_json_file(dirname($legacy) . '/jobs/' . $oldId . '/job.json');
+            if (($oldJob['id'] ?? '') !== $oldId
+                || ($oldJob['status'] ?? '') !== 'cancelled'
+                || ($oldJob['result']['superseded_by'] ?? '') !== $currentId) {
+                return;
+            }
+        }
+        // A later timestamp from the same worker, or its durable replacement,
+        // must not resurrect the old gate after the canonical owner completes.
+    }
+    $worker = null;
+    $directory = dirname($legacy) . '/jobs/' . $oldId;
+    if (preg_match('/^\d{14}-[a-f0-9]{12}$/D', $oldId) === 1
+        && is_dir($directory)) {
+        $worker = @fopen($directory . '/worker.lock', 'c+b');
+        if (!is_resource($worker) || !flock($worker, LOCK_EX | LOCK_NB)) {
+            if (is_resource($worker)) { fclose($worker); }
+            // Keep canonical admission closed while the old writer finishes.
+            return;
+        }
+    }
+    try {
+        if (!is_file($legacy) || file_get_contents($legacy) !== $bytes) {
+            return;
+        }
+        $receipt = dirname($legacy) . '/legacy-activation-'
+            . hash('sha256', $bytes) . '.json';
+        if (is_file($receipt)) {
+            if (file_get_contents($receipt) !== $bytes) {
+                throw new \RuntimeException('Legacy maintenance receipt is inconsistent.');
+            }
+            if (!@unlink($legacy) && is_file($legacy)) {
+                throw new \RuntimeException('Legacy maintenance state cannot be retired.');
+            }
+        } elseif (!@rename($legacy, $receipt) && is_file($legacy)) {
+            throw new \RuntimeException('Legacy maintenance evidence cannot be preserved.');
+        }
+    } finally {
+        if (is_resource($worker)) {
+            flock($worker, LOCK_UN);
+            fclose($worker);
+        }
+    }
 }
 
 /**
@@ -303,7 +395,7 @@ function read_json_file(string $path): ?array
  *
  * @param string $projectRoot Absolute path to the project root.
  * @param array<string,mixed> $marker Activation marker data read from disk.
- * @return bool True for a completed isolated job or legacy activation-complete receipt.
+ * @return bool True for a committed runtime, completed isolated job or legacy activation-complete receipt.
  */
 function activation_job_is_complete(string $projectRoot, array $marker): bool
 {
@@ -329,7 +421,8 @@ function activation_job_is_complete(string $projectRoot, array $marker): bool
         is_array($job)
             && hash_equals($jobId, (string) ($job['id'] ?? ''))
             && (!empty($marker['recovery_isolation'])
-                ? ($job['status'] ?? '') === 'completed'
+                ? (($job['status'] ?? '') === 'completed'
+                    || !empty($job['checkpoints']['runtime_committed']))
                 : !empty($job['checkpoints']['activation_complete']))
     );
 }
@@ -486,7 +579,7 @@ HTML;
 /**
  * Fail new ordinary HTTP requests closed while a release activation is in progress.
  *
- * New isolated jobs remain gated until completion; legacy jobs use the durable
+ * New isolated jobs remain gated until runtime commit; legacy jobs use the durable
  * activation_complete receipt. Missing, corrupt, or incomplete state remains gated so
  * an interrupted mixed-version release cannot silently reopen to public traffic.
  *
@@ -579,17 +672,37 @@ function updater_worker_allowed(string $projectRoot, array $owner): bool
 }
 
 /**
- * Acquire a shared runtime lease and record admission during a rollback window.
+ * Admit ordinary runtime only outside the sole maintenance marker.
+ *
+ * Active jobs and rollback records identify exempt authenticated workers and
+ * safety witnesses; they do not independently emit maintenance. A lease failure
+ * without the marker is an infrastructure error, never a hidden maintenance mode.
  * @param string $projectRoot Absolute installation root.
  * @return void Holds a request-local lease until shutdown; refuses unwitnessed use.
  */
 function updater_runtime_enter(string $projectRoot): void
 {
+    import_legacy_activation_gate($projectRoot);
     if (isset($GLOBALS['gallery_updater_runtime_lease'])
         || (defined('GALLERY_UPDATER_WORKER') && GALLERY_UPDATER_WORKER === true)) {
         return;
     }
     $base = rtrim($projectRoot, '/\\') . '/cache/updates';
+    $markerPath = activation_gate_path($projectRoot);
+    $gate = read_json_file($markerPath);
+    if (is_file($markerPath)) {
+        if (is_array($gate) && activation_job_is_complete($projectRoot, $gate)) {
+            @unlink($markerPath);
+        }
+        if (is_file($markerPath)) {
+            if (is_array($gate) && (activation_admin_recovery_allowed($gate)
+                || updater_worker_allowed($projectRoot, $gate))) {
+                return;
+            }
+            emit_activation_unavailable();
+            exit();
+        }
+    }
     $owner = read_json_file($base . '/rollback-window.json');
     if ($owner === null) {
         $active = read_json_file($base . '/active-job.json');
@@ -608,9 +721,7 @@ function updater_runtime_enter(string $projectRoot): void
     // runtime ownership. Existing requests finish under their old shared lease.
     // Refuse new ordinary requests before taking another shared lease, retaining
     // the second check below for a gate published during this admission race.
-    $gate = read_json_file($base . '/activation.json');
-    if (is_array($gate) && !empty($gate['recovery_isolation'])
-        && !activation_job_is_complete($projectRoot, $gate)) {
+    if (is_file($markerPath)) {
         emit_activation_unavailable();
         exit();
     }
@@ -621,14 +732,15 @@ function updater_runtime_enter(string $projectRoot): void
     $lease = @fopen($base . '/runtime-use.lock', 'c+b');
     if ($lease === false || !flock($lease, LOCK_SH | LOCK_NB)) {
         if (is_resource($lease)) { fclose($lease); }
-        emit_activation_unavailable();
-        exit();
+        if (is_file($markerPath)) {
+            emit_activation_unavailable();
+            exit();
+        }
+        throw new \RuntimeException('Runtime ownership is unavailable without a maintenance marker.');
     }
     $GLOBALS['gallery_updater_runtime_lease'] = $lease;
     register_shutdown_function(__NAMESPACE__ . '\\updater_runtime_leave');
-    $gate = read_json_file($base . '/activation.json');
-    if (is_array($gate) && !empty($gate['recovery_isolation'])
-        && !activation_job_is_complete($projectRoot, $gate)) {
+    if (is_file($markerPath)) {
         emit_activation_unavailable();
         exit();
     }

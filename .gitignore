@@ -1,5 +1,6 @@
 config.php
 config.php.lock
+/maintenance.lock
 /cache/*
 !/cache/.htaccess
 /logs/

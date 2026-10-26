@@ -2856,15 +2856,26 @@ can continue without rewriting work already committed. Obsolete managed paths
 are removed only after prepared replacements have been processed.
 
 Before waiting for ordinary readers to finish, the prepared job atomically writes
-`cache/updates/activation.json`. The early runtime checks this marker before
+`maintenance.lock` in the installation root. The early runtime checks this marker before
 acquiring a shared lease or loading the mutable application graph and returns
 `503 Service Unavailable` with
 `Cache-Control: no-store` while activation is incomplete. Corrupt or incomplete
-marker state fails closed. New jobs retain the gate through durable job
-completion; legacy jobs use their activation-complete receipt. The authenticated updater recovery/status path
+marker state fails closed. New jobs retain the gate through forward migrations and required finalization.
+A durable `runtime_committed` checkpoint closes the rollback observation window
+and reopens the website before resumable physical cleanup. Pausing or retrying
+cleanup never recreates maintenance; legacy jobs retain their original receipts. The authenticated updater recovery/status path
 remains reachable so an interrupted activation can continue. Existing requests
 finish before the exclusive lease allows file publication. New visitors can no
 longer indefinitely replace the readers that have already finished.
+
+The marker is installation-owned, excluded from deployment/rollback payloads,
+and covered by the existing Apache denial of direct `.lock` access. An empty
+operator-created marker also enables maintenance and has no automatic expiry.
+Active jobs and rollback records alone do not enable the maintenance response.
+The early runtime imports a legacy `cache/updates/activation.json` before
+admission, preserves its exact bytes privately, and retires that legacy name.
+This bridge supports an already-running old installed worker; it does not
+introduce a second public switch or a version-directory deployment model.
 
 While that owned gate is closed, a worker that progressed into a runtime wait
 keeps its private continuation, paced by a one-second delay after lock release.
@@ -2978,8 +2989,9 @@ saved beta/stable preferences. Capability OFF remains authoritative.
 
 Early runtime and bootstrap hold shared request leases; activation requires
 exclusive ownership, yields on contention and opens a durable observation window
-before file changes. Protocol-1 target packages preserve the gate until completion,
-including migrations and cleanup. Authenticated Admin update requests and
+before file changes. New target packages preserve the gate through migrations
+and required finalization, then commit the runtime before physical cleanup.
+Older jobs retain their original completion boundary. Authenticated Admin update requests and
 unexpired hashed job-bound private tickets retain their later controller checks.
 The existing dependency-free early response owner presents a compact maintenance
 document for browser GET/HEAD requests accepting HTML. Its inline style uses

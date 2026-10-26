@@ -35,7 +35,10 @@ Updater recovery reads the complete bounded migration ledger, including
 Versioned evidence distinguishes intentionally retired migration files using
 the installed manifest from missing/corrupt declared files. Historical rows
 remain intact and non-pending; no migration or schema change is introduced by
-this updater repair. Old saved evidence retains its original comparison
+this updater repair. A finalized runtime commits only after forward migrations
+complete; its isolation window closes before physical cleanup. Subsequent public
+traffic therefore cannot be treated as an untouched automatic rollback window.
+Old saved evidence retains its original comparison
 contract; absent historical evidence is never reconstructed as a past DB fact.
 
 

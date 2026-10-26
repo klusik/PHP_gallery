@@ -3307,9 +3307,20 @@ a~nastavení kanálu: vrátí i~odstraněné soubory a~odstraní nově vytvořen
 Obě identity, archivy, zálohy a~diagnostika zůstávají zachované.
 Selhaný rollback nevytváří další rollback.
 
+Jediným veřejným přepínačem údržby je~\codeword{maintenance.lock} v~kořeni
+instalace. Údržbu zapne i~ručně vytvořený prázdný soubor; jeho odstranění
+ukončí ruční údržbu. Aktivní úlohy ani záznamy obnovy samy web nezavírají.
+Před odstraněním markeru aktualizátoru po~přerušeném zápisu prověřte stav
+úlohy. Starý aktivační marker se~převede před přijetím požadavku a~jeho
+přesné bajty zůstanou soukromě zachované. Marker není součástí balíčku
+ani návratu souborů. Potvrzení použitelného běhu ukončí izolované okno
+pro automatický rollback. Soubory se~nadále aktualizují na~místě.
+
 Obnova souborů vyžaduje ověřené zálohy, shodu skutečného schématu a~ledgeru
 a~důkaz nulových účinků migrací. Před aktivací doběhnou sdílené běhové zámky;
-podporovaný cílový balíček drží bránu až~do~dokončení úlohy.
+podporovaný balíček drží bránu přes migrace a~nezbytnou finalizaci. Potom
+potvrdí použitelný běh a~otevře web před fyzickým úklidem. Úklid může
+pokračovat, čekat nebo být pozastavený za~běžného provozu.
 Běžný provoz v~pozorovacím okně zneplatní bezpečnost návratu i~při stejném
 schématu. Zahájené neověřené migrace, neznámá databáze, chybějící důkaz
 či~starší nepodporovaný balíček zůstávají selhané s~postupem opravy.

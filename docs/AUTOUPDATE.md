@@ -96,6 +96,15 @@ has its own finite transient budget and cannot create another rollback.
 
 ### Actual database safety
 
+The only public maintenance switch is `maintenance.lock` in the installation
+root. Its existence closes ordinary admission, including an empty manually
+created file. It is private installation state, never a deployment payload.
+Removing an operator-created marker ends manual maintenance; inspect an
+updater-owned marker and its job before removal during an interrupted write.
+There is no blind time-based expiry. Legacy `cache/updates/activation.json`
+is imported before admission and retained as private byte-identical evidence;
+only the canonical marker then controls maintenance.
+
 Before first ordinary activation, the prepared job publishes its activation gate
 before trying the exclusive `runtime-use.lock`. New ordinary requests receive
 503 before taking a shared lease, while existing readers finish. This ordering
@@ -104,7 +113,13 @@ when an older persisted job next reaches activation. Worker-lock contention yiel
 without consuming a failure retry. A durable
 `rollback-window.json` is opened before file changes. Packages declaring
 isolation protocol 1 and entering it from bootstrap preserve the activation gate
-through migrations/finalization/cleanup, until job completion. Normal HTTP/CLI
+through migrations and required finalization. The durable `runtime_committed`
+checkpoint then closes the rollback window and removes the owned marker before
+physical cleanup. Download, extraction and ordinary preparation run with the
+website open; cleanup can continue, pause or retry with public traffic admitted.
+Existing recovery takeovers retain isolation when the old deployment is unsafe.
+A committed runtime no longer claims an isolated automatic rollback baseline.
+No release-directory switching or database rollback is introduced. Normal HTTP/CLI
 work receives a private 503 while gated. Authenticated Admin update requests and
 a correctly hashed, unexpired, job-bound private updater ticket may bootstrap;
 normal controller authentication, CSRF and maintenance-token checks still apply.

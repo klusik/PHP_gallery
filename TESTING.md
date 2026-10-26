@@ -4862,8 +4862,13 @@ browser HTML, three-second refresh, retry/no-store/noindex headers, empty HEAD,
 unchanged plain replies for JSON/media/POST and absence of reflected request or
 private job data. Refused requests must leave the runtime lease absent and job
 state untouched. Removing only the owned gate restores a normal response at the
-same URL. The fixture uses no installed configuration, database or external
-assets. Desktop and narrow rendering are reviewed separately from HTTP evidence.
+same URL. It also exercises an empty root `maintenance.lock`, active-job/window records
+without a marker, exact-byte legacy marker import and committed-runtime stale
+marker retirement while cleanup is still running. The real recovery fixture
+refuses commit before migrations/finalization, commits through the production
+owners, pauses cleanup, admits an independent public reader and refuses an
+isolated rollback claim after reopening. The fixture uses no installed
+configuration, database or external assets. Desktop and narrow rendering are reviewed separately from HTTP evidence.
 
 It executes real persistence, worker/kernel locks, discovery, manifest checks,
 staging, backups, atomic rollback activation, settings reconciliation and a
