@@ -1,5 +1,80 @@
 # Patch notes
 
+## Version 0.144.10
+
+Fixed automatic updates that stopped while waiting to activate a prepared
+release behind the maintenance gate. Improved authenticated administrator
+access during automatic activation and separated installation-start messages
+from actual completion records.
+
+### Highlights
+
+#### Automatic update continuation
+
+- Fixed a stalled activation path in which the maintenance gate blocked new
+  visits after the private worker chain stopped waiting for existing requests.
+- Kept a private successor for progressed workers waiting for runtime readers
+  behind their closed gate. Paced these handoffs by one second after releasing
+  worker and chain locks; kept ordinary handoffs unpaced.
+- Preserved the configured administrator session name when an update job was
+  created after the visitor session had closed, keeping authenticated recovery
+  admission available.
+
+#### Clear installation logs
+
+- Changed automatic-update start messages to name the target version and state
+  that installation was still running.
+- Added a separate completion event with the previous, installed and target
+  versions and copied-file count after the job completed durably.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/updates_background.php` to retain authenticated,
+  single-use continuations for progressed runtime waits behind a closed gate.
+  Kept failed, disabled and no-progress worker handling intact.
+- Added the bounded private-drain handoff policy in
+  `app/services/updates_jobs.php`.
+- Updated `app/services/updates_jobs/state.php` to retain `session_name()`
+  after session close without bypassing server-side administrator verification.
+- Updated `app/services/updates_install.php` and
+  `app/services/updates_jobs/lifecycle.php` to distinguish
+  `update.autoupdate_started` from `update.autoupdate_completed`.
+  Kept completed jobs successful if log insertion failed.
+
+#### Translations and documentation
+
+- Added matching start and completion messages to the English, Czech, German
+  and Swedish PHP and JSON catalogs.
+- Updated the updater, architecture, compatibility and testing references and
+  all four manual sources to describe closed-gate continuations and log events.
+
+#### Tests
+
+- Extended `tests/updater_recovery_test.php` to check session-name retention,
+  actual activation after a held reader drained and one completion record
+  across a repeated terminal status read.
+- Updated the real HTTP continuation fixture to cross the early activation
+  gate, reject an ordinary follow-up with HTTP 503 and complete through
+  private successors without another admitted visit.
+- Added actual lock reacquisition at worker delivery and restricted the
+  request-latency contract to the single guarded private-drain delay while
+  retaining authentication, replay, contention and capability checks.
+
+### User Impact
+
+#### For visitors
+
+- Fixed the stopped continuation that could leave an automatic update serving
+  maintenance responses after its existing requests had drained. Maintenance
+  admission remained closed while files were activated.
+
+#### For administrators
+
+- Kept authenticated update recovery reachable for jobs created after session
+  close and made installation progress distinguishable from completion in logs.
+
 ## Version 0.144.9
 
 Recorded the release origin and predecessor metadata for v0.144.9.
