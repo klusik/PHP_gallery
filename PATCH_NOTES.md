@@ -1,5 +1,99 @@
 # Patch notes
 
+## Version 0.144.5
+
+Improved recovery from stuck application-update jobs and overwrite-only FTP
+deployments. Added a direct reset path and made explicit stable installation
+replace previous updater ownership instead of silently returning the old job.
+
+### Highlights
+
+#### Fresh recovery from the Admin interface
+
+- Added Reset updater / finish FTP update directly to running, paused and
+  stopped job cards, alongside its Advanced tools entry. Started a new linked
+  job with its own processing counter while preserving previous job records,
+  packages, backups and original gate receipts.
+- Made Install stable available outside beta mode and while the installed
+  release was already current. Downloaded one pinned stable branch head and
+  selected every packaged application file for replacement.
+- Preserved configuration, media, unlisted local files and retained backups
+  during explicit recovery, without obsolete-file pruning or database rollback.
+
+#### FTP completion and useful file warnings
+
+- Fixed failed FTP completion retries restarting archive download instead of
+  rechecking files already uploaded to the server.
+- Recorded manifest content differences as warnings for explicit Admin FTP
+  and stable recovery, including locally different stylesheets. Kept the
+  selected bytes pinned through staging and activation.
+- Added repository-relative file identities and expected/actual digests to
+  integrity diagnostics, with visible file warnings in the updater card.
+  Kept ordinary package and automatic-update verification strict.
+
+#### Ownership handoff and responsive controls
+
+- Waited for in-flight updater work at a safe checkpoint before replacing its
+  active and gate ownership. Displayed pending takeover and retried the
+  replacement action automatically instead of continuing the old job.
+- Preserved malformed old marker bytes and resumed interrupted takeover
+  reservations, including a child already owning one of the global markers.
+- Kept both recovery controls usable during existing work and suppressed late
+  continuation responses after a replacement. Clarified completion feedback
+  without promising a rollback snapshot for manual FTP completion.
+- Stopped a previously verified manual completion after another FTP version
+  replaced its installed files.
+
+### Technical Details
+
+#### Backend
+
+- Extended the existing updater services, Admin controller and view rather
+  than adding a separate installer pipeline. Kept Admin authentication, CSRF,
+  safe archive paths, required files, runtime isolation and migration execution.
+- Preserved explicit recovery as forward work without claiming an automatic
+  previous-database rollback baseline.
+- Passed the canonical installation root into server-policy finalization while
+  retaining the dependency-light default used by older bootstrap callers.
+
+#### Database
+
+- Added no database schema migration. Continued pending migrations forward
+  through the existing bounded runner and retained gallery revision readiness
+  checks before file activation.
+
+#### Frontend and documentation
+
+- Updated English, Czech, German and Swedish recovery labels and explanations,
+  the updater browser module revision, permanent references and all four TeX
+  manual sources.
+
+#### Tests
+
+- Extended actual-file and SQLite/MySQL/MariaDB recovery coverage for stylesheet
+  differences, correct FTP retry, worker contention, malformed gates,
+  interrupted reservations, same-version stable replacement and retained data.
+- Checked reset/stable controls, pending takeover, visible warnings and stale
+  responses in the production desktop/narrow browser drawer fixture.
+- Corrected the source fixture reader to distinguish class methods from
+  namespace functions while preserving genuine duplicate-function rejection.
+
+### User Impact
+
+#### For administrators
+
+- Provided a visible recovery action for the stopped updater after uploading
+  the full release over FTP. Kept a direct web route to reinstalling stable
+  without an FTP transfer for each subsequent recovery.
+- Kept old evidence available for diagnosis while displaying a fresh job,
+  concrete file warnings and ownership waiting instead of an unexplained
+  continuation of the previous run.
+
+#### For visitors
+
+- Retained runtime isolation until file replacement and forward migrations
+  completed. Gallery content and media were preserved.
+
 ## Version 0.144.4
 
 Improved application-update reliability on long-lived installations, added
