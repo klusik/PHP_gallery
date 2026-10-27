@@ -3267,6 +3267,30 @@ Der fertige Bericht wird als Download zum Browser zurückgegeben und nicht als B
 \index{t00240@Telemetrie}
 \index{d00068@Datenschutz!t00240@Telemetrie}
 
+Der kompakte Arbeitsbereich trennt \ui{Übersicht},
+\ui{Erfassung und Datenschutz}, \ui{Verlauf und Wartung} und \ui{Berichte}.
+Die URL erhält den gewählten Tab beim Neuladen und im Browserverlauf.
+Jede Einstellung wird nach einer Änderung einzeln gespeichert; ohne
+JavaScript bleiben native Formulare mit ausdrücklichem Speichern verfügbar.
+Fragezeichen erklären Erfassung, Datenschutz, Grenzen und Standardwerte.
+Ein unbestätigter Speichervorgang sperrt nur sein Formular und bietet das
+Neuladen des gespeicherten Zustands ohne erneuten Schreibversuch an.
+Segmentierte HTML-Berichte öffnen sich in einem neuen Tab; Einstellungen und
+Protokolle sind separate Ziele. Zusammenfassung/Bereinigung bleibt eine
+ausdrückliche Aktion mit aufklappbarem technischem Ergebnis.
+
+In der Übersicht öffnen Fotonamen das öffentliche Fotodetail und Galerienamen
+die betreffende Galerie. Die normalen Zugriffskontrollen gelten weiterhin.
+Sechs kleine Tagesbalkendiagramme ergänzen die Summen, jedes mit eigener Skala.
+Beim Darüberfahren erscheinen Datum und genauer Wert; \ui{Tagesdetails}
+enthält dieselben Werte in einer per Tastatur zugänglichen Tabelle. Fehlende
+oder gelöschte Tage bleiben Lücken. Aufbewahrung kann Summen ohne Tagesdetails
+hinterlassen. Bilddaten umfassen Fotos und Vorschaubilder ohne Downloads.
+Nicht überprüfbare öffentliche Pfade lassen die Namen ohne Links lesbar.
+Das Fotosymbol nutzt die Vorschau des Galerie-Bildeditors: Zeigerkontakt oder
+Tastaturfokus zeigt sie, Klicken fixiert sie und Escape schließt sie.
+Das begrenzte Vorschaubild wird erst beim Öffnen geladen.
+
 Der optionale Bereich \ui{Telemetrie} erfasst datenschutzkontrollierte Betriebsmessungen und zeigt sie als Administrationsberichte. Steuerungen umfassen Telemetriehauptschalter, öffentliche Nutzungsmessung, Leistung, Cache- und Datenbankereignisse, Berücksichtigung von Do Not Track, Ausschluss von Administratoren, maximale gezählte Fotobetrachtungsdauer und Aufbewahrung roher, stündlicher und täglicher Daten. Berichte enthalten bei aktivierten Kategorien beispielsweise anonyme Sitzungen, Seitenaufrufe, Fotoöffnungen und begrenzte Betrachtungszeit, Clientfehler, gemessene Medienbytes, Browserverteilung und Cache-/Datenbankaktivität.
 
 Das Telemetriesystem ist so ausgelegt, dass es keine unverarbeiteten IP-Adressen, Browser-User-Agent-Zeichenfolgen, Referrer-URLs, Namen, E-Mail-Adressen, Kontokennungen, Anfrageinhalte oder genauen Besucherorte speichert. Exporte enthalten aggregierte anonyme Telemetrie und Sitzungshashes statt ursprünglicher Besucherkennungen. Wartung aggregiert und bereinigt Telemetrie gemäß konfigurierter Aufbewahrungsrichtlinie; die Administrationsansicht kann einen eigenständigen HTML-Bericht zur Offline-Prüfung exportieren. Prüfen Sie Datenschutzsteuerungen vor Aktivierung der Erfassung auf einer öffentlichen Website.

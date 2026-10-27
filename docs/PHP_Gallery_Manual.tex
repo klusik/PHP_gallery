@@ -3155,6 +3155,28 @@ The~completed report is~returned to~the~browser as~a~download and~is~not~saved a
 \index{telemetry}
 \index{privacy!telemetry}
 
+The~compact workspace separates \ui{Overview}, \ui{Collection and~privacy},
+\ui{History and~maintenance}, and~\ui{Reports}. Its~query URL preserves
+the~selected tab across reload and~browser history. Each preference saves
+independently after a~change; native forms retain explicit Save without
+JavaScript. Question marks explain collection, privacy, limits and~defaults.
+An~unverified save locks its~own form and~offers a~passive reload without
+retrying the~write. Segmented HTML reports open in~a~new tab; Settings and~Logs
+are~separate destinations. Rollup/purge remains an~explicit action, with
+technical results in~a~disclosure.
+
+In~Overview, click a~ranked photo name to~open its~public detail, or~a~gallery
+name to~open that gallery. Existing access checks still apply. Six small daily
+bar charts accompany the~totals. Each chart has~its~own scale; hovering shows
+the~date and~exact value, and~\ui{Daily detail} provides the~same values
+in~a~keyboard-accessible table. Missing or~expired days remain gaps. Retention
+may leave totals without daily detail. Image bytes include photographs
+and~thumbnails, excluding downloads. Unavailable public-path metadata leaves
+ranking names readable without links.
+The~small photo icon uses the~same preview as~the~gallery Images editor:
+hover or~keyboard focus reveals it, clicking pins it, and~Escape closes it.
+The~bounded thumbnail loads only when the~preview is~opened.
+
 The~optional \ui{Telemetry} area records privacy-controlled operational measurements and~presents them as~Admin reports. Available controls cover the~master telemetry switch, public usage measurements, performance, cache and~database events, honoring Do~Not~Track, excluding administrators, the~maximum counted photo-view duration, and~retention for~raw, hourly, and~daily data. Reports include measures such as~anonymous sessions, page views, photograph opens and~capped view time, client errors, measured media bytes, browser mix, and~cache/database activity where those categories are~enabled.
 
 The~telemetry subsystem is~designed not~to~store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or~exact visitor locations. Exports contain aggregated anonymous telemetry and~session hashes rather than~raw visitor identifiers. Maintenance rolls up~and~purges telemetry according to~the~configured retention policy, and~the~Admin screen can~export a~standalone HTML report for~offline review. Review the~privacy controls before enabling collection on~a~public site.

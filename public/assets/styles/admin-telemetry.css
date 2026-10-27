@@ -3,188 +3,537 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: public/assets/styles/admin-telemetry.css
  * Module Type: Stylesheet
- * Purpose: Present a compact, readable Admin telemetry workspace.
- * Responsibilities:
- *   - Separate reporting from optional configuration without hiding privacy status.
- *   - Keep metric cards, setting groups, and aggregate tables responsive.
- * Author:
- *   Rudolf Klusal
- * Notes: Presentation only; collection, retention, and mutation policy remain server-owned.
+ * Purpose: Present compact telemetry reports and isolated preference groups.
+ * Responsibilities: Scope Theme glass surfaces, switches, help and narrow layouts.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  */
-
 .admin-telemetry-page {
+    --telemetry-line: color-mix(in srgb, var(--ink) 12%, transparent);
+    --telemetry-muted: color-mix(in srgb, var(--ink) 62%, var(--panel));
+    /* Match Appearance's legend spacing while using the shared group strip. */
+    --compact-heading-after: .35rem;
+    --compact-heading-end: 2.25rem;
+    --dashboard-content-group-gap: .65rem;
+    color: var(--ink);
+    font-size: .82rem;
     display: grid;
     gap: .65rem;
     min-width: 0;
 }
-
-/* Scope shared card and heading overrides to the telemetry dashboard. */
-.admin-page .admin-telemetry-page .hero,
-.admin-page .admin-telemetry-page .panel {
-    min-width: 0;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(h1, p, form, label) {
     margin: 0;
-    padding: .75rem .9rem;
 }
-
-.admin-page .admin-telemetry-page h1,
-.admin-page .admin-telemetry-page h2 {
-    margin: 0 0 .5rem;
-    font-size: 1.15rem;
-    line-height: 1.35;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(button, .button, a) {
+    color: var(--ink);
+    background: transparent;
+    box-shadow: none;
+    text-decoration: none;
 }
-
-.admin-telemetry-page p {
-    margin: .35rem 0;
-    line-height: 1.5;
-}
-
-.admin-telemetry-page .hero .nav {
-    gap: .35rem;
-    margin-top: .5rem;
-}
-
-.admin-telemetry-page .telemetry-privacy-note {
-    padding-left: .65rem;
-    font-size: .85rem;
-}
-
-.admin-telemetry-page .metric-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
-    gap: .5rem;
-}
-
-.admin-telemetry-page .metric-card {
-    padding: .55rem .65rem;
-    border-radius: .5rem;
-    font-size: .85rem;
-}
-
-.admin-telemetry-page .metric-card strong {
-    font-size: 1.25rem;
-    margin-bottom: .2rem;
-}
-
-/* Native disclosure keeps settings accessible by keyboard and without JavaScript. */
-.telemetry-settings-panel > summary {
+.admin-page .admin-telemetry-page[data-telemetry-workspace] button {
+    font: inherit;
+    min-height: 28px;
+    padding: .15rem .4rem;
+    border: 1px solid var(--telemetry-line);
+    border-radius: min(var(--radius, 8px), 8px);
     cursor: pointer;
 }
-
-.admin-page .telemetry-settings-panel > summary h2 {
-    display: inline;
-    margin: 0;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] [hidden] {
+    display: none !important;
 }
-
-.telemetry-settings-panel > summary:focus-visible {
-    outline: 2px solid var(--admin-brand, #385b9b);
-    outline-offset: 4px;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(a, button, input, summary):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
-
-.admin-telemetry-page .telemetry-settings-panel .form-grid {
-    gap: .75rem;
-    margin-top: .75rem;
-}
-
-.telemetry-settings-switches,
-.telemetry-settings-limits,
-.telemetry-table-grid {
-    display: grid;
-    gap: .65rem;
+.telemetry-toolbar,
+.telemetry-section-heading,
+.telemetry-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
     min-width: 0;
 }
-
-.telemetry-settings-switches {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.admin-page .telemetry-toolbar h1 {
+    font-size: .95rem;
+    line-height: 1.3;
+    font-weight: 650;
 }
-
-.admin-telemetry-page .telemetry-settings-switches .checkbox-row {
-    margin: 0;
-    padding: .4rem .5rem;
-    border-radius: .4rem;
-    background: color-mix(in srgb, currentColor 4%, transparent);
-    font-size: .85rem;
+.telemetry-collection-state {
+    margin-inline-start: auto;
+    color: var(--telemetry-muted);
+    font-size: .76rem;
 }
-
-.telemetry-settings-limits {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    align-items: start;
-    border-top: 1px solid var(--admin-border);
-    padding-top: .75rem;
+.telemetry-collection-state strong {
+    color: var(--ink);
+    font-weight: 600;
 }
-
-.telemetry-settings-limits > label {
-    min-width: 0;
-    margin: 0;
-    font-size: .85rem;
+.telemetry-tabs {
+    gap: .15rem;
+    padding: .2rem;
+    border: 1px solid var(--telemetry-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
 }
-
-.telemetry-settings-limits .muted {
+.telemetry-tabs a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: .15rem .55rem;
+    border: 1px solid transparent;
+    border-radius: min(var(--radius, 6px), 6px);
     font-size: .8rem;
-    font-weight: 400;
-    line-height: 1.45;
+    font-weight: 600;
 }
-
-.admin-telemetry-page .telemetry-settings-panel .bulk-row {
+.admin-page .telemetry-tabs a[aria-current="page"] {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+    box-shadow: inset 2px 0 color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.telemetry-section-heading {
+    margin-block-end: .4rem;
+}
+.admin-page .telemetry-section-heading h2 {
     margin: 0;
-    padding: 0;
+    font-size: .82rem;
+    font-weight: 600;
 }
-
-.telemetry-settings-panel > form + form {
-    border-top: 1px solid var(--admin-border);
-    margin-top: .75rem;
-    padding-top: .75rem;
+.telemetry-groups {
+    column-width: 300px;
+    column-count: 3;
+    column-gap: .65rem;
+    min-width: 0;
 }
-
-.telemetry-table-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+/* Group surfaces and full-width heading strips are owned by the shared
+ * Features/Maintenance rules in admin-feature-settings.css. Do not duplicate
+ * their geometry here or let a broad heading reset override their margins. */
+.telemetry-group-heading {
+    position: relative;
+    gap: .3rem;
 }
-
-.admin-telemetry-page table {
-    width: 100%;
-    table-layout: fixed;
-    font-size: .85rem;
+.telemetry-group-heading > .telemetry-help-trigger {
+    position: absolute;
+    top: .1rem;
+    right: .25rem;
 }
-
-.admin-telemetry-page th,
-.admin-telemetry-page td {
-    padding: .45rem .5rem;
-    vertical-align: top;
-    overflow-wrap: anywhere;
+.admin-page .telemetry-group-heading h2 {
+    margin: 0;
+    font: inherit;
 }
-
-.telemetry-table-grid th:first-child {
-    width: 45%;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: .65rem;
+    margin-block-end: .65rem;
 }
-
-.telemetry-table-grid th:last-child {
-    width: 20%;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] .metric-card {
+    display: flex;
+    flex: 1 1 8rem;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: .05rem;
+    min-width: 0;
+    padding: .25rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: .75rem;
+    color: var(--telemetry-muted);
 }
-
-.admin-telemetry-page th:last-child,
-.admin-telemetry-page td:last-child {
-    text-align: right;
+.admin-page .admin-telemetry-page[data-telemetry-workspace] .metric-card strong {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.25;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
 }
-
-.admin-telemetry-page .telemetry-split {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: .75rem;
+.telemetry-date-range {
+    margin-inline-start: auto;
+    font-size: .72rem;
+    color: var(--telemetry-muted);
 }
-
-@media (max-width: 1100px) {
-    .telemetry-settings-limits {
+.telemetry-sparkline {
+    display: block;
+    width: 100%;
+    height: 36px;
+    margin-block-start: auto;
+    padding-block-start: .3rem;
+    overflow: visible;
+}
+.telemetry-trend-baseline {
+    fill: none;
+    stroke: var(--telemetry-line);
+}
+.telemetry-trend-hit {
+    fill: transparent;
+}
+.telemetry-trend-bar {
+    fill: color-mix(in srgb, var(--accent) 65%, var(--ink));
+    pointer-events: none;
+}
+.telemetry-trend-hit:hover + .telemetry-trend-bar {
+    fill: var(--ink);
+}
+.telemetry-trend-empty {
+    margin-block-start: auto;
+    padding-block-start: .35rem;
+    font-size: .7rem;
+}
+.telemetry-daily-details {
+    margin-block: -.35rem .65rem;
+    font-size: .75rem;
+}
+.telemetry-daily-details > summary {
+    width: fit-content;
+    min-height: 28px;
+    cursor: pointer;
+    color: var(--telemetry-muted);
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] .telemetry-daily-table
+    :is(th, td):last-child {
+    width: auto;
+}
+.telemetry-daily-table caption {
+    padding-block: .35rem;
+    text-align: start;
+    color: var(--telemetry-muted);
+    font-size: .75rem;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] a.telemetry-entity-link {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--ink) 30%, transparent);
+    text-underline-offset: .15em;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] a.telemetry-entity-link:hover {
+    text-decoration-color: var(--accent);
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] .telemetry-photo-preview {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    vertical-align: middle;
+}
+.telemetry-photo-target {
+    display: flex;
+    align-items: flex-start;
+    gap: .2rem;
+    min-width: 0;
+}
+.telemetry-photo-target > .telemetry-entity-link {
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+.telemetry-photo-preview svg {
+    width: 15px;
+    height: 15px;
+}
+.admin-page:has(.admin-telemetry-page[data-telemetry-workspace]) .admin-image-preview-overlay {
+    width: min(25rem, calc(100% - 1.5rem));
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+}
+.admin-page:has(.admin-telemetry-page[data-telemetry-workspace]) .admin-image-preview-overlay button {
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    color: var(--ink);
+}
+@media (max-width: 1000px) {
+    .admin-page .admin-telemetry-page[data-telemetry-workspace] .metric-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+.admin-page .telemetry-preference {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .1rem .25rem;
+    min-height: 32px;
+    padding-block: .15rem;
+    border-bottom: 1px solid var(--telemetry-line);
+    font-size: .82rem;
+}
+.telemetry-preference:last-child {
+    border-bottom: 0;
+}
+.admin-page .telemetry-preference label {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: .4rem;
+    min-width: 0;
+    min-height: 28px;
+    padding: 0;
+    font-weight: 600;
+    cursor: pointer;
+}
+.telemetry-preference label span {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.admin-page .telemetry-preference input[type="number"] {
+    flex: 0 0 7ch;
+    width: 7ch;
+    min-width: 0;
+    min-height: 28px;
+    height: auto;
+    margin: 0;
+    padding: .1rem .2rem;
+    border: 1px solid var(--telemetry-line);
+    border-radius: min(var(--radius, 5px), 5px);
+    background: color-mix(in srgb, var(--panel) 35%, transparent);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 400;
+    text-align: right;
+}
+.admin-page .telemetry-preference input[type="checkbox"] {
+    appearance: none;
+    position: relative;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 14px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    cursor: pointer;
+}
+.admin-page .telemetry-preference input[type="checkbox"]::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+.admin-page .telemetry-preference input[type="checkbox"]:checked {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+.admin-page .telemetry-preference input[type="checkbox"]:checked::before {
+    transform: translateX(12px);
+}
+.telemetry-preference [disabled] {
+    opacity: .6;
+    cursor: wait;
+}
+.telemetry-preference [data-telemetry-feedback]:not(:empty) {
+    flex-basis: 100%;
+    padding-block: .15rem;
+    font-size: .74rem;
+    color: var(--telemetry-muted);
+}
+.telemetry-preference:is([data-save-state="error"], [data-save-state="unknown"])
+    [data-telemetry-feedback] {
+    color: var(--ink);
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] .telemetry-note {
+    margin: .35rem 0;
+    color: var(--telemetry-muted);
+    font-size: .76rem;
+    line-height: 1.4;
+}
+.telemetry-report-link,
+.telemetry-related-link {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    min-height: 32px;
+    padding-block: .15rem;
+    font-size: .82rem;
+}
+.telemetry-report-link {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--telemetry-line);
+}
+.telemetry-report-link:last-child {
+    border-bottom: 0;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] table {
+    width: 100%;
+    margin: .15rem 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: .74rem;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(th, td) {
+    padding: .3rem .2rem;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+    border-bottom: 1px solid var(--telemetry-line);
+    background: transparent;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(th, td):last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    width: 24%;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] tr:last-child td {
+    border-bottom: 0;
+}
+.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(.telemetry-help-trigger, .admin-dashboard-help > summary) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 24px;
+    min-height: 28px;
+    padding: 0 .2rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--telemetry-muted);
+    font-size: .8rem;
+    font-weight: 400;
+    list-style: none;
+    cursor: pointer;
+}
+.admin-telemetry-page .admin-dashboard-help > summary::-webkit-details-marker {
+    display: none;
+}
+.admin-telemetry-page .admin-dashboard-help {
+    display: inline-block;
+    position: relative;
+}
+.admin-telemetry-page .admin-dashboard-help-panel {
+    inset: auto;
+    width: max-content;
+    max-width: min(22rem, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: .5rem .65rem;
+    overflow: auto;
+    border: 1px solid var(--telemetry-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .8rem;
+    line-height: 1.45;
+}
+.admin-telemetry-page .admin-dashboard-help-panel[popover] {
+    position: fixed;
+}
+.admin-telemetry-page .admin-dashboard-help-panel::backdrop {
+    background: transparent;
+}
+.admin-telemetry-page .admin-dashboard-help-panel p + p {
+    margin-top: .35rem;
+}
+.admin-telemetry-page .telemetry-maintenance-result {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    font-size: .75rem;
+}
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page .admin-telemetry-page[data-telemetry-workspace] .metric-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-
-    .telemetry-table-grid {
-        grid-template-columns: minmax(0, 1fr);
+    .telemetry-daily-details > summary,
+    .admin-page .admin-telemetry-page[data-telemetry-workspace] .telemetry-photo-preview,
+    .admin-page .admin-telemetry-page[data-telemetry-workspace] a.telemetry-entity-link {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    .admin-page:has(.admin-telemetry-page[data-telemetry-workspace]) .admin-image-preview-overlay button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    .telemetry-daily-table thead {
+        position: absolute;
+        clip-path: inset(50%);
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+    }
+    .telemetry-daily-table tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-block-end: .5rem;
+    }
+    .telemetry-daily-table th[scope="row"] {
+        grid-column: 1 / -1;
+        text-align: start;
+    }
+    .telemetry-daily-table td::before {
+        content: attr(data-label);
+        display: block;
+        color: var(--telemetry-muted);
+        font-size: .7rem;
+    }
+    .admin-page .admin-telemetry-page[data-telemetry-workspace]
+        .telemetry-daily-table :is(th, td) {
+        text-align: start;
+    }
+    .telemetry-groups {
+        column-count: 1;
+        column-width: auto;
+    }
+    .telemetry-tabs a,
+    .telemetry-report-link,
+    .telemetry-related-link,
+    .admin-page .telemetry-preference label,
+    .admin-page .telemetry-preference input[type="number"],
+    .admin-page .admin-telemetry-page[data-telemetry-workspace] button,
+    .admin-page .admin-telemetry-page[data-telemetry-workspace]
+        :is(.telemetry-help-trigger, .admin-dashboard-help > summary) {
+        min-height: 44px;
+    }
+    .telemetry-tabs a {
+        flex: 1 1 auto;
+    }
+    .telemetry-collection-state {
+        flex-basis: 100%;
+        margin-inline-start: 0;
+    }
+    .admin-page .admin-telemetry-page[data-telemetry-workspace]
+        :is(.telemetry-help-trigger, .admin-dashboard-help > summary) {
+        min-width: 44px;
+    }
+    .telemetry-group-heading {
+        --compact-heading-min-height: 44px;
+        --compact-heading-end: 3rem;
+    }
+    .telemetry-group-heading > .telemetry-help-trigger {
+        top: 0;
     }
 }
-
-@media (max-width: 600px) {
-    .telemetry-settings-switches,
-    .telemetry-settings-limits,
-    .admin-telemetry-page .telemetry-split {
-        grid-template-columns: minmax(0, 1fr);
+@media (forced-colors: active) {
+    .admin-page .telemetry-preference input[type="checkbox"] {
+        appearance: auto;
+        background: Canvas;
+    }
+    .admin-page .telemetry-preference input[type="checkbox"]::before {
+        display: none;
+    }
+    .telemetry-group,
+    .telemetry-tabs,
+    .admin-telemetry-page .admin-dashboard-help-panel {
+        background: Canvas;
+        border-color: CanvasText;
+        color: CanvasText;
+    }
+    .admin-page .telemetry-tabs a[aria-current="page"] {
+        outline: 1px solid Highlight;
     }
 }

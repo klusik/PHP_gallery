@@ -1069,11 +1069,35 @@ removes the panel. Diagnostics never initiate media or metadata requests.
 
 Compact Dashboard help and factory-value rendering live in the existing
 `app/views/admin_ui.php` owner, shared with gallery editors. Maintenance-only
-sections remain deferred. Theme reuses the complete, already included
-`public-policy` access closure for its gallery picker and preview; scoped-save
-responses retain the canonical mutation owner. This adds no runtime files or
+sections remain deferred. Theme and Telemetry reuse their complete, already
+included `public-policy` access closure; scoped-save responses retain the
+canonical mutation owner. This adds no PHP files or
 logical modules and is expected to preserve the 3,653-duplicate ceiling.
 Hosted preparation and FULL establish actual conformance.
+
+Telemetry's existing controller prepares preference metadata from the telemetry
+settings service, including defaults and numeric bounds. Each scoped POST
+passes Admin/CSRF and saves one allowlisted key through that owner, then reads
+the persisted scalar before confirming completion. Legacy complete-form POSTs
+remain supported. The framework-free workspace owns tab/history navigation,
+anchored help and per-form pending/uncertain states. Rollup/purge remains an
+explicit separate action; standalone segmented HTML reports retain their
+existing report owners and open in a new tab.
+Telemetry group surfaces and full-width heading strips share the existing
+Features/Maintenance CSS owner. Local layout rules retain its geometry;
+narrow headings grow with their contextual help targets.
+The telemetry model returns optional verified public-path metadata alongside
+photo rankings. The controller builds public photo/gallery destinations with
+the existing URL owners; views only render prepared links. Ordinary public
+authorization remains in those destination routes. Daily overview charts reuse
+the existing hourly/session trend queries, adding image-only byte sums without
+changing export media-byte totals. The server renders SVG bars, date tooltips
+and a native daily table; charts need no new browser library or request.
+Ranking preview buttons reuse `setupAdminGalleryImages()` and its single
+document overlay; the existing global boot already initializes that owner.
+The controller supplies a bounded ordinary public-thumbnail URL, retaining
+media authorization and thumbnail-serving policy. No thumbnail is loaded by
+merely rendering the ranking table.
 
 ### Public request entry
 

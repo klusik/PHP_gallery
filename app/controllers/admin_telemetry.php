@@ -8,7 +8,7 @@
  * Module Type: Controller
  *
  * Purpose:
- *   Handles request-level application logic for the related gallery feature.
+ *   Owns authenticated telemetry reports, scoped settings and maintenance requests.
  *
  * Responsibilities:
  *   - Validate and route incoming request data
@@ -38,6 +38,9 @@ namespace Gallery\Controllers;
 
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_public_url;
+use function Gallery\Core\image_public_thumbnail_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_data;
 use function Gallery\Core\require_admin;
@@ -125,15 +128,79 @@ function render_telemetry_metric_card(
 }
 
 /**
- * Render the main anonymous telemetry dashboard.
- * @return void No return value; effects are recorded in the owned state.
+ * Keep the compact overview on one stable reporting period.
+ * Type: integer. Units: days. Scope: main Admin telemetry overview queries.
+ * Consumers: cms_admin_telemetry(). Value: 30.
+ * Rationale: retain the existing Last 30 days comparison across its metrics.
+ */
+const ADMIN_TELEMETRY_OVERVIEW_DAYS = 30;
+
+/**
+ * Bound the on-demand ranking preview to an ordinary supported thumbnail.
+ * Type: integer. Units: pixels. Scope: telemetry ranking hover/focus previews.
+ * Consumers: admin_telemetry_photo_rows(). Value: 600.
+ * Rationale: the shared preview is at most 400 CSS pixels wide; the ordinary
+ * thumbnail endpoint retains authorization, format and image-bound policies.
+ */
+const ADMIN_TELEMETRY_PREVIEW_SIZE = 600;
+
+/**
+ * Prepare canonical public destinations for existing photo ranking rows.
+ *
+ * @param list<array{id?:int|string,filename?:string,gallery_id?:int|string,
+ *     gallery_slug?:string,gallery_title?:string,image_url_slug?:string|null,
+ *     gallery_url_path?:string|null,image_modified_at?:string|null,
+ *     photo_views?:int|float|string,
+ *     avg_view_seconds?:int|float|string,view_count?:int|string}> $rows
+ *     Service-provided identities, verified route metadata and ranked metrics.
+ * @return list<array{id?:int|string,filename?:string,gallery_id?:int|string,
+ *     gallery_slug?:string,gallery_title?:string,image_url_slug?:string|null,
+ *     gallery_url_path?:string|null,image_modified_at?:string|null,
+ *     photo_views?:int|float|string,
+ *     avg_view_seconds?:int|float|string,view_count?:int|string,
+ *     photo_url:string,gallery_url:string,preview_url:string}> Ordinary public links
+ *     and a bounded thumbnail for the shared gallery-editor preview control;
+ *     unavailable route metadata retains readable unlinked names.
+ */
+function admin_telemetry_photo_rows(array $rows): array
+{
+    foreach ($rows as &$row) {
+        $row['photo_url'] = '';
+        $row['gallery_url'] = '';
+        $row['preview_url'] = '';
+        if (!isset($row['image_url_slug'], $row['gallery_url_path'])) {
+            continue;
+        }
+        $gallery = [
+            'url_path' => $row['gallery_url_path'],
+            'slug' => $row['gallery_slug'] ?? '',
+            'title' => $row['gallery_title'] ?? '',
+        ];
+        $row['gallery_url'] = gallery_public_url($gallery);
+        $image = [
+            'id' => $row['id'] ?? null,
+            'modified_at' => $row['image_modified_at'] ?? null,
+            'url_slug' => $row['image_url_slug'],
+            'filename' => $row['filename'] ?? '',
+        ];
+        $row['photo_url'] = image_public_url($image, $gallery);
+        $row['preview_url'] = image_public_thumbnail_url(
+            $image, $gallery, ADMIN_TELEMETRY_PREVIEW_SIZE, 'webp',
+        );
+    }
+    unset($row);
+    return $rows;
+}
+
+/**
+ * Prepare the compact telemetry workspace with canonical preference metadata.
+ * @return void Render schema status or the navigable reports/settings workspace.
  */
 function cms_admin_telemetry(): void
 {
     require_admin();
     $schemaStatus = presentation_telemetry_schema_status();
     $schemaReady = schema_inspection_is_available($schemaStatus);
-    $settings = $schemaReady ? telemetry_all_settings() : [];
     $schemaTitle = '';
     $schemaMessage = '';
     if (!$schemaReady) {
@@ -164,8 +231,9 @@ function cms_admin_telemetry(): void
 
     $metrics = [];
     $tables = [];
+    $trendRows = [];
     if ($schemaReady) {
-        $sessionSummary = telemetry_report_session_summary(30);
+        $sessionSummary = telemetry_report_session_summary(ADMIN_TELEMETRY_OVERVIEW_DAYS);
         $metrics = [
             [
                 'label' => t(
@@ -173,20 +241,23 @@ function cms_admin_telemetry(): void
                     'Anonymous sessions',
                 ),
                 'value' => (string) (int) ($sessionSummary['sessions'] ?? 0),
+                'trend_key' => 'sessions',
             ],
             [
                 'label' => t('admin.telemetry.metric_page_views', 'Page views'),
                 'value' => (string) telemetry_metric_events(
                     'public.page_views',
-                    30,
+                    ADMIN_TELEMETRY_OVERVIEW_DAYS,
                 ),
+                'trend_key' => 'page_views',
             ],
             [
                 'label' => t(
                     'admin.telemetry.metric_photo_opens',
                     'Photo opens',
                 ),
-                'value' => (string) telemetry_metric_events('photo.views', 30),
+                'value' => (string) telemetry_metric_events('photo.views', ADMIN_TELEMETRY_OVERVIEW_DAYS),
+                'trend_key' => 'photo_views',
             ],
             [
                 'label' => t(
@@ -195,9 +266,10 @@ function cms_admin_telemetry(): void
                 ),
                 'value' =>
                     number_format(
-                        telemetry_metric_sum('photo.view_seconds', 30),
+                        telemetry_metric_sum('photo.view_seconds', ADMIN_TELEMETRY_OVERVIEW_DAYS),
                         0,
                     ) . ' s',
+                'trend_key' => 'photo_seconds',
             ],
             [
                 'label' => t(
@@ -206,8 +278,9 @@ function cms_admin_telemetry(): void
                 ),
                 'value' => (string) telemetry_metric_events(
                     'client.errors',
-                    30,
+                    ADMIN_TELEMETRY_OVERVIEW_DAYS,
                 ),
+                'trend_key' => 'client_errors',
             ],
             [
                 'label' => t(
@@ -215,56 +288,61 @@ function cms_admin_telemetry(): void
                     'Image bytes measured',
                 ),
                 'value' => telemetry_format_bytes(
-                    telemetry_metric_sum('media.image.bytes', 30)
-                        + telemetry_metric_sum('media.thumbnail.bytes', 30),
+                    telemetry_metric_sum('media.image.bytes', ADMIN_TELEMETRY_OVERVIEW_DAYS)
+                        + telemetry_metric_sum('media.thumbnail.bytes', ADMIN_TELEMETRY_OVERVIEW_DAYS),
                     1,
                 ),
+                'trend_key' => 'image_bytes',
             ],
         ];
+        $daily = telemetry_report_daily_trends(ADMIN_TELEMETRY_OVERVIEW_DAYS);
+        foreach ($metrics as &$metric) {
+            $metric['trend'] = [];
+        }
+        unset($metric);
+        foreach ($daily as $day) {
+            $values = [];
+            foreach ($metrics as &$metric) {
+                $key = $metric['trend_key'];
+                $value = max(0, (float) ($day[$key] ?? 0));
+                // A missing session-day row is not a measured zero after retention.
+                $observed = $key !== 'sessions' || $value > 0;
+                $formatted = match ($key) {
+                    'image_bytes' => telemetry_format_bytes($value, 1),
+                    'photo_seconds' => number_format($value, 0) . ' s',
+                    default => number_format($value, 0),
+                };
+                $values[] = $observed ? $formatted : '—';
+                $metric['trend'][] = [
+                    'date' => $day['report_date'],
+                    'value' => $observed ? $value : null,
+                    'formatted' => $observed ? $formatted : '—',
+                ];
+            }
+            unset($metric);
+            $trendRows[] = ['date' => $day['report_date'], 'values' => $values];
+        }
         $tables = [
-            'top_photos' => telemetry_top_photos(),
-            'longest_photos' => telemetry_longest_viewed_photos(),
+            'top_photos' => admin_telemetry_photo_rows(telemetry_top_photos()),
+            'longest_photos' => admin_telemetry_photo_rows(telemetry_longest_viewed_photos()),
             'browser_mix' => telemetry_browser_mix(),
             'cache_mix' => telemetry_cache_mix(),
         ];
     }
-    $checkboxLabels = [
-        'telemetry_enabled' => t(
-            'admin.telemetry.setting_enable_subsystem',
-            'Enable telemetry subsystem',
-        ),
-        'telemetry_public_usage_enabled' => t(
-            'admin.telemetry.setting_collect_public_usage',
-            'Collect anonymous public usage telemetry',
-        ),
-        'telemetry_performance_enabled' => t(
-            'admin.telemetry.setting_collect_performance',
-            'Collect sampled browser performance metrics',
-        ),
-        'telemetry_cache_enabled' => t(
-            'admin.telemetry.setting_collect_cache',
-            'Collect cache efficiency metrics',
-        ),
-        'telemetry_database_enabled' => t(
-            'admin.telemetry.setting_collect_database',
-            'Collect database health metrics',
-        ),
-        'telemetry_respect_dnt' => t(
-            'admin.telemetry.setting_respect_dnt',
-            'Respect Do Not Track',
-        ),
-        'telemetry_admin_excluded' => t(
-            'admin.telemetry.setting_exclude_admins',
-            'Exclude logged-in admins from public telemetry',
-        ),
-    ];
-    $checkboxes = [];
-    foreach ($checkboxLabels as $key => $label) {
-        $checkboxes[] = [
-            'key' => $key,
-            'label' => $label,
-            'checked' => ($settings[$key] ?? '0') === '1',
-        ];
+    $preferences = $schemaReady
+        ? \Gallery\Services\telemetry_admin_editable_settings() : [];
+    foreach (\Gallery\Services\telemetry_admin_editable_setting_definitions() as $key => $definition) {
+        if (isset($preferences[$key])) {
+            $preferences[$key]['default'] = $definition['default'];
+        }
+    }
+    $requestedTab = $_GET['telemetry_tab'] ?? 'overview';
+    $activeTab = is_string($requestedTab)
+        && in_array($requestedTab, ['overview', 'collection', 'storage', 'reports'], true)
+        ? $requestedTab : 'overview';
+    $tabUrls = [];
+    foreach (['overview', 'collection', 'storage', 'reports'] as $tab) {
+        $tabUrls[$tab] = url_for('admin_telemetry', ['telemetry_tab' => $tab]);
     }
 
     \Gallery\Views\view_render_admin_telemetry_dashboard([
@@ -285,21 +363,20 @@ function cms_admin_telemetry(): void
                 'traffic_segment' => 'unknown',
             ]),
         ],
-        'dashboard_url' => url_for('admin'),
         'schema_ready' => $schemaReady,
         'schema_title' => $schemaTitle,
         'schema_message' => $schemaMessage,
         'public_enabled' => $schemaReady && telemetry_public_usage_enabled(),
-        'raw_retention_days' => $schemaReady
-            ? telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90)
-            : 7,
         'admin_excluded' =>
             $schemaReady
                 && current_user()
                 && telemetry_setting_enabled('telemetry_admin_excluded', '1'),
         'metrics' => $metrics,
-        'settings' => $settings,
-        'checkboxes' => $checkboxes,
+        'trend_rows' => $trendRows,
+        'trend_days' => ADMIN_TELEMETRY_OVERVIEW_DAYS,
+        'preferences' => $preferences,
+        'active_tab' => $activeTab,
+        'tab_urls' => $tabUrls,
         'settings_action_url' => url_for('admin_telemetry_settings'),
         'csrf_html' => csrf_field(),
         'maintenance_url' => url_for('admin_telemetry_maintenance'),
@@ -329,12 +406,13 @@ function render_telemetry_checkbox(
 
 /**
  * Render telemetry dashboard tables.
+ * @return void Emit linked photo rankings and browser/cache summaries.
  */
 function render_telemetry_tables(): void
 {
     \Gallery\Views\view_render_telemetry_tables([
-        'top_photos' => telemetry_top_photos(),
-        'longest_photos' => telemetry_longest_viewed_photos(),
+        'top_photos' => admin_telemetry_photo_rows(telemetry_top_photos()),
+        'longest_photos' => admin_telemetry_photo_rows(telemetry_longest_viewed_photos()),
         'browser_mix' => telemetry_browser_mix(),
         'cache_mix' => telemetry_cache_mix(),
     ]);
@@ -817,12 +895,17 @@ function cms_admin_telemetry_export(): void
 
 /**
  * Save validated telemetry settings from the authenticated admin form.
- * @return void Persists bounded preferences and redirects to telemetry.
+ * @return void Emit a scoped JSON completion or native redirect; unscoped
+ *     requests retain the existing complete-form preference semantics.
  */
 function cms_admin_telemetry_settings(): void
 {
     require_admin();
     verify_csrf();
+    if (array_key_exists('telemetry_preference', $_POST)) {
+        admin_telemetry_save_preference();
+        return;
+    }
     $schemaStatus = presentation_telemetry_settings_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {
@@ -893,6 +976,98 @@ function cms_admin_telemetry_settings(): void
 }
 
 /**
+ * Save one allowlisted preference without changing any other telemetry setting.
+ *
+ * Authentication and CSRF are established by the settings route before entry.
+ * A read after writing must confirm the stored scalar before reporting success;
+ * unavailable reads and unexpected write failures remain explicitly unverified.
+ *
+ * @return void Emit a canonical JSON completion or the native scoped redirect.
+ */
+function admin_telemetry_save_preference(): void
+{
+    $key = $_POST['telemetry_preference'];
+    $definitions = \Gallery\Services\telemetry_admin_editable_setting_definitions();
+    $requestedTab = $_POST['telemetry_tab'] ?? 'collection';
+    $tab = is_string($requestedTab)
+        && in_array($requestedTab, ['collection', 'storage'], true)
+        ? $requestedTab : 'collection';
+    $returnUrl = url_for('admin_telemetry', ['telemetry_tab' => $tab]);
+    $json = \Gallery\Core\admin_wants_json();
+    $ok = false;
+    $confirmed = false;
+    $values = [];
+    $message = t('admin.telemetry.preference_invalid', 'Choose a supported value.');
+    $status = 422;
+    if (is_string($key) && isset($definitions[$key])) {
+        $current = \Gallery\Services\telemetry_admin_editable_settings();
+        if (!empty($current[$key]['available'])) {
+            $confirmed = true;
+            $values[$key] = $current[$key]['current'];
+            $submitted = $_POST[$key] ?? (
+                $definitions[$key]['input_type'] === 'checkbox' ? '0' : null
+            );
+            try {
+                $normalized = \Gallery\Services\telemetry_admin_setting_normalize($key, $submitted);
+                // Once the writer starts, an exception cannot prove rollback.
+                $confirmed = false;
+                $values = [];
+                \Gallery\Services\telemetry_admin_setting_save($key, $normalized);
+                $stored = \Gallery\Services\telemetry_admin_editable_settings();
+                $confirmed = !empty($stored[$key]['available']);
+                $values = $confirmed ? [$key => $stored[$key]['current']] : [];
+                $ok = $confirmed && $stored[$key]['current'] === $normalized;
+                if ($ok) {
+                    admin_log_event('info', 'telemetry.settings_updated',
+                        'Telemetry settings were updated.', ['setting_key' => $key], [
+                            'category' => 'telemetry',
+                            'severity' => 'notice',
+                            'route_name' => 'admin_telemetry',
+                        ]);
+                }
+                $status = $ok ? 200 : ($confirmed ? 409 : 503);
+                $message = $ok
+                    ? t('admin.features.saved', 'Saved')
+                    : ($confirmed
+                        ? t('admin.telemetry.preference_refused', 'The saved value differs from your change. Review it before trying again.')
+                        : t('admin.telemetry.preference_unverified', 'Save could not be verified. Reload the saved state before trying again.'));
+            } catch (\InvalidArgumentException) {
+                // Validation finishes before the writer is admitted.
+                $status = 422;
+            } catch (\Throwable) {
+                $confirmed = false;
+                $values = [];
+                $status = 503;
+                $message = t('admin.telemetry.preference_unverified', 'Save could not be verified. Reload the saved state before trying again.');
+            }
+        } else {
+            $status = 503;
+            $message = t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.');
+        }
+    }
+    if (!$json) {
+        flash_message('admin_notice', $message);
+        redirect_to($returnUrl);
+        return;
+    }
+    $mutation = \Gallery\Core\admin_mutation_descriptor('settings.update', 'settings', 'update');
+    $fallback = ['redirect_url' => $returnUrl];
+    $payload = $ok
+        ? \Gallery\Core\admin_mutation_success_envelope($message, $mutation, null, [], $fallback)
+        : \Gallery\Core\admin_mutation_error_envelope($message, 'telemetry_preference_refused', $mutation, $fallback);
+    $payload['setting_values'] = $values;
+    $payload['confirmed'] = $confirmed;
+    $payload['public_enabled'] = $confirmed ? telemetry_public_usage_enabled() : null;
+    $payload['admin_excluded'] = $confirmed
+        ? (bool) current_user() && telemetry_setting_enabled('telemetry_admin_excluded', '1')
+        : null;
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
  * Run telemetry rollup and purge from the admin UI.
  * @return void No return value; effects are recorded in the owned state.
  */
@@ -959,7 +1134,7 @@ function cms_admin_telemetry_maintenance(): void
             'admin.telemetry.maintenance_title',
             'Telemetry maintenance',
         ),
-        'back_url' => url_for('admin_telemetry'),
+        'back_url' => url_for('admin_telemetry', ['telemetry_tab' => 'storage']),
         'result_json' => (string) json_encode(
             $result,
             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,

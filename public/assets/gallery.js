@@ -88,6 +88,7 @@ import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20261002-settings-workspace-v1';
 import { setupThemeAppearanceWorkspace } from './gallery-modules/admin-theme-appearance-workspace.js?v=20261027-compact-appearance-v2';
 import { setupThemeLanguageWorkspace } from './gallery-modules/admin-theme-language-workspace.js?v=20261027-compact-language-v3';
+import { setupAdminTelemetryWorkspace } from './gallery-modules/admin-telemetry-workspace.js?v=20261027-compact-telemetry-v2';
 import { setupAdminTagsWorkspace } from './gallery-modules/admin-tags-workspace.js?v=20261027-compact-tags-v2';
 import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261027-compact-factory-v2';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261027-compact-feature-settings-v1';
@@ -246,6 +247,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminSetupWizard();
     setupAdminLanguageSelectorDesign();
     setupThemeLanguageWorkspace();
+    setupAdminTelemetryWorkspace();
     setupThemeAppearanceWorkspace();
     setupAdminSmartGalleries();
     setupAdminUpdateJobs();

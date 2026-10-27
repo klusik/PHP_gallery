@@ -910,6 +910,27 @@ for each fullscreen quick-tag reopening and waits for that request's deferred
 resolver. Previous successful locks cannot satisfy the new phase. The fixture
 retains stale-owner rebinding, rejection recovery and actual unlock assertions.
 
+`admin_telemetry_workspace_test.php` exercises the real scoped controller and
+telemetry settings service against an isolated model store: auth/CSRF, unrelated
+preference preservation, numeric validation, missing/unknown schema, failed
+reads, and failures before/after persistence. It also renders production markup
+for `admin_telemetry_workspace_browser_test.mjs`, which checks reload/history,
+desktop/narrow group flow and help, independent writes, canonical refusal,
+out-of-order status, timeout, lost/malformed completion and separate maintenance.
+The fixture loads the shared Features/Maintenance stylesheet and checks
+full-width heading edges, separators, rounding and both dimensions of narrow
+help targets. Failed readback is tested as an uncertain write that may already
+have persisted. Real route probes use stable Telemetry workspace/status
+attributes instead of retired presentation classes.
+The render bridge now executes the actual overview controller, telemetry
+service and public URL helpers against controlled aggregate models. It covers
+renamed images in nested galleries, clean/query routing, missing/unknown route
+metadata, persisted preview cache identity, absent daily data, retained session
+gaps, all-zero series and image-byte totals excluding downloads. The browser
+fixture loads the existing gallery Images preview owner and verifies on-demand
+decode, hover exit, focus, pin, Escape, viewport bounds and single-overlay
+initialization, alongside native daily-table access and date-axis gaps.
+
 `tests/cache_lifecycle_registry_test.php` uses the actual registry model with a
 disposable SQLite table derived from the migration. It covers oldest-due
 selection, partial-region fairness/cursors, retained completed observations,

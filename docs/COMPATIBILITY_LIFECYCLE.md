@@ -1,5 +1,35 @@
 # Compatibility lifecycle and retirement register
 
+## Telemetry preference transports
+
+Overview navigation uses existing public photo/gallery URL owners and their
+normal access checks. Its telemetry service uses central schema inspection to
+verify route/cache-identity columns before the model reads them. Unverified
+columns leave ranking names unlinked and preserve the original read-only
+counts; do not guess a different public image slug. This remains permanent
+support for pre-path installs and transient observation failures; current
+deployment/version usage is unknown. The controller owns link preparation.
+Daily SVGs and the native daily-data disclosure work without JavaScript.
+Missing date rows and absent retained session-day rows remain gaps, while
+observed zero counters retain their zero baseline. Independent retention may
+leave headline totals without corresponding daily detail.
+Preview icons permanently reuse the Images editor's hover/focus/click/Escape
+owner and ordinary thumbnail serving. With no script, native photo/gallery
+name links remain available; preview enhancement usage is unknown. Opening a
+preview requests a bounded derivative and retains existing media protections.
+
+The telemetry controller and `admin-telemetry-workspace.js` enhance one-key
+native forms with immediate, authenticated CSRF-protected saves. Confirmed
+readback supplies canonical values; unavailable readback, timeout or malformed
+completion locks only that form and offers passive reload without write retry.
+The unchanged complete-form POST remains supported for existing consumers.
+Native scoped Save forms and help disclosures permanently support no-script
+and missing-Popover environments. Usage of those environments is unknown; no
+retirement cutoff is inferred. Isolated controller/browser fixtures cover the
+transport states; real devices, assistive technology and production acceptance
+remain separate from hosted qualification. Rollup/purge keeps its explicit POST
+and existing storage/service safety boundaries.
+
 ## Trash preferences and confirmation support
 
 `admin_trash.php` and `admin-trash.js` own the compact preference form and its

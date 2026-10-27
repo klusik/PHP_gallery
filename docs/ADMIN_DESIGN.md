@@ -254,6 +254,33 @@ and next step visible. A storage snapshot must never imply an end-to-end test,
 verified external connectivity, or blanket system readiness. Viewer diagnostics
 retains guarded progressive autosave and its native POST/Save fallback.
 
+Telemetry separates Overview, Collection and privacy, History and maintenance,
+and Reports with native links enhanced into local tabs. Preserve the selected
+tab through its query URL, reload and browser history. Collection, privacy,
+viewing limits and retention use independent flowing groups and one preference
+per native form. Keep historic metrics compact, detailed explanations behind
+anchored help and schema/save failures visible. Clearly label standalone HTML
+reports as new-tab outputs and related Settings/Logs as separate destinations.
+Rollup/purge remains a separate explicit POST action with a compact result page.
+Telemetry reuses the Features/Maintenance group surface and heading rules in
+`admin-feature-settings.css`. Keep their negative heading margins and bottom
+rule intact: a broad page-level heading reset must not inset the strip. Compare
+the rendered strip with Appearance's Site identity group before qualification,
+including its full width, rounding, spacing and Theme colors. On narrow screens,
+grow headings containing help to fit their 44px targets without overlapping
+the first setting row.
+Overview rankings link photo names and gallery names directly to their ordinary
+public destinations. Keep their existing typography with a quiet underline and
+visible keyboard focus. Six small daily bar charts sit inside the flat metric
+strip; use Theme colors and preserve gaps instead of fabricating zero days.
+Each metric has its own scale, native value tooltips and a shared keyboard-
+accessible daily-data disclosure. Retain the exact image/thumbnail byte scope
+of the headline, excluding downloads from that chart.
+Photo-row preview icons reuse the gallery Images editor's delegated preview
+owner and authorized thumbnail destinations: hover/focus reveals, click pins,
+and Escape/outside actions dismiss. Keep the icon separate from the native
+name link; request its thumbnail only after preview interaction.
+
 Edit tags keeps the catalog, selected editor and usage references in independent
 compact translucent groups. The catalog stays beside the editor on desktop;
 the editor and usage can share the remaining row when their preferred 300px

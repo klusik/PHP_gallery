@@ -3,7 +3,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: public/assets/styles/admin-feature-settings.css
  * Module Type: Stylesheet
- * Purpose: Align specialized Features and Maintenance destinations with compact Admin UI.
+ * Purpose: Align specialized Admin settings and telemetry with compact surfaces.
  * Responsibilities:
  *   - Style search, central Settings, Smart Galleries and Music preferences
  *   - Preserve native forms, selection controls and responsive editor layouts
@@ -18,7 +18,7 @@
     .admin-smart-gallery-workspace, .admin-smart-gallery-editor,
     #music-manager, #admin-maintenance-content, #admin-maintenance-media,
     #admin-maintenance-navigation, #admin-maintenance-system,
-    .admin-trash-workspace) {
+    .admin-trash-workspace, [data-telemetry-workspace]) {
     --feature-settings-surface:
         color-mix(in srgb, var(--panel) 42%, transparent);
     --feature-settings-line:
@@ -1157,8 +1157,8 @@ html[data-admin-trash-preferences-ready='1'] .admin-trash-settings
 
 .admin-page :is(#admin-maintenance-content, #admin-maintenance-media,
     #admin-maintenance-navigation, #admin-maintenance-system,
-    .admin-trash-workspace)
-    .admin-content-group {
+    .admin-trash-workspace, [data-telemetry-workspace])
+    :is(.admin-content-group, .telemetry-group) {
     display: flow-root;
     break-inside: avoid;
     box-sizing: border-box;
@@ -1173,14 +1173,15 @@ html[data-admin-trash-preferences-ready='1'] .admin-trash-settings
 
 .admin-page :is(#admin-maintenance-content, #admin-maintenance-media,
     #admin-maintenance-navigation, #admin-maintenance-system,
-    .admin-trash-workspace)
-    .admin-content-group > h3 {
+    .admin-trash-workspace, [data-telemetry-workspace])
+    :is(.admin-content-group > h3, .telemetry-group > h2,
+        .telemetry-group-heading) {
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    min-height: 38px;
-    margin: -.2rem -.65rem .15rem;
-    padding: .25rem .65rem;
+    min-height: var(--compact-heading-min-height, 38px);
+    margin: -.2rem -.65rem var(--compact-heading-after, .15rem);
+    padding: .25rem var(--compact-heading-end, .65rem) .25rem .65rem;
     border-bottom: 1px solid var(--feature-settings-line);
     border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
     border-radius: min(var(--radius, 8px), 8px)

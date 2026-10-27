@@ -15,6 +15,8 @@ require a browser/database only when the behavior needs one.
 - Load the actual source owner before its first assertion. Keep shared source
   reads above all consumers, and import/fully qualify native exceptions inside
   PHP namespaces, including negative branches.
+  When expanding an isolated bootstrap, remove shims now supplied by a newly
+  loaded source owner. Keep replacements only at external test boundaries.
 - For migration callbacks, preload the old runtime owner before replacing its
   bytes, then execute the real callback with populated inputs. Include an
   undefined-call negative control, explicit PDO ownership, replay and SQL rollback;
@@ -24,6 +26,9 @@ require a browser/database only when the behavior needs one.
   Seed request-guard probes with each route's own valid base query. Compare
   semantic allowlists and exercise generated same-origin public URLs through
   the confined transport, retaining unknown/repeated-value rejection.
+- After a write, distinguish failed persistence from failed readback or a lost
+  reply: uncertainty does not imply rollback. When replacing page markup, update
+  route-probe markers and load every shared stylesheet in its browser fixture.
   Use resource-specific names for response bodies and retained original paths
   in long workflow fixtures; preserve later phases' owned values across loops.
 - When an owner exposes a filtered verified list, assert its actual

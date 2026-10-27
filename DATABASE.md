@@ -1778,12 +1778,26 @@ are served only through validated generated filenames.
 
 ## Telemetry Tables
 
+Overview photo rankings read verified image slugs and gallery public paths in
+their existing bounded joins. If optional path columns cannot be verified,
+the same count/duration queries retain null route metadata and readable names.
+Daily charts reuse hourly aggregates and canonical session-day counts. Their
+image-byte column includes image/thumbnail traffic only; existing total-media
+report fields still include downloads. No schema migration is required.
+
 Telemetry is intentionally anonymous/bucketed. Use telemetry services instead of
 direct writes.
 
 ### `telemetry_settings`
 
 Stores telemetry preferences and limits.
+
+The compact Admin workspace changes one allowlisted key per scoped request
+through the existing telemetry settings service and confirms the persisted
+scalar by reading it back. Missing/unknown storage refuses writes; unavailable
+readback does not establish success or rollback. Complete-form compatibility,
+retention bounds and the separate explicit rollup/purge action remain supported.
+No telemetry schema or migration is added by this presentation change.
 
 ### `telemetry_sessions`
 

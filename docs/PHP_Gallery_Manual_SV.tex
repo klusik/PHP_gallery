@@ -3156,6 +3156,29 @@ Den färdiga rapporten returneras till webbläsaren som en hämtning och sparas 
 \index{t00243@telemetri}
 \index{i00127@integritet!t00243@telemetri}
 
+Den kompakta arbetsytan skiljer mellan \ui{Översikt},
+\ui{Insamling och integritet}, \ui{Historik och underhåll} och \ui{Rapporter}.
+URL:en bevarar vald flik vid omladdning och i webbläsarhistoriken.
+Varje inställning sparas separat efter en ändring; utan JavaScript finns
+vanliga formulär med uttryckligt Spara kvar. Frågetecken förklarar insamling,
+integritet, gränser och standardvärden. Ett overifierat sparande låser endast
+sitt formulär och erbjuder omladdning av sparat läge utan att upprepa
+skrivningen. Segmenterade HTML-rapporter öppnas i en ny flik; inställningar och
+loggar är separata mål. Sammanställning/rensning förblir en uttrycklig åtgärd
+med ett utfällbart tekniskt resultat.
+
+I Översikt öppnar fotonamn fotots offentliga detaljsida och gallerinamn
+motsvarande galleri. Vanliga åtkomstkontroller gäller fortfarande. Sex små
+dagliga stapeldiagram kompletterar summorna, vart och ett med egen skala.
+Peka för datum och exakt värde eller öppna \ui{Dagliga detaljer} för samma
+värden i en tangentbordstillgänglig tabell. Saknade eller raderade dagar
+förblir luckor. Lagringspolicyn kan lämna summor utan dagliga detaljer.
+Bildbyte omfattar foton och miniatyrer utan nedladdningar. Om offentliga sökvägar
+inte kan verifieras förblir namnen läsbara utan länkar.
+Fotoikonen använder samma förhandsvisning som galleriets bildredigerare:
+pekare eller tangentbordsfokus visar den, klick låser den och Escape stänger.
+Den begränsade miniatyren hämtas först när förhandsvisningen öppnas.
+
 Det valfria området \ui{Telemetri} registrerar integritetskontrollerade driftmätningar och presenterar dem som administrationsrapporter. Tillgängliga kontroller omfattar huvudväxeln för telemetri, offentliga användningsmätningar, prestanda, cache- och databashändelser, respekt för Do Not Track, uteslutning av administratörer, maximal räknad bildvisningstid och lagringstid för rådata, timdata och dygnsdata. Rapporter innehåller mått såsom anonyma sessioner, sidvisningar, öppnade fotografier och begränsad visningstid, klientfel, uppmätta mediebyte, webbläsarfördelning och cache- och databasaktivitet där kategorierna är~aktiverade.
 
 Telemetridelsystemet är utformat för att inte lagra råa IP-adresser, råa user-agent-strängar från webbläsare, råa hänvisnings-URL:er, namn, e-postadresser, kontoidentifierare, begärandekroppar eller exakta besökarplatser. Exporter innehåller sammanställd anonym telemetri och sessionshashar i stället för råa besökaridentifierare. Underhåll sammanställer och rensar telemetri enligt konfigurerad lagringspolicy, och administrationsskärmen kan exportera en fristående HTML-rapport för offline-granskning. Granska integritetskontrollerna innan du aktiverar insamling på en offentlig webbplats.

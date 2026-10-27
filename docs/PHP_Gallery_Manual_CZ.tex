@@ -3137,6 +3137,28 @@ Dokončená zpráva se vrací prohlížeči ke stažení a~neukládá se jako so
 \index{t00233@telemetrie}
 \index{s00215@soukromí!t00233@telemetrie}
 
+Kompaktní pracovní plocha odděluje \ui{Přehled}, \ui{Sběr a~soukromí},
+\ui{Historie a~údržba} a~\ui{Reporty}. URL zachovává vybranou záložku při
+obnovení stránky i~procházení historie. Každá volba se po změně ukládá
+samostatně; bez JavaScriptu zůstávají formuláře s~výslovným Uložit. Otazníčky
+vysvětlují sběr, soukromí, limity a~výchozí hodnoty. Neověřené uložení uzamkne
+jen svůj formulář a~nabídne načtení uloženého stavu bez opakování zápisu.
+HTML reporty podle segmentu se otevírají v~nové záložce; Settings a~Logs jsou
+samostatné cíle. Slučování a~mazání zůstává výslovnou akcí s~rozbalitelným
+technickým výsledkem.
+
+V~Přehledu otevřete kliknutím na název fotografie její veřejný detail a~názvem
+galerie příslušnou galerii. Platí běžné kontroly přístupu. Součty doplňuje šest
+malých denních sloupcových grafů, každý s~vlastním měřítkem. Najetí myší ukáže
+datum a~přesnou hodnotu; \ui{Denní detail} obsahuje stejné hodnoty v~tabulce
+přístupné z~klávesnice. Chybějící či smazané dny zůstávají mezerami. Uchovávání
+dat může ponechat součty bez denního detailu. Bajty obrázků zahrnují fotografie
+a~náhledy, nikoli downloady. Pokud nelze ověřit veřejné cesty, názvy zůstanou
+čitelné bez odkazu.
+Ikonka u~fotografie používá stejný náhled jako Media v~editoru galerie:
+objeví se při najetí či zaměření z~klávesnice, kliknutí jej připne a~Escape
+zavře. Omezený náhled se načítá až při jeho otevření.
+
 Volitelná oblast \ui{Telemetrie} zaznamenává provozní měření s~řízeným soukromím a~představuje je jako zprávy administrace. Dostupné prvky zahrnují hlavní přepínač telemetrie, měření veřejného využití, výkon, události mezipaměti a~databáze, respektování Do Not Track, vyloučení správců, maximální započítávanou dobu prohlížení fotografie a~uchování surových, hodinových a~denních dat. Zprávy zahrnují například anonymní relace, zobrazení stránek, otevření fotografií a~omezený čas prohlížení, chyby klientů, naměřené bajty médií, zastoupení prohlížečů a~aktivitu mezipaměti a~databáze, pokud jsou tyto kategorie povoleny.
 
 Subsystém telemetrie je navržen tak, aby neukládal nezpracované adresy IP, řetězce user-agent prohlížečů, URL odkazujících stránek, jména, e-mailové adresy, identifikátory účtů, těla požadavků ani přesné polohy návštěvníků. Exporty obsahují souhrnnou anonymní telemetrii a~hashe relací místo nezpracovaných identifikátorů návštěvníků. Údržba shrnuje a~maže telemetrii podle nastavených pravidel uchování a~obrazovka administrace může exportovat samostatnou zprávu HTML pro offline kontrolu. Před povolením sběru na veřejném webu zkontrolujte ovládání soukromí.

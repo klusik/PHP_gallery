@@ -1,0 +1,316 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_telemetry_workspace.html
+Module Type: Browser Regression Fixture
+Purpose: Exercise real telemetry UI with controlled asynchronous save outcomes.
+Responsibilities: Verify history, native fallback markup, scope, recovery and layout.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html><head><meta charset="utf-8"><title>Telemetry workspace fixture</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-layout.css">
+<link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-feature-settings.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-telemetry.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-subtabs.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+</head><body class="admin-page"><main class="admin-main-content">
+<!-- TELEMETRY_WORKSPACE -->
+</main><pre id="results"></pre><script type="module">
+import {setupAdminTelemetryWorkspace} from '/public/assets/gallery-modules/admin-telemetry-workspace.js?v=20261027-compact-telemetry-v2';
+import {setupAdminGalleryImages} from '/public/assets/gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
+
+/**
+ * Bound one asynchronous fixture assertion under shared-runner load.
+ * Type: number. Units: milliseconds. Scope: one expected terminal phase.
+ * Consumers: until(). Value: 4000.
+ * Rationale: allow browser/history tasks to settle without weakening assertions.
+ */
+const ASSERT_TIMEOUT_MS = 4000;
+/**
+ * Pace observation while waiting for real promise/UI transitions.
+ * Type: number. Units: milliseconds. Scope: one assertion polling cadence.
+ * Consumers: until(). Value: 10.
+ * Rationale: keep assertions responsive without relying on guessed microtask counts.
+ */
+const ASSERT_POLL_MS = 10;
+/**
+ * Admit only floating-point serialization noise in the SVG date-axis spacing.
+ * Type: number. Units: SVG coordinate units. Scope: one missing-day gap.
+ * Consumers: overview bar-position assertion. Value: 0.01.
+ * Rationale: distinguish two calendar slots from contiguous equal-width bars.
+ */
+const DATE_AXIS_EPSILON = 0.01;
+/**
+ * Capture only the production uncertain-write deadline for explicit timeout tests.
+ * Type: number. Units: milliseconds. Scope: the isolated telemetry request timer.
+ * Consumers: the setTimeout adapter. Value: 15000.
+ * Rationale: exercise actual abort handling without waiting for a real 15-second delay.
+ */
+const SAVE_DEADLINE_MS = 15000;
+const nativeTimeout = window.setTimeout.bind(window);
+const nativeClear = window.clearTimeout.bind(window);
+const requests = [];
+const timers = new Map();
+// Negative IDs identify fixture-owned timers; they are not a timing policy.
+let nextTimer = -1;
+window.setTimeout = (callback, delay, ...args) => {
+    if (delay !== SAVE_DEADLINE_MS) return nativeTimeout(callback, delay, ...args);
+    const id = nextTimer--;
+    timers.set(id, callback);
+    return id;
+};
+window.clearTimeout = id => {
+    if (timers.has(id)) timers.delete(id);
+    else nativeClear(id);
+};
+window.fetch = (url, init = {}) => new Promise((resolve, reject) => {
+    requests.push({url: String(url), init, resolve, reject});
+    init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {once: true});
+});
+/**
+ * Assert one observable invariant.
+ * @param {boolean} condition Expected result.
+ * @param {string} message Failure context.
+ * @return {void} Throw on mismatch.
+ */
+function check(condition, message) { if (!condition) throw new Error(message); }
+/**
+ * Wait for the current operation's terminal phase.
+ * @param {function():boolean} predicate State observation.
+ * @param {string} message Failure context.
+ * @return {Promise<void>} Resolve only after the expected state.
+ */
+async function until(predicate, message) {
+    const deadline = Date.now() + ASSERT_TIMEOUT_MS;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error(message);
+        await new Promise(resolve => nativeTimeout(resolve, ASSERT_POLL_MS));
+    }
+}
+/**
+ * Locate one production scoped form.
+ * @param {string} key Preference ID.
+ * @return {HTMLFormElement} Owning form.
+ */
+function form(key) { return document.querySelector('input[name="telemetry_preference"][value="' + key + '"]').form; }
+/**
+ * Locate one native input.
+ * @param {string} key Preference ID.
+ * @return {HTMLInputElement} Editable field.
+ */
+function input(key) { return form(key).querySelector('[data-telemetry-input]'); }
+/**
+ * Resolve one controlled canonical response.
+ * @param {number} index Captured request index.
+ * @param {string} value Stored scalar for its own key.
+ * @param {boolean} ok Success or authoritative refusal.
+ * @param {boolean} publicEnabled Current public collection state.
+ * @return {void} Complete that request without creating another write.
+ */
+function respond(index, value, ok = true, publicEnabled = false) {
+    const key = requests[index].init.body.get('telemetry_preference');
+    requests[index].resolve(new Response(JSON.stringify({
+        ok, confirmed: true, message: ok ? 'Saved' : 'Value refused',
+        mutation: {type: 'settings.update', entity: 'settings', action: 'update', entity_ids: []},
+        panel: null, contexts: [], fallback: {}, setting_values: {[key]: value},
+        public_enabled: publicEnabled, admin_excluded: true,
+    }), {status: ok ? 200 : 422, headers: {'Content-Type': 'application/json'}}));
+}
+try {
+    const root = document.querySelector('[data-telemetry-workspace]');
+    check(root.querySelectorAll('[data-telemetry-preference]').length === 12,
+        'All twelve canonical preferences retain independent native forms.');
+    for (const owner of root.querySelectorAll('[data-telemetry-preference]')) {
+        check(owner.method === 'post' && owner.querySelector('[name="csrf"]')
+            && owner.querySelector('[data-telemetry-save]')
+            && owner.querySelectorAll('[data-telemetry-input]').length === 1,
+        'Each native fallback retains CSRF, Save and exactly one preference.');
+    }
+    setupAdminTelemetryWorkspace();
+    setupAdminTelemetryWorkspace();
+    setupAdminGalleryImages();
+    setupAdminGalleryImages();
+    const collectionTab = root.querySelector('[data-telemetry-tab="collection"]');
+    if (sessionStorage.getItem('telemetry-reload-probe') !== '1') {
+        collectionTab.click();
+        check(new URL(location.href).searchParams.get('telemetry_tab') === 'collection', 'Tab selection updates the native URL.');
+        sessionStorage.setItem('telemetry-reload-probe', '1');
+        location.reload();
+    } else {
+        sessionStorage.removeItem('telemetry-reload-probe');
+        check(collectionTab.getAttribute('aria-selected') === 'true'
+            && !document.querySelector('#telemetry-panel-collection').hidden,
+        'Reload restores the selected panel from its URL.');
+        root.querySelector('[data-telemetry-tab="overview"]').click();
+        const overview = document.querySelector('#telemetry-panel-overview');
+        const charts = Array.from(overview.querySelectorAll('.telemetry-sparkline'));
+        check(charts.length === 6 && charts.every(chart => chart.getAttribute('role') === 'img'
+            && chart.getAttribute('aria-label')), 'Each metric has an accessible daily chart.');
+        const pageChart = charts[1];
+        const bars = pageChart.querySelectorAll('.telemetry-trend-hit');
+        const step = Number(bars[0].getAttribute('width'));
+        check(Math.abs(Number(bars[1].getAttribute('x')) - Number(bars[0].getAttribute('x')) - 2 * step) < DATE_AXIS_EPSILON,
+            'Missing calendar days retain their date-axis gap.');
+        check(charts[0].querySelectorAll('.telemetry-trend-hit').length === 1,
+            'Expired session days must not appear as observed zero bars.');
+        const rankingLinks = overview.querySelectorAll('.telemetry-entity-link');
+        check(rankingLinks.length === 4 && rankingLinks[0].getAttribute('href').endsWith('/parent/child/renamed-photo/')
+            && rankingLinks[1].getAttribute('href').endsWith('/parent/child/'),
+        'Both ranking groups retain ordinary photo and nested gallery links.');
+        const daily = overview.querySelector('.telemetry-daily-details');
+        daily.querySelector('summary').click();
+        check(daily.open && daily.querySelectorAll('tbody tr').length === 2,
+            'Daily values remain available in a native disclosure table.');
+        check(document.documentElement.scrollWidth <= innerWidth, 'Open daily detail must fit a narrow viewport.');
+        daily.querySelector('summary').click();
+        const preview = overview.querySelector('[data-admin-image-preview]');
+        check(!document.querySelector('.admin-image-preview-overlay img[src]'),
+            'Rendering rankings must not load a preview image.');
+        const previewBounds = preview.getBoundingClientRect();
+        preview.dispatchEvent(new PointerEvent('pointerover', {bubbles: true,
+            clientX: previewBounds.left, clientY: previewBounds.top, pointerType: 'mouse'}));
+        const previewOverlay = document.querySelector('.admin-image-preview-overlay');
+        await until(() => !previewOverlay.hidden && previewOverlay.querySelector('img').complete
+            && previewOverlay.querySelector('img').naturalWidth > 0, 'Shared hover preview did not decode its image.');
+        const previewRect = previewOverlay.getBoundingClientRect();
+        check(previewRect.left >= 0 && previewRect.top >= 0 && previewRect.right <= innerWidth
+            && previewRect.bottom <= innerHeight, 'Shared preview must stay inside the viewport.');
+        preview.dispatchEvent(new PointerEvent('pointerout', {bubbles: true, relatedTarget: document.body}));
+        check(previewOverlay.hidden && !previewOverlay.querySelector('img').hasAttribute('src'),
+            'Pointer exit clears an unpinned preview source.');
+        preview.focus();
+        check(!previewOverlay.hidden, 'Keyboard focus must expose the same preview.');
+        preview.click();
+        check(previewOverlay.classList.contains('is-pinned'), 'Click must pin the existing preview.');
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+        check(previewOverlay.hidden && document.activeElement === preview,
+            'Escape dismisses the preview while retaining its trigger focus.');
+        check(document.querySelectorAll('.admin-image-preview-overlay').length === 1 && requests.length === 0,
+            'Repeated initialization, previews and daily detail must not submit settings.');
+        if (innerWidth <= 640) check(previewBounds.width >= 44 && previewBounds.height >= 44,
+            'Narrow preview controls retain a comfortable touch target.');
+        collectionTab.click();
+        root.querySelector('[data-telemetry-tab="storage"]').click();
+        history.back();
+        await until(() => collectionTab.getAttribute('aria-selected') === 'true', 'Back did not restore Collection.');
+        history.forward();
+        await until(() => !document.querySelector('#telemetry-panel-storage').hidden, 'Forward did not restore Storage.');
+        collectionTab.click();
+        const groups = Array.from(document.querySelectorAll('#telemetry-panel-collection .telemetry-group'));
+        // Probe opposite sides of the production CSS breakpoint at 640px.
+        const columns = new Set(groups.map(node => Math.round(node.getBoundingClientRect().left)));
+        check(columns.size === (innerWidth > 640 ? 3 : 1), 'Whole groups must flow across three desktop columns or one narrow column.');
+        check(document.documentElement.scrollWidth <= innerWidth, 'Workspace must not overflow horizontally.');
+        for (const group of groups) {
+            const heading = group.querySelector('.telemetry-group-heading')
+                || group.querySelector('h2');
+            const frame = group.getBoundingClientRect();
+            const strip = heading.getBoundingClientRect();
+            const style = getComputedStyle(heading);
+            // The one-pixel frame surrounds a full-width heading strip.
+            check(Math.abs(strip.left - frame.left - 1) < 1
+                && Math.abs(frame.right - strip.right - 1) < 1
+                && style.borderBottomWidth === '1px'
+                && style.borderTopLeftRadius === getComputedStyle(group).borderTopLeftRadius,
+            'Group headings must reach both frame edges with the shared bottom rule and rounding.');
+        }
+        const help = root.querySelector('.telemetry-help-trigger');
+        check(getComputedStyle(help).backgroundColor === 'rgba(0, 0, 0, 0)', 'Legacy Admin styles must not fill the question mark.');
+        if (innerWidth <= 640) {
+            for (const trigger of root.querySelectorAll('#telemetry-panel-collection .telemetry-help-trigger')) {
+                const target = trigger.getBoundingClientRect();
+                check(target.width >= 44 && target.height >= 44,
+                    'Every narrow help target must remain comfortable.');
+                if (trigger.parentElement.classList.contains('telemetry-group-heading')) {
+                    const strip = trigger.parentElement.getBoundingClientRect();
+                    check(target.top >= strip.top && target.bottom <= strip.bottom,
+                        'Heading help must not overlap the first preference row.');
+                }
+            }
+            check(input('telemetry_max_photo_view_seconds').getBoundingClientRect().height >= 44,
+                'Narrow numeric controls retain comfortable interaction height.');
+        }
+        help.click();
+        const panel = document.getElementById(help.getAttribute('popovertarget'));
+        await until(() => panel.matches(':popover-open'), 'Help must use a native popover.');
+        const rect = panel.getBoundingClientRect();
+        check(rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+            'Contextual help must remain inside the viewport.');
+        panel.hidePopover();
+        check(requests.length === 0, 'Navigation, reload and help must never write settings.');
+
+        input('telemetry_enabled').click();
+        await until(() => requests.length === 1, 'Master change did not send one scoped request.');
+        check(input('telemetry_enabled').disabled && !input('telemetry_public_usage_enabled').disabled,
+            'Only the pending form is locked.');
+        input('telemetry_public_usage_enabled').click();
+        await until(() => requests.length === 2, 'Independent preference did not remain usable.');
+        for (const request of requests) {
+            const key = request.init.body.get('telemetry_preference');
+            check(request.init.method === 'POST' && request.init.credentials === 'same-origin'
+                && request.init.body.get('csrf') === 'fixture-csrf'
+                && request.init.body.get(key) === '1'
+                && !request.init.body.has('telemetry_raw_retention_days'),
+            'Scoped writes must retain method, credentials and CSRF without unrelated values.');
+        }
+        respond(1, '1', true, true);
+        await until(() => form('telemetry_public_usage_enabled').dataset.saveState === 'saved', 'Latest write did not finish.');
+        respond(0, '1', true, false);
+        await until(() => form('telemetry_enabled').dataset.saveState === 'saved', 'Earlier write did not finish.');
+        check(root.querySelector('[data-telemetry-public-status]').textContent === root.dataset.enabledLabel,
+            'Late responses must not replace the newer global collection state.');
+
+        input('telemetry_raw_retention_days').value = '11';
+        input('telemetry_raw_retention_days').dispatchEvent(new Event('change', {bubbles: true}));
+        respond(2, '7', false);
+        await until(() => form('telemetry_raw_retention_days').dataset.saveState === 'error', 'Authoritative refusal did not finish.');
+        check(input('telemetry_raw_retention_days').value === '7' && !input('telemetry_raw_retention_days').disabled,
+            'Refusal must restore only the confirmed canonical value and unlock its form.');
+
+        input('telemetry_database_retention_days').value = '9';
+        input('telemetry_database_retention_days').dispatchEvent(new Event('change', {bubbles: true}));
+        requests[3].reject(new TypeError('Controlled lost response.'));
+        await until(() => form('telemetry_database_retention_days').dataset.saveState === 'unknown', 'Lost completion did not settle.');
+        check(input('telemetry_database_retention_days').disabled && input('telemetry_database_retention_days').value === '9'
+            && form('telemetry_database_retention_days').querySelector('[data-telemetry-feedback] button'),
+            'Unknown completion preserves intent, locks the form and offers passive reload.');
+        input('telemetry_database_retention_days').dispatchEvent(new Event('change', {bubbles: true}));
+        check(requests.length === 4, 'An unknown write must never be retried automatically.');
+
+        input('telemetry_daily_retention_days').value = '731';
+        input('telemetry_daily_retention_days').dispatchEvent(new Event('change', {bubbles: true}));
+        check(timers.size === 1, 'Only the current request owns the captured deadline.');
+        timers.values().next().value();
+        await until(() => form('telemetry_daily_retention_days').dataset.saveState === 'unknown', 'Timeout did not finish its abort phase.');
+        check(input('telemetry_daily_retention_days').disabled && requests.length === 5, 'Timeout must remain locked without a second write.');
+
+        input('telemetry_hourly_retention_days').value = '91';
+        input('telemetry_hourly_retention_days').dispatchEvent(new Event('change', {bubbles: true}));
+        requests[5].resolve(new Response('<invalid JSON>', {status: 200}));
+        await until(() => form('telemetry_hourly_retention_days').dataset.saveState === 'unknown', 'Malformed completion did not settle.');
+        check(input('telemetry_hourly_retention_days').value === '91' && input('telemetry_hourly_retention_days').disabled,
+            'Malformed completion cannot invent canonical state.');
+
+        root.querySelector('[data-telemetry-tab="reports"]').click();
+        const exports = Array.from(root.querySelectorAll('.telemetry-report-link[target="_blank"]'));
+        check(exports.length === 4 && exports.every(link => link.rel.includes('noopener')),
+            'All four explicit report segments retain safe native new-tab links.');
+        const maintenance = Array.from(root.querySelectorAll('form')).find(owner =>
+            new URL(owner.action, location.href).searchParams.get('page') === 'admin_telemetry_maintenance');
+        check(maintenance.method === 'post' && maintenance.querySelector('[name="csrf"]') && requests.length === 6,
+            'Maintenance remains a separate explicit CSRF action and is never triggered by tabs.');
+        document.querySelector('#results').textContent = 'BROWSER PASS telemetry workspace tabs, scope, canonical saves, uncertainty and responsive help';
+    }
+} catch (error) {
+    document.querySelector('#results').textContent = 'BROWSER FAIL: ' + error.stack;
+} finally {
+    window.setTimeout = nativeTimeout;
+    window.clearTimeout = nativeClear;
+}
+</script></body></html>
