@@ -1923,6 +1923,25 @@ Gelingt die Speicherung, lässt sich aber die aktualisierte Ansicht innerhalb de
 
 Browsergestütztes Erstellen/Hochladen besitzt zusätzliche Schutzmaßnahmen. Die Auswahl der Browserverarbeitung ist eine ausdrückliche Ausführungsentscheidung: Eine fehlende Browserfähigkeit oder fehlgeschlagene Arbeitsprozessvorbereitung stoppt vor der Speicherung, statt still auf serverseitige Vorschaubilderzeugung umzuschalten. PHP prüft vor der Speicherung der Originale, ob jede erforderliche vorbereitete Vorschaubildgröße und jedes erforderliche Format vorliegt. Sobald die browsergestützte Speicherung beginnt, werden Ersatzmetadaten für die direkte Seite niemals als Erlaubnis zur Wiederholung der klassischen Erstellungs-/Uploadanfrage interpretiert; dies verhindert doppelte Galerien und Fotos. Die konfigurierte ZIP-Chargengröße ist ein weiches Packziel: Ein unteilbares Fotopaket oberhalb dieses Ziels kann allein in einer Charge übertragen werden; die wirksame PHP-Uploadgrenze bleibt jedoch eine harte Grenze. Die Windows-Uploadautomatisierung kann die vollständige JPEG+WebP-Kompatibilitätsmatrix senden; ein moderner reiner WebP-Server akzeptiert die erforderlichen WebP-Varianten und überspringt gültige zusätzliche JPEG-Varianten sicher. Fehlerhafte, unpassende, unbekannt große oder nicht unterstützte Vorschaubilddaten bleiben harte Fehler.
 
+\subsection{Admin-Navigation}
+
+Auf dem Desktop startet das Admin-Menü ausgeklappt mit den bestehenden
+Funktionsgruppen und Symbolen. Die Doppelpfeil-Schaltfläche oben klappt es zu
+einer Symbolleiste zusammen oder wieder aus. Diese Auswahl bleibt im Browser
+für diese Installation gespeichert; sie wird weder in der Datenbank abgelegt
+noch mit anderen Browsern geteilt. Gelöschter Browserspeicher stellt die
+ausgeklappte Vorgabe wieder her. Bei blockiertem Speicher gilt die Auswahl nur
+für die aktuelle Seite.
+
+Auf schmalen Bildschirmen öffnet eine beschriftete Hamburger-Schaltfläche
+dieselben Gruppen direkt darunter. Das Menü überlagert den Inhalt und scrollt
+unabhängig, sodass kein Scrollen durch die gesamte Navigation nötig ist.
+Schaltfläche, Escape, ein Klick außerhalb oder die Auswahl eines Ziels schließen
+das Menü. Escape setzt den Fokus auf die Schaltfläche zurück; auch ein Fokus
+außerhalb schließt es. Eine neue Seite startet mit geschlossenem mobilem Menü.
+Die Rückkehr zum Desktop stellt dessen getrennte Auswahl wieder her. Ohne
+JavaScript bleiben alle gruppierten Links sichtbar.
+
 \subsection{Zentrale Einstellungen}
 \index{e00084@Einstellungen!z00275@Zentrale}
 

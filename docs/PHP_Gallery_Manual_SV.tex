@@ -1843,6 +1843,23 @@ Om sparandet lyckas men den uppdaterade vyn inte kan verifieras inom den begrän
 
 Webbläsarstödd skapande och uppladdning har ytterligare skydd. Att välja webbläsarbearbetning är ett uttryckligt körningsval: saknad webbläsarfunktion eller misslyckad förberedelse av en arbetare stoppar före sparandet i stället för att tyst växla till servergenerering av miniatyrbilder. PHP validerar att varje obligatorisk förberedd miniatyrbildsstorlek och varje format finns innan original lagras. När webbläsarsparandet börjar tolkas reservmetadata för direktsidan aldrig som tillstånd att spela upp den klassiska skapande- eller uppladdningsbegäran igen, vilket förhindrar dubbla gallerier och fotografier. Den konfigurerade ZIP-omgångsstorleken är ett mjukt packningsmål: ett atomärt fotografipaket som överstiger målet kan skickas ensamt i en omgång, men den effektiva PHP-uppladdningsgränsen förblir en hård gräns. Uppladdningsautomatisering i Windows kan skicka hela kompatibilitetsmatrisen JPEG+WebP; en modern server med enbart WebP accepterar obligatoriska WebP-varianter och hoppar säkert över giltiga extra JPEG-varianter, medan felaktiga, icke matchande, okända storlekar eller miniatyrbildspaket som inte stöds fortfarande ger hårda fel.
 
+\subsection{Adminnavigering}
+
+På datorn är adminmenyn utfälld från början med befintliga funktionsgrupper och
+ikoner. Knappen med dubbla pilar högst upp fäller ihop den till en ikonlist eller
+fäller ut den igen. Valet sparas i den här webbläsaren för installationen; det
+lagras inte i databasen och delas inte med andra webbläsare. Rensad
+webbläsarlagring återställer utfälld meny. Om lagringen blockeras gäller valet
+bara på den aktuella sidan.
+
+På smala skärmar öppnar en märkt hamburgerknapp samma grupper direkt under
+knappen. Panelen rullar separat och ligger över innehållet, så att du slipper
+rulla förbi hela menyn för att nå sidan. Stäng med knappen, Escape, ett klick
+utanför eller genom att välja en destination. Escape återför fokus till knappen;
+även fokus utanför navigeringen stänger panelen. En ny sida börjar med stängd
+mobilmeny. Återgång till datorbredd återställer dess separata val. Utan
+JavaScript förblir alla grupperade länkar synliga.
+
 \subsection{Centralt inställningsnav}
 \index{i00126@Inställningar!c00045@centralt nav}
 

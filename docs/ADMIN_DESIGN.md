@@ -162,6 +162,30 @@ focus, muted disabled state and system colors in forced-color mode.
 - Keep common actions and important status visible. Put technical detail behind
   contextual help or a disclosure when it is not needed for the ordinary task.
 
+## Responsive Admin navigation
+
+Preserve the existing expanded vertical menu as the desktop default. Its compact
+transparent double-chevron action collapses labels into the existing icon rail;
+group separators, accessible names and current-page indication remain available.
+Keep this preference in browser-local storage, scoped to the installation asset
+mount. Do not add an application setting or database write.
+
+At the existing 1100px single-column workspace breakpoint, show a labelled
+hamburger with a 44px target. Keep the same grouped navigation in a translucent
+panel anchored directly below that trigger. Opening it overlays the content
+without pushing the page down. Bound its own scrolling to the available viewport
+and account for the real header height. Use the approved 42% Theme panel backing
+and backdrop blur; avoid an ancestor blur that prevents the child panel from
+blurring underlying content. Group headings and actions must remain readable.
+
+Use ordinary labelled navigation landmarks and links. The mobile trigger exposes
+`aria-controls` and `aria-expanded`; Tab/Shift+Tab retain native navigation.
+Escape, outside click, leaving the navigation and selecting a destination close
+the panel. Escape and an activated same-document destination restore trigger
+focus. Returning to desktop restores its independent expanded/collapsed choice.
+A new page always starts with the mobile disclosure closed. Preserve all links
+when JavaScript is unavailable; unavailable storage keeps changes in memory.
+
 ## Implementation review
 
 Inspect the actual production CSS cascade and computed specificity for the

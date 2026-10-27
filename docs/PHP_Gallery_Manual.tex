@@ -1836,6 +1836,24 @@ If persistence succeeds but~the~refreshed view cannot be~verified within the~bou
 
 Browser-assisted create/upload has~additional safeguards. Selecting browser processing is~an~explicit execution choice: a~missing browser capability or~failed worker preparation stops before persistence instead of~silently switching to~server thumbnail generation. PHP validates that every required prepared thumbnail size/format is~present before it~stores originals. Once browser persistence starts, direct-page fallback metadata is~never interpreted as~permission to~replay the~classic create/upload request, preventing duplicate galleries and~duplicate photographs. The~configured ZIP batch size is~a~soft packing target: one atomic photograph package that exceeds that target can~travel alone in~one batch, but~the~effective PHP upload ceiling remains a~hard limit. Windows upload automation may~send the~complete JPEG+WebP compatibility matrix; a~modern WebP-only server accepts required WebP variants and~safely skips valid extra JPEG variants, while malformed, mismatched, unknown-size, or~unsupported thumbnail payloads remain hard failures.
 
+\subsection{Admin navigation}
+
+The~desktop Admin menu starts expanded, with its existing function groups
+and~icons. Use the~double-chevron button at~the~top to~collapse it~to~an~icon rail
+or~expand it~again. The~choice is~remembered in~this browser for~this
+installation; it~is~not~stored in~the~database or~shared with other browsers.
+Clearing browser storage restores the~expanded default. If~storage is~blocked,
+the~choice lasts only for~the~current page.
+
+On~narrow screens, a~labelled hamburger opens the~same groups below its button.
+The~panel scrolls independently and~overlays the~page, so~you can~reach content
+without first scrolling past the~whole menu. Close it~with the~button, Escape,
+a~click outside, or~by~choosing a~destination. Keyboard focus returns
+to~the~button after Escape. Moving focus outside also closes it. Opening another page
+starts with the~mobile menu closed; returning to~desktop restores its separate
+expanded or~collapsed choice. Without JavaScript, all~grouped links remain
+visible.
+
 \subsection{Central Settings hub}
 \index{Settings!central hub}
 

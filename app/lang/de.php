@@ -50,6 +50,11 @@ return [
     'admin.features.help' => 'Details: {feature}',
     'admin.features.blocked' => 'Blockiert',
     'admin.features.error.invalid_changes' => 'Unbekannte oder nicht bearbeitbare Funktionsänderung. Seite neu laden.',
+    'admin.menu.collapse' => 'Menü einklappen',
+    'admin.menu.expand' => 'Menü ausklappen',
+    'admin.menu.open' => 'Admin-Menü öffnen',
+    'admin.menu.close' => 'Admin-Menü schließen',
+    'admin.menu.mobile' => 'Admin-Menü',
 
     'admin.updates.recovery_manual_action' => 'Mit Updater zurücksetzen / FTP abschließen die hochgeladenen Dateien erneut bearbeiten oder mit Stable installieren das neueste stabile Paket einspielen. Alte Aufträge und Sicherungen bleiben erhalten; Datenbankmigrationen werden nicht rückgängig gemacht.',
     'admin.updates.integrity_warnings' => 'Dateiunterschiede als Warnungen protokolliert; Wiederherstellung läuft weiter:',

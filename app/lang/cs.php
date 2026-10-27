@@ -50,6 +50,11 @@ return [
     'admin.features.help' => 'Podrobnosti: {feature}',
     'admin.features.blocked' => 'Blokováno',
     'admin.features.error.invalid_changes' => 'Neznámá nebo neupravitelná změna funkce. Obnovte stránku.',
+    'admin.menu.collapse' => 'Sbalit menu',
+    'admin.menu.expand' => 'Rozbalit menu',
+    'admin.menu.open' => 'Otevřít menu administrace',
+    'admin.menu.close' => 'Zavřít menu administrace',
+    'admin.menu.mobile' => 'Menu administrace',
 
     'admin.updates.recovery_manual_action' => 'Pomocí Resetovat updater / dokončit FTP aktualizaci znovu zpracujte nahrané soubory, nebo pomocí Nainstalovat stable přepište aplikaci posledním stable balíkem. Staré úlohy i zálohy zůstanou; databázové migrace se nevracejí.',
     'admin.updates.integrity_warnings' => 'Rozdíly souborů zapsané jako upozornění; obnova pokračuje:',

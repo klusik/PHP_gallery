@@ -6676,6 +6676,28 @@ retain their GUI/runtime dependency preflight. These cases are registered
 through the central WinApp regression suite; local results do not attest a
 hosted GitHub Actions run.
 
+### Responsive Admin navigation coverage
+
+`admin_navigation_browser_test.mjs` is registered in the central `browser-map`
+suite. Its PHP fixture renders the real sidebar and the complete stylesheet list
+from `shared_layout_admin_stylesheet_files()`. Disposable Chromium scenarios
+cover expanded defaults, the icon rail and released content width, preference
+reload, denied storage, delegated replacement-sidebars, desktop/mobile state
+separation, preserved groups, 44px targets and current-page markers. The narrow
+panel must overlay content without moving it or overflowing the viewport.
+Escape, outside click, focus leaving navigation and hash-link activation verify
+dismissal and focus restoration. `legacy_upload_navigation_test.php` preserves
+capability filtering, Theme/Widgets selection and the scriptless grouped markup.
+
+Manual acceptance uses the authenticated installation on wide and narrow
+screens: inspect the production cascade, toggle/reload, visit another Admin
+route, scroll every mobile group, rotate the viewport and tab through the menu.
+Check a previously used browser, two tabs, two installations on one origin,
+blocked storage, JavaScript disabled, dark Theme tokens, forced colors and a
+screen reader on a physical touch device. Isolated browser evidence does not
+establish these live/device outcomes. Feature BASIC checks syntax and declaration
+docs only; the browser scenarios run with hosted FULL at integration.
+
 ### Compact Admin workspace coverage
 
 The central audit registers `tests/admin_settings_workspace_browser_test.mjs`

@@ -50,6 +50,11 @@ return [
     'admin.features.help' => 'Details: {feature}',
     'admin.features.blocked' => 'Blocked',
     'admin.features.error.invalid_changes' => 'Unknown or non-editable feature change. Reload the page.',
+    'admin.menu.collapse' => 'Collapse menu',
+    'admin.menu.expand' => 'Expand menu',
+    'admin.menu.open' => 'Open Admin menu',
+    'admin.menu.close' => 'Close Admin menu',
+    'admin.menu.mobile' => 'Admin menu',
 
     'admin.updates.recovery_manual_action' => 'Use Reset updater / finish FTP update to recheck uploaded files, or Install stable to replace application files with the latest stable package. Old jobs and backups are kept; database migrations are not reversed.',
     'admin.updates.integrity_warnings' => 'File differences recorded as warnings; recovery continues:',

@@ -1826,6 +1826,23 @@ Pokud uložení uspěje, ale obnovené zobrazení nelze ověřit v~rámci omezen
 
 Vytváření a~nahrávání s~pomocí prohlížeče má další ochrany. Výběr zpracování v~prohlížeči je výslovnou volbou provedení: chybějící schopnost prohlížeče nebo neúspěšná příprava pracovního procesu zastaví postup před uložením místo tichého přepnutí na generování náhledů serverem. PHP před uložením originálů ověří přítomnost všech požadovaných připravených velikostí a~formátů náhledů. Jakmile začne ukládání z~prohlížeče, metadata náhradního přímého postupu se nikdy nepovažují za svolení zopakovat klasický požadavek vytvoření či nahrání, čímž se předchází duplicitním galeriím a~fotografiím. Nastavená velikost dávky ZIP je měkkým cílem balení: jeden nedělitelný balíček fotografie, který cíl překročí, může putovat samostatně v~jedné dávce, ale účinný limit nahrávání PHP zůstává tvrdým omezením. Automatizace nahrávání pro Windows může odesílat úplnou kompatibilní matici JPEG+WebP; moderní server pouze s~WebP přijímá požadované varianty WebP a~bezpečně přeskočí platné dodatečné varianty JPEG, zatímco chybné, neodpovídající, velikostně neznámé nebo nepodporované datové obsahy náhledů zůstávají nepřekročitelnými chybami.
 
+\subsection{Navigace administrace}
+
+Na~desktopu je~menu administrace ve~výchozím stavu rozbalené a~zachovává skupiny
+funkcí i~ikony. Tlačítkem s~dvojitou šipkou nahoře je~sbalíte na~pruh ikon nebo
+znovu rozbalíte. Volba se~pamatuje v~tomto prohlížeči pro tuto instalaci;
+neukládá se~do~databáze ani nepřenáší do~jiných prohlížečů. Vymazání úložiště
+obnoví rozbalený stav. Při blokovaném úložišti volba platí jen pro aktuální
+stránku.
+
+Na~úzké obrazovce otevírá označený hamburger stejné skupiny pod svým tlačítkem.
+Panel se~posouvá samostatně a~překrývá stránku, takže k~obsahu nemusíte
+odrolovat přes celé menu. Zavřete jej tlačítkem, klávesou Escape, kliknutím mimo
+nebo výběrem cíle. Escape vrátí fokus na~tlačítko; přesun fokusu mimo navigaci
+panel také zavře. Nová stránka začíná se~zavřeným mobilním menu a~návrat
+na~desktop obnoví jeho samostatnou volbu rozbalení. Bez JavaScriptu zůstávají
+všechny seskupené odkazy viditelné.
+
 \subsection{Centrální centrum Nastavení}
 \index{n00099@Nastavení!c00015@centrální centrum}
 

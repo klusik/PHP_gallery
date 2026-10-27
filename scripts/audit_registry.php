@@ -303,6 +303,11 @@ $registry = [
         // Consumers: central browser suite. Rationale: 90 seconds includes PHP
         // markup rendering, browser startup, deterministic polling and teardown.
         'admin_cron_browser_test.mjs' => ['browser' => true, 'timeout' => 90],
+        // Bound two isolated navigation journeys, including reload and storage denial.
+        // Type: int. Units: seconds. Scope: one navigation browser fixture.
+        // Consumers: central browser-map runner. Rationale: 90 seconds permits
+        // two browser startups, viewport changes and independent profile cleanup.
+        'admin_navigation_browser_test.mjs' => ['browser' => true, 'timeout' => 90],
         // Bound two responsive feature journeys with isolated PHP snapshots.
         // Type: int. Units: seconds. Scope: one browser owner invocation.
         // Consumers: central browser suite. Value: 90.

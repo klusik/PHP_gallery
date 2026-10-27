@@ -52,6 +52,9 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
+import {
+    setupAdminNavigation,
+} from './gallery-modules/admin-navigation.js?v=20261027-responsive-v2';
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261010-visual-editor-draft-availability';
 import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupPublicContentWidgets } from './gallery-modules/public-content-widgets.js?v=20261023-discovery-clearance-v1';
@@ -190,6 +193,7 @@ function bootGalleryBrowserFeatures() {
     setupGallerySearchPickers();
     setupImageBulkMoveFields();
     setupThumbnailCacheDeleteConfirmation();
+    setupAdminNavigation();
     setupAdminTabs();
     setupAdminNestedTabs();
     setupAdminDatePickers();

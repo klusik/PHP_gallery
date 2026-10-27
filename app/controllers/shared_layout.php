@@ -130,6 +130,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-gallery-access.css',
         'assets/styles/admin-gallery-display.css',
         'assets/styles/admin-gallery-media.css',
+        'assets/styles/admin-navigation.css',
         'assets/styles/breadcrumbs.css',
     ];
 }

@@ -50,6 +50,11 @@ return [
     'admin.features.help' => 'Detaljer: {feature}',
     'admin.features.blocked' => 'Blockerad',
     'admin.features.error.invalid_changes' => 'Okänd eller ej redigerbar funktionsändring. Ladda om sidan.',
+    'admin.menu.collapse' => 'Fäll ihop menyn',
+    'admin.menu.expand' => 'Fäll ut menyn',
+    'admin.menu.open' => 'Öppna adminmenyn',
+    'admin.menu.close' => 'Stäng adminmenyn',
+    'admin.menu.mobile' => 'Adminmeny',
 
     'admin.updates.recovery_manual_action' => 'Använd Återställ uppdateraren / slutför FTP för de uppladdade filerna eller Installera stable för att skriva över programmet med senaste stabila paketet. Gamla jobb och säkerhetskopior bevaras; databasmigreringar återställs inte.',
     'admin.updates.integrity_warnings' => 'Filskillnader loggade som varningar; återställningen fortsätter:',

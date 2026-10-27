@@ -686,24 +686,53 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
  *
  * Used by server-rendered view helpers.
  *
- * @param string $currentPage Current page value.
- * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool,theme_widgets_active?:bool} $model Controller-prepared sidebar state with mutually exclusive Theme/Widgets selection.
- * @return void Outputs sidebar navigation without reading feature or setting policy.
+ * @param string $currentPage Normalized Admin route used for link selection.
+ * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool,theme_widgets_active?:bool,support_access?:bool} $model Controller-prepared preferences, effective capabilities and temporary-access state.
+ * @return void Outputs grouped navigation and localized browser controls without
+ * reading feature, storage or setting policy.
  */
 function view_render_admin_sidebar(string $currentPage, array $model = []): void
 {
     echo
-        '<aside class="admin-sidebar" aria-label="'
+        '<aside class="admin-sidebar" data-admin-navigation aria-label="'
             . e(t('admin.menu.aria_navigation', 'Admin navigation'))
             . '">';
     echo
-        '<div class="admin-sidebar-title">'
+        '<div class="admin-sidebar-header">'
+            . '<span class="admin-sidebar-title">'
             . e(t('admin.menu.title', 'Admin'))
-            . '</div>';
-    foreach (view_admin_menu_structure($model) as $group) {
+            . '</span>';
+    echo '<button type="button" class="admin-navigation-toggle" '
+        . 'data-admin-navigation-toggle hidden '
+        . 'aria-controls="admin-navigation-links" '
+        . 'data-collapse-label="'
+        . e(t('admin.menu.collapse', 'Collapse menu'))
+        . '" data-expand-label="'
+        . e(t('admin.menu.expand', 'Expand menu'))
+        . '" data-open-label="'
+        . e(t('admin.menu.open', 'Open Admin menu'))
+        . '" data-close-label="'
+        . e(t('admin.menu.close', 'Close Admin menu')) . '">';
+    echo '<svg class="admin-navigation-chevron" width="16" height="16" '
+        . 'viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        . 'stroke-width="1.7" stroke-linecap="round" '
+        . 'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        . '<path d="m13 7-5 5 5 5m6-10-5 5 5 5"/></svg>';
+    echo '<svg class="admin-navigation-hamburger" width="16" height="16" '
+        . 'viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        . 'stroke-width="1.7" stroke-linecap="round" '
+        . 'aria-hidden="true" focusable="false">'
+        . '<path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+    echo '<span class="admin-navigation-mobile-label">'
+        . e(t('admin.menu.mobile', 'Admin menu'))
+        . '</span></button></div>';
+    echo '<div class="admin-navigation-links" id="admin-navigation-links">';
+    foreach (view_admin_menu_structure($model) as $groupIndex => $group) {
         echo '<section class="admin-menu-group">';
-        echo '<h2>' . e((string) $group['label']) . '</h2>';
-        echo '<nav class="admin-menu-links">';
+        echo '<h2 id="admin-menu-group-' . e((string) $groupIndex) . '">'
+            . e((string) $group['label']) . '</h2>';
+        echo '<nav class="admin-menu-links" aria-labelledby="admin-menu-group-'
+            . e((string) $groupIndex) . '">';
         foreach ((array) $group['items'] as $item) {
             if (
                 !empty($model['support_access'])
@@ -731,14 +760,17 @@ function view_render_admin_sidebar(string $currentPage, array $model = []): void
                     . e($activeClass . $highlightClass)
                     . '" href="'
                     . e((string) $item['url'])
-                    . '">'
+                    . '" title="' . e((string) $item['label']) . '"'
+                    . ($activeClass !== '' ? ' aria-current="page"' : '')
+                    . '>'
                     . view_admin_menu_icon((string) ($item['icon'] ?? ''))
+                    . '<span class="admin-menu-label">'
                     . e((string) $item['label'])
-                    . '</a>';
+                    . '</span></a>';
         }
         echo '</nav></section>';
     }
-    echo '</aside>';
+    echo '</div></aside>';
 }
 
 /**

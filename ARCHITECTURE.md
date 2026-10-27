@@ -821,6 +821,33 @@ storage adapters, configured/effective semantics, route/dependency safety, Admin
 health, non-destructive policy, and OFF-path query/work budgets.
 `scripts/audit.php` remains the authoritative orchestrator.
 
+## Responsive Admin navigation ownership
+
+`app/views/admin_chrome.php` renders the existing capability-filtered groups,
+localized collapse/mobile controls and named navigation landmarks from the
+controller-prepared model. `public/assets/gallery-modules/admin-navigation.js`
+progressively enhances that markup; `admin-navigation.css` follows legacy Admin
+styles in the shared controller's stylesheet list so its scoped controls win.
+The browser entry point initializes it once for the authenticated Admin shell.
+No domain owner, runtime module or database setting is added.
+
+Desktop starts expanded and can collapse to the existing icons. A localStorage
+preference is scoped by origin and the installation's asset mount, so rewritten
+routes share it without mixing installations. Storage denial retains a usable
+in-memory choice. Cross-tab storage events synchronize the desktop preference.
+At 1100px and below, an independent initially closed hamburger exposes the same
+groups in a viewport-bounded contextual panel. Escape, outside click, focus
+leaving navigation and destination activation dismiss it with appropriate focus
+restoration. Resize preserves the desktop preference, measures the actual sticky
+header and prevents a focused link from becoming hidden without a focus target.
+
+Shell-delegated events and a direct-child observer support the Settings workflow
+that replaces its sidebar after legacy-navigation changes. A class observer
+keeps `aria-current` aligned with existing dashboard hash-selection styling.
+Without JavaScript the original grouped links remain visible. Browser support
+and permanent storage/geometry fallbacks are recorded in
+`docs/COMPATIBILITY_LIFECYCLE.md`.
+
 ## Canonical Admin Mutation Completion Pipeline
 
 Persistent mutations launched from the Admin right-side panel use one response

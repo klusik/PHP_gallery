@@ -152,6 +152,26 @@ Disposable fixtures exercise real SQL replay, locks and file activation.
 Live hosting, external writes, production data compatibility and actual
 deployment acceptance remain unknown; no usage assumption retires legacy readers.
 
+## Browser-local Admin navigation
+
+- Owner: the shared Admin chrome view, `admin-navigation.js` and
+  `admin-navigation.css`.
+- Protected behavior: navigation groups, capability filtering, ordinary URLs and
+  keyboard access remain available on desktop and narrow screens. The desktop
+  starts expanded; its icon-rail preference stays in installation-scoped browser
+  storage. Mobile opening is transient and does not change that preference.
+- Permanent fallback: browser privacy policy or quota may reject localStorage
+  reads/writes. Keep the current document's choice in memory and fall back to
+  expanded on a new document; do not replace this with database persistence.
+  Without JavaScript retain visible grouped navigation. When ResizeObserver is
+  absent, retain initial and window-resize header measurement. These paths may
+  retire only after an explicitly reviewed browser-support-floor change;
+  storage-denial and scriptless navigation are permanently supported.
+- Regression evidence: production-markup Chromium scenarios cover the rail,
+  reload, denied storage, responsive disclosure, focus and sidebar replacement.
+  BASIC does not execute those scenarios; hosted FULL remains the execution
+  authority. Real assistive-technology and physical-device usage are unknown.
+
 ## Browser-local visitor progress
 
 Initial evidence seeding belongs to the independent migration model, not a new
