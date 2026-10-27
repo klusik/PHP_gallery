@@ -167,6 +167,9 @@ focus, muted disabled state and system colors in forced-color mode.
 Preserve the existing expanded vertical menu as the desktop default. Its compact
 transparent double-chevron action collapses labels into the existing icon rail;
 group separators, accessible names and current-page indication remain available.
+Both desktop states scroll with the document, with no independent menu
+scrollbar or viewport-height clipping. The final account action must remain
+reachable through ordinary page scrolling and keyboard focus.
 Keep this preference in browser-local storage, scoped to the installation asset
 mount. Do not add an application setting or database write.
 

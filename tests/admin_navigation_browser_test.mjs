@@ -130,6 +130,44 @@ try {
                     })()`);
                     const toggle = () => evaluate(
                         `document.querySelector('[data-admin-navigation-toggle]').click()`);
+                    const reachLastDesktopLink = async (mode) => {
+                        // Target the viewport interior so fractional edge
+                        // alignment cannot obscure the reachability invariant.
+                        await evaluate(`document.querySelector(
+                            '.admin-menu-group:last-child .admin-menu-link:last-child'
+                        ).scrollIntoView({block: 'center', behavior: 'instant'})`);
+                        await settle();
+                        const reached = await evaluate(`(() => {
+                            const sidebar = document.querySelector('.admin-sidebar');
+                            const last = sidebar.querySelector(
+                                '.admin-menu-group:last-child .admin-menu-link:last-child'
+                            ).getBoundingClientRect();
+                            return {
+                                pageScroll: scrollY,
+                                menuScroll: sidebar.scrollTop,
+                                contained: sidebar.scrollHeight <= sidebar.clientHeight,
+                                lastTop: last.top,
+                                lastBottom: last.bottom,
+                                viewportHeight: innerHeight,
+                                visible: last.top >= document.querySelector(
+                                    '.site-header').getBoundingClientRect().bottom
+                                    && last.bottom <= innerHeight,
+                            };
+                        })()`);
+                        assert.ok(reached.pageScroll > 0,
+                            mode + ' reaches the last action through page scrolling');
+                        assert.equal(reached.menuScroll, 0,
+                            mode + ' must not create a separate menu scroll position');
+                        assert.equal(reached.contained, true,
+                            mode + ' must not clip navigation into an internal scroller');
+                        assert.equal(reached.visible, true,
+                            mode + ' keeps the last action visible and reachable: '
+                                + JSON.stringify(reached));
+                        await evaluate(`scrollTo({
+                            top: 0, left: 0, behavior: 'instant',
+                        })`);
+                        await settle();
+                    };
                     await ready();
                     let before = await state();
                     assert.equal(before.collapsed, false, 'Expanded by default');
@@ -138,12 +176,14 @@ try {
                     assert.deepEqual(before.current, ['Overview']);
                     assert.notEqual(before.background, 'rgb(37, 99, 168)',
                         'Legacy blue button rule must not win');
+                    await reachLastDesktopLink('Expanded menu');
                     await toggle();
                     let after = await state();
                     assert.equal(after.collapsed, true);
                     assert.ok(after.width < before.width, 'Rail must free content width');
                     assert.ok(after.mainLeft < before.mainLeft);
                     assert.equal(after.hidden, false, 'Rail links remain available');
+                    await reachLastDesktopLink('Icon rail');
                     const oldDocument = await evaluate('performance.timeOrigin');
                     await evaluate(`location.reload(); 'reloading'`);
                     const reloadDeadline = Date.now() + RELOAD_TIMEOUT_MS;

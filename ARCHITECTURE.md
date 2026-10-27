@@ -831,9 +831,13 @@ styles in the shared controller's stylesheet list so its scoped controls win.
 The browser entry point initializes it once for the authenticated Admin shell.
 No domain owner, runtime module or database setting is added.
 
-Desktop starts expanded and can collapse to the existing icons. A localStorage
-preference is scoped by origin and the installation's asset mount, so rewritten
-routes share it without mixing installations. Storage denial retains a usable
+Desktop starts expanded and can collapse to the existing icons. Both states
+participate in document scrolling without an internal sidebar scrollbar or
+height cap, preserving access to the final account actions. Only the narrow
+hamburger surface retains its sticky trigger and bounded scrolling panel.
+A localStorage preference is scoped by origin and the installation's asset
+mount, so rewritten routes share it without mixing installations. Storage denial
+retains a usable
 in-memory choice. Cross-tab storage events synchronize the desktop preference.
 At 1100px and below, an independent initially closed hamburger exposes the same
 groups in a viewport-bounded contextual panel. Escape, outside click, focus

@@ -67,9 +67,11 @@
 }
 
 .admin-page .admin-navigation-ready .admin-sidebar {
-    position: sticky;
-    top: calc(var(--admin-navigation-header-height, 48px) + 8px);
-    max-height: calc(100dvh - var(--admin-navigation-header-height, 48px) - 20px);
+    /* Desktop navigation uses document scrolling, including the last action. */
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
 }
 
 .admin-page .admin-navigation-ready .admin-menu-group {
@@ -138,6 +140,8 @@
     }
 
     .admin-page .admin-navigation-ready .admin-sidebar {
+        position: sticky;
+        top: calc(var(--admin-navigation-header-height, 48px) + 8px);
         z-index: 39;
         max-height: none;
         overflow: visible;

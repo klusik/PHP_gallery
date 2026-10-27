@@ -6685,6 +6685,9 @@ cover expanded defaults, the icon rail and released content width, preference
 reload, denied storage, delegated replacement-sidebars, desktop/mobile state
 separation, preserved groups, 44px targets and current-page markers. The narrow
 panel must overlay content without moving it or overflowing the viewport.
+Expanded desktop and icon-rail journeys scroll the document to the final link,
+asserting its visible geometry and that the sidebar has neither internal overflow
+nor a separate scroll position.
 Escape, outside click, focus leaving navigation and hash-link activation verify
 dismissal and focus restoration. `legacy_upload_navigation_test.php` preserves
 capability filtering, Theme/Widgets selection and the scriptless grouped markup.

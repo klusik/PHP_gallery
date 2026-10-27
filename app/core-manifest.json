@@ -1,11 +1,11 @@
 {
     "version": "0.144.14",
-    "generated_at": "2026-10-27T01:50:16+00:00",
+    "generated_at": "2026-10-27T07:18:34+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:527a0839805e09e9559d4e69d89987ac2f3c8651016f8324c137d98c5f7c8b29",
-        "ARCHITECTURE.md": "sha256:e9bcbc51c07ea9d021b6e23e6bc75026326dfbbda79117d4741c410c4a11a6fb",
+        "ARCHITECTURE.md": "sha256:f20842dd40a78275abe355c584ac5075090192a4680dc188506ea8cb47fce181",
         "PATCH_NOTES.md": "sha256:d7a6f9d176cdc558d082881e9ced270917b3319cc8593f3e2646c498c62f68e7",
         "README.md": "sha256:13443d4fa36960ba1690cc93f3f02f78562ef6deec6b1066e26a8ab9dad3c49d",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
@@ -890,7 +890,7 @@
         "public/assets/styles/admin-maintenance-center.css": "sha256:3793d01cea37a35e2a1807e46ffa5e703db31e841299fca768fe6f7ab2fe38a3",
         "public/assets/styles/admin-media-tools.css": "sha256:8ecb04a181f2f23223be768f51edc36717ca1f9efdf52fcfbcc66920a4c62630",
         "public/assets/styles/admin-music.css": "sha256:db03f3559d0a1d8bc30e39e375dc1bb68b51c885ea0839dd7267174429ba01a7",
-        "public/assets/styles/admin-navigation.css": "sha256:d212f66b5374bff40e33596940711d5b899f2be5d83e9881b8f6b517aa0db10c",
+        "public/assets/styles/admin-navigation.css": "sha256:f036d39a0bb6bc39e32e67c214da535ff634561d24b7a3130ca0721a0a84593b",
         "public/assets/styles/admin-patch-notes.css": "sha256:26c3011976758eb2bdc00fe81831bbfcd8cef45ce1e5620405de6f37c84ff50b",
         "public/assets/styles/admin-public-widgets.css": "sha256:4bbe1a0477c3ea8831fca1bbb8a06296913f728f4937ea7b82840c57ef9d967f",
         "public/assets/styles/admin-reordering.css": "sha256:f72c60bd523f35f2e98f8f7b15883425a9fcccc2f1b3a1c1c26e804041ba47c6",

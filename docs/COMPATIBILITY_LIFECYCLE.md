@@ -169,6 +169,8 @@ deployment acceptance remain unknown; no usage assumption retires legacy readers
   storage-denial and scriptless navigation are permanently supported.
 - Regression evidence: production-markup Chromium scenarios cover the rail,
   reload, denied storage, responsive disclosure, focus and sidebar replacement.
+  Both desktop states reach their last account action through document scrolling
+  without an independent sidebar scroller; the mobile panel remains bounded.
   BASIC does not execute those scenarios; hosted FULL remains the execution
   authority. Real assistive-technology and physical-device usage are unknown.
 
