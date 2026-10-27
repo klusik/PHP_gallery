@@ -5345,11 +5345,39 @@ button.gallery-row-action.secondary {
 .admin-page .admin-features [hidden] { display: none !important; }
 
 .admin-page .admin-features [data-feature-groups] {
-    display: grid;
-    gap: 0.65rem;
+    /*
+     * Keep feature names, switches and factory state readable in each column.
+     * Type: length. Units: rem. Scope: Features workspace.
+     * Consumers: column-width. Value: 30rem.
+     * Rationale: Add a column only when its complete group has enough room;
+     * narrower containers retain one fluid column, including without JS.
+     */
+    --feature-column-width: 30rem;
+    /*
+     * Bound the wide-screen reading span.
+     * Type: integer. Units: columns. Scope: Features workspace.
+     * Consumers: column-count. Value: 3.
+     * Rationale: Use one to three columns according to available content width.
+     */
+    --feature-column-limit: 3;
+    /*
+     * Separate groups equally within and between columns.
+     * Type: length. Units: rem. Scope: Features workspace.
+     * Consumers: column-gap and group margin. Value: 0.65rem.
+     * Rationale: Preserve the existing compact spacing without shared rows.
+     */
+    --feature-group-gap: 0.65rem;
+    column-width: var(--feature-column-width);
+    column-count: var(--feature-column-limit);
+    column-gap: var(--feature-group-gap);
 }
 
 .admin-page .admin-features .admin-feature-group {
+    /* Keep each variable-height group intact in top-to-bottom reading order. */
+    display: flow-root;
+    break-inside: avoid;
+    box-sizing: border-box;
+    margin: 0 0 var(--feature-group-gap);
     padding: 0.2rem 0.65rem 0.35rem;
     border: 1px solid var(--feature-line);
     border-radius: min(var(--radius, 8px), 8px);

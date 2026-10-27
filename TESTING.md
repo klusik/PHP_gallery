@@ -2274,9 +2274,13 @@ that are registered in the normal PHP regression suite:
 `tests/admin_features_browser_test.mjs` uses the real controller/view and
 capability service against isolated settings through
 `tests/fixtures/admin_features_view.php`. The central browser suite checks
-1200 px and 390 px layouts with production/legacy CSS, switches before names,
-compact rows, touch targets, serialized scoped saves, group actions, factory
-reset, dependency blockers, focus retention and an actually committed write
+390, 1200, 1700 and 2560 px layouts with production/legacy CSS: one, two,
+three and at most three occupied columns. Whole groups remain intact and stack
+with the same small gap regardless of neighboring group heights. A constrained
+450 px workspace also stays in one column on a wide viewport. Layout is checked
+again after autosave and reset replace the groups. Coverage retains switches
+before names, compact rows, touch targets, serialized scoped saves, group
+actions, factory reset, dependency blockers, focus retention and a committed write
 whose response is lost. Recovery must read without replaying that mutation.
 The real-database HTTP journey also exercises authenticated autosave/passive
 reads, anonymous and CSRF rejection, stale revisions and state restoration.
@@ -2288,9 +2292,12 @@ feature-specific tests still own Smart Gallery, duplicate detector, tag,
 updater, database-maintenance, favicon, benchmark, and thumbnail behavior. The
 capability tests protect the cross-feature orchestration boundary.
 
-For Features UI acceptance, check desktop and narrow tables with the production
-cascade. Group tint/indentation must distinguish bulk switches from feature
-switches; the latter precede names. Toggle a row and a mixed/all-on group,
+For Features UI acceptance, resize the workspace through one, two and three
+columns with the production cascade, including expanded/collapsed navigation.
+Groups flow down each column before continuing to the next, remain whole and
+do not share row heights. Check long labels, keyboard reading order and help
+near a column edge. Group tint/indentation must distinguish bulk switches from
+feature switches; the latter precede names. Toggle a row and a mixed/all-on group,
 inspect factory differences and a dependency blocker, then test factory reset.
 Keep the starting preference snapshot and restore it after a live acceptance
 journey. Verify the plain question mark opens beside its trigger, Escape/outside

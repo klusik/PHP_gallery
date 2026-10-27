@@ -30,12 +30,19 @@ if (!executable) {
  */
 const RENDER_TIMEOUT_MS = 10000;
 /**
- * Exercise compact desktop and narrow production controls.
- * Type: Array<{width:number,height:number}>. Units: CSS pixels.
- * Scope: two isolated documents. Consumers: viewport emulation.
- * Rationale: 1200x800 checks density; 390x844 checks overflow and touch targets.
+ * Exercise one, two and three columns plus the wide-screen column cap.
+ * Type: Array<{width:number,height:number,columns:number}>.
+ * Units: CSS pixels for dimensions; count for expected occupied columns.
+ * Scope: four isolated documents. Consumers: viewport emulation.
+ * Rationale: 390 checks touch/overflow, 1200 checks two columns, 1700 checks
+ * three and 2560 confirms the cap. Each also checks a constrained container.
  */
-const VIEWPORTS = [{width: 1200, height: 800}, {width: 390, height: 844}];
+const VIEWPORTS = [
+    {width: 1200, height: 800, columns: 2},
+    {width: 1700, height: 1000, columns: 3},
+    {width: 2560, height: 1080, columns: 3},
+    {width: 390, height: 844, columns: 1},
+];
 
 /**
  * Run the real policy and controller/view against one isolated settings snapshot.
@@ -68,6 +75,13 @@ const POLL_MS = 10;
 const ROW_MAX_PX = 36;
 /** Comfortable touch target. Type: number. Units: CSS pixels. Scope: narrow controls. Consumers: geometry checks. Value: 44. Rationale: Match the mandatory design contract. */
 const TAP_MIN_PX = 44;
+/**
+ * Bound subpixel rounding in column geometry.
+ * Type: number. Units: CSS pixels. Scope: layout assertions.
+ * Consumers: checkLayout(). Value: 2.
+ * Rationale: Permit fractional widths without accepting row-sized gaps.
+ */
+const LAYOUT_TOLERANCE_PX = 2;
 const nativeFetch = window.fetch.bind(window);
 const requests = [];
 let hold = false;
@@ -99,11 +113,45 @@ async function until(predicate, message) {
 function feature(key) { return document.getElementById('admin-feature-' + key); }
 /** Wait for a serialized operation. @return {Promise<void>} Resolves after controls are unlocked. */
 async function settled() { await until(() => form.getAttribute('aria-busy') === 'false', 'Request did not settle'); }
+/**
+ * Verify intact groups pack vertically without shared row heights.
+ * @param {number} expectedColumns Required occupied columns for this container.
+ * @return {void} Throws on fragmentation, overflow, overlap or extra gaps.
+ */
+function checkLayout(expectedColumns) {
+    const groups = [...document.querySelectorAll('.admin-feature-group')];
+    const container = document.querySelector('[data-feature-groups]');
+    const bounds = container.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(container).columnGap);
+    const columns = new Map();
+    for (const group of groups) {
+        check(group.getClientRects().length === 1, 'Feature group split across columns');
+        const rect = group.getBoundingClientRect();
+        check(rect.left >= bounds.left - LAYOUT_TOLERANCE_PX
+            && rect.right <= bounds.right + LAYOUT_TOLERANCE_PX,
+            'Feature group overflows its container');
+        const left = Math.round(rect.left);
+        const previous = columns.get(left);
+        if (previous) {
+            check(Math.abs(rect.top - previous.bottom - gap) <= LAYOUT_TOLERANCE_PX,
+                'Unequal group heights introduced a shared row gap or overlap');
+        }
+        columns.set(left, rect);
+    }
+    check(columns.size === expectedColumns, 'Wrong number of occupied feature columns');
+}
 const form = document.querySelector('.admin-feature-form');
 const view = document.querySelector('[data-admin-features]');
 const originalUrl = location.href;
+const expectedColumns = Number(new URL(location.href).searchParams.get('columns'));
 try {
     setupAdminFeatures();
+    checkLayout(expectedColumns);
+    // A narrow panel on a wide viewport must use its own available width.
+    view.style.maxWidth = '450px';
+    checkLayout(1);
+    view.style.removeProperty('max-width');
+    checkLayout(expectedColumns);
     check(document.querySelector('table thead tr').children.length === 2, 'State became a separate column');
     const name = feature('downloads').closest('.admin-feature-name');
     check(name.firstElementChild.contains(feature('downloads')), 'Switch must precede the feature name');
@@ -124,6 +172,7 @@ try {
     hold = false; release();
     await settled();
     check(!feature('downloads').checked && view.dataset.saveState === 'saved', 'Scoped save was not rendered');
+    checkLayout(expectedColumns);
     check(document.activeElement === feature('downloads'), 'Save lost keyboard focus');
 
     feature('image_voting').click(); await settled();
@@ -137,6 +186,7 @@ try {
     document.querySelector('[data-feature-reset]').click(); await settled();
     check(document.querySelectorAll('.admin-feature-comparison.is-changed').length === 0, 'Factory reset did not restore all declared defaults');
     check(feature('image_voting').checked && !feature('thumbnail_warmup').checked, 'Factory reset ignored fresh-install defaults');
+    checkLayout(expectedColumns);
 
     drop = true;
     feature('downloads').click(); await settled();
@@ -189,7 +239,8 @@ try {
     for (const viewport of VIEWPORTS) {
         settings = {};
         const {result, exitCode} = await runHeadlessBrowserFixture(executable,
-            'http://127.0.0.1:' + server.address().port + '/', 'admin-features-', {viewport});
+            'http://127.0.0.1:' + server.address().port + '/?columns=' + viewport.columns,
+            'admin-features-', {viewport});
         console.log(viewport.width + 'px: ' + result);
         assert.equal(exitCode, 0);
         assert.ok(result?.includes('BROWSER PASS'), result || 'Features fixture did not complete');

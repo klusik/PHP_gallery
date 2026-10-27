@@ -1,6 +1,6 @@
 {
     "version": "0.144.14",
-    "generated_at": "2026-10-27T07:18:34+00:00",
+    "generated_at": "2026-10-27T07:56:37+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -908,7 +908,7 @@
         "public/assets/styles/admin-theme-preview.css": "sha256:7f21ca1d23dbee12be6f39450945643e4b0e133d92389898269bb0c8e763c632",
         "public/assets/styles/admin-theme-visual-editor.css": "sha256:f83ce5fda058733defee2ac1fc3ffbc48291908e2d4b87b9347d88afcc9535d4",
         "public/assets/styles/admin-update.css": "sha256:3423b42b2ff4f8884de591fefab8f3869024b728e979a3b448ba793839b8a6b0",
-        "public/assets/styles/admin.css": "sha256:7041ca782f94319c47f3cdbd1deb5741ef20af73f4547cf92d57be68c25493f6",
+        "public/assets/styles/admin.css": "sha256:1e210654f2652c23c0a1dc75fb8e695600a318b64bc4440c9a55de097cb4a7e3",
         "public/assets/styles/base.css": "sha256:b285d49ba97d3ae7c6adaffc72f1eadd7ff2b4c452bc15f96b71d21972cadcf6",
         "public/assets/styles/breadcrumbs.css": "sha256:0a36182e14921fcf4d3e689195f2e56b096dfa76d715ed47ce711da02dafb023",
         "public/assets/styles/lightbox.css": "sha256:b3bb5daed617d8346876d40ff433f46e4ef1e4875607746414af0c5f46446998",
