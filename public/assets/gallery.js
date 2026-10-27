@@ -83,6 +83,7 @@ import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-p
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20261022-search-keyboard-v2';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20261002-settings-workspace-v1';
+import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261027-compact-factory-v2';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
@@ -230,6 +231,7 @@ function bootGalleryBrowserFeatures() {
     setupGalleryMediaPanels();
     setupPictureManager();
     setupPublicHomeSearch();
+    setupAdminFeatures();
     setupAdminSettingsWorkspace();
     setupAdminDashboardWorkspace();
     setupAdminSettingsSearch();

@@ -791,6 +791,28 @@ key and are filtered through the central policy. The centralized Settings
 registry indexes feature ownership for discovery but does not become a second
 persistence layer.
 
+The compact Features tables put native switches before their feature names.
+Tinted group headers apply explicit patches to editable members. Autosave sends
+only the requested keys through `save_feature_flags_from_post()`; absent keys
+remain untouched. The direct/no-JavaScript complete form retains its historical
+absence-as-disabled semantics and explicit Save action. Both paths require the
+registry revision, Admin authentication and CSRF. The revision includes group
+membership and factory values as well as editability, sources and dependencies.
+
+Factory comparison/reset uses `fresh_default_enabled` when declared, otherwise
+`feature_capability_default_enabled()`. Reset restores only editable capability
+masters through their existing storage owners; subordinate preferences and
+subsystem data survive. This adds no schema or second group/master setting.
+A domain setter may refuse a later member after previous writes succeeded;
+JSON responses always reread the complete health snapshot, including on failure.
+The browser serializes writes, preserves focus and renders those authoritative
+groups without navigation. A lost/malformed response locks writes until a
+passive JSON GET reconciles the state; it never automatically replays a write.
+Technical health stays in native anchored light-dismiss help. Dedicated settings
+links use the canonical registry destinations and retain their route guards.
+The feature module adds no PHP runtime owner or route dependency; existing
+controller/service/view owners retain the same route closure and limits.
+
 The permanent regression boundary is `tests/feature_policy_core_test.php`,
 `tests/feature_policy_adapters_test.php`, `tests/feature_policy_admin_test.php`,
 `tests/feature_policy_inventory_test.php`, and

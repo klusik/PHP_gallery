@@ -1887,7 +1887,28 @@ Renaming a~tag or~changing its slug updates the~shared tag record, so~every gall
 \index{feature switches}
 \index{Features!Admin}
 
-\ui{Appearance > Features} provides global switches for~optional parts of~the~application. Registered features are~enabled by~default so~an~upgrade does~not~silently remove behavior that an~existing installation already uses. An~administrator can~disable individual visitor features, maps and~flight-simulation tools, AI/upload integrations, or~special-purpose Admin tools when a~simpler installation is~preferred.
+\ui{Appearance > Features} presents optional application features in~compact
+grouped tables. Switches sit directly before feature names and~save immediately,
+without a~second confirmation or~Save action. The~tinted group header switches
+every editable feature in~that group; a~mixed switch indicates that only some
+are~configured on. Linked feature names open their specialized settings where
+available. The~plain \ui{?} opens contextual description, configured/effective
+state, dependencies and~technical details; Escape or~an~outside click closes it.
+
+Each row shows its factory value and~whether the~configured preference differs.
+Factory means the~explicitly declared new-installation default, otherwise
+the~registry default; it~can~differ from an~upgrade compatibility default.
+\ui{Reset to~factory defaults} above the~table immediately saves all editable
+switches to~those factory values. Feature data and~specialized preferences
+are~preserved. A configured switch can~remain on~while a~disabled dependency
+makes the~feature unavailable; enabling that dependency restores availability.
+
+Saving, saved and~failure feedback stays visible. A group write can~partially
+succeed if~a~domain owner refuses a~later setting; the~table then displays
+the~authoritative persisted state. If~a~response is~lost, \ui{Reload state}
+reads the~server before permitting another change and~never repeats
+the~uncertain write. Without JavaScript, the~complete form retains an~explicit
+Save action and~factory reset uses a~normal authenticated POST.
 
 A~disabled feature is~hidden from~normal navigation and~its guarded routes refuse the~feature workflow. Disabling a~switch does~not~delete the~feature's code, photographs, database records, credentials, or~configuration. Re-enabling it therefore restores the~normal entry points subject to~the~same schema, access, and~configuration checks as~before. Examples of~switchable features include public search, lightbox browsing modes, Picture Manager, Inline Administration on~public pages, Smart Galleries, voting, Picture Game, downloads, gallery and~flight maps, navigation data, SimBrief, OpenAI assistance, local AI metadata, API uploads, mobile WebDAV, gallery migration, Media Renamer, and~anonymous telemetry.
 

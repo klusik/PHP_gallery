@@ -33,6 +33,24 @@
  */
 
 return [
+    'admin.features.autosave_hint' => 'Změny se ukládají ihned. Vypnutí funkcí zachová jejich data.',
+    'admin.features.compact_summary' => '{enabled}/{total} aktivních · {changed} změněno',
+    'admin.features.toggle_group' => 'Přepnout skupinu: {group}',
+    'admin.features.column.feature' => 'Funkce',
+    'admin.features.column.factory' => 'Tovární',
+    'admin.features.column.state' => 'Stav',
+    'admin.features.factory_reset' => 'Obnovit tovární nastavení',
+    'admin.features.factory_reset_help' => 'Obnoví všechny přepínače funkcí na hodnoty nové instalace. Data funkcí a specializovaná nastavení zůstanou zachována.',
+    'admin.features.saving' => 'Ukládání…',
+    'admin.features.saved' => 'Uloženo',
+    'admin.features.save_unknown' => 'Uložení nelze ověřit. Před další změnou načtěte skutečný stav.',
+    'admin.features.reload_state' => 'Načíst stav',
+    'admin.features.changed' => 'Změněno',
+    'admin.features.factory_match' => 'Výchozí',
+    'admin.features.help' => 'Podrobnosti: {feature}',
+    'admin.features.blocked' => 'Blokováno',
+    'admin.features.error.invalid_changes' => 'Neznámá nebo neupravitelná změna funkce. Obnovte stránku.',
+
     'admin.updates.recovery_manual_action' => 'Pomocí Resetovat updater / dokončit FTP aktualizaci znovu zpracujte nahrané soubory, nebo pomocí Nainstalovat stable přepište aplikaci posledním stable balíkem. Staré úlohy i zálohy zůstanou; databázové migrace se nevracejí.',
     'admin.updates.integrity_warnings' => 'Rozdíly souborů zapsané jako upozornění; obnova pokračuje:',
     'admin.updates.replacement_waiting' => 'Čeká se na dokončení právě běžícího požadavku updateru před resetem. Obnova se spustí automaticky.',

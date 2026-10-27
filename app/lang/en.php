@@ -33,6 +33,24 @@
  */
 
 return [
+    'admin.features.autosave_hint' => 'Changes save immediately. Turning features off preserves their data.',
+    'admin.features.compact_summary' => '{enabled}/{total} active · {changed} changed',
+    'admin.features.toggle_group' => 'Toggle group: {group}',
+    'admin.features.column.feature' => 'Feature',
+    'admin.features.column.factory' => 'Factory',
+    'admin.features.column.state' => 'State',
+    'admin.features.factory_reset' => 'Reset to factory defaults',
+    'admin.features.factory_reset_help' => 'Restore all feature switches to new-installation defaults. Feature data and specialized settings are preserved.',
+    'admin.features.saving' => 'Saving…',
+    'admin.features.saved' => 'Saved',
+    'admin.features.save_unknown' => 'Save could not be verified. Reload state before making another change.',
+    'admin.features.reload_state' => 'Reload state',
+    'admin.features.changed' => 'Changed',
+    'admin.features.factory_match' => 'Default',
+    'admin.features.help' => 'Details: {feature}',
+    'admin.features.blocked' => 'Blocked',
+    'admin.features.error.invalid_changes' => 'Unknown or non-editable feature change. Reload the page.',
+
     'admin.updates.recovery_manual_action' => 'Use Reset updater / finish FTP update to recheck uploaded files, or Install stable to replace application files with the latest stable package. Old jobs and backups are kept; database migrations are not reversed.',
     'admin.updates.integrity_warnings' => 'File differences recorded as warnings; recovery continues:',
     'admin.updates.replacement_waiting' => 'Waiting for the previous updater request to finish before reset. Recovery will start automatically.',

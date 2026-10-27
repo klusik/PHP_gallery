@@ -194,7 +194,9 @@ function feature_capability_definitions(): array
             'routes' => ['gallery_ofp_pdf'],
             'data_disable_policy' => 'preserve',
             'behavior_tags' => ['public', 'admin-only', 'writes-files'],
-            'settings_route' => 'admin_features',
+            'settings_route' => 'admin_settings',
+            'settings_params' => ['section' => 'uploads'],
+            'settings_fragment' => 'settings-uploads',
         ],
         'gallery_music' => [
             'group' => 'public_display',
@@ -210,7 +212,7 @@ function feature_capability_definitions(): array
             'routes' => ['gallery_music', 'admin_music'],
             'data_disable_policy' => 'preserve',
             'behavior_tags' => ['public', 'admin-only', 'writes-files'],
-            'settings_route' => 'admin_features',
+            'settings_route' => 'admin_music',
         ],
         'downloads' => [
             'group' => 'public_display',
@@ -590,7 +592,7 @@ function feature_capability_definitions(): array
                 'writes-files',
                 'destructive-maintenance',
             ],
-            'settings_route' => 'admin_features',
+            'settings_route' => 'admin_cron_overview',
         ],
         'admin_test_runs' => [
             'group' => 'admin_tools',
@@ -636,7 +638,12 @@ function feature_capability_definitions(): array
             'settings_params' => ['maintenance_tab' => 'general'],
             'settings_fragment' => 'admin-tab-maintenance',
         ],
-        'lightbox_modes' => ['behavior_tags' => ['public']],
+        'lightbox_modes' => [
+            'behavior_tags' => ['public'],
+            'settings_route' => 'admin_settings',
+            'settings_params' => ['section' => 'media'],
+            'settings_fragment' => 'settings-media',
+        ],
         'picture_manager' => ['behavior_tags' => ['public', 'admin-only']],
         'inline_administration' => ['behavior_tags' => [
             'public',
@@ -645,7 +652,10 @@ function feature_capability_definitions(): array
         ]],
         'image_voting' => ['behavior_tags' => ['public']],
         'picture_game' => ['behavior_tags' => ['public']],
-        'smart_galleries' => ['behavior_tags' => ['public', 'admin-only']],
+        'smart_galleries' => [
+            'behavior_tags' => ['public', 'admin-only'],
+            'settings_route' => 'admin_smart_galleries',
+        ],
         'downloads' => ['behavior_tags' => ['public']],
         'thumbnail_warmup' => [
             'behavior_tags' => ['public', 'writes-files', 'background-work'],
@@ -653,34 +663,46 @@ function feature_capability_definitions(): array
             'settings_params' => ['maintenance_tab' => 'media'],
             'settings_fragment' => 'admin-tab-maintenance',
         ],
-        'multilingual_content' => ['behavior_tags' => ['public', 'admin-only']],
-        'public_tag_browsing' => ['behavior_tags' => ['public']],
+        'multilingual_content' => [
+            'behavior_tags' => ['public', 'admin-only'],
+            'settings_route' => 'admin_theme',
+            'settings_fragment' => 'admin-theme-tab-language',
+        ],
+        'public_tag_browsing' => [
+            'behavior_tags' => ['public'],
+            'settings_route' => 'admin_tags',
+        ],
         'viewer_accounts' => [
             'behavior_tags' => ['public', 'privacy'],
             'settings_route' => 'admin_viewer_invitations',
         ],
         'gallery_maps' => ['behavior_tags' => ['public']],
         'flight_maps' => ['behavior_tags' => ['public']],
-        'navigation_data' => ['behavior_tags' => [
-            'admin-only',
-            'writes-files',
-        ]],
+        'navigation_data' => [
+            'behavior_tags' => ['admin-only', 'writes-files'],
+            'settings_route' => 'admin_navdata',
+        ],
         'simbrief' => ['behavior_tags' => ['admin-only', 'outbound-network']],
-        'openai_text_assist' => ['behavior_tags' => [
-            'admin-only',
-            'outbound-network',
-        ]],
+        'openai_text_assist' => [
+            'behavior_tags' => ['admin-only', 'outbound-network'],
+            'settings_route' => 'admin_account',
+        ],
         'ai_image_metadata' => ['behavior_tags' => [
             'admin-only',
             'background-work',
         ]],
-        'upload_api' => ['behavior_tags' => ['admin-only', 'writes-files']],
-        'mobile_webdav' => ['behavior_tags' => ['public', 'writes-files']],
-        'gallery_migration' => ['behavior_tags' => [
-            'admin-only',
-            'writes-files',
-            'outbound-network',
-        ]],
+        'upload_api' => [
+            'behavior_tags' => ['admin-only', 'writes-files'],
+            'settings_route' => 'admin_api_manager',
+        ],
+        'mobile_webdav' => [
+            'behavior_tags' => ['public', 'writes-files'],
+            'settings_route' => 'admin_mobile_uploads',
+        ],
+        'gallery_migration' => [
+            'behavior_tags' => ['admin-only', 'writes-files', 'outbound-network'],
+            'settings_route' => 'admin_gallery_migration',
+        ],
         'gallery_trash' => [
             'behavior_tags' => [
                 'admin-only',
@@ -734,7 +756,10 @@ function feature_capability_definitions(): array
             'settings_route' => 'admin_storage_statistics',
             'settings_params' => ['tab' => 'maintenance'],
         ],
-        'media_renamer' => ['behavior_tags' => ['admin-only', 'writes-files']],
+        'media_renamer' => [
+            'behavior_tags' => ['admin-only', 'writes-files'],
+            'settings_route' => 'admin_media_renamer',
+        ],
         'telemetry' => [
             'behavior_tags' => ['privacy', 'background-work'],
             'settings_route' => 'admin_telemetry',

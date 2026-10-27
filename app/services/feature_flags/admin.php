@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Count effectively enabled and disabled capabilities for the Admin feature page
- *   - Persist the complete feature checkbox payload through the canonical setters
+ *   - Persist complete forms or scoped autosave changes through canonical setters
  *   - Group canonical definitions using the existing localized feature groups
  *
  * Author:
@@ -37,8 +37,8 @@ namespace Gallery\Services;
 /**
  * Return a deterministic revision token for the editable capability surface.
  *
- * The token protects an Admin form opened before a deployment from silently
- * applying absence-as-disabled semantics to capabilities added by that deployment.
+ * The token protects forms opened before deployment from applying stale complete
+ * selections, group membership or factory defaults to a different registry.
  *
  * @return string Stable registry revision token.
  */
@@ -52,6 +52,9 @@ function feature_capability_registry_revision(): string
             'dependencies' => array_values(
                 (array) ($definition['dependencies'] ?? []),
             ),
+            'group' => $definition['group'],
+            'factory' => (bool) ($definition['fresh_default_enabled']
+                ?? feature_capability_default_enabled($key)),
         ];
     }
     return substr(
@@ -265,10 +268,15 @@ function feature_flag_summary_counts(): array
 }
 
 /**
- * Save all feature switches from the Admin form payload.
+ * Save a complete legacy form or explicit autosave changes through domain owners.
  *
- * @param array{feature_registry_revision?:string,enabled_features?:list<string>} $post Submitted feature form revision and selected canonical capability keys.
- * @return array{enabled:int,disabled:int,total:int,changed_count:int,changes:list<array<string,mixed>>,registry_revision:string} Save summary.
+ * Scoped changes preserve every absent capability, including concurrent edits
+ * made from another page. Validate the whole patch before its first write.
+ * Domain adapters may fail after an earlier write; callers must reread health
+ * on failure instead of claiming that the whole group was rolled back.
+ *
+ * @param array{feature_registry_revision?:string,enabled_features?:list<string>,feature_changes?:array<string,string|bool|int>,feature_action?:string} $post Revision and complete selection, explicit changes, or factory_defaults action.
+ * @return array{enabled:int,disabled:int,total:int,changed_count:int,changes:list<array{key:string,old_configured:bool,new_configured:bool,effective:bool,source_surface:string}>,registry_revision:string} Persisted transition summary.
  */
 function save_feature_flags_from_post(array $post): array
 {
@@ -288,6 +296,51 @@ function save_feature_flags_from_post(array $post): array
         ));
     }
 
+    $definitions = feature_capability_definitions();
+    $patch = null;
+    if (
+        (isset($post['feature_action'])
+            && $post['feature_action'] !== 'factory_defaults')
+        || (isset($post['feature_action'])
+            && array_key_exists('feature_changes', $post))
+    ) {
+        throw new \RuntimeException(t(
+            'admin.features.error.invalid_changes',
+            'Unknown or non-editable feature change. Reload the page.',
+        ));
+    }
+    if (($post['feature_action'] ?? '') === 'factory_defaults') {
+        $patch = [];
+        foreach ($definitions as $key => $definition) {
+            if (!empty($definition['editable_on_features'])) {
+                $patch[$key] = (bool) ($definition['fresh_default_enabled']
+                    ?? feature_capability_default_enabled($key));
+            }
+        }
+    }
+    if (array_key_exists('feature_changes', $post)) {
+        if (!is_array($post['feature_changes']) || $post['feature_changes'] === []) {
+            throw new \RuntimeException(t(
+                'admin.features.error.invalid_changes',
+                'Unknown or non-editable feature change. Reload the page.',
+            ));
+        }
+        $patch = [];
+        foreach ($post['feature_changes'] as $key => $value) {
+            if (
+                !is_string($key)
+                || empty($definitions[$key]['editable_on_features'])
+                || !in_array($value, ['0', '1', 0, 1, false, true], true)
+            ) {
+                throw new \RuntimeException(t(
+                    'admin.features.error.invalid_changes',
+                    'Unknown or non-editable feature change. Reload the page.',
+                ));
+            }
+            $patch[$key] = in_array($value, ['1', 1, true], true);
+        }
+    }
+
     $enabledKeys = [];
     foreach ((array) ($post['enabled_features'] ?? []) as $key) {
         $normalizedKey = feature_flag_normalize_key((string) $key);
@@ -297,12 +350,17 @@ function save_feature_flags_from_post(array $post): array
     }
 
     $changes = [];
-    foreach (feature_capability_definitions() as $key => $definition) {
-        if (empty($definition['editable_on_features'])) {
+    foreach ($definitions as $key => $definition) {
+        if (
+            empty($definition['editable_on_features'])
+            || ($patch !== null && !array_key_exists($key, $patch))
+        ) {
             continue;
         }
         $oldConfigured = feature_capability_configured_enabled($key);
-        $newConfigured = isset($enabledKeys[$key]);
+        $newConfigured = $patch !== null
+            ? $patch[$key]
+            : isset($enabledKeys[$key]);
         if ($oldConfigured === $newConfigured) {
             continue;
         }

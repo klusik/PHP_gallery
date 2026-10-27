@@ -1266,6 +1266,54 @@ try {
             && in_array('gallery_music', $mediaEnabledKeys, true),
         'New and upgraded installations must initially expose both media types.',
     );
+    $featurePatchFields = [
+        'csrf_token' => $csrf,
+        'feature_registry_revision' => $mediaRegistryRevision,
+        'feature_changes[downloads]' => '0',
+    ];
+    check(
+        $anonymous->request('/index.php?page=admin_features', $featurePatchFields, true)['status'] === 401,
+        'Anonymous feature autosave must be refused.',
+    );
+    check(
+        $admin->request('/index.php?page=admin_features', array_replace(
+            $featurePatchFields,
+            ['csrf_token' => 'invalid'],
+        ), true)['status'] === 400,
+        'Feature autosave must verify CSRF.',
+    );
+    $featurePatchResponse = $admin->request(
+        '/index.php?page=admin_features', $featurePatchFields, true,
+    );
+    check(
+        $featurePatchResponse['status'] === 200
+            && ($featurePatchResponse['json']['ok'] ?? false) === true
+            && str_contains($featurePatchResponse['json']['groups_html'] ?? '', 'data-feature-row="downloads"')
+            && ($featurePatchResponse['json']['registry_revision'] ?? '') === $mediaRegistryRevision,
+        'Scoped feature autosave must return authoritative health without redirecting.',
+    );
+    $featurePassiveRead = $admin->request('/index.php?page=admin_features', null, true);
+    check(
+        $featurePassiveRead['status'] === 200
+            && $featurePassiveRead['json']['groups_html'] === $featurePatchResponse['json']['groups_html'],
+        'Passive recovery must read the exact committed feature state.',
+    );
+    $featureStaleResponse = $admin->request('/index.php?page=admin_features', array_replace(
+        $featurePatchFields,
+        ['feature_registry_revision' => 'stale', 'feature_changes[downloads]' => '1'],
+    ), true);
+    check(
+        $featureStaleResponse['status'] === 409
+            && ($featureStaleResponse['json']['ok'] ?? true) === false
+            && $featureStaleResponse['json']['groups_html'] === $featurePatchResponse['json']['groups_html'],
+        'Stale autosave must return unchanged authoritative state with a failure status.',
+    );
+    $featureRestoreResponse = $admin->request('/index.php?page=admin_features', array_replace(
+        $featurePatchFields,
+        ['feature_changes[downloads]' => in_array('downloads', $mediaEnabledKeys, true) ? '1' : '0'],
+    ), true);
+    check($featureRestoreResponse['status'] === 200, 'Restore the fixture download preference.');
+
     $mediaSetCapabilities = static function (
         bool $pdfEnabled,
         bool $musicEnabled,

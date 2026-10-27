@@ -1,5 +1,23 @@
 # Compatibility lifecycle and retirement register
 
+## Admin feature autosave and complete-form support
+
+The feature-policy service permanently supports the complete revisioned Admin
+form for direct requests and browsers without JavaScript. Scoped autosave
+preserves absent preferences instead of applying complete-form OFF semantics.
+Both transports use the same canonical setters, authentication, CSRF and
+registry revision. The compatibility owner is `feature_flags/admin.php` and the
+Admin Features controller/view; removal would require evidence that supported
+non-JavaScript/direct-form consumers no longer exist. Usage is currently
+unknown, so support is retained. Factory reset uses new-installation defaults
+where declared and changes masters only; no schema or subordinate-setting
+reset is introduced. Partial domain failures reconcile persisted health, and a
+lost response requires a passive read without automatic mutation replay.
+Local acceptance covered save/reload, dependency recovery and factory reset
+with the original preferences restored. Hosted PHP/HTTP/browser contracts cover
+scoped preservation, adverse requests, fresh defaults and lost-response reads;
+production deployment remains unverified until installation.
+
 ## Failed updater jobs
 
 Explicit Admin recovery permanently supports overwrite-only FTP deployments,

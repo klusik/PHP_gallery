@@ -1894,7 +1894,27 @@ Att byta namn på en tagg eller ändra dess URL-namn uppdaterar den delade taggp
 \index{f00091@funktionsväxlar}
 \index{f00088@Funktioner!a00002@administration}
 
-\ui{Tema > Funktioner} ger globala växlar för programmets valfria delar. Registrerade funktioner är~aktiverade som standard så att en uppgradering inte tyst tar bort beteenden som en befintlig installation redan använder. En administratör kan stänga av enskilda besökarfunktioner, kartor och flygsimuleringsverktyg, AI- och uppladdningsintegrationer eller specialiserade administrationsverktyg när en enklare installation föredras.
+\ui{Tema > Funktioner} visar valfria funktioner i kompakta grupperade tabeller.
+Växlar står direkt före namnen och sparas omedelbart utan extra bekräftelse
+eller Spara-knapp. Den tonade grupprubriken växlar alla redigerbara funktioner i
+gruppen; blandat läge visar att bara vissa är på. Länkade namn öppnar
+tillgängliga specialinställningar. Det enkla \ui{?} visar beskrivning,
+konfigurerat och faktiskt läge, beroenden och tekniska detaljer; Escape eller
+ett klick utanför stänger hjälpen.
+
+Varje rad visar fabriksvärdet och om den sparade inställningen avviker.
+Fabriksvärdet är det uttryckliga standardvärdet vid nyinstallation, annars
+registrets standardvärde; det kan skilja sig från uppgraderingskompatibilitetens
+standard. \ui{Återställ fabriksinställningar} ovanför tabellen sparar omedelbart
+dessa värden för alla redigerbara växlar. Funktionsdata och specialinställningar
+bevaras. En påslagen växel kan vara verkningslös på grund av ett avstängt
+beroende; när beroendet aktiveras återställs tillgängligheten.
+
+Sparande, framgång och fel visas tydligt. En grupp kan sparas delvis om en
+senare domänägare nekar ändringen; tabellen visar då faktiskt sparat läge. Vid
+förlorat svar läser \ui{Läs in status} servern före nästa ändring och upprepar
+aldrig den osäkra skrivningen. Utan JavaScript har det fullständiga formuläret
+en Spara-knapp och fabriksåterställning använder vanlig autentiserad POST.
 
 En avstängd funktion döljs från vanlig navigering och dess skyddade rutter nekar funktionens arbetsflöde. Att stänga av en växel raderar inte funktionens kod, fotografier, databasposter, inloggningsuppgifter eller konfiguration. Återaktivering återställer därför vanliga ingångar, med samma kontroller av schema, åtkomst och konfiguration som tidigare. Exempel på växlingsbara funktioner är offentlig sökning, ljuslådans bläddringslägen, Bildhanteraren, Administration direkt på offentliga sidor, Smarta gallerier, röstning, Bildspelet, hämtningar, galleri- och flygkartor, navigeringsdata, SimBrief, OpenAI-hjälp, lokala AI-metadata, API-uppladdningar, mobil WebDAV, gallerimigrering, Mediefilnamnsbyte och anonym telemetri.
 

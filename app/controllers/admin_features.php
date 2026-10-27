@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Require admin authentication for feature settings
- *   - Render registry-driven feature checkboxes grouped by context
+ *   - Render compact grouped switches with factory-state comparison
  *   - Persist opt-out feature state through app_settings
  *   - Honor each registered feature's declared default state
  *
@@ -37,6 +37,7 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
@@ -48,6 +49,7 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\feature_capability_admin_context_hint;
 use function Gallery\Services\feature_capability_admin_health_snapshot;
 use function Gallery\Services\feature_capability_definition;
+use function Gallery\Services\feature_capability_default_enabled;
 use function Gallery\Services\feature_capability_registry_revision;
 use function Gallery\Services\feature_flag_summary_counts;
 use function Gallery\Services\grouped_feature_flag_definitions;
@@ -55,12 +57,13 @@ use function Gallery\Services\save_feature_flags_from_post;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Views\view_render_admin_features_page;
+use function Gallery\Views\view_render_admin_feature_groups;
 
 /**
  * Render the Admin feature settings page.
  *
- * @return void Processes an optional feature-settings POST and renders the page
- *     when no redirect occurs.
+ * @return void Processes authenticated CSRF writes, returns authoritative JSON
+ *     health for autosave/read requests, or renders the direct-page form.
  */
 function cms_admin_features(): void
 {
@@ -77,17 +80,24 @@ function cms_admin_features(): void
                 'Admin updated global feature switches.',
                 $summary,
             );
-            flash_message('admin_notice', t(
+            $savedMessage = t(
                 'admin.features.notice_saved',
                 'Feature settings saved. Enabled: {enabled}. Disabled: {disabled}.',
                 [
                     'enabled' => (string) $summary['enabled'],
                     'disabled' => (string) $summary['disabled'],
                 ],
-            ));
-            redirect_to(url_for('admin_features', ['saved' => 1]));
+            );
+            if (!admin_wants_json()) {
+                flash_message('admin_notice', $savedMessage);
+                redirect_to(url_for('admin_features', ['saved' => 1]));
+            }
         } catch (\RuntimeException $exception) {
-            $saveError = $exception->getMessage();
+            // Persistence owners can throw driver details; expose only safe UI text.
+            $saveError = t(
+                'admin.features.error.save_failed',
+                'Feature settings could not be saved. Reload the page and try again.',
+            );
         }
     }
 
@@ -100,6 +110,24 @@ function cms_admin_features(): void
         $saveError,
     );
 
+    if (admin_wants_json()) {
+        ob_start();
+        view_render_admin_feature_groups($viewModel['groups']);
+        $groupsHtml = (string) ob_get_clean();
+        http_response_code($saveError === '' ? 200 : 409);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: private, no-store, max-age=0');
+        header('X-Content-Type-Options: nosniff');
+        echo json_encode([
+            'ok' => $saveError === '',
+            'message' => $saveError,
+            'registry_revision' => $viewModel['registry_revision'],
+            'groups_html' => $groupsHtml,
+            'summary' => $viewModel['summary'],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return;
+    }
+
     render_header(t('admin.features.page_title', 'Feature settings'));
     view_render_admin_features_page($viewModel);
     render_footer();
@@ -108,12 +136,12 @@ function cms_admin_features(): void
 /**
  * Prepare the Admin feature settings presentation model.
  *
- * @param array<string, mixed> $groupedDefinitions Grouped registry definitions.
- * @param array<string, mixed> $healthSnapshot Effective feature health snapshot.
- * @param array<string, mixed> $summary Feature summary counters.
+ * @param array<string,array{group:array{label:string,description:string},features:array<string,FeatureDefinition>}> $groupedDefinitions Localized groups and canonical definitions documented by admin_feature_card_view_model().
+ * @param array<string,FeatureHealth> $healthSnapshot Bounded health rows documented by admin_feature_card_view_model().
+ * @param array{enabled:int,disabled:int,total:int} $summary Effective-state counters.
  * @param string $notice Flash notice text.
  * @param string $saveError Save failure text.
- * @return array<string, mixed> Prepared page presentation model.
+ * @return array{title:string,description:string,endpoint:string,notice:string,save_error:string,summary:string,registry_revision:string,groups:list<FeatureGroup>,save_label:string,factory_label:string,factory_help:string,saving_label:string,saved_label:string,failed_label:string,reload_label:string} Prepared page; FeatureGroup is documented by the owning view renderer.
  */
 function admin_features_view_model(
     array $groupedDefinitions,
@@ -123,83 +151,91 @@ function admin_features_view_model(
     string $saveError,
 ): array {
     $groups = [];
+    $changed = 0;
     foreach ($groupedDefinitions as $groupKey => $group) {
-        $groupDefinition = (array) ($group['group'] ?? []);
         $features = [];
-        foreach ((array) (
-            $group['features'] ?? []
-        ) as $featureKey => $definition) {
-            $features[] = admin_feature_card_view_model(
+        $editableCount = 0;
+        $configuredCount = 0;
+        foreach ($group['features'] as $featureKey => $definition) {
+            $feature = admin_feature_card_view_model(
                 (string) $featureKey,
-                (array) $definition,
-                (array) ($healthSnapshot[(string) $featureKey] ?? []),
+                $definition,
+                $healthSnapshot[$featureKey] ?? [],
             );
+            $features[] = $feature;
+            $changed += $feature['changed'] ? 1 : 0;
+            if ($feature['editable']) {
+                $editableCount++;
+                $configuredCount += $feature['configured'] ? 1 : 0;
+            }
         }
         $groups[] = [
             'key' => (string) $groupKey,
-            'label' => (string) ($groupDefinition['label'] ?? $groupKey),
-            'description' => (string) ($groupDefinition['description'] ?? ''),
+            'label' => $group['group']['label'],
+            'description' => $group['group']['description'],
             'features' => $features,
+            'editable_count' => $editableCount,
+            'configured_count' => $configuredCount,
+            'toggle_label' => t(
+                'admin.features.toggle_group',
+                'Toggle group: {group}',
+                ['group' => $group['group']['label']],
+            ),
+            'columns' => [
+                'feature' => t('admin.features.column.feature', 'Feature'),
+                'factory' => t('admin.features.column.factory', 'Factory'),
+            ],
         ];
     }
 
     return [
-        'kicker' => t('admin.features.kicker', 'Configuration'),
         'title' => t('admin.features.title', 'Feature settings'),
         'description' => t(
-            'admin.features.description',
-            'Disable unfinished or unwanted features without removing their code or data. Disabled features are hidden from normal navigation and guarded at their routes.',
+            'admin.features.autosave_hint',
+            'Changes save immediately. Turning features off preserves their data.',
         ),
-        'dashboard_url' => url_for('admin'),
-        'back_label' => t(
-            'admin.features.back_to_dashboard',
-            'Back to dashboard',
-        ),
+        'endpoint' => url_for('admin_features'),
         'notice' => $notice,
         'save_error' => $saveError,
-        'summary_title' => t('admin.features.summary_title', 'Current state'),
-        'summary' => [
-            'enabled' => [
-                'label' => t('admin.features.summary_enabled', 'Enabled'),
-                'value' => (int) ($summary['enabled'] ?? 0),
-                'help' => t(
-                    'admin.features.summary_enabled_help',
-                    'Visible and usable.',
-                ),
+        'summary' => t(
+            'admin.features.compact_summary',
+            '{enabled}/{total} active · {changed} changed',
+            [
+                'enabled' => (string) $summary['enabled'],
+                'total' => (string) $summary['total'],
+                'changed' => (string) $changed,
             ],
-            'disabled' => [
-                'label' => t('admin.features.summary_disabled', 'Disabled'),
-                'value' => (int) ($summary['disabled'] ?? 0),
-                'help' => t(
-                    'admin.features.summary_disabled_help',
-                    'Hidden and route-guarded.',
-                ),
-            ],
-            'total' => [
-                'label' => t('admin.features.summary_total', 'Total'),
-                'value' => (int) ($summary['total'] ?? 0),
-                'help' => t(
-                    'admin.features.summary_total_help',
-                    'Registered optional features.',
-                ),
-            ],
-        ],
+        ),
         'registry_revision' => feature_capability_registry_revision(),
-        'group_kicker' => t('admin.features.group_kicker', 'Feature group'),
         'groups' => $groups,
         'save_label' => t('admin.features.save', 'Save feature settings'),
-        'reset_url' => url_for('admin_features'),
-        'reset_label' => t('admin.features.reset_form', 'Reset form'),
+        'factory_label' => t(
+            'admin.features.factory_reset',
+            'Reset to factory defaults',
+        ),
+        'factory_help' => t(
+            'admin.features.factory_reset_help',
+            'Restore all feature switches to new-installation defaults. Feature data and specialized settings are preserved.',
+        ),
+        'saving_label' => t('admin.features.saving', 'Saving…'),
+        'saved_label' => t('admin.features.saved', 'Saved'),
+        'failed_label' => t(
+            'admin.features.save_unknown',
+            'Save could not be verified. Reload state before making another change.',
+        ),
+        'reload_label' => t('admin.features.reload_state', 'Reload state'),
     ];
 }
 
 /**
- * Prepare one feature card for the presentation layer.
+ * Prepare a compact feature row with factory comparison and bounded health.
  *
  * @param string $featureKey Feature registry key.
- * @param array<string, mixed> $definition Feature definition.
- * @param array<string, mixed> $health Effective feature health data.
- * @return array<string, mixed> Prepared feature-card presentation model.
+ * @phpstan-type FeatureDefinition array{group:string,label:string,description:string,default_enabled?:bool,fresh_default_enabled?:bool,source:array{type:string,key?:string,adapter?:string},dependencies:list<string>,routes:list<string>,route_prefixes:list<string>,editable_on_features:bool,data_disable_policy:string,behavior_tags:list<string>,settings_route:string,settings_params:array<string,string|int|bool>,settings_fragment:string}
+ * @phpstan-type FeatureHealth array{configured:bool,effective:bool,blockers:list<string>,source_type:string,settings_route:string,settings_params:array<string,string>,settings_fragment:string,schema_state:?string}
+ * @param FeatureDefinition $definition Canonical capability metadata.
+ * @param FeatureHealth $health Configured/effective health and prepared settings destination.
+ * @return FeatureRow Prepared row; its complete fields are documented by view_render_admin_feature_card().
  */
 function admin_feature_card_view_model(
     string $featureKey,
@@ -207,6 +243,8 @@ function admin_feature_card_view_model(
     array $health,
 ): array {
     $configuredEnabled = !empty($health['configured']);
+    $factoryEnabled = (bool) ($definition['fresh_default_enabled']
+        ?? feature_capability_default_enabled($featureKey));
     $effectiveEnabled = !empty($health['effective']);
     $editable = !empty($definition['editable_on_features']);
     $blockers = array_values(array_filter(array_map(
@@ -290,6 +328,16 @@ function admin_feature_card_view_model(
         'key' => $featureKey,
         'label' => (string) ($definition['label'] ?? $featureKey),
         'description' => (string) ($definition['description'] ?? ''),
+        'factory' => $factoryEnabled,
+        'factory_label' => $factoryEnabled ? $enabledLabel : $disabledLabel,
+        'changed' => $configuredEnabled !== $factoryEnabled,
+        'comparison_label' => $configuredEnabled !== $factoryEnabled
+            ? t('admin.features.changed', 'Changed')
+            : t('admin.features.factory_match', 'Default'),
+        'help_label' => t('admin.features.help', 'Details: {feature}', [
+            'feature' => (string) ($definition['label'] ?? $featureKey),
+        ]),
+        'blocked_state' => t('admin.features.blocked', 'Blocked'),
         'configured' => $configuredEnabled,
         'effective' => $effectiveEnabled,
         'editable' => $editable,
@@ -317,10 +365,7 @@ function admin_feature_card_view_model(
             : '',
         'blocker_label' => $blockerLabel,
         'context_hint' => is_string($contextHint) ? $contextHint : '',
-        'settings_url' => $featureKey === 'cooperative_galleries'
-        && !$effectiveEnabled
-            ? ''
-            : $settingsUrl,
+        'settings_url' => $settingsUrl,
         'settings_panel' =>
             $featureKey === 'cooperative_galleries' && $effectiveEnabled,
         'settings_label' => t(

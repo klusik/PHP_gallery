@@ -1974,7 +1974,31 @@ Das Umbenennen eines Schlagworts oder Ändern seines Slugs aktualisiert den geme
 \index{f00114@Funktionsschalter}
 \index{f00112@Funktionen!a00005@Administration}
 
-\ui{Erscheinungsbild > Funktionen} bietet globale Schalter für optionale Anwendungsteile. Registrierte Funktionen sind standardmäßig aktiviert, damit eine Aktualisierung nicht still Verhalten entfernt, das eine vorhandene Installation bereits nutzt. Ein Administrator kann einzelne Besucherfunktionen, Karten- und Flugsimulationswerkzeuge, KI-/Uploadintegrationen oder spezielle Administrationswerkzeuge deaktivieren, wenn eine einfachere Installation gewünscht ist.
+\ui{Erscheinungsbild > Funktionen} zeigt optionale Funktionen in kompakten,
+gruppierten Tabellen. Schalter stehen direkt vor dem Namen und speichern sofort,
+ohne weitere Bestätigung oder Speichern-Aktion. Der getönte Gruppenkopf schaltet
+alle bearbeitbaren Funktionen dieser Gruppe; ein gemischter Zustand kennzeichnet
+teilweise aktivierte Gruppen. Verlinkte Namen öffnen vorhandene spezielle
+Einstellungen. Das schlichte \ui{?} zeigt Beschreibung, konfigurierten und
+wirksamen Status, Abhängigkeiten und technische Details; Escape oder ein Klick
+außerhalb schließt die Hilfe.
+
+Jede Zeile zeigt den Werkswert und eine Abweichung der gespeicherten Wahl.
+Maßgeblich ist die ausdrücklich erklärte Vorgabe einer Neuinstallation, sonst
+die Registry-Vorgabe; sie kann von der Upgrade-Kompatibilitätsvorgabe abweichen.
+\ui{Werkseinstellungen wiederherstellen} oberhalb der Tabelle speichert diese
+Werte sofort für alle bearbeitbaren Schalter. Funktionsdaten und spezielle
+Einstellungen bleiben erhalten. Ein eingeschalteter Schalter kann wegen einer
+deaktivierten Abhängigkeit unwirksam sein; deren Aktivierung stellt die
+Verfügbarkeit wieder her.
+
+Speicherfortschritt, Erfolg und Fehler bleiben sichtbar. Eine Gruppe kann
+teilweise gespeichert werden, wenn ein späterer Domänen-Setter ablehnt; die
+Tabelle zeigt danach den tatsächlich gespeicherten Status. Bei verlorener
+Antwort liest \ui{Status laden} den Server vor weiteren Änderungen und
+wiederholt den unsicheren Schreibvorgang nicht. Ohne JavaScript behält das
+vollständige Formular eine Speichern-Aktion; Werksrücksetzung verwendet einen
+normalen authentifizierten POST.
 
 Eine deaktivierte Funktion wird aus der normalen Navigation ausgeblendet; ihre geschützten Routen verweigern den Funktionsablauf. Das Ausschalten eines Schalters löscht weder Funktionscode noch Fotos, Datenbankdatensätze, Zugangsdaten oder Konfiguration. Erneutes Aktivieren stellt daher die normalen Einstiegspunkte unter denselben Schema-, Zugriffs- und Konfigurationsprüfungen wie zuvor wieder her. Schaltbare Funktionen umfassen beispielsweise öffentliche Suche, Lightbox-Browsingmodi, Picture Manager, Inline-Administration auf öffentlichen Seiten, Smart Galleries, Abstimmung, Picture Game, Downloads, Galerie- und Flugkarten, Navigationsdaten, SimBrief, OpenAI-Unterstützung, lokale KI-Metadaten, API-Uploads, mobiles WebDAV, Galeriemigration, Medienumbenenner und anonyme Telemetrie.
 

@@ -1877,7 +1877,27 @@ Přejmenování štítku nebo změna jeho identifikátoru v~URL aktualizuje spol
 \index{p00176@přepínače funkcí}
 \index{f00039@Funkce!a00001@administrace}
 
-\ui{Vzhled > Funkce} poskytuje globální přepínače volitelných částí aplikace. Registrované funkce jsou ve výchozím stavu povolené, aby upgrade tiše neodstranil chování, které již existující instalace používá. Správce může vypnout jednotlivé funkce pro návštěvníky, mapy a~nástroje letecké simulace, integrace AI a~nahrávání nebo specializované nástroje administrace, pokud upřednostňuje jednodušší instalaci.
+\ui{Vzhled > Funkce} nabízí volitelné funkce v~kompaktních tabulkách po
+skupinách. Přepínač stojí přímo před názvem a~změna se ihned uloží bez dalšího
+potvrzení či tlačítka Uložit. Podbarvená hlavička přepne všechny upravitelné
+funkce skupiny; smíšený stav značí, že jsou zapnuté jen některé. Odkaz v~názvu
+otevře specializovaná nastavení, pokud existují. Prosté \ui{?} zobrazí
+kontextový popis, nastavený a~účinný stav, závislosti a~technické podrobnosti;
+Escape nebo kliknutí mimo nápovědu ji zavře.
+
+Každý řádek ukazuje tovární hodnotu a~odchylku uložené volby. Tovární hodnota je
+výslovná výchozí hodnota nové instalace, jinak výchozí hodnota registru; může se
+lišit od kompatibilního výchozího stavu při aktualizaci. \ui{Obnovit tovární
+nastavení} nad tabulkou ihned uloží tyto hodnoty pro všechny upravitelné
+přepínače. Data funkcí a~specializované volby zůstanou zachovány. Zapnutý
+přepínač může být neúčinný kvůli vypnuté závislosti; její zapnutí obnoví
+dostupnost.
+
+Stav ukládání, úspěch i~chyba zůstávají viditelné. Skupina se může uložit
+částečně, pokud vlastník některé pozdější volby zápis odmítne; tabulka potom
+zobrazí skutečně uložený stav. Při ztracené odpovědi akce \ui{Načíst stav} ověří
+server před další změnou a~neopakuje nejistý zápis. Bez JavaScriptu zůstává
+tlačítko Uložit pro celý formulář a~tovární obnova používá běžný ověřený POST.
 
 Vypnutá funkce je skrytá z~běžné navigace a~její chráněné trasy odmítají příslušný postup. Vypnutí přepínače neodstraňuje kód funkce, fotografie, databázové záznamy, přihlašovací údaje ani konfiguraci. Opětovné zapnutí proto obnoví běžné vstupní body za stejných kontrol schématu, přístupu a~konfigurace jako dříve. Příklady přepínatelných funkcí zahrnují veřejné vyhledávání, režimy procházení lightboxu, Správce fotografií, přímou správu na veřejných stránkách, chytré galerie, hlasování, hru s~fotografiemi, stahování, mapy galerií a~letů, navigační data, SimBrief, pomoc OpenAI, místní metadata AI, nahrávání API, mobilní WebDAV, migrace galerií, Přejmenování médií a~anonymní telemetrii.
 

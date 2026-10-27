@@ -303,6 +303,11 @@ $registry = [
         // Consumers: central browser suite. Rationale: 90 seconds includes PHP
         // markup rendering, browser startup, deterministic polling and teardown.
         'admin_cron_browser_test.mjs' => ['browser' => true, 'timeout' => 90],
+        // Bound two responsive feature journeys with isolated PHP snapshots.
+        // Type: int. Units: seconds. Scope: one browser owner invocation.
+        // Consumers: central browser suite. Value: 90.
+        // Rationale: Includes two Chromium startups, scoped writes and teardown.
+        'admin_features_browser_test.mjs' => ['browser' => true, 'timeout' => 90],
         'gallery_publication_local_time_test.mjs' => [],
         'maintenance_center_controls_test.mjs' => [],
         'develop_integration_test.mjs' => [],

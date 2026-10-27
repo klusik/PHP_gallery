@@ -2260,8 +2260,9 @@ that are registered in the normal PHP regression suite:
   storage, explicit app-setting storage, domain adapters, subordinate-setting
   preservation, and idempotent fresh-install seeding.
 - `tests/feature_policy_admin_test.php` validates grouped Admin > Features
-  state, stale revision rejection, dependency blockers, configured checkbox
-  state, and bounded health presentation.
+  state, stale revision rejection, scoped patch validation/preservation,
+  idempotent factory reset, fresh-install defaults, dependency blockers and
+  bounded health presentation.
 - `tests/feature_policy_inventory_test.php` statically audits registered
   capability literals, owned UI/routes, Admin navigation/settings metadata, and
   feature-specific guard placement.
@@ -2270,12 +2271,31 @@ that are registered in the normal PHP regression suite:
   diagnostics, non-destructive data policy, and early exits for expensive
   optional work.
 
+`tests/admin_features_browser_test.mjs` uses the real controller/view and
+capability service against isolated settings through
+`tests/fixtures/admin_features_view.php`. The central browser suite checks
+1200 px and 390 px layouts with production/legacy CSS, switches before names,
+compact rows, touch targets, serialized scoped saves, group actions, factory
+reset, dependency blockers, focus retention and an actually committed write
+whose response is lost. Recovery must read without replaying that mutation.
+The real-database HTTP journey also exercises authenticated autosave/passive
+reads, anonymous and CSRF rejection, stale revisions and state restoration.
+
 These tests do not replace subsystem regressions. Multilingual content still
 proves loader suppression and translation recovery, Gallery Trash tests still
 own Trash data/settings behavior, Viewer tests still own account data, and
 feature-specific tests still own Smart Gallery, duplicate detector, tag,
 updater, database-maintenance, favicon, benchmark, and thumbnail behavior. The
 capability tests protect the cross-feature orchestration boundary.
+
+For Features UI acceptance, check desktop and narrow tables with the production
+cascade. Group tint/indentation must distinguish bulk switches from feature
+switches; the latter precede names. Toggle a row and a mixed/all-on group,
+inspect factory differences and a dependency blocker, then test factory reset.
+Keep the starting preference snapshot and restore it after a live acceptance
+journey. Verify the plain question mark opens beside its trigger, Escape/outside
+click closes it, and keyboard focus remains visible after saving. Confirm no
+JavaScript errors or page navigation and no second Save action with JavaScript.
 
 For manual Admin acceptance after a policy change, verify one enabled and one
 disabled capability in **Admin > Features**, one dependency-blocked capability

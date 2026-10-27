@@ -33,6 +33,24 @@
  */
 
 return [
+    'admin.features.autosave_hint' => 'Ändringar sparas direkt. Avstängning bevarar funktionernas data.',
+    'admin.features.compact_summary' => '{enabled}/{total} aktiva · {changed} ändrade',
+    'admin.features.toggle_group' => 'Växla grupp: {group}',
+    'admin.features.column.feature' => 'Funktion',
+    'admin.features.column.factory' => 'Fabrik',
+    'admin.features.column.state' => 'Status',
+    'admin.features.factory_reset' => 'Återställ fabriksinställningar',
+    'admin.features.factory_reset_help' => 'Återställ alla funktionsväxlar till en ny installations värden. Funktionsdata och specialinställningar bevaras.',
+    'admin.features.saving' => 'Sparar…',
+    'admin.features.saved' => 'Sparat',
+    'admin.features.save_unknown' => 'Sparandet kunde inte bekräftas. Läs in aktuell status före nästa ändring.',
+    'admin.features.reload_state' => 'Läs in status',
+    'admin.features.changed' => 'Ändrad',
+    'admin.features.factory_match' => 'Standard',
+    'admin.features.help' => 'Detaljer: {feature}',
+    'admin.features.blocked' => 'Blockerad',
+    'admin.features.error.invalid_changes' => 'Okänd eller ej redigerbar funktionsändring. Ladda om sidan.',
+
     'admin.updates.recovery_manual_action' => 'Använd Återställ uppdateraren / slutför FTP för de uppladdade filerna eller Installera stable för att skriva över programmet med senaste stabila paketet. Gamla jobb och säkerhetskopior bevaras; databasmigreringar återställs inte.',
     'admin.updates.integrity_warnings' => 'Filskillnader loggade som varningar; återställningen fortsätter:',
     'admin.updates.replacement_waiting' => 'Väntar på att det pågående uppdateringsanropet ska avslutas före återställningen. Återställningen startar automatiskt.',
