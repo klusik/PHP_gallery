@@ -48,6 +48,47 @@ use InvalidArgumentException;
  */
 
 /**
+ * Return canonical installation defaults for the Appearance binary controls.
+ * @return array{theme_gps_pin_enabled:bool,
+ *     theme_gps_pin_background_enabled:bool,theme_hero_tag_display_all:bool,
+ *     theme_hero_tag_scrollbar_enabled:bool,theme_header_transparent:bool}
+ *     Defaults independent of current overrides and effective capabilities.
+ */
+function theme_appearance_switch_defaults(): array
+{
+    return [
+        'theme_gps_pin_enabled' => true,
+        'theme_gps_pin_background_enabled' => true,
+        'theme_hero_tag_display_all' => false,
+        'theme_hero_tag_scrollbar_enabled' => true,
+        'theme_header_transparent' => false,
+    ];
+}
+
+/**
+ * Read one allowlisted Appearance switch through its existing policy owner.
+ * @param string $key Canonical binary setting name from the defaults map.
+ * @return bool Current normalized preference; unknown names throw InvalidArgumentException.
+ */
+function theme_appearance_switch_value(string $key): bool
+{
+    $defaults = theme_appearance_switch_defaults();
+    if (!array_key_exists($key, $defaults)) {
+        throw new InvalidArgumentException('Unknown Appearance switch.');
+    }
+    return match ($key) {
+        'theme_hero_tag_display_all' => theme_hero_tag_display_all_enabled(),
+        'theme_hero_tag_scrollbar_enabled' => theme_hero_tag_scrollbar_enabled(),
+        'theme_header_transparent' => theme_advanced_appearance_value(
+            'header_transparent', app_setting($key),
+        ) === '1',
+        default => (string) app_setting(
+            $key, $defaults[$key] ? '1' : '0',
+        ) === '1',
+    };
+}
+
+/**
  * Theme settings are stored in the DB so the visual preset can be changed
  * without editing PHP or CSS files.
  *
@@ -57,6 +98,7 @@ function theme_settings(): array
 {
     // $defaults stores an intermediate value used by the surrounding gallery workflow.
     $defaults = theme_css_defaults();
+    $switchDefaults = theme_appearance_switch_defaults();
     return array_merge([
         'accent' => app_setting('theme_accent', $defaults['accent']),
         'accent_dark' => app_setting(
@@ -85,10 +127,13 @@ function theme_settings(): array
             'theme_background_optimized_max_side',
             '1920',
         ),
-        'gps_pin_enabled' => app_setting('theme_gps_pin_enabled', '1'),
+        'gps_pin_enabled' => app_setting(
+            'theme_gps_pin_enabled',
+            $switchDefaults['theme_gps_pin_enabled'] ? '1' : '0',
+        ),
         'gps_pin_background_enabled' => app_setting(
             'theme_gps_pin_background_enabled',
-            '1',
+            $switchDefaults['theme_gps_pin_background_enabled'] ? '1' : '0',
         ),
         'gps_pin_size' => app_setting('theme_gps_pin_size', '26'),
         'gps_pin_background_size' => app_setting(
@@ -181,7 +226,8 @@ function theme_advanced_appearance_definitions(): array
             'unit' => '%',
         ],
         'header_transparent' => [
-            'default' => '0',
+            'default' => theme_appearance_switch_defaults()['theme_header_transparent']
+                ? '1' : '0',
             'min' => 0,
             'max' => 1,
             'unit' => '',
@@ -707,7 +753,10 @@ function theme_hero_tag_visible_limit(): int
  */
 function theme_hero_tag_display_all_enabled(): bool
 {
-    return (string) app_setting('theme_hero_tag_display_all', '0') === '1';
+    return (string) app_setting(
+        'theme_hero_tag_display_all',
+        theme_appearance_switch_defaults()['theme_hero_tag_display_all'] ? '1' : '0',
+    ) === '1';
 }
 
 /**
@@ -718,7 +767,10 @@ function theme_hero_tag_display_all_enabled(): bool
 function theme_hero_tag_scrollbar_enabled(): bool
 {
     return (
-        (string) app_setting('theme_hero_tag_scrollbar_enabled', '1') !== '0'
+        (string) app_setting(
+            'theme_hero_tag_scrollbar_enabled',
+            theme_appearance_switch_defaults()['theme_hero_tag_scrollbar_enabled'] ? '1' : '0',
+        ) !== '0'
     );
 }
 

@@ -15,6 +15,7 @@ import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
 import {setupAdminLanguageSelectorDesign} from '/public/assets/gallery-modules/admin-language-selector-design.js';
+import {setupThemeLanguageWorkspace} from '/public/assets/gallery-modules/admin-theme-language-workspace.js';
 let assertions=0, approve=false, confirmations=0;
 const submissions=[];
 /** Require actual input or geometry behavior. @param {boolean} condition Required invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
@@ -100,6 +101,99 @@ try {
             const saveRect=save.getBoundingClientRect(); check(saveRect.width>0 && saveRect.left>=-1 && saveRect.right<=innerWidth+1 && saveRect.bottom<=innerHeight+1,width+' '+name+' floating Save remains usable');
         }
     }
+    // The first phase above proves permanent native/shared-form fallback.
+    // Only this enhanced phase intercepts scoped POSTs; harness GETs stay native.
+    const nativeFetch=window.fetch, requests=[];
+    let releasePublic, savedPublic='cs', losePublic=false;
+    window.fetch=async (url,options)=>{
+        if(options?.method!=='POST') return nativeFetch(url,options);
+        const data=options.body, scope=data.get('theme_language_preference_scope');
+        requests.push({scope,data});
+        check(options.credentials==='same-origin' && options.redirect==='error'
+            && options.cache==='no-store' && options.headers.Accept==='application/json',
+            'scoped save retains private JSON transport');
+        check(data.get('csrf_token')==='theme-fixture'
+            && !data.has('theme_accent') && !data.has('language_pack_json')
+            && !data.has('language_pack_file') && !data.has('public_language_selector_design[preset]'),
+            'preference request excludes all neighboring Theme/JSON/design/file drafts');
+        let values,ok=true;
+        if(scope==='public') {
+            if(losePublic) { savedPublic=data.get('public_language'); throw new TypeError('lost after persist'); }
+            await new Promise(resolve=>{releasePublic=resolve;});
+            values={public_language:savedPublic};
+        } else if(scope==='admin') values={cms_language:data.get('cms_language')};
+        else { ok=false; values={public_language_selector_enabled:true,public_language_selector_languages:['en','sv']}; }
+        return new Response(JSON.stringify({ok,message:ok?'Saved':'Choose at least one language',
+            mutation:{type:'settings.update',entity:'settings',action:'update',entity_ids:[]},
+            contexts:[],panel:null,fallback:{},setting_values:values}),{status:ok?200:422});
+    };
+    setupThemeLanguageWorkspace(); tab('settings'); await settle();
+    check(find('.admin-theme-save-panel').getBoundingClientRect().height===0,
+        'autosaved Languages hides the shared Save footer only after enhancement');
+    check(document.querySelectorAll('.theme-language-flag-select').length===3,
+        'all three native language selects have one flag enhancement');
+    for(const select of document.querySelectorAll('select[data-language-flag-select]')) {
+        const shell=select.nextElementSibling;
+        check(select.name && shell.querySelectorAll('[role=option] img').length===4
+            && shell.querySelector('[role=combobox] img'),
+            'bundled SVG flags remain visible in closed and expanded choices '+select.name);
+    }
+    const publicSelect=find('[name="public_language"]'), publicGroup=publicSelect.closest('[data-theme-language-preference-group]');
+    const jsonDraft=find('[name="language_pack_json"]').value;
+    edit(publicSelect,'de');
+    check(publicSelect.disabled && publicGroup.dataset.saveState==='saving'
+        && requests.length===1 && requests[0].data.get('public_language')==='de'
+        && [...requests[0].data.keys()].length===3,'one pending public request carries only its bounded scope');
+    form.requestSubmit(save);
+    check(submissions.at(-1).prevented,'pending scope blocks legacy shared-form replay');
+    releasePublic(); await settle();
+    check(publicSelect.value==='cs' && !publicSelect.disabled && publicGroup.dataset.saveState==='saved'
+        && find('[name="language_pack_json"]').value===jsonDraft,
+        'canonical saved value reconciles without replacing unrelated editor drafts');
+    const adminSelect=find('[name="cms_language"]'), combo=adminSelect.nextElementSibling.querySelector('[role=combobox]');
+    const previous=adminSelect.value;
+    combo.click(); combo.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));
+    check(adminSelect.value===previous && requests.length===1,
+        'opening and keyboard navigation of flag choices never saves');
+    adminSelect.nextElementSibling.querySelector('[role=listbox]').hidePopover();
+    edit(adminSelect,'en'); await settle();
+    check(requests.length===2 && requests[1].scope==='admin'
+        && find('[data-language-save-status] button',adminSelect.closest('[data-theme-language-preference-group]')),
+        'Admin save retains a separate explicit interface reload');
+    for(const input of choices.querySelectorAll('input[type=checkbox]')) input.checked=false;
+    find('[name="public_language_selector_enabled"]').dispatchEvent(new Event('change',{bubbles:true})); await settle();
+    check(choices.dataset.saveState==='error' && find('input[value="en"]',choices).checked
+        && find('input[value="sv"]',choices).checked
+        && [...choices.querySelectorAll('input[type=checkbox]')].every(input=>input.disabled)
+        && !publicSelect.disabled,'refusal restores canonical viewer choices and locks only that group');
+    losePublic=true; edit(publicSelect,'sv'); await settle();
+    const afterLost=requests.length;
+    check(savedPublic==='sv' && publicSelect.value==='sv' && publicSelect.disabled
+        && publicGroup.dataset.saveState==='unknown','lost response preserves intent and locks until passive reload');
+    form.requestSubmit(save); await settle();
+    check(requests.length===afterLost && submissions.at(-1).prevented,
+        'uncertain/refused writes have no automatic retry or legacy form replay');
+    tab('design'); await settle();
+    check(find('.admin-theme-save-panel').getBoundingClientRect().height>0,
+        'compound design retains explicit Save theme');
+    for(const name of ['editor','diagnostics','settings','design']) {
+        tab(name);
+        const url=new URL(location.href);
+        check(url.searchParams.get('language_subtab')===name
+            && url.searchParams.get('edit_language')==='cs' && url.hash==='#admin-theme-tab-language',
+            'subtab URL preserves reload destination, pack and primary hash '+name);
+    }
+    history.replaceState(null,'','?edit_language=cs&language_subtab=editor#admin-theme-tab-language');
+    dispatchEvent(new PopStateEvent('popstate'));
+    check(!find('#admin-theme-language-subtab-editor').hidden,
+        'history navigation restores Translation packs from declared URL state');
+    await nativeFetch('/__viewport?width=390'); await settle(); tab('settings');
+    for(const input of choices.querySelectorAll('input[type=checkbox]')) {
+        const style=getComputedStyle(input),label=input.closest('label');
+        check(style.width==='26px' && style.height==='14px' && label.getBoundingClientRect().height>=44,
+            'narrow offered-language controls keep compact switches inside comfortable labels');
+    }
+    window.fetch=nativeFetch;
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' Language assertions';
 } catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
 </script></body></html>

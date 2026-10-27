@@ -1664,6 +1664,26 @@ Mobile actions refresh their own workspace. Copy a~newly issued one-time passwor
 \subsubsection{Appearance, language, and~custom stylesheets}
 Appearance combines grouped controls with a~live preview and~a~bounded pointer/keyboard resizer on~wide screens. Pane size is~a~local browser preference. Site images groups branding/background tools; Layout separates shortcuts, grids, card details, and~viewer defaults. Language has~Settings, Design, Editor, and~Diagnostics. The~design preview uses that form's~offered languages and~public default; changing a~sample does not~save a~language preference.
 
+All~five Appearance subsections use compact translucent groups and~question-mark
+help beside their controls. The~shared live preview and~its browser-local divider
+remain available. Reload and~Back/Forward preserve the~active subsection, including
+existing deep links. GPS pin/background, display-all-tags, tag scrollbar and~header
+transparency switches save immediately and~individually with factory-default
+tooltips. Other colors, text, selections and~numbers remain drafts for~\ui{Save theme}.
+An~unverified or~refused switch write locks that control and~blocks shared-form
+replay until passive reload, without automatic retry. Ordinary form saving
+remains available without JavaScript.
+
+The~Language subsections use compact groups, switches and~contextual question-mark
+help. Admin language, public default and~the~viewer language list save immediately
+and~independently, without submitting other Theme drafts. After changing the~Admin
+language, use \ui{Reload interface} to~refresh labels. An~unverified save locks its
+group and~blocks shared-form replay until reload; it~is~not~retried automatically.
+All~language selectors show bundled flags. The~active subsection survives reload
+and~browser Back/Forward navigation through the~page URL. Switcher design remains
+a~draft applied with \ui{Save theme}; JSON/import and~diagnostics retain explicit
+actions. Native form submission remains available without JavaScript.
+
 Keep the~installed custom stylesheet by~leaving replacement empty. Explicitly choose a~preset or~upload a~valid CSS file to~replace it; an~upload takes precedence. Replacement/reset verifies storage first and~restores prior bytes if~saving the~marker fails. If~recovery is~incomplete, retain the~available copy and~follow the~bounded warning before retrying. Deployment preserves the~installation-owned \filepath{public/assets/custom.css}.
 
 \subsubsection{Card orientation and~operational status}
@@ -1899,13 +1919,65 @@ After a~successful save, the~browser opens the~same Settings section at~the~new 
 \index{tags!administration}
 \index{tags!metadata}
 
-\ui{Admin > Edit tags} is~the~central editor for~the~reusable tag vocabulary. The~list can~be~sorted by~total usage or~alphabetically and~shows each tag's current gallery-plus-photo use count. Selecting a~tag exposes its canonical lowercase name, clean public URL slug, and~optional public description for~the~tag landing page. The~same view lists the~galleries and~photographs that currently use the~tag, with links back to~the~relevant public or~photo-editor context.
+The editor uses compact translucent groups for the tag catalog, selected tag
+and usage references. Groups fit beside one another on wide screens and stack
+on narrow screens. The arrow beside the catalog heading jumps to the editor
+below sticky navigation. Filter and sorting choices switch immediately through
+the native GET form. Apply remains available without JavaScript. A question mark
+beside each field explains its meaning in place;
+Escape or an outside click closes the help. Review content edits and use
+\ui{Save tag}. Music tags retain their internal identifiers and song references
+without public tag-page actions.
+
+\ui{Images} and \ui{Galleries} filter direct assignments over the same visual
+tag vocabulary. A shared tag can appear in both; its edit still affects every
+assignment. Counts and usage sorting follow the selected scope. \ui{All tags}
+includes unassigned tags. \ui{Documents} is a disabled placeholder for future
+PDF tagging; direct requests explain that document editing is not yet available.
+
+\ui{Admin > Edit tags} maintains the shared tag vocabulary. Selecting a tag
+exposes its canonical lowercase name, stable identifier and description. For
+visual tags the identifier forms the public tag URL and the description can
+appear on that page; music tags use internal metadata. Usage references link
+to the related public gallery, photo editor or song editor. Counts in the
+catalog follow the selected usage filter rather than always combining scopes.
 
 Renaming a~tag or~changing its slug updates the~shared tag record, so~every gallery/photo assignment continues to~reference that one reusable tag. Names and~slugs are~normalized to~the~safe tag convention on~save and~a~duplicate slug is~rejected. Deleting a~tag is~different: the~application transactionally detaches it~from both galleries and~photographs and~then removes the~tag record. Use \ui{View public tag} to~review the~landing page and~\ui{Configure tag display} to~open the~Theme controls for~tag-page/card and~hero-tag presentation.
 
 \subsection{Feature switches}
 \index{feature switches}
 \index{Features!Admin}
+
+The~specialized destinations for~public live search, lightbox browsing,
+Smart Galleries, gallery PDF documents and~gallery music use compact,
+translucent controls. Central Settings shares this treatment across categories;
+Smart Gallery editors retain it~inside the~side panel. Preference switches keep
+their native keyboard operation, with larger tap targets on~narrow screens.
+Settings question marks open help beside the~control; Escape or~an~outside
+click closes it. Each specialist retains its existing Save workflow; catalog
+row selections remain ordinary selection boxes.
+
+Dashboard \ui{Maintenance > Content and~display} uses a~denser layout:
+one toolbar and~compact groups flow into one to~three columns according
+to~available width, retaining each group's own height. Groups match Features:
+quiet outlines, translucent surfaces, tinted headings with a~left accent and~thin
+row separators. Question marks retain
+the~explanations; counts and~warnings stay visible. Switches save immediately
+without confirmation or~a~Save button; their tooltips state the~factory default.
+Saving, success and~failure remain visible. Unverified completion requires
+a~state reload instead of~replaying the~write. Without JavaScript, native help
+disclosures and~the~existing Save/POST forms remain available.
+
+This is~the~default pattern for~new or~revised Admin preference interfaces,
+specified in~\path{docs/ADMIN_DESIGN.md}. Use switches with immediate saving,
+compact headed groups and~one to~three independently sized columns. The~reference
+uses a~preferred column width of~300 CSS pixels, 38-pixel heading strips
+and~26~by~14-pixel switch tracks; narrow/touch interaction targets are~at~least
+44 pixels high. A~setting with its own configuration page has~a~clickable name
+and~a~trailing settings arrow leading to~the~same destination. Name, switch
+and~question mark remain independent navigation, preference and~help controls.
+Apply the~pattern as~each owning interface is~edited; older forms may~still await
+migration.
 
 \ui{Appearance > Features} presents optional application features in~compact
 grouped tables. Whole groups flow into one, two or~three columns according
@@ -2361,6 +2433,12 @@ A~gallery with a~saved flight route can~open its map before the~first photograph
 \index{flight maps}
 \index{navigation data}
 
+Admin > Maintenance > Maps and~navdata uses the~compact translucent group
+treatment from~Features and~Content and~display. The~navdata name and~trailing
+arrow open the~same manager. Counts and~the~last import time remain visible;
+question-mark help and~Import details hold longer explanations. Update navdata
+remains an~explicit action with in-place progress and~the~normal form fallback.
+
 Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~compact editor accepts one visible identifier: digits alone select the~Pilot ID path; other text selects the~pilot-name path. Existing integrations that submit separate fields remain compatible, with Pilot ID preferred when both are~provided. The~editor creates an~editable Markdown description and~route draft; the~OFP and~available route coordinates attach after the~gallery is~saved. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available. The~pre-create draft is~private and~temporary as~described in~the~gallery creation section.
 
 The~SimBrief preview fills the~existing route editor with the~complete filed route, adding missing departure and~arrival airports once while preserving route instructions and~airport/runway tokens. Description drafts in~all maintained languages keep the~complete route, including its destination on~long routes. The~status explains that the~OFP and~available map points will attach when you~save the~gallery; importing alone does~not~save them. If~you~change the~route, identifier, description, or~source language while the~request runs, the~response preserves your form values and~asks you~to~import again. After saving, the~map retains the~original OFP coordinates.
@@ -2547,6 +2625,16 @@ The~\ui{Keep me signed in} option uses a~hashed browser token so~an~administrato
 \index{System Health!database readiness}
 \index{database!readiness}
 \index{503 response}
+
+\ui{System health} groups checks by runtime and recovery, access and sign-in,
+galleries and files, maps and routes, public features and reports, and tools.
+A checkmark means required storage was found; a dash means the integration is
+disabled in configuration. Neither proves a complete workflow or external API
+connection. Question marks explain the purpose of each check. Problems appear
+first within their group with visible impact and guidance; \ui{Details} retains
+safe database identifiers and request references. Opening the page does not
+repair data or run migrations. Viewer diagnostics saves its preference in place,
+with a native Save fallback; an uncertain save locks until a passive reload.
 
 Features that depend on~database schema use one readiness contract. The~important distinction is~between a~schema that was~successfully inspected and~found to~be~older, and~a~schema that cannot currently be~inspected.
 
@@ -2931,6 +3019,15 @@ After repair, reload \ui{System Health} and~retest the~affected feature. Keep an
 \index{gallery!restoration}
 \index{trash!automatic purge}
 
+Trash uses compact translucent groups with visible preference switches
+and~contextual question-mark help. With JavaScript, changes save immediately
+together with retention and~batch values. During the~write, Trash controls lock;
+confirmed state refreshes in~place and~returns focus to~the~edited field.
+A~refused or~unverified result requires a~passive state reload without replaying
+the~write. Without JavaScript, use the~normal Save form. Narrow screens retain
+labelled metadata and~explicit actions without horizontal scrolling. Restore,
+permanent deletion and~Empty Trash retain their separate confirmations.
+
 Open \ui{Maintenance > Trash} to~review recoverable gallery deletions. Each active row shows the~original path, deletion time, gallery/photo counts, stored size, lifecycle status, and~automatic-purge deadline when that policy is~active. Problem entries remain visible for~inspection; PHP Gallery does~not~guess that an~ambiguous filesystem/database state is~safe to~destroy.
 
 The~main Trash switch controls future gallery deletes and~is~enabled by~default. Turning it~off does~not~hide or~delete existing entries: restore and~manual permanent deletion remain available. Automatic purge is~a~separate opt-in and~is~off by~default. Its retention defaults to~30~days, its maintenance batch is~bounded, and~automatic deletion pauses whenever Trash is~disabled. Enabling automatic purge after a~pause gives current recoverable entries a~fresh full retention window before scheduled deletion can~begin.
@@ -3107,6 +3204,16 @@ When development diagnostics are~available, a~signed-in administrator can~start 
 \subsection{Scheduled site maintenance}
 \index{scheduled maintenance}
 \index{cron!site maintenance}
+
+The~Media and~cache tab uses the~same compact translucent groups as~Features
+and~Content and~display. Complete groups flow down one to~three columns, with
+independent heights. Question marks open contextual help; scan status and~the
+reason for~an~unavailable action remain visible. Schedule preferences save
+immediately on~change, together with their time and~numeric values. Pending
+writes lock only their form. An~unverified result retains the~intent and~offers
+a~reload without replaying the~write. Without JavaScript, use the~normal Save
+form. Thumbnail generation, cleanup, reset and~token rotation remain explicit
+tasks with their existing safeguards.
 
 In~Admin > Maintenance > Media and~cache, use~\emph{Clean updater cache now}
 to~run one bounded step in~place. The~step removes only already staged updater
@@ -3494,6 +3601,13 @@ The~generated module plan declares shared dependencies and~one canonical file or
 Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. The~public entry loads \filepath{app/early\_runtime.php} before \filepath{app/bootstrap.php}, then both layouts reach the~same normal request pipeline.
 
 The~small request-local kernel under \filepath{app/runtime/} coordinates the~existing request lifecycle through Request, Router, RouteRegistry, and~ModuleLoader before invoking the~procedural controller. The~canonical route and~security table remains in~\filepath{app/bootstrap/dispatch.php}. A~reviewed generated plan loads logical modules for~the~selected route; production performs no~source scan or~dependency compilation and~has~no~load-all fallback. Existing PHP~8.1 and~shared-hosting requirements remain sufficient, without Composer or~a~Node build. Legacy CLI/test consumers may~use \filepath{app/bootstrap\_full.php} for~the~complete procedural API.
+
+Shared Admin help and~factory-value markup belong to~the~existing
+\filepath{app/views/admin\_ui.php} owner; Maintenance sections remain deferred.
+Theme reuses the~complete gallery-access policy closure already needed by~its
+picker and~preview, while scoped saves use canonical mutation responses.
+These owners add no~logical module or~runtime file. Hosted preparation and~FULL
+verify the~unchanged duplicate-ownership limits.
 
 The~loader validates the~complete module plan in~each request. It~checks
 canonical layer/path order in~one pass, checks each selected physical path

@@ -1327,6 +1327,30 @@ function admin_settings_sensitive_status(string $key): string
 }
 
 /**
+ * Return factory metadata for compact dashboard and Theme preferences.
+ *
+ * These are the canonical Settings defaults, independent of capability masters,
+ * persisted overrides and schema availability. This metadata performs no reads.
+ *
+ * @return array{url_rewrite_enabled:bool,public_home_search_enabled:bool,
+ *     exif_gps_maps_default_enabled:bool,seo_request_guard_enabled:bool,
+ *     seo_request_guard_logging_enabled:bool,
+ *     public_language_selector_enabled:bool} Factory values shared by the
+ *     central registry and dashboard tooltips.
+ */
+function admin_settings_content_factory_defaults(): array
+{
+    return [
+        'public_language_selector_enabled' => true,
+        'url_rewrite_enabled' => true,
+        'public_home_search_enabled' => true,
+        'exif_gps_maps_default_enabled' => true,
+        'seo_request_guard_enabled' => true,
+        'seo_request_guard_logging_enabled' => true,
+    ];
+}
+
+/**
  * Return the centralized setting ownership registry.
  *
  * Registry entries intentionally describe both centrally editable and summary-only
@@ -1338,6 +1362,7 @@ function admin_settings_sensitive_status(string $key): string
  */
 function admin_settings_registry(bool $includeSessionSettings = false): array
 {
+    $contentDefaults = admin_settings_content_factory_defaults();
     $pagination = pagination_global_settings();
     $homeGrid = function_exists(
         'Gallery\\Services\\main_page_gallery_grid_settings',
@@ -1410,7 +1435,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Allow each public viewer to choose a language stored only in that viewer\'s browser; this never changes the site default or another viewer.',
             'public_language_selector_enabled',
             'checkbox',
-            '1',
+            (string) (int) $contentDefaults['public_language_selector_enabled'],
             translation_public_language_selector_enabled() ? '1' : '0',
             'admin_theme',
             [],
@@ -1454,7 +1479,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Controls whether generated public links prefer URL rewriting.',
             'url_rewrite_enabled',
             'checkbox',
-            '1',
+            (string) (int) $contentDefaults['url_rewrite_enabled'],
             url_rewrite_enabled() ? '1' : '0',
             'admin',
             [],
@@ -1468,7 +1493,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Shows the public search interface when the feature is enabled.',
             'public_home_search_enabled',
             'checkbox',
-            '1',
+            (string) (int) $contentDefaults['public_home_search_enabled'],
             public_home_search_enabled() ? '1' : '0',
             'admin',
             [],
@@ -1776,7 +1801,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Global fallback used by galleries without an explicit GPS display override.',
             exif_gps_default_enabled_setting_key(),
             'checkbox',
-            '1',
+            (string) (int) $contentDefaults['exif_gps_maps_default_enabled'],
             exif_gps_default_enabled() ? '1' : '0',
             'admin',
             [],
@@ -2080,7 +2105,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Rejects known junk or exploit-oriented public query patterns.',
             'seo_request_guard_enabled',
             'summary',
-            '1',
+            (string) (int) $contentDefaults['seo_request_guard_enabled'],
             seo_request_guard_enabled() ? '1' : '0',
             'admin',
             [],
@@ -2095,7 +2120,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             'Controls operational logging for rejected SEO-guard requests.',
             'seo_request_guard_logging_enabled',
             'summary',
-            '1',
+            (string) (int) $contentDefaults['seo_request_guard_logging_enabled'],
             seo_request_guard_logging_enabled() ? '1' : '0',
             'admin',
             [],

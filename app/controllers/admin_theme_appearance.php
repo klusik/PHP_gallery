@@ -235,6 +235,56 @@ use function Gallery\Views\view_render_admin_theme_appearance_tab;
  */
 
 /**
+ * Save one binary Appearance preference behind the existing Theme guards.
+ * @return void Emits private canonical settings.update JSON with the persisted
+ *     value and HTTP 200/422; unexpected storage failures propagate without retry.
+ */
+function admin_theme_process_appearance_switch(): void
+{
+    $key = $_POST['theme_appearance_switch'] ?? null;
+    $enabled = $_POST['enabled'] ?? null;
+    $known = is_string($key) && array_key_exists(
+        $key, \Gallery\Services\theme_appearance_switch_defaults(),
+    );
+    $ok = false;
+    $message = t('admin.theme.appearance.switch_refused',
+        'This preference could not be changed. Reload its saved state.',
+    );
+    if ($known && in_array($enabled, ['0', '1'], true)) {
+        try {
+            if ($key === 'theme_header_transparent') {
+                \Gallery\Services\theme_advanced_appearance_save([
+                    'header_transparent' => $enabled,
+                ]);
+            } else {
+                \Gallery\Services\theme_layout_safe_save($key, $enabled);
+            }
+            $ok = true;
+            $message = t('admin.features.saved', 'Saved');
+        } catch (\InvalidArgumentException) {
+            // Expected policy/capability refusals have no storage side effects.
+        }
+    }
+    $mutation = \Gallery\Core\admin_mutation_descriptor(
+        'settings.update', 'settings', 'update',
+    );
+    $fallback = ['redirect_url' => url_for('admin_theme') . '#admin-theme-tab-appearance'];
+    $payload = $ok
+        ? \Gallery\Core\admin_mutation_success_envelope(
+            $message, $mutation, null, [], $fallback,
+        )
+        : \Gallery\Core\admin_mutation_error_envelope(
+            $message, 'appearance_switch_refused', $mutation, $fallback,
+        );
+    $payload['setting_values'] = $known
+        ? [$key => \Gallery\Services\theme_appearance_switch_value($key)] : [];
+    http_response_code($ok ? 200 : 422);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
  * Render the Theme appearance tab.
  *
  * @param array<string,string|int|bool> $theme Current normalized scalar Theme preferences.
@@ -253,6 +303,13 @@ function render_admin_theme_appearance_tab(
 ): void {
     // $appearanceSubtab stores an optional deep-link target supplied by contextual Admin links.
     $appearanceSubtab = (string) ($_GET['appearance_subtab'] ?? '');
+    if (in_array(
+        $appearanceSubtab,
+        ['colors', 'width-map', 'gallery-tags', 'animations', 'advanced'],
+        true,
+    )) {
+        $appearanceSubtab = 'admin-theme-appearance-subtab-' . $appearanceSubtab;
+    }
     $appearanceSubtabOptions = [
         'admin-theme-appearance-subtab-colors',
         'admin-theme-appearance-subtab-width-map',
@@ -307,6 +364,8 @@ function render_admin_theme_appearance_tab(
     ]);
     view_render_admin_theme_appearance_tab([
         'theme' => $theme,
+        'switch_defaults' => \Gallery\Services\theme_appearance_switch_defaults(),
+        'preference_url' => url_for('admin_theme'),
         'advanced' => [
             'definitions' =>
                 \Gallery\Services\theme_advanced_appearance_definitions(),

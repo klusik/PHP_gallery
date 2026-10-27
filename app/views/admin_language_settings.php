@@ -18,6 +18,7 @@
  *
  * Author:
  *   Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  */
 
 declare(strict_types=1);
@@ -28,6 +29,24 @@ use function Gallery\Core\asset_url;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
 use function Gallery\Services\t;
+
+/**
+ * Return native contextual help for a Language control or group.
+ *
+ * @param string $id Unique panel ID, also usable by aria-describedby.
+ * @param string $label Localized control/group title.
+ * @param string $text Plain localized explanation, escaped before rendering.
+ * @return string Native details fallback enhanced to an anchored popover.
+ */
+function view_language_settings_help(string $id, string $label, string $text): string
+{
+    return '<details class="admin-language-help" data-theme-language-help>'
+        . '<summary aria-label="'
+        . e(t('admin.theme.appearance.control_help', 'About {label}', ['label' => $label]))
+        . '">?</summary><div class="admin-language-help-panel" id="'
+        . e($id) . '"><strong>' . e($label) . '</strong><p>'
+        . e($text) . '</p></div></details>';
+}
 
 /**
  * Render a resettable select field in the selector design editor.
@@ -223,7 +242,10 @@ function view_render_language_design_value(
 /**
  * Render the shared viewer-language selector settings panel.
  *
- * @param array<string,mixed> $model Prepared field names, values, errors, design metadata, id prefix, optional parts (all/choices/design), and Theme presentation flag.
+ * @param array{id_prefix?:string,enabled_name?:string,languages_name?:string,design_name?:string,marker_name?:string,languages_target_id?:string,admin_setting_target?:bool,enabled?:bool,factory_enabled?:bool,languages?:list<string>,supported_languages?:list<string>,presentations?:array<string,array{name:string,flag_asset:string}>,errors?:array<string,string>,compact?:bool,detailed_design?:bool,theme_editor?:bool,parts?:string,public_language?:string,design?:array{preset:string,show_flags:bool,show_codes:bool,show_names:bool,orientation:string,density:string,alignment:string,active_style:string,presets:array<string,array<string,string|int|bool>>},design_defaults?:array{preset:string,show_flags:bool,show_codes:bool,show_names:bool,orientation:string,density:string,alignment:string,active_style:string,presets:array<string,array<string,string|int|bool>>},design_bounds?:array<string,array{0:int,1:int}>} $model Optional prepared names, values, errors,
+ *     presentation flags and canonical design metadata. Parts are all, choices
+ *     or design. Preset maps contain named color strings, use_theme_colors,
+ *     border_style and bounded integer spacing, radius, flag and font sizes.
  * @return void Emits the requested canonical controls while preserving the default combined Settings presentation.
  */
 function view_render_public_language_selector_settings_panel(array $model = []): void
@@ -290,6 +312,8 @@ function view_render_public_language_selector_settings_panel(array $model = []):
             . e($parts === 'design' ? $idPrefix . '-design-panel' : $idPrefix)
             . '"'
             . ($renderChoices ? ' data-public-language-selector-settings' : '')
+            . ($themeEditor && $renderChoices
+                ? ' data-theme-language-preference-group="viewer"' : '')
             . (
                 !empty($model['admin_setting_target'])
                     ? ' data-admin-setting-target tabindex="-1"'
@@ -297,27 +321,22 @@ function view_render_public_language_selector_settings_panel(array $model = []):
             )
             . '>';
     if ($renderChoices) {
-        echo
-            '<div class="admin-language-selector-settings-copy"><strong>'
-                . e(t(
-                    'admin.theme.language.viewer_selector_title',
-                    'Viewer language selector',
-                ))
-                . '</strong>';
-        echo
-            '<p class="muted">'
-                . e(
-                    $themeEditor
-                        ? t(
-                            'admin.theme.language.viewer_compact_hint',
-                            'Each visitor chooses only their own browser language; site and Admin defaults stay unchanged.',
-                        )
-                        : t(
-                            'admin.theme.language.viewer_selector_hint',
-                            'This selector is only for public viewers. Each viewer\'s personal language is saved only in that viewer\'s browser; it does not change the site default, the Admin language, or any other viewer.',
-                        ),
-                )
-                . '</p></div>';
+        $viewerTitle = t('admin.theme.language.viewer_selector_title', 'Viewer language selector');
+        $viewerHint = $themeEditor
+            ? t('admin.theme.language.viewer_compact_hint',
+                'Each visitor chooses only their own browser language; site and Admin defaults stay unchanged.',
+            )
+            : t('admin.theme.language.viewer_selector_hint',
+                'This selector is only for public viewers. Each viewer\'s personal language is saved only in that viewer\'s browser; it does not change the site default, the Admin language, or any other viewer.',
+            );
+        echo '<div class="admin-language-selector-settings-copy"><strong>'
+            . e($viewerTitle) . '</strong>';
+        if ($themeEditor) {
+            echo view_language_settings_help($idPrefix . '-scope-help', $viewerTitle, $viewerHint);
+        } else {
+            echo '<p class="muted">' . e($viewerHint) . '</p>';
+        }
+        echo '</div>';
         if ($markerName !== '') {
             echo
                 '<input type="hidden" name="' . e($markerName) . '" value="1">';
@@ -332,6 +351,14 @@ function view_render_public_language_selector_settings_panel(array $model = []):
                 . '" type="checkbox" name="'
                 . e($enabledName)
                 . '" value="1"'
+                . ($themeEditor && array_key_exists('factory_enabled', $model)
+                    ? ' title="' . e(t('admin.dashboard.content_factory_tooltip',
+                        'Factory default: {value}', [
+                            'value' => $model['factory_enabled']
+                                ? t('admin.common.enabled', 'Enabled')
+                                : t('admin.common.disabled', 'Disabled'),
+                        ],
+                    )) . '"' : '')
                 . ($enabled ? ' checked' : '')
                 . ($enabledError !== '' ? ' aria-invalid="true"' : '')
                 . '> '
@@ -367,20 +394,22 @@ function view_render_public_language_selector_settings_panel(array $model = []):
                     'Languages available to viewers',
                 ))
                 . '</legend>';
-        echo
-            '<p class="muted">'
-                . e(
-                    $compact
-                        ? t(
-                            'admin.settings.workspace.viewer_hint',
-                            'Offer at least one language. Each visitor changes only their own display language.',
-                        )
-                        : t(
-                            'admin.theme.language.viewer_languages_hint',
-                            'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.',
-                        ),
-                )
-                . '</p>';
+        $offeredHint = $compact
+            ? t('admin.settings.workspace.viewer_hint',
+                'Offer at least one language. Each visitor changes only their own display language.',
+            )
+            : t('admin.theme.language.viewer_languages_hint',
+                'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.',
+            );
+        if ($themeEditor) {
+            echo view_language_settings_help(
+                $idPrefix . '-offered-help',
+                t('admin.theme.language.viewer_languages_legend', 'Languages available to viewers'),
+                $offeredHint,
+            );
+        } else {
+            echo '<p class="muted">' . e($offeredHint) . '</p>';
+        }
         echo '<div class="admin-language-selector-language-grid">';
         foreach ((array) ($model['supported_languages'] ?? []) as $language) {
             $presentation = $presentations[$language] ?? [

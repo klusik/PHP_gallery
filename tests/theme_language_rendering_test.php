@@ -48,6 +48,18 @@ function language_count(DOMXPath $xpath, string $query): int
 
 $xpath = language_xpath(theme_fixture_page());
 $scope = '//*[@id="admin-theme-tab-language"]';
+language_require(language_count($xpath, $scope
+    . '//*[@data-admin-subtab-query="language_subtab" and @data-admin-subtab-prefix="admin-theme-language-subtab-"]') === 1,
+    'Language opts into shareable reload/history subtab state');
+foreach (['admin', 'public', 'viewer'] as $owner) {
+    language_require(language_count($xpath, $scope
+        . '//*[@data-theme-language-preference-group="' . $owner . '"]') === 1,
+        'bounded preference owner ' . $owner);
+}
+language_require(language_count($xpath, $scope . '//select[@data-language-flag-select]') === 3
+    && language_count($xpath, $scope . '//select[@data-language-flag-select]/option[@data-flag-url]') === 12,
+    'all named language selects retain prepared bundled flag choices');
+
 foreach (['settings', 'design', 'editor', 'diagnostics'] as $tab)
     language_require(
         language_count(

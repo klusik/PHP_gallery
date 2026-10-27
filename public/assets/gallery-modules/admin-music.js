@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
-import {setupAdminTabsInRoot} from './admin-tabs.js?v=20261021-upload-media-v1';
+import {setupAdminTabsInRoot} from './admin-tabs.js?v=20261027-appearance-state-v1';
 import {setupAdminMusicAlbumOrdering} from './admin-music-album-order.js?v=20261020-album-order-v4';
 
 /**

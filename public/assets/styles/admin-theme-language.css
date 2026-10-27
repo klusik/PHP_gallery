@@ -541,3 +541,490 @@
         flex: 1 1 100%;
     }
 }
+
+/* Match Features/Content while preserving this tab's complete shared form. */
+.admin-page #admin-theme-tab-language {
+    --language-surface: color-mix(in srgb, var(--panel) 42%, transparent);
+    --language-line: color-mix(in srgb, var(--ink) 12%, transparent);
+    --language-muted: color-mix(in srgb, var(--ink) 62%, var(--panel));
+    --language-tint: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--ink);
+    font-size: .82rem;
+}
+
+.admin-page #admin-theme-tab-language .theme-language-workspace { gap: .65rem; }
+
+.admin-page #admin-theme-tab-language .theme-language-heading {
+    align-items: center;
+    gap: .25rem;
+    padding: 0;
+    border: 0;
+}
+
+.admin-page #admin-theme-tab-language .theme-language-heading h2 {
+    margin: 0;
+    font-size: .85rem;
+    font-weight: 650;
+}
+
+.admin-page #admin-theme-tab-language :is(button, .button, input, select, textarea) {
+    box-sizing: border-box;
+    min-height: 28px;
+    margin: 0;
+    padding: 3px 7px;
+    border: 1px solid var(--language-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font: inherit;
+    line-height: 1.4;
+}
+
+.admin-page #admin-theme-tab-language :is(a, button, summary) { text-decoration: none; }
+.admin-page #admin-theme-tab-language :is(button, .button):hover {
+    background: var(--language-tint);
+    color: var(--ink);
+}
+
+.admin-page #admin-theme-tab-language :is(a, button, input, select, textarea, summary):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.admin-page #admin-theme-tab-language .admin-subtab-list { gap: .25rem; }
+.admin-page #admin-theme-tab-language .admin-subtab {
+    min-height: 28px;
+    padding: 3px 7px;
+    border: 1px solid transparent;
+    font-size: .8rem;
+}
+.admin-page #admin-theme-tab-language .admin-subtab[aria-selected='true'] {
+    background: var(--language-tint);
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+.admin-page #admin-theme-tab-language .theme-language-defaults {
+    /* Purpose: flow complete preference groups in the approved reading order.
+     * Type: length. Units: CSS pixels. Scope: Language preference columns.
+     * Consumers: column-width. Value: 300px.
+     * Rationale: retain readable labels and native choices at reference density. */
+    --language-column-width: 300px;
+    /* Purpose: bound the full-width reading span.
+     * Type: integer. Units: columns. Scope: Language preferences.
+     * Consumers: column-count. Value: 3.
+     * Rationale: match the one-to-three Features/Content group layout. */
+    --language-column-limit: 3;
+    display: block;
+    column-width: var(--language-column-width);
+    column-count: var(--language-column-limit);
+    column-gap: .65rem;
+}
+
+.admin-page #admin-theme-tab-language .theme-language-card {
+    display: flow-root;
+    position: relative;
+    box-sizing: border-box;
+    min-width: 0;
+    break-inside: avoid;
+    margin: 0 0 .65rem;
+    padding: .2rem .65rem .35rem;
+    border: 1px solid var(--language-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--language-surface);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+    font-size: .82rem;
+}
+
+.admin-page #admin-theme-tab-language :is(.theme-language-card > legend,
+    .admin-language-selector-settings-copy, [data-language-theme-editor] > legend) {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: 38px;
+    margin: -.2rem -.65rem .35rem;
+    padding: .25rem .65rem;
+    border-bottom: 1px solid var(--language-line);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+    border-radius: min(var(--radius, 8px), 8px)
+        min(var(--radius, 8px), 8px) 0 0;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    color: var(--ink);
+    font-size: .85rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.admin-page #admin-theme-tab-language .theme-language-card > legend {
+    float: left;
+    width: calc(100% + 1.3rem);
+}
+.admin-page #admin-theme-tab-language .theme-language-card > legend + * { clear: both; }
+.admin-page #admin-theme-tab-language .admin-language-selector-settings-copy {
+    justify-content: space-between;
+    gap: .25rem;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-settings-copy > strong {
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+.admin-page #admin-theme-tab-language .theme-language-control-line {
+    display: flex;
+    align-items: center;
+    gap: .15rem;
+    min-width: 0;
+}
+.admin-page #admin-theme-tab-language .theme-language-control-line > label {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-page #admin-theme-tab-language :is(.muted, .theme-language-hint,
+    .theme-language-fallback, .admin-language-selector-language small) {
+    color: var(--language-muted);
+    font-size: .75rem;
+    font-weight: 400;
+}
+.admin-page #admin-theme-tab-language .theme-language-fallback { margin-top: .25rem; }
+
+.admin-page #admin-theme-tab-language .admin-language-selector-enabled {
+    min-height: 32px;
+    margin: 0;
+    gap: .45rem;
+    font-size: .8rem;
+    font-weight: 500;
+}
+/* Offered languages remain a native multi-selection list inside one preference. */
+.admin-page #admin-theme-tab-language .admin-language-selector-language-list {
+    margin: .25rem 0 0;
+    padding: .25rem 0 0;
+    border: 0;
+    border-top: 1px solid var(--language-line);
+    background: transparent;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language-list > legend {
+    padding: 0;
+    font-size: .75rem;
+    color: var(--language-muted);
+    font-weight: 500;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .15rem .35rem;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language {
+    min-height: 32px;
+    min-width: 0;
+    padding: 0;
+    gap: .35rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language strong {
+    font-size: .78rem;
+    font-weight: 500;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language img {
+    width: 16px;
+    height: 12px;
+}
+
+.admin-page #admin-theme-tab-language [data-save-state='saving'] { opacity: .7; }
+.admin-page #admin-theme-tab-language [data-language-save-status] {
+    display: block;
+    margin-top: .25rem;
+    color: var(--language-muted);
+    font-size: .72rem;
+}
+.admin-page #admin-theme-tab-language :is([data-save-state='error'],
+    [data-save-state='unknown']) [data-language-save-status] { color: var(--admin-danger); }
+
+.admin-page #admin-theme-tab-language :is(.admin-language-help > summary,
+    button.admin-language-help-trigger) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--language-muted);
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    list-style: none;
+}
+.admin-language-help > summary::-webkit-details-marker { display: none; }
+.admin-page #admin-theme-tab-language .admin-language-help { position: relative; }
+.admin-page #admin-theme-tab-language .admin-language-help-panel {
+    position: absolute;
+    z-index: 30;
+    left: 0;
+    top: 100%;
+    box-sizing: border-box;
+    width: 300px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: .65rem;
+    overflow: auto;
+    border: 1px solid var(--language-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--language-surface);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .8rem;
+    font-weight: 400;
+    line-height: 1.5;
+}
+.admin-page #admin-theme-tab-language .admin-language-help-panel[popover] {
+    position: fixed;
+    inset: auto;
+}
+.admin-language-help-panel::backdrop { background: transparent; }
+.admin-language-help-panel > p { margin: .35rem 0 0; }
+
+/* Global Theme Save belongs to staged design/pack workflows here. Scoped live
+ * preferences never use that whole-form path while their settings tab is open. */
+.admin-page #admin-theme-form:has(#admin-theme-tab-language:not([hidden])
+    [data-language-autosave-ready='1'] #admin-theme-language-subtab-settings:not([hidden]))
+    .admin-theme-save-panel { display: none; }
+
+.admin-page #admin-theme-form:has(#admin-theme-tab-language:not([hidden]))
+    .admin-theme-save-panel :is(button, .button) {
+    min-height: 28px;
+    padding: 3px 7px;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .8rem;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page #admin-theme-tab-language :is(button, .button, select,
+        .admin-language-selector-enabled, .admin-language-selector-language,
+        summary, input[type='file']) { min-height: 44px; }
+    .admin-page #admin-theme-tab-language :is(.admin-language-help > summary,
+        button.admin-language-help-trigger) {
+        width: 44px;
+        min-width: 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    .admin-page #admin-theme-tab-language .theme-language-card {
+        background: Canvas;
+        backdrop-filter: none;
+    }
+}
+
+/* Only complete groups carry surfaces; the Language tab itself stays flat. */
+.admin-page #admin-theme-tab-language {
+    padding: .65rem 0 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.admin-page #admin-theme-tab-language .theme-language-defaults-group > h3 {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    box-sizing: border-box;
+    margin: -.2rem -.65rem .35rem;
+    padding: .25rem .65rem;
+    border-bottom: 1px solid var(--language-line);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+    border-radius: min(var(--radius, 8px), 8px) min(var(--radius, 8px), 8px) 0 0;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    font-size: .85rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+.admin-page #admin-theme-tab-language .theme-language-scope-row {
+    min-width: 0;
+    margin: 0;
+    padding: .25rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--language-line);
+    background: transparent;
+}
+.admin-page #admin-theme-tab-language .theme-language-scope-row:last-child { border-bottom: 0; }
+.admin-page #admin-theme-tab-language .theme-language-scope-row > legend {
+    padding: 0;
+    color: var(--ink);
+    font-size: .8rem;
+    font-weight: 500;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language-list {
+    position: relative;
+    padding-top: .3rem;
+}
+.admin-page #admin-theme-tab-language .admin-language-selector-language-list
+    > :is(.admin-language-help, .admin-language-help-trigger) {
+    position: absolute;
+    top: -.4rem;
+    right: 0;
+}
+
+/* All Language checkboxes retain native values/checked state in compact tracks. */
+.admin-page #admin-theme-tab-language input[type='checkbox'] {
+    appearance: none;
+    position: relative;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 14px;
+    min-height: 14px;
+    padding: 0;
+    border: 1px solid var(--language-line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.admin-page #admin-theme-tab-language input[type='checkbox']::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink);
+}
+.admin-page #admin-theme-tab-language input[type='checkbox']:checked {
+    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+.admin-page #admin-theme-tab-language input[type='checkbox']:checked::after { left: 14px; }
+.admin-page #admin-theme-tab-language [data-language-design-reset-field] {
+    flex: 0 0 28px;
+    width: 28px;
+    min-width: 28px;
+    padding: 3px;
+    font-size: 0;
+}
+.admin-page #admin-theme-tab-language [data-language-design-reset-field]::before {
+    content: '↺';
+    font-size: 16px;
+}
+.admin-page #admin-theme-tab-language .admin-language-design-control {
+    gap: .25rem;
+    min-height: 28px;
+}
+.admin-page #admin-theme-tab-language .admin-language-design-field { gap: .2rem; }
+.admin-page #admin-theme-tab-language label { font-size: .8rem; font-weight: 500; }
+.admin-page #admin-theme-tab-language [data-language-theme-editor] { gap: .65rem; }
+.admin-page #admin-theme-tab-language [data-language-theme-editor] > legend {
+    width: calc(100% + 1.3rem);
+}
+.admin-page #admin-theme-tab-language .theme-language-design-basics { gap: .4rem; }
+.admin-page #admin-theme-tab-language .admin-language-design-global { gap: .4rem .65rem; }
+.admin-page #admin-theme-tab-language .theme-language-design-preview {
+    padding: .2rem .65rem .5rem;
+    border-color: var(--language-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--language-surface);
+    box-shadow: none;
+    backdrop-filter: blur(12px);
+}
+
+/* A native named select remains authoritative; the enhancement adds SVGs. */
+.admin-page #admin-theme-tab-language select.theme-language-flag-native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    min-height: 1px;
+    padding: 0;
+    clip-path: inset(50%);
+    opacity: 0;
+    pointer-events: none;
+}
+.admin-page #admin-theme-tab-language .theme-language-flag-select { display: block; min-width: 0; }
+.admin-page #admin-theme-tab-language .theme-language-flag-button {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+    font-size: .8rem;
+    font-weight: 400;
+}
+.admin-page #admin-theme-tab-language .theme-language-flag-button::after {
+    content: '⌄';
+    margin-left: auto;
+    color: var(--language-muted);
+}
+.admin-page #admin-theme-tab-language :is(.theme-language-flag-button,
+    .theme-language-flag-option) img {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 12px;
+    object-fit: contain;
+}
+.admin-page #admin-theme-tab-language .theme-language-flag-options {
+    position: fixed;
+    inset: auto;
+    box-sizing: border-box;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: .25rem;
+    overflow: auto;
+    border: 1px solid var(--language-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--language-surface);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .82rem;
+    line-height: 1.4;
+}
+.theme-language-flag-options::backdrop { background: transparent; }
+.admin-page #admin-theme-tab-language .theme-language-flag-option {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    min-height: 32px;
+    box-sizing: border-box;
+    padding: .25rem .4rem;
+    cursor: pointer;
+}
+.admin-page #admin-theme-tab-language .theme-language-flag-option:is(.is-active, :hover) {
+    background: var(--language-tint);
+    box-shadow: inset 2px 0 var(--accent);
+}
+.admin-page #admin-theme-tab-language .theme-language-flag-option[aria-selected='true']::after {
+    content: '✓';
+    margin-left: auto;
+    color: var(--language-muted);
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page #admin-theme-tab-language :is(.theme-language-flag-option,
+        .theme-language-flag-button, .admin-language-design-field:has(input[type='checkbox'])) {
+        min-height: 44px;
+    }
+    .admin-page #admin-theme-tab-language .admin-language-design-control > label,
+    .admin-page #admin-theme-form:has(#admin-theme-tab-language:not([hidden]))
+        .admin-theme-save-panel :is(button, .button) { min-height: 44px; }
+    .admin-page #admin-theme-tab-language [data-language-design-reset-field] {
+        flex-basis: 44px;
+        width: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+@media (forced-colors: active) {
+    .admin-page #admin-theme-tab-language input[type='checkbox'] {
+        appearance: auto;
+        background: Canvas;
+    }
+    .admin-page #admin-theme-tab-language input[type='checkbox']::after { content: none; }
+}

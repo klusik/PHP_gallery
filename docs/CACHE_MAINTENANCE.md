@@ -1,11 +1,29 @@
 # Cache inventory, retention and independent reclamation
 
-Admin > Maintenance > Media and cache now exposes **Clean updater cache now**
-above the two compact media groups. It runs one forced bounded slice in place;
+Admin > Maintenance > Media and cache uses the same compact translucent groups
+as Features and Content and display. Whole groups flow down one to three columns
+according to available workspace width, retaining independent heights. Updater
+cleanup, cache evidence, thumbnails, scheduling and available media shortcuts
+have matching heading strips and transparent actions. Plain question marks open
+contextual help; unknown scan status and disabled-action reasons stay visible.
+The native disclosures retain compatibility settings and operational detail.
+Archive and renamer names and their trailing shortcuts share their destination.
+
+Schedule preferences save immediately on change through the existing guarded
+settings route, including the complete coupled time/window/batch/budget values.
+The affected form remains locked during a write; confirmed persisted values
+update its controls and summary. A lost or invalid response preserves the intent
+and requires a passive reload, without an automatic write retry. The limit is
+fifteen seconds. The classic Save/POST remains available without JavaScript.
+Browser thumbnail rebuilding is an option for its explicit task, not a saved
+schedule preference. Scan, generation, deletion, reset and token rotation retain
+their existing separate actions and safety requirements.
+
+**Clean updater cache now** runs one forced bounded slice in place;
 **Continue cleanup** runs another explicit slice when debt remains. The visible
 scope preserves thumbnails and download caches as well as originals and backups.
-Compatibility settings and schedule diagnostics remain native disclosures, and
-archive/renamer links are concise shortcuts. Non-JavaScript POSTs return to the
+Compatibility settings and schedule diagnostics remain native disclosures.
+Non-JavaScript POSTs return to the
 same Media tab. JavaScript preserves URL, focused maintenance tab and any open
 panel, delegates dynamically injected forms, and passes the canonical mutation
 envelope to the existing completion owner. This singleton cache operation has

@@ -892,6 +892,10 @@ smart-gallery and side-panel tests own positive and negative cases.
 The runtime-plan test retains every composed/legacy isolated module child and
 route comparison. Compiler analysis is shared with dynamic-site review rather
 than parsing discarded tooling files or analyzing the application twice.
+Compact Dashboard help and factory-value renderers are loaded from the shared
+Admin UI owner, including isolated health fixtures. Theme's contained access
+policy dependency must preserve the existing file closure and duplicate cap;
+hosted preparation establishes the generated plan before the runtime ratchet.
 Retained phase timings distinguish compilation from child process wall and
 summed child execution. A bounded numeric `AUDIT_METRICS` record is retained in
 each child's JSON metrics and compact log even after PASS; malformed emitted
@@ -900,6 +904,11 @@ state waits and retain
 specific failure/stack data. Historical missing diagnostics cannot establish
 the old gallery-tag failure's root cause; deliberate hosted failure acceptance
 and live default-branch TinyTeX reuse remain separate evidence requirements.
+
+The lightbox race fixture snapshots Keyboard Lock acquisition/rejection counts
+for each fullscreen quick-tag reopening and waits for that request's deferred
+resolver. Previous successful locks cannot satisfy the new phase. The fixture
+retains stale-owner rebinding, rejection recovery and actual unlock assertions.
 
 `tests/cache_lifecycle_registry_test.php` uses the actual registry model with a
 disposable SQLite table derived from the migration. It covers oldest-due
@@ -2504,6 +2513,14 @@ the audit.
 
 ### Version 0.97 recoverable gallery trash
 
+`admin_trash_rendering_test.php` retains production POST/CSRF/confirmation,
+availability, escaping and lifecycle-action assertions with the visible
+preference group. The synthetic `admin_trash_confirmation.html` browser fixture
+also covers immediate coupled preference writes, task serialization, canonical
+panel refresh/focus, authoritative refusal, and lost-response locking followed
+by a GET-only reload. No live Trash preference or payload is changed by those
+fixtures. They run under hosted FULL; BASIC remains syntax/declaration feedback.
+
 `tests/gallery_trash_model_test.php` is the focused Version 0.97 contract. It
 verifies default and bounded settings, independent automatic-purge opt-in,
 token/path validation, retention countdowns, positive optional-column discovery,
@@ -2949,6 +2966,31 @@ maintenance policy.
 The gallery public-path test covers Czech transliteration, decomposed accents,
 invisible Unicode characters, HTML entities, hierarchical paths, and sibling
 slug collisions.
+
+`admin_tag_catalog_filters_test.php` executes the real model/service over an
+in-memory typed and confirmed-legacy tag schema. Gallery-only, image-only,
+shared, music, unused and reserved-PDF records verify scoped membership,
+counts/sorting and the unchanged default vocabulary for other callers. Unknown
+schema, malformed scopes and reserved PDF queries retain their refusal paths.
+The filter selects usage, not separate gallery/image tag identities: edits to
+a shared tag still affect every assignment. Documents remains a disabled future
+choice; direct requests show a pending explanation without a PDF editor.
+The existing Settings browser fixture also imports the real tag coordinator:
+filter and sort changes each cause one native GET submit, usage changes clear
+old selection, sort keeps it, enhanced Apply hides, and content fields remain
+explicit saves. The fixture prevents navigation and writes no tag data.
+
+`admin_tags_layout_test.php` renders the real Admin tag view using prepared
+page/panel, mixed-media, music and empty states. It checks catalog/editor/usage
+containment, native selected links, field/help associations, distinct panel IDs,
+existing POST/CSRF/limits, escaped text and media-specific public actions. Hosted
+FULL discovers this standalone regression through the central PHP registry.
+For visual verification, inspect one/two/three group layouts, the narrow editor
+jump below sticky navigation, transparent actions and 44px touch targets. Open
+field help, verify viewport bounds, Escape/focus return and outside dismissal.
+Use read-only filter/sort/selection actions. Exercise persistence in a disposable
+workflow fixture rather than changing a real tag for layout QA.
+
 The tag metadata MySQL compatibility test guards the Admin tag-usage query
 against MySQL error 3065 by requiring every DISTINCT ordering expression that is
 not already projected to be included in the SELECT list.
@@ -3886,6 +3928,30 @@ does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is
 selected. Then verify that the authenticated JSON response replaces the
 placeholder, nested maintenance tabs initialize, and direct or no-JavaScript
 fallback links remain usable.
+
+For compact Maintenance Content, inspect one/two/three flowing group columns,
+native factory tooltips and the absence of enhanced Save buttons. Toggle Public
+search, verify persistence on reload and restore its original value. Check
+saving/error feedback, stable URL and retained controls. The existing
+`admin_content_display_test.php` covers JSON authority, GPS schema refusal and
+factory metadata; `admin_dashboard_workspace.html` covers coupled preferences,
+pending-write exclusion and lost-response locking with synthetic persistence.
+Security-related switches are exercised in that disposable fixture, not by
+weakening the running installation. Hosted FULL owns execution of these tests.
+
+For System health, inspect the flowing groups at desktop and narrow widths,
+including keyboard/outside dismissal and viewport-bounded help. Keep missing or
+unverifiable states actionable and disabled integrations distinct from ready
+storage. `admin_maintenance_health_test.php` covers purpose/help markup, named
+presentation checks, problem ordering, escaped identifiers, and malformed or
+unexpected records. `runtime_support_surfaces_test.php` retains shared runtime
+labels and rejects blanket system-readiness claims. The Content controller
+fixture also covers viewer-diagnostics authentication/CSRF, canonical boolean
+responses, native Save and allowlisted System returns. The workspace browser
+fixture adds pending/lost-response cases with disposable diagnostics state.
+Do not toggle live diagnostics, run migrations, or test a real restore merely
+to verify this presentation. Hosted FULL owns those fixtures; a manual visual
+check alone does not qualify their behavior.
 
 ### Live Slideshow Speed Verification
 
@@ -5311,6 +5377,16 @@ key/placeholder parity.
 
 Manual Admin regression:
 
+`tests/theme_language_preferences_test.php` exercises the real Theme dispatcher
+and translation services against disposable settings/session state, including
+authentication/CSRF refusals, canonical values and unrelated draft isolation.
+The Language rendering/browser fixtures also preserve scoped preference field
+ownership, SVG flag choices, switches, native fallback and URL-backed subtab
+state. The enhanced phase mocks only preference POSTs: canonical success,
+validation refusal, pending exclusion and a lost response after persistence must
+not replay another Theme draft. Real installation visual checks are read-only;
+use disposable fixtures for preference writes.
+
 1. Open Theme > Language and confirm the viewer-language panel appears beside
    the Admin and public default selectors with all four languages selected on an
    installation without explicit settings.
@@ -6710,6 +6786,14 @@ docs only; the browser scenarios run with hosted FULL at integration.
 
 ### Compact Admin workspace coverage
 
+The dashboard browser fixture also covers schedule autosave with coupled
+checkbox/time/numeric fields, pending-form serialization, native validation,
+canonical summary reconciliation and uncertain-result reload locking. All
+writes use synthetic responses. BASIC does not execute this browser fixture;
+the hosted FULL browser owner supplies its qualification. Live Media and cache
+review covers available-width columns, expanded details and contextual help;
+real-device and forced-color review remain separate manual coverage.
+
 The central audit registers `tests/admin_settings_workspace_browser_test.mjs`
 and `tests/admin_dashboard_workspace_browser_test.mjs` with isolated fixtures.
 These cover lazy sections, save/revert, failure/retry and panel persistence. PHP
@@ -7410,3 +7494,19 @@ The lightbox quick-tag race fixture waits for native `fullscreenchange` and
 committed layout before sending the fullscreen tagging key. Its strict popup
 viewport bounds remain unchanged; fullscreen ownership alone does not establish
 settled HUD geometry on the hosted Chromium runner.
+
+### Compact Appearance preference coverage
+
+`tests/theme_appearance_rendering_test.php` covers all five subsection controls,
+prepared factory metadata, native help and URL state hooks. The existing
+`theme_appearance` browser fixture retains its native form/preview/resizer matrix
+before an enhanced phase that mocks only scoped switch POSTs: canonical success,
+pending exclusion, authoritative refusal and response loss after persistence.
+It also checks full-ID history compatibility, unrelated draft preservation and
+narrow switch geometry. `tests/theme_appearance_switches_test.php` exercises the
+real Theme authentication/CSRF dispatcher and Appearance adapter with disposable
+storage and an observed layout delegation boundary. Existing layout-owner tests
+retain capability/revision coverage; the advanced-owner regression verifies the
+header's partial save and canonical defaults. Real installation visual checks
+use only navigation, contextual help and preview/layout controls; persistent
+preference writes belong to disposable hosted fixtures.

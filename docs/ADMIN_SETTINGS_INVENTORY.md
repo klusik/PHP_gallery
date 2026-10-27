@@ -64,6 +64,56 @@ does not rewrite `config.php`. Advanced summaries are collapsed; ordinary
 section URLs and POST forms remain the no-JavaScript fallback. Specialist
 ownership and inherited values remain unchanged.
 
+The first specialized destinations in Features use the shared compact surface
+in `public/assets/styles/admin-feature-settings.css`: Public live search
+(Dashboard Maintenance > Content), Lightbox browsing modes (Settings > Media),
+Smart Galleries (list and standalone/side-panel editor), Gallery PDF documents
+(Settings > Uploads), and Gallery music (Music Manager). Shared central Settings
+controls use the same treatment across categories. This is a presentation layer;
+the registry destinations, domain setters and explicit save workflows stay with
+their existing owners. It does not imply that later specialist destinations
+have been migrated.
+
+Setting rows use fluid columns, translucent Theme panels, quiet transparent
+actions and native checkbox inputs styled as small switches. The surrounding
+labels provide the mobile tap targets. Music catalog row selections retain
+ordinary selection boxes. Settings question marks open native light-dismiss
+popovers beside their triggers; Escape and outside click close them. Forced-color
+mode retains native checkbox presentation. Browsers without popover support
+receive inline descriptions. Draft counts, errors, scoped Save,
+no-JavaScript forms and dynamically refreshed Settings fragments remain supported.
+
+Dashboard Maintenance > Content is the approved reference for a denser
+specialist layout. Its reusable authoring rules are specified in
+[the Admin settings design reference](ADMIN_DESIGN.md#admin-settings-reference).
+Its heading and report shortcut share one unboxed toolbar; the selected subtab
+replaces repeated introductions. Public display, gallery metadata and URL safety
+use the same group surfaces as Features: quiet outlines, translucent backing,
+tinted headings with a left accent and subtle row separators. Single preference
+switches precede their setting names, as in Features. A name with a dedicated
+configuration destination is a native link to the same prepared URL as its
+trailing settings arrow. The switch, name link and help trigger remain separate
+interactions. Whole groups flow
+top-to-bottom in one to three columns, independently of neighboring group heights.
+Routine explanations and
+crawler sampling details live behind plain question marks. Affected override
+counts, rewrite compatibility and warnings stay visible. Preference switches save
+immediately through their existing authenticated POST/CSRF routes, without a
+second Save action or navigation. Each tooltip shows its canonical factory value
+from `admin_settings_content_factory_defaults()`, also used by the Settings
+registry; it is independent of the current value and capability master.
+Each form serializes its write, returns canonical mutation metadata and persisted
+booleans, and retains visible saving/saved/refusal feedback. An unverified response
+locks that form for an explicit passive reload, without replay or fake rollback.
+Crawler protection/logging travel together, preserving the peer preference.
+GPS schema and public-search capability refusals remain authoritative. Gallery
+override reset and path regeneration remain separate explicit actions.
+The native help popovers follow their triggers on scroll/resize and close with
+Escape or outside click. Without JavaScript or Popover API support, native
+disclosures retain the complete prose. Without JavaScript, existing Save/POST
+forms remain available; Popover API support is independent of autosave.
+This pilot does not further restyle the other specialized destinations.
+
 ## Settings search
 
 The central Settings page renders a local Spotlight-style search directly below

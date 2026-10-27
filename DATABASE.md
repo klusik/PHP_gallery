@@ -270,6 +270,14 @@ relations are retained; `tags.media_type` defaults to `image`, with `music`
 and reserved `pdf` categories. The globally unique slug constraint is retained.
 The shared tag owner allocates a media-prefixed slug for non-image names.
 
+Admin's Images/Galleries filters select direct assignments from `image_tags`
+and `gallery_tags` over the same `image` vocabulary. A shared tag can appear
+in both; its displayed usage count and order follow that assignment scope.
+All tags retains unassigned visual tags and music. Existing non-Admin
+`admin_tag_rows()` callers retain the full visual vocabulary by default.
+The Documents choice reserves future PDF UI and cannot edit/assign PDF tags;
+this filter change introduces no migration, new tag identity or assignment table.
+
 `music_songs` stores optional logical title overrides. The composite primary
 key `(gallery_id, track_id)` in `music_track_instances` keeps each physical
 instance linked to one song; filename and digest are descriptive metadata,

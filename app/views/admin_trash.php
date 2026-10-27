@@ -67,8 +67,13 @@ function admin_trash_format_bytes(int $bytes): string
 /**
  * Render the complete Admin trash bin page or side-panel fragment.
  *
- * @param array<int,array<string,mixed>> $entries Recoverable trash entries.
- * @param array<string,mixed> $summary Aggregate trash counters.
+ * @param list<array{trash_token?:string,title?:string,original_folder_path?:string,
+ *     status?:string,view_days_remaining?:int,deleted_by_username?:string|null,
+ *     deleted_by_user_id?:int|null,subtree_gallery_count?:int,image_count?:int,
+ *     byte_size?:int,deleted_at?:string,last_error_code?:string|null,purge_after?:string,
+ *     view_can_purge?:bool}> $entries Prepared active/recovery records and action permissions.
+ * @param array{available?:bool,active_count?:int,bytes?:int,purgeable_count?:int,
+ *     count?:int,problem_count?:int} $summary Verified availability and counters.
  * @param bool $panelOnly True to omit page chrome for the side panel.
  * @param array{enabled?:bool,auto_purge_enabled?:bool,auto_purge_active?:bool,retention_days?:int,purge_batch_size?:int} $settings Prepared Trash enablement and cleanup preferences.
  * @return void Emits escaped compact Trash markup and the existing lifecycle-safe forms.
@@ -103,7 +108,20 @@ function render_admin_trash_page(
         '<header class="admin-trash-heading"><div><h2>'
             . view_admin_trash_icon()
             . e(t('admin.trash.title', 'Trash'))
-            . '</h2>';
+            . '</h2></div>';
+    render_admin_trash_help(
+        'admin-trash-scope-help',
+        t('admin.trash.title', 'Trash'),
+        $autoPurgeActive
+            ? t(
+                'admin.trash.intro_auto_purge',
+                'Deleted galleries stay here with all their subgalleries and photos until you restore them, delete them permanently, or their retention window ends.',
+            )
+            : t(
+                'admin.trash.intro_manual',
+                'Deleted galleries stay here with all their subgalleries and photos until you restore them or delete them permanently. Automatic deletion is disabled.',
+            ),
+    );
     if (!empty($summary['available']) && $entries !== []) {
         echo
             '<p class="admin-trash-summary"><strong>'
@@ -121,7 +139,6 @@ function render_admin_trash_page(
                 ))
                 . '</strong></p>';
     }
-    echo '</div>';
     $purgeableCount = (int) (
         $summary['purgeable_count']
         ?? $summary['count']
@@ -160,20 +177,6 @@ function render_admin_trash_page(
                 . '</button></form>';
     }
     echo '</header>';
-    echo
-        '<p class="muted">'
-            . e(
-                $autoPurgeActive
-                    ? t(
-                        'admin.trash.intro_auto_purge',
-                        'Deleted galleries stay here with all their subgalleries and photos until you restore them, delete them permanently, or their retention window ends.',
-                    )
-                    : t(
-                        'admin.trash.intro_manual',
-                        'Deleted galleries stay here with all their subgalleries and photos until you restore them or delete them permanently. Automatic deletion is disabled.',
-                    ),
-            )
-            . '</p>';
     echo '<p class="notice" data-admin-trash-status hidden></p>';
 
     if (empty($summary['available'])) {
@@ -211,28 +214,30 @@ function render_admin_trash_page(
     }
 
     echo
-        '<div class="table-scroll"><table class="admin-table admin-trash-table"><thead><tr>';
-    echo '<th>' . e(t('admin.trash.column_gallery', 'Gallery')) . '</th>';
-    echo '<th>' . e(t('admin.trash.column_contents', 'Contents')) . '</th>';
-    echo '<th>' . e(t('admin.trash.column_deleted', 'Deleted')) . '</th>';
-    echo '<th>' . e(t('admin.trash.column_deleted_by', 'Deleted by')) . '</th>';
-    echo '<th>' . e(t('admin.trash.column_state', 'State')) . '</th>';
+        '<div class="admin-trash-list admin-content-group"><h3>'
+            . e(t('admin.trash.column_gallery', 'Gallery'))
+            . '</h3><div class="table-scroll"><table class="admin-table admin-trash-table" role="table"><thead><tr>';
+    echo '<th scope="col">' . e(t('admin.trash.column_gallery', 'Gallery')) . '</th>';
+    echo '<th scope="col">' . e(t('admin.trash.column_contents', 'Contents')) . '</th>';
+    echo '<th scope="col">' . e(t('admin.trash.column_deleted', 'Deleted')) . '</th>';
+    echo '<th scope="col">' . e(t('admin.trash.column_deleted_by', 'Deleted by')) . '</th>';
+    echo '<th scope="col">' . e(t('admin.trash.column_state', 'State')) . '</th>';
     echo
-        '<th>'
+        '<th scope="col">'
             . e(
                 $autoPurgeActive
                     ? t('admin.trash.column_purges_in', 'Purges in')
                     : t('admin.trash.column_auto_purge', 'Automatic purge'),
             )
             . '</th>';
-    echo '<th>' . e(t('admin.common.actions', 'Actions')) . '</th>';
+    echo '<th scope="col">' . e(t('admin.common.actions', 'Actions')) . '</th>';
     echo '</tr></thead><tbody>';
 
     foreach ($entries as $entry) {
         render_admin_trash_row($entry, $autoPurgeActive);
     }
 
-    echo '</tbody></table></div>';
+    echo '</tbody></table></div></div>';
     echo '</section>';
 }
 
@@ -256,7 +261,12 @@ function admin_trash_status_label(string $status): string
 /**
  * Render one trash listing row with lifecycle-safe controls.
  *
- * @param array<string,mixed> $entry Trash entry row.
+ * @param array{trash_token?:string,title?:string,original_folder_path?:string,
+ *     status?:string,view_days_remaining?:int,deleted_by_username?:string|null,
+ *     deleted_by_user_id?:int|null,subtree_gallery_count?:int,image_count?:int,
+ *     byte_size?:int,deleted_at?:string,last_error_code?:string|null,purge_after?:string,
+ *     view_can_purge?:bool} $entry Prepared identity, counts, lifecycle evidence
+ *     and the service's permanent-purge permission.
  * @param bool $autoPurgeActive Whether automatic purge is active.
  * @return void Emits all entry metadata, diagnostics and authorized lifecycle actions.
  */
@@ -284,13 +294,14 @@ function render_admin_trash_row(
 
     echo '<tr' . ($status !== 'trashed' ? ' class="is-attention"' : '') . '>';
     echo
-        '<td><strong>'
+        '<td data-label="' . e(t('admin.trash.column_gallery', 'Gallery'))
+            . '"><strong>'
             . e($title)
             . '</strong><br><span class="muted">'
             . e($folderPath)
             . '</span></td>';
     echo
-        '<td>'
+        '<td data-label="' . e(t('admin.trash.column_contents', 'Contents')) . '">'
             . e(t(
                 'admin.trash.contents_value',
                 '{galleries} folder(s), {images} photo(s), {size}',
@@ -303,9 +314,12 @@ function render_admin_trash_row(
                 ],
             ))
             . '</td>';
-    echo '<td>' . e((string) ($entry['deleted_at'] ?? '')) . '</td>';
-    echo '<td>' . e($deletedBy) . '</td>';
-    echo '<td><strong>' . e(admin_trash_status_label($status)) . '</strong>';
+    echo '<td data-label="' . e(t('admin.trash.column_deleted', 'Deleted')) . '">'
+        . e((string) ($entry['deleted_at'] ?? '')) . '</td>';
+    echo '<td data-label="' . e(t('admin.trash.column_deleted_by', 'Deleted by'))
+        . '">' . e($deletedBy) . '</td>';
+    echo '<td data-label="' . e(t('admin.trash.column_state', 'State'))
+        . '"><strong>' . e(admin_trash_status_label($status)) . '</strong>';
     if (
         $status !== 'trashed'
         && trim((string) ($entry['last_error_code'] ?? '')) !== ''
@@ -320,7 +334,7 @@ function render_admin_trash_row(
     echo '</td>';
     if ($status === 'trashed' && $autoPurgeActive) {
         echo
-            '<td>'
+            '<td data-label="' . e(t('admin.trash.column_purges_in', 'Purges in')) . '">'
                 . e(
                     $daysRemaining > 0
                         ? t('admin.trash.days_remaining', '{days} day(s)', [
@@ -333,7 +347,8 @@ function render_admin_trash_row(
                 . '</span></td>';
     } elseif ($status === 'trashed') {
         echo
-            '<td><span title="'
+            '<td data-label="' . e(t('admin.trash.column_auto_purge', 'Automatic purge'))
+                . '"><span title="'
                 . e(t(
                     'admin.trash.auto_purge_disabled',
                     'Disabled; kept until manually deleted',
@@ -343,14 +358,15 @@ function render_admin_trash_row(
                 . '</span></td>';
     } else {
         echo
-            '<td>'
+            '<td data-label="' . e(t('admin.trash.column_auto_purge', 'Automatic purge')) . '">'
                 . e(t(
                     'admin.trash.auto_purge_paused',
                     'Automatic purge paused',
                 ))
                 . '</td>';
     }
-    echo '<td class="admin-trash-actions">';
+    echo '<td class="admin-trash-actions" data-label="'
+        . e(t('admin.common.actions', 'Actions')) . '">';
 
     if ($status === 'trashed') {
         $restoreConfirm = t(
@@ -438,7 +454,8 @@ function render_admin_trash_row(
  * Render the trash retention and enablement settings form.
  *
  * @param array{enabled?:bool,auto_purge_enabled?:bool,retention_days?:int,purge_batch_size?:int} $settings Prepared enablement and retention preferences.
- * @return void Emits the native settings disclosure and unchanged POST controls.
+ * @return void Emits a flat preference group with contextual help and a classic
+ *     Save/POST fallback; the owning browser module binds immediate persistence.
  */
 function render_admin_trash_settings_form(array $settings = []): void
 {
@@ -455,46 +472,57 @@ function render_admin_trash_settings_form(array $settings = []): void
                 . '</p>';
     }
     echo
-        '<details class="admin-trash-settings-details"><summary>'
+        '<section class="admin-content-group admin-trash-settings-group"><h3>'
             . e(t('admin.trash.settings_title', 'Trash settings'))
-            . '</summary>';
+            . '</h3>';
     echo
         '<form method="post" action="'
             . e(url_for('admin_trash_settings'))
-            . '" class="admin-trash-settings">'
+            . '" class="admin-trash-settings" data-admin-trash-settings-form'
+            . ' data-saving-label="' . e(t('admin.features.saving', 'Saving…'))
+            . '" data-saved-label="' . e(t('admin.features.saved', 'Saved'))
+            . '" data-failed-label="' . e(t(
+                'admin.features.save_unknown',
+                'Save could not be verified. Reload state before making another change.',
+            )) . '" data-reload-label="'
+            . e(t('admin.features.reload_state', 'Reload state')) . '">'
             . csrf_field();
     echo
         '<div class="admin-trash-setting"><label><input type="checkbox" name="gallery_trash_enabled" value="1"'
             . (!empty($settings['enabled']) ? ' checked' : '')
             . '> ';
     echo
-        e(t(
-            'admin.trash.enabled_label',
-            'Move deleted galleries to the trash instead of deleting them immediately',
-        )) . '</label>';
-    echo
-        '<p class="muted">'
-            . e(t(
+        e(t('admin.features.gallery_trash.label', 'Gallery Trash')) . '</label>';
+    render_admin_trash_help(
+        'admin-trash-enabled-help',
+        t('admin.features.gallery_trash.label', 'Gallery Trash'),
+        t(
+                'admin.trash.enabled_label',
+                'Move deleted galleries to the trash instead of deleting them immediately',
+        ) . ' ' . t(
                 'admin.trash.enabled_hint',
                 'Turning this off only changes future deletes. Existing trash contents are kept and remain available here.',
-            ))
-            . '</p></div>';
+        ),
+    );
+    echo '</div>';
     echo
         '<div class="admin-trash-setting"><label><input type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"'
             . (!empty($settings['auto_purge_enabled']) ? ' checked' : '')
             . '> ';
     echo
-        e(t(
-            'admin.trash.auto_purge_enabled_label',
-            'Automatically delete trashed galleries after the retention period',
-        )) . '</label>';
-    echo
-        '<p class="muted">'
-            . e(t(
+        e(t('admin.trash.column_auto_purge', 'Automatic purge')) . '</label>';
+    render_admin_trash_help(
+        'admin-trash-auto-purge-help',
+        t('admin.trash.column_auto_purge', 'Automatic purge'),
+        t(
+                'admin.trash.auto_purge_enabled_label',
+                'Automatically delete trashed galleries after the retention period',
+        ) . ' ' . t(
                 'admin.trash.auto_purge_enabled_hint',
                 'Off by default. Enabling it gives every currently recoverable item a fresh full retention period before automatic deletion can occur.',
-            ))
-            . '</p></div>';
+        ),
+    );
+    echo '</div>';
     echo
         '<label class="admin-trash-number-setting">'
             . e(t(
@@ -518,5 +546,25 @@ function render_admin_trash_settings_form(array $settings = []): void
         '<button type="submit" class="secondary">'
             . e(t('admin.common.save', 'Save'))
             . '</button>';
-    echo '</form></details>';
+    echo '<span role="status" aria-live="polite" data-admin-trash-settings-status>'
+        . '</span></form></section>';
+}
+
+/**
+ * Render one plain question-mark disclosure for the Trash module to enhance.
+ * @param string $id Stable document-local help panel identity.
+ * @param string $title Localized accessible help subject.
+ * @param string $text Localized plain explanation, escaped before output.
+ * @return void Emits native no-script help; enhancement anchors it to its trigger.
+ */
+function render_admin_trash_help(string $id, string $title, string $text): void
+{
+    echo '<details class="admin-trash-help" data-admin-trash-help>'
+        . '<summary aria-label="' . e(t(
+            'admin.settings.workspace.help_item',
+            'Help: {label}',
+            ['label' => $title],
+        )) . '">?</summary><div class="admin-trash-help-panel" id="'
+        . e($id) . '"><strong>' . e($title) . '</strong><p>' . e($text)
+        . '</p></div></details>';
 }

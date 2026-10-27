@@ -3,18 +3,140 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: public/assets/gallery-modules/admin-dashboard-workspace.js
  * Module Type: Browser Module
- * Purpose: Defer dashboard metadata and gallery previews until their visible surface needs them.
- * Responsibilities: Bind read-only fragments, retry failed reads and initialize the existing gallery controls.
+ * Purpose: Defer dashboard reads and save compact Maintenance preferences in place.
+ * Responsibilities: Bind fragments, serialize preference autosave and initialize gallery controls.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  *
  * Load read-only Overview totals after paint and gallery previews only when their tab is opened.
- * The existing tab, bulk-action and mutation modules retain ownership of navigation and writes.
+ * Existing tab/bulk modules and authenticated domain routes retain their authority.
  */
 import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261021-smart-photo-tags-v2';
+import { completeAdminMutation } from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
+
+/**
+ * Bound one preference write before requiring an explicit authoritative reload.
+ * Type: number. Units: milliseconds. Scope: one Maintenance autosave request.
+ * Consumers: saveDashboardContentForm(). Value: 15000.
+ * Rationale: match Features autosave; never retry an uncertain mutation.
+ */
+const DASHBOARD_CONTENT_SAVE_TIMEOUT_MS = 15000;
+
+/**
+ * Show a compact save state or an explicit reload action after an unverified write.
+ * @param {HTMLFormElement} form Existing preference form; never a bulk reset.
+ * @param {'saving'|'saved'|'error'|'unknown'} state Observable persistence state.
+ * @param {string} message Localized status or safe server refusal.
+ * @return {void} Update only this form's feedback, preserving controls and help.
+ */
+function setDashboardContentSaveStatus(form, state, message) {
+    const owner = form.closest('[data-dashboard-content-settings]');
+    let feedback = form.querySelector('[data-dashboard-save-status]');
+    if (!feedback) {
+        feedback = document.createElement('span');
+        feedback.dataset.dashboardSaveStatus = '';
+        feedback.setAttribute('role', 'status');
+        feedback.setAttribute('aria-live', 'polite');
+    }
+    form.dataset.saveState = state;
+    feedback.textContent = message;
+    if (state === 'error' || state === 'unknown') {
+        const reload = document.createElement('button');
+        reload.type = 'button';
+        reload.textContent = owner.dataset.reloadLabel;
+        reload.addEventListener('click', () => window.location.reload());
+        feedback.append(' ', reload);
+        form.append(feedback);
+    } else {
+        (form.querySelector('.admin-content-controls') || form).append(feedback);
+    }
+}
+
+/**
+ * Save one preference form once and reconcile authoritative returned values.
+ * @param {HTMLFormElement} form Authenticated route/CSRF form containing Content
+ *     booleans or the coupled schedule booleans, time and numeric fields.
+ * @return {Promise<void>} Keep URL/DOM stable; lock uncertain/refused writes until reload.
+ */
+async function saveDashboardContentForm(form) {
+    if (['saving', 'error', 'unknown'].includes(form.dataset.saveState)) return;
+    const owner = form.closest('[data-dashboard-content-settings]');
+    if (!form.reportValidity()) return;
+    const controls = Array.from(form.querySelectorAll(
+        'input:not([type="hidden"]):not([type="submit"]):not(:disabled)',
+    ));
+    const body = new FormData(form);
+    body.set('ajax', '1');
+    controls.forEach(control => { control.disabled = true; });
+    form.setAttribute('aria-busy', 'true');
+    setDashboardContentSaveStatus(form, 'saving', owner.dataset.savingLabel);
+    try {
+        const response = await fetch(form.getAttribute('action'), {
+            method: 'POST', body, credentials: 'same-origin',
+            cache: 'no-store', redirect: 'error',
+            headers: {'Accept': 'application/json'},
+            signal: AbortSignal.timeout(DASHBOARD_CONTENT_SAVE_TIMEOUT_MS),
+        });
+        const result = await response.json();
+        if (typeof result.ok !== 'boolean'
+            || typeof result.message !== 'string'
+            || !result.setting_values
+            || controls.some(control => typeof result.setting_values[control.name]
+                !== (control.type === 'checkbox' ? 'boolean' : 'string'))
+            || (!response.ok && result.ok)) {
+            throw new Error('Incomplete dashboard preference response');
+        }
+        for (const control of controls) {
+            if (control.type === 'checkbox') control.checked = result.setting_values[control.name];
+            else control.value = result.setting_values[control.name];
+        }
+        if (!result.ok) {
+            setDashboardContentSaveStatus(form, 'error', result.message);
+            return;
+        }
+        await completeAdminMutation(result);
+        if (form.hasAttribute('data-dashboard-schedule-preferences')) {
+            const group = form.closest('.admin-site-maintenance-card');
+            const state = group?.querySelector('[data-dashboard-schedule-state]');
+            const time = group?.querySelector('[data-dashboard-schedule-time]');
+            if (state) state.textContent = result.setting_values.site_maintenance_enabled
+                ? state.dataset.enabledLabel : state.dataset.disabledLabel;
+            if (time) time.textContent = result.setting_values.site_maintenance_utc_time;
+        }
+        setDashboardContentSaveStatus(form, 'saved', owner.dataset.savedLabel);
+        controls.forEach(control => { control.disabled = false; });
+    } catch {
+        // A lost response may follow a successful write. Preserve the displayed
+        // intent and require a passive reload instead of replay or fake rollback.
+        setDashboardContentSaveStatus(form, 'unknown', owner.dataset.failedLabel);
+    } finally {
+        form.removeAttribute('aria-busy');
+    }
+}
+
+/**
+ * Enhance declared preference forms; thumbnail options and bulk tasks stay explicit.
+ * @param {HTMLElement} root Dashboard or a newly inserted Maintenance read region.
+ * @return {void} Mark autosave forms and expose factory tooltips on their full labels.
+ */
+function setupDashboardContentAutosave(root) {
+    for (const form of root.querySelectorAll(
+        '[data-dashboard-content-settings] form:is(.admin-content-row, [data-dashboard-schedule-preferences])',
+    )) {
+        const controls = form.querySelectorAll('input[type="checkbox"]');
+        if (!controls.length || form.dataset.dashboardContentAutosave) continue;
+        form.dataset.dashboardContentAutosave = '1';
+        for (const control of controls) {
+            if (control.title) {
+                control.closest('label').title = control.title;
+                control.setAttribute('aria-description', control.title);
+            }
+        }
+    }
+}
 
 /**
  * Purpose: Bound one read so a stalled connection exposes an explicit retry.
@@ -26,6 +148,74 @@ import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261021-smar
  * @type {number}
  */
 const DASHBOARD_READ_TIMEOUT_MS = 20000;
+
+/**
+ * Keep Maintenance help clear of viewport edges beside its trigger.
+ * Type: number. Units: CSS pixels. Scope: dashboard contextual help.
+ * Consumers: positionDashboardHelp(). Value: 8.
+ * Rationale: match the compact Features panel's readable edge and trigger gap.
+ */
+const DASHBOARD_HELP_GAP_PX = 8;
+
+/**
+ * Position one open help panel without moving its trigger or surrounding rows.
+ * @param {HTMLElement} panel Open native popover containing escaped help prose.
+ * @param {HTMLElement} trigger Owning question-mark button or native summary.
+ * @return {void} Fit the panel beside the trigger within the current viewport.
+ */
+function positionDashboardHelp(panel, trigger) {
+    const rect = trigger.getBoundingClientRect();
+    const gap = DASHBOARD_HELP_GAP_PX;
+    // The client box excludes an occupied scrollbar; innerWidth can place help
+    // underneath it even when the document itself has no horizontal overflow.
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.clientHeight;
+    panel.style.maxWidth = `${width - gap - gap}px`;
+    const below = rect.bottom + gap;
+    const top = below + panel.offsetHeight <= height - gap
+        ? below : rect.top - panel.offsetHeight - gap;
+    panel.style.left = `${Math.max(gap, Math.min(
+        rect.left, width - panel.offsetWidth - gap,
+    ))}px`;
+    panel.style.top = `${Math.max(gap, Math.min(
+        top, height - panel.offsetHeight - gap,
+    ))}px`;
+}
+
+/**
+ * Enhance only the Maintenance fragment's help and compact action labels.
+ * @param {HTMLElement} root Dashboard or newly inserted Maintenance read region.
+ * @return {void} Preserve native disclosures without popover support and every form field.
+ */
+function setupDashboardCompactHelp(root) {
+    // Permanent progressive enhancement: the server's native disclosure and
+    // text actions remain usable without JavaScript or Popover API support.
+    if (typeof HTMLElement.prototype.showPopover !== 'function') return;
+    for (const action of root.querySelectorAll(
+        '#admin-maintenance-content .admin-content-actions > button[aria-label], '
+        + '#admin-maintenance-content .admin-content-actions > a:not(.button)',
+    )) {
+        const label = action.getAttribute('aria-label') || action.textContent.trim();
+        action.setAttribute('aria-label', label);
+        action.title = label;
+        action.dataset.dashboardCompactAction = action.tagName === 'BUTTON'
+            ? 'save' : 'settings';
+    }
+    for (const disclosure of root.querySelectorAll('[data-dashboard-help]')) {
+        const summary = disclosure.querySelector('summary');
+        const panel = disclosure.querySelector('.admin-dashboard-help-panel');
+        if (!summary || !panel?.id) continue;
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'admin-dashboard-help-trigger';
+        trigger.textContent = '?';
+        trigger.setAttribute('aria-label', summary.getAttribute('aria-label'));
+        trigger.setAttribute('aria-controls', panel.id);
+        trigger.setAttribute('popovertarget', panel.id);
+        panel.setAttribute('popover', 'auto');
+        disclosure.replaceWith(trigger, panel);
+    }
+}
 
 /**
  * Update the Galleries tab count from an authenticated, completed read.
@@ -47,14 +237,87 @@ function updateGalleryCount(root, count) {
 }
 
 /**
- * Attach deferred reads to the current dashboard without polling or running maintenance.
- * @return {void} Binds a single workspace and keeps successful fragments resident across tab changes.
+ * Attach deferred reads and contextual help without polling or running maintenance.
+ * @return {void} Bind one workspace, enhance loaded help and retain fragments across tab changes.
  */
 export function setupAdminDashboardWorkspace() {
     setupAdminCacheCleanup();
     const root = document.querySelector('[data-admin-dashboard-workspace]');
     if (!(root instanceof HTMLElement) || root.dataset.dashboardBound === '1') return;
     root.dataset.dashboardBound = '1';
+    setupDashboardContentAutosave(root);
+    setupDashboardCompactHelp(root);
+    root.addEventListener('change', event => {
+        const control = event.target;
+        if (!(control instanceof HTMLInputElement)) return;
+        const form = control.closest('form[data-dashboard-content-autosave]');
+        if (!form) return;
+        event.stopImmediatePropagation();
+        void saveDashboardContentForm(form);
+    }, true);
+    root.addEventListener('submit', event => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.dataset.dashboardContentAutosave) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void saveDashboardContentForm(form);
+    }, true);
+    // Delegation also covers newly fetched Maintenance fragments. Native
+    // popovers own outside-click/Escape dismissal and keyboard focus return.
+    root.addEventListener('toggle', event => {
+        const panel = event.target;
+        // Cache snapshots replace their overview in place. Enhance each fresh
+        // native disclosure on opening instead of replacing its owned markup.
+        if (panel instanceof HTMLDetailsElement
+            && panel.hasAttribute('data-cache-help')
+            && typeof HTMLElement.prototype.showPopover === 'function') {
+            const body = panel.querySelector('div');
+            const summary = panel.querySelector('summary');
+            if (!body || !summary) return;
+            body.classList.add('admin-dashboard-help-panel');
+            body.setAttribute('popover', 'auto');
+            if (panel.open) {
+                body.showPopover();
+                positionDashboardHelp(body, summary);
+            } else body.hidePopover();
+            return;
+        }
+        if (panel instanceof HTMLElement && panel.hasAttribute('popover')
+            && panel.closest('[data-cache-help]')
+            && !panel.matches(':popover-open')) {
+            panel.closest('[data-cache-help]').open = false;
+        }
+        if (!(panel instanceof HTMLElement)
+            || !panel.classList.contains('admin-dashboard-help-panel')
+            || !panel.hasAttribute('popover')
+            || !panel.matches(':popover-open')) return;
+        const trigger = panel.closest('[data-cache-help]')?.querySelector('summary')
+            || root.querySelector(
+            `[popovertarget="${CSS.escape(panel.id)}"]`,
+        );
+        if (trigger instanceof HTMLElement) positionDashboardHelp(panel, trigger);
+    }, true);
+    const repositionHelp = () => {
+        for (const panel of root.querySelectorAll('.admin-dashboard-help-panel[popover]')) {
+            if (!panel.matches(':popover-open')) continue;
+            const trigger = panel.closest('[data-cache-help]')?.querySelector('summary')
+                || root.querySelector(`[popovertarget="${CSS.escape(panel.id)}"]`);
+            if (trigger instanceof HTMLElement) positionDashboardHelp(panel, trigger);
+        }
+    };
+    window.addEventListener('resize', repositionHelp);
+    document.addEventListener('scroll', repositionHelp, true);
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        const help = root.querySelector('[data-cache-help][open]');
+        const panel = help?.querySelector('[popover]');
+        if (!panel?.matches(':popover-open')) return;
+        // Passive snapshots can replace a formerly focused summary. Restore
+        // focus to the current trigger rather than to that detached node.
+        panel.hidePopover();
+        help.open = false;
+        help.querySelector('summary')?.focus();
+    });
     // Maintenance owns an explicit, allowlisted query while generic nested tabs remain local.
     const maintenanceIds = new Map(['content','media','navigation','trash','system'].map(value => ['admin-maintenance-' + value,value]));
     let restoringMaintenance = false;
@@ -194,6 +457,10 @@ export function setupAdminDashboardWorkspace() {
             }
             if (region.dataset.dashboardRead === 'galleries') replaceGalleries(region, result.html);
             else region.innerHTML = result.html;
+            if (region.dataset.dashboardRead === 'maintenance') {
+                setupDashboardContentAutosave(region);
+                setupDashboardCompactHelp(region);
+            }
             states.set(region, 'loaded');
             region.dataset.dashboardLoaded = '1';
             updateGalleryCount(root, result.total_galleries);

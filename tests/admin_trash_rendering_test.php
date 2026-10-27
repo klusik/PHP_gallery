@@ -228,9 +228,9 @@ namespace {
     );
     trash_render_assert(
         $empty->query(
-            '//details[contains(@class,"admin-trash-settings-details") and not(@open)]//form',
+            '//section[contains(@class,"admin-trash-settings-group")]/form[@data-admin-trash-settings-form]',
         )->length === 1,
-        'Trash settings must remain available inside the compact native disclosure.',
+        'Trash preferences must remain visible in one semantic group with a classic POST fallback.',
     );
     trash_render_assert(
         $empty->query('//table')->length === 0,

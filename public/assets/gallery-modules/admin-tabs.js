@@ -31,7 +31,7 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
-import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260812-deferred-maintenance-v1';
+import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20261027-appearance-state-v1';
 
 import {startGalleryImagesPreload} from './admin-gallery-images-preload.js?v=20261016-cover-in-place-v1';
 

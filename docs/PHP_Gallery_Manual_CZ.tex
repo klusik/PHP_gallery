@@ -1660,6 +1660,27 @@ Mobilní akce obnovují vlastní pracovní prostor. Nové jednorázově zobrazen
 \subsubsection{Vzhled, jazyky a vlastní styly}
 Vzhled sdružuje ovládací prvky a živý náhled; na široké obrazovce lze poměr panelů upravit myší i klávesnicí. Šířka je místní preference prohlížeče. Obrázky webu sdružují branding a pozadí; Rozvržení odděluje zkratky, mřížky, karty a výchozí prohlížeč. Jazyk má části Nastavení, Design, Editor a Diagnostika. Náhled používá nabízené jazyky a veřejný výchozí jazyk téhož formuláře a sám nic neukládá.
 
+Všech pět částí Vzhledu používá kompaktní průsvitné skupiny a~nápovědu pod
+sousedními otazníky. Společný živý náhled i~místní posuvný dělič zůstávají dostupné.
+Obnovení stránky a~Zpět/Vpřed zachovají aktivní část včetně starších přímých odkazů.
+Přepínače GPS pinu, jeho pozadí, zobrazení všech štítků, posuvníku štítků
+a~průhledného záhlaví se ukládají ihned a~samostatně; popisky uvádějí tovární
+hodnoty. Ostatní barvy, texty, výběry a~čísla jsou návrhem pro \ui{Uložit vzhled}.
+Neověřené nebo odmítnuté uložení uzamkne daný přepínač a~zabrání opakování celého
+formuláře do obnovení stránky; automaticky se neopakuje. Bez JavaScriptu lze
+nadále uložit běžný formulář.
+
+Části nastavení jazyka používají kompaktní skupiny, posuvné přepínače a~nápovědu
+pod otazníky. Jazyk administrace, veřejný výchozí jazyk a~nabízené jazyky se
+ukládají ihned a~samostatně bez odeslání jiných rozpracovaných voleb vzhledu.
+Po změně jazyka administrace obnovte popisky tlačítkem \ui{Obnovit rozhraní}.
+Neověřené uložení uzamkne skupinu a~zabrání opakování celého formuláře do
+obnovení stránky; automaticky se neopakuje. Výběry jazyků zobrazují přibalené
+vlajky. Aktivní část zůstane zachována při obnovení i~navigaci Zpět/Vpřed díky
+adrese stránky. Návrh přepínače se použije tlačítkem \ui{Uložit vzhled}; JSON,
+import a~diagnostika mají vlastní výslovné akce. Bez JavaScriptu funguje běžné
+odeslání formuláře.
+
 Ponechte výběr náhrady prázdný, chcete-li zachovat nainstalované CSS. Pro nahrazení vyberte šablonu nebo platný CSS soubor; upload má přednost. Nahrazení i reset nejprve ověřují úložiště a při chybě zápisu značky obnoví původní soubor. Při neúplné obnově zachovejte dostupnou kopii a postupujte podle bezpečného upozornění. Nasazení zachovává instalační \filepath{public/assets/custom.css}.
 
 \subsubsection{Orientace karet a provozní stav}
@@ -1887,13 +1908,65 @@ Po úspěšném uložení prohlížeč otevře stejný oddíl Nastavení na nov�
 \index{s00230@štítky!s00219@správa}
 \index{s00230@štítky!m00082@metadata}
 
-\ui{Administrace > Upravit štítky} je centrálním editorem opakovaně použitelného slovníku štítků. Seznam lze řadit podle celkového využití nebo abecedně a~ukazuje aktuální počet použití každého štítku v~galeriích a~fotografiích dohromady. Výběr štítku zpřístupní jeho kanonický název malými písmeny, identifikátor čisté veřejné adresy URL a~volitelný veřejný popis pro cílovou stránku štítku. Stejné zobrazení uvádí galerie a~fotografie, které štítek aktuálně používají, s~odkazy zpět na příslušný veřejný kontext nebo editor fotografie.
+Editor používá kompaktní průsvitné skupiny pro katalog štítků, vybraný štítek
+a~odkazy na jeho použití. Na široké obrazovce jsou skupiny vedle sebe, na úzké
+pod sebou. Šipka u~nadpisu katalogu přejde k~editoru pod pevnou navigací.
+Filtr použití i~řazení se přepnou ihned přes běžný formulář GET.
+Tlačítko Použít zůstává dostupné bez JavaScriptu. Otazníček u~pole
+vysvětlí jeho význam přímo na místě; Escape nebo kliknutí mimo nápovědu ji
+zavře. Změny obsahu zkontrolujte a~potvrďte volbou \ui{Uložit štítek}.
+Hudební štítky zachovávají interní identifikátory a~odkazy na skladby bez akcí
+pro veřejnou stránku štítku.
+
+\ui{Obrázky} a~\ui{Galerie} filtrují přímá přiřazení nad stejným slovníkem
+vizuálních štítků. Sdílený štítek může být v~obou filtrech a~jeho úprava stále
+ovlivní všechna přiřazení. Počty a~řazení podle použití odpovídají vybranému
+rozsahu. \ui{Všechny štítky} zahrnují i~nepřiřazené štítky. \ui{Dokumenty}
+jsou vypnutá příprava na budoucí tagování PDF; přímý požadavek vysvětlí,
+že úprava štítků dokumentů zatím není dostupná.
+
+\ui{Administrace > Upravit štítky} spravuje sdílený slovník štítků. Výběr
+štítku zpřístupní jeho kanonický název malými písmeny, stabilní identifikátor
+a~popis. U~vizuálních štítků tvoří identifikátor veřejnou adresu štítku a~popis
+lze zobrazit na cílové stránce; hudební štítky používají interní metadata.
+Odkazy použití vedou na související veřejnou galerii, editor fotografie nebo
+skladby. Počty v~katalogu odpovídají vybranému filtru použití.
 
 Přejmenování štítku nebo změna jeho identifikátoru v~URL aktualizuje společný záznam štítku, takže všechna přiřazení galeriím a~fotografiím nadále odkazují na tentýž opakovaně použitelný štítek. Názvy a~identifikátory se při uložení normalizují podle bezpečných pravidel štítků a~duplicitní identifikátor se odmítá. Odstranění štítku je odlišné: aplikace jej v~transakci odpojí od galerií i~fotografií a~poté odstraní jeho záznam. Volbou \ui{Zobrazit veřejný štítek} zkontrolujte cílovou stránku a~volbou \ui{Nastavit zobrazení štítků} otevřete ovládací prvky Vzhledu pro stránky a~karty štítků a~prezentaci hlavních štítků.
 
 \subsection{Přepínače funkcí}
 \index{p00176@přepínače funkcí}
 \index{f00039@Funkce!a00001@administrace}
+
+Specializované cíle pro veřejné živé hledání, režimy lightboxu, chytré galerie,
+PDF dokumenty galerií a~hudbu používají kompaktní průsvitné ovládání. Centrální
+Nastavení sdílí tento vzhled napříč kategoriemi; editor chytré galerie jej
+zachovává také v~bočním panelu. Přepínače voleb zachovávají nativní ovládání
+klávesnicí a~na úzké obrazovce mají větší dotykové cíle. Otazníky v~Nastavení
+otevírají nápovědu u~ovládacího prvku; Escape nebo kliknutí mimo ji zavře.
+Každá specializovaná stránka zachovává své ukládání; výběr řádků katalogu
+nadále používá běžná zaškrtávací políčka.
+
+Oddíl přehledu \ui{Údržba > Obsah a~zobrazení} používá hustší rozložení:
+jedna lišta a~kompaktní skupiny se podle šířky skládají do jednoho až
+tří sloupců, každá s~vlastní výškou. Skupiny přebírají vzhled Funkcí: jemný
+rámeček, průsvitnou plochu, podbarvenou hlavičku s~levým akcentem a~tenké
+oddělovače řádků. Vysvětlení zůstávají pod otazníky; počty
+a~varování jsou stále viditelné. Přepínač ukládá ihned bez potvrzení či tlačítka
+Uložit; tooltip uvádí tovární hodnotu. Ukládání, úspěch i~chyba jsou viditelné.
+Neověřený výsledek vyžaduje načtení stavu místo opakování zápisu. Bez
+JavaScriptu zůstávají dostupné nativní nápovědy a~původní formuláře Uložit/POST.
+
+Tento vzor je výchozím pravidlem pro nová nebo upravovaná administrační
+nastavení; podrobně jej určuje \path{docs/ADMIN_DESIGN.md}. Používá přepínače
+s~okamžitým uložením, kompaktní skupiny s~hlavičkami a~jeden až tři sloupce
+s~nezávislou výškou skupin. Reference má preferovanou šířku sloupce 300 CSS
+pixelů, hlavičku vysokou alespoň 38 pixelů a~dráhu přepínače 26 krát 14 pixelů;
+na úzké či dotykové obrazovce mají interakční plochy výšku alespoň 44 pixelů.
+Pokud má položka vlastní podrobné nastavení, klikací název i~šipka vedou na
+stejnou adresu. Název otevírá nastavení, přepínač mění volbu a~otazník otevírá
+nápovědu; jde o~samostatné prvky. Vzor se uplatňuje při úpravě příslušné
+stránky; starší formuláře mohou na převod ještě čekat.
 
 \ui{Vzhled > Funkce} nabízí volitelné funkce v~kompaktních tabulkách po
 skupinách. Celé skupiny se podle dostupné šířky pracovní plochy skládají do
@@ -2344,6 +2417,13 @@ Galerie s~uloženou letovou trasou může otevřít mapu ještě před nahrání
 \index{l00074@letové mapy}
 \index{n00101@navigační data}
 
+Administrace > Údržba > Mapy a~navigační data používá stejné kompaktní
+průsvitné skupiny jako Funkce a~Obsah a~zobrazení. Název navigačních dat
+i~koncová šipka otevírají stejného správce. Počty a~čas posledního importu
+zůstávají viditelné; delší vysvětlení obsahuje nápověda pod otazníkem
+a~Podrobnosti importu. Aktualizace dat zůstává samostatnou akcí s~průběhem
+přímo na stránce a~běžným formulářem bez JavaScriptu.
+
 Sbírky zaměřené na létání mohou využít volitelnou integraci SimBrief k~načtení nejnovějšího provozního letového plánu pro ID nebo jméno pilota. Kompaktní editor přijímá jediný viditelný identifikátor: samotné číslice vybírají postup ID pilota, ostatní text postup jména pilota. Stávající integrace odesílající oddělená pole zůstávají kompatibilní, přičemž při zadání obou má ID pilota přednost. Editor vytváří upravitelný návrh popisu Markdown a~trasy; OFP i~dostupné souřadnice trasy se připojí až po uložení galerie. Neúspěšný požadavek SimBrief ponechává běžné pole popisu i~ruční editor trasy dostupné. Návrh před vytvořením je soukromý a~dočasný, jak popisuje oddíl o~vytváření galerií.
 
 Náhled SimBrief vyplní stávající editor trasy úplnou podanou trasou. Chybějící odletové a~cílové letiště doplní právě jednou a~zachová pokyny trasy i~zápis letiště s~dráhou. Návrhy popisu ve všech udržovaných jazycích obsahují celou trasu včetně cíle i~u~dlouhých tras. Stavová zpráva vysvětluje, že OFP a~dostupné body mapy se připojí při uložení galerie; samotný import je neukládá. Pokud během požadavku změníte trasu, identifikátor, popis nebo zdrojový jazyk, odpověď zachová hodnoty formuláře a~vyzve k~novému importu. Po uložení mapa zachovává původní souřadnice OFP.
@@ -2528,6 +2608,16 @@ Volba \ui{Zůstat přihlášený} používá hashovaný token prohlížeče, aby
 \index{s00226@Stav systému!p00188@připravenost databáze}
 \index{d00024@databáze!p00187@připravenost}
 \index{o00120@odpověď 503}
+
+\ui{Stav systému} řadí kontroly podle prostředí a~obnovy, přístupu a~přihlášení,
+galerií a~souborů, map a~tras, veřejných funkcí a~přehledů a~nástrojů.
+Fajfka znamená nalezené potřebné úložiště, pomlčka vypnutou integraci
+v~konfiguraci. Ani jedno nepotvrzuje úplný pracovní postup či spojení s~externím
+API. Otazníčky vysvětlují účel kontroly. Problémy jsou ve skupině první
+s~viditelným dopadem a~doporučením; \ui{Podrobnosti} uchovávají bezpečné databázové
+identifikátory a~reference požadavků. Otevření stránky neopravuje data ani
+nespouští migrace. Diagnostika prohlížeče médií ukládá volbu na místě a~zachovává
+tlačítko Uložit bez JavaScriptu. Nejistý zápis ovládání zamkne do prostého obnovení.
 
 Funkce závislé na databázovém schématu používají jednotný kontrakt připravenosti. Důležité je rozlišovat schéma, které bylo úspěšně prozkoumáno a~zjištěno jako starší, od schématu, které nyní nelze prozkoumat.
 
@@ -2909,6 +2999,15 @@ Po opravě obnovte \ui{Stav systému} a~znovu otestujte ovlivněnou funkci. Při
 \index{g00040@galerie!o00112@obnova}
 \index{k00071@koš!a00011@automatické mazání}
 
+Koš používá kompaktní průsvitné skupiny s~viditelnými přepínači nastavení
+a~kontextovou nápovědou pod otazníkem. S~JavaScriptem se změny ukládají ihned
+spolu s~dobou uchování a~velikostí dávky. Během zápisu jsou ovládací prvky Koše
+zamčené; potvrzený stav se obnoví přímo na stránce a~fokus se vrátí do upraveného
+pole. Odmítnutý nebo neověřený výsledek vyžaduje načtení stavu bez opakování
+zápisu. Bez JavaScriptu zůstává běžné tlačítko Uložit. Úzké zobrazení zachová
+pojmenované údaje i~samostatné akce bez vodorovného posouvání. Obnova, trvalé
+odstranění i~vyprázdnění Koše mají nadále vlastní potvrzení.
+
 Otevřete \ui{Údržba > Koš} pro kontrolu obnovitelných odstranění galerií. Každý aktivní řádek ukazuje původní cestu, čas odstranění, počty galerií a~fotografií, uloženou velikost, stav životního cyklu a~termín automatického vymazání, pokud jsou tato pravidla aktivní. Problematické položky zůstávají viditelné ke kontrole; PHP Gallery neodhaduje, že nejednoznačný stav souborového systému a~databáze lze bezpečně zničit.
 
 Hlavní přepínač Koše řídí budoucí odstranění galerií a~je ve výchozím stavu povolen. Vypnutí neskrývá ani nemaže existující položky: obnova a~ruční trvalé odstranění zůstávají dostupné. Automatické mazání je samostatná dobrovolná volba, ve výchozím stavu vypnutá. Uchování má výchozí dobu 30~dnů, dávka údržby je omezená a~automatické odstranění se pozastavuje, kdykoli je Koš vypnutý. Zapnutí automatického mazání po pozastavení poskytne aktuálním obnovitelným položkám nové úplné období uchování před možným začátkem plánovaného odstranění.
@@ -3085,6 +3184,16 @@ Postup \ui{Integrita} v~administraci kontroluje soubory jádra spravované integ
 Je-li dostupná vývojová diagnostika, přihlášený správce může pro aktuální galerii zahájit \ui{Měření načítání veřejné galerie}. Prohlížeč několikrát načte galerii ve skrytém rámci stejného původu s~anonymním náhledem, spojí čítače vykreslování PHP s~časováním navigace prohlížeče a~poté nabídne protokol měření jako JSON. Při porovnávání dvou změn použijte stejnou galerii, režim prezentace a~podmínky sítě a~mezipaměti; měření je nejužitečnější pro porovnání před a~po, nikoli jako univerzální skóre.
 
 \subsection{Plánovaná údržba webu}
+
+Záložka Média a~cache používá stejné kompaktní průsvitné skupiny jako Funkce
+a~Obsah a~zobrazení. Celé skupiny plynou shora dolů v~jednom až třech
+sloupcích a~mají nezávislou výšku. Otazníky otevírají kontextovou nápovědu;
+stav kontroly i~důvod nedostupné akce zůstávají viditelné. Nastavení plánu se
+ukládá ihned při změně spolu s~časem a~číselnými hodnotami. Probíhající zápis
+zamkne jen příslušný formulář. Neověřený výsledek zachová záměr a~nabídne
+obnovení stavu bez opakování zápisu. Bez JavaScriptu zůstává tlačítko Uložit.
+Generování náhledů, úklid, reset i~obměna tokenu zůstávají samostatnými úkony
+s~dosavadními bezpečnostními podmínkami.
 
 V~Administraci > Údržba > Média a~cache spustí tlačítko \emph{Vyčistit cache
 aktualizátoru nyní} jeden omezený krok přímo na~stránce. Odstraňuje pouze již
@@ -3467,6 +3576,13 @@ Generovaný plán modulů deklaruje sdílené závislosti a~jedno kanonické po�
 Běžné požadavky vstupují přes \filepath{public/index.php}; \filepath{index.php} v~kořeni repozitáře je podporovaný kompatibilní vstup pro jiná uspořádání hostingu. Veřejný vstup načítá \filepath{app/early\_runtime.php} před \filepath{app/bootstrap.php} a~obě uspořádání pak dosahují stejného běžného postupu zpracování požadavku.
 
 Malé jádro pro aktuální požadavek v~\filepath{app/runtime/} řídí existující životní cyklus pomocí Request, Router, RouteRegistry a~ModuleLoader a~poté volá procedurální kontroler. Kanonická tabulka tras a~zabezpečení zůstává v~\filepath{app/bootstrap/dispatch.php}. Revidovaný generovaný plán načítá logické moduly podle vybrané trasy; produkce neskenuje zdrojové soubory, nekompiluje závislosti a~nemá náhradní načtení celé aplikace. Stávající PHP~8.1 a~sdílený hosting zůstávají dostačující bez Composeru či sestavení pomocí Node. Starší CLI a~testy mohou pro úplné procedurální API používat \filepath{app/bootstrap\_full.php}.
+
+Sdílenou nápovědu Adminu a~zobrazení továrních hodnot vlastní existující
+\filepath{app/views/admin\_ui.php}; sekce Maintenance se načítají odloženě.
+Theme využívá úplnou politiku přístupu ke galeriím, kterou již potřebuje jeho
+výběr a~náhled; dílčí ukládání zachovává kanonické odpovědi mutací.
+Tito vlastníci nepřidávají logický modul ani runtime soubor. Hostovaná příprava
+a~FULL ověřují nezměněné limity duplicitního vlastnictví.
 
 Loader ověřuje celý plán modulů v~každém požadavku. Kanonické pořadí vrstev
 a~cest kontroluje jedním průchodem, každou vybranou fyzickou cestu jednou

@@ -1746,6 +1746,29 @@ Mobile Aktionen aktualisieren ihren eigenen Bereich. Kopieren Sie ein neu ausgeg
 \subsubsection{Darstellung, Sprache und eigene Stylesheets}
 Darstellung verbindet gruppierte Felder mit einer Live-Vorschau und einem begrenzten Maus-/Tastaturteiler auf breiten Bildschirmen. Seine Breite ist eine lokale Browserpräferenz. Website-Bilder gruppiert Branding/Hintergründe; Layout trennt Verknüpfungen, Raster, Karten und Viewer-Vorgaben. Sprache bietet Einstellungen, Design, Editor und Diagnose. Die Designvorschau verwendet die angebotenen Sprachen und die öffentliche Vorgabe desselben Formulars und speichert selbst nichts.
 
+Alle fünf Darstellungsabschnitte verwenden kompakte durchscheinende Gruppen
+und benachbarte Fragezeichenhilfe. Gemeinsame Live-Vorschau und lokaler Teiler
+bleiben verfügbar. Neuladen und Zurück/Vorwärts erhalten den aktiven Abschnitt,
+auch bei bisherigen Direktlinks. Schalter für GPS-Pin, Pin-Hintergrund, alle
+Tags, Tag-Bildlauf und transparenten Kopfbereich speichern sofort und einzeln;
+Tooltips nennen die Werksvorgabe. Andere Farben, Texte, Auswahlen und Zahlen
+bleiben Entwürfe bis \ui{Design speichern}. Eine unbestätigte oder abgelehnte
+Speicherung sperrt den Schalter und die erneute Gesamtformularübermittlung bis
+zum passiven Neuladen, ohne automatische Wiederholung. Ohne JavaScript bleibt
+das normale Formular verfügbar.
+
+Die Sprachabschnitte verwenden kompakte Gruppen, Schalter und kontextbezogene
+Fragezeichenhilfe. Adminsprache, öffentliche Vorgabe und angebotene Sprachen
+werden sofort und unabhängig gespeichert, ohne andere Designentwürfe zu senden.
+Nach einem Adminsprachwechsel aktualisiert \ui{Oberfläche neu laden} die Texte.
+Eine unbestätigte Speicherung sperrt ihre Gruppe und die erneute Übermittlung
+des Gesamtformulars bis zum Neuladen; sie wird nicht automatisch wiederholt.
+Alle Sprachauswahlen zeigen mitgelieferte Flaggen. Der aktive Abschnitt bleibt
+beim Neuladen und bei Zurück/Vorwärts über die Seitenadresse erhalten.
+Das Umschalterdesign bleibt bis \ui{Design speichern} ein Entwurf; JSON, Import
+und Diagnose behalten eigene ausdrückliche Aktionen. Ohne JavaScript bleibt
+das normale Absenden des Formulars möglich.
+
 Lassen Sie die Ersatzauswahl leer, um das installierte CSS zu behalten. Wählen Sie ausdrücklich eine Vorlage oder laden Sie eine gültige CSS-Datei hoch; der Upload hat Vorrang. Ersetzen/Zurücksetzen prüft zuerst den Speicher und stellt bei fehlgeschlagener Markerspeicherung die vorherige Datei wieder her. Bei unvollständiger Wiederherstellung behalten Sie die verfügbare Kopie und folgen dem sicheren Hinweis. Deployment erhält die installationsspezifische \filepath{public/assets/custom.css}.
 
 \subsubsection{Kartenorientierung und Betriebszustand}
@@ -1987,13 +2010,70 @@ Nach erfolgreichem Speichern öffnet der Browser denselben Einstellungsabschnitt
 \index{s00212@Schlagwörter!a00005@Administration}
 \index{s00212@Schlagwörter!m00170@Metadaten}
 
-\ui{Administration > Schlagwörter bearbeiten} ist der zentrale Editor für das wiederverwendbare Schlagwortvokabular. Die Liste kann nach Gesamtnutzung oder alphabetisch sortiert werden und zeigt für jedes Schlagwort die aktuelle gemeinsame Nutzungszahl in Galerien und Fotos. Die Auswahl eines Schlagworts zeigt seinen kanonischen kleingeschriebenen Namen, den Slug seiner sprechenden öffentlichen URL und eine optionale öffentliche Beschreibung für die Schlagwort-Zielseite. Dieselbe Ansicht führt aktuell zugeordnete Galerien und Fotos auf, mit Links zurück zum passenden öffentlichen oder Fotoeditorkontext.
+Der Editor verwendet kompakte durchscheinende Gruppen für Katalog,
+ausgewähltes Schlagwort und Verwendungsnachweise. Auf breiten Bildschirmen
+stehen Gruppen nebeneinander, auf schmalen untereinander. Der Pfeil neben der
+Katalogüberschrift springt zum Editor unter der festen Navigation. Filter und Sortierung wechseln sofort über das native GET-Formular.
+Anwenden bleibt ohne JavaScript verfügbar. Fragezeichen neben Feldern
+erklären deren Bedeutung direkt; Escape oder ein Klick außerhalb schließt die
+Hilfe. Prüfen Sie Inhaltsänderungen und wählen Sie \ui{Schlagwort speichern}.
+Musikschlagwörter behalten interne Kennungen und Liedverweise ohne Aktionen
+für öffentliche Schlagwortseiten.
+
+\ui{Bilder} und \ui{Galerien} filtern direkte Zuweisungen desselben visuellen
+Schlagwortverzeichnisses. Ein gemeinsames Schlagwort kann in beiden Filtern
+stehen; Änderungen gelten weiterhin für alle Zuweisungen. Zähler und
+Verwendungssortierung folgen dem gewählten Bereich. \ui{Alle Schlagwörter}
+enthält auch nicht zugewiesene Einträge. \ui{Dokumente} bleibt als Vorbereitung
+auf künftige PDF-Schlagwörter deaktiviert; direkte Aufrufe erklären, dass die
+Dokumentbearbeitung noch nicht verfügbar ist.
+
+Der zentrale Schlagworteditor verwaltet das gemeinsame Verzeichnis. Die
+Auswahl zeigt den kanonischen Namen in Kleinbuchstaben, eine stabile Kennung
+und die Beschreibung. Bei visuellen Schlagwörtern bildet die Kennung die
+öffentliche URL; die Beschreibung kann dort erscheinen. Musikschlagwörter
+verwenden interne Metadaten. Verwendungsnachweise verlinken auf die zugehörige
+öffentliche Galerie, den Foto- oder Liededitor. Katalogzähler folgen dem
+gewählten Verwendungsfilter.
 
 Das Umbenennen eines Schlagworts oder Ändern seines Slugs aktualisiert den gemeinsamen Schlagwortdatensatz, sodass jede Galerie-/Fotozuordnung weiterhin dasselbe wiederverwendbare Schlagwort referenziert. Namen und Slugs werden beim Speichern gemäß der sicheren Schlagwortkonvention normalisiert; ein doppelter Slug wird abgelehnt. Das Löschen eines Schlagworts ist anders: Die Anwendung löst es transaktional von Galerien und Fotos und entfernt anschließend den Schlagwortdatensatz. Verwenden Sie \ui{Öffentliches Schlagwort anzeigen}, um die Zielseite zu prüfen, und \ui{Schlagwortanzeige konfigurieren}, um die Designsteuerungen für Schlagwortseiten/-karten und Hero-Schlagwortpräsentation zu öffnen.
 
 \subsection{Funktionsschalter}
 \index{f00114@Funktionsschalter}
 \index{f00112@Funktionen!a00005@Administration}
+
+Die spezialisierten Ziele für öffentliche Live-Suche, Lightbox-Modi, intelligente
+Galerien, Galerie-PDFs und Galeriemusik verwenden kompakte, durchscheinende
+Bedienelemente. Die zentralen Einstellungen teilen diese Darstellung über alle
+Kategorien; der Editor intelligenter Galerien behält sie auch im Seitenpanel.
+Optionsschalter bleiben nativ per Tastatur bedienbar und bieten auf schmalen
+Bildschirmen größere Tippflächen. Fragezeichen in den Einstellungen öffnen
+Hilfe neben dem Bedienelement; Escape oder ein Klick außerhalb schließt sie.
+Jede Spezialseite behält ihren Speichervorgang; Katalogzeilen werden weiterhin
+mit gewöhnlichen Auswahlkästchen markiert.
+
+Der Dashboard-Bereich \ui{Wartung > Inhalt und Anzeige} nutzt eine dichtere
+Darstellung: Eine Werkzeugleiste und kompakte Gruppen fließen je nach
+Breite in eine bis drei Spalten, jede mit eigener Höhe. Die Gruppen übernehmen
+die Funktionsansicht: dezente Konturen, durchscheinende Flächen, getönte Köpfe
+mit linkem Akzent und dünne Zeilentrenner. Fragezeichen enthalten
+die Erklärungen; Zähler und Warnungen bleiben sichtbar. Schalter speichern
+sofort ohne Bestätigung oder Speichern-Knopf; Tooltips nennen den Werkswert.
+Speichern, Erfolg und Fehler bleiben sichtbar. Ein unbestätigtes Ergebnis
+erfordert erneutes Laden des Zustands statt einer Schreibwiederholung.
+Ohne JavaScript bleiben native Hilfe und die bisherigen Speichern/POST-Formulare.
+
+Dieses Muster ist der Standard für neue oder überarbeitete Admin-Einstellungen;
+\path{docs/ADMIN_DESIGN.md} legt die Einzelheiten fest. Es verwendet sofort
+speichernde Schalter, kompakte Gruppen mit Köpfen und eine bis drei Spalten
+mit unabhängigen Gruppenhöhen. Die Referenz nutzt eine bevorzugte Spaltenbreite
+von 300 CSS-Pixeln, mindestens 38 Pixel hohe Köpfe und Schalterbahnen von
+26 mal 14 Pixeln; schmale oder berührungsgesteuerte Ansichten bieten mindestens
+44 Pixel hohe Bedienflächen. Hat ein Eintrag eine eigene Konfigurationsseite,
+führen sein anklickbarer Name und der Einstellungspfeil zum selben Ziel.
+Name, Schalter und Fragezeichen bleiben getrennte Navigation, Einstellung und
+Hilfe. Das Muster wird bei der Überarbeitung der jeweiligen Oberfläche
+angewendet; ältere Formulare können noch auf die Umstellung warten.
 
 \ui{Erscheinungsbild > Funktionen} zeigt optionale Funktionen in kompakten,
 gruppierten Tabellen. Ganze Gruppen fließen je nach verfügbarer Breite des
@@ -2452,6 +2532,14 @@ Eine Galerie mit gespeicherter Flugroute kann ihre Karte bereits vor dem ersten 
 \index{f00104@Flugkarten}
 \index{n00176@Navigationsdaten}
 
+Administration > Wartung > Karten und Navigationsdaten verwendet dieselben
+kompakten durchscheinenden Gruppen wie Funktionen sowie Inhalt und Anzeige.
+Name und nachfolgender Pfeil öffnen dieselbe Navigationsdatenverwaltung.
+Anzahlen und Zeitpunkt des letzten Imports bleiben sichtbar; Fragezeichenhilfe
+und Importdetails enthalten längere Erklärungen. Die Aktualisierung bleibt eine
+ausdrückliche Aktion mit Fortschritt auf der Seite und normalem Formular ohne
+JavaScript.
+
 Flugbezogene Sammlungen können die optionale SimBrief-Integration verwenden, um den neuesten operationellen Flugplan für eine Pilot ID oder einen Pilotennamen abzurufen. Der kompakte Editor akzeptiert eine sichtbare Kennung: Nur Ziffern wählen den Pilot-ID-Weg; anderer Text den Pilotennamenweg. Vorhandene Integrationen mit getrennten Feldern bleiben kompatibel; bei beiden Angaben wird die Pilot ID bevorzugt. Der Editor erstellt einen bearbeitbaren Markdown-Beschreibungs- und Routenentwurf; OFP und verfügbare Routenkoordinaten werden erst nach dem Speichern der Galerie angehängt. Eine fehlgeschlagene SimBrief-Anfrage lässt das normale Beschreibungsfeld und den manuellen Routeneditor verfügbar. Der Entwurf vor der Erstellung ist privat und vorübergehend, wie im Abschnitt zur Galerieerstellung beschrieben.
 
 Die SimBrief-Vorschau füllt den vorhandenen Routeneditor mit der vollständigen eingereichten Route. Fehlende Abflug- und Zielflughäfen werden jeweils einmal ergänzt; Routenanweisungen und Flughafen-/Pistenangaben bleiben erhalten. Beschreibungsentwürfe in allen gepflegten Sprachen behalten die gesamte Route einschließlich des Ziels bei langen Routen. Der Status erklärt, dass OFP und verfügbare Kartenpunkte beim Speichern der Galerie angehängt werden; der Import allein speichert sie nicht. Ändern Sie während der Anfrage Route, Kennung, Beschreibung oder Ausgangssprache, bleiben Ihre Formularwerte erhalten und die Antwort fordert einen neuen Import an. Nach dem Speichern behält die Karte die ursprünglichen OFP-Koordinaten.
@@ -2636,6 +2724,18 @@ Die Option \ui{Angemeldet bleiben} verwendet ein gehashtes Browsertoken, damit e
 \index{s00238@Systemzustand!d00063@Datenbankbereitschaft}
 \index{d00062@Datenbank!b00032@Bereitschaft}
 \index{a00001@503-Antwort}
+
+\ui{Systemzustand} gruppiert Prüfungen nach Laufzeit und Wiederherstellung,
+Zugriff und Anmeldung, Galerien und Dateien, Karten und Routen, öffentlichen
+Funktionen und Berichten sowie Werkzeugen. Ein Häkchen bedeutet gefundenen
+benötigten Speicher; ein Strich eine in der Konfiguration deaktivierte
+Integration. Beides bestätigt keinen vollständigen Ablauf oder externen
+API-Zugriff. Fragezeichen erklären den Prüfzweck. Probleme stehen in ihrer
+Gruppe zuerst mit sichtbaren Auswirkungen und Hinweisen; \ui{Details} enthält
+sichere Datenbankkennungen und Anfragereferenzen. Das Öffnen repariert keine
+Daten und startet keine Migrationen. Die Betrachterdiagnose speichert die Wahl
+direkt mit nativem Speichern als Rückfall. Ungewisse Schreibvorgänge sperren
+bis zum rein lesenden Neuladen.
 
 Funktionen, die vom Datenbankschema abhängen, verwenden einen gemeinsamen Bereitschaftsvertrag. Entscheidend ist der Unterschied zwischen einem erfolgreich geprüften und als älter erkannten Schema und einem Schema, das derzeit nicht geprüft werden kann.
 
@@ -3020,6 +3120,16 @@ Laden Sie nach der Reparatur \ui{Systemzustand} erneut und testen Sie die betrof
 \index{g00117@Galerie!w00274@Wiederherstellung}
 \index{p00183@Papierkorb!a00024@automatische Löschung}
 
+Der Papierkorb verwendet kompakte durchscheinende Gruppen mit sichtbaren
+Einstellungsschaltern und kontextueller Fragezeichenhilfe. Mit JavaScript werden
+Änderungen sofort zusammen mit Aufbewahrungsfrist und Chargengröße gespeichert.
+Währenddessen sind die Papierkorbsteuerungen gesperrt; bestätigter Zustand und
+Fokus werden direkt im Bereich wiederhergestellt. Ein abgelehntes oder
+unbestätigtes Ergebnis verlangt ein passives Neuladen ohne erneuten
+Schreibversuch. Ohne JavaScript bleibt Speichern verfügbar. Schmale Ansichten
+behalten beschriftete Metadaten und einzelne Aktionen ohne horizontales Scrollen.
+Wiederherstellung, endgültiges Löschen und Leeren behalten eigene Bestätigungen.
+
 Öffnen Sie \ui{Wartung > Papierkorb}, um wiederherstellbare Galerielöschungen zu prüfen. Jede aktive Zeile zeigt ursprünglichen Pfad, Löschzeitpunkt, Galerie-/Fotoanzahlen, gespeicherte Größe, Lebenszyklusstatus und bei aktiver Richtlinie die automatische Löschfrist. Problemeinträge bleiben zur Prüfung sichtbar; PHP Gallery nimmt bei unklarem Dateisystem-/Datenbankzustand nicht an, dass eine Vernichtung sicher ist.
 
 Der Papierkorbhauptschalter steuert zukünftige Galerielöschungen und ist standardmäßig aktiviert. Sein Ausschalten verbirgt oder löscht keine vorhandenen Einträge: Wiederherstellung und manuelle endgültige Löschung bleiben verfügbar. Automatische Löschung ist eine separate ausdrückliche Option und standardmäßig aus. Ihre Aufbewahrung beträgt standardmäßig 30~Tage, ihre Wartungscharge ist begrenzt, und automatische Löschung pausiert bei deaktiviertem Papierkorb. Die Aktivierung nach einer Pause gibt aktuellen wiederherstellbaren Einträgen eine neue vollständige Aufbewahrungsfrist, bevor geplante Löschung beginnen darf.
@@ -3204,6 +3314,17 @@ Der administrative Ablauf \ui{Integrität} prüft integritätsverwaltete Kerndat
 Bei verfügbarer Entwicklungsdiagnose kann ein angemeldeter Administrator für die aktuelle Galerie einen \ui{Benchmark zum Laden der öffentlichen Galerie} starten. Der Browser lädt die Galerie mehrfach in einem verborgenen Frame desselben Ursprungs mit anonymer Vorschau, kombiniert PHP-Darstellungszähler mit Browsernavigationstiming und bietet anschließend das Benchmarkprotokoll als JSON an. Verwenden Sie zum Vergleich zweier Änderungen dieselbe Galerie, denselben Präsentationsmodus und dieselben Netzwerk-/Cachebedingungen; der Benchmark ist als Vorher-/Nachhermessung nützlicher denn als universelle Punktzahl.
 
 \subsection{Geplante Websitewartung}
+
+Medien und Cache verwendet dieselben kompakten durchscheinenden Gruppen wie
+Funktionen sowie Inhalt und Anzeige. Vollständige Gruppen fließen von oben
+nach unten in einer bis drei Spalten mit unabhängigen Höhen. Fragezeichen
+öffnen kontextuelle Hilfe; Prüfstatus und Gründe für nicht verfügbare Aktionen
+bleiben sichtbar. Zeitplanänderungen werden sofort zusammen mit Zeit- und
+Zahlenwerten gespeichert. Währenddessen ist nur das betroffene Formular
+gesperrt. Ein unbestätigtes Ergebnis behält die Absicht bei und bietet ein
+Neuladen ohne erneuten Schreibversuch. Ohne JavaScript bleibt Speichern
+verfügbar. Vorschaubilderzeugung, Bereinigung, Rücksetzung und Tokenwechsel
+bleiben ausdrückliche Aufgaben mit ihren bisherigen Schutzmaßnahmen.
 
 Unter Administration > Wartung > Medien und Cache startet \emph{Updater-Cache
 jetzt bereinigen} einen begrenzten Schritt direkt auf der Seite. Entfernt wird
@@ -3614,6 +3735,14 @@ Der generierte Modulplan erklärt gemeinsame Abhängigkeiten und eine kanonische
 Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{index.php} im Repository-Stamm ist ein unterstützter Kompatibilitätseinstieg für andere Hostingstrukturen. Der öffentliche Einstieg lädt \filepath{app/early\_runtime.php} vor \filepath{app/bootstrap.php}; danach erreichen beide Strukturen dieselbe normale Anfragepipeline.
 
 Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
+
+Gemeinsame Admin-Hilfe und die Anzeige der Werkseinstellungen gehören zum
+bestehenden \filepath{app/views/admin\_ui.php}; Maintenance-Abschnitte bleiben
+verzögert geladen. Theme verwendet die vollständige Galerie-Zugriffsrichtlinie,
+die Auswahl und Vorschau bereits benötigen; einzelne Speichervorgänge behalten
+kanonische Mutationsantworten. Diese Zuständigkeiten fügen weder logische
+Module noch Laufzeitdateien hinzu. Gehostete Vorbereitung und FULL prüfen die
+unveränderten Grenzen doppelter Dateizuständigkeit.
 
 Der Loader prüft den vollständigen Modulplan bei jeder Anfrage. Er prüft die
 kanonische Schicht-/Pfadreihenfolge in einem Durchlauf, jeden ausgewählten

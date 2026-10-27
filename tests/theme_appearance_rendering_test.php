@@ -137,6 +137,21 @@ appearance_assert(
     'one named keyboard-accessible separator controls the two shared columns outside subsection panels',
 );
 $base = '//*[@id="admin-theme-tab-appearance"]';
+appearance_assert(appearance_count($xpath, $base
+    . '//span[contains(@class,"theme-appearance-save-hint") and @hidden]') === 1,
+    'native fallback does not claim autosave before enhancement binds');
+
+appearance_assert(appearance_count($xpath, $base
+    . '//*[@data-admin-subtab-query="appearance_subtab" and @data-admin-subtab-prefix="admin-theme-appearance-subtab-"]') === 1,
+    'Appearance opts into the shared reload/history query owner');
+appearance_assert(appearance_count($xpath, $base . '//input[@data-theme-appearance-switch]') === 5
+    && appearance_count($xpath, $base . '//input[@data-theme-appearance-switch and @title and @aria-description]') === 5,
+    'all five binary preferences retain native fields and canonical factory descriptions');
+appearance_assert(appearance_count($xpath, $base . '//*[@data-theme-appearance-help]') > 0
+    && appearance_count($xpath, $base . '//*[contains(@class,"theme-appearance-help-panel")]')
+        === appearance_count($xpath, $base . '//*[@data-theme-appearance-help]'),
+    'every contextual explanation retains a native disclosure fallback');
+
 appearance_assert(
     appearance_count($xpath, $base . '//*[@data-admin-subtab-target]') === 5,
     'Appearance adds one coherent advanced subsection',

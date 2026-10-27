@@ -1043,8 +1043,11 @@ function view_render_admin_url_rewrite_warning(array $model = []): void
  * @param string $className Row presentation class from the owning dashboard group.
  * @param bool $defaultEnabled Prepared global map-display preference.
  * @param int $overrideCount Prepared individual override count, retained for caller compatibility.
- * @param array<string,mixed> $model Prepared global Settings URLs.
- * @return void Emits only the global map preference with its owned Content return context.
+ * @param array{admin_settings_urls?:array{media?:string},
+ *     content_factory_defaults?:array<string,bool>} $model Prepared
+ *     canonical central Media settings destination.
+ * @return void Emit the global map preference and matching title/shortcut links
+ *     to Media settings, retaining the owned Content return context.
  */
 function view_render_admin_exif_gps_defaults_card(
     string $className,
@@ -1052,6 +1055,10 @@ function view_render_admin_exif_gps_defaults_card(
     int $overrideCount,
     array $model = [],
 ): void {
+    $settingsUrl = (string) (
+        $model['admin_settings_urls']['media'] ?? url_for('admin_settings')
+    );
+
     echo
         '<form method="post" action="'
             . e(url_for('admin_exif_gps_settings'))
@@ -1060,22 +1067,29 @@ function view_render_admin_exif_gps_defaults_card(
             . '">'
             . csrf_field();
     echo
-        '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>'
+        '<input type="hidden" name="maintenance_return" value="content">'
+            . '<div class="admin-content-copy"><strong><a href="'
+            . e($settingsUrl) . '">'
             . e(t('admin.dashboard.content_gps_title', 'GPS maps'))
-            . '</strong><span>'
-            . e(t(
-                'admin.dashboard.content_gps_hint',
-                'Default for galleries without a map override.',
-            ))
-            . '</span></div>';
+            . '</a></strong>';
+    view_render_admin_dashboard_compact_help(
+        'admin-content-gps-help',
+        t('admin.dashboard.content_gps_title', 'GPS maps'),
+        [t(
+            'admin.dashboard.content_gps_hint',
+            'Default for galleries without a map override.',
+        )],
+    );
+    echo '</div>';
     echo
         '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="exif_gps_default_enabled" value="1" aria-label="'
             . e(t('admin.dashboard.content_gps_title', 'GPS maps'))
-            . '"'
-            . ($defaultEnabled ? ' checked' : '')
-            . '> '
+            . '"';
+    view_render_admin_dashboard_factory_attributes($model, 'exif_gps_maps_default_enabled');
+    echo ($defaultEnabled ? ' checked' : '')
+            . '> <span>'
             . e(t('admin.dashboard.content_enabled', 'Enabled'))
-            . '</label></div>';
+            . '</span></label></div>';
     echo
         '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="'
             . e(
@@ -1085,13 +1099,7 @@ function view_render_admin_exif_gps_defaults_card(
             . '">'
             . e(t('admin.dashboard.content_save', 'Save'))
             . '</button><a href="'
-            . e(
-                (string) (
-                    $model['admin_settings_urls']['media'] ?? url_for(
-                        'admin_settings',
-                    )
-                ),
-            )
+            . e($settingsUrl)
             . '">'
             . e(t('admin.dashboard.content_gps_settings', 'Map settings'))
             . '</a></div></form>';
@@ -1101,7 +1109,8 @@ function view_render_admin_exif_gps_defaults_card(
  * Render a dashboard card linking to the gallery date suggestion workflow.
  *
  * @param string $className Row presentation class from the owning dashboard group.
- * @param array<string,mixed> $model Prepared effective gallery-date suggestion capability.
+ * @param array{feature_enabled?:array<string,bool>} $model Effective capability
+ *     flags, including exif_gallery_date_suggestions.
  * @return void Emits the date workflow shortcut only when its capability is available.
  */
 function view_render_admin_gallery_dates_card(
@@ -1116,17 +1125,16 @@ function view_render_admin_gallery_dates_card(
             . e($className)
             . '"><div class="admin-content-copy"><strong>'
             . e(t('admin.dashboard.gallery_dates', 'Gallery dates'))
-            . '</strong><span title="'
-            . e(t(
-                'admin.dashboard.gallery_dates_hint',
-                'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.',
-            ))
-            . '">'
-            . e(t(
-                'admin.dashboard.content_dates_hint',
-                'Review date ranges suggested from photo EXIF.',
-            ))
-            . '</span></div><div class="admin-content-actions"><a class="button secondary" href="'
+            . '</strong>';
+    view_render_admin_dashboard_compact_help(
+        'admin-content-dates-help',
+        t('admin.dashboard.gallery_dates', 'Gallery dates'),
+        [t(
+            'admin.dashboard.gallery_dates_hint',
+            'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.',
+        )],
+    );
+    echo '</div><div class="admin-content-actions"><a class="button secondary" href="'
             . e(url_for('admin_gallery_dates'))
             . '">'
             . e(t('admin.dashboard.content_dates_action', 'Review dates'))
@@ -1137,7 +1145,10 @@ function view_render_admin_gallery_dates_card(
  * Render the URL rewrite setting and compatibility summary.
  *
  * @param string $className Class name value.
- * @param array<string,mixed> $model Prepared rewrite preference and compatibility diagnosis.
+ * @param array{url_rewrite_enabled?:bool,
+ *     url_rewrite_compatibility?:array{status?:string,reasons?:list<string>,
+ *     enabled?:bool},content_factory_defaults?:array<string,bool>} $model
+ *     Prepared preference, factory metadata and hosting diagnosis.
  * @param bool $compact Whether to use the owned Content layout and return context.
  * @return void Emits rewrite controls while retaining the historical layout for other callers.
  */
@@ -1205,12 +1216,7 @@ function view_render_admin_url_rewrite_card(
                 ))
                 . '</span> '
                 . e($statusLabels[$status] ?? $statusLabels['unknown'])
-                . '</small></div><span>'
-                . e(t(
-                    'admin.dashboard.content_rewrite_hint',
-                    'Use readable gallery and photo URLs.',
-                ))
-                . '</span>';
+                . '</small></div>';
         if (in_array($status, ['unsupported', 'unknown'], true)) {
             echo
                 '<span class="admin-content-status is-attention">'
@@ -1218,29 +1224,30 @@ function view_render_admin_url_rewrite_card(
                     . '</span>';
         }
         view_render_admin_url_rewrite_warning($model);
-        echo
-            '<details class="admin-content-details"><summary>'
-                . e(t('admin.dashboard.content_details', 'Details'))
-                . '</summary><p>'
-                . e(t(
-                    'admin.dashboard.url_rewrite_hint',
-                    'Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.',
-                ))
-                . '</p>';
+        $help = [t(
+            'admin.dashboard.url_rewrite_hint',
+            'Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.',
+        )];
         if (!in_array($status, ['unsupported', 'unknown'], true)) {
-            echo '<p>' . e($reason) . '</p>';
+            $help[] = $reason;
         }
+        view_render_admin_dashboard_compact_help(
+            'admin-content-rewrite-help',
+            t('admin.dashboard.content_rewrite_title', 'Clean public URLs'),
+            $help,
+        );
         echo
-            '</details></div><div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="url_rewrite_enabled" value="1" aria-label="'
+            '</div><div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="url_rewrite_enabled" value="1" aria-label="'
                 . e(t(
                     'admin.dashboard.content_rewrite_title',
                     'Clean public URLs',
                 ))
-                . '"'
-                . ($enabled ? ' checked' : '')
-                . '> '
+                . '"';
+        view_render_admin_dashboard_factory_attributes($model, 'url_rewrite_enabled');
+        echo ($enabled ? ' checked' : '')
+                . '> <span>'
                 . e(t('admin.dashboard.content_enabled', 'Enabled'))
-                . '</label></div><div class="admin-content-actions"><button type="submit" class="secondary" aria-label="'
+                . '</span></label></div><div class="admin-content-actions"><button type="submit" class="secondary" aria-label="'
                 . e(
                     t('admin.dashboard.content_save', 'Save') . ': '
                         . t(
@@ -1301,10 +1308,15 @@ function view_render_admin_url_rewrite_card(
 /**
  * Render the admin maintenance card that refreshes local flight-map navdata.
  *
- * @param bool $flightNavdataReady Flight navdata ready value.
- * @param array<string,mixed> $flightNavdataStatus Prepared navdata freshness, totals and source status.
- * @param string $returnPage Owned surface to preserve after fragment refresh or ordinary POST.
- * @return void Emits the in-place refresh card.
+ * @param bool $flightNavdataReady Whether the importer has verified storage.
+ * @param array{refresh_due?:bool,last_update?:string,total?:int,
+ *     last_airports?:int,last_navaids?:int,last_skipped?:int,last_deleted?:int,
+ *     hybrid?:array{bundled_count?:int}} $flightNavdataStatus Prepared freshness,
+ *     local/import counts and the bundled fallback count; no storage is read.
+ * @param string $returnPage Owned surface: admin renders the compact Maintenance
+ *     group; admin_navdata retains the dedicated manager presentation.
+ * @return void Emits the shared in-place refresh form and visible evidence, or
+ *     a migration warning and disabled action when storage is unavailable.
  */
 function view_render_admin_navdata_maintenance_card(
     bool $flightNavdataReady,
@@ -1321,22 +1333,26 @@ function view_render_admin_navdata_maintenance_card(
         : [];
 
     echo
-        '<article class="admin-maintenance-card admin-navdata-update-card" data-navdata-card data-navdata-return-page="'
+        '<article class="admin-maintenance-card admin-navdata-update-card'
+            . ($returnPage === 'admin' ? ' admin-content-group' : '')
+            . '" data-navdata-card data-navdata-return-page="'
             . e($returnPage)
             . '">';
-    echo
-        '<div class="admin-maintenance-card-heading"><strong>'
-            . e(t('admin.dashboard.flight_navdata', 'Flight map navdata'))
-            . '</strong>';
     if ($returnPage === 'admin') {
+        $managerUrl = url_for('admin_navdata');
         echo
-            '<a class="button secondary" href="'
-                . e(url_for('admin_navdata'))
-                . '">'
+            '<h3 class="admin-maintenance-card-heading"><a href="'
+                . e($managerUrl) . '">'
+                . e(t('admin.dashboard.flight_navdata', 'Flight map navdata'))
+                . '</a><a class="admin-navigation-settings-shortcut" href="'
+                . e($managerUrl) . '" aria-label="'
                 . e(t('admin.dashboard.open_navdata_manager', 'Open manager'))
-                . '</a>';
+                . '">↗</a></h3>';
+    } else {
+        echo '<div class="admin-maintenance-card-heading"><strong>'
+            . e(t('admin.dashboard.flight_navdata', 'Flight map navdata'))
+            . '</strong></div>';
     }
-    echo '</div>';
 
     if (!$flightNavdataReady) {
         echo
@@ -1413,17 +1429,21 @@ function view_render_admin_navdata_maintenance_card(
                 ))
                 . '</p>';
     }
-    echo
-        '<p class="muted admin-navdata-import-note">'
-            . e(t(
-                'admin.dashboard.flight_navdata_scope_hint',
-                'Imports airports and navaids from OurAirports. It does not include full IFR fixes or SID/STAR procedure geometry.',
-            ))
-            . '</p>';
+    $scopeHint = t(
+        'admin.dashboard.flight_navdata_scope_hint',
+        'Imports airports and navaids from OurAirports. It does not include full IFR fixes or SID/STAR procedure geometry.',
+    );
+    if ($returnPage === 'admin_navdata') {
+        echo '<p class="muted admin-navdata-import-note">'
+            . e($scopeHint) . '</p>';
+    }
     echo
         '<details class="admin-navdata-import-details"><summary>'
             . e(t('admin.navdata.import_details', 'Import details'))
             . '</summary>';
+    if ($returnPage === 'admin') {
+        echo '<p class="muted">' . e($scopeHint) . '</p>';
+    }
     echo
         '<p class="muted">'
             . e(t(
@@ -1462,8 +1482,9 @@ function view_render_admin_navdata_maintenance_card(
 /**
  * Render the reusable admin dev mode settings card.
  *
- * @param string $className Class name value.
- * @param array<string,mixed> $model Prepared developer-mode setting state.
+ * @param string $className Wrapper classes; admin-health-devmode selects the
+ *     compact Maintenance control with progressive autosave and native fallback.
+ * @param array{dev_mode_enabled?:bool} $model Prepared developer-mode state.
  * @return void Emits the developer-mode settings form.
  */
 function view_render_admin_devmode_card(
@@ -1472,6 +1493,26 @@ function view_render_admin_devmode_card(
 ): void {
     // $enabled stores an intermediate value used by the surrounding gallery workflow.
     $enabled = !empty($model['dev_mode_enabled']);
+    if (str_contains($className, 'admin-health-devmode')) {
+        $title = t('admin.dashboard.health_viewer_diagnostics', 'Viewer diagnostics');
+        echo '<form method="post" action="' . e(url_for('admin_devmode'))
+            . '" class="' . e($className) . '">' . csrf_field()
+            . '<input type="hidden" name="maintenance_return" value="system">'
+            . '<label><input type="checkbox" name="dev_mode_enabled" value="1"'
+            . ($enabled ? ' checked' : '') . '> <span>' . e($title)
+            . '</span></label>';
+        view_render_admin_dashboard_compact_help(
+            'system-viewer-diagnostics',
+            $title,
+            [t('admin.dashboard.devmode_description',
+                'Optional admin-only diagnostics overlay for the public viewer.',
+            )],
+        );
+        echo '<div class="admin-content-actions"><button type="submit">'
+            . e(t('admin.dashboard.devmode_save', 'Save dev mode'))
+            . '</button></div></form>';
+        return;
+    }
     echo
         '<form method="post" action="'
             . e(url_for('admin_devmode'))

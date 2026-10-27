@@ -69,6 +69,9 @@ require a browser/database only when the behavior needs one.
   connectivity;
   await returned async timer callbacks before asserting their terminal phase,
   including across VM realms, rather than guessing a fixed microtask count.
+  For repeated browser API calls, compare counters with the current phase's
+  snapshot and await its own deferred resolver; an earlier success does not
+  establish readiness of a newly opened control.
   Await the released write's expected revision before owner teardown. Serve the
   coordinator's visible URL with the real method/envelope and owner generation.
   Capture layout immediately before each operation; preserve exact revision,

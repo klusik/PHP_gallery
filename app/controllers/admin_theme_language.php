@@ -150,6 +150,95 @@ use function Gallery\Views\view_render_admin_theme_language_tab;
 use function Gallery\Views\view_render_public_language_selector_settings_panel;
 
 /**
+ * Persist one bounded Language preference without processing other Theme drafts.
+ *
+ * The Theme entrypoint owns Admin authentication and the shared POST processor
+ * verifies CSRF before dispatch here. Each scope sends only its own fields;
+ * viewer enabled/languages remain coupled and design/pack data is never saved.
+ *
+ * @return void Emit private JSON with the canonical settings.update envelope,
+ *     persisted scalar/list values and HTTP 200 or validation refusal HTTP 422.
+ *     Unexpected storage failures propagate; callers must not retry the write.
+ */
+function admin_theme_process_language_preference(): void
+{
+    $scope = $_POST['theme_language_preference_scope'] ?? '';
+    $ok = false;
+    $values = [];
+    $message = t(
+        'admin.theme.language.preference_invalid',
+        'Choose one of the available languages.',
+    );
+    if ($scope === 'admin' || $scope === 'public') {
+        $field = $scope === 'admin' ? 'cms_language' : 'public_language';
+        $submitted = $_POST[$field] ?? null;
+        $code = is_string($submitted)
+            ? translation_normalize_language_code($submitted) : '';
+        if ($code !== '' && translation_language_allowed($code)) {
+            if ($scope === 'admin') {
+                $ok = translation_set_active_language($code);
+                if ($ok) {
+                    \Gallery\Core\apply_cookie_intents(
+                        \Gallery\Services\translation_admin_language_cookie_intents($code),
+                    );
+                }
+            } else {
+                $ok = translation_set_public_language($code);
+            }
+        }
+        $values[$field] = $scope === 'admin'
+            ? translation_admin_language(
+                (string) ($_COOKIE[CMS_ADMIN_LANGUAGE_COOKIE] ?? ''),
+                (string) ($_COOKIE[CMS_LANGUAGE_COOKIE] ?? ''),
+            )
+            : translation_public_language();
+    } elseif ($scope === 'viewer') {
+        $submitted = $_POST['public_language_selector_languages'] ?? [];
+        $languages = is_array($submitted) && array_filter(
+            $submitted,
+            static fn(mixed $code): bool => !is_string($code),
+        ) === []
+            ? \Gallery\Services\translation_public_language_selector_normalize_languages($submitted)
+            : [];
+        if ($languages !== []) {
+            \Gallery\Services\translation_save_public_language_selector_settings(
+                isset($_POST['public_language_selector_enabled']),
+                $languages,
+            );
+            $ok = true;
+        } else {
+            $message = t(
+                'admin.theme.language.viewer_languages_required',
+                'Enable at least one viewer language.',
+            );
+        }
+        $values = [
+            'public_language_selector_enabled' => translation_public_language_selector_enabled(),
+            'public_language_selector_languages' => translation_public_language_selector_languages(),
+        ];
+    }
+    if ($ok) {
+        $message = t('admin.features.saved', 'Saved');
+    }
+    $mutation = \Gallery\Core\admin_mutation_descriptor(
+        'settings.update', 'settings', 'update',
+    );
+    $fallback = ['redirect_url' => url_for('admin_theme') . '#admin-theme-tab-language'];
+    $payload = $ok
+        ? \Gallery\Core\admin_mutation_success_envelope(
+            $message, $mutation, null, [], $fallback,
+        )
+        : \Gallery\Core\admin_mutation_error_envelope(
+            $message, 'language_preference_refused', $mutation, $fallback,
+        );
+    $payload['setting_values'] = $values;
+    http_response_code($ok ? 200 : 422);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
  * Admin theme controller.
  *
  * Renders and processes the visual theme configuration page. The code remains
@@ -381,24 +470,28 @@ function render_admin_theme_language_tab(): void
 
     $activeSubtab = 'admin-theme-language-subtab-settings';
     $requestedSubtab = (string) ($_GET['language_subtab'] ?? '');
-    if (in_array(
+    $hasRequestedSubtab = in_array(
         $requestedSubtab,
         ['settings', 'design', 'editor', 'diagnostics'],
         true,
-    )) {
+    );
+    if ($hasRequestedSubtab) {
         $activeSubtab = 'admin-theme-language-subtab-' . $requestedSubtab;
     }
     $requestedEditLanguage = translation_normalize_language_code(
         (string) ($_GET['edit_language'] ?? ''),
     );
     if (
-        (
-            $requestedEditLanguage !== ''
-            && translation_language_allowed($requestedEditLanguage)
+        !$hasRequestedSubtab
+        && (
+            (
+                $requestedEditLanguage !== ''
+                && translation_language_allowed($requestedEditLanguage)
+            )
+            || !empty($_GET['language_saved'])
+            || !empty($_GET['language_imported'])
+            || $languageEditorErrors !== []
         )
-        || !empty($_GET['language_saved'])
-        || !empty($_GET['language_imported'])
-        || $languageEditorErrors !== []
     ) {
         $activeSubtab = 'admin-theme-language-subtab-editor';
     }
@@ -419,6 +512,7 @@ function render_admin_theme_language_tab(): void
         'saved_notice' => !empty($_GET['language_saved']),
         'imported_notice' => !empty($_GET['language_imported']),
         'editor_base_url' => url_for('admin_theme'),
+        'viewer_factory_enabled' => \Gallery\Services\admin_settings_content_factory_defaults()['public_language_selector_enabled'],
         'export_url' => url_for('admin_theme', [
             'download_language_pack' => $languageEditCode,
         ]),

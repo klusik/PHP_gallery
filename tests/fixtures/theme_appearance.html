@@ -16,6 +16,7 @@ import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
 import {setupThemeAppearanceResize} from '/public/assets/gallery-modules/theme-appearance-resizer.js';
+import {setupThemeAppearanceWorkspace} from '/public/assets/gallery-modules/admin-theme-appearance-workspace.js';
 let assertions = 0;
 const submits = [];
 /** Original real-rendered workspace used to exercise fresh initialization with saved browser preference. */
@@ -214,6 +215,86 @@ try {
         css.textContent=originalCss; await settle();
         check(getComputedStyle(header).backgroundColor===opaqueHeader && getComputedStyle(hero).backgroundColor===heroBackdrop,width+' resetting generated switch restores the previous header and hero');
     }
+    // Preserve all original native/draft assertions above, then enhance only
+    // disposable scoped writes. Harness GETs retain the captured native fetch.
+    const nativeFetch=window.fetch, requests=[];
+    let releaseHeader, mode='pending', persistedBackground=true;
+    window.fetch=async (url,options)=>{
+        if(options?.method!=='POST') return nativeFetch(url,options);
+        const data=options.body, key=data.get('theme_appearance_switch');
+        requests.push({key,data});
+        check(url==='/fixture-theme-appearance','scoped transport uses the controller-prepared endpoint');
+        check(options.credentials==='same-origin' && options.cache==='no-store'
+            && options.redirect==='error' && options.headers.Accept==='application/json',
+            'switch transport stays private and rejects navigation');
+        check(data.get('csrf_token')==='theme-fixture' && [...data.keys()].length===3
+            && !data.has('theme_accent') && !data.has('theme_gallery_grid_gap')
+            && !data.has('language_pack_json') && !data.has('theme_background'),
+            'one switch request excludes every other scalar, JSON and upload draft');
+        if(mode==='lost') { persistedBackground=data.get('enabled')==='1'; throw new TypeError('lost after persist'); }
+        if(mode==='pending') await new Promise(resolve=>{releaseHeader=resolve;});
+        const ok=mode!=='refuse';
+        return new Response(JSON.stringify({ok,message:ok?'Saved':'Unavailable preference',
+            mutation:{type:'settings.update',entity:'settings',action:'update',entity_ids:[]},
+            contexts:[],panel:null,fallback:{},setting_values:{[key]:false}}),{status:ok?200:422});
+    };
+    setupThemeAppearanceWorkspace(); tab('advanced');
+    check(!find('.theme-appearance-save-hint').hidden,'autosave copy appears only after scoped transport binds');
+    const header=find('[name="theme_header_transparent"]'), headerRow=header.closest('.theme-appearance-switch-row');
+    find('[name="theme_accent"]').value='#654321';
+    header.checked=true; header.dispatchEvent(new Event('change',{bubbles:true}));
+    check(header.disabled && headerRow.dataset.saveState==='saving'
+        && find('[data-theme-advanced-reset][value="header_transparent"]').disabled
+        && requests.length===1 && requests[0].data.get('enabled')==='1',
+        'pending header write locks only its checkbox and dependent reset');
+    form.requestSubmit(save);
+    check(submits.at(-1).prevented,'pending switch blocks legacy shared-form replay');
+    releaseHeader(); await settle();
+    check(!header.disabled && !header.checked && headerRow.dataset.saveState==='saved'
+        && find('[data-theme-preview-page]').dataset.headerTransparent==='0'
+        && find('[name="theme_accent"]').value==='#654321',
+        'canonical response refreshes the existing preview and preserves other drafts');
+    mode='refuse'; tab('gallery-tags');
+    const allTags=find('[name="theme_hero_tag_display_all"]');
+    allTags.checked=true; allTags.dispatchEvent(new Event('change',{bubbles:true})); await settle();
+    check(!allTags.checked && allTags.disabled && allTags.closest('.theme-appearance-switch-row').dataset.saveState==='error'
+        && !header.disabled,'refusal restores canonical state and leaves unrelated switches usable');
+    mode='lost'; tab('width-map');
+    const background=find('[name="theme_gps_pin_background_enabled"]');
+    background.checked=false; background.dispatchEvent(new Event('change',{bubbles:true})); await settle();
+    const completed=requests.length;
+    check(!persistedBackground && !background.checked && background.disabled
+        && background.closest('.theme-appearance-switch-row').dataset.saveState==='unknown',
+        'lost response preserves displayed intent without inventing rollback');
+    form.requestSubmit(save); await settle();
+    check(requests.length===completed && submits.at(-1).prevented,
+        'refused/uncertain writes never retry or replay through shared Save');
+    const help=find('button.theme-appearance-help-trigger'), panel=document.getElementById(help.getAttribute('popovertarget'));
+    help.click(); await settle();
+    check(panel.matches(':popover-open') && requests.length===completed,
+        'contextual help opens without changing a preference'); panel.hidePopover();
+    history.replaceState(null,'','?keep=1#admin-theme-tab-appearance');
+    for(const name of ['colors','width-map','gallery-tags','animations','advanced']) {
+        tab(name); const url=new URL(location.href);
+        check(url.searchParams.get('appearance_subtab')===name
+            && url.searchParams.get('keep')==='1' && url.hash==='#admin-theme-tab-appearance',
+            'all subsections publish their reload state without dropping existing URL context '+name);
+    }
+    history.replaceState(null,'','?appearance_subtab=admin-theme-appearance-subtab-animations#admin-theme-tab-appearance');
+    dispatchEvent(new PopStateEvent('popstate'));
+    check(!find('#admin-theme-appearance-subtab-animations').hidden,
+        'history accepts established full-ID deep links alongside short query values');
+    await nativeFetch('/__viewport?width=390'); await settle();
+    for(const name of ['colors','width-map','gallery-tags','animations','advanced']) {
+        tab(name); await settle(); const workspace=find('.theme-appearance-workspace');
+        check(workspace.scrollWidth<=workspace.clientWidth+1,
+            'enhanced narrow subsection and any completion feedback fit '+name);
+    }
+    for(const input of document.querySelectorAll('#admin-theme-tab-appearance input[type=checkbox]')) {
+        check(getComputedStyle(input).width==='26px' && getComputedStyle(input).height==='14px'
+            && input.title.startsWith('Factory default:'),'binary controls retain compact tracks and declared factory metadata');
+    }
+    window.fetch=nativeFetch;
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' Appearance assertions';
 } catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
 </script></body></html>

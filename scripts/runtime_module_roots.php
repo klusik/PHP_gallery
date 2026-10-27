@@ -215,6 +215,10 @@ return [
         'domain-admin-galleries-edit-page' => [
             'domain-admin-galleries-edit-metadata',
         ],
+        // Theme's gallery picker/preview already contains the complete access
+        // policy closure. Reuse its established owner without adding files or
+        // logical modules when scoped saves load canonical mutation responses.
+        'domain-admin-theme' => ['public-policy'],
         // Reuse the existing maintenance owner only where its complete historical
         // closure is already present, including Admin authentication. The edge
         // replaces four duplicated files without broadening any route's closure.

@@ -4,7 +4,7 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: tests/fixtures/admin_settings_workspace.html
 Module Type: Browser Test Fixture
-Purpose: Exercise production Settings navigation, drafts, validation and scoped saves.
+Purpose: Exercise Settings drafts/saves and immediate native tag-catalog reads.
 Responsibilities: Verify in-place behavior with synthetic forms and a confined fetch seam.
 Author: Rudolf Klusal
 License: MIT
@@ -14,8 +14,10 @@ License: MIT
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-settings.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-tags.css">
 <body class="admin-page"><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
 <script type="module">
+import {setupAdminTagsWorkspace} from '/public/assets/gallery-modules/admin-tags-workspace.js';
 import {setupAdminSettingsWorkspace} from '/public/assets/gallery-modules/admin-settings-workspace.js';
 import {setupAdminSettingsSearch} from '/public/assets/gallery-modules/admin-settings-search.js';
 import {setupAdminLanguageSelectorDesign} from '/public/assets/gallery-modules/admin-language-selector-design.js';
@@ -139,6 +141,49 @@ try {
     check(requests === 3, 'Newly rendered forms remain intercepted without rebinding other categories');
     history.replaceState(null, '', '?section=site'); dispatchEvent(new PopStateEvent('popstate'));
     check(!document.querySelector('#settings-general').hidden, 'Historical Website deep links still select General');
+    // Exercise the real tag coordinator through native submit events while
+    // confining navigation to this disposable browser fixture.
+    const tags = document.createElement('section');
+    tags.id = 'admin-tags-workspace';
+    tags.className = 'admin-tags-page';
+    tags.innerHTML = '<form class="admin-tags-sort-form" method="get" action="/fixture-tag-catalog">'
+        + '<input type="hidden" name="id" value="7">'
+        + '<select name="media_type"><option value="image">Images</option><option value="gallery">Galleries</option><option value="music">Music</option><option value="documents" disabled>Documents (later)</option></select>'
+        + '<select name="sort"><option value="usage">Most used</option><option value="name">Alphabetical</option></select>'
+        + '<button type="submit">Apply</button></form>'
+        + '<form class="admin-tags-form"><input name="name" value="shared"></form>';
+    document.body.append(tags);
+    const tagReads = [];
+    const tagFilters = tags.querySelector('.admin-tags-sort-form');
+    tagFilters.addEventListener('submit', event => {
+        event.preventDefault();
+        tagReads.push(Object.fromEntries(new FormData(tagFilters)));
+    });
+    check(getComputedStyle(tagFilters.querySelector('button')).display !== 'none',
+        'Native Apply is available before the tag coordinator initializes');
+    setupAdminTagsWorkspace(); setupAdminTagsWorkspace();
+    check(getComputedStyle(tagFilters.querySelector('button')).display === 'none',
+        'Enhanced tags hide Apply while keeping the native GET fallback');
+    const tagScope = tagFilters.querySelector('[name="media_type"]');
+    tagScope.value = 'gallery';
+    tagScope.dispatchEvent(new Event('change', {bubbles:true}));
+    check(tagReads.length === 1 && tagReads[0].media_type === 'gallery'
+        && !('id' in tagReads[0])
+        && !tagFilters.querySelector('[name="id"]').disabled
+        && tagFilters.querySelector('[name="id"]').value === '7',
+        'A usage filter immediately submits one native read and clears old selection');
+    // Model the newly rendered selected row after that confined catalog read.
+    tagFilters.querySelector('[name="id"]').value = '9';
+    const tagSort = tagFilters.querySelector('[name="sort"]');
+    tagSort.value = 'name';
+    tagSort.dispatchEvent(new Event('change', {bubbles:true}));
+    check(tagReads.length === 2 && tagReads[1].sort === 'name'
+        && tagReads[1].id === '9' && tagReads[1].media_type === 'gallery',
+        'Sorting immediately submits one read while retaining filter and selected tag');
+    tags.querySelector('.admin-tags-form input').dispatchEvent(new Event('change', {bubbles:true}));
+    check(tagReads.length === 2 && tags.querySelector('[value="documents"]').disabled,
+        'Content fields keep explicit Save and the future Documents option stays disabled');
+    tags.remove();
     document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
 } catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
 </script></body></html>

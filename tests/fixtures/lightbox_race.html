@@ -674,14 +674,20 @@ License: MIT License (see LICENSE file in repository)
             'fullscreen tag mutation remains bound to the active physical source image');
         await waitFor(() => quickTagPopover.hidden,
             'Confirmed successful fullscreen add did not close its current editor.');
+        // Each reopening owns a new request. Earlier successful/failed locks
+        // cannot establish that this request exposed its deferred resolver.
+        const acquisitionsBeforeReopen = quickTagKeyboardLock.acquired;
+        const rejectionsBeforeReopen = quickTagKeyboardLock.rejected;
         window.quickTagDeferNextKeyboardLock = true;
         window.quickTagInputPhase = 'fullscreen-reopen-t';
         await waitFor(() => !quickTagPopover.hidden,
             'T did not reopen the fullscreen editor after a confirmed save.');
         if (quickTagKeyboardLock.supported) {
-            await waitFor(() => quickTagKeyboardLock.acquired > 0
-                || quickTagKeyboardLock.rejected > 0,
-            'Keyboard Lock request did not settle before the trusted Escape test.');
+            await waitFor(() => (
+                quickTagKeyboardLock.acquired > acquisitionsBeforeReopen
+                    && typeof quickTagDeferredKeyboardLockResolver === 'function'
+            ) || quickTagKeyboardLock.rejected > rejectionsBeforeReopen,
+            'The reopened editor Keyboard Lock did not expose its deferred resolver or reject.');
         }
         if (quickTagDeferredKeyboardLockResolver && !quickTagDeferredKeyboardLockSettled) {
             const releasesBeforeRebind = quickTagKeyboardLock.releases;

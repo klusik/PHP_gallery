@@ -129,5 +129,20 @@ namespace {
         $GLOBALS['advanced_settings'] === $before,
         'invalid batch must not partly save appearance',
     );
+    $before = $GLOBALS['advanced_settings'];
+    \Gallery\Services\theme_advanced_appearance_save(['header_transparent' => '1']);
+    advanced_require(\Gallery\Services\theme_appearance_switch_value('theme_header_transparent')
+        && $GLOBALS['advanced_settings'] === array_replace($before, ['theme_header_transparent' => '1']),
+        'isolated header switch preserves every neighboring advanced draft');
+    advanced_require(\Gallery\Services\theme_appearance_switch_defaults() === [
+        'theme_gps_pin_enabled' => true, 'theme_gps_pin_background_enabled' => true,
+        'theme_hero_tag_display_all' => false, 'theme_hero_tag_scrollbar_enabled' => true,
+        'theme_header_transparent' => false,
+    ], 'factory metadata is independent of current saved state');
+    try {
+        \Gallery\Services\theme_appearance_switch_value('theme_accent');
+        throw new RuntimeException('nonbinary key accepted');
+    } catch (InvalidArgumentException) {
+    }
     echo "PASS advanced Theme appearance\n";
 }

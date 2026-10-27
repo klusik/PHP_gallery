@@ -66,6 +66,9 @@ namespace Gallery\Core {
     function verify_csrf(): void
     {
         $GLOBALS['content_csrf']++;
+        if (!empty($GLOBALS['content_csrf_denied'])) {
+            throw new \RuntimeException('fixture CSRF refusal', 403);
+        }
     }
 
     /**
@@ -105,6 +108,25 @@ namespace Gallery\Core {
 
 namespace Gallery\Services {
     /**
+     * Persist viewer diagnostics in disposable fixture state only.
+     * @param bool $enabled Requested administrator diagnostics preference.
+     * @return void Record the fixture setting without a configuration write.
+     */
+    function set_dev_mode_enabled(bool $enabled): void
+    {
+        $GLOBALS['content_setting_writes']['devmode'] = $enabled;
+    }
+
+    /**
+     * Read the persisted fixture preference after the real controller writes it.
+     * @return bool Current disposable viewer diagnostics preference.
+     */
+    function dev_mode_enabled(): bool
+    {
+        return $GLOBALS['content_setting_writes']['devmode'] ?? false;
+    }
+
+    /**
      * Supply the public-search fixture capability without consulting persisted configuration.
      * @param string $feature Canonical optional capability identifier.
      * @return bool Injected effective fixture availability.
@@ -141,6 +163,15 @@ namespace Gallery\Services {
     function set_url_rewrite_enabled(bool $enabled): void
     {
         $GLOBALS['content_setting_writes']['rewrite'] = $enabled;
+    }
+
+    /**
+     * Read the authoritative rewrite value from isolated fixture storage.
+     * @return bool Current disposable rewrite preference.
+     */
+    function url_rewrite_enabled(): bool
+    {
+        return $GLOBALS['content_setting_writes']['rewrite'] ?? false;
     }
 
     /**
@@ -327,6 +358,8 @@ namespace Gallery\Controllers {
 }
 
 namespace {
+    require_once dirname(__DIR__) . '/app/helpers_mutation.php';
+    require_once dirname(__DIR__) . '/app/services/admin_settings_registry.php';
     require_once dirname(__DIR__) . '/app/views/admin_ui.php';
     require_once dirname(__DIR__) . '/app/views/admin_dashboard.php';
     require_once dirname(__DIR__) . '/app/views/admin_dashboard_sections.php';
@@ -391,6 +424,7 @@ namespace {
                         $GLOBALS['content_reset_writes'] = 0;
         $GLOBALS['content_gps_default'] = $default;
         $GLOBALS['content_denied'] = $GLOBALS['content_not_found'] = false;
+        $GLOBALS['content_csrf_denied'] = false;
         $GLOBALS['content_search_available'] = true;
         $GLOBALS['content_paths_fail'] = false;
         $GLOBALS['content_setting_writes'] = [];
@@ -399,6 +433,8 @@ namespace {
         $GLOBALS['content_redirect'] = $GLOBALS['content_notice'] = '';
         $_GET = [];
         $_POST = ['maintenance_return' => 'content'];
+        unset($_SERVER['HTTP_ACCEPT'], $_SERVER['HTTP_X_REQUESTED_WITH']);
+        http_response_code(200);
     }
 
     /**
@@ -680,6 +716,7 @@ namespace {
         );
     }
     foreach ([
+        'cms_admin_devmode',
         'cms_admin_url_rewrite',
         'cms_admin_public_search_settings',
         'cms_admin_seo_guard_settings',
@@ -727,6 +764,127 @@ namespace {
                 'maintenance_tab=content',
             ),
         'Path regeneration refusal lost its Content return destination.',
+    );
+    content_display_reset(false);
+    $_POST = ['maintenance_return' => 'system', 'dev_mode_enabled' => '1'];
+    content_display_gps_request('Gallery\\Controllers\\cms_admin_devmode');
+    content_display_assert(
+        $GLOBALS['content_setting_writes']['devmode'] === true
+            && str_contains($GLOBALS['content_redirect'], 'maintenance_tab=system'),
+        'Classic diagnostics POST returns to System health after persisting.',
+    );
+    foreach (['https://example.invalid/', ['system'], 'trash'] as $unowned) {
+        $_POST['maintenance_return'] = $unowned;
+        content_display_assert(
+            \Gallery\Controllers\admin_dashboard_content_return_url('/fallback')
+                === '/fallback',
+            'Unowned or malformed preference returns never become redirect targets.',
+        );
+    }
+    ob_start();
+    \Gallery\Views\view_render_admin_devmode_card(
+        'admin-content-row admin-health-devmode',
+        ['dev_mode_enabled' => true],
+    );
+    $devmodeHtml = (string) ob_get_clean();
+    content_display_assert(
+        str_contains($devmodeHtml, 'name="csrf_token"')
+            && str_contains($devmodeHtml, 'value="system"')
+            && str_contains($devmodeHtml, 'name="dev_mode_enabled" value="1" checked')
+            && str_contains($devmodeHtml, 'type="submit"')
+            && str_contains($devmodeHtml, 'data-dashboard-help'),
+        'Diagnostics keeps checked state, native Save, CSRF and contextual help.',
+    );
+    // Exercise JSON transports against real envelopes and fake persistence only.
+    foreach ([
+        'cms_admin_devmode' => ['dev_mode_enabled'],
+        'cms_admin_public_search_settings' => ['public_home_search_enabled'],
+        'cms_admin_url_rewrite' => ['url_rewrite_enabled'],
+        'cms_admin_exif_gps_settings' => ['exif_gps_default_enabled'],
+        'cms_admin_seo_guard_settings' => [
+            'seo_request_guard_enabled', 'seo_request_guard_logging_enabled',
+        ],
+    ] as $handler => $fields) {
+        foreach ([false, true] as $enabled) {
+            content_display_reset(false);
+            $_POST['ajax'] = '1';
+            if ($enabled) {
+                foreach ($fields as $field) {
+                    $_POST[$field] = '1';
+                }
+            }
+            ob_start();
+            ('Gallery\\Controllers\\' . $handler)();
+            $payload = json_decode(
+                (string) ob_get_clean(), true, flags: JSON_THROW_ON_ERROR,
+            );
+            content_display_assert(
+                $payload['ok'] === true && http_response_code() === 200
+                    && $payload['mutation']['type'] === 'settings.update'
+                    && $GLOBALS['content_auth'] === 1
+                    && $GLOBALS['content_csrf'] === 1
+                    && $GLOBALS['content_redirect'] === '',
+                'Autosave lost its authenticated JSON completion or navigated.',
+            );
+            foreach ($fields as $field) {
+                content_display_assert(
+                    $payload['setting_values'][$field] === $enabled,
+                    'Autosave must return the persisted boolean for each owned control.',
+                );
+            }
+            content_display_assert(
+                $GLOBALS['content_reset_writes'] === 0,
+                'Ordinary autosave must never reset gallery overrides.',
+            );
+        }
+    }
+    foreach (['missing', 'unknown'] as $schemaState) {
+        content_display_reset(true);
+        $GLOBALS['content_schema_state'] = $schemaState;
+        $_POST['ajax'] = '1';
+        ob_start();
+        \Gallery\Controllers\cms_admin_exif_gps_settings();
+        $payload = json_decode((string) ob_get_clean(), true, flags: JSON_THROW_ON_ERROR);
+        content_display_assert(
+            $payload['ok'] === false && http_response_code() === 422
+                && $payload['setting_values']['exif_gps_default_enabled'] === true
+                && $GLOBALS['content_default_writes'] === 0
+                && $GLOBALS['content_reset_writes'] === 0,
+            'Autosave must refuse missing/unknown GPS schema without mutation.',
+        );
+    }
+    content_display_reset(true);
+    $GLOBALS['content_search_available'] = false;
+    $_POST['ajax'] = '1';
+    ob_start();
+    \Gallery\Controllers\cms_admin_public_search_settings();
+    $payload = json_decode((string) ob_get_clean(), true, flags: JSON_THROW_ON_ERROR);
+    content_display_assert(
+        $payload['ok'] === false && $GLOBALS['content_setting_writes'] === [],
+        'JSON autosave cannot bypass the public-search capability.',
+    );
+    foreach (['content_denied', 'content_csrf_denied'] as $denial) {
+        foreach (['cms_admin_public_search_settings', 'cms_admin_devmode'] as $handler) {
+            content_display_reset(true);
+            $GLOBALS[$denial] = true;
+            $_POST['ajax'] = '1';
+            $refused = false;
+            try {
+                ('Gallery\\Controllers\\' . $handler)();
+            } catch (\RuntimeException $exception) {
+                $refused = in_array($exception->getCode(), [401, 403], true);
+            }
+            content_display_assert(
+                $refused && $GLOBALS['content_setting_writes'] === [],
+                'Autosave must retain authentication and CSRF before persistence.',
+            );
+        }
+    }
+    $factory = \Gallery\Services\admin_settings_content_factory_defaults();
+    $factoryDom = content_display_render($model + ['content_factory_defaults' => $factory]);
+    content_display_assert(
+        $factoryDom->query('//input[@type="checkbox" and @title="Factory default: Enabled"]')->length === 5,
+        'Every Content preference must expose the canonical factory tooltip.',
     );
     echo "Content and display production controls: PASS\n";
 }

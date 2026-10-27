@@ -1,5 +1,58 @@
 # Compatibility lifecycle and retirement register
 
+## Trash preferences and confirmation support
+
+`admin_trash.php` and `admin-trash.js` own the compact preference form and its
+native help disclosures. With JavaScript, the existing authenticated POST/CSRF
+settings route saves both switches and numeric fields together, then reads the
+canonical Trash fragment so deadline/pause evidence stays aligned. A guarded
+refusal returns persisted values. A lost/malformed response or failed follow-up
+read locks Trash controls and offers only passive reconciliation; no write is
+replayed or presumed rolled back. Existing fresh-retention rearming and schema
+guards remain with the service. Restore, purge and Empty Trash keep their
+independent confirmations and bounded lifecycle workflows.
+
+Without JavaScript, the classic Save/POST and native help remain permanent
+supported transports. Popover enhancement is optional; unsupported browsers
+retain readable inline disclosure content. Older-browser/no-script usage is
+unknown, so there is no retirement cutoff. Desktop/narrow preview does not prove
+real-device, assistive-technology, failure-path or destructive acceptance. The
+registered rendering/browser fixtures own isolated regression coverage; hosted
+FULL and disposable-installation lifecycle acceptance remain separate evidence.
+
+## Dashboard compact help and action labels
+
+The dashboard views and `admin-dashboard-workspace.js` own the compact
+Maintenance Content pilot. Its server-rendered question marks are native
+disclosures. JavaScript promotes only their help bodies to native auto-popovers
+when supported, preserving Escape/outside-click dismissal and trigger focus.
+Absent JavaScript or Popover API support, native disclosures remain usable.
+Without JavaScript, explicit Save/POST forms remain the permanent compatibility
+transport; enhanced switches save immediately with visible feedback, serializing
+each form. Unknown completion blocks further writes until a passive reload and
+never replays a possibly completed mutation. JSON refusals reconcile authoritative
+values without bypassing authentication, CSRF, capabilities or GPS schema gates.
+The existing domain controllers own both transports; independent GPS override
+reset and path regeneration keep their explicit workflows. Canonical factory
+metadata is shared with the Settings registry and adds no schema/storage probe.
+Older-browser usage is unknown, so no retirement cutoff is inferred.
+Local acceptance covers density, help/viewport bounds and Public search
+OFF/reload/ON with its original value restored. Hosted fixtures additionally
+cover refusal, coupled crawler values and lost responses. No-script paths,
+other persistent local settings, real devices and production remain unverified.
+
+## Central Settings contextual help
+
+Settings owns the native light-dismiss help in `admin_settings.php`,
+`admin-settings-workspace.js` and `admin-feature-settings.css`. Browsers without
+popover support permanently receive inline descriptions and no inert question
+marks. This presentation fallback preserves help and native forms without
+requiring JavaScript or changing persistence. Usage of older browsers is unknown;
+there is no version-based retirement. Desktop/narrow acceptance covers native
+popover positioning, Escape, outside-click dismissal and switch label geometry.
+The unsupported-browser fallback and system forced-color rendering have source
+review only; real-device and production acceptance remain unverified.
+
 ## Admin feature autosave and complete-form support
 
 The feature-policy service permanently supports the complete revisioned Admin

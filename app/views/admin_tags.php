@@ -18,6 +18,8 @@
  * Author:
  *   Rudolf Klusal
  *
+ * License: MIT License (see LICENSE file in repository)
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Tag persistence, normalization, feature policy, URL generation, and CSRF issuance stay in the controller.
@@ -38,7 +40,19 @@ use function Gallery\Services\t;
 /**
  * Render the Admin tag-management page from its prepared view model.
  *
- * @param array<string,mixed> $viewModel Controller-prepared tag editor state.
+ * @param array{panel?:bool,selected_id?:int,sort_mode?:string,media_type?:string,
+ *     filter_options?:list<array{value:string,label:string,disabled:bool}>,
+ *     notice?:string,error?:string,selected_tag?:array{id:int,media_type?:string}|null,
+ *     tags?:list<array{id:int,name:string,slug:string,media_type?:string,
+ *     usage_count?:int|string,edit_url:string}>,settings_url?:string,filters_url?:string,
+ *     form?:array{tag?:array{id:int,name?:string,slug?:string},description?:string,
+ *     media_type?:string,filter_value?:string,sort_mode?:string,action_url?:string,csrf_html?:string,
+ *     public_url?:string,theme_url?:string},usage?:array{
+ *     galleries?:list<array{public_url:string,title:string}>,
+ *     images?:list<array{edit_url:string,side_panel_url:string,
+ *     relative_path:string,gallery_title:string}>,
+ *     songs?:list<array{edit_url:string,title:string}>}} $viewModel
+ *     Prepared catalog, selected editor, safe usage links and request notices.
  * @return void Emit the tag list, filters, and available management actions.
  */
 function view_render_admin_tags(array $viewModel): void
@@ -74,39 +88,28 @@ function view_render_admin_tags(array $viewModel): void
                     ))
                     . '</p></div>';
         } else {
-            view_render_admin_tag_form((array) ($viewModel['form'] ?? []));
+            view_render_admin_tag_form((array) ($viewModel['form'] ?? []), 'panel');
         }
         echo '</div>';
         return;
     }
 
     render_header(t('admin.tags.title', 'Edit tags'));
-    echo '<section class="panel admin-tags-hero">';
-    echo
-        '<p class="admin-kicker">'
-            . e(t('admin.tags.kicker', 'Metadata'))
-            . '</p>';
-    echo '<h1>' . e(t('admin.tags.title', 'Edit tags')) . '</h1>';
-    $descriptionKey = $mediaType === 'music'
-        ? 'admin.tags.description_music'
-        : 'admin.tags.description';
-    echo
-        '<p class="muted">'
-            . e(t(
-                $descriptionKey,
-                'Rename reusable tags, adjust their clean URL slug, and add public text for tag landing pages. Tags are always stored as safe lowercase values.',
-            ))
-            . '</p>';
-    echo
-        '<nav class="nav"><a class="button secondary" href="'
-            . e((string) ($viewModel['settings_url'] ?? ''))
-            . '">'
-            . e(t(
-                'admin.settings.open_centralized',
-                'Open centralized settings',
-            ))
-            . '</a></nav>';
-    echo '</section>';
+    echo '<div class="admin-tags-page" id="admin-tags-workspace"><header class="admin-tags-toolbar">'
+        . '<div class="admin-tags-title"><h1>'
+        . e(t('admin.tags.title', 'Edit tags')) . '</h1>';
+    view_render_admin_tag_help(
+        'admin-tags-overview-help',
+        t('admin.tags.title', 'Edit tags'),
+        t(
+            $mediaType === 'music' ? 'admin.tags.description_music' : 'admin.tags.description',
+            'Rename reusable tags, adjust their clean URL slug, and add public text for tag landing pages. Tags are always stored as safe lowercase values.',
+        ),
+    );
+    echo '</div><a class="admin-tags-settings" href="'
+        . e((string) ($viewModel['settings_url'] ?? '')) . '">'
+        . e(t('admin.menu.settings', 'Settings'))
+        . '<span aria-hidden="true"> ↗</span></a></header>';
 
     if ($notice !== '') {
         echo '<p class="success">' . e($notice) . '</p>';
@@ -115,10 +118,23 @@ function view_render_admin_tags(array $viewModel): void
         echo '<p class="error">' . e($error) . '</p>';
     }
 
-    echo '<section class="admin-tags-layout">';
-    echo '<div class="panel admin-tags-list-panel">';
-    echo '<div class="admin-tags-list-head">';
-    echo '<h2>' . e(t('admin.tags.existing_tags', 'Existing tags')) . '</h2>';
+    echo '<div class="admin-tags-layout">';
+    echo '<section class="admin-content-group admin-tags-list-panel">';
+    echo '<h2>' . e(t('admin.tags.existing_tags', 'Existing tags'));
+    view_render_admin_tag_help(
+        'admin-tags-filter-help',
+        t('admin.tags.filter_label', 'Filter by use'),
+        t('admin.tags.filter_help',
+            'Images and Galleries filter by direct assignments. Shared tags can appear in both; editing a tag changes it everywhere. Counts follow the selected filter. All tags includes unassigned tags. Documents is reserved for future PDF tagging.',
+        ),
+    );
+    if ($selectedTag) {
+        echo '<a class="admin-tags-editor-jump" href="#admin-tags-editor"'
+            . ' aria-label="' . e(t('admin.tags.edit_heading', 'Edit tag'))
+            . '">↗</a>';
+    }
+    echo '</h2>';
+
     echo '<form method="get" action="'
         . e((string) ($viewModel['filters_url'] ?? ''))
         . '" class="admin-tags-sort-form">';
@@ -130,13 +146,13 @@ function view_render_admin_tags(array $viewModel): void
         echo '<input type="hidden" name="panel" value="1">';
     }
     echo '<label><span>'
-        . e(t('admin.tags.filter_label', 'Media type'))
+        . e(t('admin.tags.filter_label', 'Filter by use'))
         . '</span><select name="media_type">';
-    foreach (['all' => 'All', 'image' => 'Images', 'music' => 'Music'] as $type => $label) {
-        echo '<option value="' . e($type) . '"'
-            . ($mediaType === $type ? ' selected' : '') . '>'
-            . e(t('admin.tags.filter_' . $type, $label))
-            . '</option>';
+    foreach ($viewModel['filter_options'] ?? [] as $option) {
+        echo '<option value="' . e((string) $option['value']) . '"'
+            . ($mediaType === $option['value'] ? ' selected' : '')
+            . (!empty($option['disabled']) ? ' disabled' : '') . '>'
+            . e((string) $option['label']) . '</option>';
     }
     echo '</select></label>';
     echo
@@ -158,59 +174,68 @@ function view_render_admin_tags(array $viewModel): void
     echo '</select></label>';
     echo '<button type="submit" class="button secondary">'
         . e(t('admin.tags.sort_apply', 'Apply')) . '</button>';
-    echo '</form></div></div>';
+    echo '</form>';
 
     $tags = (array) ($viewModel['tags'] ?? []);
     if (!$tags) {
         echo
             '<p class="muted">'
                 . e(t(
-                    $mediaType === 'music'
-                        ? 'admin.tags.empty_music'
-                        : 'admin.tags.empty',
+                    match ($mediaType) {
+                        'music' => 'admin.tags.empty_music',
+                        'image' => 'admin.tags.empty_images',
+                        'gallery' => 'admin.tags.empty_galleries',
+                        'documents' => 'admin.tags.documents_pending',
+                        default => 'admin.tags.empty',
+                    },
                     'No tags exist yet. Add tags from a gallery or image editor first.',
                 ))
                 . '</p>';
     } else {
-        echo '<div class="admin-tags-list" role="list">';
+        echo '<ul class="admin-tags-list">';
         foreach ($tags as $tag) {
             $active = (int) ($tag['id'] ?? 0) === $selectedId;
             $usage = (int) ($tag['usage_count'] ?? 0);
             echo
-                '<a class="admin-tag-row'
+                '<li><a class="admin-tag-row'
                     . ($active ? ' is-active' : '')
-                    . '" role="listitem" href="'
+                    . '"' . ($active ? ' aria-current="true"' : '')
+                    . ' href="'
                     . e((string) ($tag['edit_url'] ?? ''))
                     . '">';
-            echo
-                '<span><strong>'
-                    . e((string) ($tag['name'] ?? ''))
-                    . '</strong><small>/'
-                    . e((string) ($tag['slug'] ?? ''))
-                    . '</small><small class="admin-tag-media-type">'
+            echo '<span class="admin-tag-copy"><strong>'
+                . e((string) ($tag['name'] ?? '')) . '</strong>';
+            if ((string) ($tag['slug'] ?? '') !== (string) ($tag['name'] ?? '')) {
+                echo '<small>/' . e((string) ($tag['slug'] ?? '')) . '</small>';
+            }
+            if ($mediaType === 'all') {
+                echo '<small class="admin-tag-media-type">'
                     . e(t(
-                        'admin.tags.type_' . (string) ($tag['media_type'] ?? 'image'),
+                        (string) ($tag['media_type'] ?? 'image') === 'image'
+                            ? 'admin.tags.type_visual'
+                            : 'admin.tags.type_' . (string) $tag['media_type'],
                         (string) ($tag['media_type'] ?? 'image'),
-                    ))
-                    . '</small></span>';
+                    )) . '</small>';
+            }
+            echo '</span>';
             if ((string) ($tag['media_type'] ?? 'image') === 'music') {
                 echo '<em>' . e(t('admin.tags.music_usage_count', '{count} songs', [
                     'count' => $usage,
-                ])) . '</em></a>';
+                ])) . '</em></a></li>';
                 continue;
             }
             echo '<em>' . e(t('admin.tags.usage_count', '{count} uses', [
                 'count' => $usage,
-            ])) . '</em></a>';
+            ])) . '</em></a></li>';
         }
-        echo '</div>';
+        echo '</ul>';
     }
-    echo '</div>';
+    echo '</section>';
 
-    echo '<div class="panel admin-tags-edit-panel">';
+    echo '<div class="admin-tags-edit-panel" id="admin-tags-editor">';
     if (!$selectedTag) {
         echo
-            '<h2>'
+            '<section class="admin-content-group"><h2>'
                 . e(t('admin.tags.no_selection', 'No tag selected'))
                 . '</h2>';
         echo
@@ -219,11 +244,11 @@ function view_render_admin_tags(array $viewModel): void
                     'admin.tags.no_selection_help',
                     'Select a tag ' . 'from the list to edit it.',
                 ))
-                . '</p>';
+                . '</p></section>';
     } else {
         view_render_admin_tag_form((array) ($viewModel['form'] ?? []));
         echo
-            '<section class="admin-tags-usage-panel"><h3>'
+            '<section class="admin-content-group admin-tags-usage-panel"><h3>'
                 . e(t('admin.tags.used_where', 'Used in'))
                 . '</h3>';
         $usage = (array) ($viewModel['usage'] ?? []);
@@ -296,21 +321,29 @@ function view_render_admin_tags(array $viewModel): void
         }
         echo '</section>';
     }
-    echo '</div></section>';
+    echo '</div></div></div>';
     render_footer();
 }
 
 /**
  * Render the Admin form for creating or editing one tag.
  *
- * @param array<string,mixed> $viewModel Controller-prepared selected-tag form state.
+ * @param array{tag?:array{id:int,name?:string,slug?:string},description?:string,
+ *     media_type?:string,filter_value?:string,sort_mode?:string,action_url?:string,csrf_html?:string,
+ *     public_url?:string,theme_url?:string} $viewModel Prepared field values,
+ *     issued CSRF markup and allowed action destinations.
+ * @param string $context Page (default) or panel context for distinct help IDs.
  * @return void Emit the selected-tag fields and save controls.
  */
-function view_render_admin_tag_form(array $viewModel): void
-{
+function view_render_admin_tag_form(
+    array $viewModel,
+    string $context = 'page',
+): void {
     $tag = (array) ($viewModel['tag'] ?? []);
     $isMusic = (string) ($viewModel['media_type'] ?? 'image') === 'music';
-    echo '<h2>' . e(t('admin.tags.edit_heading', 'Edit tag')) . '</h2>';
+    $idPrefix = 'admin-tag-' . $context . '-' . (int) ($tag['id'] ?? 0);
+    echo '<section class="admin-content-group admin-tags-editor-group"><h2>'
+        . e(t('admin.tags.edit_heading', 'Edit tag')) . '</h2>';
     echo
         '<form method="post" action="'
             . e((string) ($viewModel['action_url'] ?? ''))
@@ -323,52 +356,44 @@ function view_render_admin_tag_form(array $viewModel): void
             . e((string) ($viewModel['sort_mode'] ?? 'usage'))
             . '"><input type="hidden" name="media_type" value="'
             . e((string) ($viewModel['media_type'] ?? 'image'))
+            . '"><input type="hidden" name="catalog_filter" value="'
+            . e((string) ($viewModel['filter_value'] ?? $viewModel['media_type'] ?? 'image'))
             . '">';
-    echo
-        '<label>'
-            . e(t('admin.tags.name', 'Tag name'))
-            . '<input name="name" value="'
-            . e((string) ($tag['name'] ?? ''))
-            . '" required maxlength="100" autocomplete="off"><span class="muted">'
-            . e(t(
-                'admin.tags.name_help',
-                'Use lowercase letters, numbers, and hyphens only. Other input is normalized automatically when saved.',
-            ))
-            . '</span></label>';
-    echo
-        '<label>'
-            . e(t(
-                $isMusic ? 'admin.tags.slug_music' : 'admin.tags.slug',
-                'URL slug',
-            ))
-            . '<input name="slug" value="'
-            . e((string) ($tag['slug'] ?? ''))
-            . '" required maxlength="120" autocomplete="off"><span class="muted">'
-            . e(t(
-                $isMusic
-                    ? 'admin.tags.slug_help_music'
-                    : 'admin.tags.slug_help',
-                'This controls the public tag URL. Keep it short and stable when possible.',
-            ))
-            . '</span></label>';
-    echo
-        '<label>'
-            . e(t(
-                $isMusic
-                    ? 'admin.tags.description_label_music'
-                    : 'admin.tags.public_description',
-                'Public description',
-            ))
-            . '<textarea name="description" rows="6">'
-            . e((string) ($viewModel['description'] ?? ''))
-            . '</textarea><span class="muted">'
-            . e(t(
-                $isMusic
-                    ? 'admin.tags.description_help_music'
-                    : 'admin.tags.description_help',
-                'Optional text shown on the public tag landing page.',
-            ))
-            . '</span></label>';
+    view_render_admin_tag_field_heading(
+        $idPrefix . '-name',
+        t('admin.tags.name', 'Tag name'),
+        t('admin.tags.name_help',
+            'Use lowercase letters, numbers, and hyphens only. Other input is normalized automatically when saved.',
+        ),
+    );
+    echo '<input id="' . e($idPrefix . '-name') . '" name="name" value="'
+        . e((string) ($tag['name'] ?? ''))
+        . '" aria-describedby="' . e($idPrefix . '-name-help')
+        . '" required maxlength="100" autocomplete="off">';
+    view_render_admin_tag_field_heading(
+        $idPrefix . '-slug',
+        t($isMusic ? 'admin.tags.slug_music' : 'admin.tags.slug', 'URL slug'),
+        t($isMusic ? 'admin.tags.slug_help_music' : 'admin.tags.slug_help',
+            'This controls the public tag URL. Keep it short and stable when possible.',
+        ),
+    );
+    echo '<input id="' . e($idPrefix . '-slug') . '" name="slug" value="'
+        . e((string) ($tag['slug'] ?? ''))
+        . '" aria-describedby="' . e($idPrefix . '-slug-help')
+        . '" required maxlength="120" autocomplete="off">';
+    view_render_admin_tag_field_heading(
+        $idPrefix . '-description',
+        t($isMusic ? 'admin.tags.description_label_music' : 'admin.tags.public_description',
+            'Public description',
+        ),
+        t($isMusic ? 'admin.tags.description_help_music' : 'admin.tags.description_help',
+            'Optional text shown on the public tag landing page.',
+        ),
+    );
+    echo '<textarea id="' . e($idPrefix . '-description')
+        . '" name="description" aria-describedby="'
+        . e($idPrefix . '-description-help') . '" rows="4">'
+        . e((string) ($viewModel['description'] ?? '')) . '</textarea>';
     echo
         '<div class="bulk-row"><button type="submit">'
             . e(t('admin.tags.save', 'Save tag'))
@@ -388,5 +413,43 @@ function view_render_admin_tag_form(array $viewModel): void
             . e(t('admin.tags.configure_display', 'Configure tag display'))
             . '</a>';
     }
-    echo '</div></form>';
+    echo '</div></form></section>';
+}
+
+/**
+ * Render a field label and its adjacent contextual explanation.
+ *
+ * @param string $inputId Unique native input ID selected by the form renderer.
+ * @param string $label Localized field name.
+ * @param string $help Localized plain explanation, escaped by the help renderer.
+ * @return void Emit an associated label and question-mark trigger.
+ */
+function view_render_admin_tag_field_heading(
+    string $inputId,
+    string $label,
+    string $help,
+): void {
+    echo '<div class="admin-tags-field-heading"><label for="' . e($inputId)
+        . '">' . e($label) . '</label>';
+    view_render_admin_tag_help($inputId . '-help', $label, $help);
+    echo '</div>';
+}
+
+/**
+ * Render the tag workspace's native, light-dismiss contextual help.
+ *
+ * @param string $id Unique help ID within the page/panel document.
+ * @param string $label Localized control or workspace name.
+ * @param string $text Plain localized explanation; never trusted HTML.
+ * @return void Emit an accessible native popover and its explicit invoker.
+ */
+function view_render_admin_tag_help(string $id, string $label, string $text): void
+{
+    echo '<button type="button" class="admin-tags-help" popovertarget="'
+        . e($id) . '" aria-controls="' . e($id) . '" aria-label="'
+        . e(t('admin.settings.workspace.help_item', 'Help: {label}', [
+            'label' => $label,
+        ])) . '">?</button><div popover class="admin-tags-help-panel" id="'
+        . e($id) . '"><strong>' . e($label) . '</strong><p>'
+        . e($text) . '</p></div>';
 }

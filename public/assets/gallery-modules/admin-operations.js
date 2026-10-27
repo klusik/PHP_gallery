@@ -30,10 +30,10 @@
  *   2026-10-03
  */
 
-export { setupAdminTabs } from './admin-tabs.js?v=20261021-upload-media-v1';
-export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
+export { setupAdminTabs } from './admin-tabs.js?v=20261027-appearance-state-v1';
+export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20261027-appearance-state-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260611-admin-discovery-actions-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20261024-short-presentation-v1';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20261027-appearance-state-v1';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260925-gallery-scope-fix-v1';
 export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20261021-smart-photo-tags-v2';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';
@@ -42,4 +42,4 @@ export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReord
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20261016-renamer-ui-v3';
 export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20261003-compact-tables-v1';
-export { setupAdminTrashActions } from './admin-trash.js?v=20261002-trash-confirmation-v2';
+export { setupAdminTrashActions } from './admin-trash.js?v=20261027-trash-settings-v3';

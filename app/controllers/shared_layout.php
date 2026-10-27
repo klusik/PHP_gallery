@@ -108,6 +108,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-public-widgets.css',
         'assets/styles/admin-media-tools.css',
         'assets/styles/admin-theme-editor.css',
+        'assets/styles/admin-theme-appearance.css',
         'assets/styles/admin-theme-media.css',
         'assets/styles/admin-theme-layout.css',
         'assets/styles/admin-theme-language.css',
@@ -132,6 +133,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-gallery-media.css',
         'assets/styles/admin-navigation.css',
         'assets/styles/breadcrumbs.css',
+        'assets/styles/admin-feature-settings.css',
     ];
 }
 

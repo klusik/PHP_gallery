@@ -169,13 +169,6 @@ namespace Gallery\Core {
 
 namespace Gallery\Views {
     /**
-     * Omit unrelated introduction markup without altering health-card rendering.
-     * @param array<string,mixed> $model Prepared presentation data, unused here.
-     * @return void
-     */
-    function view_render_admin_tab_intro(array $model): void {}
-
-    /**
      * Record developer-control delegation without consulting host configuration.
      * @param string $className Unused presentation wrapper.
      * @param array<string,mixed> $model Unused prepared developer settings.
@@ -192,6 +185,7 @@ namespace Gallery\Views {
 namespace {
     require_once __DIR__ . '/support/module_source.php';
     require_once dirname(__DIR__) . '/app/services/admin_dashboard.php';
+    require_once dirname(__DIR__) . '/app/views/admin_ui.php';
     require_once dirname(__DIR__) . '/app/views/admin_dashboard_sections.php';
     require_once dirname(__DIR__) . '/app/views/admin_diagnostics.php';
 
@@ -414,6 +408,20 @@ namespace {
                 'The new health namespace has exactly eleven catalog keys.',
             );
         }
+        $uiFallback = require
+            dirname(__DIR__) . '/app/lang/' . $locale . '.php';
+        $uiKeys = array_filter(array_keys($catalog), static fn(string $key): bool => (
+            str_starts_with($key, 'admin.dashboard.health_')
+                && $key !== 'admin.dashboard.health_details'
+        ));
+        foreach ($uiKeys as $key) {
+            maintenance_health_assert(
+                ($uiFallback[$key] ?? null) === $catalog[$key]
+                    && $catalog[$key] !== ''
+                    && substr_count($source, '"' . $key . '":') === 1,
+                'All maintained UI help catalogs and PHP fallbacks agree uniquely.',
+            );
+        }
         foreach ($requiredKeys as $key) {
             maintenance_health_assert(
                 is_string($catalog[$key] ?? null) && $catalog[$key] !== '',
@@ -624,8 +632,8 @@ namespace {
             'Compact diagnostics cannot inject active markup.',
         );
         maintenance_health_assert(
-            str_contains($html, 'System ready') === !$attention,
-            'Only confirmed healthy or intentionally disabled capabilities permit System ready.',
+            !str_contains($html, 'System ready'),
+            'Storage snapshots never claim the whole system has been tested.',
         );
         maintenance_health_assert(
             str_contains($html, 'admin-tab-badge') === $attention,
@@ -710,10 +718,11 @@ namespace {
     $warningHtml = maintenance_health_render('dashboard', [], $pending, [
         'runtime_support_status' => $runtime,
     ]);
-    $firstDisclosure = strpos($warningHtml, '<details');
+    $runtimeStart = strpos($warningHtml, 'data-runtime-support');
+    $firstDisclosure = strpos($warningHtml, '<details', $runtimeStart);
     maintenance_health_assert(
         $firstDisclosure !== false
-            && strpos($warningHtml, 'Runtime guidance') < $firstDisclosure,
+            && strpos($warningHtml, 'Runtime guidance', $runtimeStart) < $firstDisclosure,
         'Actionable runtime guidance remains outside collapsed detail.',
     );
     maintenance_health_assert(
@@ -766,8 +775,54 @@ namespace {
     );
     maintenance_health_assert(
         ($GLOBALS['maintenance_devmode_delegated'] ?? '')
-            === 'admin-maintenance-card',
+            === 'admin-content-row admin-health-devmode',
         'Compact health still delegates developer controls to their existing form owner.',
+    );
+
+    $GLOBALS['maintenance_catalog'] = json_decode(
+        maintenance_health_source('app/lang/en.json'),
+        true,
+        flags: JSON_THROW_ON_ERROR,
+    );
+    // Exercise presentation semantics through actual renderers, including
+    // unexpected future states and records that cannot be read as a shape.
+    $groupedHtml = maintenance_health_render('dashboard', [
+        'mutation_gallery_edit' => ['state' => 'available'],
+        'mutation_gallery_move' => ['state' => 'unrecognized'],
+        'mutation_gallery_delete' => null,
+    ], [], [
+        'presentation_schema_statuses' => [
+            'presentation_links' => ['state' => 'available'],
+            'presentation_gallery_visit_content' => ['state' => 'disabled'],
+            'presentation_openai_text' => ['state' => 'available'],
+        ],
+    ]);
+    maintenance_health_assert(
+        strpos($groupedHtml, 'data-health-check="mutation_gallery_move"')
+            < strpos($groupedHtml, 'data-health-check="mutation_gallery_edit"')
+            && substr_count($groupedHtml, 'data-health-state="unknown"') === 2,
+        'Unexpected and malformed records remain unknown and precede healthy peers.',
+    );
+    maintenance_health_assert(
+        str_contains($groupedHtml, 'Shared presentation links')
+            && str_contains($groupedHtml, 'New gallery content')
+            && !str_contains($groupedHtml, 'Optional presentation schema capability')
+            && str_contains($groupedHtml, 'An API key, quota, provider connection')
+            && str_contains($groupedHtml, 'id="health-presentation_openai_text"'),
+        'Named presentation checks expose contextual purpose and external-test limits.',
+    );
+    maintenance_health_assert(
+        !str_contains($groupedHtml,
+            'Required optional database objects are installed and verified.')
+            && str_contains($groupedHtml, 'aria-label="Storage ready"')
+            && str_contains($groupedHtml, 'aria-label="Disabled in configuration"'),
+        'Quiet states retain accessible meanings without repeated technical prose.',
+    );
+
+    maintenance_health_assert(
+        str_contains($groupedHtml, 'data-reload-label="Reload state"')
+            && str_contains($groupedHtml, 'data-saved-label="Saved"'),
+        'System health owns localized autosave and passive reload feedback.',
     );
 
     $dashboard = maintenance_health_source('app/services/admin_dashboard.php');

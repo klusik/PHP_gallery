@@ -864,18 +864,69 @@ function tag_description_schema_ready(): bool
 }
 
 /**
+ * Define the Admin catalog's usage filters independently of tag namespaces.
+ *
+ * @return array<string,array{label:string,media_type:string,
+ *     assignment_scope:string,available:bool}> Filter values mapped to safe
+ *     vocabulary/assignment inputs. Documents reserves future PDF UI only;
+ *     its unavailable definition must not probe or edit PDF records.
+ */
+function admin_tag_catalog_filters(): array
+{
+    return [
+        'all' => [
+            'label' => t('admin.tags.filter_all', 'All tags'),
+            'media_type' => 'all',
+            'assignment_scope' => 'all',
+            'available' => true,
+        ],
+        'image' => [
+            'label' => t('admin.tags.filter_image', 'Images'),
+            'media_type' => 'image',
+            'assignment_scope' => 'image',
+            'available' => true,
+        ],
+        'gallery' => [
+            'label' => t('admin.tags.filter_gallery', 'Galleries'),
+            'media_type' => 'image',
+            'assignment_scope' => 'gallery',
+            'available' => true,
+        ],
+        'music' => [
+            'label' => t('admin.tags.filter_music', 'Music'),
+            'media_type' => 'music',
+            'assignment_scope' => 'all',
+            'available' => true,
+        ],
+        'documents' => [
+            'label' => t('admin.tags.filter_documents', 'Documents (PDF, later)'),
+            'media_type' => 'pdf',
+            'assignment_scope' => 'all',
+            'available' => false,
+        ],
+    ];
+}
+
+/**
  * Return editable tag rows with gallery and image usage counts.
  *
  * @param string $sortField Sorting key, either name or usage.
  * @param string $sortDirection Sort direction, asc or desc.
  * @param string $mediaType Requested category image, music, or all; defaults to image.
- * @return list<array{id:int|string,name:string,slug:string,media_type:string,description:?string,created_at:string,updated_at:string,gallery_count:int|string,image_count:int|string,music_count:int|string,usage_count:int|string}> Editable tag rows with database-native scalar values, or an empty list when unavailable.
+ * @param string $assignmentScope Usage filter all (default), gallery or image. The default
+ *     preserves the complete image vocabulary for existing non-Admin callers.
+ * @return list<array{id:int|string,name:string,slug:string,media_type:string,description:?string,created_at:string,updated_at:string,gallery_count:int|string,image_count:int|string,music_count:int|string,usage_count:int|string}> Editable tag rows with database-native scalar values, or an empty list when unavailable or outside the catalog allowlists.
  */
 function admin_tag_rows(
     string $sortField = 'usage',
     string $sortDirection = 'desc',
     string $mediaType = 'image',
+    string $assignmentScope = 'all',
 ): array {
+    if (!in_array($assignmentScope, ['all', 'gallery', 'image'], true)
+        || ($assignmentScope !== 'all' && $mediaType !== 'image')) {
+        return [];
+    }
     $schemaState = tag_media_type_schema_state();
     if ($schemaState === 'unknown') {
         return [];
@@ -894,6 +945,7 @@ function admin_tag_rows(
         $schemaState === 'available',
         ($mediaType === 'music' || $mediaType === 'all')
             && tag_music_assignment_schema_ready(),
+        $assignmentScope,
     );
 }
 

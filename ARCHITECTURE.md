@@ -1067,6 +1067,14 @@ removes the panel. Diagnostics never initiate media or metadata requests.
 
 ## Runtime Entry Points
 
+Compact Dashboard help and factory-value rendering live in the existing
+`app/views/admin_ui.php` owner, shared with gallery editors. Maintenance-only
+sections remain deferred. Theme reuses the complete, already included
+`public-policy` access closure for its gallery picker and preview; scoped-save
+responses retain the canonical mutation owner. This adds no runtime files or
+logical modules and is expected to preserve the 3,653-duplicate ceiling.
+Hosted preparation and FULL establish actual conformance.
+
 ### Public request entry
 
 Root-level `index.php` delegates to `public/index.php`, and `public/index.php`

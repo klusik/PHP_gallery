@@ -10,7 +10,8 @@ Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><title>Trash confirmation fixture</title>
-<body><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
+<link rel="stylesheet" href="/public/assets/styles/admin-feature-settings.css">
+<body class="admin-page"><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
 <script type="module">
 import {setupAdminTrashActions} from '/public/assets/gallery-modules/admin-trash.js';
 let assertions = 0;
@@ -18,6 +19,11 @@ let confirmed = false;
 let mutationReads = 0;
 let refreshReads = 0;
 let confirmationReads = 0;
+let settingsWrites = 0, settingsMode = 'success', releaseSettings = null;
+const settingsPersisted = {
+    gallery_trash_enabled:true, gallery_trash_auto_purge_enabled:false,
+    gallery_trash_retention_days:'30', gallery_trash_purge_batch:'25',
+};
 const originalUrl = location.href;
 
 /**
@@ -33,10 +39,17 @@ function check(condition, message) {
 
 /**
  * Supply synthetic production-shaped forms with actual inline confirmations.
- * @return {string} Replaceable Trash root containing all delegated mutation controls.
+ * @return {string} Replaceable Trash root with synthetic preferences and confirmed tasks.
  */
 function panelMarkup() {
-    return '<section data-admin-trash-panel data-admin-trash-refresh-url="/fixture-trash-refresh"><p data-admin-trash-status hidden></p>'
+    return '<section class="admin-trash-workspace" data-admin-trash-panel data-admin-trash-refresh-url="/fixture-trash-refresh"><p data-admin-trash-status hidden></p>'
+        + '<form class="admin-trash-settings" method="post" action="/fixture-trash-settings" data-admin-trash-settings-form data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unverified; reload" data-reload-label="Reload state">'
+        + '<input type="hidden" name="csrf_token" value="fixture-authority">'
+        + '<label><input type="checkbox" name="gallery_trash_enabled" value="1"' + (settingsPersisted.gallery_trash_enabled ? ' checked' : '') + '>Trash</label>'
+        + '<label><input type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"' + (settingsPersisted.gallery_trash_auto_purge_enabled ? ' checked' : '') + '>Auto purge</label>'
+        + '<label>Days<input type="number" name="gallery_trash_retention_days" min="1" max="365" value="' + settingsPersisted.gallery_trash_retention_days + '"></label>'
+        + '<label>Batch<input type="number" name="gallery_trash_purge_batch" min="1" max="100" value="' + settingsPersisted.gallery_trash_purge_batch + '"></label>'
+        + '<button type="submit">Save</button><span role="status" data-admin-trash-settings-status></span></form>'
         + ['restore', 'purge', 'empty'].map(/**
          * Render one fixture action with its unchanged delegation and authority fields.
          * @param {string} action Stable production mutation action.
@@ -83,6 +96,32 @@ window.fetch = /**
         refreshReads++;
         return new Response(panelMarkup(), {status: 200, headers: {'Content-Type': 'text/html'}});
     }
+    if (url.pathname === '/fixture-trash-settings') {
+        check(options.method === 'POST' && options.credentials === 'same-origin'
+            && options.cache === 'no-store' && options.redirect === 'error'
+            && options.headers.Accept === 'application/json'
+            && options.body.get('csrf_token') === 'fixture-authority'
+            && options.body.get('ajax') === '1', 'Autosave preserves its guarded POST contract');
+        settingsWrites++;
+        if (settingsMode !== 'refuse') {
+            for (const field of ['gallery_trash_enabled','gallery_trash_auto_purge_enabled']) {
+                settingsPersisted[field] = options.body.has(field);
+            }
+            for (const field of ['gallery_trash_retention_days','gallery_trash_purge_batch']) {
+                check(typeof options.body.get(field) === 'string', 'Coupled numeric values travel with both switches');
+                settingsPersisted[field] = options.body.get(field);
+            }
+        }
+        const response = new Response(JSON.stringify({
+            ok:settingsMode !== 'refuse', message:settingsMode === 'refuse' ? 'Guarded refusal' : 'Saved',
+            setting_values:{...settingsPersisted},
+            mutation:{type:'settings.update',entity:'settings',action:'update',entity_ids:[]},
+            panel:null, contexts:[], fallback:{redirect_url:originalUrl},
+        }), {status:settingsMode === 'refuse' ? 422 : 200,headers:{'Content-Type':'application/json'}});
+        if (settingsMode === 'lost') throw new Error('Lost response after persistence');
+        if (settingsMode === 'hold') return new Promise(resolve => { releaseSettings = () => resolve(response); });
+        return response;
+    }
     check(['/fixture-trash-restore', '/fixture-trash-purge', '/fixture-trash-empty'].includes(url.pathname), 'Fixture must refuse unexpected network destinations.');
     check(options.method === 'POST' && options.body instanceof FormData, 'Mutation must keep its POST form transport.');
     check(options.body.get('csrf_token') === 'fixture-authority' && options.body.get('trash_token') === 'fixture-token', 'Mutation must retain hidden authority and identity fields.');
@@ -107,6 +146,44 @@ try {
     document.querySelector('[data-admin-trash-empty-form]').requestSubmit();
     await until(/** Observe completion of the bounded synthetic empty workflow. @return {boolean} Whether its refreshed root is ready. */ () => mutationReads === 2 && refreshReads === 2 && document.querySelector('[data-admin-trash-panel]')?.dataset.adminTrashBusy !== '1');
     check(location.href === originalUrl && document.querySelector('[data-admin-trash-panel]') !== null, 'Enhanced mutations must preserve the URL and owned panel.');
+    let preferences = document.querySelector('[data-admin-trash-settings-form]');
+    check(settingsWrites === 0 && getComputedStyle(preferences.querySelector('[type="submit"]')).display === 'none',
+        'Bound preferences neither write on load nor require a separate Save');
+    settingsMode = 'hold';
+    preferences.elements.gallery_trash_enabled.click();
+    await until(() => releaseSettings !== null);
+    check(preferences.elements.gallery_trash_retention_days.disabled
+        && document.querySelector('[data-admin-trash-empty-form] button').disabled
+        && settingsWrites === 1, 'Pending preferences serialize against explicit Trash tasks');
+    releaseSettings();
+    await until(() => document.querySelector('[data-admin-trash-settings-form]') !== preferences);
+    preferences = document.querySelector('[data-admin-trash-settings-form]');
+    check(!preferences.elements.gallery_trash_enabled.checked
+        && !preferences.elements.gallery_trash_auto_purge_enabled.checked
+        && preferences.elements.gallery_trash_purge_batch.value === '25'
+        && document.activeElement === preferences.elements.gallery_trash_enabled,
+        'Confirmed state refreshes all coupled fields and restores focus in the retained panel');
+    settingsMode = 'lost';
+    const readsBeforeLost = refreshReads;
+    preferences.elements.gallery_trash_enabled.click();
+    await until(() => preferences.dataset.saveState === 'unknown');
+    preferences.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    check(settingsWrites === 2 && refreshReads === readsBeforeLost
+        && preferences.elements.gallery_trash_enabled.checked
+        && preferences.elements.gallery_trash_enabled.disabled,
+        'Lost committed responses retain intent and cannot replay the write or claim rollback');
+    preferences.querySelector('[data-admin-trash-settings-status] button').click();
+    await until(() => document.querySelector('[data-admin-trash-settings-form]') !== preferences);
+    preferences = document.querySelector('[data-admin-trash-settings-form]');
+    check(settingsWrites === 2 && preferences.elements.gallery_trash_enabled.checked,
+        'Passive reload reads canonical state without another preference write');
+    settingsMode = 'refuse';
+    preferences.elements.gallery_trash_auto_purge_enabled.click();
+    await until(() => preferences.dataset.saveState === 'error');
+    check(!preferences.elements.gallery_trash_auto_purge_enabled.checked
+        && preferences.elements.gallery_trash_auto_purge_enabled.disabled
+        && preferences.textContent.includes('Guarded refusal') && location.href === originalUrl,
+        'Authoritative refusal restores persisted purge state and keeps reconciliation in place');
     document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
 } catch (error) {
     document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack;
