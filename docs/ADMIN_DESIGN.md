@@ -261,6 +261,10 @@ viewing limits and retention use independent flowing groups and one preference
 per native form. Keep historic metrics compact, detailed explanations behind
 anchored help and schema/save failures visible. Clearly label standalone HTML
 reports as new-tab outputs and related Settings/Logs as separate destinations.
+Return standalone reports as private inline HTML so the native new tab keeps
+the rendered document visible. Retain its safe suggested filename and ordinary
+Admin/schema boundaries; opening a report must not become an attachment-only
+download that discards the new tab.
 Rollup/purge remains a separate explicit POST action with a compact result page.
 Telemetry reuses the Features/Maintenance group surface and heading rules in
 `admin-feature-settings.css`. Keep their negative heading margins and bottom

@@ -1,11 +1,11 @@
 {
     "version": "0.144.14",
-    "generated_at": "2026-10-27T20:33:05+00:00",
+    "generated_at": "2026-10-27T21:00:30+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:527a0839805e09e9559d4e69d89987ac2f3c8651016f8324c137d98c5f7c8b29",
-        "ARCHITECTURE.md": "sha256:d6b21b23daf5d07f019105eaa508241bbe0a62ebc6a0581e03f782ee3b41d76f",
+        "ARCHITECTURE.md": "sha256:aab7942f6a0a0ecbebec0973289130b0e37c777007e0042238e32375b2db3234",
         "PATCH_NOTES.md": "sha256:d7a6f9d176cdc558d082881e9ced270917b3319cc8593f3e2646c498c62f68e7",
         "README.md": "sha256:4bd8e09c0835c7bce8a8ed81c3b4cbdd40d4655c932583504da758d4018fb288",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
@@ -78,7 +78,7 @@
         "app/controllers/admin_simbrief.php": "sha256:2fe812f88ee3df95994d0a0672d5692f12ca8309717a334d63932565f2e2f40f",
         "app/controllers/admin_support.php": "sha256:9fb066a500e35b8532227f9b186bd499ea67530034ead2fb41bab9d2ff7b0b4e",
         "app/controllers/admin_tags.php": "sha256:cd2599fc282710673ee63c93e42baef87ae95d8864e946371e4eb39ca6463abc",
-        "app/controllers/admin_telemetry.php": "sha256:f65d202a6097545af4b53634004b54cf339363fb426af7fb321c43363f3b4579",
+        "app/controllers/admin_telemetry.php": "sha256:d7f2c2bd867599ced7865b4b05a2fa7171029b980c5347b3d8574f7a51cb4a3d",
         "app/controllers/admin_test_runs.php": "sha256:32a060b8e59743e0ddaa5c423b6370c59ec2e42911ab589a4012f8afd8876a2f",
         "app/controllers/admin_theme.php": "sha256:bf481e503b6a8727e38ae4ae41a8fff45857815f0067c880b8f3befda51206d2",
         "app/controllers/admin_theme_actions.php": "sha256:286ac1bcae1266f43c75b03c8077ed4ee4671debf083c19806b8247db16cb157",

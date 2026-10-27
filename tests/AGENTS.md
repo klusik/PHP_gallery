@@ -115,6 +115,17 @@ After a production media swap, query the currently owned image node again before
 asserting decode or geometry. Keep identity/source assertions: a detached
 initial
 placeholder cannot establish the state of its decoded replacement.
+When a load listener owns final image geometry, observe completion of that event
+before checking bounds. Image complete/naturalWidth can precede the queued load
+event; preserve strict geometry assertions and report actual bounds on failure.
+For a lazily mounted overlay, open it before querying its image and register the
+load observer synchronously before yielding the opening task.
+Passive browser observations can cross a fixture reload. Admit a lost execution
+context only after verifying the exact surviving page target and loopback origin;
+retain the original deadline and terminal result requirement. Never replay
+mutating input or suppress application exceptions and unrelated protocol errors.
+An omitted target URL needs matching committed main-frame URL and security
+origin; empty or malformed URLs alone do not establish fixture ownership.
 When a counter announces navigation intent before media commit, await the target
 image identity and completed decode before asserting its final geometry.
 

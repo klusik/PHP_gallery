@@ -575,12 +575,14 @@ function telemetry_export_trend_chart(
 }
 
 /**
- * Download a standalone anonymous telemetry HTML report.
- * @return void No return value; effects are recorded in the owned state.
+ * Render an authenticated standalone telemetry report directly in the browser.
+ * @return void Emit private inline HTML, or a safe plain-text 409/503 response
+ *     when reporting storage is missing or cannot be verified.
  */
 function cms_admin_telemetry_export(): void
 {
     require_admin();
+    header('Cache-Control: private, no-store');
     $schemaStatus = presentation_telemetry_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         header('Content-Type: text/plain; charset=utf-8');
@@ -889,7 +891,7 @@ function cms_admin_telemetry_export(): void
     $html = view_render_admin_telemetry_export_document(get_defined_vars());
 
     header('Content-Type: text/html; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Content-Disposition: inline; filename="' . $fileName . '"');
     echo $html;
 }
 

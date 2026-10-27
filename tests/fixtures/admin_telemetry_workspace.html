@@ -175,12 +175,24 @@ try {
         const previewBounds = preview.getBoundingClientRect();
         preview.dispatchEvent(new PointerEvent('pointerover', {bubbles: true,
             clientX: previewBounds.left, clientY: previewBounds.top, pointerType: 'mouse'}));
+        // Opening mounts the owner-created overlay synchronously. Observe load
+        // before yielding this task; the production listener positions it first.
+        // complete/naturalWidth can precede that queued event.
         const previewOverlay = document.querySelector('.admin-image-preview-overlay');
-        await until(() => !previewOverlay.hidden && previewOverlay.querySelector('img').complete
-            && previewOverlay.querySelector('img').naturalWidth > 0, 'Shared hover preview did not decode its image.');
+        const previewImage = previewOverlay.querySelector('img');
+        let previewLoadHandled = false;
+        previewImage.addEventListener('load', () => { previewLoadHandled = true; }, {once: true});
+        await until(() => previewLoadHandled && !previewOverlay.hidden
+            && previewImage.complete && previewImage.naturalWidth > 0,
+        'Shared hover preview did not finish its image-load positioning.');
         const previewRect = previewOverlay.getBoundingClientRect();
         check(previewRect.left >= 0 && previewRect.top >= 0 && previewRect.right <= innerWidth
-            && previewRect.bottom <= innerHeight, 'Shared preview must stay inside the viewport.');
+            && previewRect.bottom <= innerHeight,
+        'Shared preview must stay inside the viewport: ' + JSON.stringify({
+            left: previewRect.left, top: previewRect.top,
+            right: previewRect.right, bottom: previewRect.bottom,
+            viewportWidth: innerWidth, viewportHeight: innerHeight,
+        }));
         preview.dispatchEvent(new PointerEvent('pointerout', {bubbles: true, relatedTarget: document.body}));
         check(previewOverlay.hidden && !previewOverlay.querySelector('img').hasAttribute('src'),
             'Pointer exit clears an unpinned preview source.');

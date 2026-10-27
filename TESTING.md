@@ -930,6 +930,21 @@ gaps, all-zero series and image-byte totals excluding downloads. The browser
 fixture loads the existing gallery Images preview owner and verifies on-demand
 decode, hover exit, focus, pin, Escape, viewport bounds and single-overlay
 initialization, alongside native daily-table access and date-axis gaps.
+Preview geometry is asserted after the production image-load listener has
+positioned the decoded image; complete/naturalWidth alone can precede that event.
+The shared harness admits a reload-invalidated passive read only after verifying
+the same owned page target and loopback origin, including its port. It retries
+through the existing readiness/result poll deadline, without replaying actions.
+If Chromium omits the target URL during replacement, both the committed main
+frame URL and its security origin must independently match the fixture origin.
+Closed or moved targets, page assertions, other protocol errors and expired
+deadlines still fail. Inert positive/negative ownership probes are retained in
+`tests/admin_side_panel_created_gallery_refresh_test.mjs`.
+For standalone report delivery, use the real local browser: open Reports,
+activate Export all traffic, and confirm the new tab retains the rendered
+report heading and summary. Repeat with a classified segment and keep the
+original Reports tab available. Workspace fixtures cover native link targets;
+this manual check covers the browser's inline-versus-download handling.
 
 `tests/cache_lifecycle_registry_test.php` uses the actual registry model with a
 disposable SQLite table derived from the migration. It covers oldest-due

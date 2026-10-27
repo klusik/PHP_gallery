@@ -2,6 +2,13 @@
 
 ## Telemetry preference transports
 
+Standalone report delivery keeps its existing Admin-only URL, segment filters,
+HTML body and safe suggested filename. Its controller now sends private,
+no-store inline HTML so the Reports link remains visible in the browser's new
+tab. The former forced-attachment disposition conflicted with that documented
+interaction. HTTP clients can still read/save the same HTML response; native
+links also work without scripts. Schema failure status/text remains unchanged.
+
 Overview navigation uses existing public photo/gallery URL owners and their
 normal access checks. Its telemetry service uses central schema inspection to
 verify route/cache-identity columns before the model reads them. Unverified

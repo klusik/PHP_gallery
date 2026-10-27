@@ -1083,6 +1083,10 @@ remain supported. The framework-free workspace owns tab/history navigation,
 anchored help and per-form pending/uncertain states. Rollup/purge remains an
 explicit separate action; standalone segmented HTML reports retain their
 existing report owners and open in a new tab.
+The standalone export controller sends HTML with an inline disposition and a
+private, no-store cache policy. This preserves the native report tab instead of
+turning it into a transient download. Report URLs, segments, suggested filename
+and payload remain unchanged; unavailable schema retains safe plain-text status.
 Telemetry group surfaces and full-width heading strips share the existing
 Features/Maintenance CSS owner. Local layout rules retain its geometry;
 narrow headings grow with their contextual help targets.
