@@ -35,6 +35,7 @@
 import { appendUploadProgressLog, i18n, i18nForElement, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {isBrowserUploadAudioFile, uploadGalleryMusicFiles} from './gallery-music-upload.js?v=20261017-music-v3';
+import {createBrowserUploadSelectionStream} from './browser-upload-archive-stream.js?v=20261029-manual-zip-v1';
 
 /**
  * Prepared uploader's existing session retained only for the current document's explicit retries.
@@ -82,6 +83,8 @@ import {isBrowserUploadAudioFile, uploadGalleryMusicFiles} from './gallery-music
  * @property {number} sourceGalleryId Source PDF gallery; zero for ordinary images.
  * @property {number} startPage One-based original starting source position.
  * @property {number} nextSourceIndex Zero-based next source item not yet persisted by the batcher.
+ * @property {import('./browser-upload-archive-stream.js').BrowserUploadSelectionStream} [selectionStream] Immutable manual source descriptors and retry cursor, without extracted image arrays.
+ * @property {Record<string, unknown>} [acknowledgedPhotoResult] Completed photo aggregate retained while later attachments await retry.
  * @property {ReturnType<typeof emptyBrowserAggregate>} aggregate Canonical
  *     merged server result and counters.
  * @property {(PdfUploadStreamOptions & {endpoint:string,
@@ -113,16 +116,6 @@ const tempStoreName = 'prepared_batches';
 const maximumPngCompareChunkBytes = 1024 * 1024;
 
 /**
- * Bound originals retained by a selection containing archives across worker requests.
- * Type: number.
- * Units: bytes. Scope: one upload selection containing at least one ZIP.
- * Consumers: expandBrowserUploadArchives and extractBrowserUploadZip.
- * Rationale: carry the worker's 64 MiB retention ceiling across multiple selected
- * archives instead of allowing each worker to consume a separate full budget.
- */
-const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
-
-/**
  * Describe a pull-driven ordered File source; PDF callers provide generated PNG pages.
  * @typedef {Object} PdfUploadFileStream
  * @property {number|undefined} pageCount Total source File count when known;
@@ -150,8 +143,9 @@ const maximumArchiveSelectionBytes = 64 * 1024 * 1024;
  * @property {PdfUploadProgressHandler} [onProgress] Observe render, packaging and upload progress.
  * @property {PdfUploadAcknowledgmentHandler} [onBatchAcknowledged] Observe
  *     durable batch acknowledgment.
- * @property {'pdf'|'images'} [sourceKind] PDF retains strict PNG checks; images
- *     use the ordinary image worker and gallery creation path.
+ * @property {'pdf'|'images'|'selection'} [sourceKind] PDF retains strict PNG checks;
+ *     images restrict automatic new targets to private visibility; selection
+ *     preserves the manual form's server-validated new-gallery visibility.
  */
 
 /**
@@ -226,12 +220,12 @@ export function browserUploadRequested(form) {
  * @param {HTMLFormElement} form Existing Admin upload or create-gallery form.
  * @param {HTMLElement} progress Existing upload progress container.
  * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Active form intent that owns retry identity.
- * @param {PdfUploadFileStream|import('./browser-upload-archive-stream.js').BrowserArchiveStream} fileStream Ordered File stream, including optional PDF metadata or archive cursor and cleanup methods.
+ * @param {PdfUploadFileStream|import('./browser-upload-archive-stream.js').BrowserArchiveStream|import('./browser-upload-archive-stream.js').BrowserUploadSelectionStream} fileStream Ordered File stream, including optional PDF metadata or archive cursor and cleanup methods.
  * @param {PdfUploadStreamOptions} options Stream transport and acknowledgment options.
  * @returns {Promise<Record<string, unknown>>} Canonical merged server acknowledgment fields and accumulated upload counters.
  */
 export async function uploadBrowserFileStream(form, progress, operation, fileStream, options = {}) {
-    const imageMode = options.sourceKind === 'images';
+    const imageMode = options.sourceKind === 'images' || options.sourceKind === 'selection';
     const imageText = (key, parameters = {}) => i18nForElement(form, key, i18n(key, ''), parameters);
     const preparedKind = imageMode ? 'image-file-stream' : 'pdf-file-stream';
     if (!fileStream || typeof fileStream[Symbol.asyncIterator] !== 'function') {
@@ -307,7 +301,11 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
             let sourceIndex = startPage - 1;
             const existingGalleryId = Number(options.galleryId || selectedBrowserGalleryId(form) || 0);
             if (!existingGalleryId && !imageMode) throw new Error(i18n('pdf.upload.destination_required', 'Select the destination gallery before starting PDF page upload.'));
-            if (!existingGalleryId && imageMode && (form.querySelector('[name="upload_mode"]')?.value !== 'new' || !['private', 'unpublished', 'draft'].includes(form.querySelector('[name="visibility"]')?.value))) throw new Error(imageText('admin.icloud.private_required'));
+            if (!existingGalleryId && imageMode && (
+                form.querySelector('[name="upload_mode"]')?.value !== 'new'
+                || (options.sourceKind !== 'selection'
+                    && !['private', 'unpublished', 'draft'].includes(form.querySelector('[name="visibility"]')?.value))
+            )) throw new Error(imageText('admin.icloud.private_required'));
             prepared = {
                 kind: preparedKind,
                 processingConfig,
@@ -393,7 +391,7 @@ export async function uploadBrowserFileStream(form, progress, operation, fileStr
 
 /**
  * Consume ordered source Files one at a time and upload each ready batch before pulling again.
- * @param {PdfUploadFileStream|import('./browser-upload-archive-stream.js').BrowserArchiveStream} fileStream Pull-driven source; PDF requires PNGs and image mode uses ordinary preparation.
+ * @param {PdfUploadFileStream|import('./browser-upload-archive-stream.js').BrowserArchiveStream|import('./browser-upload-archive-stream.js').BrowserUploadSelectionStream} fileStream Pull-driven source; PDF requires PNGs and image mode uses ordinary preparation.
  * @param {number} startPage One-based first source page in this stream.
  * @param {number} pageCount Initial admitted source count; archive integrity skips can reduce fileStream.pageCount.
  * @param {HTMLElement} progress Existing upload progress surface.
@@ -635,8 +633,43 @@ export async function runBrowserGalleryUpload(form, progress, operation, signal 
     }
 
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
-    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, {...processingConfig, signal}, progress, Boolean(form.querySelector('[data-gallery-upload-preview]')));
-    const files = expanded.files;
+    const preserveOrder = Boolean(form.querySelector('[data-gallery-upload-preview]'));
+    if (archiveSelected) {
+        const activeSignal = signal || new AbortController().signal;
+        const stream = operation.prepared?.selectionStream
+            || await createBrowserUploadSelectionStream(selectedFiles,
+                processingConfig, progress, activeSignal,
+                preserveOrder ? null : compareUploadFilesByDefaultFolderOrder);
+        stream.signal = activeSignal;
+        stream.startIndex = Number(operation.prepared?.nextSourceIndex || 0);
+        if (!stream.pageCount && hasAttachments) {
+            return uploadSelectedGalleryAttachments(
+                form, progress, pdfFiles, musicFiles, operation, null);
+        }
+        try {
+            const result = await uploadBrowserFileStream(form, progress,
+                operation, stream, {signal: activeSignal,
+                    sourceKind: 'selection', startPage: stream.startIndex + 1});
+            if (hasAttachments) {
+                operation.prepared.acknowledgedPhotoResult = result;
+                return await uploadSelectedGalleryAttachments(
+                    form, progress, pdfFiles, musicFiles, operation, result);
+            }
+            return result;
+        } catch (error) {
+            if (!operation.prepared?.serverSideStarted
+                && ['QuotaExceededError', 'InvalidStateError', 'SecurityError', 'UnknownError'].includes(error?.name)) {
+                throw new Error(i18n('admin.icloud.storage_failed'));
+            }
+            throw error;
+        } finally {
+            if (operation.prepared?.kind === 'image-file-stream') {
+                operation.prepared.selectionStream = stream;
+            }
+        }
+    }
+    const files = operation.prepared?.files || (preserveOrder
+        ? selectedFiles : selectedFiles.slice().sort(compareUploadFilesByDefaultFolderOrder));
     if (files.length === 0 && hasAttachments) {
         return uploadSelectedGalleryAttachments(
             form, progress, pdfFiles, musicFiles, operation, null
@@ -1081,7 +1114,7 @@ function isBrowserUploadPdfFile(file) {
  *     clears the separate PDF picker only after success.
  */
 async function uploadSelectedGalleryPdfFiles(form, progress, files, operation, baseResult) {
-    const helper = await import('./admin-pdf-documents.js?v=20261021-smart-photo-tags-v2');
+    const helper = await import('./admin-pdf-documents.js?v=20261029-manual-zip-v1');
     if (typeof helper.uploadGalleryPdfFiles !== 'function') {
         throw new Error(i18n('pdf.upload.helper_unavailable', 'The PDF upload workflow is unavailable. No PDF was attached.'));
     }
@@ -1120,103 +1153,6 @@ function isBrowserUploadZipFile(file) {
 }
 
 /**
- * Replace selected ZIPs with their supported image entries before preparation.
- *
- * @param {File[]} selectedFiles Original browser selection.
- * @param {{uploadLimitBytes:number,signal?:AbortSignal|null}} config Effective per-file limit and optional cancellation.
- * @param {HTMLElement} progress Progress container.
- * @param {boolean} preserveOrder Honour explicit drawer order, including ZIP positions.
- * @return {Promise<{files:File[],skipped:number}>} Ordered bounded originals; oversized selections fail before server mutation.
- */
-async function expandBrowserUploadArchives(selectedFiles, config, progress, preserveOrder = false) {
-    const files = [];
-    let skipped = 0;
-    let retainedBytes = selectedFiles.filter(file => !isBrowserUploadZipFile(file)).reduce((sum, file) => sum + file.size, 0);
-    if (selectedFiles.some(isBrowserUploadZipFile) && retainedBytes > maximumArchiveSelectionBytes) {
-        throw new Error(i18n('admin.icloud.zip_retention'));
-    }
-    for (const selectedFile of selectedFiles) {
-        throwIfUploadStreamAborted(config.signal || null);
-        if (!isBrowserUploadZipFile(selectedFile)) {
-            files.push(selectedFile);
-            continue;
-        }
-        appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracting_zip', 'Inspecting ZIP: {name} ({bytes}).', {name: selectedFile.name, bytes: formatFileSize(selectedFile.size)}));
-        const result = await extractBrowserUploadZip(selectedFile, {...config, remainingArchiveBytes: maximumArchiveSelectionBytes - retainedBytes});
-        skipped += Number(result.skipped || 0);
-        const archiveFiles = (result.entries || []).map((entry) => new File([entry.blob], String(entry.name || 'archive-image'), {
-            type: browserUploadMimeFromFilename(String(entry.name || '')),
-            lastModified: selectedFile.lastModified,
-        }));
-        files.push(...archiveFiles);
-        retainedBytes += archiveFiles.reduce((sum, file) => sum + file.size, 0);
-        appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracted_zip', 'ZIP {name}: added {added} supported image(s), skipped {skipped} other entry or entries.', {name: selectedFile.name, added: archiveFiles.length, skipped: Number(result.skipped || 0)}));
-        for (const [reason, count] of Object.entries(result.reasons || {})) {
-            appendUploadProgressLog(progress, i18n('admin.icloud.skipped', 'Skipped {count}: {reason}.', {count, reason: i18n('admin.icloud.skip_' + reason)}));
-        }
-    }
-    return {files: preserveOrder ? files : files.sort(compareUploadFilesByDefaultFolderOrder), skipped};
-}
-
-/**
- * Extract one selected ZIP in a cancellable worker with a shared retention budget.
- * @param {File} zipFile Disk-backed user selection, never a full archive buffer.
- * @param {{uploadLimitBytes:number,remainingArchiveBytes:number,signal?:AbortSignal|null}} config Effective per-file/selection limits and cancellation.
- * @returns {Promise<{entries:Array<{name:string,path:string,blob:Blob}>,skipped:number,totalEntries:number,reasons:Record<string,number>}>} Bounded checked images and categorized skipped entries.
- */
-function extractBrowserUploadZip(zipFile, config) {
-    return new Promise((resolve, reject) => {
-        const worker = new Worker(workerScriptUrl);
-        /** Release the archive worker after its single extraction request. */
-        const finish = () => {
-            worker.terminate();
-            config.signal?.removeEventListener('abort', abort);
-        };
-        const abort = () => {
-            finish();
-            reject(new Error(i18n('admin.icloud.cancelled')));
-        };
-        if (config.signal?.aborted) { abort(); return; }
-        config.signal?.addEventListener('abort', abort, {once: true});
-        worker.addEventListener('message', (event) => {
-            const data = event.data || {};
-            finish();
-            if (!data.ok) {
-                const code = ['zip64', 'entries', 'directory', 'size', 'retention', 'deflate'].includes(data.code) ? data.code : 'invalid';
-                reject(new Error(i18n('admin.icloud.zip_' + code)));
-                return;
-            }
-            resolve(data.result || {entries: [], skipped: 0, totalEntries: 0});
-        }, {once: true});
-        worker.addEventListener('error', (event) => {
-            finish();
-            reject(new Error(event.message || i18n('admin.browser_upload.zip_extract_failed', 'The selected ZIP archive could not be read.')));
-        }, {once: true});
-        worker.postMessage({
-            action: 'extractUploadZip',
-            id: 1,
-            zipBlob: zipFile,
-            limits: {
-                maximumEntries: 10000,
-                maximumEntryBytes: Number(config.uploadLimitBytes || 8 * 1024 * 1024),
-                maximumRetainedBytes: config.remainingArchiveBytes,
-                maximumTotalBytes: Math.min(2 * 1024 * 1024 * 1024, Math.max(Number(config.uploadLimitBytes || 1), Number(config.uploadLimitBytes || 1) * 1000)),
-            },
-        });
-    });
-}
-
-/**
- * Return the existing MIME hint for an extracted supported image name.
- * @param {string} filename Checked image filename.
- * @returns {string} JPEG/PNG/WebP/GIF MIME, or the binary fallback.
- */
-function browserUploadMimeFromFilename(filename) {
-    const extension = String(filename || '').split('.').pop()?.toLowerCase() || '';
-    return {jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'}[extension] || 'application/octet-stream';
-}
-
-/**
  * Compare selected files by the default folder order used by the upload pipeline.
  *
  * Browser FileList ordering can vary by browser, operating system, and selection
@@ -1225,8 +1161,8 @@ function browserUploadMimeFromFilename(filename) {
  * paths are preferred when a browser provides them; otherwise filenames are
  * compared with natural numeric ordering.
  *
- * @param {File} left Left selected file.
- * @param {File} right Right selected file.
+ * @param {{name:string,webkitRelativePath?:string}} left Selected File or metadata-only archive image name.
+ * @param {{name:string,webkitRelativePath?:string}} right Selected File or metadata-only archive image name.
  * @return {number} Sort comparison result.
  */
 function compareUploadFilesByDefaultFolderOrder(left, right) {
@@ -1242,7 +1178,7 @@ function compareUploadFilesByDefaultFolderOrder(left, right) {
 /**
  * Return the stable path/name key used for default upload ordering.
  *
- * @param {File} file Selected browser file.
+ * @param {{name:string,webkitRelativePath?:string}} file Selected File or archive image metadata.
  * @return {string} Folder-relative path when available, otherwise filename.
  */
 function uploadFileOrderKey(file) {

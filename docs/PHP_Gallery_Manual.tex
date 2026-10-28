@@ -1352,7 +1352,20 @@ Open \ui{Import from iCloud}, paste a~public Photos Link at~\url{https://share.i
 
 The~source types use separate acquisition paths. Photos Links can~expire or~be~revoked; Shared Album availability is~controlled by~the~owner, including optional temporary expiry. Gallery requests compatible JPEG/PNG/GIF representations; received JPEG/PNG/WebP/GIF images are~checked by~their actual signature. HEIC/HEIF/DNG/RAW, MP4/MOV, Live Photo motion and~sidecars are~counted as~unsupported rather than renamed or~silently converted. Compatible JPEG is~not~a~preserved RAW original; capture/GPS metadata and~Apple edits are~not~guaranteed. Apple's download protocol can~change and~a~sign-in-only source cannot be~imported anonymously.
 
-Automatic transfer requires a~supported browser on~HTTPS with OPFS temporary disk storage. Known byte totals produce download progress; unknown totals show received bytes only. The~response is~written incrementally, never held as~one whole-archive memory buffer. The~existing ZIP worker reads bounded metadata and~one image at~a~time, preparing and~uploading small IndexedDB-backed batches. Stored and~Deflate are~supported; ZIP64 and~multi-disk archives fail explicitly. Bounds include 10,000 entries, 4~MiB directory metadata, 2~GiB expanded data and~64~MiB/the~server limit per~image. Manual ZIP selections retain a~64~MiB combined-original budget. Decoders and~thumbnails also use memory; these bounds are~not~a~total heap measurement.
+Automatic transfer requires a~supported browser on~HTTPS with OPFS temporary
+disk storage. Known byte totals produce download progress; unknown totals show
+received bytes only. The~response is~written incrementally, never held as~one
+whole-archive memory buffer. The~existing ZIP worker reads bounded metadata
+and~one image at~a~time, preparing and~uploading small IndexedDB-backed
+batches. Stored and~Deflate are~supported; ZIP64 and~multi-disk archives fail
+explicitly. Bounds include 10,000 entries, 4~MiB directory metadata, 2~GiB
+expanded data and~64~MiB/the~server limit per~image. Manually selected ZIPs use
+the~same incremental reader: the~64~MiB bound applies to~each image, together
+with the~server limit. The~archive itself is~not~uploaded or~compared with
+the~PHP request ceiling. Mixed selections preserve drawer order or~standalone
+natural image order. Retry retains the~source cursor and~exact pending batch;
+manual new-gallery visibility follows the~explicit form and~server. Decoders
+and~thumbnails also use memory; these bounds are~not~a~total heap measurement.
 
 \ui{Cancel import} stops acquisition and~the~active work; accepted photos remain. Keep the~same form open and~choose \ui{Retry the~same import} after an~uncertain result: the~disk source, cursor and~unacknowledged batch/session identity are~retained, so~retry does not~insert duplicates. Source and~target controls remain locked until reconciliation. Safe failure before server work and~successful completion remove temporary sources. Closing the~tab loses in-page retry; the~next acquisition removes abandoned unlocked source files older than one day. No~background import or~cross-session restart is~promised.
 

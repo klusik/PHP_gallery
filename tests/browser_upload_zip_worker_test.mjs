@@ -269,5 +269,127 @@ assert.equal(perImageBound.result.entries.length, 0, 'Streaming does not lift th
 await import('./browser_upload_zip_worker/icloud_source.mjs');
 await import('./browser_upload_zip_worker/icloud_upload.mjs');
 await import('./browser_upload_zip_worker/icloud_download.mjs');
-await import('./browser_upload_zip_worker/icloud_stream.mjs');
-console.log('Browser upload ZIP worker and automatic iCloud scenarios passed.');
+const {streamHarness} = await import('./browser_upload_zip_worker/icloud_stream.mjs');
+
+/** Adapt the real ZIP worker to the browser reader's event boundary in Node. */
+class SelectionArchiveWorker {
+    /** Construct an isolated worker with observable, disposable listeners.
+     * @returns {void} Owns one production worker request handler.
+     */
+    constructor() { this.reader = workerReaderHarness(); this.listeners = new Map(); }
+    /** Register a browser-style event listener.
+     * @param {string} type Message or error event name.
+     * @param {function({data:Record<string,unknown>}):void} callback Worker reply observer.
+     * @returns {void} Retains the callback until request cleanup.
+     */
+    addEventListener(type, callback) {
+        if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+        this.listeners.get(type).add(callback);
+    }
+    /** Release a request's browser-style listener.
+     * @param {string} type Message or error event name.
+     * @param {function({data:Record<string,unknown>}):void} callback Original observer.
+     * @returns {void} Removes only that request's callback.
+     */
+    removeEventListener(type, callback) { this.listeners.get(type)?.delete(callback); }
+    /** Deliver a request to the actual worker and report its envelope.
+     * @param {{action:string,zipBlob?:Blob,entryIndex?:number,limits?:{maximumEntryBytes?:number}}} payload Reader request.
+     * @returns {void} Schedules a real worker reply without synchronous extraction.
+     */
+    postMessage(payload) {
+        this.reader.then(reader => reader(payload)).then(data => {
+            for (const callback of this.listeners.get('message') || []) callback({data});
+        });
+    }
+    /** Release the disposable worker's event observers.
+     * @returns {void} Prevents delivery after disposal or cancellation.
+     */
+    terminate() { this.listeners.clear(); }
+}
+
+/** Expose a large disk-like selected File without allocating its sparse holes. */
+class SparseSelectedArchive extends File {
+    /** Wrap the existing bounded-range ZIP fixture in a user selection.
+     * @param {SparseArchive} archive Sparse original with checked ZIP metadata.
+     * @returns {void} Retains only the immutable source fixture reference.
+     */
+    constructor(archive) { super([], 'large-selection.zip', {type: 'application/zip'}); this.archive = archive; }
+    /** Report the disk source length independently of heap allocation.
+     * @returns {number} Virtual archive byte length.
+     */
+    get size() { return this.archive.size; }
+    /** Read only an explicitly bounded ZIP range.
+     * @param {number} start Inclusive source offset.
+     * @param {number} end Exclusive source offset.
+     * @returns {Blob} Requested bounded metadata or entry bytes.
+     */
+    slice(start, end) { return this.archive.slice(start, end); }
+    /** Refuse full-source buffering in the manual selection pipeline.
+     * @returns {Promise<ArrayBuffer>} Always rejects a whole-archive read.
+     */
+    async arrayBuffer() { throw new Error('Manual ZIP must remain disk-backed.'); }
+}
+
+/** Load the actual selection adapter, upload coordinator and batcher together.
+ * @param {File[]} files Immutable synthetic manual picker selection.
+ * @param {boolean} drawer Whether explicit drawer order overrides natural sorting.
+ * @returns {Promise<import('./browser_upload_zip_worker/icloud_stream.mjs').StreamHarness>} Production coordinator with a real ZIP worker and confined transport/storage adapters.
+ */
+async function manualSelectionHarness(files, drawer = true) {
+    const harness = await streamHarness();
+    const context = harness.context;
+    context.Worker = SelectionArchiveWorker;
+    context.globalI18n = context.i18n;
+    context.files = files;
+    context.manualForm = {dataset: {}, querySelector: selector =>
+        selector === '[data-gallery-upload-preview]' && drawer ? {} : null};
+    context.manualProgress = {};
+    const adapter = await readFile(new URL('../public/assets/gallery-modules/browser-upload-archive-stream.js', import.meta.url), 'utf8');
+    vm.runInContext(adapter.replace(/^import .*;\s*$/gm, '').replace(/^export /gm, '')
+        .replaceAll('import.meta.url', "'https://gallery.example/assets/browser-upload-archive-stream.js'") + `
+        selectedBrowserUploadFiles = () => files;
+        selectedBrowserUploadPdfFiles = () => [];
+        selectedBrowserUploadMusicFiles = () => [];
+        browserUploadCapability = () => ({ok:true});
+    `, context);
+    return harness;
+}
+
+const archiveSelection = new File([readerArchive], 'selection.zip', {type: 'application/zip'});
+const beforeArchive = new File([png], 'z-before.png', {type: 'image/png'});
+const afterArchive = new File([png], 'a-after.png', {type: 'image/png'});
+const manual = await manualSelectionHarness([beforeArchive, archiveSelection, afterArchive]);
+manual.state.loseAck = true;
+manual.context.manualOperation = {prepared: null, unresolved: false};
+await assert.rejects(() => vm.runInContext('runBrowserGalleryUpload(manualForm,manualProgress,manualOperation)', manual.context), /lost batch acknowledgment/);
+const retainedSelection = manual.context.manualOperation.prepared.selectionStream;
+const retainedZip = manual.state.requests[0].blob;
+const manualResult = await vm.runInContext('runBrowserGalleryUpload(manualForm,manualProgress,manualOperation)', manual.context);
+assert.equal(manualResult.uploaded, 4, 'Mixed picker originals and valid archive entries upload once');
+assert.equal(manual.context.manualOperation.prepared.selectionStream, retainedSelection);
+assert.equal(manual.state.requests[1].blob, retainedZip, 'Manual retry reuses the exact unacknowledged ZIP');
+assert.equal(manual.state.inserted.size, 4);
+assert.deepEqual(manual.state.events.filter(event => event.startsWith('file:')),
+    ['file:z-before.png', 'file:a.png', 'file:b.png', 'file:a-after.png'],
+    'Drawer order surrounds directory order, while corrupt entries are counted and skipped');
+assert.equal(manual.state.store.size, 0);
+
+const sorted = await manualSelectionHarness([beforeArchive, archiveSelection, afterArchive], false);
+sorted.context.manualOperation = {prepared: null, unresolved: false};
+await vm.runInContext('runBrowserGalleryUpload(manualForm,manualProgress,manualOperation)', sorted.context);
+assert.deepEqual(sorted.state.events.filter(event => event.startsWith('file:')),
+    ['file:a-after.png', 'file:a.png', 'file:b.png', 'file:z-before.png'],
+    'Standalone selection keeps global natural image ordering across archive boundaries');
+
+const admitted = await manualSelectionHarness([new SparseSelectedArchive(largeMetadata)]);
+admitted.context.manualConfig = {uploadLimitBytes: 64 * 1024 * 1024};
+const admittedStream = await vm.runInContext('createBrowserUploadSelectionStream(files,manualConfig,manualProgress,new AbortController().signal)', admitted.context);
+assert.equal(admittedStream.pageCount, 2, 'Manual selection admits 80 MiB of declared images without eager retention');
+assert.ok(Math.max(...largeMetadata.reads) <= 69653, 'Large manual inspection reads metadata only');
+await admittedStream.dispose();
+
+const malformed = await manualSelectionHarness([archiveSelection, new File(['not ZIP'], 'broken.zip')]);
+malformed.context.manualOperation = {prepared: null, unresolved: false};
+await assert.rejects(() => vm.runInContext('runBrowserGalleryUpload(manualForm,manualProgress,manualOperation)', malformed.context));
+assert.equal(malformed.state.requests.length, 0, 'Every archive is inspected before the first server write');
+console.log('Browser upload ZIP worker, manual selection streaming and automatic iCloud scenarios passed.');

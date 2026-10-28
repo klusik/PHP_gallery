@@ -44,9 +44,14 @@ The explicit manual alternative feeds this picker. Bearer URLs are never
 persisted
 or submitted to Gallery. See
 [the acquisition, ZIP limits and retry contract](ICLOUD_IMPORT.md).
-Manual ZIP selections share a 64 MiB retained-original budget; the disk stream
-bounds each image instead. These bounds are independent from preview admission
-and upload batch size.
+Manual ZIP selections use the same pull-driven reader and bounded batcher.
+They retain source Files and directory descriptors, not all extracted originals;
+the 64 MiB ceiling applies to each extracted image together with the effective
+server limit. Mixed selections preserve explicit drawer order or standalone
+natural image order. Exact pending ZIP bytes and the source cursor survive retry.
+A source ZIP is not compared with the PHP per-request limit in preview; direct
+image originals retain that warning. These bounds are independent from preview
+admission and upload batch size.
 
 | Resource | Bound | Effect outside the bound |
 | --- | --- | --- |
@@ -115,8 +120,9 @@ the runtime limit registry. The form receives the effective
 `upload_limit_bytes`; worker concurrency and maximum items per ZIP batch remain
 administrator-bounded. The ZIP soft packing target is not the preview byte
 ceiling, and the PHP request ceiling remains hard. ZIP entry/expansion/path
-checks now also bound directory allocation, retained originals across archives
-and actual Deflate output. Existing bounded batch replay remains authoritative.
+checks bound directory allocation, each extracted original and actual Deflate
+output. Every selected archive is inspected before the first server write.
+Existing bounded batch replay remains authoritative.
 No actual WEDOS capacity or browser-process memory measurement is claimed here.
 
 The displayed selection count and total byte size describe the local queue, not

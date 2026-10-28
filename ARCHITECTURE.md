@@ -2775,8 +2775,20 @@ formatting.
 
 When browser-assisted upload is selected, the file input also accepts user ZIP
 archives such as iCloud Photos exports. Archives are inspected and expanded
-entirely in a short-lived browser worker before the normal image-preparation
-pool runs; the original user ZIP is never posted to PHP. The parser reads the
+through bounded metadata inspection in a browser worker before any server
+write. The manual selection then pulls one verified image at a time through
+`browser-upload-archive-stream.js` and the existing File-stream uploader;
+the original user ZIP is never posted to PHP. Mixed selections preserve drawer
+order or the standalone form's natural image order across archive boundaries.
+The source descriptors, cursor, upload session and exact pending batch survive
+an uncertain acknowledgment. Extracted originals are never collected into an
+all-images File array, so a large archive does not consume a 64 MiB aggregate
+retention budget. Per-image limits, bounded directory/expanded data, CRC checks,
+server request ceilings and prepared-thumbnail checks remain authoritative.
+Manual new-gallery visibility still follows the explicit form and server; the
+automatic iCloud source retains its Private/Unpublished requirement.
+The preview does not compare a locally expanded ZIP with the PHP request limit;
+ordinary originals retain their per-file size warnings. The parser reads the
 central directory, supports stored and Deflate entries, skips directories,
 hidden metadata, encrypted entries, unsupported compression and unsupported
 media, and verifies image signatures. It refuses traversal paths,

@@ -1427,7 +1427,23 @@ Laden Sie bei einer großen Veranstaltung in sinnvollen Gruppen hoch. Kleinere G
 
 Beide Quelltypen haben getrennte Beschaffungswege. Fotolinks können ablaufen oder widerrufen werden; die Verfügbarkeit geteilter Alben bestimmt der Eigentümer einschließlich einer optionalen temporären Freigabe. Angefordert werden kompatible JPEG/PNG/GIF-Darstellungen; empfangene JPEG/PNG/WebP/GIF-Bilder werden anhand ihrer tatsächlichen Signatur geprüft. HEIC/HEIF/DNG/RAW, MP4/MOV, Live-Photo-Bewegungen und Begleitdateien werden als nicht unterstützt gezählt, nicht umbenannt oder still konvertiert. JPEG ersetzt kein erhaltenes RAW-Original; Aufnahme-/GPS-Metadaten und Apple-Bearbeitungen sind nicht garantiert. Apples Downloadprotokoll kann sich ändern; anmeldepflichtige Quellen lassen sich nicht anonym importieren.
 
-Der automatische Transfer benötigt einen unterstützten Browser auf HTTPS mit temporärem OPFS-Dateispeicher. Bekannte Gesamtgrößen ermöglichen Downloadfortschritt, unbekannte zeigen nur empfangene Bytes. Die Daten werden schrittweise geschrieben; das vollständige Archiv liegt nie in einem einzigen Speicherpuffer. Der vorhandene ZIP-Worker liest begrenzte Metadaten und jeweils ein Bild. Kleine Uploadpakete werden über IndexedDB vorbereitet und bestätigt. Stored und Deflate werden unterstützt; ZIP64 und Mehrdatenträgerarchive werden ausdrücklich abgelehnt. Grenzen: 10.000 Einträge, 4~MiB Verzeichnismetadaten, 2~GiB entpackte Daten sowie 64~MiB beziehungsweise die Servergrenze pro Bild. Manuelle ZIP-Auswahl behält 64~MiB Gesamtbudget für Originale. Decoder und Vorschaubilder benötigen zusätzlichen Speicher; dies ist keine Messung des gesamten Heaps.
+Der automatische Transfer benötigt einen unterstützten Browser auf HTTPS mit
+temporärem OPFS-Dateispeicher. Bekannte Gesamtgrößen ermöglichen
+Downloadfortschritt, unbekannte zeigen nur empfangene Bytes. Die Daten werden
+schrittweise geschrieben; das vollständige Archiv liegt nie in einem einzigen
+Speicherpuffer. Der vorhandene ZIP-Worker liest begrenzte Metadaten und jeweils
+ein Bild. Kleine Uploadpakete werden über IndexedDB vorbereitet und bestätigt.
+Stored und Deflate werden unterstützt; ZIP64 und Mehrdatenträgerarchive werden
+ausdrücklich abgelehnt. Grenzen: 10.000 Einträge, 4~MiB Verzeichnismetadaten,
+2~GiB entpackte Daten sowie 64~MiB beziehungsweise die Servergrenze pro Bild.
+Manuell gewählte ZIPs verwenden denselben schrittweisen Leser: 64~MiB und die
+Servergrenze gelten je Bild. Das Quellarchiv wird nicht hochgeladen und nicht
+mit der PHP-Anfragegrenze verglichen. Gemischte Auswahlen behalten die
+Panelreihenfolge oder die natürliche Bildreihenfolge der eigenständigen Seite.
+Wiederholen behält Quellposition und exakt dasselbe unbestätigte Paket; die
+Sichtbarkeit manuell angelegter Galerien bestimmen Formular und Server. Decoder
+und Vorschaubilder benötigen zusätzlichen Speicher; dies ist keine Messung des
+gesamten Heaps.
 
 \ui{Import abbrechen} stoppt Beschaffung und aktive Arbeit; angenommene Fotos bleiben erhalten. Lassen Sie bei unklarem Ergebnis dasselbe Formular offen und wählen Sie \ui{Denselben Import wiederholen}. Festplattenquelle, Position und Identität unbestätigter Pakete/Sitzungen bleiben erhalten, sodass keine doppelten Einträge entstehen. Quelle und Ziel bleiben bis zur Abstimmung gesperrt. Sichere Fehler vor Serverarbeit und erfolgreicher Abschluss entfernen temporäre Quellen. Beim Schließen des Tabs geht die Fortsetzung im Formular verloren; die nächste Beschaffung entfernt verwaiste, ungesperrte Quellen nach einem Tag. Hintergrundimport und sitzungsübergreifender Neustart werden nicht zugesichert.
 

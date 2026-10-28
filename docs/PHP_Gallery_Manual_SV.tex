@@ -1362,7 +1362,21 @@ Ladda upp i meningsfulla grupper för ett stort evenemang. Mindre grupper gör f
 
 Källtyperna har separata hämtningsvägar. Fotolänkar kan upphöra eller återkallas; ägaren styr tillgängligheten för delade album, inklusive tillfällig giltighet. Galleriet begär kompatibla JPEG/PNG/GIF-versioner och kontrollerar mottagna JPEG/PNG/WebP/GIF genom deras faktiska signatur. HEIC/HEIF/DNG/RAW, MP4/MOV, Live Photo-rörelser och sidofiler räknas som format utan stöd och döps inte om eller konverteras dolt. JPEG är inte ett bevarat RAW-original; fotograferings-/GPS-metadata och Apple-redigeringar garanteras inte. Apples hämtningsprotokoll kan ändras och en källa som kräver inloggning kan inte importeras anonymt.
 
-Automatisk överföring kräver en stödd webbläsare på HTTPS med tillfällig OPFS-fillagring. Känd totalstorlek visar hämtningsförlopp; annars visas bara mottagna byte. Data skrivs stegvis och hela arkivet hålls aldrig i en enda minnesbuffert. Den befintliga ZIP-arbetaren läser begränsade metadata och en bild i taget. Små uppladdningspaket förbereds via IndexedDB och bekräftas. Stored och Deflate stöds; ZIP64 och arkiv över flera diskar avvisas uttryckligen. Gränserna är 10~000 poster, 4~MiB katalogmetadata, 2~GiB uppackade data och 64~MiB/servergränsen per bild. Manuellt valda ZIP-filer behåller 64~MiB sammanlagd originalbudget. Avkodare och miniatyrer använder också minne; detta är ingen mätning av total heap.
+Automatisk överföring kräver en stödd webbläsare på HTTPS med tillfällig
+OPFS-fillagring. Känd totalstorlek visar hämtningsförlopp; annars visas bara
+mottagna byte. Data skrivs stegvis och hela arkivet hålls aldrig i en enda
+minnesbuffert. Den befintliga ZIP-arbetaren läser begränsade metadata och en
+bild i taget. Små uppladdningspaket förbereds via IndexedDB och bekräftas.
+Stored och Deflate stöds; ZIP64 och arkiv över flera diskar avvisas
+uttryckligen. Gränserna är 10~000 poster, 4~MiB katalogmetadata, 2~GiB
+uppackade data och 64~MiB/servergränsen per bild. Manuellt valda ZIP-filer
+använder samma stegvisa läsare: 64~MiB och servergränsen gäller per bild.
+Källarkivet laddas inte upp och jämförs inte med PHP-gränsen per begäran.
+Blandade val behåller panelordningen eller den fristående sidans naturliga
+bildordning. Försök igen behåller källpositionen och exakt samma obekräftade
+paket; formuläret och servern bestämmer synligheten för manuellt skapade
+gallerier. Avkodare och miniatyrer använder också minne; detta är ingen mätning
+av total heap.
 
 \ui{Avbryt import} stoppar hämtningen och aktivt arbete; mottagna foton finns kvar. Håll samma formulär öppet efter ett osäkert resultat och välj \ui{Försök med samma import igen}. Diskkälla, position och identitet för obekräftade paket/sessioner bevaras, så att inga dubbletter skapas. Källa och mål är låsta tills resultatet stämts av. Säkra fel före serverarbete och lyckat slutförande tar bort tillfälliga källor. Om fliken stängs förloras formulärets fortsättning; nästa hämtning tar bort övergivna olåsta källor äldre än ett dygn. Bakgrundsimport eller återstart mellan sessioner utlovas inte.
 

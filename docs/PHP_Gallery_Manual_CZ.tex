@@ -1348,7 +1348,21 @@ Otevřete \ui{Import z iCloudu}, vložte veřejný odkaz na Fotky na iCloudu na 
 
 Oba typy zdrojů mají samostatnou cestu získání dat. Odkaz na~fotografie může vypršet či být odvolán; dostupnost sdíleného alba určuje vlastník včetně volitelné dočasné expirace. Galerie požaduje kompatibilní JPEG/PNG/GIF; přijaté JPEG/PNG/WebP/GIF ověřuje podle skutečné signatury. HEIC/HEIF/DNG/RAW, MP4/MOV, pohyblivé součásti Live Photo a~doprovodné soubory vykazuje jako nepodporované, nepřejmenovává je ani skrytě nekonvertuje. JPEG není zachovaný originál RAW; metadata pořízení/GPS ani úpravy Applu nejsou zaručeny. Stahovací protokol se~může změnit a~zdroj vyžadující přihlášení nelze anonymně importovat.
 
-Automatický přenos vyžaduje podporovaný prohlížeč na~HTTPS s~dočasným diskovým úložištěm OPFS. Je-li celková velikost známa, zobrazí se~průběh stahování; jinak pouze skutečně přijaté bajty. Data se~zapisují postupně, celý archiv se~nedrží v~jednom paměťovém bufferu. Dosavadní ZIP worker čte omezená metadata a~jeden obrázek po~druhém; fotografie připravuje a~odesílá v~malých dávkách uložených v~IndexedDB. Podporuje Stored a~Deflate; ZIP64 a~vícediskové archivy výslovně odmítá. Limity zahrnují 10~000 položek, 4~MiB metadat adresáře, 2~GiB rozbalených dat a~64~MiB/limit serveru na~obrázek. Ruční ZIP výběr zachovává souhrnný limit 64~MiB originálů. Dekódování a~náhledy potřebují další paměť; nejde o~měření celkové spotřeby.
+Automatický přenos vyžaduje podporovaný prohlížeč na~HTTPS s~dočasným diskovým
+úložištěm OPFS. Je-li celková velikost známa, zobrazí se~průběh stahování;
+jinak pouze skutečně přijaté bajty. Data se~zapisují postupně, celý archiv
+se~nedrží v~jednom paměťovém bufferu. Dosavadní ZIP worker čte omezená metadata
+a~jeden obrázek po~druhém; fotografie připravuje a~odesílá v~malých dávkách
+uložených v~IndexedDB. Podporuje Stored a~Deflate; ZIP64 a~vícediskové archivy
+výslovně odmítá. Limity zahrnují 10~000 položek, 4~MiB metadat adresáře, 2~GiB
+rozbalených dat a~64~MiB/limit serveru na~obrázek. Ručně vybrané ZIPy používají
+stejný průběžný reader: limit 64~MiB spolu s~limitem serveru platí
+na~jednotlivý obrázek. Samotný archiv se~neodesílá a~neporovnává s~limitem
+požadavku PHP. Smíšený výběr zachovává pořadí panelu nebo přirozené pořadí
+obrázků na~samostatné stránce. Opakování uchová kurzor zdroje i~přesnou
+nepotvrzenou dávku; viditelnost ručně zakládané galerie určuje formulář
+a~server. Dekódování a~náhledy potřebují další paměť; nejde o~měření celkové
+spotřeby.
 
 \ui{Zrušit import} zastaví získávání dat a~probíhající práci; přijaté fotografie zůstanou zachovány. Při neurčitém výsledku ponechte stejný formulář otevřený a~zvolte \ui{Opakovat stejný import}: diskový zdroj, pozice a~identita nepotvrzené dávky i~session zůstanou zachovány, takže nevzniknou duplicity. Zdroj a~cíl zůstávají do~vyřešení uzamčené. Bezpečné selhání před prací serveru a~úspěšné dokončení odstraní dočasný zdroj. Zavřením karty se~ztratí možnost pokračování v~tomto formuláři; další import odstraní opuštěné neuzamčené zdroje starší než jeden den. Import na~pozadí ani obnovení mezi relacemi není slíbeno.
 

@@ -249,9 +249,9 @@ $uploadControllerSource = file_get_contents(__DIR__
     . '/../app/controllers/admin_uploads.php');
 browser_upload_test_assert(
     is_string($browserUploadSource)
-        && str_contains($browserUploadSource, 'expandBrowserUploadArchives')
-        && str_contains($browserUploadSource, "action: 'extractUploadZip'"),
-    'browser upload expands selected ZIP archives before image preparation',
+        && str_contains($browserUploadSource, 'createBrowserUploadSelectionStream')
+        && str_contains($browserUploadSource, "sourceKind: 'selection'"),
+    'browser upload streams selected ZIP images through bounded prepared batches',
 );
 browser_upload_test_assert(
     is_string($browserWorkerSource)

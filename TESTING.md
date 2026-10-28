@@ -2963,8 +2963,16 @@ confirm the classic path still creates exactly one gallery and remains the
 explicit server-side choice.
 
 Run `node tests/browser_upload_zip_worker_test.mjs` for the generated
-stored/Deflate mixed-archive worker fixture. Node is a development-only test
-convenience; it is not required by the deployed PHP application.
+stored/Deflate mixed-archive worker fixture, manual mixed-selection streaming,
+sparse large-archive admission above 64 MiB, global/drawer ordering, real worker
+integrity skips, exact lost-ACK batch replay and pre-write refusal of a malformed
+later archive. The clipboard Chromium fixture verifies that a prepared source
+ZIP has no PHP-size warning while direct originals and classic selections retain
+theirs. Manually select a large real ZIP on desktop and narrow layouts, then
+confirm bounded outgoing requests and the unchanged target gallery, including
+Retry after interrupted transport. Physical process memory and Safari/Firefox
+remain separate manual coverage. Node is a development-only test convenience;
+it is not required by the deployed PHP application.
 
 Run one focused test directly when diagnosing a failure:
 
