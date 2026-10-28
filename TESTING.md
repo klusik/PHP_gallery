@@ -1106,7 +1106,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.146. Release verification uses the
+This guide applies to PHP Gallery Version 0.146.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4064,6 +4064,11 @@ gradients. An unpaired dark edge must remain unchanged. Caption assertions keep
 the annotated edge visible while allowing an independently proven opposite
 matte to fit. The reported local concert image was additionally inspected through
 the actual protected preview route; no personal image is embedded in fixtures.
+Paired dim game edges cover both reported failure classes: a crop on only the
+bright side and no crop when both sides are dim. Node vectors exercise both
+axes and unequal dim mattes; compressed browser JPEGs require both pillars to
+disappear. Uniform dark frames remain unchanged. The actual reported Mass
+Effect samples are diagnostic inputs only, not committed fixture assets.
 The same fixture snapshots outgoing source/surface styles synchronously at
 navigation, checks incoming full-source proportions and unconstrained computed
 maxima during fades, and observes intermediate outgoing opacity. Its automatic

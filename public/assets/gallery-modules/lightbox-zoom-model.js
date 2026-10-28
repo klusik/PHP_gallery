@@ -13,6 +13,7 @@
  *   - Clamp panning to the scaled image bounds
  *   - Preserve a pointer or pinch midpoint while scale changes
  *   - Select the smallest safe source that satisfies the active zoom density
+ *   - Detect bounded black mattes without changing stored image pixels
  *   - Keep model behavior testable without a browser DOM
  *
  * Author:
@@ -21,7 +22,7 @@
  * License: MIT License (see LICENSE file in repository)
  *
  * Last Updated:
- *   2026-08-16
+ *   2026-10-28
  */
 
 export const LIGHTBOX_ZOOM_MIN_SCALE = 1;
@@ -37,6 +38,7 @@ export const LIGHTBOX_ZOOM_QUALITY_UPGRADE_THRESHOLD = 1;
  * blackMean:number,blackDeviation:number,minBand:number,maxTrim:number,
  * minContent:number,transitionLight:number,transitionShare:number,
  * transitionDepth:number,transitionRamp:number,pairedTransitionShare:number,
+ * pairedTransitionLight:number,pairedTransitionContrast:number,
  * pairedTransitionDepth:number,pairedBandTolerance:number,
  * aspectTolerance:number,version:string}.
  * Units: pixels, entries, byte levels and dimensionless fractions as below.
@@ -60,10 +62,12 @@ export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
     transitionDepth: 2, // Require the transition to persist into content.
     transitionRamp: 2, // Retain up to two blended boundary lines during evidence checks.
     pairedTransitionShare: 0.15, // Dark content needs a matching opposite matte.
+    pairedTransitionLight: 24, // Accept dim game scenes above near-black noise.
+    pairedTransitionContrast: 12, // Require visible variation, not a flat fade.
     pairedTransitionDepth: 4, // Paired dark edges need four persistent content lines.
     pairedBandTolerance: 2, // Opposite mattes may differ by two sample pixels.
     aspectTolerance: 0.02, // Allow 2% derivative rounding, not a different frame.
-    version: 'content-v2', // Invalidate cached decisions when policy changes.
+    version: 'content-v3', // Invalidate cached decisions when policy changes.
 });
 
 /**
@@ -71,9 +75,10 @@ export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
  *
  * Horizontal bands are found first, then columns within their content span.
  * An uncertain edge retains its extent without rejecting other proven edges.
- * Matched opposite mattes can establish a darker but sustained transition when
- * the other edge passes the ordinary bright-content test. Real dark backgrounds
- * can still resemble a matte, so the viewer offers an original-frame override.
+ * Matched opposite mattes can establish darker sustained transitions on both
+ * edges when each has spatial variation. An independent edge still needs the
+ * ordinary bright-content test. Real dark backgrounds can resemble a matte,
+ * so the viewer offers an original-frame override.
  *
  * @param {{width:number,height:number,data:Uint8ClampedArray}} sample Small RGBA raster, at most 256 pixels per axis.
  * @returns {{left:number,top:number,right:number,bottom:number}|null} Normalized content edges, or null when unchanged/uncertain.
@@ -117,7 +122,8 @@ export function detectLightboxContentBounds(sample) {
         if (band > limit) return -1;
         return band;
     };
-    const hasTransition = (vertical, reverse, band, start, end, share, depthCount) => {
+    const hasTransition = (vertical, reverse, band, start, end, share,
+        depthCount, light = policy.transitionLight, contrast = 0) => {
         if (band <= 0) return false;
         const extent = vertical ? width : height;
         const count = end - start;
@@ -129,14 +135,19 @@ export function detectLightboxContentBounds(sample) {
                 const distance = band + ramp + depth;
                 const line = reverse ? extent - 1 - distance : distance;
                 let bright = 0;
+                let minimum = 255;
+                let maximum = 0;
                 for (let position = start; position < end; position += 1) {
                     const offset = (vertical
                         ? position * width + line : line * width + position) * 4;
-                    if (data[offset + 3] === 255
-                        && Math.max(data[offset], data[offset + 1],
-                            data[offset + 2]) >= policy.transitionLight) bright += 1;
+                    if (data[offset + 3] !== 255) continue;
+                    const level = Math.max(data[offset], data[offset + 1],
+                        data[offset + 2]);
+                    if (level >= light) bright += 1;
+                    minimum = Math.min(minimum, level);
+                    maximum = Math.max(maximum, level);
                 }
-                if (bright / count < share) {
+                if (bright / count < share || maximum - minimum < contrast) {
                     sustained = false;
                     break;
                 }
@@ -154,14 +165,17 @@ export function detectLightboxContentBounds(sample) {
             policy.transitionShare, policy.transitionDepth);
         const paired = first > 0 && last > 0
             && Math.abs(first - last) <= policy.pairedBandTolerance;
-        const firstSupported = firstStrong || (paired && lastStrong
-            && hasTransition(vertical, false, first, start, end,
-                policy.pairedTransitionShare, policy.pairedTransitionDepth));
-        const lastSupported = lastStrong || (paired && firstStrong
-            && hasTransition(vertical, true, last, start, end,
-                policy.pairedTransitionShare, policy.pairedTransitionDepth));
-        return {first: firstSupported ? first : 0,
-            last: lastSupported ? last : 0};
+        // Matching geometry corroborates two dim edges even when neither has
+        // 35% bright pixels. Flat fades and unmatched dark edges stay intact.
+        const pairedSupported = paired
+            && (firstStrong || hasTransition(vertical, false, first, start, end,
+                policy.pairedTransitionShare, policy.pairedTransitionDepth,
+                policy.pairedTransitionLight, policy.pairedTransitionContrast))
+            && (lastStrong || hasTransition(vertical, true, last, start, end,
+                policy.pairedTransitionShare, policy.pairedTransitionDepth,
+                policy.pairedTransitionLight, policy.pairedTransitionContrast));
+        return {first: firstStrong || pairedSupported ? first : 0,
+            last: lastStrong || pairedSupported ? last : 0};
     };
     const {first: top, last: bottom} = resolveAxis(false, 0, width);
     const {first: left, last: right} = resolveAxis(true, top, height - bottom);

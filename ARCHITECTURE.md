@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.146';
+const CMS_VERSION = '0.146.1';
 ```
 
 Update-related code uses:
@@ -3685,9 +3685,11 @@ The same model detects conservative content bounds from an opaque RGBA sample.
 The viewer samples only the active already-decoded authorized source, with a
 maximum 256-pixel edge, and caches at most 64 normalized rectangles per setup.
 Contiguous low-variance near-black bands require a sustained transition.
-Matching opposite bands can support a darker edge when the other edge passes
-the strict bright-content test. Up to two retained blended boundary lines may
-precede the transition evidence. Uncertain edges, subtitle/logo pixels and
+Matching opposite bands can support two darker content edges without either
+passing the strict bright-content test: each needs sustained dim pixels and
+spatial variation. A uniform dark fade remains unchanged. Up to two retained
+blended boundary lines may precede the transition evidence. Uncertain edges,
+subtitle/logo pixels and
 natural dark gradients stay visible while independently proven edges can fit.
 Excessive bands retain their extent; pixel-read refusal keeps the original frame.
 No learning model, source rewrite, gallery scan or

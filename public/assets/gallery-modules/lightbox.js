@@ -93,7 +93,7 @@ import {
     zoomLightboxStateAtAnchor,
     zoomLightboxStateAtPhotoAnchor,
     zoomLightboxStateAtRenderedAnchor,
-} from './lightbox-zoom-model.js?v=20261028-content-fit-v3';
+} from './lightbox-zoom-model.js?v=20261028-content-fit-v5';
 
 import {
     galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
