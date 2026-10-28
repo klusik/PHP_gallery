@@ -2958,6 +2958,17 @@ Zařazení do~ZIP nikdy neobchází zděděná přístupová oprávnění, vidit
 \index{m00088@migrace galerie}
 \index{m00087@migrace API}
 
+Pro přímý import otevřete ve~zdrojové galerii záložku \ui{API},
+vygenerujte API klíč a~zkopírujte \ui{URL pro import galerie}
+a~jednorázově zobrazený klíč. V~cílové galerii otevřete
+\ui{Upravit > Média > Import galerie}, vložte obě hodnoty a~spusťte
+přenos. Vytvoří se~nová podgalerie s~originály a~existujícími náhledy.
+Volba \ui{Zahrnout podgalerie} přenese také strom potomků.
+\ui{Nastavení připojení} skrývá interval opětovného připojení,
+dokud jej nepotřebujete. Editor zůstává otevřený s~průběhem a~chybami.
+Přenos vyžaduje JavaScript; nápověda se~otevírá u~svého ovladače
+a~zavírá klávesou Escape nebo kliknutím mimo.
+
 Oblast API editoru galerie podporuje oba směry přenosu mezi kompatibilními instalacemi PHP Gallery. \ui{Exportovat tuto galerii do jiné instance} považuje aktuální galerii za zdroj a~používá klíč API omezený na přijímající nadřazenou galerii. \ui{Importovat do této galerie z~jiné instance} považuje aktuální galerii za přijímajícího rodiče a~používá klíč API vytvořený pro vzdálenou zdrojovou galerii. Import vytváří novou podřízenou galerii pod tímto rodičem; nikdy nepřepisuje ani nepřesouvá vybranou přijímající galerii.
 
 \ui{Zahrnout podgalerie} je ve výchozím stavu povoleno. Při výběru verzovaný manifest popisuje zdrojovou galerii a~úplnou hierarchii potomků v~pořadí s~rodiči prvními. Cíl znovu vytvoří tuto hierarchii pod novým importovaným kořenem a~zachovává podporovaná metadata galerií a~obrázků, překlady, stav letové mapy, originály, existující náhledy a~podklady značky galerie. Vypnutí volby přenáší pouze vybranou zdrojovou galerii. Současná pravidla kompatibility vyžadují přesně stejnou verzi aplikace na zdroji i~cíli.

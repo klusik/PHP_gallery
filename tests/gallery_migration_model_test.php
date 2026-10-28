@@ -134,6 +134,15 @@ assert_gallery_migration_same(
     'localhost without scheme defaults to http',
 );
 
+assert_gallery_migration_same(
+    'https://example.com/gallery/index.php?page=gallery_migration_package',
+    gallery_migration_endpoint_url(
+        'https://example.com/gallery/index.php?page=gallery_migration_manifest',
+        'gallery_migration_package',
+    ),
+    'copied source import URL keeps the installation mount for package reads',
+);
+
 $original = [
     'scope' => 'image',
     'kind' => 'original',

@@ -141,6 +141,14 @@ const refreshedMusicCard = renderFixture('music-card');
 const filteredChoices = renderFixture('choices', 'Night');
 const albumChoices = renderFixture('album-choices');
 const noPresentationMarkup = renderFixture('without-presentation');
+const noImportMarkup = renderFixture('without-import');
+const sourceApiMarkup = renderFixture('source-api');
+assert.ok(sourceApiMarkup.includes('data-admin-copy-input value="https://source.example/gallery/index.php?page=gallery_migration_manifest"')
+    && sourceApiMarkup.includes('data-admin-copy-input value="fixture-api-key"'),
+'Source API must expose the canonical import URL and one-time key through independent copy controls.');
+assert.ok(!noImportMarkup.includes('admin-gallery-media-import')
+    && !noImportMarkup.includes('data-gallery-migration-form'),
+'A disabled migration capability must omit both the import tab and its form.');
 const encodedFilteredChoices = JSON.stringify(filteredChoices)
     .replaceAll('<', '\\u003c');
 const encodedAlbumChoices = JSON.stringify(albumChoices)
@@ -198,6 +206,7 @@ window.addEventListener('unhandledrejection', event => {
 import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
 import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
+import {setupAdminGalleryMigration} from '/public/assets/gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 
 const check = (condition, message) => {
     if (!condition) throw new Error(message);
@@ -323,6 +332,14 @@ let persistedMusicEnabled = true;
 let musicRevisionNumber = 7;
 let activePreferenceWrites = 0;
 let maximumConcurrentPreferenceWrites = 0;
+const importActions = [];
+let refuseImport = false;
+const importCompletions = [];
+document.addEventListener('php-gallery:auxiliary-mutation-success', event => {
+    if (event.detail?.source === 'gallery-migration') {
+        importCompletions.push(event.detail);
+    }
+});
 
 /** Wait until one exact count of submitted preference writes is observable.
  * @param {number} expectedCount Expected total settings requests in this fixture.
@@ -434,6 +451,47 @@ window.fetch = /** Mock same-origin catalog and mutation endpoints while preserv
  */
 async (input, options = {}) => {
     const requestUrl = new URL(String(input), location.href);
+    if (requestUrl.searchParams.get('page') === 'admin_gallery_migration') {
+        const body = options.body;
+        check(options.method === 'POST' && body instanceof FormData
+            && body.get('csrf_token') === 'fixture-csrf'
+            && body.get('gallery_id') === '42'
+            && body.get('source_url') === 'https://source.example/gallery/index.php?page=gallery_migration_manifest'
+            && body.get('source_api_key') === 'fixture-api-key'
+            && !requestUrl.href.includes('fixture-api-key'),
+        'Import must send scoped credentials and CSRF only in the POST body.');
+        const action = body.get('action');
+        importActions.push({action, recursive: body.get('include_subgalleries')});
+        if (refuseImport) {
+            return new Response(JSON.stringify({
+                ok: false, error: 'Fixture incompatible source version.',
+            }), {status: 422, headers: {'Content-Type': 'application/json'}});
+        }
+        const payload = {
+            ok: true, job_id: 'fixture-import', message: 'Fixture import step.',
+            received_asset_keys: [],
+        };
+        // One child with an original and a thumbnail proves package completion
+        // without making this transport adapter claim real filesystem evidence.
+        if (action === 'pull_manifest') {
+            Object.assign(payload, {
+                counts: {assets: 2, galleries: 1},
+                packages: [{package_id: 'fixture-package',
+                    asset_keys: ['original', 'thumbnail'], assets: []}],
+            });
+        }
+        if (action === 'pull_complete') {
+            Object.assign(payload, {
+                assets_received: 2, total_assets: 2,
+                mutation: {type: 'gallery', entity: 'gallery',
+                    action: 'pull_complete', entity_ids: [43]},
+                contexts: [], fallback: {},
+            });
+        }
+        return new Response(JSON.stringify(payload), {
+            headers: {'Content-Type': 'application/json'},
+        });
+    }
     if (requestUrl.searchParams.get('action') === 'music_selection_status') {
         return new Response(JSON.stringify({
             ok: true,
@@ -534,6 +592,7 @@ async (input, options = {}) => {
 
 try {
     setupAdminNestedTabs(document);
+    setupAdminGalleryMigration();
     setupGalleryMusic();
     setupGalleryMusicPlayback();
     const manager = document.querySelector(
@@ -557,10 +616,10 @@ try {
     );
     check(manager instanceof HTMLElement && sidePanel instanceof HTMLElement
         && sidePanel.dataset.open === '1'
-        && nestedTabs.length === 4
+        && nestedTabs.length === 5
         && nestedTabs.map(tab => tab.dataset.adminSubtabTarget).join(',')
-            === 'admin-gallery-media-music,admin-gallery-media-pdf,admin-gallery-media-presentation,admin-gallery-media-artwork',
-    'Production gallery media view must render one scoped Music/PDF/Presentation/Artwork tab group inside the persistent side panel.');
+            === 'admin-gallery-media-music,admin-gallery-media-pdf,admin-gallery-media-presentation,admin-gallery-media-import,admin-gallery-media-artwork',
+    'Production gallery media view must render Import beside Music/PDF/Presentation/Artwork inside the persistent side panel.');
     const mediaPanels = Array.from(document.querySelectorAll(
         '#admin-edit-media [data-admin-subtab-panel]',
     ));
@@ -568,12 +627,13 @@ try {
         'admin-gallery-media-pdf',
         'admin-gallery-media-presentation',
         'admin-gallery-media-music',
+        'admin-gallery-media-import',
         'admin-gallery-media-artwork',
     ]) {
         const tab = nestedTabs.find(item => item.dataset.adminSubtabTarget === target);
         tab?.click();
         check(tab?.getAttribute('aria-selected') === 'true'
-            && mediaPanels.length === 4
+            && mediaPanels.length === 5
             && mediaPanels.every(panel => panel.hidden === (panel.id !== target)),
         'Music/PDF/Presentation navigation must select only its scoped panel: '
             + target);
@@ -589,6 +649,57 @@ try {
         tab.dataset.adminSubtabTarget === 'admin-gallery-media-pdf');
     const presentationTab = nestedTabs.find(tab =>
         tab.dataset.adminSubtabTarget === 'admin-gallery-media-presentation');
+    const importTab = nestedTabs.find(tab =>
+        tab.dataset.adminSubtabTarget === 'admin-gallery-media-import');
+    importTab.click();
+    const importPanel = document.getElementById('admin-gallery-media-import');
+    const initialImportForm = importPanel.querySelector('[data-gallery-migration-form]');
+    const originalImportUrl = location.href;
+    check(initialImportForm.dataset.galleryMigrationMode === 'target_pull'
+        && !importPanel.querySelector('[data-gallery-migration-mode="source_push"]')
+        && initialImportForm !== document.getElementById('admin-gallery-settings-42')
+        && initialImportForm.querySelector('[name="include_subgalleries"]').checked
+        && !initialImportForm.querySelector('.admin-gallery-import-options').open,
+    'Media must expose one independent pull form with recursive import and compact connection options.');
+    const importTemplate = importPanel.innerHTML;
+    for (const phase of ['success', 'refused', 'rerendered']) {
+        if (phase === 'rerendered') importPanel.innerHTML = importTemplate;
+        const form = importPanel.querySelector('[data-gallery-migration-form]');
+        form.elements.namedItem('source_url').value = 'https://source.example/gallery/index.php?page=gallery_migration_manifest';
+        form.elements.namedItem('source_api_key').value = 'fixture-api-key';
+        form.elements.namedItem('include_subgalleries').checked = phase !== 'rerendered';
+        refuseImport = phase === 'refused';
+        const beforeCompletions = importCompletions.length;
+        form.requestSubmit();
+        const deadline = Date.now() + ACTION_TIMEOUT_MS;
+        while (form.querySelector('button[type="submit"]').disabled
+            && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+        check(!form.querySelector('button[type="submit"]').disabled
+            && location.href === originalImportUrl
+            && sidePanel.dataset.open === '1'
+            && importPanel.contains(form) && !importPanel.hidden
+            && !form.querySelector('[data-gallery-migration-log]').textContent.includes('fixture-api-key'),
+        'Import must retain its mounted panel, URL and safe progress in phase ' + phase);
+        if (refuseImport) {
+            check(importCompletions.length === beforeCompletions
+                && form.querySelector('[data-gallery-migration-log]').textContent
+                    .includes('Fixture incompatible source version.'),
+            'A refused manifest must show its reason and emit no success.');
+        } else {
+            check(importCompletions.length === beforeCompletions + 1
+                && importCompletions.at(-1).result.mutation.entity_ids[0] === 43
+                && importCompletions.at(-1).refreshPanel === false
+                && form.querySelector('progress').value === 100,
+            'Successful import must forward canonical completion and keep its progress owner.');
+        }
+    }
+    check(importActions.map(item => item.action).join(',')
+        === 'pull_manifest,pull_status,pull_package,pull_complete,pull_manifest,pull_manifest,pull_status,pull_package,pull_complete'
+        && importActions.slice(-4).every(item => item.recursive === '0'),
+    'Dynamically replaced import forms must remain delegated and explicitly send unchecked recursive scope.');
+    refuseImport = false;
     musicTab?.click();
     const musicInline = manager.querySelector(':scope > .gallery-media-inline');
     check(musicPanel?.hidden === false
@@ -820,7 +931,7 @@ try {
     const capabilityTabs = Array.from(capabilityProbe.querySelectorAll(
         '.gallery-editor-media-tabs [role="tab"]',
     ));
-    check(capabilityTabs.length === 3
+    check(capabilityTabs.length === 4
         && capabilityTabs.every(tab =>
             tab.dataset.adminSubtabTarget !== 'admin-gallery-media-presentation')
         && capabilityProbe.querySelector(
@@ -1332,7 +1443,7 @@ try {
                     })()`));
                 }
                 assert.ok(Array.isArray(desktopPanelStates)
-                    && desktopPanelStates.length === 4
+                    && desktopPanelStates.length === 5
                     && desktopPanelStates.every(panel => panel.tabSelected
                         && panel.catalogReadable
                         && panel.visible
@@ -1431,7 +1542,7 @@ try {
                     })()`));
                 }
                 assert.ok(Array.isArray(mobilePanelStates)
-                    && mobilePanelStates.length === 4
+                    && mobilePanelStates.length === 5
                     && mobilePanelStates.every(panel => panel.tabSelected
                         && panel.catalogReadable
                         && panel.visible

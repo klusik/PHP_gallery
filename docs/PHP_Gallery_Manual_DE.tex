@@ -3083,6 +3083,17 @@ Die Archivfreigabe umgeht niemals geerbte Zugriffsrechte, Sichtbarkeit, versteck
 \index{g00130@Galeriemigration}
 \index{a00021@API-Migration}
 
+Öffnen Sie für einen direkten Import \ui{API} in~der~Quellgalerie,
+erzeugen Sie einen API-Schlüssel und~kopieren Sie die~\ui{Galerie-Import-URL}
+und~den einmal angezeigten Schlüssel. Öffnen Sie in~der~Zielgalerie
+\ui{Bearbeiten > Medien > Galerie importieren}, fügen Sie beide Werte ein
+und~starten Sie die~Übertragung. Eine neue Untergalerie erhält Originale
+und~vorhandene Vorschaubilder. \ui{Untergalerien einschließen} überträgt
+auch den Nachfahrenbaum. \ui{Verbindungseinstellungen} hält das
+Wiederverbindungsintervall zunächst eingeklappt. Der Editor bleibt mit
+Fortschritt und~Fehlern offen. JavaScript ist erforderlich; Hilfe öffnet
+am~Auslöser und~schließt mit Escape oder einem Klick außerhalb.
+
 Der API-Bereich des Galerieeditors unterstützt beide Übertragungsrichtungen zwischen kompatiblen PHP-Gallery-Installationen. \ui{Diese Galerie in eine andere Instanz exportieren} behandelt die aktuelle Galerie als Quelle und verwendet einen galeriegebundenen API-Schlüssel für die empfangende übergeordnete Galerie. \ui{Aus einer anderen Instanz in diese Galerie importieren} behandelt die aktuelle Galerie als empfangende übergeordnete Galerie und verwendet einen API-Schlüssel für die entfernte Quellgalerie. Der Import erstellt darunter eine neue Untergalerie; er überschreibt oder verschiebt niemals die ausgewählte empfangende Galerie.
 
 \ui{Untergalerien einschließen} ist standardmäßig aktiviert. Bei Auswahl beschreibt das versionierte Manifest die Quellgalerie und ihre vollständige untergeordnete Hierarchie in Eltern-zuerst-Reihenfolge. Das Ziel erstellt diese Hierarchie unter der neuen importierten Wurzel erneut und erhält unterstützte Galerie-/Bildmetadaten, Übersetzungen, Flugkartenzustand, Originale, vorhandene Vorschaubilder und Galeriebranding-Ressourcen. Ohne die Option wird nur die ausgewählte Quellgalerie übertragen. Die aktuelle Kompatibilitätsrichtlinie erfordert exakt dieselbe Anwendungsversion auf Quelle und Ziel.

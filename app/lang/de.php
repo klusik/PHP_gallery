@@ -33,6 +33,15 @@
  */
 
 return [
+    'gallery_migration.import_tab' => 'Galerie importieren',
+    'gallery_migration.import_instructions' => 'Öffnen Sie API in der Quellgalerie, erzeugen Sie einen Schlüssel und kopieren Sie die Galerie-Import-URL und den Schlüssel hierher.',
+    'gallery_migration.import_destination' => 'Erstellt hier eine neue Untergalerie mit Fotos und vorhandenen Vorschaubildern.',
+    'gallery_migration.connection_options' => 'Verbindungseinstellungen',
+    'gallery_migration.javascript_required' => 'Aktivieren Sie JavaScript, um Galeriepakete zu übertragen und den Fortschritt anzuzeigen.',
+    'gallery_migration.source_key_help' => 'Kopieren Sie für die Galerieübertragung die Galerie-Import-URL und diesen Schlüssel in die Zielgalerie unter Bearbeiten → Medien → Galerie importieren. Der Schlüssel erlaubt auch den Migrationszugriff auf diesen Quellbaum.',
+    'gallery_migration.import_url' => 'Galerie-Import-URL',
+    'gallery_migration.copy_import_url' => 'Galerie-Import-URL kopieren',
+    'gallery_migration.source_api_title' => 'Galerie-API-Schlüssel',
     'admin.telemetry.daily_detail' => 'Tagesdetails',
     'admin.telemetry.daily_unavailable' => 'Keine Tagesdetails',
     'admin.telemetry.daily_help' => 'Die Balken zeigen aufbewahrte Tagesmessungen mit einer eigenen Skala je Kennzahl. Genaue Werte erscheinen beim Darüberfahren oder in den Tagesdetails. Fehlende oder bereits gelöschte Tage werden nicht mit Nullen ergänzt. Bilddaten schließen Downloads aus.',

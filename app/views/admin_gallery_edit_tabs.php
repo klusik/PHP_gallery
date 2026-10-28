@@ -1464,7 +1464,8 @@ function view_render_admin_gallery_archive_preferences(
  * Render one Media tab with only the available nested sections.
  * @param array{active:bool,active_section:string,presentation_html:string,
  *     documents_html:string,music_html:string,artwork_html:string,
- *     images_html?:string,upload_url?:string,upload_panel_url?:string,
+ *     images_html?:string,import_html?:string,upload_url?:string,
+ *     upload_panel_url?:string,
  *     archive_settings?:array{gallery_id:int,action_url:string,csrf_html:string,
  *     pdf_gallery:bool,music_gallery:bool,pdf_global:bool,music_global:bool},
  *     settings_form_id:string}
@@ -1499,6 +1500,12 @@ function view_render_admin_gallery_media_tab(array $model): void
                 'Presentation',
             ),
             'html' => $model['presentation_html'],
+        ];
+    }
+    if (($model['import_html'] ?? '') !== '') {
+        $sections['import'] = [
+            'label' => t('gallery_migration.import_tab', 'Import gallery'),
+            'html' => $model['import_html'],
         ];
     }
     $sections['artwork'] = [

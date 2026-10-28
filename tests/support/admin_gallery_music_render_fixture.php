@@ -12,6 +12,14 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /** Render an inert CSRF field for production migration form presentation.
+     * @return string Test-only token markup; never authorizes a real request.
+     */
+    function csrf_field(): string
+    {
+        return '<input type="hidden" name="csrf_token" value="fixture-csrf">';
+    }
+
     /** Escape one prepared fixture value at the HTML presentation boundary.
      * @param string $value Fixture text or attribute value.
      * @return string HTML-safe value.
@@ -139,6 +147,9 @@ namespace {
     require_once dirname(__DIR__, 2) . '/app/views/admin_gallery_edit_tabs.php';
     require_once dirname(__DIR__, 2) . '/app/views/gallery_music.php';
     require_once dirname(__DIR__, 2) . '/app/views/gallery_pdf_documents.php';
+    require_once dirname(__DIR__, 2) . '/app/views/admin_gallery_migration.php';
+    require_once dirname(__DIR__, 2) . '/app/views/upload_automation.php';
+    require_once dirname(__DIR__, 2) . '/app/services/gallery_migration.php';
 
     /** Match the server-prepared bound used by the catalog query control.
      * Type: integer. Units: UTF-8 query bytes. Scope: this prepared browser model.
@@ -306,6 +317,22 @@ namespace {
     }
 
     $mode = (string) ($argv[1] ?? 'page');
+    if ($mode === 'source-api') {
+        \Gallery\Views\view_render_admin_gallery_upload_automation_panel([
+            'gallery_id' => 42,
+            'schema_ready' => true,
+            'schema_message' => '',
+            'endpoint' => 'https://source.example/gallery/index.php?page=upload_automation_upload',
+            'migration_url' => 'https://source.example/gallery/index.php?page=gallery_migration_manifest',
+            'new_token' => 'fixture-api-key',
+            'token_action_url' => '/index.php?page=admin_upload_automation_token',
+            'csrf_html' => \Gallery\Core\csrf_field(),
+            'return_tab' => 'admin-edit-api',
+            'return_url' => '/index.php?page=admin_edit_gallery&id=42&tab=admin-edit-api',
+            'tokens' => [],
+        ]);
+        return;
+    }
     $query = (string) ($argv[2] ?? '');
     $model = fixtureMusicModel($query);
     if ($mode === 'album-choices') {
@@ -416,6 +443,16 @@ namespace {
         'settings_form_id' => 'admin-gallery-settings-42',
     ]);
     $artworkHtml = (string) ob_get_clean();
+    ob_start();
+    if ($mode !== 'without-import') {
+        \Gallery\Views\view_render_admin_gallery_migration_panel(
+            ['id' => 42],
+            'fixture',
+            \Gallery\Services\GALLERY_MIGRATION_RECONNECT_SECONDS,
+            true,
+        );
+    }
+    $importHtml = (string) ob_get_clean();
     echo '<form id="admin-gallery-settings-42" method="post"></form>';
     echo '<div data-admin-side-panel data-open="1">'
         . '<main data-admin-side-panel-body>';
@@ -426,6 +463,7 @@ namespace {
         'documents_html' => $pdfHtml,
         'music_html' => $musicHtml,
         'artwork_html' => $artworkHtml,
+        'import_html' => $importHtml,
         'settings_form_id' => 'admin-gallery-settings-42',
     ]);
     echo '</main></div>';

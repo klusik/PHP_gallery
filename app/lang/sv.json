@@ -1,4 +1,13 @@
 {
+    "gallery_migration.import_tab": "Importera galleri",
+    "gallery_migration.import_instructions": "Öppna API i källgalleriet, skapa en nyckel och kopiera galleriets import-URL och nyckeln hit.",
+    "gallery_migration.import_destination": "Skapar ett nytt undergalleri här med foton och befintliga miniatyrbilder.",
+    "gallery_migration.connection_options": "Anslutningsinställningar",
+    "gallery_migration.javascript_required": "Aktivera JavaScript för att överföra galleripaket och följa förloppet.",
+    "gallery_migration.source_key_help": "Kopiera galleriets import-URL och denna nyckel till målgalleriet under Redigera → Media → Importera galleri. Nyckeln tillåter också migreringsåtkomst till detta källträd.",
+    "gallery_migration.import_url": "Galleriets import-URL",
+    "gallery_migration.copy_import_url": "Kopiera galleriets import-URL",
+    "gallery_migration.source_api_title": "Galleriets API-nyckel",
     "admin.telemetry.daily_detail": "Dagliga detaljer",
     "admin.telemetry.daily_unavailable": "Inga dagliga detaljer",
     "admin.telemetry.daily_help": "Staplarna visar bevarade dagsmätningar med en egen skala för varje mått. Exakta värden visas när du pekar eller öppnar Dagliga detaljer. Saknade eller raderade dagar fylls inte med nollor. Bildbyte omfattar inte nedladdningar.",

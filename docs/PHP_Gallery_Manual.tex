@@ -2974,6 +2974,16 @@ Archive inclusion never bypasses inherited gallery access, visibility or~hidden 
 \index{gallery migration}
 \index{API migration}
 
+For~a~direct import, open the~source gallery's \ui{API} tab, generate
+an~API key and~copy the~\ui{Gallery import URL} and~one-time key.
+In~the~target gallery, open \ui{Edit > Media > Import gallery}, paste
+both values and~start the~transfer. This creates a~new child gallery
+with originals and~existing thumbnails. \ui{Include subgalleries}
+also transfers the~descendant tree. \ui{Connection options} keeps
+the~reconnect interval collapsed until needed. The~editor stays open
+with progress and~error feedback. JavaScript is~required; help opens
+beside its trigger and~closes with Escape or~an~outside click.
+
 The~gallery editor's API area supports both transfer directions between compatible PHP Gallery installations. \ui{Export this gallery to~another instance} treats the~current gallery as~the~source and~uses a~gallery-scoped API key created for~the~receiving parent gallery. \ui{Import into this gallery from~another instance} treats the~current gallery as~the~receiving parent and~uses an~API key created for~the~remote source gallery. The~import creates a~new child gallery below that parent; it never overwrites or~moves the~selected receiving gallery.
 
 \ui{Include subgalleries} is~enabled by~default. When selected, the~versioned manifest describes the~source gallery and~its complete descendant hierarchy in~parent-first order. The~target recreates that hierarchy below the~new imported root and~preserves supported gallery/image metadata, translations, flight-map state, originals, existing thumbnails, and~gallery branding assets. Turning the~option off transfers only the~selected source gallery. The~current compatibility policy requires source and~target to~run exactly the~same application version.

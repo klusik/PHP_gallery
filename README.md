@@ -1000,6 +1000,17 @@ overwriting them. Per-gallery overrides stay with their galleries.
    as you switch settings tabs. Upload photographs from **Images** or the upload
    action, then publish when ready.
 
+To copy a gallery between installations, open **API** in the source gallery,
+generate an API key and copy the **Gallery import URL** and one-time key.
+In the receiving gallery, open **Edit → Media → Import gallery**, paste both
+values and start the import. This creates a new child gallery containing the
+source photos and existing thumbnails; **Include subgalleries** also copies
+the descendant tree. The selected receiving gallery keeps its own settings.
+Both installations must run the same application version and have gallery
+migration enabled. Connection options are collapsed by default. Keep the editor
+open for progress and revoke a temporary source key when finished. JavaScript
+is required for the staged transfer.
+
 The direct Admin create page remains available without the side panel. It offers
 the title, SimBrief import, description, language, and tags up front, with
 folder, visibility, date, parent, voting, filename display, and count badge

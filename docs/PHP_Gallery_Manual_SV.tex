@@ -2976,6 +2976,17 @@ ZIP-inkludering kringgår aldrig ärvd åtkomst, synlighet, dolda filer, övergr
 \index{g00103@gallerimigrering}
 \index{a00015@API-migrering}
 
+För en direkt import öppnar du~\ui{API} i~källgalleriet, skapar
+en~API-nyckel och~kopierar \ui{Galleriets import-URL} och~nyckeln
+som visas en~gång. Öppna \ui{Redigera > Media > Importera galleri}
+i~målgalleriet, klistra in~båda värdena och~starta överföringen.
+Ett nytt undergalleri får original och~befintliga miniatyrbilder.
+\ui{Inkludera undergallerier} överför också underträdet.
+\ui{Anslutningsinställningar} håller återanslutningsintervallet
+hopfällt tills det behövs. Redigeraren förblir öppen med förlopp
+och~fel. JavaScript krävs; hjälp öppnas vid sin utlösare och~stängs
+med Escape eller ett klick utanför.
+
 Galleriredigerarens API-område stöder båda överföringsriktningarna mellan kompatibla PHP Gallery-installationer. \ui{Exportera detta galleri till en annan instans} behandlar aktuellt galleri som källa och använder en galleribegränsad API-nyckel som skapats för det mottagande övergalleriet. \ui{Importera till detta galleri från en annan instans} behandlar aktuellt galleri som mottagande övergalleri och använder en API-nyckel som skapats för fjärrkällgalleriet. Importen skapar ett nytt undergalleri under övergalleriet; den skriver aldrig över eller flyttar valt mottagande galleri.
 
 \ui{Inkludera undergallerier} är aktiverat som standard. När det väljs beskriver det versionshanterade manifestet källgalleriet och hela dess underhierarki med övergallerier först. Målet återskapar hierarkin under den nya importerade roten och bevarar stödda galleri- och bildmetadata, översättningar, flygkartstillstånd, original, befintliga miniatyrbilder och galleriprofileringsresurser. Att stänga av alternativet överför bara valt källgalleri. Den aktuella kompatibilitetspolicyn kräver att källa och mål kör exakt samma programversion.

@@ -1535,7 +1535,7 @@ function upload_automation_return_url_allowed(string $url, int $galleryId): bool
 }
 
 /**
- * Render gallery-scoped upload automation controls inside the image editor tab.
+ * Render gallery-scoped API keys and copyable upload/import URLs.
  *
  * @param array{id:int|string,title?:string,name?:string} $gallery Gallery row containing its id and display data.
  * @param string $returnTab Admin editor tab to restore after token management.
@@ -1568,6 +1568,7 @@ function render_admin_gallery_upload_automation_panel(
     $newToken = '';
     $tokens = [];
     $endpoint = '';
+    $migrationUrl = '';
     if ($schemaReady) {
         $newToken = (string) (
             $_SESSION['upload_automation_new_token_' . $galleryId] ?? ''
@@ -1575,6 +1576,11 @@ function render_admin_gallery_upload_automation_panel(
         unset($_SESSION['upload_automation_new_token_' . $galleryId]);
         $tokens = gallery_upload_automation_tokens($galleryId);
         $endpoint = absolute_public_url(url_for('upload_automation_upload'));
+        if (feature_capability_effective_enabled('gallery_migration')) {
+            $migrationUrl = absolute_public_url(
+                url_for('gallery_migration_manifest'),
+            );
+        }
     }
     $returnUrl = admin_edit_gallery_tab_url($galleryId, $returnTab);
     \Gallery\Views\view_render_admin_gallery_upload_automation_panel([
@@ -1582,6 +1588,7 @@ function render_admin_gallery_upload_automation_panel(
         'schema_ready' => $schemaReady,
         'schema_message' => $schemaMessage,
         'endpoint' => $endpoint,
+        'migration_url' => $migrationUrl,
         'new_token' => $newToken,
         'token_action_url' => url_for('admin_upload_automation_token'),
         'csrf_html' => csrf_field(),

@@ -221,6 +221,16 @@ It covers scoped nested tabs, direct/live source groups, chooser replacement
 with readable titles and nonzero action icons under the production CSS cascade,
 without rebasing unrelated revision tokens, canonical completion and retained
 panel/URL state. Controlled audio/transport adapters do not qualify real codecs.
+Its Media import cases render the production pull form, verify separate source
+URL/key copy controls and omitted disabled-capability markup, then exercise
+manifest/status/package/completion through the real delegated migration owner.
+They cover scoped POST credentials/CSRF, a refused manifest, canonical mutation
+handoff, retained panel/URL, recursive scope OFF and a dynamically replaced
+import form. Desktop/narrow tab geometry includes Import. The transport adapter
+does not qualify a real two-installation transfer: manually check equal-version
+source/target, imported originals and thumbnail checksums, interrupted resume
+and temporary-key revocation before production use. Native no-script output
+explains that this staged transfer requires JavaScript.
 It also covers lazy album rows, preview without assignment, the shared-header
 preference, serial bulk writes with fresh CAS tokens, already-present skipping
 and exactly one outer editor after replacement. The repository database fixture
