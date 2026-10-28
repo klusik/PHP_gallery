@@ -2091,7 +2091,7 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
 
 ## Updater and release compatibility
 
-### UPD-5 — Source ZIPs without HTTP Range support
+### UPD-6 — Source ZIPs without HTTP Range support
 
 - **Reason / protected scenario:** GitHub's codeload source archive can ignore
   Range and return HTTP 200. Short workers then repeatedly replace the same

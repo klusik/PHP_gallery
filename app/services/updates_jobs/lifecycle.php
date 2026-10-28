@@ -654,7 +654,7 @@ function application_update_cancel_job(string $jobId): array
  *
  * @param string $jobId Job identifier.
  * @param bool $automatic Whether bounded unattended retry admission is required.
- * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public state; result.last_failure retains the preceding safe error when a retry clears it.
+ * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,runtime_waiting:bool,integrity_warnings:list<string>,can_reset:bool,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public state; result.last_failure retains the preceding safe error when a retry clears it.
  */
 function application_update_retry_job(string $jobId, bool $automatic = false): array
 {
