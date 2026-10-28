@@ -1791,4 +1791,6 @@ return [
     'admin.telemetry.reload_saved' => 'Gespeicherten Zustand laden',
     'admin.telemetry.settings_unavailable' => 'Gespeicherte Einstellungen sind nicht verfügbar.',
     'admin.telemetry.preference_refused' => 'Der gespeicherte Wert weicht von Ihrer Änderung ab. Prüfen Sie ihn vor einem neuen Versuch.',
+    'lightbox.fit_content' => 'An Inhalt anpassen',
+    'lightbox.original_frame' => 'Originalrahmen anzeigen',
 ];

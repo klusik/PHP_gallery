@@ -81,6 +81,8 @@ import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,
     LIGHTBOX_ZOOM_STEP,
+    LIGHTBOX_CONTENT_POLICY,
+    detectLightboxContentBounds,
     createLightboxZoomState,
     lightboxZoomPercentage,
     lightboxZoomRequiredSourceWidth,
@@ -91,11 +93,27 @@ import {
     zoomLightboxStateAtAnchor,
     zoomLightboxStateAtPhotoAnchor,
     zoomLightboxStateAtRenderedAnchor,
-} from './lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5';
+} from './lightbox-zoom-model.js?v=20261028-content-fit-v3';
 
 import {
     galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
 } from './gallery-presentation.js?v=20261024-short-presentation-v1';
+
+/**
+ * Decoded presentation measured without committing visible viewer state.
+ * @typedef {object} LightboxPreparedGeometry
+ * @property {number} viewportWidth Target stage width in CSS pixels.
+ * @property {number} viewportHeight Target stage height in CSS pixels.
+ * @property {number} imageWidth Fitted visible content width in CSS pixels.
+ * @property {number} imageHeight Fitted visible content height in CSS pixels.
+ * @property {number} panViewportWidth Horizontal pan boundary in CSS pixels.
+ * @property {number} panViewportHeight Vertical pan boundary in CSS pixels.
+ * @property {number} stageLeft Target stage's viewport-relative left edge.
+ * @property {number} stageTop Target stage's viewport-relative top edge.
+ * @property {string} stageWidth Prepared normal-stage CSS width variable.
+ * @property {string} stageHeight Prepared normal-stage CSS height variable.
+ * @property {{left:number,top:number,right:number,bottom:number}|null} contentBounds Detected normalized edges, including when original-frame mode is selected.
+ */
 
 const galleryLightboxState = {
     controller: null,
@@ -1021,6 +1039,23 @@ export function setupGalleryLightbox() {
     let suppressNextStageClick = false;
     // lightboxZoomState is presentation-only state for the current decoded image.
     let lightboxZoomState = createLightboxZoomState();
+    // Session-only presentation rectangles; never retain pixels or source files.
+    const lightboxContentCache = new Map();
+    let lightboxContentBounds = null;
+    let lightboxContentEnabled = true;
+    const lightboxContentButtons = [];
+    overlay.querySelectorAll('[data-lightbox-zoom-controls]').forEach((group) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.lightboxAction = 'content-fit';
+        button.textContent = '▣';
+        group.append(button);
+        lightboxContentButtons.push(button);
+    });
+    controller.signal.addEventListener('abort', () => {
+        lightboxContentButtons.forEach((button) => button.remove());
+        lightboxContentCache.clear();
+    }, {once: true});
     // lightboxZoomAnimationTimer removes the short transform transition after button or keyboard zooming.
     let lightboxZoomAnimationTimer = 0;
     // lightboxZoomPan owns one captured pointer while a zoomed image is dragged.
@@ -2103,7 +2138,9 @@ export function setupGalleryLightbox() {
         const timing = sourceStat?.finishedAt && sourceStat.startedAt ? {loadMs: sourceStat.finishedAt - sourceStat.startedAt, decodeMs: sourceStat.decodeMs} : null;
         const stage = stageLink?.getBoundingClientRect();
         const metrics = measureLightboxZoomMetrics();
-        const fittedWidth = metrics.imageWidth || 0;
+        const fittedWidth = (metrics.imageWidth || 0)
+            / (lightboxContentEnabled && lightboxContentBounds
+                ? lightboxContentBounds.right - lightboxContentBounds.left : 1);
         const fittedHeight = metrics.imageHeight || 0;
         const requiredWidth = lightboxZoomRequiredSourceWidth(fittedWidth, lightboxZoomState.scale, lightboxQualityDevicePixelRatio());
         const neighbors = [];
@@ -2355,36 +2392,45 @@ export function setupGalleryLightbox() {
         }
     }
     /**
-     * Handles remove transition image behavior for the gallery UI.
-     *
-     * @param {*} node Value supplied by the caller or event context.
+     * Remove a fade cover and restore the live surface only for its current owner.
+     * @param {HTMLImageElement|null} node Specific cover, or null for the active transition.
+     * @returns {void} Releases owned fade styles without disturbing a newer transition.
      */
-    function removeTransitionImage(node) {
+    function removeTransitionImage(node = null) {
         // imageToRemove stores state or configuration for the gallery front-end flow.
         const imageToRemove = node || transitionImage;
-        if (!imageToRemove) {
-            return;
-        }
-        imageToRemove.remove();
+        imageToRemove?.remove();
         if (!node || transitionImage === node) {
             transitionImage = null;
+            if (zoomSurface instanceof HTMLElement) {
+                zoomSurface.style.removeProperty('transition');
+                zoomSurface.style.removeProperty('opacity');
+            }
         }
     }
 
-        /**
-     * Handles update normal lightbox stage size behavior for the gallery UI.
-     *
-     * @param {*} card Value supplied by the caller or event context.
+    /**
+     * Fit the normal stage to the active card's visible content dimensions.
+     * @param {HTMLElement|null} card Authorized source card, or null before metadata.
+     * @returns {void} Updates the existing stage sizing variables.
      */
     function updateNormalLightboxStageSize(card) {
         if (!card) {
+            return;
+        }
+        if (!overlay.hidden && image?.getAttribute('src')
+            && image.dataset.lightboxImageId !== String(card.dataset.imageId || '')) {
             return;
         }
         // naturalWidth stores state or configuration for the gallery front-end flow.
         const naturalWidth = Number.parseInt(card.dataset.imageWidth || '0', 10);
         // naturalHeight stores state or configuration for the gallery front-end flow.
         const naturalHeight = Number.parseInt(card.dataset.imageHeight || '0', 10);
-        updateNormalLightboxStageSizeFromDimensions(naturalWidth, naturalHeight);
+        const bounds = lightboxContentEnabled ? lightboxContentBounds : null;
+        updateNormalLightboxStageSizeFromDimensions(
+            naturalWidth * (bounds ? bounds.right - bounds.left : 1),
+            naturalHeight * (bounds ? bounds.bottom - bounds.top : 1),
+        );
     }
 
         /**
@@ -2443,35 +2489,153 @@ export function setupGalleryLightbox() {
      * or EXIF orientation differences between PHP metadata and browser display.
      *
      * @param {HTMLImageElement|null} loadedImage Decoded image used by the lightbox.
+     * @param {boolean} scheduleReclamp Whether to queue post-layout zoom fitting.
+     * @returns {void} Fits the visible content and optionally schedules zoom fitting.
      */
     function updateNormalLightboxStageSizeFromLoadedImage(loadedImage, scheduleReclamp = true) {
         if (!(loadedImage instanceof HTMLImageElement)) {
             return;
         }
-        updateNormalLightboxStageSizeFromDimensions(loadedImage.naturalWidth || 0, loadedImage.naturalHeight || 0);
+        const bounds = lightboxContentEnabled ? lightboxContentBounds : null;
+        updateNormalLightboxStageSizeFromDimensions(
+            loadedImage.naturalWidth * (bounds ? bounds.right - bounds.left : 1),
+            loadedImage.naturalHeight * (bounds ? bounds.bottom - bounds.top : 1),
+        );
         if (scheduleReclamp) {
             scheduleLightboxZoomReclamp();
         }
     }
 
     /**
+     * Synchronize the session content-fit toggle in both existing zoom toolbars.
+     * @returns {void} Updates accessible names and the pressed state.
+     */
+    function syncLightboxContentControls() {
+        const label = lightboxContentEnabled
+            ? i18n('lightbox.original_frame', 'Show original frame')
+            : i18n('lightbox.fit_content', 'Fit by content');
+        lightboxContentButtons.forEach((button) => {
+            button.title = label;
+            button.setAttribute('aria-label', label);
+            button.setAttribute('aria-pressed', String(lightboxContentEnabled));
+        });
+        overlay.dataset.lightboxContentFit = lightboxContentEnabled
+            && lightboxContentBounds ? 'cropped' : 'original';
+    }
+
+    /**
+     * Sample only the active decoded source once per photo/version in this viewer.
+     *
+     * This synchronous bounded step runs inside the navigation owner's guarded
+     * presentation task, before geometry/transition pixels commit. It creates
+     * no asynchronous work that can outlive navigation and requests no images.
+     * Canvas refusal or missing capabilities permanently retain the full frame
+     * for this cached version; browser capability support has no retirement date.
+     *
+     * @param {HTMLImageElement} loadedImage Already authorized and decoded target.
+     * @returns {{left:number,top:number,right:number,bottom:number}|null} Cached normalized bounds, or the original-frame fallback; visible state is unchanged.
+     */
+    function selectLightboxContentBounds(loadedImage) {
+        const card = cards[lightboxNavigation.index];
+        const key = JSON.stringify([LIGHTBOX_CONTENT_POLICY.version,
+            card?.dataset.imageId, card?.dataset.fullSrc,
+            card?.dataset.previewSrc, card?.dataset.imageWidth,
+            card?.dataset.imageHeight]);
+        if (!lightboxContentCache.has(key)) {
+            let bounds = null;
+            const started = performance.now();
+            try {
+                const canvas = document.createElement('canvas');
+                const scale = Math.min(1, LIGHTBOX_CONTENT_POLICY.sampleEdge
+                    / Math.max(loadedImage.naturalWidth, loadedImage.naturalHeight));
+                canvas.width = Math.max(1, Math.round(loadedImage.naturalWidth * scale));
+                canvas.height = Math.max(1, Math.round(loadedImage.naturalHeight * scale));
+                const context = canvas.getContext('2d', {willReadFrequently: true});
+                if (context) {
+                    context.drawImage(loadedImage, 0, 0, canvas.width, canvas.height);
+                    bounds = detectLightboxContentBounds(context.getImageData(
+                        0, 0, canvas.width, canvas.height));
+                }
+                // Drop the backing store immediately; cache rectangles only.
+                canvas.width = 0;
+                canvas.height = 0;
+            } catch {
+                // Canvas/CORS/privacy refusal must never change access or block viewing.
+            }
+            overlay.dataset.lightboxContentAnalysisMs = String(performance.now() - started);
+            lightboxContentCache.set(key, {bounds,
+                aspect: loadedImage.naturalWidth / loadedImage.naturalHeight});
+            if (lightboxContentCache.size > LIGHTBOX_CONTENT_POLICY.cacheEntries) {
+                lightboxContentCache.delete(lightboxContentCache.keys().next().value);
+            }
+        }
+        const cached = lightboxContentCache.get(key);
+        const aspect = loadedImage.naturalWidth / loadedImage.naturalHeight;
+        // Derivatives with different framing cannot safely share normalized bounds.
+        return Math.abs(aspect / cached.aspect - 1)
+            <= LIGHTBOX_CONTENT_POLICY.aspectTolerance ? cached.bounds : null;
+    }
+
+    /**
      * Resolve the final 100% presentation geometry for an already-decoded target image.
      *
-     * Normal lightbox mode first sizes the stage from the browser-decoded dimensions.
-     * Fullscreen and mobile fullscreen keep their fixed viewport-sized stage. A forced
-     * stage measurement then makes the returned fitted rectangle authoritative before
-     * any pixels from the target image are allowed to become visible.
+     * Temporarily measure the target's normal-stage fit, then restore its current
+     * size before the browser can paint. The outgoing photograph keeps its crop,
+     * stage and pan until the decoded replacement is installed in one task.
+     * Fullscreen/mobile stages retain their viewport-sized geometry.
      *
      * @param {HTMLImageElement} loadedImage Decoded image that is about to be displayed.
-     * @return {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth:number,panViewportHeight:number}|null} Final target geometry.
+     * @return {LightboxPreparedGeometry|null} Final target geometry, or null for an undecoded source.
      */
     function prepareDecodedLightboxGeometry(loadedImage) {
-        if (!(loadedImage instanceof HTMLImageElement) || !loadedImage.naturalWidth || !loadedImage.naturalHeight) {
+        if (!(loadedImage instanceof HTMLImageElement)
+            || !(stageLink instanceof HTMLElement)
+            || !loadedImage.naturalWidth || !loadedImage.naturalHeight) {
             return null;
         }
-        updateNormalLightboxStageSizeFromLoadedImage(loadedImage, false);
-        stageLink?.getBoundingClientRect();
-        return measureLightboxZoomMetricsForDimensions(loadedImage.naturalWidth, loadedImage.naturalHeight);
+        const contentBounds = selectLightboxContentBounds(loadedImage);
+        const bounds = lightboxContentEnabled ? contentBounds : null;
+        const previousSize = [
+            ['--lightbox-stage-width', stageLink.style.getPropertyValue('--lightbox-stage-width')],
+            ['--lightbox-stage-height', stageLink.style.getPropertyValue('--lightbox-stage-height')],
+        ];
+        try {
+            updateNormalLightboxStageSizeFromDimensions(
+                loadedImage.naturalWidth * (bounds ? bounds.right - bounds.left : 1),
+                loadedImage.naturalHeight * (bounds ? bounds.bottom - bounds.top : 1),
+            );
+            const targetRect = stageLink.getBoundingClientRect();
+            return {
+                ...measureLightboxZoomMetricsForDimensions(
+                    loadedImage.naturalWidth, loadedImage.naturalHeight, bounds),
+                stageLeft: targetRect.left,
+                stageTop: targetRect.top,
+                stageWidth: stageLink.style.getPropertyValue('--lightbox-stage-width'),
+                stageHeight: stageLink.style.getPropertyValue('--lightbox-stage-height'),
+                contentBounds,
+            };
+        } finally {
+            previousSize.forEach(([name, value]) => {
+                if (value) stageLink.style.setProperty(name, value);
+                else stageLink.style.removeProperty(name);
+            });
+        }
+    }
+
+    /**
+     * Commit prepared stage and crop state in the same task as the live image.
+     * @param {LightboxPreparedGeometry} metrics Guarded decoded target geometry.
+     * @returns {void} Updates presentation state without starting media requests.
+     */
+    function activateDecodedLightboxGeometry(metrics) {
+        lightboxContentBounds = metrics.contentBounds;
+        [['--lightbox-stage-width', metrics.stageWidth],
+            ['--lightbox-stage-height', metrics.stageHeight]]
+            .forEach(([name, value]) => {
+                if (value) stageLink.style.setProperty(name, value);
+                else stageLink.style.removeProperty(name);
+            });
+        syncLightboxContentControls();
     }
 
         /**
@@ -2549,6 +2713,7 @@ export function setupGalleryLightbox() {
         // zoom renderer immediately reapplies enlarged dimensions and current pan.
         loadedImage.style.removeProperty('transform');
         loadedImage.style.removeProperty('will-change');
+        activateDecodedLightboxGeometry(targetMetrics);
         previousImage.replaceWith(loadedImage);
         image = loadedImage;
         activeLightboxQualitySource = src;
@@ -2619,7 +2784,7 @@ export function setupGalleryLightbox() {
      * @param {HTMLImageElement} loadedImage Decoded cached target image.
      * @param {string} src Authorized target source URL.
      * @param {string} altText Accessible image alternative text.
-     * @param {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth:number,panViewportHeight:number}|null} measuredMetrics Precomputed target geometry.
+     * @param {LightboxPreparedGeometry|null} measuredMetrics Precomputed target geometry, or null to prepare it now.
      * @return {Promise<boolean>} True after the final geometry survives two paint boundaries.
      */
     function commitPreparedLightboxImage(index, token, loadedImage, src, altText, measuredMetrics = null) {
@@ -2650,10 +2815,16 @@ export function setupGalleryLightbox() {
             ) {
                 return false;
             }
+            const finalMetrics = prepareDecodedLightboxGeometry(loadedImage);
+            if (!finalMetrics) return false;
+            if (transitionImage?.dataset.lightboxImageId === imageId) {
+                positionLightboxTransitionImage(transitionImage, finalMetrics);
+            }
+            activateDecodedLightboxGeometry(finalMetrics);
             previousImage.replaceWith(displayNode);
             image = displayNode;
             applyLightboxImageSource(src, altText, imageId);
-            applyLightboxZoomState(false, targetMetrics);
+            applyLightboxZoomState(false, finalMetrics);
             zoomSurface.getBoundingClientRect();
             displayNode.getBoundingClientRect();
 
@@ -2676,12 +2847,64 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Position one full-source fade cover using the target's visible rectangle.
+     * @param {HTMLImageElement} node Incoming decoded cover inside the overlay.
+     * @param {LightboxPreparedGeometry} metrics Target geometry for the current viewport.
+     * @returns {void} Applies proportional dimensions and presentation-only clipping.
+     */
+    function positionLightboxTransitionImage(node, metrics) {
+        const bounds = lightboxContentEnabled ? metrics.contentBounds : null;
+        const fullWidth = metrics.imageWidth
+            / (bounds ? bounds.right - bounds.left : 1);
+        const fullHeight = metrics.imageHeight
+            / (bounds ? bounds.bottom - bounds.top : 1);
+        // Keep the incoming cover independent of the outgoing stage and of
+        // fullscreen/global image maxima. Its full-source box stays proportional.
+        node.style.position = 'fixed';
+        node.style.inset = 'auto';
+        node.style.left = `${metrics.stageLeft
+            + (metrics.viewportWidth - metrics.imageWidth) / 2
+            - (bounds ? bounds.left * fullWidth : 0)}px`;
+        node.style.top = `${metrics.stageTop
+            + (metrics.viewportHeight - metrics.imageHeight) / 2
+            - (bounds ? bounds.top * fullHeight : 0)}px`;
+        node.style.width = `${fullWidth}px`;
+        node.style.height = `${fullHeight}px`;
+        node.style.maxWidth = 'none';
+        node.style.maxHeight = 'none';
+        node.style.objectFit = 'fill';
+        node.style.removeProperty('clip-path');
+        if (bounds) {
+            // CSS inset order is top, right, bottom, left in the full image box.
+            const inset = [bounds.top, 1 - bounds.right,
+                1 - bounds.bottom, bounds.left]
+                .map((fraction) => `${fraction * 100}%`).join(' ');
+            node.style.clipPath = `inset(${inset})`;
+        }
+    }
+
+    /**
+     * Refit an in-flight cover after a viewport, fullscreen or map-pane change.
+     * @returns {void} Updates the current target without exposing an uncropped frame.
+     */
+    function refreshLightboxTransitionGeometry() {
+        if (!(transitionImage instanceof HTMLImageElement)
+            || !transitionImage.complete
+            || transitionImage.dataset.lightboxImageId !== String(
+                cards[lightboxNavigation.index]?.dataset.imageId
+                    || lightboxNavigation.index)) return;
+        const metrics = prepareDecodedLightboxGeometry(transitionImage);
+        if (metrics) positionLightboxTransitionImage(transitionImage, metrics);
+    }
+
+    /**
      * Blend an already-decoded image in at its final centered stage position.
      *
      * The visible transition node is independent from the live zoom surface. This is
      * important when consecutive photographs have different aspect ratios: the old
-     * image can keep its old zoom-surface rectangle while the new image fades in using
-     * the final stage-centered `object-fit: contain` geometry. Once the transition is
+     * image keeps its old cropped rectangle while fading out. The new image fades
+     * in through a proportional full-source box clipped to its prepared bounds.
+     * Once the transition is
      * fully opaque, the real zoom surface is switched underneath it using dimensions
      * calculated from the same decoded target. The transition is removed only after
      * that final live layout has survived two animation frames.
@@ -2723,10 +2946,11 @@ export function setupGalleryLightbox() {
         transitionNode.alt = '';
         transitionNode.decoding = 'sync';
         transitionNode.className = 'lightbox-transition-image';
+        positionLightboxTransitionImage(transitionNode, targetMetrics);
         const transitionDuration = currentLightboxTransitionDuration();
         transitionNode.style.setProperty('--lightbox-transition-duration', `${transitionDuration}ms`);
         transitionImage = transitionNode;
-        stageLink.append(transitionNode);
+        overlay.append(transitionNode);
 
         return decodeLoadedImage(transitionNode).then(() => new Promise((resolve) => {
             if (
@@ -2761,6 +2985,10 @@ export function setupGalleryLightbox() {
                     }
 
                     transitionNode.classList.add('is-visible');
+                    // Fade the outgoing content too: differing crop rectangles
+                    // must not leave exposed old pixels opaque until removal.
+                    zoomSurface.style.transition = `opacity ${transitionDuration}ms ease`;
+                    zoomSurface.style.opacity = '0';
                     window.setTimeout(() => {
                         if (
                             !isCurrentLightboxImageRequest(index, token)
@@ -2824,14 +3052,14 @@ export function setupGalleryLightbox() {
     /**
      * Handles show lightbox image source behavior for the gallery UI.
      *
-     * @param {*} index Value supplied by the caller or event context.
-     * @param {*} token Value supplied by the caller or event context.
-     * @param {*} src Value supplied by the caller or event context.
-     * @param {*} altText Value supplied by the caller or event context.
-     * @param {*} immediate Value supplied by the caller or event context.
-     * @param {*} decodedImage Decoded image value.
+     * @param {number} index Zero-based requested card index.
+     * @param {number} token Current navigation generation.
+     * @param {string} src Already authorized target source URL.
+     * @param {string} altText Accessible target description.
+     * @param {boolean} immediate Whether to replace without a fade.
+     * @param {HTMLImageElement|null} decodedImage Decoded target, or null to load it.
      * @param {boolean} preparedForSlideshow Whether the decoded image must use the stable automatic-slideshow handoff.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @return {Promise<boolean>} Whether the guarded target was displayed.
      */
     function showLightboxImageSource(index, token, src, altText, immediate, decodedImage = null, preparedForSlideshow = false) {
         if (!src) {
@@ -2883,6 +3111,7 @@ export function setupGalleryLightbox() {
         if (image.getAttribute('src') === src) {
             image.alt = altText;
             image.dataset.lightboxImageId = String(cards[index]?.dataset.imageId || index);
+            activateDecodedLightboxGeometry(targetMetrics);
             applyLightboxZoomState(false, targetMetrics);
             clearLightboxNavigationPending(token);
             return finishDisplay(Promise.resolve(true));
@@ -2966,7 +3195,8 @@ export function setupGalleryLightbox() {
         const metrics = measureLightboxZoomMetrics();
         const candidates = lightboxQualityCandidatesForCard(card);
         const requiredWidth = lightboxZoomRequiredSourceWidth(
-            metrics.imageWidth,
+            metrics.imageWidth / (lightboxContentEnabled && lightboxContentBounds
+                ? lightboxContentBounds.right - lightboxContentBounds.left : 1),
             lightboxZoomState.scale,
             lightboxQualityDevicePixelRatio(),
         );
@@ -3800,9 +4030,13 @@ export function setupGalleryLightbox() {
     /**
      * Measure the stage and contained image at its unscaled object-fit dimensions.
      *
+     * @param {number} naturalWidth Decoded full-frame width in pixels.
+     * @param {number} naturalHeight Decoded full-frame height in pixels.
+     * @param {{left:number,top:number,right:number,bottom:number}|null} bounds Visible normalized bounds, or null for the full frame; defaults to the active presentation.
      * @return {{viewportWidth: number, viewportHeight: number, imageWidth: number, imageHeight: number, panViewportWidth: number, panViewportHeight: number}} Current zoom metrics.
      */
-    function measureLightboxZoomMetricsForDimensions(naturalWidth, naturalHeight) {
+    function measureLightboxZoomMetricsForDimensions(naturalWidth, naturalHeight,
+        bounds = lightboxContentEnabled ? lightboxContentBounds : null) {
         const stageRect = stageLink?.getBoundingClientRect();
         const stagedWidth = Number.parseFloat(stageLink?.style.getPropertyValue('--lightbox-stage-width') || '0') || 0;
         const stagedHeight = Number.parseFloat(stageLink?.style.getPropertyValue('--lightbox-stage-height') || '0') || 0;
@@ -3814,8 +4048,10 @@ export function setupGalleryLightbox() {
             : 0;
         const viewportWidth = Math.max(0, stageRect?.width || stageLink?.clientWidth || stagedWidth || fullscreenViewportWidth || 0);
         const viewportHeight = Math.max(0, stageRect?.height || stageLink?.clientHeight || stagedHeight || fullscreenViewportHeight || 0);
-        const resolvedNaturalWidth = Math.max(0, Number(naturalWidth) || 0);
-        const resolvedNaturalHeight = Math.max(0, Number(naturalHeight) || 0);
+        const resolvedNaturalWidth = Math.max(0, Number(naturalWidth) || 0)
+            * (bounds ? bounds.right - bounds.left : 1);
+        const resolvedNaturalHeight = Math.max(0, Number(naturalHeight) || 0)
+            * (bounds ? bounds.bottom - bounds.top : 1);
         if (!viewportWidth || !viewportHeight || !resolvedNaturalWidth || !resolvedNaturalHeight) {
             return {
                 viewportWidth,
@@ -3877,6 +4113,7 @@ export function setupGalleryLightbox() {
             }
             updateNormalLightboxStageSize(cards[lightboxNavigation.index]);
             applyLightboxZoomState(false);
+            refreshLightboxTransitionGeometry();
             scheduleLightboxQualityUpgrade();
         });
     }
@@ -3921,14 +4158,20 @@ export function setupGalleryLightbox() {
      *
      * @param {boolean} announce Whether to announce the resulting percentage.
      * @param {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth?:number,panViewportHeight?:number}|null} measuredMetrics Stable pre-source-change geometry when available.
+     * @returns {void} Renders the visible content rectangle at the current zoom.
      */
     function applyLightboxZoomState(announce = false, measuredMetrics = null) {
+        if (!measuredMetrics && image?.getAttribute('src')
+            && image.dataset.lightboxImageId !== String(
+                cards[lightboxNavigation.index]?.dataset.imageId
+                    || lightboxNavigation.index)) return;
         const metrics = measuredMetrics || measureLightboxZoomMetrics();
         lightboxZoomState = normalizeLightboxZoomState(lightboxZoomState, metrics);
         const isZoomed = lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE;
         const frameWidth = Math.max(1, metrics.imageWidth * lightboxZoomState.scale);
         const frameHeight = Math.max(1, metrics.imageHeight * lightboxZoomState.scale);
 
+        const bounds = lightboxContentEnabled ? lightboxContentBounds : null;
         if (zoomSurface instanceof HTMLElement) {
             zoomSurface.style.width = `${frameWidth}px`;
             zoomSurface.style.height = `${frameHeight}px`;
@@ -3939,6 +4182,7 @@ export function setupGalleryLightbox() {
                 zoomSurface.style.removeProperty('will-change');
             }
             zoomSurface.style.removeProperty('overflow');
+            if (bounds) zoomSurface.style.overflow = 'hidden';
         }
         if (image instanceof HTMLImageElement) {
             image.style.width = '100%';
@@ -3947,6 +4191,18 @@ export function setupGalleryLightbox() {
             image.style.maxHeight = 'none';
             image.style.removeProperty('transform');
             image.style.removeProperty('will-change');
+            image.style.removeProperty('position');
+            image.style.removeProperty('left');
+            image.style.removeProperty('top');
+            if (bounds) {
+                const width = bounds.right - bounds.left;
+                const height = bounds.bottom - bounds.top;
+                image.style.position = 'absolute';
+                image.style.width = `${100 / width}%`;
+                image.style.height = `${100 / height}%`;
+                image.style.left = `${-100 * bounds.left / width}%`;
+                image.style.top = `${-100 * bounds.top / height}%`;
+            }
         }
         overlay.classList.toggle('is-zoomed', isZoomed);
         syncLightboxZoomControls(announce);
@@ -3981,7 +4237,7 @@ export function setupGalleryLightbox() {
             return null;
         }
         const stageRect = stageLink.getBoundingClientRect();
-        const imageRect = image.getBoundingClientRect();
+        const imageRect = (zoomSurface || image).getBoundingClientRect();
         if (!stageRect.width || !stageRect.height || !imageRect.width || !imageRect.height) {
             return null;
         }
@@ -4067,9 +4323,10 @@ export function setupGalleryLightbox() {
      * Restore the canonical centered 100% state for navigation and teardown.
      *
      * @param {boolean} announce Whether to announce the reset.
-     * @returns {void} Recenter the photo without changing gallery navigation.
+     * @param {boolean} preservePresentation Whether navigation must retain outgoing pixels until decoded replacement.
+     * @returns {void} Resets logical zoom while retaining or clearing outgoing geometry as requested.
      */
-    function resetLightboxZoom(announce = false) {
+    function resetLightboxZoom(announce = false, preservePresentation = false) {
         cancelLightboxZoomReclamp();
         clearLightboxZoomPointers();
         clearLightboxZoomPan();
@@ -4078,6 +4335,11 @@ export function setupGalleryLightbox() {
         if (lightboxZoomAnimationTimer) {
             window.clearTimeout(lightboxZoomAnimationTimer);
             lightboxZoomAnimationTimer = 0;
+        }
+        if (preservePresentation) {
+            overlay.classList.remove('is-zoom-animating');
+            syncLightboxZoomControls(announce);
+            return;
         }
         overlay.classList.remove('is-zoom-animating', 'is-zoom-panning', 'is-zoomed');
         if (zoomSurface instanceof HTMLElement) {
@@ -4094,6 +4356,9 @@ export function setupGalleryLightbox() {
             image.style.removeProperty('max-height');
             image.style.removeProperty('transform');
             image.style.removeProperty('will-change');
+            image.style.removeProperty('position');
+            image.style.removeProperty('left');
+            image.style.removeProperty('top');
         }
         syncLightboxZoomControls(announce);
     }
@@ -4555,7 +4820,7 @@ export function setupGalleryLightbox() {
         const resumesCurrentNavigation = Number.isInteger(requestedResumeToken)
             && isCurrentLightboxImageRequest(normalizedIndex, requestedResumeToken);
         if (!resumesCurrentNavigation) {
-            resetLightboxZoom(false);
+            resetLightboxZoom(false, true);
         }
         // Every navigation intent owns a token before sparse metadata or image work begins.
         const imageToken = resumesCurrentNavigation
@@ -5155,7 +5420,8 @@ export function setupGalleryLightbox() {
             scheduleLightboxSlideshowNext();
             return;
         }
-        resetLightboxZoom(false);
+        resetLightboxZoom(false, true);
+        applyLightboxZoomState(false);
         lightboxSlideshowActive = true;
         syncLightboxSlideshowControls();
         if (musicOverride === false) {
@@ -5458,6 +5724,7 @@ export function setupGalleryLightbox() {
 
     document.addEventListener('visibilitychange', handleLightboxVisibilityChange, {signal: controller.signal});
     resetLightboxZoom(false);
+    syncLightboxContentControls();
 
     /**
      * Apply the link snapshot or gallery defaults and open photo one.
@@ -5603,6 +5870,20 @@ export function setupGalleryLightbox() {
             event.preventDefault();
             event.stopPropagation();
             setLightboxZoomScale(lightboxZoomState.scale + LIGHTBOX_ZOOM_STEP, currentLightboxZoomPointerAnchor());
+            return;
+        }
+        if (action === 'content-fit') {
+            event.preventDefault();
+            event.stopPropagation();
+            // A transition owns its captured geometry until the target commits.
+            if (transitionImage || image?.dataset.lightboxImageId
+                !== String(cards[lightboxNavigation.index]?.dataset.imageId
+                    || lightboxNavigation.index)) return;
+            lightboxContentEnabled = !lightboxContentEnabled;
+            resetLightboxZoom(false);
+            updateNormalLightboxStageSizeFromLoadedImage(image, false);
+            applyLightboxZoomState(false);
+            syncLightboxContentControls();
             return;
         }
         if (action === 'zoom-out') {
@@ -5756,6 +6037,7 @@ export function setupGalleryLightbox() {
         renderPictureStrip(lightboxNavigation.index, false);
         updateFullscreenMapImageFit(cards[lightboxNavigation.index]);
         applyLightboxZoomState(false);
+        refreshLightboxTransitionGeometry();
         scheduleLightboxQualityUpgrade();
     }, {signal: controller.signal});
     window.visualViewport?.addEventListener('resize', updateMobileLightboxViewport, {signal: controller.signal});

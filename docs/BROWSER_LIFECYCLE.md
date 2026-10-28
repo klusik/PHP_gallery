@@ -2,6 +2,29 @@
 
 ## Lightbox navigation transaction
 
+Active-image content detection is synchronous and bounded inside the guarded
+decoded-image presentation path, before canonical geometry and fade covers
+commit. It neither schedules background analysis nor starts image requests.
+The 64-entry cache is keyed by photo/authorized source URLs/indexed dimensions
+and detector version; quality upgrades reuse normalized bounds only for the
+same aspect (2% rounding tolerance). Resize, zoom and fullscreen never resample.
+The session original-frame override resets zoom and updates both existing HUD
+groups; a fade retains its captured mode until its target is committed.
+Teardown removes injected controls and clears the rectangle cache.
+Detection resolves edges independently: a dim natural side gradient cannot
+discard a proven horizontal matte pair. A matched opposite strong edge can
+support a sustained darker transition; dim boundary pixels retained after
+downsampling remain inside the returned content rectangle.
+Preparation returns target crop/stage metrics without publishing them. Its
+temporary normal-stage measurement is restored in the same task, and incoming
+pixels are first painted with their crop already applied. Navigation retains
+the outgoing DOM geometry until a guarded decoded replacement commits.
+An overlay-level cover avoids outgoing-stage clipping and global image maxima.
+Incoming and outgoing opacities share the fade duration, including when their
+visible rectangles differ. Stale-cover removal cannot clear a newer fade;
+current completion restores the live surface only after its replacement has
+survived the paint boundaries. Resize/fullscreen/map changes refit the cover.
+
 `public/assets/gallery-modules/lightbox-navigation-lifecycle.js` owns the
 canonical target index, image ID, generation, phase, and signal for one active
 lightbox intent. `lightbox.js` creates one owner per setup and reads its

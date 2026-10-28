@@ -1848,4 +1848,6 @@ return [
     'admin.telemetry.reload_saved' => 'Reload saved state',
     'admin.telemetry.settings_unavailable' => 'Stored preferences are unavailable.',
     'admin.telemetry.preference_refused' => 'The saved value differs from your change. Review it before trying again.',
+    'lightbox.fit_content' => 'Fit by content',
+    'lightbox.original_frame' => 'Show original frame',
 ];

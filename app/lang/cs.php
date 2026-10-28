@@ -1843,4 +1843,6 @@ return [
     'admin.telemetry.reload_saved' => 'Načíst uložený stav',
     'admin.telemetry.settings_unavailable' => 'Uložená nastavení nejsou dostupná.',
     'admin.telemetry.preference_refused' => 'Uložená hodnota se liší od vaší změny. Před dalším pokusem ji zkontrolujte.',
+    'lightbox.fit_content' => 'Přizpůsobit podle obsahu',
+    'lightbox.original_frame' => 'Zobrazit původní rám',
 ];

@@ -4686,6 +4686,8 @@
     "lightbox.zoom_in": "Zooma in",
     "lightbox.zoom_out": "Zooma ut",
     "lightbox.zoom_reset": "Återställ zoom",
+    "lightbox.fit_content": "Anpassa efter innehåll",
+    "lightbox.original_frame": "Visa originalram",
     "lightbox.zoom_status": "Zoom {percent}",
     "mobile_webdav.auth_required": "Autentisering krävs.",
     "mobile_webdav.confirm_delete": "Ta bort denna anslutning för mobiluppladdning?",

@@ -1,10 +1,15 @@
 # PHP Gallery project website
 
-The presentation site lives at **https://klusik.github.io/PHP_gallery/**.
+The presentation site lives at **https://phpgallery.site/**.
 It is separate from the PHP CMS. Authored content is in `content.json`, layout
 in `build.mjs`, and reviewed public assets in `assets/`. Node 22+ renders static
 HTML without packages. EN is the root; CS, DE and SV have their own routes.
 Each language has a `docs/` page. Language links preserve the current page.
+Canonical, EN/CS/DE/SV alternate, English `x-default` and Open Graph URLs share
+the production origin declared once in `build.mjs`. English starts at `/`;
+translated routes start at `/cs/`, `/de/` and `/sv/`. Relative navigation and
+assets also work under the test-only `/PHP_gallery/` preview mount below;
+that mount never appears in production metadata.
 The compact translucent presentation shares light/dark palette tokens across
 the overview and documentation. `assets/site.js` optionally switches the
 page-local palette and enlarges authentic application screenshots in a native
@@ -132,7 +137,7 @@ Screenshot evidence is captured from the same fully loaded DevTools session that
 asserts each route. The suite retains seven full-document desktop/mobile PNGs and
 checks their viewport width and format; it does not start a second CLI browser
 whose navigation can stall before producing an image.
-Do not enable bypass or change branch protections. The public project URL stays
-unchanged. Inspect the website build summary, audit evidence and Pages
+Do not enable bypass or change branch protections. Keep the configured custom
+domain in place. Inspect the website build summary, audit evidence and Pages
 deployment
 URL, then review desktop/mobile presentation at that URL after first activation.

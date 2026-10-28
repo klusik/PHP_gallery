@@ -36,6 +36,10 @@
        Consumers: updateNormalLightboxStageSizeFromDimensions.
        Rationale: 12 reserves desktop arrows, gaps and outer padding. */
     --lightbox-inline-reserve: 12;
+    /* Type: integer. Units: stacking order. Scope: viewer captions.
+       Consumers: .lightbox-meta. Rationale: 4 keeps controls above the incoming
+       media cover at layer 3, below the existing fullscreen HUD layers. */
+    --lightbox-meta-layer: 4;
     position: fixed;
     inset: 0;
     z-index: 20;
@@ -349,6 +353,7 @@
     border-radius: var(--radius, 16px);
 }
 .lightbox-meta {
+    z-index: var(--lightbox-meta-layer);
     display: grid;
     gap: 0.3rem;
     justify-items: center;
@@ -492,6 +497,17 @@
 
 .lightbox-zoom-controls > button:last-child {
     border-right: 0;
+}
+
+/* Content fit is a session display action within the existing compact HUD. */
+.lightbox-zoom-controls > [data-lightbox-action="content-fit"] {
+    font-size: 1rem;
+    font-weight: normal;
+}
+.lightbox-zoom-controls > [data-lightbox-action="content-fit"][aria-pressed="true"] {
+    color: var(--accent, #fffdf8);
+    background: color-mix(in srgb, var(--panel, #181818) 42%, transparent);
+    box-shadow: inset 0 -1px currentColor;
 }
 
 .lightbox-zoom-controls > button:hover:not(:disabled) {

@@ -18,6 +18,8 @@
  * Author:
  *   Rudolf Klusal
  *
+ * License: MIT License (see LICENSE file in repository)
+ *
  * Last Updated:
  *   2026-08-16
  */
@@ -28,6 +30,147 @@ export const LIGHTBOX_ZOOM_STEP = 0.25;
 export const LIGHTBOX_ZOOM_QUALITY_MAX_DPR = 2;
 export const LIGHTBOX_ZOOM_QUALITY_DETAIL_FACTOR = 1.5;
 export const LIGHTBOX_ZOOM_QUALITY_UPGRADE_THRESHOLD = 1;
+
+/**
+ * Bound conservative matte detection independently of source resolution.
+ * Type: {sampleEdge:number,cacheEntries:number,blackCeiling:number,
+ * blackMean:number,blackDeviation:number,minBand:number,maxTrim:number,
+ * minContent:number,transitionLight:number,transitionShare:number,
+ * transitionDepth:number,transitionRamp:number,pairedTransitionShare:number,
+ * pairedTransitionDepth:number,pairedBandTolerance:number,
+ * aspectTolerance:number,version:string}.
+ * Units: pixels, entries, byte levels and dimensionless fractions as below.
+ * Scope: one active lightbox; no background gallery analysis.
+ * Consumers: detectLightboxContentBounds and the lightbox canvas/cache owner.
+ * Rationale: 256-square sampling caps RGBA storage at 256 KiB; 64 cached
+ * rectangles bound session memory. These are conservative design budgets,
+ * not measured low-end-device performance guarantees.
+ */
+export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
+    sampleEdge: 256,
+    cacheEntries: 64,
+    blackCeiling: 20, // Every channel must tolerate only faint JPEG noise.
+    blackMean: 12, // Reject uniformly dark gray photographic backgrounds.
+    blackDeviation: 6, // Reject texture even below the near-black ceiling.
+    minBand: 3, // Require three contiguous sampled lines, not a dark edge.
+    maxTrim: 0.30, // Never remove more than 30% from any individual edge.
+    minContent: 0.40, // Retain at least 40% on each axis.
+    transitionLight: 40, // Content must clearly exceed the black ceiling.
+    transitionShare: 0.35, // A subtitle/logo alone is insufficient evidence.
+    transitionDepth: 2, // Require the transition to persist into content.
+    transitionRamp: 2, // Retain up to two blended boundary lines during evidence checks.
+    pairedTransitionShare: 0.15, // Dark content needs a matching opposite matte.
+    pairedTransitionDepth: 4, // Paired dark edges need four persistent content lines.
+    pairedBandTolerance: 2, // Opposite mattes may differ by two sample pixels.
+    aspectTolerance: 0.02, // Allow 2% derivative rounding, not a different frame.
+    version: 'content-v2', // Invalidate cached decisions when policy changes.
+});
+
+/**
+ * Locate convincing contiguous black mattes in a bounded opaque RGBA sample.
+ *
+ * Horizontal bands are found first, then columns within their content span.
+ * An uncertain edge retains its extent without rejecting other proven edges.
+ * Matched opposite mattes can establish a darker but sustained transition when
+ * the other edge passes the ordinary bright-content test. Real dark backgrounds
+ * can still resemble a matte, so the viewer offers an original-frame override.
+ *
+ * @param {{width:number,height:number,data:Uint8ClampedArray}} sample Small RGBA raster, at most 256 pixels per axis.
+ * @returns {{left:number,top:number,right:number,bottom:number}|null} Normalized content edges, or null when unchanged/uncertain.
+ */
+export function detectLightboxContentBounds(sample) {
+    const {width, height, data} = sample || {};
+    const policy = LIGHTBOX_CONTENT_POLICY;
+    // Four channels per pixel are the structural RGBA wire shape.
+    if (!Number.isInteger(width) || !Number.isInteger(height)
+        || width < policy.minBand || height < policy.minBand
+        || width > policy.sampleEdge || height > policy.sampleEdge
+        || !(data instanceof Uint8ClampedArray)
+        || data.length !== width * height * 4) return null;
+
+    const scanBand = (vertical, reverse, start, end) => {
+        const extent = vertical ? width : height;
+        const limit = Math.floor(extent * policy.maxTrim);
+        const count = end - start;
+        let band = 0;
+        for (; band <= limit; band += 1) {
+            const line = reverse ? extent - 1 - band : band;
+            let sum = 0;
+            let squares = 0;
+            let black = true;
+            for (let position = start; position < end; position += 1) {
+                const offset = (vertical
+                    ? position * width + line : line * width + position) * 4;
+                const level = Math.max(data[offset], data[offset + 1],
+                    data[offset + 2]);
+                if (data[offset + 3] !== 255
+                    || level > policy.blackCeiling) black = false;
+                sum += level;
+                squares += level * level;
+            }
+            const mean = sum / count;
+            if (!black || mean > policy.blackMean
+                || squares / count - mean * mean
+                    > policy.blackDeviation * policy.blackDeviation) break;
+        }
+        if (band < policy.minBand) return 0;
+        if (band > limit) return -1;
+        return band;
+    };
+    const hasTransition = (vertical, reverse, band, start, end, share, depthCount) => {
+        if (band <= 0) return false;
+        const extent = vertical ? width : height;
+        const count = end - start;
+        // Downsampling can leave a dim boundary line before real content. Look
+        // only a bounded distance inward, keeping those lines inside the crop.
+        for (let ramp = 0; ramp <= policy.transitionRamp; ramp += 1) {
+            let sustained = true;
+            for (let depth = 0; depth < depthCount; depth += 1) {
+                const distance = band + ramp + depth;
+                const line = reverse ? extent - 1 - distance : distance;
+                let bright = 0;
+                for (let position = start; position < end; position += 1) {
+                    const offset = (vertical
+                        ? position * width + line : line * width + position) * 4;
+                    if (data[offset + 3] === 255
+                        && Math.max(data[offset], data[offset + 1],
+                            data[offset + 2]) >= policy.transitionLight) bright += 1;
+                }
+                if (bright / count < share) {
+                    sustained = false;
+                    break;
+                }
+            }
+            if (sustained) return true;
+        }
+        return false;
+    };
+    const resolveAxis = (vertical, start, end) => {
+        const first = scanBand(vertical, false, start, end);
+        const last = scanBand(vertical, true, start, end);
+        const firstStrong = hasTransition(vertical, false, first, start, end,
+            policy.transitionShare, policy.transitionDepth);
+        const lastStrong = hasTransition(vertical, true, last, start, end,
+            policy.transitionShare, policy.transitionDepth);
+        const paired = first > 0 && last > 0
+            && Math.abs(first - last) <= policy.pairedBandTolerance;
+        const firstSupported = firstStrong || (paired && lastStrong
+            && hasTransition(vertical, false, first, start, end,
+                policy.pairedTransitionShare, policy.pairedTransitionDepth));
+        const lastSupported = lastStrong || (paired && firstStrong
+            && hasTransition(vertical, true, last, start, end,
+                policy.pairedTransitionShare, policy.pairedTransitionDepth));
+        return {first: firstSupported ? first : 0,
+            last: lastSupported ? last : 0};
+    };
+    const {first: top, last: bottom} = resolveAxis(false, 0, width);
+    const {first: left, last: right} = resolveAxis(true, top, height - bottom);
+    if (!(left || top || right || bottom)
+        || (width - left - right) / width < policy.minContent
+        || (height - top - bottom) / height < policy.minContent) return null;
+    return {left: left / width, top: top / height,
+        right: 1 - right / width, bottom: 1 - bottom / height};
+}
 
 /**
  * Clamp a numeric value to an inclusive range.

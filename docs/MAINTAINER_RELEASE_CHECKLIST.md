@@ -109,7 +109,7 @@ its summary explicitly says `ELIGIBLE`.
 - [ ] Retry configuration/transport failures using **Project website -> Run
   workflow -> Use workflow from: main**; there are no inputs. Do not rerun the
   historical rejected tag deployment.
-- [ ] Check [the live site](https://klusik.github.io/PHP_gallery/) on
+- [ ] Check [the live site](https://phpgallery.site/) on
   desktop/mobile:
   EN/CS/DE/SV, docs navigation, published version and pinned README/patch
   notes/PDF links.

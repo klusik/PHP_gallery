@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.145}
+\newcommand{\version}{0.146}
 \newcommand{\manualdate}{28.~Oktober~2026}
 
 \hypersetup{
@@ -183,7 +183,7 @@ Bezeichnungen aus der Administration wie \ui{Design} und \ui{Systemzustand} ersc
 
 Referenzen für Entwicklung und Hosting bleiben von diesem Betreiberhandbuch getrennt. Der Abschnitt mit den Quellen führt die Repository-Dokumente zu Architektur, Datenbank, Quellcodeverantwortung, Tests und Beitragsregeln auf \cite{readme,architecture,database,codemap,testing,agents}.\footnote{Diese Dateien sind die bessere Quelle, wenn Sie Code ändern, Schemadetails prüfen oder eine Veröffentlichung vorbereiten.}
 
-Die \href{https://klusik.github.io/PHP_gallery/}{Projektwebsite} bietet
+Die \href{https://phpgallery.site/}{Projektwebsite} bietet
 die veröffentlichte Version und Dokumentation auf Englisch, Tschechisch,
 Deutsch und Schwedisch. Der Hell-/Dunkelschalter ändert die Präsentationsseite;
 vergrößerbare Anwendungsaufnahmen behalten ihre erfasste Sprache,
@@ -2508,6 +2508,26 @@ Der Zoombereich der Lightbox beträgt 100--400~\%. Verwenden Sie Minus und Plus 
 Am~Computer verschieben normales Mausrad-Scrollen und~Scrollen mit zwei Fingern auf~dem Trackpad ein~vergrößertes Foto in~beiden Achsen; bei~100~\% ändern sie den~Maßstab nicht. Eine~Spreizgeste auf~dem Trackpad oder~\codeword{Strg} mit dem~Mausrad vergrößert das~Foto um~den Zeiger; \codeword{Command} mit dem~Mausrad bleibt eine~Browserfunktion. Auf~Touchscreens vergrößert eine~Zweifingergeste um~ihren Mittelpunkt, während ein Finger das~vergrößerte Foto verschiebt. Bei~100~\% blättert horizontales Wischen mit einem Finger zwischen Fotos; der~Übergang von~Wischen zu~Pinch oder~von~Pinch zu~Verschieben löst keine Navigation aus.
 
 Bei 100~\% ist das Foto eingepasst und im Betrachter zentriert. Vollbild verwendet dasselbe Zoom- und Verschiebeverhalten; Schließen und andere Steuerungen bleiben bei vergrößertem Bild anklickbar.
+
+\ui{An Inhalt anpassen} blendet sicher erkannte schwarze Ränder innerhalb
+eines Screenshots aus und passt den Inhalt proportional ein. Das Rahmensymbol
+neben der Zoomanzeige bietet \ui{Originalrahmen anzeigen}; erneutes Betätigen
+aktiviert die Inhaltsanpassung wieder. Die Auswahl gilt beim Bildwechsel in
+dieser Sitzung; eine Änderung setzt den Zoom auf 100~\% zurück. Wegen des
+Inhaltsseitenverhältnisses nötiger Freiraum bleibt erhalten.
+Die Erkennung liest nur eine kleine Probe des aktiven dekodierten Bildes,
+höchstens 256~Pixel pro Seite, ohne maschinelles Lernen oder zusätzliche
+Bildanfragen. Passende gegenüberliegende Ränder können auch einen dunkleren
+Inhaltsrand bestätigen. Unsichere Kanten und Text bleiben sichtbar, während
+andere sicher erkannte Ränder ausgeblendet werden können. Verweigerte
+Pixelzugriffe behalten den ganzen Rahmen. Dateien, Vorschaubilder und
+Downloads bleiben unverändert.
+
+Manueller Bildwechsel und Diashow bereiten den Ausschnitt vor der ersten
+Anzeige des nächsten Fotos vor. Das bisherige Foto behält beim Laden seine
+Geometrie und wird beim Einblenden des neuen Bildes gleichzeitig ausgeblendet.
+Bei unterschiedlichen Bildformen verschwinden freiliegende Teile des alten
+Fotos dadurch nicht erst abrupt am Ende des Übergangs.
 
 Zoom über 100~\% fordert sofort die geschützte Quelle voller Qualität für das aktive Foto an. Die vorhandene Vorschau bleibt sichtbar, bis das größere Bild bereit ist; aktuelle Zoom- und Verschiebeposition bleiben erhalten. Im normalen, Vollbild- und mobilen Vollbildmodus zeigt diese Übertragung dieselbe Fortschrittsleiste mit Prozentwert und Byteanzahl. Fotowechsel, Schließen des Betrachters oder eine neuere Anfrage voller Qualität brechen die vorherige Übertragung ab. Eine fehlgeschlagene oder abgebrochene Anfrage voller Qualität belässt die geschützte Vorschau.
 

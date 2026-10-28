@@ -152,7 +152,9 @@ const server = createServer(async (request, response) => {
     const target = path.resolve(root, relative);
     if (
         !target.startsWith(root + path.sep)
-        || (relative !== 'tests/fixtures/lightbox_race.html' && !relative.startsWith('public/assets/'))
+        || (relative !== 'tests/fixtures/lightbox_race.html'
+            && relative !== 'tests/fixtures/lightbox_content_fit.html'
+            && !relative.startsWith('public/assets/'))
     ) {
         response.writeHead(404).end();
         return;
@@ -242,6 +244,23 @@ try {
     console.log(`Fullscreen evidence: ${JSON.stringify(fullscreenEvidence)}; screenshot: ${fullscreenScreenshotPath || 'not captured'}`);
     assert.equal(exitCode, 0, 'Browser process must finish successfully');
     assert.ok(result?.includes('BROWSER PASS'), 'Lightbox race fixture must complete all assertions');
+    // Cover the production cascade with widescreen and narrow portrait stages.
+    // Type: Array<{width:number,height:number}>. Units: CSS pixels.
+    // Scope: content-fit fixture only. Consumers: runHeadlessBrowserFixture.
+    // Rationale: 1440x900 and 390x844 straddle the public mobile layout boundary.
+    const contentFitViewports = [
+        {width: 1440, height: 900},
+        {width: 390, height: 844},
+    ];
+    for (const viewport of contentFitViewports) {
+        const contentFit = await runHeadlessBrowserFixture(executable,
+            `${fixtureUrl}tests/fixtures/lightbox_content_fit.html`,
+            'lightbox-content-fit-profile-', {viewport});
+        console.log(contentFit.result);
+        assert.equal(contentFit.exitCode, 0, 'Content-fit browser must exit successfully');
+        assert.ok(contentFit.result?.includes('BROWSER PASS'),
+            'Content-fit fixture must pass at each supported layout');
+    }
 } finally {
     server.close();
 }

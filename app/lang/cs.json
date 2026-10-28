@@ -4686,6 +4686,8 @@
     "lightbox.zoom_in": "Přiblížit",
     "lightbox.zoom_out": "Oddálit",
     "lightbox.zoom_reset": "Obnovit přiblížení",
+    "lightbox.fit_content": "Přizpůsobit podle obsahu",
+    "lightbox.original_frame": "Zobrazit původní rám",
     "lightbox.zoom_status": "Přiblížení {percent}",
     "mobile_webdav.auth_required": "Je vyžadováno ověření.",
     "mobile_webdav.confirm_delete": "Smazat toto mobilní upload připojení?",

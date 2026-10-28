@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.145}
+\newcommand{\version}{0.146}
 \newcommand{\manualdate}{28~oktober~2026}
 
 \hypersetup{
@@ -179,7 +179,7 @@ Namn i administrationen, såsom \ui{Tema} och \ui{Systemstatus}, visas med fetst
 
 Referenser för utvecklare och webbhotell hålls åtskilda från denna ägarmanual. Referensavsnittet anger de dokument i kodförrådet som används för arkitektur, databas, ansvar för källkod, testning och regler för bidrag \cite{readme,architecture,database,codemap,testing,agents}.\footnote{Dessa filer är bättre källor när du ändrar kod, undersöker schemadetaljer eller förbereder en utgåva.}
 
-\href{https://klusik.github.io/PHP_gallery/}{Projektwebbplatsen} erbjuder
+\href{https://phpgallery.site/}{Projektwebbplatsen} erbjuder
 den publicerade versionen och dokumentationen på engelska, tjeckiska,
 tyska och svenska. Knappen för ljust/mörkt utseende ändrar presentationssidan;
 förstoringsbara skärmbilder behåller sitt avbildade språk, utseende och
@@ -2410,6 +2410,24 @@ Ljuslådans zoomintervall är 100--400~\%. Använd minus- och pluskontrollerna, 
 På~datorer flyttar vanligt mushjul och~rullning med två fingrar på~styrplattan ett~förstorat fotografi i~båda riktningarna; vid~100~\% ändras inte skalan. Att~dra isär fingrarna på~styrplattan eller~använda \codeword{Ctrl} med mushjulet zoomar fotografiet kring pekaren, medan \codeword{Command} med mushjulet förblir ett~webbläsarkommando. På~pekskärmar zoomar två fingrar kring gestens mittpunkt, medan ett finger flyttar en~förstorad bild. Vid~100~\% byter ett~vågrätt svep med ett finger fotografi; växling från svep till nypning eller från nypning till panorering byter inte bild.
 
 Vid 100~\% passas fotografiet in och centreras i visaren. Helskärmsläget använder samma zoom- och panoreringsbeteende, och dess Stäng-kontroll och övriga kontroller går att klicka på när bilden är förstorad.
+
+\ui{Anpassa efter innehåll} döljer säkert identifierade svarta kanter i en
+skärmbild och passar in innehållet proportionellt. Ramsymbolen vid zoomtalet
+erbjuder \ui{Visa originalram}; välj den igen för att återställa
+innehållsanpassningen. Valet följer bildbyten under sessionen och en ändring
+återställer zoom till 100~\%. Utrymme som innehållets egna proportioner kräver
+finns kvar runt bilden.
+Detekteringen läser bara ett litet prov av den aktiva avkodade bilden, högst
+256~pixlar per sida, utan maskininlärning eller extra bildförfrågningar.
+Matchande motsatta kanter kan även stödja en mörkare innehållskant. Osäkra
+kanter och text förblir synliga medan andra säkert identifierade kanter kan
+döljas. Nekad pixelåtkomst behåller hela ramen. Filer, miniatyrbilder och
+nedladdningar förblir oförändrade.
+
+Manuella bildbyten och bildspel förbereder beskärningen innan nästa fotografi
+visas. Den gamla bilden behåller sin geometri under laddningen och tonas sedan
+ut samtidigt som den nya tonas in. Vid olika bildformer försvinner synliga
+delar av den gamla bilden därför inte abrupt först vid övergångens slut.
 
 Zoomning över 100~\% begär omedelbart den skyddade källan i full kvalitet för det aktiva fotografiet. Den befintliga förhandsvisningen förblir synlig tills den större bilden är klar, och aktuell zoom- och panoreringsposition bevaras. I vanligt läge, helskärmsläge och mobilt helskärmsläge visar överföringen samma förloppsrad med procenttal och byteantal. Att byta fotografi, stänga visaren eller starta en nyare begäran om full kvalitet avbryter föregående överföring. En misslyckad eller avbruten begäran om full kvalitet lämnar den skyddade förhandsvisningen på plats.
 

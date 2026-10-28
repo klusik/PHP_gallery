@@ -4686,6 +4686,8 @@
     "lightbox.zoom_in": "Zoom in",
     "lightbox.zoom_out": "Zoom out",
     "lightbox.zoom_reset": "Reset zoom",
+    "lightbox.fit_content": "Fit by content",
+    "lightbox.original_frame": "Show original frame",
     "lightbox.zoom_status": "Zoom {percent}",
     "mobile_webdav.auth_required": "Authentication required.",
     "mobile_webdav.confirm_delete": "Delete this mobile upload connection?",

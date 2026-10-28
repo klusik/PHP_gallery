@@ -2386,6 +2386,7 @@
         "tests/fixtures/gallery_visit_migration_legacy_model.php",
         "tests/fixtures/gallery_visit_migration_previous_seed.php",
         "tests/fixtures/gallery_visit_progress.html",
+        "tests/fixtures/lightbox_content_fit.html",
         "tests/fixtures/lightbox_dev_dashboard.html",
         "tests/fixtures/lightbox_map_navigation.html",
         "tests/fixtures/lightbox_race.html",

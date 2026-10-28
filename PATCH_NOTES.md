@@ -1,5 +1,139 @@
 # Patch notes
 
+## Version 0.146
+
+Added automatic lightbox fitting around visible image content, with a session
+switch for restoring the original frame. Improved manual and slideshow fades
+between differently shaped images, including fullscreen transitions. Updated
+the project website's canonical, language and social-sharing metadata to use
+`https://phpgallery.site/` across all eight localized pages.
+
+### Highlights
+
+#### Content-aware lightbox fitting
+
+- Added conservative detection of embedded black borders around the active
+  image. Fitted the existing viewer to supported content bounds so screenshots
+  with letterbox, pillarbox or four-sided mattes could use more of the available
+  display area without changing the stored photograph.
+- Enabled content fit initially and added a compact frame button beside the
+  existing zoom controls in both the normal toolbar and fullscreen HUD. Added
+  English, Czech, German and Swedish labels for switching between content fit
+  and the original frame.
+- Retained the selected mode across navigation within the viewer session and
+  reset zoom to 100% when deliberately switching modes. Kept the original-frame
+  option available even when the detector found no supported border.
+- Treated image edges independently. Retained uncertain edges, subtitle-bearing
+  borders and natural dark gradients while allowing independently supported
+  borders to fit. Added paired-edge evidence for a darker content boundary when
+  the opposite border provided a convincing transition.
+- Preserved ordinary viewport letterboxing when the visible content and display
+  had different aspect ratios. Kept original files, downloads, thumbnails and
+  media access unchanged.
+
+#### Stable image changes and slideshow fades
+
+- Prepared the incoming image's crop and stage dimensions before its first
+  visible paint, while retaining the outgoing image's existing geometry until
+  the decoded replacement was ready.
+- Faded both outgoing and incoming layers when their visible rectangles
+  differed. Removed the abrupt disappearance of exposed portions of the old
+  image at the end of the transition.
+- Positioned incoming covers independently of the outgoing stage and global
+  image size limits. Preserved full-source proportions in fullscreen instead
+  of shrinking or misaligning the cropped image during a fade.
+- Refit in-flight covers after viewport, fullscreen or map-pane changes and
+  remeasured geometry at the final decoded commit. Kept captions above the
+  incoming media layer and restored owned fade styles on cancellation.
+
+#### Canonical project website domain
+
+- Updated generated canonical URLs, EN/CS/DE/SV language alternates, English
+  `x-default` links and `og:url` metadata to share the production origin
+  `https://phpgallery.site/`. Applied the correct locale and documentation paths
+  to all eight project pages, addressing
+  [#318](https://github.com/klusik/PHP_gallery/issues/318).
+- Preserved relative asset and navigation links, language switching, local
+  preview routes and release-pinned documentation links. Updated maintained
+  website references without changing the website's appearance or the PHP
+  gallery installation's configured address.
+
+### Technical Details
+
+#### Browser implementation and compatibility
+
+- Added `detectLightboxContentBounds()` and explicit detection policies to
+  `public/assets/gallery-modules/lightbox-zoom-model.js`. Sampled only the active,
+  already decoded authorized image, with no extra image request, gallery scan
+  or background analysis.
+- Bounded sampling to 256 pixels per edge and at most 256 KiB of RGBA data.
+  Limited trimming to 30% per edge and retained at least 40% of each axis.
+  Required contiguous, opaque, low-variance near-black bands and sustained
+  content transitions instead of treating every dark margin as a border.
+- Added a viewer-local cache of at most 64 normalized rectangles, keyed by
+  detector version, image identity, authorized source URLs and indexed
+  dimensions. Released the sample canvas immediately and cleared the cache at
+  teardown. Reused bounds for matching-aspect quality variants, retaining the
+  complete frame for differently framed derivatives.
+- Integrated clipping with the existing zoom surface, pan anchors, normal
+  stage, fullscreen/map layout and quality-source selection in
+  `public/assets/gallery-modules/lightbox.js`. Accounted for the full source
+  pixels behind a crop when selecting image quality.
+- Retained the original frame when Canvas support or pixel reads were
+  unavailable. Kept detection inside the current guarded navigation task, so
+  detached analysis could not overwrite a later image selection. Preserved
+  existing protected-media and no-JavaScript behavior.
+- Updated `public/assets/styles/lightbox.css` for the compact fit control and
+  caption stacking, and refreshed the zoom-model module revision.
+
+#### Regression coverage and documentation
+
+- Extended `tests/lightbox_zoom_model_test.mjs` with letterbox, pillarbox,
+  asymmetric and four-sided borders, compression-like noise, dark and black
+  scenes, transparent samples, subtitles, blended boundaries, paired darker
+  edges, excessive trimming and malformed input.
+- Added `tests/fixtures/lightbox_content_fit.html` to the existing lightbox race
+  browser owner at 1440x900 and 390x844. Covered compressed JPEG fitting,
+  original-frame switching, zoom, CSS fullscreen fallback, bounded sampling,
+  cache reuse and denied pixel reads.
+- Added transition assertions for retained outgoing geometry, proportional
+  incoming covers, gradual outgoing opacity and slideshow navigation between
+  different content aspects. Updated the existing PHP zoom integration,
+  lifecycle and quality contracts for conditional clipping and retained crop
+  geometry.
+- Extended `tests/project_website_test.mjs` to verify exact canonical,
+  alternate and Open Graph URLs on every generated page, including exclusion
+  of the former GitHub Pages origin and the local preview mount.
+- Updated architecture, browser lifecycle, compatibility and testing guidance,
+  maintained website references and all four English, Czech, German and
+  Swedish manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Improved the usable size of images containing recognizable embedded black
+  borders while retaining the existing zoom and pan controls. Added an immediate
+  original-frame comparison when a dark photographic background resembled a
+  border or the complete source composition was preferred.
+- Improved image-to-image transitions in manual viewing and presentations,
+  especially when consecutive images had different content proportions or the
+  viewport changed during a fade.
+- Updated project website metadata so search engines and social previews were
+  directed to the custom domain and corresponding language page.
+
+#### For administrators and maintainers
+
+- Required no database migration, image reprocessing, re-upload or new server
+  setting for content fit. Kept this display choice in the viewer session
+  without changing stored media or download permissions.
+- Documented the original-frame fallback and remaining manual acceptance areas:
+  real-phone performance, broader film/game image collections and assistive
+  technology. Sample and cache limits established resource budgets rather than
+  a performance guarantee for every device.
+- Kept the project website address separate from the hosted PHP gallery's own
+  URL and retained existing release-bound source and manual links.
+
 ## Version 0.145
 
 Reworked the administration workspace around compact, responsive settings,

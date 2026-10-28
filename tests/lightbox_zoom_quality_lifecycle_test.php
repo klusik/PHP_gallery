@@ -303,13 +303,17 @@ lightbox_zoom_quality_lifecycle_assert(
             'const metrics = measuredMetrics || measureLightboxZoomMetrics();',
         )
         && !str_contains($lightboxSource, 'scale(${lightboxZoomState.scale})')
-        && !str_contains(
+        && str_contains(
             $lightboxSource,
-            "zoomSurface.style.overflow = 'hidden'",
+            "if (bounds) zoomSurface.style.overflow = 'hidden';",
+        )
+        && str_contains(
+            $lightboxSource,
+            "zoomSurface.style.removeProperty('overflow');",
         )
         && !str_contains($lightboxSource, 'qualityRepaintImage')
         && !str_contains($lightboxSource, 'qualityRepaintTransformReady'),
-    'Zoom must enlarge a stage-centered fitted photograph frame, keep the image filling that frame, and preserve center-relative panning.',
+    'Zoom must enlarge the centered fitted frame, clip only detected mattes inside that growing frame, and preserve center-relative panning.',
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains(
@@ -388,7 +392,7 @@ lightbox_zoom_quality_lifecycle_assert(
         )
         && str_contains(
             $lightboxSource,
-            'lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5',
+            'lightbox-zoom-model.js?v=20261028-content-fit-v3',
         ),
     'All public lightbox module paths must invalidate stale browser caches together.',
 );

@@ -1,5 +1,59 @@
 # Compatibility lifecycle and retirement register
 
+## Lightbox content fit and original-frame support
+
+Owners: `lightbox.js` and `lightbox-zoom-model.js`. Content fit is a browser-only
+enhancement of the existing viewer. Missing Canvas support, denied/tainted pixel
+reads and differently framed derivatives permanently use the full frame.
+Uncertain edges keep their extent while independently proven borders can fit.
+No CORS/access policy or protected-media URL is
+changed. Downloads, thumbnails, stored originals and no-JavaScript links retain
+their existing behavior. This capability fallback has no planned retirement;
+browser/device usage is unknown.
+
+The detector uses at most 256 by 256 sampled pixels (256 KiB RGBA), three-line
+minimum bands, at most 30% trim per edge and at least 40% retained per axis.
+Each line requires opaque channels at most 20, mean at most 12 and standard
+deviation at most 6. Two content lines need at least 35% pixels at level 40 or
+above. Matching opposite bands (within two sampled pixels) permit a darker
+transition only when the other edge passes that strict test: at least 15%
+bright pixels must persist over four lines. Up to two dim boundary lines may
+precede either evidence window; those lines remain inside the crop. Decisions
+are per edge, so an uncertain natural dark side does not reject valid top/bottom
+bands. Text remains visible; an uncertain caption edge can remain in full while
+the opposite matte fits. A genuinely black
+photographic background may still resemble a matte. The original-frame toggle
+remains available even when no matte is found. It retains the session selection
+across navigation and resets zoom on a deliberate mode change.
+
+Regression sources cover synthetic noise, dark/black/transparent frames,
+asymmetric/four-sided mattes and subtitle contamination, with a browser JPEG
+fixture for fitting/override/zoom/fullscreen/cache and pixel refusal. The reported
+concert screenshot originally failed because the lower content edge had about
+20% bright pixels, a downsampled mixed boundary line, and dim side gradients.
+The corrected detector was inspected on that exact authorized image in normal,
+2560x1080 fullscreen and a 390x844 viewport: both horizontal bands fit, full
+image width and natural side gradients remain, and analysis was about 1.8 ms on
+the authoring machine. Synthetic
+desktop preview observed about 1.9--3.7 ms for the initial sample on the authoring
+machine; this is not a low-end-device or whole-slideshow guarantee. Real mobile
+performance, broader film/game corpora and assistive
+technology acceptance remain manual coverage. Cache retains at most 64
+rectangles, no pixels, and is discarded at setup teardown or page reload.
+
+Manual and slideshow transitions retain outgoing crop geometry during loading.
+Target geometry is prepared without a visible full-frame intermediate. The
+incoming cover overrides global image maxima, which otherwise shrank its
+full-source box in fullscreen and misaligned the crop. Both layers now fade,
+so exposed old content outside a differently shaped incoming image does not
+disappear abruptly. Cancellation restores opacity only for its owning cover;
+viewport/map/fullscreen changes and final decode remeasure the target.
+The actual local 6-to-7 transition was inspected with the soundtrack explicitly
+disabled: outgoing/incoming opacity was about 0.795/0.205 during the blend.
+The focused fixture passed manual and automatic transitions, including a narrow
+viewport change during the fade. Real-phone performance and broader geometry
+corpora remain manual coverage; these local observations do not qualify FULL.
+
 ## Lightbox fullscreen exit and split-map lifetime
 
 Owner: `public/assets/gallery-modules/lightbox.js`. Native browser fullscreen

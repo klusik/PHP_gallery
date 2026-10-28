@@ -167,9 +167,13 @@ lightbox_zoom_integration_assert(
         && str_contains($lightboxStyleSource, 'position: absolute;')
         && str_contains($lightboxStyleSource, 'left: 50%;')
         && str_contains($lightboxStyleSource, 'top: 50%;')
-        && !str_contains(
+        && str_contains(
             $lightboxSource,
-            "zoomSurface.style.overflow = 'hidden'",
+            "if (bounds) zoomSurface.style.overflow = 'hidden';",
+        )
+        && str_contains(
+            $lightboxSource,
+            "zoomSurface.style.removeProperty('overflow');",
         )
         && str_contains($zoomModelSource, 'metrics?.panViewportHeight'),
     'Fullscreen zoom must retain two-axis pan bounds while the fitted photograph frame grows symmetrically from the stage center.',
