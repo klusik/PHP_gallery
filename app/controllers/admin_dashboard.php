@@ -82,6 +82,7 @@ use function Gallery\Services\flight_map_navdata_refresh;
 use function Gallery\Services\flight_map_navdata_status;
 use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_mutation_error_envelope;
 use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_panel_metadata;
 use function Gallery\Services\public_home_search_enabled;
@@ -693,27 +694,65 @@ function render_admin_url_rewrite_card(string $className): void
 }
 
 /**
- * Resolve the owned Content and display return target without accepting arbitrary URLs.
+ * Resolve owned Maintenance preference targets without accepting arbitrary URLs.
  *
  * @param string $fallbackUrl Existing direct-page destination for unmarked requests.
- * @return string Fixed Maintenance content destination or the supplied controller fallback.
+ * @return string Fixed content/system destination or the supplied controller fallback.
  */
 function admin_dashboard_content_return_url(string $fallbackUrl): string
 {
+    $tab = $_POST['maintenance_return'] ?? '';
     return (
-        ($_POST['maintenance_return'] ?? '') === 'content'
+        in_array($tab, ['content', 'system'], true)
             ? url_for('admin', [
                 'dashboard_tab' => 'maintenance',
-                'maintenance_tab' => 'content',
+                'maintenance_tab' => $tab,
             ])
             : $fallbackUrl
     );
 }
 
 /**
+ * Complete an enhanced Maintenance preference write with authoritative values.
+ *
+ * @param array<string,bool> $values Persisted booleans keyed by this route's
+ *     existing checkbox field names; never inferred from the submitted intent.
+ * @param string $message Localized success or safe capability/schema refusal.
+ * @param bool $ok Whether the permitted write completed successfully.
+ * @return bool True after emitting JSON; false leaves the classic POST fallback.
+ */
+function admin_dashboard_content_json_response(
+    array $values,
+    string $message,
+    bool $ok = true,
+): bool {
+    if (!admin_wants_json()) {
+        return false;
+    }
+    $mutation = admin_mutation_descriptor('settings.update', 'settings', 'update');
+    $fallback = [
+        'redirect_url' => admin_dashboard_content_return_url(url_for('admin')),
+    ];
+    $payload = $ok
+        ? admin_mutation_success_envelope($message, $mutation, null, [], $fallback)
+        : admin_mutation_error_envelope(
+            $message,
+            'settings_refused',
+            $mutation,
+            $fallback,
+        );
+    $payload['setting_values'] = $values;
+    http_response_code($ok ? 200 : 422);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    return true;
+}
+
+/**
  * Persist the URL rewrite admin setting and return to its originating control group.
  *
- * @return void Saves an authenticated preference and redirects to the owned Admin surface.
+ * @return void Emit authoritative JSON for autosave or redirect the classic POST.
  */
 function cms_admin_url_rewrite(): void
 {
@@ -724,6 +763,12 @@ function cms_admin_url_rewrite(): void
     }
     verify_csrf();
     set_url_rewrite_enabled(isset($_POST['url_rewrite_enabled']));
+    if (admin_dashboard_content_json_response(
+        ['url_rewrite_enabled' => url_rewrite_enabled()],
+        t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.'),
+    )) {
+        return;
+    }
     flash_message(
         'admin_notice',
         ''
@@ -741,7 +786,7 @@ function cms_admin_url_rewrite(): void
 /**
  * Persist the optional public search setting and retain the selected maintenance group.
  *
- * @return void Saves the permitted preference or redirects with a capability notice.
+ * @return void Emit persisted search state/refusal as JSON or retain the classic redirect.
  */
 function cms_admin_public_search_settings(): void
 {
@@ -757,6 +802,16 @@ function cms_admin_public_search_settings(): void
         )
         && !feature_capability_effective_enabled('public_search')
     ) {
+        if (admin_dashboard_content_json_response(
+            ['public_home_search_enabled' => public_home_search_enabled()],
+            t(
+                'admin.dashboard.notice_public_search_disabled',
+                'Public search is disabled in Admin > Features.',
+            ),
+            false,
+        )) {
+            return;
+        }
         flash_message('admin_notice', t(
             'admin.dashboard.notice_public_search_disabled',
             'Public search is disabled in Admin > Features.',
@@ -772,6 +827,12 @@ function cms_admin_public_search_settings(): void
             'enabled' => public_home_search_enabled(),
         ],
     );
+    if (admin_dashboard_content_json_response(
+        ['public_home_search_enabled' => public_home_search_enabled()],
+        t('admin.dashboard.notice_public_search_saved', 'Public search setting saved.'),
+    )) {
+        return;
+    }
     flash_message('admin_notice', t(
         'admin.dashboard.notice_public_search_saved',
         'Public search setting saved.',
@@ -782,7 +843,8 @@ function cms_admin_public_search_settings(): void
 /**
  * Persist the GPS map default or reset gallery overrides without changing that default.
  *
- * @return void Applies only the requested operation after schema verification and redirects.
+ * @return void Emit authoritative JSON for a verified default save/refusal;
+ *     classic and bulk-reset requests retain their owned redirects.
  */
 function cms_admin_exif_gps_settings(): void
 {
@@ -794,6 +856,25 @@ function cms_admin_exif_gps_settings(): void
     verify_csrf();
     $schemaStatus = presentation_gps_override_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
+        $message = schema_inspection_is_unknown($schemaStatus)
+            ? t(
+                'admin.dashboard.exif_gps_schema_unknown',
+                'EXIF/GPS defaults were not changed because the gallery override schema could not be verified. Check System Health.',
+            )
+            : t(
+                'admin.dashboard.exif_gps_requires_migration',
+                'EXIF/GPS default controls will be available after the database migration is applied.',
+            );
+        if (admin_dashboard_content_json_response(
+            ['exif_gps_default_enabled' => exif_gps_default_enabled()],
+            $message,
+            false,
+        )) {
+            if (schema_inspection_is_unknown($schemaStatus)) {
+                presentation_schema_log_degraded($schemaStatus, 'gps_default_setting_save');
+            }
+            return;
+        }
         if (schema_inspection_is_unknown($schemaStatus)) {
             presentation_schema_log_degraded(
                 $schemaStatus,
@@ -833,6 +914,14 @@ function cms_admin_exif_gps_settings(): void
         ],
     );
 
+    if (!$resetOnly && empty($_POST['reset_gallery_overrides'])
+        && admin_dashboard_content_json_response(
+            ['exif_gps_default_enabled' => exif_gps_default_enabled()],
+            t('admin.dashboard.notice_exif_gps_saved', 'EXIF/GPS defaults saved.'),
+        )) {
+        return;
+    }
+
     if ($resetOnly) {
         flash_message('admin_notice', t(
             'admin.dashboard.content_gps_reset_done',
@@ -857,7 +946,7 @@ function cms_admin_exif_gps_settings(): void
 /**
  * Persist crawler protection settings and retain the selected maintenance group.
  *
- * @return void Saves the authenticated protection preferences and redirects to Admin.
+ * @return void Emit authoritative protection/logging JSON or retain the classic redirect.
  */
 function cms_admin_seo_guard_settings(): void
 {
@@ -882,6 +971,16 @@ function cms_admin_seo_guard_settings(): void
         ],
         ['category' => 'security', 'severity' => 'info'],
     );
+
+    if (admin_dashboard_content_json_response(
+        [
+            'seo_request_guard_enabled' => seo_request_guard_enabled(),
+            'seo_request_guard_logging_enabled' => seo_request_guard_logging_enabled(),
+        ],
+        t('admin.dashboard.notice_seo_guard_saved', 'SEO request guard setting saved.'),
+    )) {
+        return;
+    }
 
     flash_message('admin_notice', t(
         'admin.dashboard.notice_seo_guard_saved',
@@ -1054,7 +1153,8 @@ function render_admin_devmode_panel(): void
 /**
  * Persist the admin dev mode setting.
  *
- * @return void Saves the authenticated preference and redirects to Admin.
+ * @return void Emit canonical JSON for autosave or redirect the classic POST
+ *     to its owned Maintenance target after saving the authenticated preference.
  */
 function cms_admin_devmode(): void
 {
@@ -1065,16 +1165,18 @@ function cms_admin_devmode(): void
     }
     verify_csrf();
     set_dev_mode_enabled(isset($_POST['dev_mode_enabled']));
-    flash_message(
-        'admin_notice',
-        ''
-            . e(t(
-                'admin.dashboard.notice_devmode_saved',
-                'Dev mode setting saved.',
-            ))
-            . '',
+    $message = t(
+        'admin.dashboard.notice_devmode_saved',
+        'Dev mode setting saved.',
     );
-    redirect_to(url_for('admin'));
+    if (admin_dashboard_content_json_response(
+        ['dev_mode_enabled' => dev_mode_enabled()],
+        $message,
+    )) {
+        return;
+    }
+    flash_message('admin_notice', e($message));
+    redirect_to(admin_dashboard_content_return_url(url_for('admin')));
 }
 
 /**

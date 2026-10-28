@@ -1,0 +1,257 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-navigation.css
+ * Module Type: Stylesheet
+ * Purpose: Keep Admin navigation compact on desktop and contextual on mobile.
+ * Responsibilities: Override legacy navigation layout within the Admin shell,
+ * preserve grouped links and supply accessible focus and touch geometry.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.admin-page .admin-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.admin-page .admin-sidebar-header .admin-sidebar-title {
+    padding-bottom: 4px;
+}
+
+.admin-page .admin-sidebar button.admin-navigation-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 4px;
+    border: 1px solid color-mix(in srgb, var(--ink, #182230) 18%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+    color: var(--ink, #182230);
+    box-shadow: none;
+    cursor: pointer;
+    line-height: 1.2;
+    text-decoration: none;
+    backdrop-filter: blur(12px);
+}
+
+.admin-page .admin-sidebar button.admin-navigation-toggle:hover {
+    background: color-mix(in srgb, var(--accent, #2563a8) 10%, var(--panel, #fff));
+}
+
+.admin-page .admin-sidebar button.admin-navigation-toggle:focus-visible,
+.admin-page .admin-sidebar .admin-menu-link:focus-visible {
+    outline: 2px solid var(--accent, #2563a8);
+    outline-offset: 2px;
+}
+
+.admin-page .admin-navigation-toggle[hidden],
+.admin-page .admin-navigation-links[hidden],
+.admin-page .admin-navigation-hamburger,
+.admin-page .admin-navigation-mobile-label {
+    display: none;
+}
+
+.admin-page .admin-sidebar .admin-menu-link {
+    text-decoration: none;
+}
+
+.admin-page .admin-shell.admin-navigation-ready {
+    grid-template-columns: 208px minmax(0, 1fr);
+}
+
+.admin-page .admin-navigation-ready .admin-sidebar {
+    /* Desktop navigation uses document scrolling, including the last action. */
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+}
+
+.admin-page .admin-navigation-ready .admin-menu-group {
+    display: block;
+    width: auto;
+    margin-right: 0;
+}
+
+/* Desktop keeps the current expanded group treatment by default. */
+@media (min-width: 1101px) {
+    .admin-page .admin-shell.admin-navigation-collapsed {
+        grid-template-columns: 64px minmax(0, 1fr);
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-sidebar {
+        padding: 6px;
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-sidebar-header {
+        justify-content: center;
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-navigation-chevron {
+        transform: rotate(180deg);
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-menu-group {
+        margin-bottom: 6px;
+        padding: 6px 0 0;
+        border: 0;
+        border-top: 1px solid var(--admin-border);
+        border-radius: 0;
+        background: transparent;
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-sidebar-title,
+    .admin-page .admin-navigation-collapsed .admin-menu-group h2,
+    .admin-page .admin-navigation-collapsed .admin-menu-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-menu-link {
+        justify-content: center;
+        min-height: 32px;
+        padding: 4px;
+    }
+
+    .admin-page .admin-navigation-collapsed .admin-menu-icon {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+    }
+}
+
+/* 1100px matches the existing single-column Admin workspace breakpoint. */
+@media (max-width: 1100px) {
+    .admin-page .admin-shell.admin-navigation-ready {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-page .admin-navigation-ready .admin-sidebar {
+        position: sticky;
+        top: calc(var(--admin-navigation-header-height, 48px) + 8px);
+        z-index: 39;
+        max-height: none;
+        overflow: visible;
+        padding: 4px;
+        border-radius: min(var(--radius, 8px), 8px);
+        background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+        color: var(--ink, #182230);
+    }
+
+    .admin-page .admin-navigation-ready .admin-sidebar-header {
+        margin: 0;
+    }
+
+    .admin-page .admin-navigation-ready .admin-sidebar-title,
+    .admin-page .admin-navigation-ready .admin-navigation-chevron {
+        display: none;
+    }
+
+    .admin-page .admin-navigation-ready .admin-sidebar button.admin-navigation-toggle {
+        justify-content: flex-start;
+        gap: 8px;
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 10px;
+        border-color: transparent;
+        font: inherit;
+        font-weight: 650;
+    }
+
+    .admin-page .admin-navigation-ready .admin-navigation-hamburger,
+    .admin-page .admin-navigation-ready .admin-navigation-mobile-label {
+        display: inline;
+    }
+
+    .admin-page .admin-navigation-ready .admin-navigation-links {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        width: min(22rem, 100%);
+        max-height: var(--admin-navigation-panel-height, 70dvh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 8px;
+        border: 1px solid color-mix(in srgb, var(--ink, #182230) 18%, transparent);
+        border-radius: min(var(--radius, 8px), 8px);
+        background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+        color: var(--ink, #182230);
+        backdrop-filter: blur(16px);
+        box-shadow: var(--admin-shadow);
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-group {
+        margin: 0;
+        padding: 8px 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-group + .admin-menu-group {
+        border-top: 1px solid color-mix(in srgb, var(--ink, #182230) 16%, transparent);
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-group h2 {
+        padding: 0 8px;
+        color: var(--ink, #182230);
+        font-family: inherit;
+        font-size: 0.85rem;
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-link {
+        gap: 8px;
+        min-height: 44px;
+        color: var(--ink, #182230);
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-link:hover,
+    .admin-page .admin-navigation-ready .admin-menu-link:focus-visible,
+    .admin-page .admin-navigation-ready .admin-menu-link.is-active {
+        background: color-mix(in srgb, var(--accent, #2563a8) 12%, transparent);
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-link.is-active {
+        box-shadow: inset 3px 0 0 var(--accent, #2563a8);
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-icon {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+    }
+}
+
+@media (pointer: coarse) and (min-width: 1101px) {
+    .admin-page .admin-navigation-ready .admin-sidebar button.admin-navigation-toggle,
+    .admin-page .admin-navigation-ready .admin-menu-link {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    .admin-page .admin-navigation-ready .admin-sidebar button.admin-navigation-toggle,
+    .admin-page .admin-navigation-ready .admin-navigation-links {
+        border: 1px solid ButtonText;
+        background: Canvas;
+        color: CanvasText;
+    }
+
+    .admin-page .admin-navigation-ready .admin-menu-link.is-active {
+        outline: 1px solid Highlight;
+    }
+}

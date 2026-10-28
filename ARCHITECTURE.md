@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.144.14';
+const CMS_VERSION = '0.145';
 ```
 
 Update-related code uses:
@@ -791,6 +791,28 @@ key and are filtered through the central policy. The centralized Settings
 registry indexes feature ownership for discovery but does not become a second
 persistence layer.
 
+The compact Features tables put native switches before their feature names.
+Tinted group headers apply explicit patches to editable members. Autosave sends
+only the requested keys through `save_feature_flags_from_post()`; absent keys
+remain untouched. The direct/no-JavaScript complete form retains its historical
+absence-as-disabled semantics and explicit Save action. Both paths require the
+registry revision, Admin authentication and CSRF. The revision includes group
+membership and factory values as well as editability, sources and dependencies.
+
+Factory comparison/reset uses `fresh_default_enabled` when declared, otherwise
+`feature_capability_default_enabled()`. Reset restores only editable capability
+masters through their existing storage owners; subordinate preferences and
+subsystem data survive. This adds no schema or second group/master setting.
+A domain setter may refuse a later member after previous writes succeeded;
+JSON responses always reread the complete health snapshot, including on failure.
+The browser serializes writes, preserves focus and renders those authoritative
+groups without navigation. A lost/malformed response locks writes until a
+passive JSON GET reconciles the state; it never automatically replays a write.
+Technical health stays in native anchored light-dismiss help. Dedicated settings
+links use the canonical registry destinations and retain their route guards.
+The feature module adds no PHP runtime owner or route dependency; existing
+controller/service/view owners retain the same route closure and limits.
+
 The permanent regression boundary is `tests/feature_policy_core_test.php`,
 `tests/feature_policy_adapters_test.php`, `tests/feature_policy_admin_test.php`,
 `tests/feature_policy_inventory_test.php`, and
@@ -798,6 +820,37 @@ The permanent regression boundary is `tests/feature_policy_core_test.php`,
 storage adapters, configured/effective semantics, route/dependency safety, Admin
 health, non-destructive policy, and OFF-path query/work budgets.
 `scripts/audit.php` remains the authoritative orchestrator.
+
+## Responsive Admin navigation ownership
+
+`app/views/admin_chrome.php` renders the existing capability-filtered groups,
+localized collapse/mobile controls and named navigation landmarks from the
+controller-prepared model. `public/assets/gallery-modules/admin-navigation.js`
+progressively enhances that markup; `admin-navigation.css` follows legacy Admin
+styles in the shared controller's stylesheet list so its scoped controls win.
+The browser entry point initializes it once for the authenticated Admin shell.
+No domain owner, runtime module or database setting is added.
+
+Desktop starts expanded and can collapse to the existing icons. Both states
+participate in document scrolling without an internal sidebar scrollbar or
+height cap, preserving access to the final account actions. Only the narrow
+hamburger surface retains its sticky trigger and bounded scrolling panel.
+A localStorage preference is scoped by origin and the installation's asset
+mount, so rewritten routes share it without mixing installations. Storage denial
+retains a usable
+in-memory choice. Cross-tab storage events synchronize the desktop preference.
+At 1100px and below, an independent initially closed hamburger exposes the same
+groups in a viewport-bounded contextual panel. Escape, outside click, focus
+leaving navigation and destination activation dismiss it with appropriate focus
+restoration. Resize preserves the desktop preference, measures the actual sticky
+header and prevents a focused link from becoming hidden without a focus target.
+
+Shell-delegated events and a direct-child observer support the Settings workflow
+that replaces its sidebar after legacy-navigation changes. A class observer
+keeps `aria-current` aligned with existing dashboard hash-selection styling.
+Without JavaScript the original grouped links remain visible. Browser support
+and permanent storage/geometry fallbacks are recorded in
+`docs/COMPATIBILITY_LIFECYCLE.md`.
 
 ## Canonical Admin Mutation Completion Pipeline
 
@@ -1013,6 +1066,42 @@ DEV does not load this module; closing stops monitoring and setup teardown
 removes the panel. Diagnostics never initiate media or metadata requests.
 
 ## Runtime Entry Points
+
+Compact Dashboard help and factory-value rendering live in the existing
+`app/views/admin_ui.php` owner, shared with gallery editors. Maintenance-only
+sections remain deferred. Theme and Telemetry reuse their complete, already
+included `public-policy` access closure; scoped-save responses retain the
+canonical mutation owner. This adds no PHP files or
+logical modules and is expected to preserve the 3,653-duplicate ceiling.
+Hosted preparation and FULL establish actual conformance.
+
+Telemetry's existing controller prepares preference metadata from the telemetry
+settings service, including defaults and numeric bounds. Each scoped POST
+passes Admin/CSRF and saves one allowlisted key through that owner, then reads
+the persisted scalar before confirming completion. Legacy complete-form POSTs
+remain supported. The framework-free workspace owns tab/history navigation,
+anchored help and per-form pending/uncertain states. Rollup/purge remains an
+explicit separate action; standalone segmented HTML reports retain their
+existing report owners and open in a new tab.
+The standalone export controller sends HTML with an inline disposition and a
+private, no-store cache policy. This preserves the native report tab instead of
+turning it into a transient download. Report URLs, segments, suggested filename
+and payload remain unchanged; unavailable schema retains safe plain-text status.
+Telemetry group surfaces and full-width heading strips share the existing
+Features/Maintenance CSS owner. Local layout rules retain its geometry;
+narrow headings grow with their contextual help targets.
+The telemetry model returns optional verified public-path metadata alongside
+photo rankings. The controller builds public photo/gallery destinations with
+the existing URL owners; views only render prepared links. Ordinary public
+authorization remains in those destination routes. Daily overview charts reuse
+the existing hourly/session trend queries, adding image-only byte sums without
+changing export media-byte totals. The server renders SVG bars, date tooltips
+and a native daily table; charts need no new browser library or request.
+Ranking preview buttons reuse `setupAdminGalleryImages()` and its single
+document overlay; the existing global boot already initializes that owner.
+The controller supplies a bounded ordinary public-thumbnail URL, retaining
+media authorization and thumbnail-serving policy. No thumbnail is loaded by
+merely rendering the ranking table.
 
 ### Public request entry
 
@@ -2800,6 +2889,21 @@ supported. The first trusted archive URL is persisted for the job. Response
 `If-Range`; if a stable branch head changes and the origin returns a fresh
 `200`, the local partial archive is truncated before new bytes are accepted.
 Completion is checked against the known response size when available.
+Archive-size reads explicitly invalidate PHP's stat cache, including when an
+existing empty or partial file is overwritten. Stream writes must consume the
+whole chunk, and only successful 200/206 responses may supply package data.
+After three incomplete HTTP 200 restarts of a requested continuation, download
+selection advances in separate bounded metadata slices: pinned bootstrap
+version, published `production.zip` metadata, and exact tag-to-commit identity.
+The alternative retains the original full commit, discards the source prefix
+only after verification, and pins the provider's raw SHA-256 and byte count.
+Its canonical URL is derived from the repository and verified version; it is
+not an arbitrary provider URL. The raw asset digest is mandatory before
+extraction even when publisher per-file sweeps are disabled. Flat production
+archives and historical GitHub wrapper directories share subsequent validation,
+planning and activation. Failed archive retries clear every selection/digest
+receipt without changing the original commit. Missing/unpublished assets and
+unsupported older installed clients remain documented operational boundaries.
 `archive_validate` rejects unsafe absolute/traversal paths, symbolic links, more
 than 20,000 entries, files above 32 MiB, and more than 512 MiB total
 uncompressed data. Its central-directory scan checkpoints every 500 entries.

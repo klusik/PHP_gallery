@@ -66,7 +66,10 @@ Preparation runs without persisted write credentials. Generated data is
 published by the owner-selected workflow with exact source/base leases. Keep one
 final source commit above observed develop, dispatch fresh BASIC after a
 prepared
-rewrite and execute the complete 28-owner matrix on final A.
+rewrite and execute the complete 27-owner matrix on final A. Independent macOS
+packaging retains its actual outcome in a separate advisory run and cannot block
+integration; Linux/Windows packaging remains mandatory. Historical owner
+contracts retain their original platform requirements.
 
 The read-only **Retain integration execution** stage uploads schema-2 execution
 evidence before develop publication. `qualify_only` seals without a protected
@@ -77,7 +80,7 @@ inputs or cancelled/superseded execution invalidate reuse.
 
 A CI-only branch based on main can use **Basic source checks → install_ci**.
 This reusable qualification executes FULL plus the authoritative release audit,
-retains all 29 native owners, checks source/main leases and CI/test/docs scope,
+retains all 28 native owners, checks source/main leases and CI/test/docs scope,
 and opens a bot PR. A real human review and protected auto-merge install it.
 No throwaway workflow or current-version identity table is required.
 

@@ -20,7 +20,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {browserEvaluationResult, browserFailureCategory} from './support/headless_browser_fixture.mjs';
+import {
+    browserEvaluationResult, browserFailureCategory, readOwnedBrowserValue,
+} from './support/headless_browser_fixture.mjs';
 
 const sidePanelSource = fs.readFileSync('public/assets/gallery-modules/admin-side-panel.js', 'utf8');
 const browserUploadSource = fs.readFileSync('public/assets/gallery-modules/admin-browser-upload.js', 'utf8');
@@ -48,6 +50,82 @@ assert.throws(() => browserEvaluationResult({exceptionDetails: {text: 'Uncaught'
     assert.doesNotMatch(error.stack, /unsafe URL/);
     return true;
 }, 'A page assertion must retain its concrete reason and original page stack frame.');
+
+// Protocol -32000 is Chromium's structural error code, not a retry policy.
+// The port and target strings below are inert ownership identities, not servers.
+const reloadReadFailure = Object.assign(new Error(
+    'Owned Chromium DevTools Runtime.evaluate failed: Inspected target navigated or closed',
+), {protocolCode: -32000});
+const ownedOrigin = 'http://127.0.0.1:43123';
+const ownedTarget = {targetId: 'owned-tab', type: 'page', url: ownedOrigin + '/fixture'};
+const readCommands = [];
+assert.equal(await readOwnedBrowserValue(async (method, params) => {
+    readCommands.push(method);
+    if (method === 'Runtime.evaluate') throw reloadReadFailure;
+    assert.deepEqual(params, {targetId: ownedTarget.targetId});
+    return {targetInfo: ownedTarget};
+}, 'document.readyState', ownedTarget.targetId, ownedOrigin), undefined);
+assert.deepEqual(readCommands, ['Runtime.evaluate', 'Target.getTargetInfo'],
+    'A reload gap verifies ownership without replaying the observation internally.');
+const committedFrame = {url: ownedTarget.url, securityOrigin: ownedOrigin};
+const provisionalCommands = [];
+assert.equal(await readOwnedBrowserValue(async method => {
+    provisionalCommands.push(method);
+    if (method === 'Runtime.evaluate') throw reloadReadFailure;
+    if (method === 'Target.getTargetInfo') return {targetInfo: {...ownedTarget, url: ''}};
+    return {frameTree: {frame: committedFrame}};
+}, 'document.readyState', ownedTarget.targetId, ownedOrigin), undefined);
+assert.deepEqual(provisionalCommands, [
+    'Runtime.evaluate', 'Target.getTargetInfo', 'Page.getFrameTree',
+], 'An omitted target URL needs independent committed main-frame ownership.');
+for (const frame of [
+    undefined,
+    {...committedFrame, url: ''},
+    {...committedFrame, url: 'malformed URL'},
+    {...committedFrame, securityOrigin: 'https://example.invalid'},
+    {...committedFrame, url: 'https://example.invalid/fixture'},
+]) {
+    await assert.rejects(readOwnedBrowserValue(async method => {
+        if (method === 'Runtime.evaluate') throw reloadReadFailure;
+        if (method === 'Target.getTargetInfo') return {targetInfo: {...ownedTarget, url: ''}};
+        return {frameTree: {frame}};
+    }, 'document.readyState', ownedTarget.targetId, ownedOrigin),
+    error => error === reloadReadFailure, 'Unverified main-frame origins must fail.');
+}
+for (const targetInfo of [
+    undefined,
+    {...ownedTarget, targetId: 'different-tab'},
+    {...ownedTarget, type: 'service_worker'},
+    {...ownedTarget, url: 'https://example.invalid/fixture'},
+    {...ownedTarget, url: 'http://127.0.0.1:43124/fixture'},
+    {...ownedTarget, url: 'about:blank'},
+    {...ownedTarget, url: 'malformed URL'},
+]) {
+    await assert.rejects(readOwnedBrowserValue(async method => {
+        if (method === 'Runtime.evaluate') throw reloadReadFailure;
+        return {targetInfo};
+    }, 'document.readyState', ownedTarget.targetId, ownedOrigin),
+    error => error === reloadReadFailure, 'Missing or moved targets must fail.');
+}
+await assert.rejects(readOwnedBrowserValue(async method => {
+    if (method === 'Runtime.evaluate') throw reloadReadFailure;
+    throw new Error('Owned target closed');
+}, 'document.readyState', ownedTarget.targetId, ownedOrigin), /Owned target closed/);
+assert.equal(await readOwnedBrowserValue(async () => ({result: {value: false}}),
+    'false', ownedTarget.targetId, ownedOrigin), false);
+await assert.rejects(readOwnedBrowserValue(async () => ({
+    exceptionDetails: {text: 'Uncaught', exception: {description: 'Error: real page failure'}},
+}), 'throw new Error()', ownedTarget.targetId, ownedOrigin), /real page failure/);
+for (const failure of [
+    new Error('Owned Chromium protocol timeout during page evaluation'),
+    Object.assign(new Error('Different protocol failure'), {protocolCode: -32000}),
+    Object.assign(new Error(reloadReadFailure.message), {protocolCode: -32601}),
+]) {
+    await assert.rejects(readOwnedBrowserValue(async method => {
+        assert.equal(method, 'Runtime.evaluate', 'Other errors must not probe or retry.');
+        throw failure;
+    }, 'document.readyState', ownedTarget.targetId, ownedOrigin), error => error === failure);
+}
 
 function extractFunction(source, name) {
     const asyncMarker = `async function ${name}(`;

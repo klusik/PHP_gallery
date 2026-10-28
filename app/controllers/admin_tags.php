@@ -56,6 +56,7 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\admin_tag_rows;
 use function Gallery\Services\admin_tag_usage_rows;
+use function Gallery\Services\admin_tag_catalog_filters;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\delete_tag_by_id;
 use function Gallery\Services\feature_capability_effective_enabled;
@@ -108,8 +109,10 @@ function cms_admin_tags(): void
     if (!in_array($sortMode, ['name', 'usage'], true)) {
         $sortMode = 'usage';
     }
-    $mediaType = strtolower((string) ($_GET['media_type'] ?? 'image'));
-    if (!in_array($mediaType, ['all', 'image', 'music'], true)) {
+    $filters = admin_tag_catalog_filters();
+    $requestedFilter = $_GET['media_type'] ?? 'image';
+    $mediaType = is_string($requestedFilter) ? strtolower($requestedFilter) : 'image';
+    if (!isset($filters[$mediaType])) {
         $mediaType = 'image';
     }
     // Variable $sortDirection stores this steps working value.
@@ -130,11 +133,19 @@ function cms_admin_tags(): void
         if (!in_array($postedSort, ['name', 'usage'], true)) {
             $postedSort = $sortMode;
         }
-        $postedMediaType = strtolower((string) (
-            $_POST['media_type'] ?? $mediaType
-        ));
+        $defaultTagType = $filters[$mediaType]['media_type'];
+        $postedType = $_POST['media_type'] ?? $defaultTagType;
+        $postedMediaType = is_string($postedType) ? strtolower($postedType) : '';
         if (!in_array($postedMediaType, ['all', 'image', 'music'], true)) {
-            $postedMediaType = $mediaType;
+            // Documents is a navigation placeholder, never PDF write authority.
+            $postedMediaType = in_array($defaultTagType, ['all', 'image', 'music'], true)
+                ? $defaultTagType : 'image';
+        }
+        $requestedReturn = $_POST['catalog_filter'] ?? $postedMediaType;
+        $postedFilter = is_string($requestedReturn)
+            ? strtolower($requestedReturn) : $postedMediaType;
+        if (!isset($filters[$postedFilter]) || !$filters[$postedFilter]['available']) {
+            $postedFilter = $postedMediaType;
         }
         // Variable $wantsJson stores this steps working value.
         $wantsJson = admin_tags_request_wants_json();
@@ -169,7 +180,7 @@ function cms_admin_tags(): void
                 redirect_to(url_for('admin_tags', [
                     'id' => $tagId,
                     'sort' => $postedSort,
-                    'media_type' => $postedMediaType,
+                    'media_type' => $postedFilter,
                 ]));
             }
             admin_log_event('info', 'tags.deleted', 'Admin deleted tag.', [
@@ -245,7 +256,7 @@ function cms_admin_tags(): void
             redirect_to(url_for('admin_tags', [
                 'id' => $tagId,
                 'sort' => $postedSort,
-                'media_type' => $postedMediaType,
+                'media_type' => $postedFilter,
             ]));
         }
         // Variable $updatedTag stores this steps working value.
@@ -260,7 +271,7 @@ function cms_admin_tags(): void
             $editUrl = url_for('admin_tags', [
                 'id' => $tagId,
                 'panel' => 1,
-                'media_type' => $postedMediaType,
+                'media_type' => $postedFilter,
             ]);
             // $publicUrl is canonical after a slug rename only while public tag browsing is enabled.
             $publicTagBrowsingEnabled = feature_capability_effective_enabled(
@@ -295,7 +306,7 @@ function cms_admin_tags(): void
                 ['redirect_url' => url_for('admin_tags', [
                     'id' => $tagId,
                     'sort' => $postedSort,
-                    'media_type' => $postedMediaType,
+                    'media_type' => $postedFilter,
                 ])],
             );
             admin_tags_json_response(array_merge($payload, [
@@ -310,17 +321,26 @@ function cms_admin_tags(): void
         redirect_to(url_for('admin_tags', [
             'id' => $tagId,
             'sort' => $postedSort,
-            'media_type' => $postedMediaType,
+            'media_type' => $postedFilter,
         ]));
     }
 
     // Variable $tags stores this steps working value.
-    $tags = admin_tag_rows($sortMode, $sortDirection, $mediaType);
+    $filter = $filters[$mediaType];
+    $tags = $filter['available']
+        ? admin_tag_rows(
+            $sortMode,
+            $sortDirection,
+            $filter['media_type'],
+            $filter['assignment_scope'],
+        )
+        : [];
     if ($selectedId <= 0 && $tags) {
         $selectedId = (int) $tags[0]['id'];
     }
     // Variable $selectedTag stores this steps working value.
-    $selectedTag = $selectedId > 0 ? find_tag_by_id($selectedId) : null;
+    $selectedTag = $filter['available'] && $selectedId > 0
+        ? find_tag_by_id($selectedId) : null;
     if (
         $selectedTag
         && (
@@ -329,8 +349,12 @@ function cms_admin_tags(): void
                 ['image', 'music'],
                 true,
             )
-            || ($mediaType !== 'all'
-                && (string) ($selectedTag['media_type'] ?? 'image') !== $mediaType)
+            || ($filter['media_type'] !== 'all'
+                && (string) ($selectedTag['media_type'] ?? 'image') !== $filter['media_type'])
+            || ($filter['assignment_scope'] !== 'all'
+                && !in_array($selectedId, array_map(
+                    'intval', array_column($tags, 'id'),
+                ), true))
         )
     ) {
         $selectedTag = null;
@@ -363,13 +387,23 @@ function cms_admin_tags(): void
             $selectedTag,
             $sortMode,
             (string) ($selectedTag['media_type'] ?? 'image'),
+            $mediaType,
         )
         : [];
+    $filterOptions = [];
+    foreach ($filters as $value => $definition) {
+        $filterOptions[] = [
+            'value' => $value,
+            'label' => $definition['label'],
+            'disabled' => !$definition['available'],
+        ];
+    }
     \Gallery\Views\view_render_admin_tags([
         'panel' => isset($_GET['panel']),
         'selected_id' => $selectedId,
         'sort_mode' => $sortMode,
         'media_type' => $mediaType,
+        'filter_options' => $filterOptions,
         'notice' => (string) ($notice ?? ''),
         'error' => (string) ($error ?? ''),
         'selected_tag' => $selectedTag,
@@ -401,7 +435,7 @@ function cms_admin_tags(): void
 /**
  * Render the selected tag edit form.
  *
- * @param array{id:int,name?:string,slug?:string,description?:string} $tag Selected tag row.
+ * @param array{id:int,name?:string,slug?:string,description?:string,media_type?:string} $tag Selected tag row.
  * @param string $sortMode Tag list ordering mode.
  * @return void Render the selected tag form.
  */
@@ -416,15 +450,21 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 /**
  * Prepare presentation state for the selected tag form.
  *
- * @param array{id:int,name?:string,slug?:string,description?:string} $tag Selected tag row.
+ * @param array{id:int,name?:string,slug?:string,description?:string,media_type?:string} $tag Selected tag row.
  * @param string $sortMode Tag list ordering mode.
  * @param string $mediaType Tag media category used for public-link policy.
- * @return array{tag:array{id:int,name?:string,slug?:string,description?:string},description:string,sort_mode:string,media_type:string,action_url:string,csrf_html:string,public_url:string,theme_url:string} View model.
+ * @param string $catalogFilter Selected usage filter; the default empty string
+ *     preserves the existing media category independently of POST authority.
+ * @return array{filter_value:string,tag:array{id:int,name?:string,slug?:string,
+ *     description?:string,media_type?:string},description:string,sort_mode:string,
+ *     media_type:string,action_url:string,csrf_html:string,public_url:string,
+ *     theme_url:string} Prepared fields with separate namespace and catalog context.
  */
 function admin_tag_form_view_model(
     array $tag,
     string $sortMode = 'usage',
     string $mediaType = 'image',
+    string $catalogFilter = '',
 ): array {
     $description = tag_description_schema_ready()
         ? (string) ($tag['description'] ?? '')
@@ -432,8 +472,10 @@ function admin_tag_form_view_model(
     $publicEnabled = feature_capability_effective_enabled(
         'public_tag_browsing',
     );
+    $filters = admin_tag_catalog_filters();
     return [
         'tag' => $tag,
+        'filter_value' => isset($filters[$catalogFilter]) ? $catalogFilter : $mediaType,
         'description' => $description,
         'sort_mode' => in_array($sortMode, ['name', 'usage'], true)
             ? $sortMode

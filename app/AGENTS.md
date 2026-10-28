@@ -51,6 +51,11 @@ generated-plan checks establish actual conformance.
 Keep shared media-layout helpers in an existing shared view owner and pass
 prepared description HTML. Leave caller-specific Markdown/link discovery with
 its current owner so sharing a hero does not expand unrelated route closures.
+Keep compact help and factory-value renderers used by several Admin views in
+the existing shared UI owner. Review every rendering fixture's imports and
+stubs when moving a helper. Preserve each caller's existing translation key,
+fallback explanation and setting scope when compacting a shared control;
+place long explanations in contextual help on the edited surface.
 When a caller explicitly loads a deferred owner, register both its module roots
 and the guarded call edges in runtime_module_roots.php; keep presence checks
 before the load and actual deferred calls after it.

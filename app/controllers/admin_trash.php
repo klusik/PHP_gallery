@@ -215,7 +215,8 @@ function cms_admin_trash(): void
 /**
  * Persist Trash settings from the Maintenance subtab.
  *
- * @return void Saves the settings and redirects to the Trash tab.
+ * @return void Emits authoritative preference values for autosave, including a
+ *     safe refusal, or preserves the classic flash/redirect fallback.
  */
 function cms_admin_trash_settings(): void
 {
@@ -244,6 +245,11 @@ function cms_admin_trash_settings(): void
         ),
     );
 
+    $ok = false;
+    $message = t(
+        'admin.trash.settings_save_failed',
+        'Trash settings could not be applied safely. Automatic deletion was not enabled; verify database migrations and try again.',
+    );
     try {
         set_gallery_trash_settings(
             $enabled,
@@ -262,10 +268,11 @@ function cms_admin_trash_settings(): void
                 'purge_batch' => $purgeBatch,
             ],
         );
-        flash_message('admin_notice', t(
+        $ok = true;
+        $message = t(
             'admin.trash.settings_saved',
             'Trash bin settings saved.',
-        ));
+        );
     } catch (Throwable) {
         // Fail closed if the schema cannot be verified while enabling a destructive maintenance path.
         admin_log_event(
@@ -277,11 +284,36 @@ function cms_admin_trash_settings(): void
                 'requested_auto_purge_enabled' => $autoPurgeEnabled,
             ],
         );
-        flash_message('admin_error', t(
-            'admin.trash.settings_save_failed',
-            'Trash settings could not be applied safely. Automatic deletion was not enabled; verify database migrations and try again.',
-        ));
     }
+    if (admin_wants_json()) {
+        $mutation = admin_mutation_descriptor('settings.update', 'settings', 'update');
+        $fallback = ['redirect_url' => admin_trash_dashboard_url()];
+        $payload = $ok
+            ? admin_mutation_success_envelope(
+                $message,
+                $mutation,
+                admin_trash_panel_metadata(),
+                [],
+                $fallback,
+            )
+            : admin_mutation_error_envelope(
+                $message,
+                'gallery_trash_settings_refused',
+                $mutation,
+                $fallback,
+            );
+        // Read the owning service after its guarded transition. A submitted
+        // switch is not evidence that purge activation or deadline rearming ran.
+        $payload['setting_values'] = [
+            'gallery_trash_enabled' => gallery_trash_enabled(),
+            'gallery_trash_auto_purge_enabled' => gallery_trash_auto_purge_enabled(),
+            'gallery_trash_retention_days' => (string) gallery_trash_retention_days(),
+            'gallery_trash_purge_batch' => (string) gallery_trash_purge_batch_size(),
+        ];
+        admin_trash_json_response($payload, $ok ? 200 : 422);
+        return;
+    }
+    flash_message($ok ? 'admin_notice' : 'admin_error', $message);
     redirect_to(admin_trash_dashboard_url());
 }
 

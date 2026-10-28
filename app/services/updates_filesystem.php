@@ -274,13 +274,18 @@ function application_update_assert_source_root(
 }
 
 /**
- * Find the single root directory produced by GitHub zip extraction.
+ * Locate a flat production archive or the historical GitHub source wrapper.
  *
- * @param string $extractDir Extract dir value.
- * @return string Text result for the caller.
+ * @param string $extractDir Absolute extraction directory owned by this job.
+ * @return string Validated-layout candidate, either a flat production tree or a GitHub source wrapper; required-file validation remains with the caller.
  */
 function application_update_extracted_root(string $extractDir): string
 {
+    // Published production.zip stores paths directly at its root. GitHub
+    // source ZIPs retain the historical owner-repository-commit wrapper.
+    if (is_file($extractDir . '/app/bootstrap.php')) {
+        return $extractDir;
+    }
     // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = array_values(array_filter(
         scandir($extractDir) ?: [],

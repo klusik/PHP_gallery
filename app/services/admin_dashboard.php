@@ -169,7 +169,8 @@ function admin_dashboard_parent_sync_fingerprint(): string
  * @param string $surface complete preserves historical callers; shell omits totals and gallery rows;
  *   overview reads indexed totals only; galleries resolves the workspace on demand.
  * @return array<string,mixed> Dashboard presentation map with the nested health records
- *   above, gallery hierarchy data, maintenance summaries and localized status labels.
+ *   above, gallery hierarchy data, maintenance summaries and localized status labels;
+ *   content_factory_defaults maps canonical boolean setting IDs to defaults.
  * @see runtime_support_health_status()
  * @see admin_image_move_pending_health_status()
  * @see admin_mutation_schema_health_statuses()
@@ -680,6 +681,7 @@ function admin_dashboard_view_model(
         'missing_thumbnail_variants' => $missingThumbnailVariants,
         'feature_enabled' => $dashboardFeatureEnabled,
         'admin_settings_urls' => $adminSettingsUrls,
+        'content_factory_defaults' => admin_settings_content_factory_defaults(),
         'public_home_search_enabled' => public_home_search_enabled(),
         'seo_guard_status' => $seoGuardStatus,
         'thumbnail_compatibility_mode' => thumbnail_compatibility_mode(),

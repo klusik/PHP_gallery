@@ -939,11 +939,11 @@ function select_lint_targets(
 }
 
 /**
- * Delegate the packaging suite only to the required native three-platform same-candidate owner.
+ * Delegate packaging only to required native Linux/Windows same-candidate owners.
  *
  * This reports delegation, never a local PASS or authorization to change protected
- * refs. The installed integration harness continues to reject branch-authored
- * authority changes; maintenance_full qualifies proposed changes separately.
+ * refs. Owner-selected feature workflows qualify their exact prepared candidate;
+ * independent advisory macOS packaging never establishes required FULL success.
  *
  * @param list<string> $suites Selected central suites before ownership delegation.
  * @param string $profile Central full or release profile being executed.

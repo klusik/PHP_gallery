@@ -56,6 +56,12 @@ use function Gallery\Services\site_maintenance_reset_state;
 use function Gallery\Services\site_maintenance_rotate_token;
 use function Gallery\Services\site_maintenance_run;
 use function Gallery\Services\site_maintenance_time_budget_seconds;
+use function Gallery\Services\site_maintenance_enabled;
+use function Gallery\Services\site_maintenance_utc_time;
+use function Gallery\Services\site_maintenance_batch_size;
+use function Gallery\Services\site_maintenance_request_trigger_enabled;
+use function Gallery\Services\site_maintenance_window_minutes;
+use function Gallery\Services\site_maintenance_window_hours_value;
 use function Gallery\Services\site_maintenance_token_is_valid;
 use function Gallery\Services\site_maintenance_cache_chain_run;
 use function Gallery\Services\site_maintenance_window_hours_to_minutes;
@@ -294,7 +300,8 @@ function cms_site_maintenance_cron(): void
 
 /**
  * Save authorized maintenance settings or dispatch a manual site/cache slice.
- * @return void Emits in-place JSON for manual cache cleanup or redirects the classic settings/maintenance POST fallback.
+ * @return void Emits canonical JSON for preference autosave/manual cache actions,
+ *     or redirects the classic settings/maintenance POST fallback.
  */
 function cms_admin_site_maintenance_settings(): void
 {
@@ -409,11 +416,43 @@ function cms_admin_site_maintenance_settings(): void
         ),
     );
 
-    flash_message('admin_notice', t(
+    $message = t(
         'admin.site_maintenance.settings_saved',
         'Site maintenance settings saved.',
-    ));
-    redirect_to(url_for('admin') . '#admin-tab-maintenance');
+    );
+    $returnUrl = url_for('admin', [
+        'dashboard_tab' => 'maintenance',
+        'maintenance_tab' => 'media',
+    ]) . '#admin-tab-maintenance';
+    if (admin_wants_json()) {
+        $payload = admin_mutation_success_envelope(
+            $message,
+            admin_mutation_descriptor('settings.update', 'settings', 'update'),
+            null,
+            [],
+            ['redirect_url' => $returnUrl],
+        );
+        // Read through the settings owner after normalization; submitted values
+        // cannot prove the persisted schedule or its coupled checkbox state.
+        $payload['setting_values'] = [
+            'site_maintenance_enabled' => site_maintenance_enabled(),
+            'site_maintenance_request_trigger_enabled' =>
+                site_maintenance_request_trigger_enabled(),
+            'site_maintenance_utc_time' => site_maintenance_utc_time(),
+            'site_maintenance_batch_size' => (string) site_maintenance_batch_size(),
+            'site_maintenance_time_budget_seconds' =>
+                (string) site_maintenance_time_budget_seconds(),
+            'site_maintenance_window_hours' => site_maintenance_window_hours_value(
+                site_maintenance_window_minutes(),
+            ),
+        ];
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: private, no-store');
+        echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return;
+    }
+    flash_message('admin_notice', $message);
+    redirect_to($returnUrl);
 }
 
 /**

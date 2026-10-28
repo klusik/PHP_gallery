@@ -52,6 +52,9 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
+import {
+    setupAdminNavigation,
+} from './gallery-modules/admin-navigation.js?v=20261027-responsive-v2';
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20261010-visual-editor-draft-availability';
 import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupPublicContentWidgets } from './gallery-modules/public-content-widgets.js?v=20261023-discovery-clearance-v1';
@@ -69,7 +72,7 @@ import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261021-smart-photo-tags-v2';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
-import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261021-upload-media-v1';
+import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261027-appearance-state-v1';
 import {
     setupGalleryMusicPlayback,
 } from './gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
@@ -83,8 +86,13 @@ import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-p
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20261022-search-keyboard-v2';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20261002-settings-workspace-v1';
-import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261021-smart-photo-tags-v2';
-import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261021-smart-photo-tags-v2';
+import { setupThemeAppearanceWorkspace } from './gallery-modules/admin-theme-appearance-workspace.js?v=20261027-compact-appearance-v2';
+import { setupThemeLanguageWorkspace } from './gallery-modules/admin-theme-language-workspace.js?v=20261027-compact-language-v3';
+import { setupAdminTelemetryWorkspace } from './gallery-modules/admin-telemetry-workspace.js?v=20261027-compact-telemetry-v2';
+import { setupAdminTagsWorkspace } from './gallery-modules/admin-tags-workspace.js?v=20261027-compact-tags-v2';
+import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261027-compact-factory-v2';
+import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261027-compact-feature-settings-v1';
+import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261027-media-settings-v3';
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20261002-theme-language-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261021-smart-photo-tags-v2';
@@ -127,7 +135,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261024-short-presentation-v1';
+} from './gallery-modules/admin-operations.js?v=20261027-appearance-state-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -189,6 +197,7 @@ function bootGalleryBrowserFeatures() {
     setupGallerySearchPickers();
     setupImageBulkMoveFields();
     setupThumbnailCacheDeleteConfirmation();
+    setupAdminNavigation();
     setupAdminTabs();
     setupAdminNestedTabs();
     setupAdminDatePickers();
@@ -230,11 +239,16 @@ function bootGalleryBrowserFeatures() {
     setupGalleryMediaPanels();
     setupPictureManager();
     setupPublicHomeSearch();
+    setupAdminTagsWorkspace();
+    setupAdminFeatures();
     setupAdminSettingsWorkspace();
     setupAdminDashboardWorkspace();
     setupAdminSettingsSearch();
     setupAdminSetupWizard();
     setupAdminLanguageSelectorDesign();
+    setupThemeLanguageWorkspace();
+    setupAdminTelemetryWorkspace();
+    setupThemeAppearanceWorkspace();
     setupAdminSmartGalleries();
     setupAdminUpdateJobs();
 

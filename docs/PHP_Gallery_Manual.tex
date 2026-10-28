@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.144.14}
-\newcommand{\manualdate}{26 October 2026}
+\newcommand{\version}{0.145}
+\newcommand{\manualdate}{28 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1664,6 +1664,26 @@ Mobile actions refresh their own workspace. Copy a~newly issued one-time passwor
 \subsubsection{Appearance, language, and~custom stylesheets}
 Appearance combines grouped controls with a~live preview and~a~bounded pointer/keyboard resizer on~wide screens. Pane size is~a~local browser preference. Site images groups branding/background tools; Layout separates shortcuts, grids, card details, and~viewer defaults. Language has~Settings, Design, Editor, and~Diagnostics. The~design preview uses that form's~offered languages and~public default; changing a~sample does not~save a~language preference.
 
+All~five Appearance subsections use compact translucent groups and~question-mark
+help beside their controls. The~shared live preview and~its browser-local divider
+remain available. Reload and~Back/Forward preserve the~active subsection, including
+existing deep links. GPS pin/background, display-all-tags, tag scrollbar and~header
+transparency switches save immediately and~individually with factory-default
+tooltips. Other colors, text, selections and~numbers remain drafts for~\ui{Save theme}.
+An~unverified or~refused switch write locks that control and~blocks shared-form
+replay until passive reload, without automatic retry. Ordinary form saving
+remains available without JavaScript.
+
+The~Language subsections use compact groups, switches and~contextual question-mark
+help. Admin language, public default and~the~viewer language list save immediately
+and~independently, without submitting other Theme drafts. After changing the~Admin
+language, use \ui{Reload interface} to~refresh labels. An~unverified save locks its
+group and~blocks shared-form replay until reload; it~is~not~retried automatically.
+All~language selectors show bundled flags. The~active subsection survives reload
+and~browser Back/Forward navigation through the~page URL. Switcher design remains
+a~draft applied with \ui{Save theme}; JSON/import and~diagnostics retain explicit
+actions. Native form submission remains available without JavaScript.
+
 Keep the~installed custom stylesheet by~leaving replacement empty. Explicitly choose a~preset or~upload a~valid CSS file to~replace it; an~upload takes precedence. Replacement/reset verifies storage first and~restores prior bytes if~saving the~marker fails. If~recovery is~incomplete, retain the~available copy and~follow the~bounded warning before retrying. Deployment preserves the~installation-owned \filepath{public/assets/custom.css}.
 
 \subsubsection{Card orientation and~operational status}
@@ -1836,6 +1856,26 @@ If persistence succeeds but~the~refreshed view cannot be~verified within the~bou
 
 Browser-assisted create/upload has~additional safeguards. Selecting browser processing is~an~explicit execution choice: a~missing browser capability or~failed worker preparation stops before persistence instead of~silently switching to~server thumbnail generation. PHP validates that every required prepared thumbnail size/format is~present before it~stores originals. Once browser persistence starts, direct-page fallback metadata is~never interpreted as~permission to~replay the~classic create/upload request, preventing duplicate galleries and~duplicate photographs. The~configured ZIP batch size is~a~soft packing target: one atomic photograph package that exceeds that target can~travel alone in~one batch, but~the~effective PHP upload ceiling remains a~hard limit. Windows upload automation may~send the~complete JPEG+WebP compatibility matrix; a~modern WebP-only server accepts required WebP variants and~safely skips valid extra JPEG variants, while malformed, mismatched, unknown-size, or~unsupported thumbnail payloads remain hard failures.
 
+\subsection{Admin navigation}
+
+The~desktop Admin menu starts expanded, with its existing function groups
+and~icons. Use the~double-chevron button at~the~top to~collapse it~to~an~icon rail
+or~expand it~again. The~choice is~remembered in~this browser for~this
+installation; it~is~not~stored in~the~database or~shared with other browsers.
+Clearing browser storage restores the~expanded default. If~storage is~blocked,
+the~choice lasts only for~the~current page. Both desktop states scroll with
+the~page, without a~separate menu scrollbar. Scroll the~page to~reach the~last
+account actions.
+
+On~narrow screens, a~labelled hamburger opens the~same groups below its button.
+The~panel scrolls independently and~overlays the~page, so~you can~reach content
+without first scrolling past the~whole menu. Close it~with the~button, Escape,
+a~click outside, or~by~choosing a~destination. Keyboard focus returns
+to~the~button after Escape. Moving focus outside also closes it. Opening another page
+starts with the~mobile menu closed; returning to~desktop restores its separate
+expanded or~collapsed choice. Without JavaScript, all~grouped links remain
+visible.
+
 \subsection{Central Settings hub}
 \index{Settings!central hub}
 
@@ -1879,7 +1919,28 @@ After a~successful save, the~browser opens the~same Settings section at~the~new 
 \index{tags!administration}
 \index{tags!metadata}
 
-\ui{Admin > Edit tags} is~the~central editor for~the~reusable tag vocabulary. The~list can~be~sorted by~total usage or~alphabetically and~shows each tag's current gallery-plus-photo use count. Selecting a~tag exposes its canonical lowercase name, clean public URL slug, and~optional public description for~the~tag landing page. The~same view lists the~galleries and~photographs that currently use the~tag, with links back to~the~relevant public or~photo-editor context.
+The editor uses compact translucent groups for the tag catalog, selected tag
+and usage references. Groups fit beside one another on wide screens and stack
+on narrow screens. The arrow beside the catalog heading jumps to the editor
+below sticky navigation. Filter and sorting choices switch immediately through
+the native GET form. Apply remains available without JavaScript. A question mark
+beside each field explains its meaning in place;
+Escape or an outside click closes the help. Review content edits and use
+\ui{Save tag}. Music tags retain their internal identifiers and song references
+without public tag-page actions.
+
+\ui{Images} and \ui{Galleries} filter direct assignments over the same visual
+tag vocabulary. A shared tag can appear in both; its edit still affects every
+assignment. Counts and usage sorting follow the selected scope. \ui{All tags}
+includes unassigned tags. \ui{Documents} is a disabled placeholder for future
+PDF tagging; direct requests explain that document editing is not yet available.
+
+\ui{Admin > Edit tags} maintains the shared tag vocabulary. Selecting a tag
+exposes its canonical lowercase name, stable identifier and description. For
+visual tags the identifier forms the public tag URL and the description can
+appear on that page; music tags use internal metadata. Usage references link
+to the related public gallery, photo editor or song editor. Counts in the
+catalog follow the selected usage filter rather than always combining scopes.
 
 Renaming a~tag or~changing its slug updates the~shared tag record, so~every gallery/photo assignment continues to~reference that one reusable tag. Names and~slugs are~normalized to~the~safe tag convention on~save and~a~duplicate slug is~rejected. Deleting a~tag is~different: the~application transactionally detaches it~from both galleries and~photographs and~then removes the~tag record. Use \ui{View public tag} to~review the~landing page and~\ui{Configure tag display} to~open the~Theme controls for~tag-page/card and~hero-tag presentation.
 
@@ -1887,7 +1948,63 @@ Renaming a~tag or~changing its slug updates the~shared tag record, so~every gall
 \index{feature switches}
 \index{Features!Admin}
 
-\ui{Appearance > Features} provides global switches for~optional parts of~the~application. Registered features are~enabled by~default so~an~upgrade does~not~silently remove behavior that an~existing installation already uses. An~administrator can~disable individual visitor features, maps and~flight-simulation tools, AI/upload integrations, or~special-purpose Admin tools when a~simpler installation is~preferred.
+The~specialized destinations for~public live search, lightbox browsing,
+Smart Galleries, gallery PDF documents and~gallery music use compact,
+translucent controls. Central Settings shares this treatment across categories;
+Smart Gallery editors retain it~inside the~side panel. Preference switches keep
+their native keyboard operation, with larger tap targets on~narrow screens.
+Settings question marks open help beside the~control; Escape or~an~outside
+click closes it. Each specialist retains its existing Save workflow; catalog
+row selections remain ordinary selection boxes.
+
+Dashboard \ui{Maintenance > Content and~display} uses a~denser layout:
+one toolbar and~compact groups flow into one to~three columns according
+to~available width, retaining each group's own height. Groups match Features:
+quiet outlines, translucent surfaces, tinted headings with a~left accent and~thin
+row separators. Question marks retain
+the~explanations; counts and~warnings stay visible. Switches save immediately
+without confirmation or~a~Save button; their tooltips state the~factory default.
+Saving, success and~failure remain visible. Unverified completion requires
+a~state reload instead of~replaying the~write. Without JavaScript, native help
+disclosures and~the~existing Save/POST forms remain available.
+
+This is~the~default pattern for~new or~revised Admin preference interfaces,
+specified in~\path{docs/ADMIN_DESIGN.md}. Use switches with immediate saving,
+compact headed groups and~one to~three independently sized columns. The~reference
+uses a~preferred column width of~300 CSS pixels, 38-pixel heading strips
+and~26~by~14-pixel switch tracks; narrow/touch interaction targets are~at~least
+44 pixels high. A~setting with its own configuration page has~a~clickable name
+and~a~trailing settings arrow leading to~the~same destination. Name, switch
+and~question mark remain independent navigation, preference and~help controls.
+Apply the~pattern as~each owning interface is~edited; older forms may~still await
+migration.
+
+\ui{Appearance > Features} presents optional application features in~compact
+grouped tables. Whole groups flow into one, two or~three columns according
+to~the~available workspace width, reading down each column before the~next.
+Groups keep their own heights and~are~never split between columns; narrow
+pages use one column. Switches sit directly before feature names and~save
+immediately, without a~second confirmation or~Save action.
+The~tinted group header switches
+every editable feature in~that group; a~mixed switch indicates that only some
+are~configured on. Linked feature names open their specialized settings where
+available. The~plain \ui{?} opens contextual description, configured/effective
+state, dependencies and~technical details; Escape or~an~outside click closes it.
+
+Each row shows its factory value and~whether the~configured preference differs.
+Factory means the~explicitly declared new-installation default, otherwise
+the~registry default; it~can~differ from an~upgrade compatibility default.
+\ui{Reset to~factory defaults} above the~table immediately saves all editable
+switches to~those factory values. Feature data and~specialized preferences
+are~preserved. A configured switch can~remain on~while a~disabled dependency
+makes the~feature unavailable; enabling that dependency restores availability.
+
+Saving, saved and~failure feedback stays visible. A group write can~partially
+succeed if~a~domain owner refuses a~later setting; the~table then displays
+the~authoritative persisted state. If~a~response is~lost, \ui{Reload state}
+reads the~server before permitting another change and~never repeats
+the~uncertain write. Without JavaScript, the~complete form retains an~explicit
+Save action and~factory reset uses a~normal authenticated POST.
 
 A~disabled feature is~hidden from~normal navigation and~its guarded routes refuse the~feature workflow. Disabling a~switch does~not~delete the~feature's code, photographs, database records, credentials, or~configuration. Re-enabling it therefore restores the~normal entry points subject to~the~same schema, access, and~configuration checks as~before. Examples of~switchable features include public search, lightbox browsing modes, Picture Manager, Inline Administration on~public pages, Smart Galleries, voting, Picture Game, downloads, gallery and~flight maps, navigation data, SimBrief, OpenAI assistance, local AI metadata, API uploads, mobile WebDAV, gallery migration, Media Renamer, and~anonymous telemetry.
 
@@ -2311,10 +2428,23 @@ Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~c
 
 A~gallery with a~saved flight route can~open its map before the~first photograph is~uploaded, including pages with no~lightbox markup. The~map fits all stored route points and~retains ordinary reset controls without treating route points as~photo markers. Without stored coordinates it~shows the~normal empty-map message. Gallery access and~effective map settings still apply; loading remains on~demand.
 
+Leaving photo fullscreen with \codeword{F}, its~control, or~the~browser's
+\codeword{Escape} closes the~split map and~returns to~the~ordinary lightbox
+with the~same photograph and~zoom. Pending map loading cannot reopen the~pane
+after exit. In~CSS fullscreen, one \codeword{Escape} performs the~same
+transition. \codeword{M} toggles the~map independently while fullscreen;
+a~later \codeword{Escape} closes the~ordinary lightbox.
+
 \subsection{Flight maps and~navigation data}
 \index{SimBrief}
 \index{flight maps}
 \index{navigation data}
+
+Admin > Maintenance > Maps and~navdata uses the~compact translucent group
+treatment from~Features and~Content and~display. The~navdata name and~trailing
+arrow open the~same manager. Counts and~the~last import time remain visible;
+question-mark help and~Import details hold longer explanations. Update navdata
+remains an~explicit action with in-place progress and~the~normal form fallback.
 
 Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~compact editor accepts one visible identifier: digits alone select the~Pilot ID path; other text selects the~pilot-name path. Existing integrations that submit separate fields remain compatible, with Pilot ID preferred when both are~provided. The~editor creates an~editable Markdown description and~route draft; the~OFP and~available route coordinates attach after the~gallery is~saved. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available. The~pre-create draft is~private and~temporary as~described in~the~gallery creation section.
 
@@ -2502,6 +2632,16 @@ The~\ui{Keep me signed in} option uses a~hashed browser token so~an~administrato
 \index{System Health!database readiness}
 \index{database!readiness}
 \index{503 response}
+
+\ui{System health} groups checks by runtime and recovery, access and sign-in,
+galleries and files, maps and routes, public features and reports, and tools.
+A checkmark means required storage was found; a dash means the integration is
+disabled in configuration. Neither proves a complete workflow or external API
+connection. Question marks explain the purpose of each check. Problems appear
+first within their group with visible impact and guidance; \ui{Details} retains
+safe database identifiers and request references. Opening the page does not
+repair data or run migrations. Viewer diagnostics saves its preference in place,
+with a native Save fallback; an uncertain save locks until a passive reload.
 
 Features that depend on~database schema use one readiness contract. The~important distinction is~between a~schema that was~successfully inspected and~found to~be~older, and~a~schema that cannot currently be~inspected.
 
@@ -2886,6 +3026,15 @@ After repair, reload \ui{System Health} and~retest the~affected feature. Keep an
 \index{gallery!restoration}
 \index{trash!automatic purge}
 
+Trash uses compact translucent groups with visible preference switches
+and~contextual question-mark help. With JavaScript, changes save immediately
+together with retention and~batch values. During the~write, Trash controls lock;
+confirmed state refreshes in~place and~returns focus to~the~edited field.
+A~refused or~unverified result requires a~passive state reload without replaying
+the~write. Without JavaScript, use the~normal Save form. Narrow screens retain
+labelled metadata and~explicit actions without horizontal scrolling. Restore,
+permanent deletion and~Empty Trash retain their separate confirmations.
+
 Open \ui{Maintenance > Trash} to~review recoverable gallery deletions. Each active row shows the~original path, deletion time, gallery/photo counts, stored size, lifecycle status, and~automatic-purge deadline when that policy is~active. Problem entries remain visible for~inspection; PHP Gallery does~not~guess that an~ambiguous filesystem/database state is~safe to~destroy.
 
 The~main Trash switch controls future gallery deletes and~is~enabled by~default. Turning it~off does~not~hide or~delete existing entries: restore and~manual permanent deletion remain available. Automatic purge is~a~separate opt-in and~is~off by~default. Its retention defaults to~30~days, its maintenance batch is~bounded, and~automatic deletion pauses whenever Trash is~disabled. Enabling automatic purge after a~pause gives current recoverable entries a~fresh full retention window before scheduled deletion can~begin.
@@ -3013,6 +3162,30 @@ The~completed report is~returned to~the~browser as~a~download and~is~not~saved a
 \index{telemetry}
 \index{privacy!telemetry}
 
+The~compact workspace separates \ui{Overview}, \ui{Collection and~privacy},
+\ui{History and~maintenance}, and~\ui{Reports}. Its~query URL preserves
+the~selected tab across reload and~browser history. Each preference saves
+independently after a~change; native forms retain explicit Save without
+JavaScript. Question marks explain collection, privacy, limits and~defaults.
+An~unverified save locks its~own form and~offers a~passive reload without
+retrying the~write. Segmented HTML reports open in~a~new tab; Settings and~Logs
+are~separate destinations. Rollup/purge remains an~explicit action, with
+technical results in~a~disclosure.
+Report links display the~standalone HTML document directly in~the~new tab,
+which remains available for~reading.
+
+In~Overview, click a~ranked photo name to~open its~public detail, or~a~gallery
+name to~open that gallery. Existing access checks still apply. Six small daily
+bar charts accompany the~totals. Each chart has~its~own scale; hovering shows
+the~date and~exact value, and~\ui{Daily detail} provides the~same values
+in~a~keyboard-accessible table. Missing or~expired days remain gaps. Retention
+may leave totals without daily detail. Image bytes include photographs
+and~thumbnails, excluding downloads. Unavailable public-path metadata leaves
+ranking names readable without links.
+The~small photo icon uses the~same preview as~the~gallery Images editor:
+hover or~keyboard focus reveals it, clicking pins it, and~Escape closes it.
+The~bounded thumbnail loads only when the~preview is~opened.
+
 The~optional \ui{Telemetry} area records privacy-controlled operational measurements and~presents them as~Admin reports. Available controls cover the~master telemetry switch, public usage measurements, performance, cache and~database events, honoring Do~Not~Track, excluding administrators, the~maximum counted photo-view duration, and~retention for~raw, hourly, and~daily data. Reports include measures such as~anonymous sessions, page views, photograph opens and~capped view time, client errors, measured media bytes, browser mix, and~cache/database activity where those categories are~enabled.
 
 The~telemetry subsystem is~designed not~to~store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or~exact visitor locations. Exports contain aggregated anonymous telemetry and~session hashes rather than~raw visitor identifiers. Maintenance rolls up~and~purges telemetry according to~the~configured retention policy, and~the~Admin screen can~export a~standalone HTML report for~offline review. Review the~privacy controls before enabling collection on~a~public site.
@@ -3062,6 +3235,16 @@ When development diagnostics are~available, a~signed-in administrator can~start 
 \subsection{Scheduled site maintenance}
 \index{scheduled maintenance}
 \index{cron!site maintenance}
+
+The~Media and~cache tab uses the~same compact translucent groups as~Features
+and~Content and~display. Complete groups flow down one to~three columns, with
+independent heights. Question marks open contextual help; scan status and~the
+reason for~an~unavailable action remain visible. Schedule preferences save
+immediately on~change, together with their time and~numeric values. Pending
+writes lock only their form. An~unverified result retains the~intent and~offers
+a~reload without replaying the~write. Without JavaScript, use the~normal Save
+form. Thumbnail generation, cleanup, reset and~token rotation remain explicit
+tasks with their existing safeguards.
 
 In~Admin > Maintenance > Media and~cache, use~\emph{Clean updater cache now}
 to~run one bounded step in~place. The~step removes only already staged updater
@@ -3300,6 +3483,18 @@ Temporary download or~hosting failures may~be~retried. A~package whose files do~
 
 Stable discovery and~package work are~separate bounded operations. A~discovery request may~create a~durable background job, while a~later safe request or~the~CLI runner advances a~short slice through download, archive validation, extraction, manifest verification, staging, rollback backup, activation, migrations, and~cleanup. Range requests can~resume interrupted downloads, worker locks prevent concurrent advancement, and~a~stale lock can~be~recovered after its~owner expires. On~idle shared hosting, schedule \codeword{php scripts/application_update.php} from~cron, for~example every five minutes. Each invocation performs bounded discovery or~advances existing background work; correctness does~not~depend on~\codeword{set_time_limit()} or~\codeword{ignore_user_abort()}.
 
+If~the~source server ignores Range, three incomplete full-response
+restarts switch the~same job to~the~published \filepath{production.zip}.
+Separate bounded metadata requests require the~release tag to~resolve to~the~original
+full commit and~require the~asset's canonical URL, byte count and~SHA-256.
+The~archive digest is~checked before extraction even when optional per-file
+publisher checks are~disabled. Flat production archives and~wrapped source
+archives use the~same later installation stages. Missing or~unmatched assets
+retain finite failure handling; request limits are~not~extended.
+An~older installed updater cannot use this repair before receiving it.
+Verify that first upgrade on~a~staging copy or~deploy the~complete compatible
+release manually and~use \ui{Finish FTP update}.
+
 Current releases also reconcile the~small set of~application-owned server-policy files during update preparation and~activation. This protects installations whose older updater skipped a~policy file: the~validated release copy is~compared and~published atomically, rollback metadata is~extended before replacement, and~a~migration-backed bootstrap path can~repair an~already activated older tree. The~reconciliation is~limited to~known policy paths and~does~not~alter gallery media or~user configuration.
 
 Before activation, an~administrator can~cancel or~retry a~recoverable job. After activation, the~Admin recovery action can~restore managed application files from~the~saved rollback snapshot, but~file rollback does~not~reverse database migrations. Stable restore, clean reinstall, and~beta installation remain resumable jobs with their own package validation. The~standalone \filepath{reset.php} emergency path is~a~separate recovery tool for~returning to~the~stable branch when the~normal Admin route cannot be~used; it~still requires the~same careful backup and~integrity review.
@@ -3449,6 +3644,13 @@ The~generated module plan declares shared dependencies and~one canonical file or
 Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. The~public entry loads \filepath{app/early\_runtime.php} before \filepath{app/bootstrap.php}, then both layouts reach the~same normal request pipeline.
 
 The~small request-local kernel under \filepath{app/runtime/} coordinates the~existing request lifecycle through Request, Router, RouteRegistry, and~ModuleLoader before invoking the~procedural controller. The~canonical route and~security table remains in~\filepath{app/bootstrap/dispatch.php}. A~reviewed generated plan loads logical modules for~the~selected route; production performs no~source scan or~dependency compilation and~has~no~load-all fallback. Existing PHP~8.1 and~shared-hosting requirements remain sufficient, without Composer or~a~Node build. Legacy CLI/test consumers may~use \filepath{app/bootstrap\_full.php} for~the~complete procedural API.
+
+Shared Admin help and~factory-value markup belong to~the~existing
+\filepath{app/views/admin\_ui.php} owner; Maintenance sections remain deferred.
+Theme reuses the~complete gallery-access policy closure already needed by~its
+picker and~preview, while scoped saves use canonical mutation responses.
+These owners add no~logical module or~runtime file. Hosted preparation and~FULL
+verify the~unchanged duplicate-ownership limits.
 
 The~loader validates the~complete module plan in~each request. It~checks
 canonical layer/path order in~one pass, checks each selected physical path
@@ -3628,7 +3830,12 @@ for~compatibility, while authored Python docstrings use one consistent format.
 
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
-Hosted qualification covers PHP/Node/WinApp tests, source contracts, required Chromium, real MySQL/MariaDB workflows, PHP compatibility and~Linux/Windows/macOS package checks. Every mandatory job and~the~exact-SHA gate must pass. The~release workflow compiles all~four PDF manuals once after the~final source edits, not~during routine development.
+Hosted qualification covers PHP/Node/WinApp tests, source contracts, required
+Chromium, real MySQL/MariaDB workflows, PHP compatibility and~required
+Linux/Windows package checks; macOS runs independently as~an~advisory check.
+Every mandatory job and~the~exact-SHA gate must pass. The~release workflow
+compiles all~four PDF manuals once after the~final source edits, not~during
+routine development.
 
 The~hosted portable WinApp job installs the~existing Pillow requirement into
 the~Python interpreter selected for~the~audit, so~tray-badge pixel coverage
@@ -3731,7 +3938,18 @@ The commands in this section describe hosted release ownership and the retained 
 
 The~current qualification and~release assembly sequence is~described in~the~maintainer verification section and~\filepath{RELEASE.md}.
 
-Create a~production folder or~ZIP only when explicitly requested; hosted release assets use the~same PHP builder automatically. Pass the~candidate epoch with \codeword{--timestamp} for~deterministic metadata. The~builder refuses stale manifests and~existing outputs; \filepath{scripts/release_files.php} inspects membership only. Three OS packaging owners cover the~real builder independently of~the~database matrix. The~main-only locked TinyTeX cache warmer requires reviewed installation before release branches can~reuse its exact key. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy require explicit authorization. CI tests PHP 8.1 as~the~compatibility floor and~PHP 8.5 as~the~newest representative. All~three database variants run on~PHP 8.5; historical evidence retains its actual versions.
+Create a~production folder or~ZIP only when explicitly requested; hosted release
+assets use the~same PHP builder automatically. Pass the~candidate epoch with
+\codeword{--timestamp} for~deterministic metadata. The~builder refuses stale
+manifests and~existing outputs; \filepath{scripts/release_files.php} inspects
+membership only. Required Linux/Windows packaging owners cover the~real builder
+independently of~the~database matrix; macOS repeats the~same suite in~a~separate
+advisory run. The~main-only locked TinyTeX cache warmer requires reviewed
+installation before release branches can~reuse its exact key. A~CMS-only release
+does~not~require a~new WinApp installer. Commit, tag, publish, upload,
+and~deploy require explicit authorization. CI tests PHP 8.1 as~the~compatibility
+floor and~PHP 8.5 as~the~newest representative. All~three database variants run
+on~PHP 8.5; historical evidence retains its actual versions.
 
 During ordinary development, update all~four \codeword{.tex} sources together and~review their actual explanations; do~not~rebuild the~tracked PDFs after every change. The~PDFs may~lag behind the~sources until final release preparation. Automated version/date replacement is~not~semantic documentation generation: maintainers must add new feature, security, compatibility, and~operational content in~English, Czech, German, and~Swedish themselves.
 
@@ -3861,11 +4079,19 @@ Changes to~tests or~registries need no~preliminary installation on~main.
 The~source is~one commit above observed develop. Hosted preparation generates
 runtime modules, inventory and~manifest, folds changed generated data into
 the~final candidate and~obtains fresh BASIC. A~separate authority checkout
-inspects the~clean candidate. FULL retains all~28 required native owners:
-shared source contracts, portable Node/WinApp, packaging on~three operating
-systems, four shards for~each~of~three databases, four shards for~each PHP
+inspects the~clean candidate. FULL retains all~27 required native owners:
+shared source contracts, portable Node/WinApp, Linux/Windows packaging,
+four shards for~each~of~three databases, four shards for~each PHP
 8.1/8.5 source environment, required Chromium and~the~aggregate.
 Missing, failed, cancelled or~skipped mandatory owners block integration.
+
+After preparation, the~selected feature workflow dispatches macOS packaging
+as~an~independent advisory run on~the~same exact candidate and~base. It~executes
+the~central package suite and~retains its~actual result and~diagnostics.
+Runner queues, timeout, cancellation, failure or~dispatch refusal never block
+integration. Separate concurrency and~check names protect required FULL.
+Historical owner contracts 1--3 keep their original mandatory macOS proof;
+authenticated immutable workflow bytes determine the~applicable contract.
 
 Successful execution is~sealed before the~protected non-force fast-forward.
 \codeword{qualify_only} retains qualification without writing develop.

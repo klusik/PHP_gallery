@@ -146,8 +146,9 @@ focus, muted disabled state and system colors in forced-color mode.
 - Use short labels with small `?` context-help controls for longer explanations.
   Help must open by mouse click and keyboard activation, close on outside click
   and Escape, and expose an accessible name and relationship to its content.
-- Use standard switches for binary settings. An autosaved setting has no second
-  Save button; show its saving, saved, and failure state where users can see it.
+- Use standard switches and immediate autosave for binary Admin preferences,
+  following the [Admin settings reference](#admin-settings-reference).
+  Show saving, saved, and failure states beside the affected setting.
 - Progressively replace visible checkbox boxes with small switches when their
   owning interface is edited. Apply this direction across public and Admin
   interfaces, preserving native input behavior, labels, keyboard operation,
@@ -159,8 +160,291 @@ focus, muted disabled state and system colors in forced-color mode.
 - Group work into logical tabs or sections. Use a fluid grid that gives each
   control the space it needs; keep items inline when they fit and do not impose
   a two-column cap.
+- Use the Features group surfaces and one to three flowing columns for Admin
+  settings. Keep individual controls unboxed and each group's height independent
+  of its neighbors. The detailed reference below defines the approved density,
+  heading treatment, row order and persistence interaction.
+- When a setting has its own detailed configuration, link both its visible
+  name and its trailing settings arrow to the same prepared destination.
+  Keep the switch and help trigger as independent controls.
 - Keep common actions and important status visible. Put technical detail behind
   contextual help or a disclosure when it is not needed for the ordinary task.
+
+## Admin settings reference
+
+This is the default authoring pattern for new or changed Admin preference
+interfaces. Its approved visual reference is **Appearance > Features**, with
+the specialist settings interaction demonstrated by
+**Dashboard > Maintenance > Content and display**, reached from the Public live
+search settings link.
+Use this reference automatically when editing the owning settings interface.
+Older specialist pages may still await migration; the rule does not claim that
+all existing Admin forms already autosave or authorize a wider redesign.
+
+The pattern combines compact switches, immediate persistence, clear group
+headings and one to three independent columns. Keep ordinary preferences
+visible at a glance. Use the existing Theme tokens and the feature's existing
+configuration/mutation owners when applying it elsewhere.
+
+### Group surfaces and headings
+
+Wrap related preferences in one semantic section with a short heading. Use the
+heading level appropriate to its parent; the Content reference uses `h3`.
+Frame the whole group once. Individual rows, switches and question marks retain
+their flat appearance, with no nested cards or decorative shadows.
+
+The following values describe the approved reference. CSS pixels (`px`) apply
+to geometry and interaction targets; `rem` values follow the user's base text
+size. All color mixes use the active Theme, including dark themes.
+
+| Part | Reference treatment |
+| --- | --- |
+| Group surface | `color-mix(in srgb, var(--panel) 42%, transparent)`; `backdrop-filter: blur(12px)` |
+| Group outline and row lines | `1px solid color-mix(in srgb, var(--ink) 12%, transparent)` |
+| Group rounding | `min(var(--radius, 8px), 8px)`; respect a smaller Theme radius |
+| Group inner spacing | `.2rem .65rem .35rem` at top, sides and bottom |
+| Space between groups/columns | `.65rem`; no stretched group heights |
+| Heading strip | At least `38px` high; `.25rem .65rem` padding; span the group's inner width |
+| Heading tint | `color-mix(in srgb, var(--accent) 6%, transparent)` |
+| Heading left accent | `2px solid color-mix(in srgb, var(--accent) 65%, transparent)` |
+| Heading type | `var(--ink)`, `.85rem`, weight `650`, line height `1.25` |
+| Setting rows | At least `32px` high on desktop; thin bottom separator, omitted on the last row |
+| Setting names | Reference `.82rem`, weight `600`; permit natural wrapping |
+| Subordinate information | Quiet foreground/panel mix; counts and compatibility remain readable |
+
+Let a long heading or translated label grow vertically. Minimum heights are
+density targets, not clipping boxes. Use a short page toolbar for the section
+title, help and common actions; avoid repeated introductory paragraphs above
+each group. The group heading is a label by default. A group master switch
+belongs only to a real supported bulk preference operation, as in Features;
+do not infer such an operation from matching the visual style.
+
+### Flow and responsive behavior
+
+Use whole groups in a top-to-bottom column flow, then continue in the next
+column. Preserve this group order in the DOM and keyboard navigation. The Content
+reference uses CSS multicolumn layout with `column-width: 300px`,
+`column-count: 3` and `column-gap: .65rem`. The preferred width leaves room for
+short names, help and compact controls; the count caps the workspace at three
+columns. The browser fits one or two columns when three will not fit. Choose
+the usable width from the actual workspace after Admin navigation and panel
+padding, rather than assuming a viewport breakpoint alone determines it.
+
+Keep each group together with `break-inside: avoid` and retain its natural
+height. Do not arrange the groups in a shared table or shared grid rows, impose
+equal heights, or reserve blank space beneath a short group to match a taller
+neighbor. A local grid/flex row inside one group is appropriate for aligning its
+own controls. Do not split a group or make each preference its own card merely
+to fill columns.
+
+On narrow screens, use a single column that can shrink below the preferred
+column width. Allow labels, compound controls and the toolbar to wrap without
+horizontal scrolling. At `max-width: 640px` or `pointer: coarse`, surrounding
+switch labels, name links, help and action controls have at least `44px`
+interaction height. The visible switch track remains compact. Avoid fixed
+group heights and independent scroll areas inside ordinary settings blocks.
+
+System health follows these flowing groups by user task: runtime/recovery,
+access/sign-in, galleries/files, maps/routes, public features/reports, and tools.
+Healthy storage rows use a quiet checkmark with an accessible state name;
+configured-off integrations use a dash. Keep the check's purpose and test limits
+in anchored question-mark help, and safe database identifiers/references in
+Details. Put missing/unknown records before healthy peers and keep their impact
+and next step visible. A storage snapshot must never imply an end-to-end test,
+verified external connectivity, or blanket system readiness. Viewer diagnostics
+retains guarded progressive autosave and its native POST/Save fallback.
+
+Telemetry separates Overview, Collection and privacy, History and maintenance,
+and Reports with native links enhanced into local tabs. Preserve the selected
+tab through its query URL, reload and browser history. Collection, privacy,
+viewing limits and retention use independent flowing groups and one preference
+per native form. Keep historic metrics compact, detailed explanations behind
+anchored help and schema/save failures visible. Clearly label standalone HTML
+reports as new-tab outputs and related Settings/Logs as separate destinations.
+Return standalone reports as private inline HTML so the native new tab keeps
+the rendered document visible. Retain its safe suggested filename and ordinary
+Admin/schema boundaries; opening a report must not become an attachment-only
+download that discards the new tab.
+Rollup/purge remains a separate explicit POST action with a compact result page.
+Telemetry reuses the Features/Maintenance group surface and heading rules in
+`admin-feature-settings.css`. Keep their negative heading margins and bottom
+rule intact: a broad page-level heading reset must not inset the strip. Compare
+the rendered strip with Appearance's Site identity group before qualification,
+including its full width, rounding, spacing and Theme colors. On narrow screens,
+grow headings containing help to fit their 44px targets without overlapping
+the first setting row.
+Overview rankings link photo names and gallery names directly to their ordinary
+public destinations. Keep their existing typography with a quiet underline and
+visible keyboard focus. Six small daily bar charts sit inside the flat metric
+strip; use Theme colors and preserve gaps instead of fabricating zero days.
+Each metric has its own scale, native value tooltips and a shared keyboard-
+accessible daily-data disclosure. Retain the exact image/thumbnail byte scope
+of the headline, excluding downloads from that chart.
+Photo-row preview icons reuse the gallery Images editor's delegated preview
+owner and authorized thumbnail destinations: hover/focus reveals, click pins,
+and Escape/outside actions dismiss. Keep the icon separate from the native
+name link; request its thumbnail only after preview interaction.
+
+Edit tags keeps the catalog, selected editor and usage references in independent
+compact translucent groups. The catalog stays beside the editor on desktop;
+the editor and usage can share the remaining row when their preferred 300px
+width fits. Stack complete groups on narrow screens and retain an editor jump
+beside the catalog heading. Catalog rows remain native links with an accessible
+current selection. Repeated identical name/slug and filtered media-type labels
+need no duplicate text. Field help opens beside the label; content edits retain
+explicit Save, existing POST/CSRF fields and media-specific public actions.
+Images and Galleries are direct-assignment filters over the shared visual tag
+vocabulary; the filter help explains global edit scope and scoped counts.
+Filter and sort selections submit their native GET form immediately after a
+change; hide Apply only after enhancement, retaining it without JavaScript.
+Changing usage clears the prior selection; sorting retains the selected tag.
+Keep Documents visibly reserved and disabled until PDF tagging is implemented;
+never present its placeholder as an available editor or verified empty catalog.
+
+
+### Switches and row anatomy
+
+Render binary preferences as switches, with no visible square checkbox in
+normal themes. Retain the native input's checked/disabled state, associated
+label, keyboard activation and form submission; a styled `input[type=checkbox]`
+is the reference implementation. Under forced colors, preserve the visible
+native control when needed for system contrast.
+
+The reference switch has a `26px` by `14px` track and an `8px` thumb. Its quiet
+off track mixes `--ink` at 8%; the on track mixes `--accent` at 23%, with a
+restrained accent border. State remains distinguishable by the thumb position.
+The label supplies a minimum `28px` desktop interaction height and the larger
+narrow/touch target. Do not enlarge the visible track to create that target.
+
+A single preference row reads visually as **switch, name, plain question mark,
+subordinate status, trailing settings arrow** where those items apply. Keep
+the name and its help close together. Avoid repeating Enabled/Disabled in a
+separate visible column when the switch already conveys it; retain accessible
+state and name. A compound setting keeps a short shared title and separately
+labelled switches, wrapping onto a second line when useful. Each choice retains
+its own meaning; the shared title does not become a new master preference.
+
+Keep catalog/item selection controls governed by their selection semantics;
+selecting a row is not a persisted binary preference. Explicit tasks such as
+resetting gallery overrides or regenerating paths remain separate actions with
+their existing safety requirements. The autosave rule concerns preferences and
+does not turn bulk/destructive operations into switches.
+
+### Names link to detailed settings
+
+Whenever an item has a dedicated configuration destination, make the visible
+item name a native link and retain the trailing settings arrow as a second
+shortcut to **the same URL**. This is a general Admin rule, not an exception
+for Public search. Use the prepared canonical destination for both links,
+including the correct section, installation mount and locale. Do not maintain
+two independently assembled routes for the same row.
+
+Both links preserve the compact name typography and normal Theme foreground,
+without an underline, filled button or extra explanatory text. Retain a visible
+keyboard focus outline and accessible destination name for the icon-only
+arrow. The link target grows to the narrow/touch minimum without enlarging the
+glyph. Normal browser link behavior, including opening in another tab, remains
+available with and without JavaScript.
+
+The name opens configuration; the switch changes the preference; `?` opens
+help. Keep these three interactions separate. Do not wrap the switch or help
+inside the anchor, turn the entire row into a navigation click target, or use
+the linked name as a switch label that also toggles on navigation. Where there
+is no configuration destination, retain a plain name with no dead link/arrow.
+
+### Immediate save and factory information
+
+With JavaScript enabled, toggling a binary preference immediately sends its
+change through the owning authenticated, CSRF-protected mutation route.
+There is no second Save button, checkmark action, confirmation dialog or
+page navigation for that preference. Enhance the existing form only when
+autosave is bound; retain its classic Save/POST fallback without JavaScript.
+Independent help and link navigation never submit the preference form.
+
+Use compact, localized feedback beside the affected control, with an accessible
+live status. Idle rows do not reserve an explanatory/status paragraph. During
+saving, visibly mark the pending operation and temporarily disable the controls
+in that form to serialize its write. Other groups remain usable. Show Saved
+only after the server confirms the canonical persisted state; apply the
+returned values and existing shared mutation-completion contract.
+
+An authoritative refusal shows its reason and returned persisted values. A
+timeout, lost response or malformed result leaves completion explicitly
+unverified: keep the displayed intent, lock the affected form and offer a
+passive state reload. Do not silently retry a write, report success or invent
+a rollback when the server may already have committed it. The Content reference
+bounds a write at `15000ms`; preserve the owning route's safety and reconciliation
+contract when adopting this interaction elsewhere. Coupled fields travel with
+their peer state rather than overwriting it with a guessed default.
+
+The switch/label tooltip states **Factory default: Enabled/Disabled** using
+localized text and canonical factory metadata from the setting's owner. Expose
+the same information to assistive technology, as the reference does with an
+accessible description. Factory means the declared installation default,
+independent of the current saved value, effective capability state and upgrade
+fallback. Never infer it from whether the switch is checked. Missing metadata
+does not justify inventing a factory value. Do not add a permanent explanatory
+paragraph or a duplicate factory column to this compact specialist layout.
+
+### Context help and review
+
+Routine descriptions, technical details and crawler sampling prose belong
+behind the adjacent plain `?`. Use the approved nonblocking translucent popover,
+anchored to its own trigger and bounded by the visible viewport. It closes on
+Escape or outside click and follows scroll/resize without shifting the rows.
+Retain the native disclosure fallback when enhancement is unavailable. Counts,
+compatibility warnings, disabled reasons and save failures needed for a safe
+decision remain visible in the row.
+
+For each migrated owner, verify the actual production cascade and rendered
+desktop/narrow result. Check one-, two- and three-column flow, unequal group
+heights, translated/wrapping labels, keyboard focus, narrow/touch targets and
+viewport-bounded help. Confirm the title and arrow resolve to the same settings
+destination and neither changes the preference. Verify immediate save feedback,
+authoritative refusal and uncertain-result handling through the existing hosted
+coverage; follow the repository's CI-first verification contract. Preserve
+no-script forms, Theme colors and forced-color controls. Record any missing
+manual/device coverage rather than treating source review as rendered proof.
+
+The concrete owners are:
+
+- `public/assets/styles/admin.css`: Features group reference.
+- `public/assets/styles/admin-feature-settings.css`: scoped specialist group,
+  row, switch, help and responsive styling.
+- `app/views/admin_dashboard.php` and
+  `app/views/admin_dashboard_sections.php`: semantic Content groups, links,
+  forms and canonical factory tooltip attributes.
+- `public/assets/gallery-modules/admin-dashboard-workspace.js`: progressive
+  autosave, visible completion states and trigger-anchored help.
+- [Admin settings inventory](ADMIN_SETTINGS_INVENTORY.md): migration scope,
+  prepared settings destinations and preference owners.
+
+## Responsive Admin navigation
+
+Preserve the existing expanded vertical menu as the desktop default. Its compact
+transparent double-chevron action collapses labels into the existing icon rail;
+group separators, accessible names and current-page indication remain available.
+Both desktop states scroll with the document, with no independent menu
+scrollbar or viewport-height clipping. The final account action must remain
+reachable through ordinary page scrolling and keyboard focus.
+Keep this preference in browser-local storage, scoped to the installation asset
+mount. Do not add an application setting or database write.
+
+At the existing 1100px single-column workspace breakpoint, show a labelled
+hamburger with a 44px target. Keep the same grouped navigation in a translucent
+panel anchored directly below that trigger. Opening it overlays the content
+without pushing the page down. Bound its own scrolling to the available viewport
+and account for the real header height. Use the approved 42% Theme panel backing
+and backdrop blur; avoid an ancestor blur that prevents the child panel from
+blurring underlying content. Group headings and actions must remain readable.
+
+Use ordinary labelled navigation landmarks and links. The mobile trigger exposes
+`aria-controls` and `aria-expanded`; Tab/Shift+Tab retain native navigation.
+Escape, outside click, leaving the navigation and selecting a destination close
+the panel. Escape and an activated same-document destination restore trigger
+focus. Returning to desktop restores its independent expanded/collapsed choice.
+A new page always starts with the mobile disclosure closed. Preserve all links
+when JavaScript is unavailable; unavailable storage keeps changes in memory.
 
 ## Implementation review
 
@@ -169,3 +453,42 @@ changed controls. Legacy global Admin selectors can override new feature styles;
 confirm the scoped feature rules win in the rendered interface. Review desktop
 and mobile layouts, keyboard access, tap targets, focus visibility, and reduced
 motion where animation is present. Keep the change within its feature scope.
+
+## Theme Language workspace
+
+Language follows the Features surfaces with independent interface-language and
+viewer-choice groups. All native checkboxes, including compound designer drafts,
+use the compact switch treatment. Keep longer scope explanations in anchored
+question-mark help. Language choices use bundled flag assets in both the closed
+combobox and its keyboard-accessible list; retain the original named select as
+the submission owner and unsupported-browser fallback.
+
+Admin language, public default and the coupled viewer enabled/language list save
+separately. Exclude neighboring Theme, design and JSON drafts from these requests.
+Use canonical response values and the shared mutation completion owner. An
+uncertain or refused write locks only its group, blocks legacy full-form replay,
+and offers passive reload without automatic retry. Admin language offers an
+explicit interface reload so unrelated drafts are not lost unexpectedly.
+The designer remains one staged object with explicit Save theme, local preview
+and resets. Pack and diagnostic actions retain their explicit authority.
+Opt the nested Language tabs into `language_subtab` URL persistence, preserving
+the primary hash, other query fields, reload and browser history.
+
+## Theme Appearance workspace
+
+Apply compact flowing groups to all five Appearance subsections while keeping
+one shared preview and its existing browser-local bounded divider. Group height
+is independent; labels, colors and precise numeric alternatives remain readable
+at the minimum settings width. Keep swatch/HEX ownership and staged preview
+semantics intact. Routine scope and animation explanations use anchored plain
+question marks. Display numeric units and retain explicit Save theme for colors,
+text, selects and ranges.
+
+The five binary preferences use native compact switches with canonical factory
+descriptions and isolated immediate saves. Each request carries one allowlisted
+setting, desired boolean and CSRF token. Reuse existing layout/advanced owners,
+capability gates and hero-tag public revision effects. Reconcile canonical
+values through existing preview events; refusal/uncertainty locks its switch
+and prevents full-form replay until passive reload. Other drafts remain intact.
+Native forms remain the permanent no-script fallback. Appearance opts into the
+shared URL-backed subtab owner, accepting old full panel IDs and short values.

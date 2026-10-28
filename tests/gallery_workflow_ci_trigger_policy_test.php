@@ -502,10 +502,7 @@ namespace {
                 $packageOwner,
                 "os: windows-2025\n            php: '8.5'",
             )
-            && str_contains(
-                $packageOwner,
-                "os: macos-latest\n            php: '8.5'",
-            )
+            && !str_contains($packageOwner, 'macos-latest')
             && str_contains($packageOwner, 'php-version: ${{ matrix.php }}')
             && str_contains(
                 $packageOwner,
@@ -520,7 +517,21 @@ namespace {
             && !str_contains($packageOwner, 'continue-on-error:')
             && !str_contains($packageOwner, 'deploy.sh')
             && !str_contains($packageOwner, 'deploy.ps1'),
-        'All three native package jobs must execute the single central policy/smoke/full-content owner and retain mandatory evidence.',
+        'Linux and Windows must execute the central package owner with mandatory evidence.',
+    );
+    $macosOwner = $jobBlocks['macos-advisory'] ?? '';
+    check(
+        str_contains($macosOwner, "github.event_name == 'workflow_dispatch'")
+            && str_contains($macosOwner, 'inputs.advisory_macos')
+            && str_contains($macosOwner, 'runs-on: macos-latest')
+            && str_contains($macosOwner, 'php scripts/audit.php --suite=production-package')
+            && str_contains($macosOwner, 'production-package-macOS-advisory')
+            && str_contains($macosOwner, 'EXPECTED_SHA: ${{ inputs.checkout_ref }}')
+            && !str_contains($macosOwner, 'needs:')
+            && !str_contains($nativeGate, 'macos-advisory')
+            && str_contains($nativeGate, '!inputs.advisory_macos')
+            && str_contains($nativeGate, 'Advisory macOS matrix gate (unused)'),
+        'Advisory macOS must run independently on the exact candidate without a required aggregate dependency or duplicate required check name.',
     );
     foreach ([
         'real-database-browser',

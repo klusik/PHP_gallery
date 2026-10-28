@@ -865,7 +865,7 @@ The workflow appears in the sidebar after reviewed default-branch installation.
 
 Active workflows use PHP 8.1 and PHP 8.5 only; all three database
 engines retain their complete scenarios on PHP 8.5. Ubuntu packaging also checks
-the PHP 8.1 floor, while Windows and macOS packaging use PHP 8.5. Historical
+the PHP 8.1 floor, while Windows and advisory macOS packaging use PHP 8.5. Historical
 qualification records retain their authenticated original matrix. The newest
 representative advances only through an explicit reviewed update. Reports use
 separate PHP/JS/MJS counts.
@@ -892,6 +892,10 @@ smart-gallery and side-panel tests own positive and negative cases.
 The runtime-plan test retains every composed/legacy isolated module child and
 route comparison. Compiler analysis is shared with dynamic-site review rather
 than parsing discarded tooling files or analyzing the application twice.
+Compact Dashboard help and factory-value renderers are loaded from the shared
+Admin UI owner, including isolated health fixtures. Theme's contained access
+policy dependency must preserve the existing file closure and duplicate cap;
+hosted preparation establishes the generated plan before the runtime ratchet.
 Retained phase timings distinguish compilation from child process wall and
 summed child execution. A bounded numeric `AUDIT_METRICS` record is retained in
 each child's JSON metrics and compact log even after PASS; malformed emitted
@@ -900,6 +904,47 @@ state waits and retain
 specific failure/stack data. Historical missing diagnostics cannot establish
 the old gallery-tag failure's root cause; deliberate hosted failure acceptance
 and live default-branch TinyTeX reuse remain separate evidence requirements.
+
+The lightbox race fixture snapshots Keyboard Lock acquisition/rejection counts
+for each fullscreen quick-tag reopening and waits for that request's deferred
+resolver. Previous successful locks cannot satisfy the new phase. The fixture
+retains stale-owner rebinding, rejection recovery and actual unlock assertions.
+
+`admin_telemetry_workspace_test.php` exercises the real scoped controller and
+telemetry settings service against an isolated model store: auth/CSRF, unrelated
+preference preservation, numeric validation, missing/unknown schema, failed
+reads, and failures before/after persistence. It also renders production markup
+for `admin_telemetry_workspace_browser_test.mjs`, which checks reload/history,
+desktop/narrow group flow and help, independent writes, canonical refusal,
+out-of-order status, timeout, lost/malformed completion and separate maintenance.
+The fixture loads the shared Features/Maintenance stylesheet and checks
+full-width heading edges, separators, rounding and both dimensions of narrow
+help targets. Failed readback is tested as an uncertain write that may already
+have persisted. Real route probes use stable Telemetry workspace/status
+attributes instead of retired presentation classes.
+The render bridge now executes the actual overview controller, telemetry
+service and public URL helpers against controlled aggregate models. It covers
+renamed images in nested galleries, clean/query routing, missing/unknown route
+metadata, persisted preview cache identity, absent daily data, retained session
+gaps, all-zero series and image-byte totals excluding downloads. The browser
+fixture loads the existing gallery Images preview owner and verifies on-demand
+decode, hover exit, focus, pin, Escape, viewport bounds and single-overlay
+initialization, alongside native daily-table access and date-axis gaps.
+Preview geometry is asserted after the production image-load listener has
+positioned the decoded image; complete/naturalWidth alone can precede that event.
+The shared harness admits a reload-invalidated passive read only after verifying
+the same owned page target and loopback origin, including its port. It retries
+through the existing readiness/result poll deadline, without replaying actions.
+If Chromium omits the target URL during replacement, both the committed main
+frame URL and its security origin must independently match the fixture origin.
+Closed or moved targets, page assertions, other protocol errors and expired
+deadlines still fail. Inert positive/negative ownership probes are retained in
+`tests/admin_side_panel_created_gallery_refresh_test.mjs`.
+For standalone report delivery, use the real local browser: open Reports,
+activate Export all traffic, and confirm the new tab retains the rendered
+report heading and summary. Repeat with a classified segment and keep the
+original Reports tab available. Workspace fixtures cover native link targets;
+this manual check covers the browser's inline-versus-download handling.
 
 `tests/cache_lifecycle_registry_test.php` uses the actual registry model with a
 disposable SQLite table derived from the migration. It covers oldest-due
@@ -1059,7 +1104,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.144.14. Release verification uses the
+This guide applies to PHP Gallery Version 0.145. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1492,11 +1537,11 @@ a recursive bot-triggered push. A source-only PASS is feedback, not handoff.
 | `runtime-compatibility` | Four central `hosted-full` PHP shards in each PHP 8.1 Unicode/intl and PHP 8.5 ASCII/no-intl environment; runtime probes remain per shard; floor shard 1 also owns whole-tree PHP 8.1 syntax | All eight native jobs required; no environment compatibility case removed |
 | `real-database-browser` | Four central `hosted-full` PHP shards for each PHP 8.5/MySQL 8.4, MariaDB 10.11 and MariaDB 11.4 environment. Each runner provisions a private database and application. The MySQL shards that own the two real-browser fixtures must execute them | All twelve native jobs required, with individual required DB/HTTP/race/browser PASS evidence in each owning shard |
 | `browser-tests` | Required Chromium `browser-map` fixtures via `scripts/audit.php --suite=browser-map` | Missing browser or fixture failures block the matrix |
-| `production-package` | Compact real-builder negative scenarios and complete production folder/ZIP membership and raw-byte integrity on Ubuntu, Windows and macOS | All three OS jobs required with zero missing mandatory package cases |
+| `production-package` | Compact real-builder negative scenarios and complete production folder/ZIP membership and raw-byte integrity on Ubuntu and Windows | Both OS jobs required with zero missing mandatory package cases |
 | `gallery-workflows:ci-gate` and `candidate-preparation:gate` | Aggregate required jobs, exact prepared SHA, immutable source base and current remote branch HEAD | FAIL, BLOCKED, missing, skipped, cancelled, superseded or stale required evidence refuses green handoff |
 | `release-audit` (release only) | Central `release` profile and mandatory sibling matrix after final hosted manual PDFs/metadata/manifest | Full release qualification of the exact prepared release candidate |
 
-This table describes source contract 3, with 28 required native owners. Its
+This table describes source contract 4, with 27 required native owners. Its
 protected installation remains separate from feature maintenance qualification;
 see `docs/CI_COVERAGE_REUSE_CONTRACT.md`. The five PHP/environment combinations
 retain their complete regression trees, partitioned deterministically rather
@@ -1508,6 +1553,17 @@ required job outcomes and remote-head check. Measure step/job wall time and
 runner cost separately; avoid inferring savings from a static ownership map.
 Optional local diagnostics remain usable offline but never promote stale,
 dirty-tree or incomplete hosted results to qualified status.
+
+After preparation, integration dispatches `Advisory macOS production package`
+through the existing reusable workflow's separate manual-dispatch mode, selecting
+the feature branch and checking out the exact prepared SHA. It executes the same
+central package suite on PHP 8.5 and retains its real outcome and diagnostics.
+The separate run has independent concurrency and cannot emit the protected
+`Complete required CI matrix` context. A queued, failed, timed-out, cancelled or
+unavailable advisory run never blocks integration. Regression fixtures cover
+those outcomes, missing mandatory Linux/Windows owners and provider refusal.
+Historical contracts 1–3 still require macOS: authenticating their immutable
+workflow source prevents missing old owners from being reinterpreted as advisory.
 
 ### Source-only authoring feedback
 
@@ -1568,8 +1624,9 @@ a minimal isolated payload: folder and ZIP membership, complete SHA-256
 content, deterministic output, missing/stale/unsafe inputs, links, destination
 protection, no-clobber and cleanup. The central packaging owner runs it
 independently of the SQL engine. The `production-package` CI matrix
-additionally builds a complete production folder and ZIP on Ubuntu, Windows and
-macOS and verifies every file against its source bytes. Windows owns real
+additionally builds a complete production folder and ZIP on Ubuntu and Windows
+and verifies every file against its source bytes. Independent advisory macOS
+packaging repeats that suite without blocking integration. Windows owns real
 junction/reparse-point rejection. A missing required capability or incomplete
 proof fails that owner. Legacy FTP, interactive collision naming and
 source-review/media packaging options have been removed with their
@@ -2260,8 +2317,9 @@ that are registered in the normal PHP regression suite:
   storage, explicit app-setting storage, domain adapters, subordinate-setting
   preservation, and idempotent fresh-install seeding.
 - `tests/feature_policy_admin_test.php` validates grouped Admin > Features
-  state, stale revision rejection, dependency blockers, configured checkbox
-  state, and bounded health presentation.
+  state, stale revision rejection, scoped patch validation/preservation,
+  idempotent factory reset, fresh-install defaults, dependency blockers and
+  bounded health presentation.
 - `tests/feature_policy_inventory_test.php` statically audits registered
   capability literals, owned UI/routes, Admin navigation/settings metadata, and
   feature-specific guard placement.
@@ -2270,12 +2328,38 @@ that are registered in the normal PHP regression suite:
   diagnostics, non-destructive data policy, and early exits for expensive
   optional work.
 
+`tests/admin_features_browser_test.mjs` uses the real controller/view and
+capability service against isolated settings through
+`tests/fixtures/admin_features_view.php`. The central browser suite checks
+390, 1200, 1700 and 2560 px layouts with production/legacy CSS: one, two,
+three and at most three occupied columns. Whole groups remain intact and stack
+with the same small gap regardless of neighboring group heights. A constrained
+450 px workspace also stays in one column on a wide viewport. Layout is checked
+again after autosave and reset replace the groups. Coverage retains switches
+before names, compact rows, touch targets, serialized scoped saves, group
+actions, factory reset, dependency blockers, focus retention and a committed write
+whose response is lost. Recovery must read without replaying that mutation.
+The real-database HTTP journey also exercises authenticated autosave/passive
+reads, anonymous and CSRF rejection, stale revisions and state restoration.
+
 These tests do not replace subsystem regressions. Multilingual content still
 proves loader suppression and translation recovery, Gallery Trash tests still
 own Trash data/settings behavior, Viewer tests still own account data, and
 feature-specific tests still own Smart Gallery, duplicate detector, tag,
 updater, database-maintenance, favicon, benchmark, and thumbnail behavior. The
 capability tests protect the cross-feature orchestration boundary.
+
+For Features UI acceptance, resize the workspace through one, two and three
+columns with the production cascade, including expanded/collapsed navigation.
+Groups flow down each column before continuing to the next, remain whole and
+do not share row heights. Check long labels, keyboard reading order and help
+near a column edge. Group tint/indentation must distinguish bulk switches from
+feature switches; the latter precede names. Toggle a row and a mixed/all-on group,
+inspect factory differences and a dependency blocker, then test factory reset.
+Keep the starting preference snapshot and restore it after a live acceptance
+journey. Verify the plain question mark opens beside its trigger, Escape/outside
+click closes it, and keyboard focus remains visible after saving. Confirm no
+JavaScript errors or page navigation and no second Save action with JavaScript.
 
 For manual Admin acceptance after a policy change, verify one enabled and one
 disabled capability in **Admin > Features**, one dependency-blocked capability
@@ -2476,6 +2560,14 @@ automatically. Do not duplicate that work with a second manual tree walk after
 the audit.
 
 ### Version 0.97 recoverable gallery trash
+
+`admin_trash_rendering_test.php` retains production POST/CSRF/confirmation,
+availability, escaping and lifecycle-action assertions with the visible
+preference group. The synthetic `admin_trash_confirmation.html` browser fixture
+also covers immediate coupled preference writes, task serialization, canonical
+panel refresh/focus, authoritative refusal, and lost-response locking followed
+by a GET-only reload. No live Trash preference or payload is changed by those
+fixtures. They run under hosted FULL; BASIC remains syntax/declaration feedback.
 
 `tests/gallery_trash_model_test.php` is the focused Version 0.97 contract. It
 verifies default and bounded settings, independent automatic-purge opt-in,
@@ -2922,6 +3014,31 @@ maintenance policy.
 The gallery public-path test covers Czech transliteration, decomposed accents,
 invisible Unicode characters, HTML entities, hierarchical paths, and sibling
 slug collisions.
+
+`admin_tag_catalog_filters_test.php` executes the real model/service over an
+in-memory typed and confirmed-legacy tag schema. Gallery-only, image-only,
+shared, music, unused and reserved-PDF records verify scoped membership,
+counts/sorting and the unchanged default vocabulary for other callers. Unknown
+schema, malformed scopes and reserved PDF queries retain their refusal paths.
+The filter selects usage, not separate gallery/image tag identities: edits to
+a shared tag still affect every assignment. Documents remains a disabled future
+choice; direct requests show a pending explanation without a PDF editor.
+The existing Settings browser fixture also imports the real tag coordinator:
+filter and sort changes each cause one native GET submit, usage changes clear
+old selection, sort keeps it, enhanced Apply hides, and content fields remain
+explicit saves. The fixture prevents navigation and writes no tag data.
+
+`admin_tags_layout_test.php` renders the real Admin tag view using prepared
+page/panel, mixed-media, music and empty states. It checks catalog/editor/usage
+containment, native selected links, field/help associations, distinct panel IDs,
+existing POST/CSRF/limits, escaped text and media-specific public actions. Hosted
+FULL discovers this standalone regression through the central PHP registry.
+For visual verification, inspect one/two/three group layouts, the narrow editor
+jump below sticky navigation, transparent actions and 44px touch targets. Open
+field help, verify viewport bounds, Escape/focus return and outside dismissal.
+Use read-only filter/sort/selection actions. Exercise persistence in a disposable
+workflow fixture rather than changing a real tag for layout QA.
+
 The tag metadata MySQL compatibility test guards the Admin tag-usage query
 against MySQL error 3065 by requiring every DISTINCT ordering expression that is
 not already projected to be included in the SELECT list.
@@ -3860,6 +3977,30 @@ selected. Then verify that the authenticated JSON response replaces the
 placeholder, nested maintenance tabs initialize, and direct or no-JavaScript
 fallback links remain usable.
 
+For compact Maintenance Content, inspect one/two/three flowing group columns,
+native factory tooltips and the absence of enhanced Save buttons. Toggle Public
+search, verify persistence on reload and restore its original value. Check
+saving/error feedback, stable URL and retained controls. The existing
+`admin_content_display_test.php` covers JSON authority, GPS schema refusal and
+factory metadata; `admin_dashboard_workspace.html` covers coupled preferences,
+pending-write exclusion and lost-response locking with synthetic persistence.
+Security-related switches are exercised in that disposable fixture, not by
+weakening the running installation. Hosted FULL owns execution of these tests.
+
+For System health, inspect the flowing groups at desktop and narrow widths,
+including keyboard/outside dismissal and viewport-bounded help. Keep missing or
+unverifiable states actionable and disabled integrations distinct from ready
+storage. `admin_maintenance_health_test.php` covers purpose/help markup, named
+presentation checks, problem ordering, escaped identifiers, and malformed or
+unexpected records. `runtime_support_surfaces_test.php` retains shared runtime
+labels and rejects blanket system-readiness claims. The Content controller
+fixture also covers viewer-diagnostics authentication/CSRF, canonical boolean
+responses, native Save and allowlisted System returns. The workspace browser
+fixture adds pending/lost-response cases with disposable diagnostics state.
+Do not toggle live diagnostics, run migrations, or test a real restore merely
+to verify this presentation. Hosted FULL owns those fixtures; a manual visual
+check alone does not qualify their behavior.
+
 ### Live Slideshow Speed Verification
 
 The registered `lightbox_slideshow_speed_test.mjs` executes the production
@@ -4024,6 +4165,13 @@ placement may float only when the existing solver finds clear space.
    request is needed. Delay metadata responses, select a second marker, then
    close the map or viewer: cancelled/older work
    must neither change the photo nor navigate away, including after reopen.
+   With a map open in native fullscreen, press Escape once: the ordinary
+   lightbox must remain open with the split map and all its actions hidden,
+   without large blue controls or an extra Escape to repair the layout.
+   Compare F and the fullscreen button, including while map loading is pending,
+   after rapid exit/reentry, and on desktop/narrow viewports. In CSS fullscreen
+   the page-delivered Escape follows the same transition. A later Escape closes
+   the ordinary viewer; M still toggles the map independently while fullscreen.
    Repeat after exiting fullscreen or changing
    photos with the keyboard. Fail a current lookup deliberately and confirm its
    canonical photo-page fallback still works.
@@ -4092,6 +4240,9 @@ executable and uses a fresh profile under
 lightbox module with synthetic photographs
 and controlled metadata responses. Its popup-shaped links exercise real DOM
 event routing and CSS fullscreen split state;
+it also checks browser-owned fullscreen exit without a page keydown, a single
+Escape from CSS fullscreen with a map, duplicate exit notifications, disposal
+of the split-map runtime/geometry and late Leaflet completion after exit/reentry.
 it does not validate Leaflet rendering, native fullscreen, touch gestures, or
 live database/media authorization. Run the
 manual matrix above for those integration checks. `--baseline` on either Node
@@ -4787,6 +4938,31 @@ fetches retain the active session by posting to the current origin.
 
 ### Resumable application-update verification
 
+`updater_download_transport_test.php` runs the actual download owner with real
+temporary archive files and persisted jobs. Only cURL/HTTP stream and GitHub
+metadata boundaries are confined. It covers a previously statted empty file,
+partial and completed transfers, conditional Range append, ignored-Range full
+replacement, durable bounded fallback selection, stream short writes and
+unresolved redirects. Published fallback must perform one metadata call per
+slice, retain its full source commit, refuse draft/duplicate/unbound/digestless
+assets and another tag commit, preserve the old prefix on refusal, resume the
+selected asset, and verify its exact digest before ZIP parsing. Retry clears
+selection and digest checkpoints. Flat production and wrapped source roots both
+remain accepted. Hosted FULL discovers this fixture through the existing PHP
+registry; BASIC checks syntax and declaration documentation only. The fixture
+requires cURL, already installed by all hosted PHP owners, and performs no
+external network requests or real installation writes.
+
+The 2026-10-28 read-only provider observation for develop `9cb0125e` received
+HTTP 200 for a source ZIP Range request. Its complete 16,485,474-byte response
+took about 2.23 seconds on that connection; a separately capped two-second
+request ended with 11,182,369 bytes. The published `v_0.144.14/production.zip`
+returned HTTP 206 and exactly 1,024 requested bytes. These are observations of
+one connection, not hosting performance guarantees. Real slow-host acceptance
+must verify the old-client first hop and published-asset continuation on an
+owned staging installation; the new downloader cannot run before it is
+installed.
+
 The recovery fixture overlays the real declared updater file set in its owned
 installation, retains extra local PHP and old backup bytes, simulates a legacy
 active/gated job, and completes the new manual FTP operation through the real
@@ -4839,7 +5015,9 @@ The retained opt-in publisher verifier still rejects corrupt bytes when called
 directly. Job-driven publisher/FTP sweeps are disabled until explicitly enabled;
 fixtures assert absent sweep cursors and no diagnostic warning events.
 An ordinary background update with mismatched publisher hashes reaches activation
-under a held shared reader. Its real gate refuses an independent new reader with
+from a real flat production ZIP with a mandatory raw archive digest, through
+actual extraction and package validation, under a held shared reader. Its real
+gate refuses an independent new reader with
 503 before another lease is taken. After the old reader releases, the actual
 activation/migration/finalization pipeline completes and removes the gate.
 Job creation additionally retains its configured session name with no active
@@ -5283,6 +5461,16 @@ behavior, same-page links, shared Theme/Settings panel registration, and catalog
 key/placeholder parity.
 
 Manual Admin regression:
+
+`tests/theme_language_preferences_test.php` exercises the real Theme dispatcher
+and translation services against disposable settings/session state, including
+authentication/CSRF refusals, canonical values and unrelated draft isolation.
+The Language rendering/browser fixtures also preserve scoped preference field
+ownership, SVG flag choices, switches, native fallback and URL-backed subtab
+state. The enhanced phase mocks only preference POSTs: canonical success,
+validation refusal, pending exclusion and a lost response after persistence must
+not replay another Theme draft. Real installation visual checks are read-only;
+use disposable fixtures for preference writes.
 
 1. Open Theme > Language and confirm the viewer-language panel appears beside
    the Admin and public default selectors with all four languages selected on an
@@ -6656,7 +6844,40 @@ retain their GUI/runtime dependency preflight. These cases are registered
 through the central WinApp regression suite; local results do not attest a
 hosted GitHub Actions run.
 
+### Responsive Admin navigation coverage
+
+`admin_navigation_browser_test.mjs` is registered in the central `browser-map`
+suite. Its PHP fixture renders the real sidebar and the complete stylesheet list
+from `shared_layout_admin_stylesheet_files()`. Disposable Chromium scenarios
+cover expanded defaults, the icon rail and released content width, preference
+reload, denied storage, delegated replacement-sidebars, desktop/mobile state
+separation, preserved groups, 44px targets and current-page markers. The narrow
+panel must overlay content without moving it or overflowing the viewport.
+Expanded desktop and icon-rail journeys scroll the document to the final link,
+asserting its visible geometry and that the sidebar has neither internal overflow
+nor a separate scroll position.
+Escape, outside click, focus leaving navigation and hash-link activation verify
+dismissal and focus restoration. `legacy_upload_navigation_test.php` preserves
+capability filtering, Theme/Widgets selection and the scriptless grouped markup.
+
+Manual acceptance uses the authenticated installation on wide and narrow
+screens: inspect the production cascade, toggle/reload, visit another Admin
+route, scroll every mobile group, rotate the viewport and tab through the menu.
+Check a previously used browser, two tabs, two installations on one origin,
+blocked storage, JavaScript disabled, dark Theme tokens, forced colors and a
+screen reader on a physical touch device. Isolated browser evidence does not
+establish these live/device outcomes. Feature BASIC checks syntax and declaration
+docs only; the browser scenarios run with hosted FULL at integration.
+
 ### Compact Admin workspace coverage
+
+The dashboard browser fixture also covers schedule autosave with coupled
+checkbox/time/numeric fields, pending-form serialization, native validation,
+canonical summary reconciliation and uncertain-result reload locking. All
+writes use synthetic responses. BASIC does not execute this browser fixture;
+the hosted FULL browser owner supplies its qualification. Live Media and cache
+review covers available-width columns, expanded details and contextual help;
+real-device and forced-color review remain separate manual coverage.
 
 The central audit registers `tests/admin_settings_workspace_browser_test.mjs`
 and `tests/admin_dashboard_workspace_browser_test.mjs` with isolated fixtures.
@@ -7358,3 +7579,23 @@ The lightbox quick-tag race fixture waits for native `fullscreenchange` and
 committed layout before sending the fullscreen tagging key. Its strict popup
 viewport bounds remain unchanged; fullscreen ownership alone does not establish
 settled HUD geometry on the hosted Chromium runner.
+
+### Compact Appearance preference coverage
+
+`tests/theme_appearance_rendering_test.php` covers all five subsection controls,
+prepared factory metadata, native help and URL state hooks. The existing
+`theme_appearance` browser fixture retains its native form/preview/resizer matrix
+before an enhanced phase that mocks only scoped switch POSTs: canonical success,
+pending exclusion, authoritative refusal and response loss after persistence.
+It also checks full-ID history compatibility, unrelated draft preservation and
+narrow switch geometry. `tests/theme_appearance_switches_test.php` exercises the
+real Theme authentication/CSRF dispatcher and Appearance adapter with disposable
+storage and an observed layout delegation boundary. Existing layout-owner tests
+retain capability/revision coverage; the advanced-owner regression verifies the
+header's partial save and canonical defaults. Real installation visual checks
+use only navigation, contextual help and preview/layout controls; persistent
+preference writes belong to disposable hosted fixtures.
+Viewport changes use the captured native harness transport and await two
+rendering frames before checking the committed width and responsive layout.
+This lets native resize delivery and ResizeObserver state settle without
+relaxing separator visibility, disabled-state or overflow assertions.

@@ -91,6 +91,14 @@ namespace {
         return (string) ob_get_clean();
     }
 
+    $chrome = legacy_navigation_sidebar([]);
+    legacy_navigation_expect(
+        str_contains($chrome, 'aria-controls="admin-navigation-links"')
+            && str_contains($chrome, 'data-admin-navigation-toggle hidden')
+            && str_contains($chrome, 'id="admin-navigation-links"')
+            && str_contains($chrome, 'aria-labelledby="admin-menu-group-0"'),
+        'Progressive controls preserve grouped navigation without JavaScript',
+    );
     $routes = ['admin_upload', 'admin_upload_settings', 'admin_mobile_uploads'];
     $features = [
         'gallery_music' => true,
@@ -126,7 +134,7 @@ namespace {
         }
         legacy_navigation_expect(
             preg_match(
-                '~<a class="admin-menu-link" href="/\?page=admin_music"><svg class="admin-menu-icon"[^>]*>.*?</svg>Music Manager</a>~s',
+                '~<a class="admin-menu-link" href="/\?page=admin_music" title="Music Manager"><svg class="admin-menu-icon"[^>]*>.*?</svg><span class="admin-menu-label">Music Manager</span></a>~s',
                 $html,
             ) === 1,
             'Music Manager uses its compact music icon in the capability-enabled sidebar.',

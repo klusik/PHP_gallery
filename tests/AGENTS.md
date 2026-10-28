@@ -15,6 +15,8 @@ require a browser/database only when the behavior needs one.
 - Load the actual source owner before its first assertion. Keep shared source
   reads above all consumers, and import/fully qualify native exceptions inside
   PHP namespaces, including negative branches.
+  When expanding an isolated bootstrap, remove shims now supplied by a newly
+  loaded source owner. Keep replacements only at external test boundaries.
 - For migration callbacks, preload the old runtime owner before replacing its
   bytes, then execute the real callback with populated inputs. Include an
   undefined-call negative control, explicit PDO ownership, replay and SQL rollback;
@@ -24,6 +26,9 @@ require a browser/database only when the behavior needs one.
   Seed request-guard probes with each route's own valid base query. Compare
   semantic allowlists and exercise generated same-origin public URLs through
   the confined transport, retaining unknown/repeated-value rejection.
+- After a write, distinguish failed persistence from failed readback or a lost
+  reply: uncertainty does not imply rollback. When replacing page markup, update
+  route-probe markers and load every shared stylesheet in its browser fixture.
   Use resource-specific names for response bodies and retained original paths
   in long workflow fixtures; preserve later phases' owned values across loops.
 - When an owner exposes a filtered verified list, assert its actual
@@ -69,6 +74,9 @@ require a browser/database only when the behavior needs one.
   connectivity;
   await returned async timer callbacks before asserting their terminal phase,
   including across VM realms, rather than guessing a fixed microtask count.
+  For repeated browser API calls, compare counters with the current phase's
+  snapshot and await its own deferred resolver; an earlier success does not
+  establish readiness of a newly opened control.
   Await the released write's expected revision before owner teardown. Serve the
   coordinator's visible URL with the real method/envelope and owner generation.
   Capture layout immediately before each operation; preserve exact revision,
@@ -107,6 +115,17 @@ After a production media swap, query the currently owned image node again before
 asserting decode or geometry. Keep identity/source assertions: a detached
 initial
 placeholder cannot establish the state of its decoded replacement.
+When a load listener owns final image geometry, observe completion of that event
+before checking bounds. Image complete/naturalWidth can precede the queued load
+event; preserve strict geometry assertions and report actual bounds on failure.
+For a lazily mounted overlay, open it before querying its image and register the
+load observer synchronously before yielding the opening task.
+Passive browser observations can cross a fixture reload. Admit a lost execution
+context only after verifying the exact surviving page target and loopback origin;
+retain the original deadline and terminal result requirement. Never replay
+mutating input or suppress application exceptions and unrelated protocol errors.
+An omitted target URL needs matching committed main-frame URL and security
+origin; empty or malformed URLs alone do not establish fixture ownership.
 When a counter announces navigation intent before media commit, await the target
 image identity and completed decode before asserting its final geometry.
 

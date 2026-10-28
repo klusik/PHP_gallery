@@ -80,8 +80,8 @@ return [
     'admin_telemetry' => [
         'response_kind' => 'html',
         'response_markers' => [
-            'class="admin-telemetry-page"',
-            'telemetry-privacy-note',
+            'data-telemetry-workspace',
+            'data-telemetry-public-status',
         ],
         'route' => 'admin_telemetry',
         'request_uri' => '/?page=admin_telemetry',

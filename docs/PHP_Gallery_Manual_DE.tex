@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.144.14}
-\newcommand{\manualdate}{26.~Oktober~2026}
+\newcommand{\version}{0.145}
+\newcommand{\manualdate}{28.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1746,6 +1746,29 @@ Mobile Aktionen aktualisieren ihren eigenen Bereich. Kopieren Sie ein neu ausgeg
 \subsubsection{Darstellung, Sprache und eigene Stylesheets}
 Darstellung verbindet gruppierte Felder mit einer Live-Vorschau und einem begrenzten Maus-/Tastaturteiler auf breiten Bildschirmen. Seine Breite ist eine lokale Browserpräferenz. Website-Bilder gruppiert Branding/Hintergründe; Layout trennt Verknüpfungen, Raster, Karten und Viewer-Vorgaben. Sprache bietet Einstellungen, Design, Editor und Diagnose. Die Designvorschau verwendet die angebotenen Sprachen und die öffentliche Vorgabe desselben Formulars und speichert selbst nichts.
 
+Alle fünf Darstellungsabschnitte verwenden kompakte durchscheinende Gruppen
+und benachbarte Fragezeichenhilfe. Gemeinsame Live-Vorschau und lokaler Teiler
+bleiben verfügbar. Neuladen und Zurück/Vorwärts erhalten den aktiven Abschnitt,
+auch bei bisherigen Direktlinks. Schalter für GPS-Pin, Pin-Hintergrund, alle
+Tags, Tag-Bildlauf und transparenten Kopfbereich speichern sofort und einzeln;
+Tooltips nennen die Werksvorgabe. Andere Farben, Texte, Auswahlen und Zahlen
+bleiben Entwürfe bis \ui{Design speichern}. Eine unbestätigte oder abgelehnte
+Speicherung sperrt den Schalter und die erneute Gesamtformularübermittlung bis
+zum passiven Neuladen, ohne automatische Wiederholung. Ohne JavaScript bleibt
+das normale Formular verfügbar.
+
+Die Sprachabschnitte verwenden kompakte Gruppen, Schalter und kontextbezogene
+Fragezeichenhilfe. Adminsprache, öffentliche Vorgabe und angebotene Sprachen
+werden sofort und unabhängig gespeichert, ohne andere Designentwürfe zu senden.
+Nach einem Adminsprachwechsel aktualisiert \ui{Oberfläche neu laden} die Texte.
+Eine unbestätigte Speicherung sperrt ihre Gruppe und die erneute Übermittlung
+des Gesamtformulars bis zum Neuladen; sie wird nicht automatisch wiederholt.
+Alle Sprachauswahlen zeigen mitgelieferte Flaggen. Der aktive Abschnitt bleibt
+beim Neuladen und bei Zurück/Vorwärts über die Seitenadresse erhalten.
+Das Umschalterdesign bleibt bis \ui{Design speichern} ein Entwurf; JSON, Import
+und Diagnose behalten eigene ausdrückliche Aktionen. Ohne JavaScript bleibt
+das normale Absenden des Formulars möglich.
+
 Lassen Sie die Ersatzauswahl leer, um das installierte CSS zu behalten. Wählen Sie ausdrücklich eine Vorlage oder laden Sie eine gültige CSS-Datei hoch; der Upload hat Vorrang. Ersetzen/Zurücksetzen prüft zuerst den Speicher und stellt bei fehlgeschlagener Markerspeicherung die vorherige Datei wieder her. Bei unvollständiger Wiederherstellung behalten Sie die verfügbare Kopie und folgen dem sicheren Hinweis. Deployment erhält die installationsspezifische \filepath{public/assets/custom.css}.
 
 \subsubsection{Kartenorientierung und Betriebszustand}
@@ -1923,6 +1946,27 @@ Gelingt die Speicherung, lässt sich aber die aktualisierte Ansicht innerhalb de
 
 Browsergestütztes Erstellen/Hochladen besitzt zusätzliche Schutzmaßnahmen. Die Auswahl der Browserverarbeitung ist eine ausdrückliche Ausführungsentscheidung: Eine fehlende Browserfähigkeit oder fehlgeschlagene Arbeitsprozessvorbereitung stoppt vor der Speicherung, statt still auf serverseitige Vorschaubilderzeugung umzuschalten. PHP prüft vor der Speicherung der Originale, ob jede erforderliche vorbereitete Vorschaubildgröße und jedes erforderliche Format vorliegt. Sobald die browsergestützte Speicherung beginnt, werden Ersatzmetadaten für die direkte Seite niemals als Erlaubnis zur Wiederholung der klassischen Erstellungs-/Uploadanfrage interpretiert; dies verhindert doppelte Galerien und Fotos. Die konfigurierte ZIP-Chargengröße ist ein weiches Packziel: Ein unteilbares Fotopaket oberhalb dieses Ziels kann allein in einer Charge übertragen werden; die wirksame PHP-Uploadgrenze bleibt jedoch eine harte Grenze. Die Windows-Uploadautomatisierung kann die vollständige JPEG+WebP-Kompatibilitätsmatrix senden; ein moderner reiner WebP-Server akzeptiert die erforderlichen WebP-Varianten und überspringt gültige zusätzliche JPEG-Varianten sicher. Fehlerhafte, unpassende, unbekannt große oder nicht unterstützte Vorschaubilddaten bleiben harte Fehler.
 
+\subsection{Admin-Navigation}
+
+Auf dem Desktop startet das Admin-Menü ausgeklappt mit den bestehenden
+Funktionsgruppen und Symbolen. Die Doppelpfeil-Schaltfläche oben klappt es zu
+einer Symbolleiste zusammen oder wieder aus. Diese Auswahl bleibt im Browser
+für diese Installation gespeichert; sie wird weder in der Datenbank abgelegt
+noch mit anderen Browsern geteilt. Gelöschter Browserspeicher stellt die
+ausgeklappte Vorgabe wieder her. Bei blockiertem Speicher gilt die Auswahl nur
+für die aktuelle Seite. Ausgeklapptes Menü und Symbolleiste scrollen mit der
+Seite, ohne eigene Bildlaufleiste. Die letzten Kontoaktionen erreichen Sie durch
+Scrollen der Seite.
+
+Auf schmalen Bildschirmen öffnet eine beschriftete Hamburger-Schaltfläche
+dieselben Gruppen direkt darunter. Das Menü überlagert den Inhalt und scrollt
+unabhängig, sodass kein Scrollen durch die gesamte Navigation nötig ist.
+Schaltfläche, Escape, ein Klick außerhalb oder die Auswahl eines Ziels schließen
+das Menü. Escape setzt den Fokus auf die Schaltfläche zurück; auch ein Fokus
+außerhalb schließt es. Eine neue Seite startet mit geschlossenem mobilem Menü.
+Die Rückkehr zum Desktop stellt dessen getrennte Auswahl wieder her. Ohne
+JavaScript bleiben alle gruppierten Links sichtbar.
+
 \subsection{Zentrale Einstellungen}
 \index{e00084@Einstellungen!z00275@Zentrale}
 
@@ -1966,7 +2010,31 @@ Nach erfolgreichem Speichern öffnet der Browser denselben Einstellungsabschnitt
 \index{s00212@Schlagwörter!a00005@Administration}
 \index{s00212@Schlagwörter!m00170@Metadaten}
 
-\ui{Administration > Schlagwörter bearbeiten} ist der zentrale Editor für das wiederverwendbare Schlagwortvokabular. Die Liste kann nach Gesamtnutzung oder alphabetisch sortiert werden und zeigt für jedes Schlagwort die aktuelle gemeinsame Nutzungszahl in Galerien und Fotos. Die Auswahl eines Schlagworts zeigt seinen kanonischen kleingeschriebenen Namen, den Slug seiner sprechenden öffentlichen URL und eine optionale öffentliche Beschreibung für die Schlagwort-Zielseite. Dieselbe Ansicht führt aktuell zugeordnete Galerien und Fotos auf, mit Links zurück zum passenden öffentlichen oder Fotoeditorkontext.
+Der Editor verwendet kompakte durchscheinende Gruppen für Katalog,
+ausgewähltes Schlagwort und Verwendungsnachweise. Auf breiten Bildschirmen
+stehen Gruppen nebeneinander, auf schmalen untereinander. Der Pfeil neben der
+Katalogüberschrift springt zum Editor unter der festen Navigation. Filter und Sortierung wechseln sofort über das native GET-Formular.
+Anwenden bleibt ohne JavaScript verfügbar. Fragezeichen neben Feldern
+erklären deren Bedeutung direkt; Escape oder ein Klick außerhalb schließt die
+Hilfe. Prüfen Sie Inhaltsänderungen und wählen Sie \ui{Schlagwort speichern}.
+Musikschlagwörter behalten interne Kennungen und Liedverweise ohne Aktionen
+für öffentliche Schlagwortseiten.
+
+\ui{Bilder} und \ui{Galerien} filtern direkte Zuweisungen desselben visuellen
+Schlagwortverzeichnisses. Ein gemeinsames Schlagwort kann in beiden Filtern
+stehen; Änderungen gelten weiterhin für alle Zuweisungen. Zähler und
+Verwendungssortierung folgen dem gewählten Bereich. \ui{Alle Schlagwörter}
+enthält auch nicht zugewiesene Einträge. \ui{Dokumente} bleibt als Vorbereitung
+auf künftige PDF-Schlagwörter deaktiviert; direkte Aufrufe erklären, dass die
+Dokumentbearbeitung noch nicht verfügbar ist.
+
+Der zentrale Schlagworteditor verwaltet das gemeinsame Verzeichnis. Die
+Auswahl zeigt den kanonischen Namen in Kleinbuchstaben, eine stabile Kennung
+und die Beschreibung. Bei visuellen Schlagwörtern bildet die Kennung die
+öffentliche URL; die Beschreibung kann dort erscheinen. Musikschlagwörter
+verwenden interne Metadaten. Verwendungsnachweise verlinken auf die zugehörige
+öffentliche Galerie, den Foto- oder Liededitor. Katalogzähler folgen dem
+gewählten Verwendungsfilter.
 
 Das Umbenennen eines Schlagworts oder Ändern seines Slugs aktualisiert den gemeinsamen Schlagwortdatensatz, sodass jede Galerie-/Fotozuordnung weiterhin dasselbe wiederverwendbare Schlagwort referenziert. Namen und Slugs werden beim Speichern gemäß der sicheren Schlagwortkonvention normalisiert; ein doppelter Slug wird abgelehnt. Das Löschen eines Schlagworts ist anders: Die Anwendung löst es transaktional von Galerien und Fotos und entfernt anschließend den Schlagwortdatensatz. Verwenden Sie \ui{Öffentliches Schlagwort anzeigen}, um die Zielseite zu prüfen, und \ui{Schlagwortanzeige konfigurieren}, um die Designsteuerungen für Schlagwortseiten/-karten und Hero-Schlagwortpräsentation zu öffnen.
 
@@ -1974,7 +2042,68 @@ Das Umbenennen eines Schlagworts oder Ändern seines Slugs aktualisiert den geme
 \index{f00114@Funktionsschalter}
 \index{f00112@Funktionen!a00005@Administration}
 
-\ui{Erscheinungsbild > Funktionen} bietet globale Schalter für optionale Anwendungsteile. Registrierte Funktionen sind standardmäßig aktiviert, damit eine Aktualisierung nicht still Verhalten entfernt, das eine vorhandene Installation bereits nutzt. Ein Administrator kann einzelne Besucherfunktionen, Karten- und Flugsimulationswerkzeuge, KI-/Uploadintegrationen oder spezielle Administrationswerkzeuge deaktivieren, wenn eine einfachere Installation gewünscht ist.
+Die spezialisierten Ziele für öffentliche Live-Suche, Lightbox-Modi, intelligente
+Galerien, Galerie-PDFs und Galeriemusik verwenden kompakte, durchscheinende
+Bedienelemente. Die zentralen Einstellungen teilen diese Darstellung über alle
+Kategorien; der Editor intelligenter Galerien behält sie auch im Seitenpanel.
+Optionsschalter bleiben nativ per Tastatur bedienbar und bieten auf schmalen
+Bildschirmen größere Tippflächen. Fragezeichen in den Einstellungen öffnen
+Hilfe neben dem Bedienelement; Escape oder ein Klick außerhalb schließt sie.
+Jede Spezialseite behält ihren Speichervorgang; Katalogzeilen werden weiterhin
+mit gewöhnlichen Auswahlkästchen markiert.
+
+Der Dashboard-Bereich \ui{Wartung > Inhalt und Anzeige} nutzt eine dichtere
+Darstellung: Eine Werkzeugleiste und kompakte Gruppen fließen je nach
+Breite in eine bis drei Spalten, jede mit eigener Höhe. Die Gruppen übernehmen
+die Funktionsansicht: dezente Konturen, durchscheinende Flächen, getönte Köpfe
+mit linkem Akzent und dünne Zeilentrenner. Fragezeichen enthalten
+die Erklärungen; Zähler und Warnungen bleiben sichtbar. Schalter speichern
+sofort ohne Bestätigung oder Speichern-Knopf; Tooltips nennen den Werkswert.
+Speichern, Erfolg und Fehler bleiben sichtbar. Ein unbestätigtes Ergebnis
+erfordert erneutes Laden des Zustands statt einer Schreibwiederholung.
+Ohne JavaScript bleiben native Hilfe und die bisherigen Speichern/POST-Formulare.
+
+Dieses Muster ist der Standard für neue oder überarbeitete Admin-Einstellungen;
+\path{docs/ADMIN_DESIGN.md} legt die Einzelheiten fest. Es verwendet sofort
+speichernde Schalter, kompakte Gruppen mit Köpfen und eine bis drei Spalten
+mit unabhängigen Gruppenhöhen. Die Referenz nutzt eine bevorzugte Spaltenbreite
+von 300 CSS-Pixeln, mindestens 38 Pixel hohe Köpfe und Schalterbahnen von
+26 mal 14 Pixeln; schmale oder berührungsgesteuerte Ansichten bieten mindestens
+44 Pixel hohe Bedienflächen. Hat ein Eintrag eine eigene Konfigurationsseite,
+führen sein anklickbarer Name und der Einstellungspfeil zum selben Ziel.
+Name, Schalter und Fragezeichen bleiben getrennte Navigation, Einstellung und
+Hilfe. Das Muster wird bei der Überarbeitung der jeweiligen Oberfläche
+angewendet; ältere Formulare können noch auf die Umstellung warten.
+
+\ui{Erscheinungsbild > Funktionen} zeigt optionale Funktionen in kompakten,
+gruppierten Tabellen. Ganze Gruppen fließen je nach verfügbarer Breite des
+Arbeitsbereichs in eine, zwei oder drei Spalten, von oben nach unten und dann
+in der nächsten Spalte. Jede Gruppe behält ihre eigene Höhe und bleibt
+ungeteilt; schmale Seiten verwenden eine Spalte.
+Schalter stehen direkt vor dem Namen und speichern sofort,
+ohne weitere Bestätigung oder Speichern-Aktion. Der getönte Gruppenkopf schaltet
+alle bearbeitbaren Funktionen dieser Gruppe; ein gemischter Zustand kennzeichnet
+teilweise aktivierte Gruppen. Verlinkte Namen öffnen vorhandene spezielle
+Einstellungen. Das schlichte \ui{?} zeigt Beschreibung, konfigurierten und
+wirksamen Status, Abhängigkeiten und technische Details; Escape oder ein Klick
+außerhalb schließt die Hilfe.
+
+Jede Zeile zeigt den Werkswert und eine Abweichung der gespeicherten Wahl.
+Maßgeblich ist die ausdrücklich erklärte Vorgabe einer Neuinstallation, sonst
+die Registry-Vorgabe; sie kann von der Upgrade-Kompatibilitätsvorgabe abweichen.
+\ui{Werkseinstellungen wiederherstellen} oberhalb der Tabelle speichert diese
+Werte sofort für alle bearbeitbaren Schalter. Funktionsdaten und spezielle
+Einstellungen bleiben erhalten. Ein eingeschalteter Schalter kann wegen einer
+deaktivierten Abhängigkeit unwirksam sein; deren Aktivierung stellt die
+Verfügbarkeit wieder her.
+
+Speicherfortschritt, Erfolg und Fehler bleiben sichtbar. Eine Gruppe kann
+teilweise gespeichert werden, wenn ein späterer Domänen-Setter ablehnt; die
+Tabelle zeigt danach den tatsächlich gespeicherten Status. Bei verlorener
+Antwort liest \ui{Status laden} den Server vor weiteren Änderungen und
+wiederholt den unsicheren Schreibvorgang nicht. Ohne JavaScript behält das
+vollständige Formular eine Speichern-Aktion; Werksrücksetzung verwendet einen
+normalen authentifizierten POST.
 
 Eine deaktivierte Funktion wird aus der normalen Navigation ausgeblendet; ihre geschützten Routen verweigern den Funktionsablauf. Das Ausschalten eines Schalters löscht weder Funktionscode noch Fotos, Datenbankdatensätze, Zugangsdaten oder Konfiguration. Erneutes Aktivieren stellt daher die normalen Einstiegspunkte unter denselben Schema-, Zugriffs- und Konfigurationsprüfungen wie zuvor wieder her. Schaltbare Funktionen umfassen beispielsweise öffentliche Suche, Lightbox-Browsingmodi, Picture Manager, Inline-Administration auf öffentlichen Seiten, Smart Galleries, Abstimmung, Picture Game, Downloads, Galerie- und Flugkarten, Navigationsdaten, SimBrief, OpenAI-Unterstützung, lokale KI-Metadaten, API-Uploads, mobiles WebDAV, Galeriemigration, Medienumbenenner und anonyme Telemetrie.
 
@@ -2398,10 +2527,26 @@ Die Auswahl von \ui{Foto öffnen} in einer Galeriekartenmarkierung öffnet diese
 
 Eine Galerie mit gespeicherter Flugroute kann ihre Karte bereits vor dem ersten Fotoupload öffnen, auch auf Seiten ohne Lightbox-Markup. Die Karte umfasst alle gespeicherten Routenpunkte und behält die normalen Zurücksetzen-Steuerelemente; Routenpunkte werden nicht als Fotomarker behandelt. Ohne gespeicherte Koordinaten erscheint die normale Leerkartenmeldung. Galeriezugriff und wirksame Karteneinstellungen gelten weiter; die Karte lädt auf Anforderung.
 
+Das Verlassen der Foto-Vollbildansicht mit \codeword{F}, ihrer Schaltfläche
+oder dem vom Browser behandelten \codeword{Escape} schließt die geteilte Karte
+und stellt die normale Lightbox mit demselben Foto und Zoom wieder her.
+Ausstehendes Laden der Karte kann den Bereich danach nicht erneut öffnen.
+Im CSS-Vollbild führt einmaliges \codeword{Escape} denselben Übergang aus.
+\codeword{M} schaltet die Karte im Vollbild unabhängig um; ein weiteres
+\codeword{Escape} schließt die normale Lightbox.
+
 \subsection{Flugkarten und Navigationsdaten}
 \index{s00224@SimBrief}
 \index{f00104@Flugkarten}
 \index{n00176@Navigationsdaten}
+
+Administration > Wartung > Karten und Navigationsdaten verwendet dieselben
+kompakten durchscheinenden Gruppen wie Funktionen sowie Inhalt und Anzeige.
+Name und nachfolgender Pfeil öffnen dieselbe Navigationsdatenverwaltung.
+Anzahlen und Zeitpunkt des letzten Imports bleiben sichtbar; Fragezeichenhilfe
+und Importdetails enthalten längere Erklärungen. Die Aktualisierung bleibt eine
+ausdrückliche Aktion mit Fortschritt auf der Seite und normalem Formular ohne
+JavaScript.
 
 Flugbezogene Sammlungen können die optionale SimBrief-Integration verwenden, um den neuesten operationellen Flugplan für eine Pilot ID oder einen Pilotennamen abzurufen. Der kompakte Editor akzeptiert eine sichtbare Kennung: Nur Ziffern wählen den Pilot-ID-Weg; anderer Text den Pilotennamenweg. Vorhandene Integrationen mit getrennten Feldern bleiben kompatibel; bei beiden Angaben wird die Pilot ID bevorzugt. Der Editor erstellt einen bearbeitbaren Markdown-Beschreibungs- und Routenentwurf; OFP und verfügbare Routenkoordinaten werden erst nach dem Speichern der Galerie angehängt. Eine fehlgeschlagene SimBrief-Anfrage lässt das normale Beschreibungsfeld und den manuellen Routeneditor verfügbar. Der Entwurf vor der Erstellung ist privat und vorübergehend, wie im Abschnitt zur Galerieerstellung beschrieben.
 
@@ -2587,6 +2732,18 @@ Die Option \ui{Angemeldet bleiben} verwendet ein gehashtes Browsertoken, damit e
 \index{s00238@Systemzustand!d00063@Datenbankbereitschaft}
 \index{d00062@Datenbank!b00032@Bereitschaft}
 \index{a00001@503-Antwort}
+
+\ui{Systemzustand} gruppiert Prüfungen nach Laufzeit und Wiederherstellung,
+Zugriff und Anmeldung, Galerien und Dateien, Karten und Routen, öffentlichen
+Funktionen und Berichten sowie Werkzeugen. Ein Häkchen bedeutet gefundenen
+benötigten Speicher; ein Strich eine in der Konfiguration deaktivierte
+Integration. Beides bestätigt keinen vollständigen Ablauf oder externen
+API-Zugriff. Fragezeichen erklären den Prüfzweck. Probleme stehen in ihrer
+Gruppe zuerst mit sichtbaren Auswirkungen und Hinweisen; \ui{Details} enthält
+sichere Datenbankkennungen und Anfragereferenzen. Das Öffnen repariert keine
+Daten und startet keine Migrationen. Die Betrachterdiagnose speichert die Wahl
+direkt mit nativem Speichern als Rückfall. Ungewisse Schreibvorgänge sperren
+bis zum rein lesenden Neuladen.
 
 Funktionen, die vom Datenbankschema abhängen, verwenden einen gemeinsamen Bereitschaftsvertrag. Entscheidend ist der Unterschied zwischen einem erfolgreich geprüften und als älter erkannten Schema und einem Schema, das derzeit nicht geprüft werden kann.
 
@@ -2971,6 +3128,16 @@ Laden Sie nach der Reparatur \ui{Systemzustand} erneut und testen Sie die betrof
 \index{g00117@Galerie!w00274@Wiederherstellung}
 \index{p00183@Papierkorb!a00024@automatische Löschung}
 
+Der Papierkorb verwendet kompakte durchscheinende Gruppen mit sichtbaren
+Einstellungsschaltern und kontextueller Fragezeichenhilfe. Mit JavaScript werden
+Änderungen sofort zusammen mit Aufbewahrungsfrist und Chargengröße gespeichert.
+Währenddessen sind die Papierkorbsteuerungen gesperrt; bestätigter Zustand und
+Fokus werden direkt im Bereich wiederhergestellt. Ein abgelehntes oder
+unbestätigtes Ergebnis verlangt ein passives Neuladen ohne erneuten
+Schreibversuch. Ohne JavaScript bleibt Speichern verfügbar. Schmale Ansichten
+behalten beschriftete Metadaten und einzelne Aktionen ohne horizontales Scrollen.
+Wiederherstellung, endgültiges Löschen und Leeren behalten eigene Bestätigungen.
+
 Öffnen Sie \ui{Wartung > Papierkorb}, um wiederherstellbare Galerielöschungen zu prüfen. Jede aktive Zeile zeigt ursprünglichen Pfad, Löschzeitpunkt, Galerie-/Fotoanzahlen, gespeicherte Größe, Lebenszyklusstatus und bei aktiver Richtlinie die automatische Löschfrist. Problemeinträge bleiben zur Prüfung sichtbar; PHP Gallery nimmt bei unklarem Dateisystem-/Datenbankzustand nicht an, dass eine Vernichtung sicher ist.
 
 Der Papierkorbhauptschalter steuert zukünftige Galerielöschungen und ist standardmäßig aktiviert. Sein Ausschalten verbirgt oder löscht keine vorhandenen Einträge: Wiederherstellung und manuelle endgültige Löschung bleiben verfügbar. Automatische Löschung ist eine separate ausdrückliche Option und standardmäßig aus. Ihre Aufbewahrung beträgt standardmäßig 30~Tage, ihre Wartungscharge ist begrenzt, und automatische Löschung pausiert bei deaktiviertem Papierkorb. Die Aktivierung nach einer Pause gibt aktuellen wiederherstellbaren Einträgen eine neue vollständige Aufbewahrungsfrist, bevor geplante Löschung beginnen darf.
@@ -3108,6 +3275,32 @@ Der fertige Bericht wird als Download zum Browser zurückgegeben und nicht als B
 \index{t00240@Telemetrie}
 \index{d00068@Datenschutz!t00240@Telemetrie}
 
+Der kompakte Arbeitsbereich trennt \ui{Übersicht},
+\ui{Erfassung und Datenschutz}, \ui{Verlauf und Wartung} und \ui{Berichte}.
+Die URL erhält den gewählten Tab beim Neuladen und im Browserverlauf.
+Jede Einstellung wird nach einer Änderung einzeln gespeichert; ohne
+JavaScript bleiben native Formulare mit ausdrücklichem Speichern verfügbar.
+Fragezeichen erklären Erfassung, Datenschutz, Grenzen und Standardwerte.
+Ein unbestätigter Speichervorgang sperrt nur sein Formular und bietet das
+Neuladen des gespeicherten Zustands ohne erneuten Schreibversuch an.
+Segmentierte HTML-Berichte öffnen sich in einem neuen Tab; Einstellungen und
+Protokolle sind separate Ziele. Zusammenfassung/Bereinigung bleibt eine
+ausdrückliche Aktion mit aufklappbarem technischem Ergebnis.
+Berichtslinks zeigen das eigenständige HTML-Dokument direkt im neuen Tab,
+der zum Lesen geöffnet bleibt.
+
+In der Übersicht öffnen Fotonamen das öffentliche Fotodetail und Galerienamen
+die betreffende Galerie. Die normalen Zugriffskontrollen gelten weiterhin.
+Sechs kleine Tagesbalkendiagramme ergänzen die Summen, jedes mit eigener Skala.
+Beim Darüberfahren erscheinen Datum und genauer Wert; \ui{Tagesdetails}
+enthält dieselben Werte in einer per Tastatur zugänglichen Tabelle. Fehlende
+oder gelöschte Tage bleiben Lücken. Aufbewahrung kann Summen ohne Tagesdetails
+hinterlassen. Bilddaten umfassen Fotos und Vorschaubilder ohne Downloads.
+Nicht überprüfbare öffentliche Pfade lassen die Namen ohne Links lesbar.
+Das Fotosymbol nutzt die Vorschau des Galerie-Bildeditors: Zeigerkontakt oder
+Tastaturfokus zeigt sie, Klicken fixiert sie und Escape schließt sie.
+Das begrenzte Vorschaubild wird erst beim Öffnen geladen.
+
 Der optionale Bereich \ui{Telemetrie} erfasst datenschutzkontrollierte Betriebsmessungen und zeigt sie als Administrationsberichte. Steuerungen umfassen Telemetriehauptschalter, öffentliche Nutzungsmessung, Leistung, Cache- und Datenbankereignisse, Berücksichtigung von Do Not Track, Ausschluss von Administratoren, maximale gezählte Fotobetrachtungsdauer und Aufbewahrung roher, stündlicher und täglicher Daten. Berichte enthalten bei aktivierten Kategorien beispielsweise anonyme Sitzungen, Seitenaufrufe, Fotoöffnungen und begrenzte Betrachtungszeit, Clientfehler, gemessene Medienbytes, Browserverteilung und Cache-/Datenbankaktivität.
 
 Das Telemetriesystem ist so ausgelegt, dass es keine unverarbeiteten IP-Adressen, Browser-User-Agent-Zeichenfolgen, Referrer-URLs, Namen, E-Mail-Adressen, Kontokennungen, Anfrageinhalte oder genauen Besucherorte speichert. Exporte enthalten aggregierte anonyme Telemetrie und Sitzungshashes statt ursprünglicher Besucherkennungen. Wartung aggregiert und bereinigt Telemetrie gemäß konfigurierter Aufbewahrungsrichtlinie; die Administrationsansicht kann einen eigenständigen HTML-Bericht zur Offline-Prüfung exportieren. Prüfen Sie Datenschutzsteuerungen vor Aktivierung der Erfassung auf einer öffentlichen Website.
@@ -3155,6 +3348,17 @@ Der administrative Ablauf \ui{Integrität} prüft integritätsverwaltete Kerndat
 Bei verfügbarer Entwicklungsdiagnose kann ein angemeldeter Administrator für die aktuelle Galerie einen \ui{Benchmark zum Laden der öffentlichen Galerie} starten. Der Browser lädt die Galerie mehrfach in einem verborgenen Frame desselben Ursprungs mit anonymer Vorschau, kombiniert PHP-Darstellungszähler mit Browsernavigationstiming und bietet anschließend das Benchmarkprotokoll als JSON an. Verwenden Sie zum Vergleich zweier Änderungen dieselbe Galerie, denselben Präsentationsmodus und dieselben Netzwerk-/Cachebedingungen; der Benchmark ist als Vorher-/Nachhermessung nützlicher denn als universelle Punktzahl.
 
 \subsection{Geplante Websitewartung}
+
+Medien und Cache verwendet dieselben kompakten durchscheinenden Gruppen wie
+Funktionen sowie Inhalt und Anzeige. Vollständige Gruppen fließen von oben
+nach unten in einer bis drei Spalten mit unabhängigen Höhen. Fragezeichen
+öffnen kontextuelle Hilfe; Prüfstatus und Gründe für nicht verfügbare Aktionen
+bleiben sichtbar. Zeitplanänderungen werden sofort zusammen mit Zeit- und
+Zahlenwerten gespeichert. Währenddessen ist nur das betroffene Formular
+gesperrt. Ein unbestätigtes Ergebnis behält die Absicht bei und bietet ein
+Neuladen ohne erneuten Schreibversuch. Ohne JavaScript bleibt Speichern
+verfügbar. Vorschaubilderzeugung, Bereinigung, Rücksetzung und Tokenwechsel
+bleiben ausdrückliche Aufgaben mit ihren bisherigen Schutzmaßnahmen.
 
 Unter Administration > Wartung > Medien und Cache startet \emph{Updater-Cache
 jetzt bereinigen} einen begrenzten Schritt direkt auf der Seite. Entfernt wird
@@ -3403,6 +3607,20 @@ Vorübergehende Download- oder Hostingfehler können erneut versucht werden. Ein
 
 Stable-Erkennung und Paketverarbeitung sind getrennte begrenzte Vorgänge. Eine Erkennungsanfrage kann einen dauerhaften Hintergrundauftrag erstellen; eine spätere sichere Anfrage oder der CLI-Läufer führt einen kurzen Teilabschnitt über Download, Archivprüfung, Entpacken, Manifestprüfung, Vorbereitung, Rücknahmesicherung, Aktivierung, Migrationen und Bereinigung aus. Range-Anfragen können unterbrochene Downloads fortsetzen, Arbeitsprozesssperren verhindern paralleles Fortschreiten, und eine veraltete Sperre kann nach Ablauf ihres Besitzers wiederhergestellt werden. Planen Sie auf wenig frequentiertem Shared Hosting \codeword{php scripts/application_update.php} per Cron, beispielsweise alle fünf Minuten. Jeder Aufruf führt begrenzte Erkennung aus oder setzt vorhandene Hintergrundarbeit fort; die Korrektheit hängt nicht von \codeword{set_time_limit()} oder \codeword{ignore_user_abort()} ab.
 
+Ignoriert der Quellserver Range, wechseln drei unvollständige Neustarts
+der gesamten Antwort im selben Auftrag zum veröffentlichten
+\filepath{production.zip}. Getrennte begrenzte Metadatenabfragen müssen
+bestätigen, dass das Versions-Tag auf den ursprünglichen vollständigen Commit
+zeigt und der Anhang seine kanonische URL, Bytezahl und SHA-256 besitzt.
+Der Archiv-Hash wird vor dem Entpacken auch bei ausgeschalteter optionaler
+Einzeldateiprüfung geprüft. Flache Produktionsarchive und umschlossene
+Quellarchive verwenden dieselben weiteren Installationsschritte.
+Fehlende oder unpassende Anhänge behalten die endliche Fehlerbehandlung;
+Zeitlimits werden nicht erhöht. Ein älterer installierter Updater kann diese
+Reparatur erst nach deren Empfang verwenden. Prüfen Sie den ersten Übergang
+auf einer Testkopie oder übertragen Sie die vollständige kompatible Version
+manuell und verwenden Sie \ui{FTP-Aktualisierung abschließen}.
+
 Aktuelle Veröffentlichungen gleichen außerdem die kleine Menge anwendungseigener Serverrichtliniendateien während Vorbereitung und Aktivierung ab. Das schützt Installationen, deren älteres Aktualisierungssystem eine Richtliniendatei übersprungen hat: Die validierte Veröffentlichungskopie wird verglichen und atomar bereitgestellt, Rücknahmemetadaten werden vor dem Austausch erweitert, und ein migrationsgestützter Initialisierungsweg kann einen bereits aktivierten älteren Baum reparieren. Der Abgleich ist auf bekannte Richtlinienpfade begrenzt und verändert weder Galeriemedien noch Benutzerkonfiguration.
 
 Vor Aktivierung kann ein Administrator einen wiederherstellbaren Auftrag abbrechen oder erneut versuchen. Danach kann die administrative Wiederherstellungsaktion verwaltete Anwendungsdateien aus der gespeicherten Rücknahmemomentaufnahme wiederherstellen; Dateirücknahme kehrt Datenbankmigrationen jedoch nicht um. Stable-Wiederherstellung, saubere Neuinstallation und Beta-Installation bleiben fortsetzbare Aufträge mit eigener Paketprüfung. Der eigenständige Notfallweg \filepath{reset.php} ist ein getrenntes Wiederherstellungswerkzeug zur Rückkehr auf den Stable-Zweig, wenn die normale Administrationsroute nicht nutzbar ist; er erfordert weiterhin dieselbe sorgfältige Sicherungs- und Integritätsprüfung.
@@ -3565,6 +3783,14 @@ Der generierte Modulplan erklärt gemeinsame Abhängigkeiten und eine kanonische
 Gewöhnliche Anfragen gehen über \filepath{public/index.php} ein; \filepath{index.php} im Repository-Stamm ist ein unterstützter Kompatibilitätseinstieg für andere Hostingstrukturen. Der öffentliche Einstieg lädt \filepath{app/early\_runtime.php} vor \filepath{app/bootstrap.php}; danach erreichen beide Strukturen dieselbe normale Anfragepipeline.
 
 Der kleine anfragelokale Kernel unter \filepath{app/runtime/} steuert den vorhandenen Lebenszyklus über Request, Router, RouteRegistry und ModuleLoader und ruft anschließend den prozeduralen Controller auf. Die kanonische Routen- und Sicherheitstabelle bleibt in \filepath{app/bootstrap/dispatch.php}. Ein geprüfter generierter Plan lädt logische Module für die gewählte Route; Produktionsanfragen scannen keine Quelldateien, kompilieren keine Abhängigkeiten und besitzen keinen Ersatzweg zum Laden der gesamten Anwendung. PHP~8.1 und bisheriges Shared Hosting reichen weiterhin aus, ohne Composer oder Node-Build. Ältere CLI-/Testverbraucher können \filepath{app/bootstrap\_full.php} für die vollständige prozedurale API verwenden.
+
+Gemeinsame Admin-Hilfe und die Anzeige der Werkseinstellungen gehören zum
+bestehenden \filepath{app/views/admin\_ui.php}; Maintenance-Abschnitte bleiben
+verzögert geladen. Theme verwendet die vollständige Galerie-Zugriffsrichtlinie,
+die Auswahl und Vorschau bereits benötigen; einzelne Speichervorgänge behalten
+kanonische Mutationsantworten. Diese Zuständigkeiten fügen weder logische
+Module noch Laufzeitdateien hinzu. Gehostete Vorbereitung und FULL prüfen die
+unveränderten Grenzen doppelter Dateizuständigkeit.
 
 Der Loader prüft den vollständigen Modulplan bei jeder Anfrage. Er prüft die
 kanonische Schicht-/Pfadreihenfolge in einem Durchlauf, jeden ausgewählten
@@ -3748,7 +3974,13 @@ verwenden das einheitliche Format.
 
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus. Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED. Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein lokale Qualifikation.
 
-Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge, erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität und~Paketprüfungen auf~Linux, Windows und~macOS. Alle erforderlichen Jobs und~das~Gate für~das~exakte SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder Entwicklungsänderung.
+Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge,
+erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität
+und~verbindliche Paketprüfungen auf~Linux und~Windows; macOS läuft separat
+als~informative Prüfung. Alle erforderlichen Jobs und~das~Gate für~das~exakte
+SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier
+PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder
+Entwicklungsänderung.
 
 Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
 in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für
@@ -3852,7 +4084,21 @@ Die Befehle dieses Abschnitts beschreiben gehostete Releases und den erhaltenen 
 
 Der~aktuelle Qualifikations- und~Release-Ablauf steht im~Abschnitt zur~Maintainer-Verifikation und~in~\filepath{RELEASE.md}.
 
-Erstellen Sie Produktionsordner oder ZIP-Dateien nur auf ausdrückliche Anforderung; die gehosteten Release-Artefakte verwenden dasselbe PHP-Werkzeug automatisch. Übergeben Sie den Kandidatenzeitpunkt mit \codeword{--timestamp} für deterministische Metadaten. Veraltete Manifeste und vorhandene Ausgaben werden abgelehnt; \filepath{scripts/release_files.php} prüft nur die Mitgliedschaft. Drei Betriebssystem-Paketverantwortliche prüfen das echte Werkzeug unabhängig von der Datenbankmatrix. Der ausschließlich auf main ausgeführte, gesperrte TinyTeX-Cache-Aufbau benötigt vor gemeinsamer Nutzung durch Release-Zweige eine geprüfte Installation. Eine reine CMS-Änderung benötigt keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und Bereitstellung benötigen ausdrückliche Erlaubnis. CI prüft PHP 8.1 als Kompatibilitätsuntergrenze und PHP 8.5 als neuesten Vertreter. Alle drei Datenbankvarianten verwenden PHP 8.5; historische Nachweise behalten ihre tatsächlichen Versionen.
+Erstellen Sie Produktionsordner oder ZIP-Dateien nur auf ausdrückliche
+Anforderung; die gehosteten Release-Artefakte verwenden dasselbe PHP-Werkzeug
+automatisch. Übergeben Sie den Kandidatenzeitpunkt mit \codeword{--timestamp}
+für deterministische Metadaten. Veraltete Manifeste und vorhandene Ausgaben
+werden abgelehnt; \filepath{scripts/release_files.php} prüft nur die
+Mitgliedschaft. Verbindliche Linux/Windows-Paketverantwortliche prüfen das~echte
+Werkzeug unabhängig von~der Datenbankmatrix; macOS wiederholt dieselbe Suite
+in~einem separaten informativen Lauf. Der ausschließlich auf main ausgeführte,
+gesperrte TinyTeX-Cache-Aufbau benötigt vor gemeinsamer Nutzung durch
+Release-Zweige eine geprüfte Installation. Eine reine CMS-Änderung benötigt
+keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und
+Bereitstellung benötigen ausdrückliche Erlaubnis. CI prüft PHP 8.1 als
+Kompatibilitätsuntergrenze und PHP 8.5 als neuesten Vertreter. Alle drei
+Datenbankvarianten verwenden PHP 8.5; historische Nachweise behalten ihre
+tatsächlichen Versionen.
 
 Während der~gewöhnlichen Entwicklung bearbeiten und~prüfen Sie die~Inhalte aller vier \codeword{.tex}-Quelldateien gemeinsam; erstellen Sie die~verfolgten PDFs nicht nach jeder Änderung neu. Die~PDFs dürfen bis~zur endgültigen Release-Vorbereitung hinter ihren Quellen zurückliegen. Automatische Versions- und~Datumsänderungen erzeugen keine sachliche Dokumentation: Neue Funktionen, Sicherheitsaspekte, Kompatibilität und~Betriebsverfahren müssen in~den~englischen, tschechischen, deutschen und~schwedischen Handbüchern redaktionell ergänzt werden.
 
@@ -3969,10 +4215,19 @@ Die~Quelle ist~ein Commit über dem beobachteten develop. Die~gehostete
 Vorbereitung erzeugt Runtime-Module, Inventar und~Manifest, übernimmt geänderte
 generierte Daten in~den endgültigen Kandidaten und~startet frisches BASIC.
 Ein separater Autoritäts-Checkout prüft den~sauberen Kandidaten.
-FULL behält alle 28 Pflichtbesitzer: Quellverträge, Node/WinApp,
-Pakete auf~drei Systemen, vier Shards je~Datenbank bei~drei Datenbanken,
+FULL behält alle 27 Pflichtbesitzer: Quellverträge, Node/WinApp,
+Linux/Windows-Pakete, vier Shards je~Datenbank bei~drei Datenbanken,
 vier Shards je~PHP-8.1/8.5-Quellumgebung, Chromium und~Gesamtprüfung.
 Fehlende, rote, abgebrochene oder~übersprungene Pflichtbesitzer stoppen die~Integration.
+
+Nach der~Vorbereitung startet der~gewählte Feature-Workflow macOS-Paketprüfungen
+als~separaten informativen Lauf mit~demselben exakten Kandidaten und~derselben
+Basis. Die~zentrale Paketsuite speichert das~tatsächliche Ergebnis und~Diagnosen.
+Runner-Warteschlangen, Timeout, Abbruch, Fehler oder~Startverweigerung blockieren
+die~Integration nicht. Getrennte Parallelitätsgruppen und~Prüfnamen schützen
+das~verbindliche FULL. Historische Besitzerverträge 1--3 behalten verpflichtende
+macOS-Nachweise; authentifizierte unveränderliche Workflow-Quellen bestimmen
+den~jeweiligen Vertrag.
 
 Erfolgreiche Ausführung wird vor~dem geschützten normalen Fast-forward
 gesichert. \codeword{qualify_only} speichert sie ohne develop-Schreibzugriff.

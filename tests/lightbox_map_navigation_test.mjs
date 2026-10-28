@@ -103,7 +103,7 @@ function fixture() {
         cards: Array.from({length: 200}, (_, i) => i === 0 ? visible : null),
         lightboxNavigation: createLightboxNavigationLifecycle(),
         lightboxEndpoint: '/index.php?page=gallery_lightbox_data&id=7', lightboxTotal: 200, lightboxWindowSize: 60,
-        lightboxOrderRefreshGeneration: 0,
+        lightboxOrderRefreshGeneration: 0, lightboxMapSplitGeneration: 0,
         overlay, lightboxMapSplit: split, lightboxMapSplitCanvas: null, fullscreen: false,
         // Modal focus has real-browser coverage; this adapter owns navigation only.
         closePublicModal: () => {},

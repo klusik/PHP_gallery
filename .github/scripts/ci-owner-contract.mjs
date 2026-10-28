@@ -12,15 +12,15 @@ import {createHash} from 'node:crypto';
 
 /**
  * Return one complete native FULL owner contract without consulting candidate-authored metadata.
- * @param {1|2|3} [version=3] Contract 1 is historical PHP 8.3 coverage, contract 2 is the prior unsharded matrix, and contract 3 is the current sharded matrix.
+ * @param {1|2|3|4} [version=4] Historical contracts 1–3 retain mandatory macOS; contract 4 keeps the sharded matrix with mandatory Linux/Windows packaging and independent advisory macOS.
  * @returns {string[]} Exact required owner labels, including unchanged databases, runtimes and aggregate gate.
  */
-export function fullMatrixOwners(version=3) {
-    if (![1,2,3].includes(version)) throw new Error('BLOCKED unknown CI owner contract version.');
+export function fullMatrixOwners(version=4) {
+    if (![1,2,3,4].includes(version)) throw new Error('BLOCKED unknown CI owner contract version.');
     const owners=['Read-only generated-state and source preflight',
-        'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-        'Positive production package (macos-latest)'];
-    if (version===3) {
+        'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)'];
+    if (version<4) owners.push('Positive production package (macos-latest)');
+    if (version>=3) {
         owners.push('Shared source contracts','Portable Node and WinApp');
         for (const database of ['mysql:8.4','mariadb:10.11','mariadb:11.4']) {
             for (let shard=1;shard<=4;shard++) {
@@ -38,6 +38,14 @@ export function fullMatrixOwners(version=3) {
     }
     owners.push('Required Chromium fixtures','Complete required CI matrix');
     return owners;
+}
+
+/**
+ * Identify supplementary jobs whose outcomes never establish FULL success.
+ * @returns {string[]} Exact advisory labels allowed alongside current required owners.
+ */
+export function advisoryMatrixOwners() {
+    return ['Advisory macOS production package'];
 }
 
 /**
@@ -95,7 +103,7 @@ export function requireIntegrationBasicProfile(profile,repository,workflowSha,ca
 /**
  * Recognize only the reviewed historical or four-shard native database/runtime matrices.
  * @param {string} source Verified workflow source text.
- * @returns {1|2|3} Reviewed contract version; unknown, partial or mixed matrices always throw.
+ * @returns {1|2|3|4} Reviewed required-platform contract; unknown, partial or mixed matrices always throw.
  */
 export function workflowOwnerVersion(source) {
     const block=name=>new RegExp('^  '+name+':\\n([\\s\\S]*?)(?=^  [a-z][a-z0-9-]*:|$(?![\\s\\S]))','m').exec(source)?.[1] || '';
@@ -130,6 +138,30 @@ export function workflowOwnerVersion(source) {
             || JSON.stringify(runtimes)!==JSON.stringify(expectedRuntimes)) {
             throw new Error('BLOCKED sharded workflow W owner matrix is unsupported or incomplete.');
         }
+        const packageBlock=block('production-package');
+        const packageRows=[...matrix(packageBlock).matchAll(/^          - os: ([a-z0-9.-]+)\n            php: ['"](8\.[0-9]+)['"]$/gm)]
+            .map(match=>[match[1],match[2]]);
+        if (readAxisKeys(matrix(packageBlock)).length!==0) {
+            throw new Error('BLOCKED required package workflow contains an unsupported matrix axis.');
+        }
+        const requiredPackages=[['ubuntu-24.04','8.1'],['windows-2025','8.5']];
+        if (JSON.stringify(packageRows)===JSON.stringify(requiredPackages)) {
+            const advisory=block('macos-advisory');
+            if (!advisory.includes("if: ${{ github.event_name == 'workflow_dispatch' && inputs.advisory_macos }}")
+                || !advisory.includes('name: Advisory macOS production package')
+                || !advisory.includes('runs-on: macos-latest')
+                || !advisory.includes('php-version: \'8.5\'')
+                || !advisory.includes('php scripts/audit.php --suite=production-package')
+                || !block('ci-gate').includes("inputs.advisory_macos && 'Advisory macOS matrix gate (unused)' || 'Complete required CI matrix'")
+                || !block('ci-gate').includes('always() && !inputs.advisory_macos')
+                || /needs:[^\n]*macos-advisory/.test(source)) {
+                throw new Error('BLOCKED advisory macOS is missing or coupled to required qualification.');
+            }
+            return 4;
+        }
+        if (JSON.stringify(packageRows)!==JSON.stringify([...requiredPackages,['macos-latest','8.5']])) {
+            throw new Error('BLOCKED required production package matrix is unsupported or incomplete.');
+        }
         return 3;
     }
     if (databaseAxisKeys.length!==0 || runtimeAxisKeys.length!==0) {
@@ -151,39 +183,39 @@ export function workflowOwnerVersion(source) {
  * @param {string} repository Exact owner/repository identity.
  * @param {string} workflowSha Previously authenticated protected workflow commit W.
  * @param {function(string):unknown} call Independent immutable GitHub source reader.
- * @param {2|3} [expectedVersion=3] Exact installed owner contract; version 2 is allowed only for authenticated retained authority evidence.
+ * @param {2|3|4} [expectedVersion=4] Exact current contract, or an explicitly authenticated retained historical matrix.
  * @returns {void} Returns only for the exact reviewed installed owner matrix; altered or historical definitions throw.
  */
-export function requireCurrentWorkflowOwners(repository,workflowSha,call,expectedVersion=3) {
+export function requireCurrentWorkflowOwners(repository,workflowSha,call,expectedVersion=4) {
     const source=workflowSource(call,repository,workflowSha).text;
     const version=workflowOwnerVersion(source);
-    if (![2,3].includes(expectedVersion) || version!==expectedVersion) {
+    if (![2,3,4].includes(expectedVersion) || version!==expectedVersion) {
         throw new Error('BLOCKED protected workflow does not define the exact requested owner matrix.');
     }
     const php='$'+'{{ matrix.php }}';
     const database='$'+'{{ matrix.database }}';
     const normalization='$'+'{{ matrix.normalization }}';
     const shard='$'+'{{ matrix.shard }}';
-    const databaseLabel='name: PHP '+php+' workflows ('+database+', Unicode'+(version===3?', shard '+shard+'/4':'')+')';
-    const runtimeLabel='name: PHP '+php+' source ('+normalization+(version===3?', shard '+shard+'/4':'')+')';
+    const databaseLabel='name: PHP '+php+' workflows ('+database+', Unicode'+(version>=3?', shard '+shard+'/4':'')+')';
+    const runtimeLabel='name: PHP '+php+' source ('+normalization+(version>=3?', shard '+shard+'/4':'')+')';
     if (!source.includes('php-version: '+php)
         || !source.includes(databaseLabel) || !source.includes(runtimeLabel)
-        || version===3 && (!source.includes('name: Shared source contracts') || !source.includes('name: Portable Node and WinApp'))
+        || version>=3 && (!source.includes('name: Shared source contracts') || !source.includes('name: Portable Node and WinApp'))
         || !source.includes('extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl')) {
         throw new Error('BLOCKED protected-develop runtime provisioning differs from its declared native owner matrix.');
     }
 }
 
 /**
- * Select historical owners only with immutable workflow and inherited main-history proof.
+ * Authenticate current or historical owner requirements against immutable workflow proof.
  *
- * Fresh publishers use fullMatrixOwners() directly and can emit only contract 3.
- * Readers accept contracts 1 and 2 only when W's verified workflow is identical
- * to its authenticated common-main ancestor. Existing records remain intact.
+ * Fresh publishers use contract 4. Contract 3 retains its original required
+ * macOS owner through verified W. Contracts 1 and 2 additionally require W to
+ * match authenticated common-main history. Existing records remain intact.
  *
  * @param {Array<{name:string}>} jobs Actual retained native job/evidence rows.
  * @param {string} repository Exact owner/repository.
- * @param {string|undefined} workflowSha Server-recorded immutable source W; required only for historical owner names.
+ * @param {string|undefined} workflowSha Server-recorded immutable source W; unavailable identity always blocks.
  * @param {function(string):unknown} call Independent read-only GitHub API reader.
  * @param {boolean} [complete=true] Require every runtime/database owner; false allows only correctly named optional skipped-path metadata.
  * @returns {string[]} Exactly one reviewed owner set; unavailable W, unsupported matrices or mixed/missing native rows throw.
@@ -220,7 +252,9 @@ export function evidenceMatrixOwners(jobs,repository,workflowSha,call,complete=t
         if (typeof workflowSha!=='string' || typeof call!=='function') {
             throw new Error('BLOCKED sharded native owner rows lack their immutable workflow W reader.');
         }
-        requireCurrentWorkflowOwners(repository,workflowSha,call);
+        version=workflowOwnerVersion(workflowSource(call,repository,workflowSha).text);
+        if (![3,4].includes(version)) throw new Error('BLOCKED sharded workflow W has a historical unsharded matrix.');
+        requireCurrentWorkflowOwners(repository,workflowSha,call,version);
     }
     const owners=fullMatrixOwners(version);
     const matrixOwners=owners.filter(name=>name.startsWith('PHP '));

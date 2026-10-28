@@ -72,6 +72,17 @@ namespace Gallery\Services {
     {
         $GLOBALS['feature_policy_admin_settings'][$key] = $value;
     }
+    /** Read the isolated thumbnail domain master. @return bool Whether thumbnail repair is configured on. */
+    function thumbnail_warmup_enabled(): bool
+    {
+        return app_setting('thumbnail_background_warmup_enabled', '1') === '1';
+    }
+    /** Persist through the isolated domain adapter. @param bool $enabled Requested thumbnail master. @return void Updates the owned setting only. */
+    function set_thumbnail_warmup_enabled(bool $enabled): void
+    {
+        set_app_setting('thumbnail_background_warmup_enabled', $enabled ? '1' : '0');
+    }
+
 }
 
 namespace {
@@ -223,6 +234,80 @@ namespace {
         $effectiveSummary['enabled']
             === (count(feature_policy_admin_enabled_payload()) - 1),
         'Capability summary must count dependency-blocked configured preferences as effectively disabled.',
+    );
+
+    // Scoped autosave preserves both absent flags and domain-owned subsettings.
+    $patched = save_feature_flags_from_post([
+        'feature_registry_revision' => $revision,
+        'feature_changes' => ['downloads' => '1'],
+    ]);
+    feature_policy_admin_assert(
+        $patched['changed_count'] === 1
+            && feature_capability_configured_enabled('downloads')
+            && !feature_capability_configured_enabled('image_voting')
+            && feature_capability_configured_enabled('picture_game'),
+        'Scoped autosave must update exactly one requested preference.',
+    );
+    feature_policy_admin_assert(
+        save_feature_flags_from_post([
+            'feature_registry_revision' => $revision,
+            'feature_changes' => ['downloads' => '1'],
+        ])['changed_count'] === 0,
+        'Repeating the same scoped state must be idempotent.',
+    );
+    foreach ([
+        ['feature_changes' => ['downloads' => '0', 'unknown_feature' => '1']],
+        ['feature_changes' => ['downloads' => 'false']],
+        ['feature_changes' => []],
+        ['feature_changes' => 'downloads'],
+        ['feature_action' => 'unknown_action'],
+        ['feature_action' => 'factory_defaults', 'feature_changes' => ['downloads' => '0']],
+        ['feature_registry_revision' => 'stale', 'feature_action' => 'factory_defaults'],
+    ] as $invalidPatch) {
+        $beforeInvalid = $GLOBALS['feature_policy_admin_settings'];
+        $rejected = false;
+        try {
+            save_feature_flags_from_post($invalidPatch + [
+                'feature_registry_revision' => $revision,
+            ]);
+        } catch (RuntimeException) {
+            $rejected = true;
+        }
+        feature_policy_admin_assert(
+            $rejected && $GLOBALS['feature_policy_admin_settings'] === $beforeInvalid,
+            'Reject the whole invalid or stale patch before writing any flag.',
+        );
+    }
+    $GLOBALS['feature_policy_admin_settings']['telemetry_enabled'] = '0';
+    $GLOBALS['feature_policy_admin_settings']['fixture_subordinate'] = 'preserve';
+    $factory = save_feature_flags_from_post([
+        'feature_registry_revision' => $revision,
+        'feature_action' => 'factory_defaults',
+    ]);
+    foreach (feature_capability_definitions() as $key => $definition) {
+        if (empty($definition['editable_on_features'])) {
+            continue;
+        }
+        $expectedFactory = (bool) ($definition['fresh_default_enabled']
+            ?? \Gallery\Services\feature_capability_default_enabled($key));
+        feature_policy_admin_assert(
+            feature_capability_configured_enabled($key) === $expectedFactory,
+            'Factory reset must honor each new-installation default: ' . $key,
+        );
+    }
+    feature_policy_admin_assert(
+        !feature_capability_configured_enabled('thumbnail_warmup')
+            && !feature_capability_configured_enabled('remote_favicon_discovery')
+            && $GLOBALS['feature_policy_admin_settings']['telemetry_enabled'] === '0'
+            && $GLOBALS['feature_policy_admin_settings']['fixture_subordinate'] === 'preserve',
+        'Factory reset must prefer fresh defaults and preserve subordinate data.',
+    );
+    feature_policy_admin_assert(
+        save_feature_flags_from_post([
+            'feature_registry_revision' => $revision,
+            'feature_action' => 'factory_defaults',
+        ])['changed_count'] === 0,
+        'Factory reset must be idempotent.',
     );
 
     $controllerSource = (string) file_get_contents($root

@@ -40,6 +40,9 @@ function admin_import_groups(): array
             'admin-navdata-update.js',
             'admin-pdf-documents.js',
             'admin-settings-workspace.js',
+            'admin-theme-language-workspace.js',
+            'admin-theme-appearance-workspace.js',
+            'admin-dashboard-workspace.js',
         ],
         'admin-browser-upload.js' => [
             'admin-side-panel.js',
@@ -47,6 +50,12 @@ function admin_import_groups(): array
             'admin-pdf-documents.js',
         ],
         'admin-smart-galleries.js' => ['admin-side-panel.js'],
+        'admin-nested-tabs.js' => [
+            'admin-tabs.js', 'admin-side-panel.js', 'admin-operations.js',
+        ],
+        'admin-tabs.js' => [
+            'admin-music.js', 'admin-side-panel.js', 'admin-operations.js',
+        ],
         'admin-side-panel.js' => ['admin-operations.js'],
         'admin-pdf-documents.js' => ['admin-browser-upload.js'],
         'admin-cache-lifecycle.js' => ['admin-cache-cleanup.js'],
@@ -69,6 +78,10 @@ function admin_import_groups(): array
         'admin-pdf-documents.js',
         'admin-route-navdata.js',
         'admin-settings-workspace.js',
+        'admin-tags-workspace.js',
+        'admin-theme-language-workspace.js',
+        'admin-theme-appearance-workspace.js',
+        'admin-music.js',
         'admin-cooperative-galleries.js',
         'admin-dashboard-workspace.js',
     ] as $target) {

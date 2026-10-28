@@ -12,6 +12,14 @@
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 
 /**
+ * Keep Settings help beside its trigger and inside the viewport.
+ * Type: number. Units: CSS pixels. Scope: central Settings help panels.
+ * Consumers: the delegated help toggle listener in setupAdminSettingsWorkspaceRoot.
+ * Value: 8. Rationale: retain the same edge gap as the Features help panels.
+ */
+const SETTINGS_HELP_GAP_PX = 8;
+
+/**
  * Capture submitted values by canonical setting identifier, excluding CSRF and routing fields.
  * @param {HTMLFormElement} form Settings form whose controls are currently enabled.
  * @return {Map<string, string>} Comparable values, including unchecked setting groups.
@@ -67,6 +75,26 @@ function setupAdminSettingsWorkspaceRoot(root) {
     if (!tabs.length || panels.length !== tabs.length) return;
     root.dataset.adminSettingsWorkspaceBound = '1';
     root.classList.add('is-enhanced');
+    // Native popovers own Escape, outside-click dismissal and trigger focus.
+    // Delegation also covers help returned by an in-place section save.
+    root.addEventListener('toggle', event => {
+        const panel = event.target;
+        if (!(panel instanceof HTMLElement)
+            || !panel.classList.contains('admin-settings-help-panel')
+            || !panel.matches(':popover-open')) return;
+        const trigger = root.querySelector(
+            `[popovertarget="${CSS.escape(panel.id)}"]`,
+        );
+        if (!(trigger instanceof HTMLButtonElement)) return;
+        const rect = trigger.getBoundingClientRect();
+        const gap = SETTINGS_HELP_GAP_PX;
+        panel.style.left = `${Math.max(gap, Math.min(
+            rect.left, window.innerWidth - panel.offsetWidth - gap,
+        ))}px`;
+        panel.style.top = `${Math.max(gap, Math.min(
+            rect.bottom + gap, window.innerHeight - panel.offsetHeight - gap,
+        ))}px`;
+    }, true);
     const selector = root.querySelector('[data-admin-settings-category]');
     const formStates = new WeakMap();
     const mobilePending = new WeakSet();

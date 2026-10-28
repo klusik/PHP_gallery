@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.144.14}
-\newcommand{\manualdate}{26~oktober~2026}
+\newcommand{\version}{0.145}
+\newcommand{\manualdate}{28~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1675,6 +1675,27 @@ Mobila åtgärder uppdaterar sin egen yta. Kopiera ett nytt engångslösenord ge
 \subsubsection{Utseende, språk och egna stilmallar}
 Utseende kombinerar grupperade fält med direkt förhandsvisning och en begränsad mus-/tangentbordsdelare på breda skärmar. Panelbredden är en lokal webbläsarinställning. Webbplatsbilder grupperar profil/bakgrund; Layout skiljer genvägar, rutnät, kort och bildvisarens standardval. Språk har Inställningar, Design, Redigerare och Diagnostik. Designprovet använder samma formulärs erbjudna språk och offentliga standardval och sparar ingenting självt.
 
+Alla fem utseendeavsnitt använder kompakta genomskinliga grupper och hjälp
+under intilliggande frågetecken. Gemensam direktförhandsvisning och lokal delare
+finns kvar. Omladdning och Bakåt/Framåt bevarar aktivt avsnitt, även med äldre
+direktlänkar. Reglage för GPS-markör, markörbakgrund, alla taggar, taggrullning
+och genomskinligt sidhuvud sparas direkt och enskilt; tips visar fabriksval.
+Övriga färger, texter, val och tal är utkast tills \ui{Spara tema} används.
+En obekräftad eller nekad sparning låser reglaget och hindrar att hela formuläret
+skickas igen före passiv omladdning, utan automatiskt återförsök. Vanliga
+formulär kan fortfarande sparas utan JavaScript.
+
+Språkavsnitten använder kompakta grupper, reglage och kontextuell hjälp under
+frågetecken. Adminspråk, offentlig standard och erbjudna språk sparas direkt
+och oberoende, utan att andra temautkast skickas. Efter byte av adminspråk
+uppdaterar \ui{Ladda om gränssnittet} etiketterna. En obekräftad sparning låser
+sin grupp och hindrar att hela formuläret skickas igen före omladdning;
+ingen automatisk omsändning sker. Alla språkval visar medföljande flaggor.
+Aktivt avsnitt bevaras vid omladdning och Bakåt/Framåt genom sidans adress.
+Växlarens design är ett utkast tills \ui{Spara tema} används; JSON, import och
+diagnostik behåller uttryckliga åtgärder. Vanlig formulärinlämning fungerar
+utan JavaScript.
+
 Lämna ersättningsvalet tomt för att behålla installerad CSS. Välj uttryckligen en mall eller ladda upp en giltig CSS-fil; uppladdning har företräde. Ersättning/återställning verifierar lagring först och återställer tidigare fil om markören inte kan sparas. Behåll tillgänglig kopia och följ den säkra vägledningen vid ofullständig återställning. Driftsättning bevarar installationens \filepath{public/assets/custom.css}.
 
 \subsubsection{Kortorientering och driftstatus}
@@ -1843,6 +1864,24 @@ Om sparandet lyckas men den uppdaterade vyn inte kan verifieras inom den begrän
 
 Webbläsarstödd skapande och uppladdning har ytterligare skydd. Att välja webbläsarbearbetning är ett uttryckligt körningsval: saknad webbläsarfunktion eller misslyckad förberedelse av en arbetare stoppar före sparandet i stället för att tyst växla till servergenerering av miniatyrbilder. PHP validerar att varje obligatorisk förberedd miniatyrbildsstorlek och varje format finns innan original lagras. När webbläsarsparandet börjar tolkas reservmetadata för direktsidan aldrig som tillstånd att spela upp den klassiska skapande- eller uppladdningsbegäran igen, vilket förhindrar dubbla gallerier och fotografier. Den konfigurerade ZIP-omgångsstorleken är ett mjukt packningsmål: ett atomärt fotografipaket som överstiger målet kan skickas ensamt i en omgång, men den effektiva PHP-uppladdningsgränsen förblir en hård gräns. Uppladdningsautomatisering i Windows kan skicka hela kompatibilitetsmatrisen JPEG+WebP; en modern server med enbart WebP accepterar obligatoriska WebP-varianter och hoppar säkert över giltiga extra JPEG-varianter, medan felaktiga, icke matchande, okända storlekar eller miniatyrbildspaket som inte stöds fortfarande ger hårda fel.
 
+\subsection{Adminnavigering}
+
+På datorn är adminmenyn utfälld från början med befintliga funktionsgrupper och
+ikoner. Knappen med dubbla pilar högst upp fäller ihop den till en ikonlist eller
+fäller ut den igen. Valet sparas i den här webbläsaren för installationen; det
+lagras inte i databasen och delas inte med andra webbläsare. Rensad
+webbläsarlagring återställer utfälld meny. Om lagringen blockeras gäller valet
+bara på den aktuella sidan. Både utfälld meny och ikonlist rullar med sidan
+utan egen rullningslist. Rulla sidan för att nå de sista kontoåtgärderna.
+
+På smala skärmar öppnar en märkt hamburgerknapp samma grupper direkt under
+knappen. Panelen rullar separat och ligger över innehållet, så att du slipper
+rulla förbi hela menyn för att nå sidan. Stäng med knappen, Escape, ett klick
+utanför eller genom att välja en destination. Escape återför fokus till knappen;
+även fokus utanför navigeringen stänger panelen. En ny sida börjar med stängd
+mobilmeny. Återgång till datorbredd återställer dess separata val. Utan
+JavaScript förblir alla grupperade länkar synliga.
+
 \subsection{Centralt inställningsnav}
 \index{i00126@Inställningar!c00045@centralt nav}
 
@@ -1886,7 +1925,28 @@ Efter lyckat sparande öppnar webbläsaren samma inställningsavsnitt på den ny
 \index{t00241@taggar!a00002@administration}
 \index{t00241@taggar!m00161@metadata}
 
-\ui{Administration > Redigera taggar} är den centrala redigeraren för det återanvändbara taggordförrådet. Listan kan sorteras efter total användning eller alfabetiskt och visar varje taggs aktuella sammanlagda antal användningar i gallerier och fotografier. När en tagg väljs visas dess kanoniska namn med gemener, rena offentliga URL-namn och valfria offentliga beskrivning för taggens landningssida. Samma vy listar de gallerier och fotografier som för närvarande använder taggen, med länkar tillbaka till relevant offentligt sammanhang eller bildredigerare.
+Redigeraren använder kompakta genomskinliga grupper för taggkatalogen,
+vald tagg och användningsreferenser. Grupperna ligger bredvid varandra på breda
+skärmar och staplas på smala. Pilen vid katalogrubriken går till redigeraren
+nedanför den fasta navigeringen. Filter och sortering växlar direkt via det vanliga GET-formuläret.
+Verkställ finns kvar utan JavaScript. Frågetecken vid fälten förklarar deras betydelse på plats; Escape
+eller ett klick utanför stänger hjälpen. Granska innehållsändringar och välj
+\ui{Spara tagg}. Musiktaggar behåller interna identifierare och låtreferenser
+utan åtgärder för publika taggsidor.
+
+\ui{Bilder} och \ui{Gallerier} filtrerar direkta tilldelningar i samma visuella
+taggordlista. En delad tagg kan visas i båda; ändringar gäller fortfarande alla
+tilldelningar. Antal och användningssortering följer valt omfång.
+\ui{Alla taggar} omfattar även otilldelade taggar. \ui{Dokument} är en avstängd
+förberedelse för framtida PDF-taggning; direkta anrop förklarar att
+redigering av dokumenttaggar ännu inte är tillgänglig.
+
+Den centrala taggredigeraren hanterar den delade ordlistan. Ett taggval visar
+dess kanoniska namn med små bokstäver, stabila identifierare och beskrivning.
+För visuella taggar bildar identifieraren den publika taggadressen och
+beskrivningen kan visas där; musiktaggar använder intern metadata.
+Användningsreferenser länkar till berört publikt galleri, foto- eller
+låtredigerare. Katalogens antal följer valt användningsfilter.
 
 Att byta namn på en tagg eller ändra dess URL-namn uppdaterar den delade taggposten, så varje galleri- och bildkoppling fortsätter att referera till samma återanvändbara tagg. Namn och URL-namn normaliseras till den säkra taggkonventionen vid sparande, och ett dubblerat URL-namn avvisas. Att radera en tagg är annorlunda: programmet kopplar i en transaktion bort den från både gallerier och fotografier och tar sedan bort taggposten. Använd \ui{Visa offentlig tagg} för att granska landningssidan och \ui{Konfigurera taggvisning} för att öppna Temas kontroller för taggsidors, korts och huvudtaggars presentation.
 
@@ -1894,7 +1954,61 @@ Att byta namn på en tagg eller ändra dess URL-namn uppdaterar den delade taggp
 \index{f00091@funktionsväxlar}
 \index{f00088@Funktioner!a00002@administration}
 
-\ui{Tema > Funktioner} ger globala växlar för programmets valfria delar. Registrerade funktioner är~aktiverade som standard så att en uppgradering inte tyst tar bort beteenden som en befintlig installation redan använder. En administratör kan stänga av enskilda besökarfunktioner, kartor och flygsimuleringsverktyg, AI- och uppladdningsintegrationer eller specialiserade administrationsverktyg när en enklare installation föredras.
+Specialsidorna för offentlig livesökning, lightbox-lägen, smarta gallerier,
+galleriernas PDF-dokument och musik använder kompakta genomskinliga kontroller.
+Centrala Inställningar delar utseendet mellan kategorier; redigeraren för
+smarta gallerier behåller det även i sidopanelen. Inställningsväxlar behåller
+inbyggd tangentbordsstyrning och får större tryckytor på smala skärmar.
+Frågetecken i Inställningar öppnar hjälp intill kontrollen; Escape eller ett
+klick utanför stänger den. Varje specialsida behåller sitt sätt att spara;
+katalograder markeras fortfarande med vanliga kryssrutor.
+
+Översiktens \ui{Underhåll > Innehåll och visning} använder en tätare layout:
+ett verktygsfält och kompakta grupper flödar i en till tre kolumner
+efter bredden, var och en med egen höjd. Grupperna följer Funktioners utseende:
+diskreta konturer, genomskinliga ytor, tonade rubriker med vänsteraccent och
+tunna radavdelare. Frågetecken behåller förklaringarna;
+antal och varningar förblir synliga. Växlar sparar direkt utan bekräftelse
+eller Spara-knapp; verktygstips anger fabriksvärdet. Sparande, framgång och
+fel förblir synliga. Ett obekräftat resultat kräver att tillståndet läses om,
+utan att skrivningen upprepas. Utan JavaScript finns inbyggd hjälp och tidigare
+Spara/POST-formulär kvar.
+
+Detta är standardmönstret för nya eller ändrade administratörsinställningar;
+\path{docs/ADMIN_DESIGN.md} anger detaljerna. Använd växlar som sparar direkt,
+kompakta grupper med rubriker och en till tre kolumner med oberoende grupphöjd.
+Referensen har en föredragen kolumnbredd på 300 CSS-pixlar, minst 38 pixlar höga
+rubrikfält och växelspår på 26 gånger 14 pixlar; smala eller pekstyrda vyer har
+minst 44 pixlar höga träffytor. När en inställning har egen konfiguration leder
+både dess klickbara namn och inställningspilen till samma mål. Namn, växel och
+frågetecken förblir separata kontroller för navigering, inställning och hjälp.
+Mönstret tillämpas när respektive gränssnitt ändras; äldre formulär kan ännu
+vänta på anpassning.
+
+\ui{Tema > Funktioner} visar valfria funktioner i kompakta grupperade tabeller.
+Hela grupper flödar i en, två eller tre kolumner efter arbetsytans tillgängliga
+bredd, uppifrån och ned innan nästa kolumn börjar. Varje grupp behåller sin
+egen höjd och delas aldrig mellan kolumner; smala sidor använder en kolumn.
+Växlar står direkt före namnen och sparas omedelbart utan extra bekräftelse
+eller Spara-knapp. Den tonade grupprubriken växlar alla redigerbara funktioner i
+gruppen; blandat läge visar att bara vissa är på. Länkade namn öppnar
+tillgängliga specialinställningar. Det enkla \ui{?} visar beskrivning,
+konfigurerat och faktiskt läge, beroenden och tekniska detaljer; Escape eller
+ett klick utanför stänger hjälpen.
+
+Varje rad visar fabriksvärdet och om den sparade inställningen avviker.
+Fabriksvärdet är det uttryckliga standardvärdet vid nyinstallation, annars
+registrets standardvärde; det kan skilja sig från uppgraderingskompatibilitetens
+standard. \ui{Återställ fabriksinställningar} ovanför tabellen sparar omedelbart
+dessa värden för alla redigerbara växlar. Funktionsdata och specialinställningar
+bevaras. En påslagen växel kan vara verkningslös på grund av ett avstängt
+beroende; när beroendet aktiveras återställs tillgängligheten.
+
+Sparande, framgång och fel visas tydligt. En grupp kan sparas delvis om en
+senare domänägare nekar ändringen; tabellen visar då faktiskt sparat läge. Vid
+förlorat svar läser \ui{Läs in status} servern före nästa ändring och upprepar
+aldrig den osäkra skrivningen. Utan JavaScript har det fullständiga formuläret
+en Spara-knapp och fabriksåterställning använder vanlig autentiserad POST.
 
 En avstängd funktion döljs från vanlig navigering och dess skyddade rutter nekar funktionens arbetsflöde. Att stänga av en växel raderar inte funktionens kod, fotografier, databasposter, inloggningsuppgifter eller konfiguration. Återaktivering återställer därför vanliga ingångar, med samma kontroller av schema, åtkomst och konfiguration som tidigare. Exempel på växlingsbara funktioner är offentlig sökning, ljuslådans bläddringslägen, Bildhanteraren, Administration direkt på offentliga sidor, Smarta gallerier, röstning, Bildspelet, hämtningar, galleri- och flygkartor, navigeringsdata, SimBrief, OpenAI-hjälp, lokala AI-metadata, API-uppladdningar, mobil WebDAV, gallerimigrering, Mediefilnamnsbyte och anonym telemetri.
 
@@ -2315,10 +2429,24 @@ Att välja \ui{Öppna fotografi} i en gallerikartmarkör öppnar fotografiet i a
 
 Ett galleri med sparad flygrutt kan öppna kartan innan det första fotot laddas upp, även på sidor utan lightbox-markup. Kartan anpassas till alla sparade ruttpunkter och behåller vanliga återställningskontroller; ruttpunkter behandlas inte som fotomarkörer. Utan sparade koordinater visas det vanliga meddelandet om en tom karta. Galleriets åtkomstregler och effektiva kartinställningar gäller fortfarande; inläsning sker på begäran.
 
+När fotots helskärm lämnas med \codeword{F}, dess knapp eller webbläsarens
+\codeword{Escape} stängs den delade kartan och den vanliga ljuslådan återställs
+med samma foto och zoom. Pågående kartinläsning kan inte öppna panelen igen
+efteråt. I CSS-helskärm ger ett enda \codeword{Escape} samma övergång.
+\codeword{M} växlar kartan separat i helskärm; ett senare \codeword{Escape}
+stänger den vanliga ljuslådan.
+
 \subsection{Flygkartor och navigeringsdata}
 \index{s00220@SimBrief}
 \index{f00081@flygkartor}
 \index{n00173@navigeringsdata}
+
+Administration > Underhåll > Kartor och navigeringsdata använder samma kompakta
+genomskinliga grupper som Funktioner och Innehåll och visning. Namnet och den
+efterföljande pilen öppnar samma hanterare. Antal och tid för senaste import
+förblir synliga; frågeteckenhjälp och Importdetaljer innehåller längre
+förklaringar. Uppdateringen förblir en uttrycklig åtgärd med förlopp på sidan
+och vanligt formulär utan JavaScript.
 
 Flyginriktade samlingar kan använda den valfria SimBrief-integrationen för att hämta senaste operativa färdplanen för ett~pilot-ID eller pilotnamn. Den kompakta redigeraren accepterar en synlig identifierare: enbart siffror väljer vägen för pilot-ID; annan text väljer vägen för pilotnamn. Befintliga integrationer som skickar separata fält förblir kompatibla, med pilot-ID som förstahandsval när båda anges. Redigeraren skapar ett redigerbart Markdown-beskrivnings- och ruttutkast; OFP och tillgängliga ruttkoordinater kopplas först efter att galleriet sparats. En misslyckad SimBrief-begäran lämnar det vanliga beskrivningsfältet och den manuella ruttredigeraren tillgängliga. Utkastet före skapande är privat och tillfälligt enligt avsnittet om galleriskapande.
 
@@ -2504,6 +2632,17 @@ Alternativet \ui{Håll mig inloggad} använder en hashad webbläsartoken så att
 \index{s00236@Systemstatus!d00051@databasberedskap}
 \index{d00049@databas!b00023@beredskap}
 \index{a00001@503-svar}
+
+\ui{Systemstatus} grupperar kontroller efter driftmiljö och återställning,
+åtkomst och inloggning, gallerier och filer, kartor och rutter, publika funktioner
+och rapporter samt verktyg. En bock betyder att nödvändig lagring hittades;
+ett streck betyder avstängd integration i konfigurationen. Inget av detta
+bekräftar ett helt arbetsflöde eller extern API-anslutning. Frågetecken förklarar
+kontrollens syfte. Problem visas först i gruppen med synlig påverkan och
+vägledning; \ui{Detaljer} behåller säkra databasidentifierare och felreferenser.
+Sidan reparerar inga data och startar inga migreringar. Visardiagnostik sparar
+valet direkt med vanlig Spara som reserv. Ett osäkert skrivresultat låser
+kontrollen tills en rent läsande omladdning.
 
 Funktioner som beror på databasschema använder ett gemensamt beredskapskontrakt. Den viktiga skillnaden är mellan ett schema som har undersökts framgångsrikt och konstaterats vara äldre, och ett schema som för närvarande inte kan undersökas.
 
@@ -2886,6 +3025,15 @@ Efter reparationen laddar du om \ui{Systemstatus} och testar berörd funktion ig
 \index{g00096@galleri!z00277@återställning}
 \index{p00183@papperskorg!a00019@automatisk rensning}
 
+Papperskorgen använder kompakta genomskinliga grupper med synliga
+inställningsväxlar och kontextuell frågeteckenhjälp. Med JavaScript sparas
+ändringar direkt tillsammans med lagringstid och batchstorlek. Under skrivningen
+låses papperskorgens kontroller; bekräftat tillstånd läses om på plats och fokus
+återgår till det ändrade fältet. Ett avvisat eller obekräftat resultat kräver en
+passiv omläsning utan nytt skrivförsök. Utan JavaScript finns Spara kvar. Smala
+vyer behåller märkta metadata och enskilda åtgärder utan horisontell rullning.
+Återställning, permanent radering och tömning behåller separata bekräftelser.
+
 Öppna \ui{Underhåll > Papperskorg} för att granska återställningsbara galleriraderingar. Varje aktiv rad visar ursprunglig sökväg, raderingstid, galleri- och bildantal, lagrad storlek, livscykelstatus och tidsgräns för automatisk rensning när policyn är aktiv. Problemposter förblir synliga för undersökning; PHP Gallery gissar inte att ett tvetydigt filsystems- och databastillstånd är säkert att förstöra.
 
 Papperskorgens huvudväxel styr framtida galleriraderingar och är~aktiverad som standard. Att stänga av den döljer eller raderar inte befintliga poster: återställning och manuell permanent radering finns kvar. Automatisk rensning är ett separat aktivt val och är avstängd som standard. Dess lagringstid är som standard 30~dagar, underhållsomgången är begränsad och automatisk radering pausas när Papperskorg är avstängd. Om automatisk rensning aktiveras efter en paus får aktuella återställningsbara poster en ny full lagringsperiod innan schemalagd radering kan börja.
@@ -3015,6 +3163,31 @@ Den färdiga rapporten returneras till webbläsaren som en hämtning och sparas 
 \index{t00243@telemetri}
 \index{i00127@integritet!t00243@telemetri}
 
+Den kompakta arbetsytan skiljer mellan \ui{Översikt},
+\ui{Insamling och integritet}, \ui{Historik och underhåll} och \ui{Rapporter}.
+URL:en bevarar vald flik vid omladdning och i webbläsarhistoriken.
+Varje inställning sparas separat efter en ändring; utan JavaScript finns
+vanliga formulär med uttryckligt Spara kvar. Frågetecken förklarar insamling,
+integritet, gränser och standardvärden. Ett overifierat sparande låser endast
+sitt formulär och erbjuder omladdning av sparat läge utan att upprepa
+skrivningen. Segmenterade HTML-rapporter öppnas i en ny flik; inställningar och
+loggar är separata mål. Sammanställning/rensning förblir en uttrycklig åtgärd
+med ett utfällbart tekniskt resultat.
+Rapportlänkar visar det fristående HTML-dokumentet direkt i den nya fliken,
+som förblir öppen för läsning.
+
+I Översikt öppnar fotonamn fotots offentliga detaljsida och gallerinamn
+motsvarande galleri. Vanliga åtkomstkontroller gäller fortfarande. Sex små
+dagliga stapeldiagram kompletterar summorna, vart och ett med egen skala.
+Peka för datum och exakt värde eller öppna \ui{Dagliga detaljer} för samma
+värden i en tangentbordstillgänglig tabell. Saknade eller raderade dagar
+förblir luckor. Lagringspolicyn kan lämna summor utan dagliga detaljer.
+Bildbyte omfattar foton och miniatyrer utan nedladdningar. Om offentliga sökvägar
+inte kan verifieras förblir namnen läsbara utan länkar.
+Fotoikonen använder samma förhandsvisning som galleriets bildredigerare:
+pekare eller tangentbordsfokus visar den, klick låser den och Escape stänger.
+Den begränsade miniatyren hämtas först när förhandsvisningen öppnas.
+
 Det valfria området \ui{Telemetri} registrerar integritetskontrollerade driftmätningar och presenterar dem som administrationsrapporter. Tillgängliga kontroller omfattar huvudväxeln för telemetri, offentliga användningsmätningar, prestanda, cache- och databashändelser, respekt för Do Not Track, uteslutning av administratörer, maximal räknad bildvisningstid och lagringstid för rådata, timdata och dygnsdata. Rapporter innehåller mått såsom anonyma sessioner, sidvisningar, öppnade fotografier och begränsad visningstid, klientfel, uppmätta mediebyte, webbläsarfördelning och cache- och databasaktivitet där kategorierna är~aktiverade.
 
 Telemetridelsystemet är utformat för att inte lagra råa IP-adresser, råa user-agent-strängar från webbläsare, råa hänvisnings-URL:er, namn, e-postadresser, kontoidentifierare, begärandekroppar eller exakta besökarplatser. Exporter innehåller sammanställd anonym telemetri och sessionshashar i stället för råa besökaridentifierare. Underhåll sammanställer och rensar telemetri enligt konfigurerad lagringspolicy, och administrationsskärmen kan exportera en fristående HTML-rapport för offline-granskning. Granska integritetskontrollerna innan du aktiverar insamling på en offentlig webbplats.
@@ -3062,6 +3235,16 @@ Administrationens \ui{Integritet}-flöde kontrollerar integritetshanterade kärn
 När utvecklingsdiagnostik är tillgänglig kan en inloggad administratör starta ett \ui{Prestandatest för offentlig galleriinläsning} för aktuellt galleri. Webbläsaren läser in galleriet flera gånger i en dold ram med samma ursprung och anonym förhandsvisning, kombinerar PHP-renderingsräknare med webbläsarens navigeringstider och erbjuder sedan testloggen som JSON. Använd samma galleri, presentationsläge och nätverks- och cacheförhållanden när du jämför två ändringar; testet är mest användbart som en före- och eftermätning snarare än ett universellt poängtal.
 
 \subsection{Schemalagt webbplatsunderhåll}
+
+Media och cache använder samma kompakta genomskinliga grupper som Funktioner
+och Innehåll och visning. Hela grupper flödar uppifrån och ned i en till tre
+kolumner med oberoende höjder. Frågetecken öppnar kontextuell hjälp; kontrollens
+status och orsaker till otillgängliga åtgärder förblir synliga. Schemaändringar
+sparas direkt tillsammans med tids- och talvärden. Under skrivningen låses
+bara det berörda formuläret. Ett obekräftat resultat behåller avsikten och
+erbjuder omläsning utan ett nytt skrivförsök. Utan JavaScript finns Spara kvar.
+Skapande av miniatyrer, rensning, återställning och tokenbyte förblir uttryckliga
+uppgifter med befintliga skydd.
 
 Under Administration > Underhåll > Media och cache kör \emph{Rensa uppdaterarens
 cache nu} ett begränsat steg direkt på sidan. Endast redan undanlagt avfall i
@@ -3302,6 +3485,19 @@ Tillfälliga hämtnings- eller webbhotellsfel kan försöks igen. Ett paket vars
 
 Upptäckt av stabila utgåvor och paketarbete är separata begränsade åtgärder. En upptäcktsbegäran kan skapa ett beständigt bakgrundsjobb, medan en senare säker begäran eller CLI-köraren driver en kort del genom hämtning, arkivvalidering, uppackning, manifestverifiering, förberedelse, säkerhetskopiering för återställning, aktivering, migreringar och rensning. Range-begäranden kan återuppta avbrutna hämtningar, arbetarlås förhindrar samtidiga framsteg och ett gammalt lås kan återställas när dess ägare löpt ut. På inaktiva delade webbhotell schemalägger du \codeword{php scripts/application_update.php} från cron, t.ex. var femte minut. Varje anrop gör begränsad upptäckt eller driver befintligt bakgrundsarbete framåt; korrektheten beror inte på \codeword{set_time_limit()} eller \codeword{ignore_user_abort()}.
 
+Om källservern ignorerar Range växlar tre ofullständiga omstarter av hela
+svaret samma jobb till publicerade \filepath{production.zip}.
+Separata begränsade metadataanrop måste bekräfta att utgåvans tagg pekar på
+ursprunglig fullständig commit och att bilagan har kanonisk URL, byteantal
+och SHA-256. Arkivets hash kontrolleras före uppackning även när valfri
+kontroll av enskilda filer är avstängd. Platta produktionsarkiv och omslutna
+källarkiv använder samma senare installationssteg. Saknade eller felaktiga
+bilagor behåller ändlig felhantering; tidsgränserna höjs inte.
+En äldre installerad uppdaterare kan inte använda reparationen innan den
+har tagits emot. Kontrollera första uppgraderingen på en testkopia eller
+överför hela den kompatibla utgåvan manuellt och använd
+\ui{Slutför FTP-uppdatering}.
+
 Aktuella utgåvor stämmer också av den lilla uppsättningen programägda serverpolicyfiler under uppdateringsförberedelse och aktivering. Det skyddar installationer vars äldre uppdaterare hoppade över en policyfil: den validerade utgåvekopian jämförs och publiceras atomärt, återställningsmetadata utökas före ersättningen och en migreringsstödd uppstartsväg kan reparera ett redan aktiverat äldre träd. Avstämningen är begränsad till kända policysökvägar och ändrar inte gallerimedier eller användarkonfiguration.
 
 Före aktivering kan administratören avbryta eller försöka igen med ett återställningsbart jobb. Efter aktivering kan administrationens återställningsåtgärd återställa hanterade programfiler från den sparade återställningsögonblicksbilden, men filåterställning gör inte databasmigreringar ogjorda. Återställning av stabil utgåva, ren ominstallation och beta-installation förblir återupptagningsbara jobb med egen paketvalidering. Den fristående nödvägen \filepath{reset.php} är ett separat återställningsverktyg för att återgå till den stabila grenen när den vanliga administrationsrutten inte kan användas; den kräver ändå samma omsorgsfulla säkerhetskopiering och integritetsgranskning.
@@ -3451,6 +3647,14 @@ Den genererade modulplanen anger delade beroenden och en kanonisk filordning som
 Vanliga begäranden kommer in genom \filepath{public/index.php}; \filepath{index.php} i kodförrådets rot är en stödd kompatibilitetsingång för andra webbhotellsupplägg. Den offentliga ingången läser in \filepath{app/early\_runtime.php} före \filepath{app/bootstrap.php}, och sedan når båda uppläggen samma vanliga begärandepipeline.
 
 Den lilla begärandelokala kärnan under \filepath{app/runtime/} styr den befintliga livscykeln via Request, Router, RouteRegistry och ModuleLoader innan den anropar den procedurala kontrollern. Den kanoniska rutt- och säkerhetstabellen finns kvar i \filepath{app/bootstrap/dispatch.php}. En granskad genererad plan laddar logiska moduler för vald rutt; produktionen skannar inte källfiler, kompilerar inte beroenden och har ingen reservväg som laddar hela programmet. Befintliga PHP~8.1- och webbhotellskrav räcker fortfarande, utan Composer eller Node-bygge. Äldre CLI-/testverktyg kan använda \filepath{app/bootstrap\_full.php} för hela det procedurala API:et.
+
+Gemensam Admin-hjälp och visning av fabriksvärden hör till befintliga
+\filepath{app/views/admin\_ui.php}; Maintenance-avsnitt laddas fortfarande
+fördröjt. Theme återanvänder hela galleriets åtkomstpolicy som väljaren och
+förhandsvisningen redan behöver; enskilda sparningar behåller kanoniska
+mutationssvar. Dessa ägare lägger inte till logiska moduler eller körningsfiler.
+Värdbaserad förberedelse och FULL verifierar oförändrade gränser för dubbelt
+filägarskap.
 
 Laddaren validerar hela modulplanen för varje begäran. Den kontrollerar
 kanonisk lager-/sökvägsordning i en genomgång, varje vald fysisk sökväg en gång
@@ -3631,7 +3835,12 @@ Python-docstrings använder ett gemensamt format.
 
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.
 
-Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt, obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet och~paketkontroller på~Linux, Windows och~macOS. Alla obligatoriska jobb och~kontrollen av~exakt SHA måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter de~slutliga källändringarna, inte vid~rutinmässig utveckling.
+Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt,
+obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet
+och~obligatoriska paketkontroller på~Linux och~Windows; macOS körs separat
+som~en rådgivande kontroll. Alla obligatoriska jobb och~kontrollen av~exakt SHA
+måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter
+de~slutliga källändringarna, inte vid~rutinmässig utveckling.
 
 Det värdbaserade portabla WinApp-jobbet installerar det befintliga
 Pillow-kravet i den Python-tolk som valts för revisionen, så att pixeltestet
@@ -3735,7 +3944,20 @@ Kommandona i detta avsnitt beskriver värdbaserade utgåvor och underhållarens 
 
 Aktuell kvalificering och~utgåvesammansättning beskrivs i~avsnittet om~underhållarverifiering och~i~\filepath{RELEASE.md}.
 
-Skapa produktionsmapp eller ZIP endast på uttrycklig begäran; den värdbaserade utgåvans artefakter använder samma PHP-verktyg automatiskt. Ange kandidatens tidsstämpel med \codeword{--timestamp} för deterministiska metadata. Verktyget nekar inaktuella manifest och befintliga utdata; \filepath{scripts/release_files.php} granskar bara medlemskap. Tre operativsystemsägare för paketering provar det verkliga verktyget oberoende av databasmatrisen. Uppvärmning av låst TinyTeX-cache enbart på main kräver granskad installation innan utgåvegrenar kan återanvända samma nyckel. En ren CMS-ändring kräver ingen ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och driftsättning kräver uttryckligt tillstånd. CI provar PHP 8.1 som kompatibilitetsgolv och PHP 8.5 som senaste representant. Alla tre databasvarianter använder PHP 8.5; historiska bevis behåller sina verkliga versioner.
+Skapa produktionsmapp eller ZIP endast på uttrycklig begäran; den värdbaserade
+utgåvans artefakter använder samma PHP-verktyg automatiskt. Ange kandidatens
+tidsstämpel med \codeword{--timestamp} för deterministiska metadata. Verktyget
+nekar inaktuella manifest och befintliga utdata;
+\filepath{scripts/release_files.php} granskar bara medlemskap. Obligatoriska
+Linux/Windows-paketägare provar det~verkliga verktyget oberoende
+av~databasmatrisen; macOS upprepar samma svit i~en separat rådgivande körning.
+Uppvärmning av låst TinyTeX-cache enbart på main kräver granskad installation
+innan utgåvegrenar kan återanvända samma nyckel. En ren CMS-ändring kräver ingen
+ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och
+driftsättning kräver uttryckligt tillstånd. CI provar PHP 8.1 som
+kompatibilitetsgolv och PHP 8.5 som senaste representant. Alla tre
+databasvarianter använder PHP 8.5; historiska bevis behåller sina verkliga
+versioner.
 
 Vid vanlig utveckling ska innehållet i~alla fyra \codeword{.tex}-källor ändras och~granskas tillsammans; bygg inte om~de~spårade PDF-filerna efter varje ändring. PDF-filerna får ligga efter källorna fram till~den~slutliga utgåveförberedelsen. Automatisk uppdatering av~version och~datum skapar inte innehållsdokumentation: nya funktioner, säkerhet, kompatibilitet och~driftrutiner måste föras in~redaktionellt i~de~engelska, tjeckiska, tyska och~svenska handböckerna.
 
@@ -3849,10 +4071,18 @@ feature-gren under \ui{Use workflow from} och~därefter källgrenen.
 Källan är~en commit över observerad develop. Värdbaserad förberedelse skapar
 runtime-moduler, inventering och~manifest, för~in ändrade genererade data
 i~slutlig kandidat och~startar nytt BASIC. En separat auktoritetsutcheckning
-granskar den~rena kandidaten. FULL behåller alla 28 obligatoriska ägare:
-källkontrakt, Node/WinApp, paket på~tre system, fyra shardar per~databas
+granskar den~rena kandidaten. FULL behåller alla 27 obligatoriska ägare:
+källkontrakt, Node/WinApp, Linux/Windows-paket, fyra shardar per~databas
 för~tre databaser, fyra shardar per~PHP-8.1/8.5-källmiljö, Chromium och~samlad kontroll.
 Saknade, misslyckade, avbrutna eller~överhoppade obligatoriska ägare stoppar integration.
+
+Efter förberedelsen startar valt feature-arbetsflöde macOS-paketering som~en
+separat rådgivande körning på~samma exakta kandidat och~bas. Den~centrala
+paketsviten sparar verkligt resultat och~diagnostik. Runner-köer, timeout,
+avbrott, fel eller~nekad start blockerar aldrig integrationen. Separata
+samtidighetsgrupper och~kontrollnamn skyddar obligatorisk FULL. Historiska
+ägaravtal 1--3 behåller obligatoriska macOS-bevis; autentiserade oföränderliga
+arbetsflödeskällor avgör vilket avtal som~gäller.
 
 Godkänd körning sparas före skyddad vanlig fast-forward.
 \codeword{qualify_only} sparar kvalificeringen utan skrivning till develop.

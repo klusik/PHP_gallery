@@ -310,13 +310,22 @@ function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecov
  *
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
- * @return void Sends a Theme redirect or the dedicated editor JSON response; ordinary form domain refusals propagate to the request boundary.
+ * @return void Sends a Theme redirect, scoped Language/Appearance preference JSON, or the dedicated
+ *     editor JSON response; ordinary form domain refusals propagate to the request boundary.
  */
 function admin_theme_process_post(
     bool $gpsMapsFeatureEnabled,
     bool $lightboxModesFeatureEnabled,
 ): void {
     verify_csrf();
+    if (array_key_exists('theme_appearance_switch', $_POST)) {
+        admin_theme_process_appearance_switch();
+        return;
+    }
+    if (array_key_exists('theme_language_preference_scope', $_POST)) {
+        admin_theme_process_language_preference();
+        return;
+    }
     // The dedicated editor submission never processes or clears another Theme form value.
     if (array_key_exists('css_override_action', $_POST)) {
         admin_theme_process_css_overrides();

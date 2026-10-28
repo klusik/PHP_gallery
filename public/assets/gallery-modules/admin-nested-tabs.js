@@ -73,7 +73,9 @@ function setAdminSubtabPanelVisibility(panel, isVisible) {
 /**
  * Attach behavior to one reusable local subtab group.
  *
- * @param {HTMLElement} tabsRoot Subtab navigation root.
+ * @param {HTMLElement} tabsRoot Subtab navigation root; its scope may declare
+ *     a query parameter and target prefix for shareable reload/history state.
+ * @return {void} Bind local ARIA/keyboard behavior and optional URL state once.
  */
 function setupAdminNestedTabGroup(tabsRoot) {
     if (tabsRoot.dataset.adminSubtabsBound === '1') {
@@ -89,6 +91,9 @@ function setupAdminNestedTabGroup(tabsRoot) {
 
     // scope stores the nearest logical settings group containing this subtab row and its panels.
     const scope = adminSubtabScope(tabsRoot);
+    // URL persistence is explicit metadata, leaving every other local group alone.
+    const queryName = scope instanceof HTMLElement ? scope.dataset.adminSubtabQuery : '';
+    const queryPrefix = scope instanceof HTMLElement ? scope.dataset.adminSubtabPrefix : '';
     // panels stores only the panels targeted by this control row.
     const panels = tabs
         .map((tab) => scope.querySelector(`#${CSS.escape(tab.dataset.adminSubtabTarget || '')}`))
@@ -97,11 +102,13 @@ function setupAdminNestedTabGroup(tabsRoot) {
         return;
     }
 
-        /**
+    /**
      * Select one local subtab panel and hide the others.
      *
      * @param {string} targetId Panel id requested by a click or keyboard event.
-     * @param {object} options Optional behavior flags.
+     * @param {{focusTab?:boolean,syncUrl?:boolean}} options Focus request and
+     *     whether this activation should publish its declared query value.
+     * @return {void} Update only owned panels and any opted-in URL parameter.
      */
     const activateSubtab = (targetId, options = {}) => {
         // targetPanel stores the matching panel or the first available panel as a safe fallback.
@@ -127,11 +134,29 @@ function setupAdminNestedTabGroup(tabsRoot) {
         if (options.focusTab) {
             tabs.find((tab) => tab.dataset.adminSubtabTarget === targetPanel.id)?.focus();
         }
+        if (queryName && queryPrefix && targetPanel.id.startsWith(queryPrefix)
+            && options.syncUrl !== false) {
+            const url = new URL(window.location.href);
+            url.searchParams.set(queryName, targetPanel.id.slice(queryPrefix.length));
+            if (url.href !== window.location.href) history.pushState(null, '', url);
+        }
     };
 
     // initialTargetId stores the server-selected panel, or the first rendered subtab.
     const initialTargetId = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminSubtabTarget || tabs[0].dataset.adminSubtabTarget || '';
-    activateSubtab(initialTargetId);
+    const requestedTarget = () => {
+        if (!queryName || !queryPrefix) return initialTargetId;
+        const value = new URL(window.location.href).searchParams.get(queryName);
+        const candidate = panels.some(panel => panel.id === value)
+            ? value : `${queryPrefix}${value || ''}`;
+        return panels.some(panel => panel.id === candidate) ? candidate : initialTargetId;
+    };
+    activateSubtab(requestedTarget(), {syncUrl: false});
+    if (queryName && queryPrefix) {
+        window.addEventListener('popstate', () => {
+            activateSubtab(requestedTarget(), {syncUrl: false});
+        });
+    }
 
     tabs.forEach((tab) => {
         tab.addEventListener('click', () => {

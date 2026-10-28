@@ -41,6 +41,58 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
+ * Render a tooltip from controller-prepared factory metadata for one preference.
+ *
+ * @param array{content_factory_defaults?:array<string,bool>} $model Canonical
+ *     factory values prepared by the dashboard service, keyed by registry ID.
+ * @param string $setting Canonical preference ID, independent of its POST name.
+ * @return void Emit escaped title/default attributes, or nothing without metadata.
+ */
+function view_render_admin_dashboard_factory_attributes(
+    array $model,
+    string $setting,
+): void {
+    if (!isset($model['content_factory_defaults'][$setting])) {
+        return;
+    }
+    $default = $model['content_factory_defaults'][$setting];
+    $value = $default
+        ? t('admin.common.enabled', 'Enabled')
+        : t('admin.common.disabled', 'Disabled');
+    echo ' title="' . e(t(
+        'admin.dashboard.content_factory_tooltip',
+        'Factory default: {value}',
+        ['value' => $value],
+    )) . '" data-dashboard-factory-enabled="' . ($default ? '1' : '0') . '"';
+}
+
+/**
+ * Render reusable contextual help for the compact Maintenance workspace.
+ *
+ * @param string $id Unique panel ID reused by the enhanced native popover.
+ * @param string $label Localized setting or workspace title.
+ * @param list<string> $paragraphs Plain localized explanations; escaped here.
+ * @return void Emit a keyboard-accessible disclosure, enhanced in place by the dashboard.
+ */
+function view_render_admin_dashboard_compact_help(
+    string $id,
+    string $label,
+    array $paragraphs,
+): void {
+    echo '<details class="admin-dashboard-help" data-dashboard-help>'
+        . '<summary aria-label="'
+        . e(t('admin.dashboard.content_details', 'Details') . ': ' . $label)
+        . '">?</summary><div class="admin-dashboard-help-panel" id="'
+        . e($id) . '"><strong>' . e($label) . '</strong>';
+    foreach ($paragraphs as $paragraph) {
+        if ($paragraph !== '') {
+            echo '<p>' . e($paragraph) . '</p>';
+        }
+    }
+    echo '</div></details>';
+}
+
+/**
  * Return a decorative, unfilled Trash symbol for Admin labels and headings.
  *
  * @return string Trusted SVG using the surrounding text color and no background.

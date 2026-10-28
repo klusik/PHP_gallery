@@ -1006,13 +1006,34 @@ function telemetry_metric_events(
 }
 
 /**
+ * Verify route and cache-identity columns needed by ranking destinations.
+ *
+ * @return bool True only when central inspection confirms the required columns;
+ *     missing or unknown observations retain the read-only unlinked report.
+ */
+function telemetry_ranking_paths_available(): bool
+{
+    return schema_inspection_is_available(
+        schema_inspection_column('galleries', 'url_path'),
+    ) && schema_inspection_is_available(
+        schema_inspection_column('images', 'url_slug'),
+    ) && schema_inspection_is_available(
+        schema_inspection_column('images', 'modified_at'),
+    );
+}
+
+/**
  * Return top viewed photos using hourly aggregates.
  *
  * @param int $days Days value.
  * @param int $limit Maximum number of items.
  * @param string $trafficSegment Normalized technical traffic segment; allowed values are all, non_bot, bot, or unknown.
  *
- * @return list<array{id:int,filename:string,gallery_title:string,photo_views:int}> Photo rows ranked by aggregate view count, or empty when storage is unavailable.
+ * @return list<array{id:int|string,filename:string,gallery_id:int|string,
+ *     gallery_slug:string,gallery_title:string,image_url_slug:?string,
+ *     gallery_url_path:?string,image_modified_at:?string,
+ *     photo_views:int|string}> Ranked photos with
+ *     verified public-route metadata, or empty when storage is unavailable.
  */
 function telemetry_top_photos(
     int $days = 30,
@@ -1026,6 +1047,7 @@ function telemetry_top_photos(
         $days,
         $limit,
         telemetry_traffic_segment($trafficSegment),
+        telemetry_ranking_paths_available(),
     );
 }
 
@@ -1036,7 +1058,12 @@ function telemetry_top_photos(
  * @param int $limit Maximum number of items.
  * @param string $trafficSegment Normalized technical traffic segment; allowed values are all, non_bot, bot, or unknown.
  *
- * @return list<array{id:int,filename:string,gallery_title:string,avg_view_seconds:float,view_count:int}> Photo rows ranked by average capped view duration, or empty when storage is unavailable.
+ * @return list<array{id:int|string,filename:string,gallery_id:int|string,
+ *     gallery_slug:string,gallery_title:string,image_url_slug:?string,
+ *     gallery_url_path:?string,image_modified_at:?string,
+ *     avg_view_seconds:float|string,
+ *     view_count:int|string}> Ranked durations with verified public-route
+ *     metadata, or empty when storage is unavailable.
  */
 function telemetry_longest_viewed_photos(
     int $days = 30,
@@ -1050,6 +1077,7 @@ function telemetry_longest_viewed_photos(
         $days,
         $limit,
         telemetry_traffic_segment($trafficSegment),
+        telemetry_ranking_paths_available(),
     );
 }
 
@@ -1547,9 +1575,17 @@ function telemetry_report_session_summary(
 /**
  * Merge daily aggregate metrics with canonical unique-session counts.
  *
- * @param list<array{report_date:string,page_views:int,photo_views:int,photo_seconds:int|float,client_errors:int,media_bytes:int|float}> $metricRows Daily aggregate metric rows.
+ * @param list<array{report_date:string,page_views:int|string,
+ *     photo_views:int|string,photo_seconds:int|float|string,
+ *     client_errors:int|string,media_bytes:int|float|string,
+ *     image_bytes?:int|float|string}> $metricRows Daily aggregates with optional
+ *     image-only byte totals, including numeric SQL scalar strings.
  * @param list<array{report_date:string,sessions:int}> $sessionRows Daily canonical session rows.
- * @return list<array{report_date:string,page_views:int,photo_views:int,photo_seconds:int|float,client_errors:int,media_bytes:int|float,sessions:int}> Date-ordered daily metrics merged with canonical unique-session counts.
+ * @return list<array{report_date:string,page_views:int|string,
+ *     photo_views:int|string,photo_seconds:int|float|string,
+ *     client_errors:int|string,media_bytes:int|float|string,
+ *     image_bytes?:int|float|string,sessions:int}> Date-ordered metrics preserving
+ *     supplied image-only bytes, merged with canonical session counts.
  */
 function telemetry_merge_daily_trends(
     array $metricRows,
@@ -1594,7 +1630,11 @@ function telemetry_merge_daily_trends(
  * @param int $days Days value.
  * @param string $trafficSegment Normalized technical traffic segment; allowed values are all, non_bot, bot, or unknown.
  *
- * @return list<array{report_date:string,page_views:int,photo_views:int,photo_seconds:int|float,client_errors:int,media_bytes:int|float,sessions:int}> Daily event totals merged with canonical session counts, ordered by report date.
+ * @return list<array{report_date:string,page_views:int|string,
+ *     photo_views:int|string,photo_seconds:int|float|string,
+ *     client_errors:int|string,media_bytes:int|float|string,
+ *     image_bytes?:int|float|string,sessions:int}> Date-ordered daily totals and
+ *     canonical session counts; image-only bytes exclude downloads.
  */
 function telemetry_report_daily_trends(
     int $days,

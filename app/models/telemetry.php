@@ -388,27 +388,40 @@ function telemetry_model_metric_events(
  * @param int $limit Maximum number of rows returned.
  * @param int $days Lookback window in days.
  * @param string $trafficSegment Normalized technical traffic segment used to select rows.
- * @return array<int,array{id:int,filename:string,gallery_title:string,photo_views:int}> Rows containing image id, filename, gallery title, and aggregate photo views.
+ * @param bool $includePublicPaths Whether verified public-path columns may be read.
+ * @return list<array{id:int|string,filename:string,gallery_id:int|string,
+ *     gallery_slug:string,gallery_title:string,image_url_slug:?string,
+ *     gallery_url_path:?string,image_modified_at:?string,
+ *     photo_views:int|string}> Ranked photo identities,
+ *     safe route metadata when available, and aggregate view counts.
  */
 function telemetry_model_top_photos(
     int $days,
     int $limit,
     string $trafficSegment = 'all',
+    bool $includePublicPaths = false,
 ): array {
     $limit = max(1, min(50, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition(
         $trafficSegment,
         'm.device_type',
     );
+    // Optional path columns must not break reports on an older schema.
+    $paths = $includePublicPaths
+        ? 'i.url_slug AS image_url_slug, g.url_path AS gallery_url_path, i.modified_at AS image_modified_at'
+        : 'NULL AS image_url_slug, NULL AS gallery_url_path, NULL AS image_modified_at';
+    $groupPaths = $includePublicPaths ? ', i.url_slug, g.url_path, i.modified_at' : '';
     $stmt = db()->prepare(
-        'SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.event_count) AS photo_views
+        'SELECT i.id, i.filename, i.gallery_id, g.slug AS gallery_slug, '
+            . $paths . ', g.title AS gallery_title, SUM(m.event_count) AS photo_views
         FROM telemetry_hourly_metrics m
         JOIN images i ON i.id = m.image_id
         JOIN galleries g ON g.id = i.gallery_id
         WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0'
             . $segmentSql
             . '
-        GROUP BY i.id, i.filename, g.title
+        GROUP BY i.id, i.filename, i.gallery_id, g.title, g.slug'
+            . $groupPaths . '
         ORDER BY photo_views DESC
         LIMIT '
             . $limit,
@@ -426,27 +439,41 @@ function telemetry_model_top_photos(
  * @param int $limit Maximum number of rows returned.
  * @param int $days Lookback window in days.
  * @param string $trafficSegment Normalized technical traffic segment used to select rows.
- * @return array<int,array{id:int,filename:string,gallery_title:string,avg_view_seconds:float,view_count:int}> Rows containing image id, filename, gallery title, average view seconds, and view count.
+ * @param bool $includePublicPaths Whether verified public-path columns may be read.
+ * @return list<array{id:int|string,filename:string,gallery_id:int|string,
+ *     gallery_slug:string,gallery_title:string,image_url_slug:?string,
+ *     gallery_url_path:?string,image_modified_at:?string,
+ *     avg_view_seconds:float|string,
+ *     view_count:int|string}> Ranked photo identities, optional route metadata,
+ *     average capped duration and sample counts.
  */
 function telemetry_model_longest_viewed_photos(
     int $days,
     int $limit,
     string $trafficSegment = 'all',
+    bool $includePublicPaths = false,
 ): array {
     $limit = max(1, min(50, $limit));
     $segmentSql = telemetry_model_traffic_segment_condition(
         $trafficSegment,
         'm.device_type',
     );
+    // Keep the passive legacy report available without optional route columns.
+    $paths = $includePublicPaths
+        ? 'i.url_slug AS image_url_slug, g.url_path AS gallery_url_path, i.modified_at AS image_modified_at'
+        : 'NULL AS image_url_slug, NULL AS gallery_url_path, NULL AS image_modified_at';
+    $groupPaths = $includePublicPaths ? ', i.url_slug, g.url_path, i.modified_at' : '';
     $stmt = db()->prepare(
-        'SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.value_sum) / NULLIF(SUM(m.event_count), 0) AS avg_view_seconds, SUM(m.event_count) AS view_count
+        'SELECT i.id, i.filename, i.gallery_id, g.slug AS gallery_slug, '
+            . $paths . ', g.title AS gallery_title, SUM(m.value_sum) / NULLIF(SUM(m.event_count), 0) AS avg_view_seconds, SUM(m.event_count) AS view_count
         FROM telemetry_hourly_metrics m
         JOIN images i ON i.id = m.image_id
         JOIN galleries g ON g.id = i.gallery_id
         WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0'
             . $segmentSql
             . '
-        GROUP BY i.id, i.filename, g.title
+        GROUP BY i.id, i.filename, i.gallery_id, g.title, g.slug'
+            . $groupPaths . '
         HAVING view_count > 0
         ORDER BY avg_view_seconds DESC
         LIMIT '
@@ -1073,7 +1100,11 @@ function telemetry_model_report_session_summary(
  * Return daily trend report rows.
  * @param int $days Lookback window in days.
  * @param string $trafficSegment Normalized technical traffic segment used to select rows.
- * @return array<int,array{report_date:string,page_views:int,photo_views:int,photo_seconds:float,client_errors:int,media_bytes:float}> Daily rows containing report date and page, photo, error, and media aggregates.
+ * @return list<array{report_date:string,page_views:int|string,
+ *     photo_views:int|string,photo_seconds:int|float|string,
+ *     client_errors:int|string,media_bytes:int|float|string,
+ *     image_bytes:int|float|string}>
+ *     Daily counts and sums; image bytes exclude download traffic.
  */
 function telemetry_model_report_daily_trends(
     int $days,
@@ -1086,6 +1117,7 @@ function telemetry_model_report_daily_trends(
         SUM(CASE WHEN metric_name = \'photo.views\' THEN event_count ELSE 0 END) AS photo_views,
         SUM(CASE WHEN metric_name = \'photo.view_seconds\' THEN value_sum ELSE 0 END) AS photo_seconds,
         SUM(CASE WHEN metric_name = \'client.errors\' THEN event_count ELSE 0 END) AS client_errors,
+        SUM(CASE WHEN metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\') THEN value_sum ELSE 0 END) AS image_bytes,
         SUM(CASE WHEN metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN value_sum ELSE 0 END) AS media_bytes
         FROM telemetry_hourly_metrics
         WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)'

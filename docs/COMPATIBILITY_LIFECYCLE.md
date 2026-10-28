@@ -1,5 +1,133 @@
 # Compatibility lifecycle and retirement register
 
+## Lightbox fullscreen exit and split-map lifetime
+
+Owner: `public/assets/gallery-modules/lightbox.js`. Native browser fullscreen
+exit can consume Escape without delivering a page keydown. Both that event
+and the explicit F/control exit use the same normal-viewer cleanup: dispose
+Leaflet and its resize observer, hide split controls, clear fitted-map geometry
+and unavailable state, cancel map-photo selection and stop the slideshow.
+CSS/mobile fullscreen remains supported; page-delivered Escape leaves that
+shell with the same cleanup. M retains independent map toggling.
+
+Split-map payload, Leaflet-load and layout continuations retain a render
+generation. Closing the split invalidates their generation, including across
+rapid fullscreen exit/reentry, so late completion cannot reopen the pane.
+The existing native-refusal CSS fallback is permanent capability support;
+supported-browser/version usage remains unknown and no retirement is proposed.
+The registered browser fixture covers exit-event cleanup, CSS Escape and
+late runtime completion with synthetic media and a Leaflet boundary.
+Real browser-chrome Escape, mobile devices and production acceptance require
+manual verification; synthetic fullscreen events do not prove those paths.
+
+## Telemetry preference transports
+
+Standalone report delivery keeps its existing Admin-only URL, segment filters,
+HTML body and safe suggested filename. Its controller now sends private,
+no-store inline HTML so the Reports link remains visible in the browser's new
+tab. The former forced-attachment disposition conflicted with that documented
+interaction. HTTP clients can still read/save the same HTML response; native
+links also work without scripts. Schema failure status/text remains unchanged.
+
+Overview navigation uses existing public photo/gallery URL owners and their
+normal access checks. Its telemetry service uses central schema inspection to
+verify route/cache-identity columns before the model reads them. Unverified
+columns leave ranking names unlinked and preserve the original read-only
+counts; do not guess a different public image slug. This remains permanent
+support for pre-path installs and transient observation failures; current
+deployment/version usage is unknown. The controller owns link preparation.
+Daily SVGs and the native daily-data disclosure work without JavaScript.
+Missing date rows and absent retained session-day rows remain gaps, while
+observed zero counters retain their zero baseline. Independent retention may
+leave headline totals without corresponding daily detail.
+Preview icons permanently reuse the Images editor's hover/focus/click/Escape
+owner and ordinary thumbnail serving. With no script, native photo/gallery
+name links remain available; preview enhancement usage is unknown. Opening a
+preview requests a bounded derivative and retains existing media protections.
+
+The telemetry controller and `admin-telemetry-workspace.js` enhance one-key
+native forms with immediate, authenticated CSRF-protected saves. Confirmed
+readback supplies canonical values; unavailable readback, timeout or malformed
+completion locks only that form and offers passive reload without write retry.
+The unchanged complete-form POST remains supported for existing consumers.
+Native scoped Save forms and help disclosures permanently support no-script
+and missing-Popover environments. Usage of those environments is unknown; no
+retirement cutoff is inferred. Isolated controller/browser fixtures cover the
+transport states; real devices, assistive technology and production acceptance
+remain separate from hosted qualification. Rollup/purge keeps its explicit POST
+and existing storage/service safety boundaries.
+
+## Trash preferences and confirmation support
+
+`admin_trash.php` and `admin-trash.js` own the compact preference form and its
+native help disclosures. With JavaScript, the existing authenticated POST/CSRF
+settings route saves both switches and numeric fields together, then reads the
+canonical Trash fragment so deadline/pause evidence stays aligned. A guarded
+refusal returns persisted values. A lost/malformed response or failed follow-up
+read locks Trash controls and offers only passive reconciliation; no write is
+replayed or presumed rolled back. Existing fresh-retention rearming and schema
+guards remain with the service. Restore, purge and Empty Trash keep their
+independent confirmations and bounded lifecycle workflows.
+
+Without JavaScript, the classic Save/POST and native help remain permanent
+supported transports. Popover enhancement is optional; unsupported browsers
+retain readable inline disclosure content. Older-browser/no-script usage is
+unknown, so there is no retirement cutoff. Desktop/narrow preview does not prove
+real-device, assistive-technology, failure-path or destructive acceptance. The
+registered rendering/browser fixtures own isolated regression coverage; hosted
+FULL and disposable-installation lifecycle acceptance remain separate evidence.
+
+## Dashboard compact help and action labels
+
+The dashboard views and `admin-dashboard-workspace.js` own the compact
+Maintenance Content pilot. Its server-rendered question marks are native
+disclosures. JavaScript promotes only their help bodies to native auto-popovers
+when supported, preserving Escape/outside-click dismissal and trigger focus.
+Absent JavaScript or Popover API support, native disclosures remain usable.
+Without JavaScript, explicit Save/POST forms remain the permanent compatibility
+transport; enhanced switches save immediately with visible feedback, serializing
+each form. Unknown completion blocks further writes until a passive reload and
+never replays a possibly completed mutation. JSON refusals reconcile authoritative
+values without bypassing authentication, CSRF, capabilities or GPS schema gates.
+The existing domain controllers own both transports; independent GPS override
+reset and path regeneration keep their explicit workflows. Canonical factory
+metadata is shared with the Settings registry and adds no schema/storage probe.
+Older-browser usage is unknown, so no retirement cutoff is inferred.
+Local acceptance covers density, help/viewport bounds and Public search
+OFF/reload/ON with its original value restored. Hosted fixtures additionally
+cover refusal, coupled crawler values and lost responses. No-script paths,
+other persistent local settings, real devices and production remain unverified.
+
+## Central Settings contextual help
+
+Settings owns the native light-dismiss help in `admin_settings.php`,
+`admin-settings-workspace.js` and `admin-feature-settings.css`. Browsers without
+popover support permanently receive inline descriptions and no inert question
+marks. This presentation fallback preserves help and native forms without
+requiring JavaScript or changing persistence. Usage of older browsers is unknown;
+there is no version-based retirement. Desktop/narrow acceptance covers native
+popover positioning, Escape, outside-click dismissal and switch label geometry.
+The unsupported-browser fallback and system forced-color rendering have source
+review only; real-device and production acceptance remain unverified.
+
+## Admin feature autosave and complete-form support
+
+The feature-policy service permanently supports the complete revisioned Admin
+form for direct requests and browsers without JavaScript. Scoped autosave
+preserves absent preferences instead of applying complete-form OFF semantics.
+Both transports use the same canonical setters, authentication, CSRF and
+registry revision. The compatibility owner is `feature_flags/admin.php` and the
+Admin Features controller/view; removal would require evidence that supported
+non-JavaScript/direct-form consumers no longer exist. Usage is currently
+unknown, so support is retained. Factory reset uses new-installation defaults
+where declared and changes masters only; no schema or subordinate-setting
+reset is introduced. Partial domain failures reconcile persisted health, and a
+lost response requires a passive read without automatic mutation replay.
+Local acceptance covered save/reload, dependency recovery and factory reset
+with the original preferences restored. Hosted PHP/HTTP/browser contracts cover
+scoped preservation, adverse requests, fresh defaults and lost-response reads;
+production deployment remains unverified until installation.
+
 ## Failed updater jobs
 
 Explicit Admin recovery permanently supports overwrite-only FTP deployments,
@@ -133,6 +261,28 @@ target or merely restoring files cannot prove database compatibility.
 Disposable fixtures exercise real SQL replay, locks and file activation.
 Live hosting, external writes, production data compatibility and actual
 deployment acceptance remain unknown; no usage assumption retires legacy readers.
+
+## Browser-local Admin navigation
+
+- Owner: the shared Admin chrome view, `admin-navigation.js` and
+  `admin-navigation.css`.
+- Protected behavior: navigation groups, capability filtering, ordinary URLs and
+  keyboard access remain available on desktop and narrow screens. The desktop
+  starts expanded; its icon-rail preference stays in installation-scoped browser
+  storage. Mobile opening is transient and does not change that preference.
+- Permanent fallback: browser privacy policy or quota may reject localStorage
+  reads/writes. Keep the current document's choice in memory and fall back to
+  expanded on a new document; do not replace this with database persistence.
+  Without JavaScript retain visible grouped navigation. When ResizeObserver is
+  absent, retain initial and window-resize header measurement. These paths may
+  retire only after an explicitly reviewed browser-support-floor change;
+  storage-denial and scriptless navigation are permanently supported.
+- Regression evidence: production-markup Chromium scenarios cover the rail,
+  reload, denied storage, responsive disclosure, focus and sidebar replacement.
+  Both desktop states reach their last account action through document scrolling
+  without an independent sidebar scroller; the mobile panel remains bounded.
+  BASIC does not execute those scenarios; hosted FULL remains the execution
+  authority. Real assistive-technology and physical-device usage are unknown.
 
 ## Browser-local visitor progress
 
@@ -1339,6 +1489,25 @@ qualification remain separate evidence.
 
 ## Owner-selected feature qualification and protected-develop releases (#235)
 
+Current native owner contract 4 retains all functional shards and mandatory
+Linux/Windows packaging among 27 required jobs. Integration dispatches macOS
+packaging separately from the selected feature revision for the exact prepared
+candidate/base. Its genuine result remains advisory even when a runner is
+unavailable, times out or fails. Owner: `.github/scripts/ci-owner-contract.mjs`
+and the integration/reusable workflows. On 2026-10-28, integration runs
+`40725313291` and `40729700051` could not acquire a macOS runner and ended with
+cancelled packaging despite successful Linux/Windows packaging. The second run
+passed all functional owners. This observed capacity failure motivates the
+independent boundary; it establishes no production macOS adoption.
+
+Historical contracts 1–3 preserve mandatory macOS and their original owner
+counts. Readers authenticate complete Git-hashed workflow bytes before choosing
+the owner contract; missing native jobs never select a newer contract. Keep
+these readers until supported retained integration/release consumers are proven
+absent; their current usage is unknown. Regression fixtures reject missing
+Linux/Windows and historical macOS owners, preserve real adverse advisory
+outcomes, and exercise dispatch refusal without a ref write or run wait.
+
 Owners: integration/evidence and release origin/promotion readers. New
 integration
 schema 2 permits explicit owner-selected feature workflows and seals successful
@@ -1941,6 +2110,34 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
 
 ## Updater and release compatibility
 
+### UPD-6 — Source ZIPs without HTTP Range support
+
+- **Reason / protected scenario:** GitHub's codeload source archive can ignore
+  Range and return HTTP 200. Short workers then repeatedly replace the same
+  partial archive without reaching extraction. Cached PHP stat results can
+  additionally misreport newly written bytes, including resumed completion.
+- **Owner:** `updates_jobs/download.php` owns refreshed measurements, bounded
+  restart counting and published-archive selection. `updates_filesystem.php`
+  recognizes the flat production ZIP and the historical source wrapper.
+- **Safety:** Three incomplete full-response restarts select a published asset
+  through one metadata request per slice. Its canonical URL, version, original
+  full commit, positive size and SHA-256 are required. Raw ZIP digest validation
+  precedes extraction regardless of the optional per-file verifier. A retry
+  clears old archive receipts and keeps the commit. No request limit is raised.
+- **Evidence / tests:** On 2026-10-28, the source archive at `9cb0125e` ignored
+  a GET Range request and exceeded one two-second opportunity; the existing
+  published production asset returned the requested 206 byte range.
+  `updater_download_transport_test.php` covers both confined transport paths,
+  resumed file sizes, short writes, fallback identity and digest refusal,
+  evidence preservation and retry. Hosted execution must qualify the changed
+  candidate; an earlier green develop does not execute the added fixture.
+- **Usage / support rationale:** Production frequency and installed-client
+  distribution are unknown. Preserve source archives for unpublished snapshots
+  and older releases; no matching asset may be inferred from version alone.
+  The first hop from an older installed downloader remains operator acceptance
+  work. Safe retirement requires a supported upgrade floor and equivalent
+  bounded download/identity coverage, not a passing fast-network check.
+
 
 ### FILES-1 — Windows layout-migration sidecar sharing locks
 
@@ -2054,8 +2251,8 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
   resources with unchanged CMS activation ownership. It retains the existing
   pre-companion fixture. Policy regressions reject malformed, unsafe, duplicate,
   unordered or updater-owned resources. The real folder/ZIP builder checks full
-  font/license bytes, with complete package coverage on all three hosted
-  systems.
+  font/license bytes, with mandatory Linux/Windows package coverage and
+  independent advisory macOS coverage under current owner contract 4.
 - **Usage / retirement:** The supplied production failure confirms this reader
   generation remains deployed; aggregate adoption is unknown. Preserve the
   additive format until supported installed readers no longer validate the old

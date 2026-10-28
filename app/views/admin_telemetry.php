@@ -17,6 +17,7 @@
  *
  * Author:
  *   Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
@@ -43,12 +44,17 @@ use function Gallery\Services\t;
  * @param string $label Metric label.
  * @param string $value Formatted metric value.
  * @param string $hint Optional explanatory hint.
- * @return void Emit the labeled metric card and optional explanatory hint.
+ * @param list<array{date:string,value:?float,formatted:string}> $trend Observed
+ *     daily values, preserving gaps and the metric's own unit.
+ * @param ?int $trendDays Rolling chart window, or null for the legacy value-only card.
+ * @return void Emit the labeled value, optional hint and optional daily chart.
  */
 function view_render_telemetry_metric_card(
     string $label,
     string $value,
     string $hint = '',
+    array $trend = [],
+    ?int $trendDays = null,
 ): void {
     echo
         '<article class="metric-card"><strong>'
@@ -59,7 +65,63 @@ function view_render_telemetry_metric_card(
     if ($hint !== '') {
         echo '<small>' . e($hint) . '</small>';
     }
+    if ($trendDays !== null) {
+        view_render_telemetry_sparkline($trend, $label, $trendDays);
+    }
     echo '</article>';
+}
+
+/**
+ * Render a compact daily bar chart with native exact-value tooltips.
+ *
+ * @param list<array{date:string,value:?float,formatted:string}> $points Ordered
+ *     daily pairs; null values and absent dates remain gaps in the date axis.
+ * @param string $label Localized metric name used as the accessible image title.
+ * @param int $days Rolling reporting window; partial boundary days share its axis.
+ * @return void Emit a Theme-colored SVG or an explicit unavailable-detail note.
+ */
+function view_render_telemetry_sparkline(
+    array $points,
+    string $label,
+    int $days,
+): void {
+    $observed = array_filter(
+        $points, static fn(array $point): bool => $point['value'] !== null,
+    );
+    if ($observed === []) {
+        $unavailable = t('admin.telemetry.daily_unavailable', 'No daily detail');
+        echo '<small class="telemetry-trend-empty" title="' . e($unavailable)
+            . '" aria-label="' . e($unavailable) . '">—</small>';
+        return;
+    }
+    $maximum = max(array_column($observed, 'value'));
+    $last = new \DateTimeImmutable($points[array_key_last($points)]['date']);
+    // Normalize drawing geometry to a 160 by 32 unit SVG. One extra slot
+    // represents the partial first calendar day of a rolling day window.
+    $step = 160 / ($days + 1);
+    echo '<svg class="telemetry-sparkline" viewBox="0 0 160 32" role="img"'
+        . ' aria-label="' . e($label . ': '
+            . t('admin.telemetry.daily_detail', 'Daily detail')) . '">'
+        . '<title>' . e($label) . '</title>'
+        . '<path class="telemetry-trend-baseline" d="M0 31H160"/>';
+    foreach ($points as $point) {
+        if ($point['value'] === null) {
+            continue;
+        }
+        $date = new \DateTimeImmutable($point['date']);
+        $offset = (int) $last->diff($date)->days;
+        $x = 160 - ($offset + 1) * $step;
+        $height = $maximum > 0 ? 28 * $point['value'] / $maximum : 0;
+        echo '<g><title>' . e($point['date'] . ': ' . $point['formatted'])
+            . '</title><rect class="telemetry-trend-hit" x="' . e((string) $x)
+            . '" y="0" width="' . e((string) $step) . '" height="32"/>'
+            . '<rect class="telemetry-trend-bar" x="'
+            . e((string) ($x + $step * .15)) . '" y="'
+            . e((string) (30 - $height)) . '" width="'
+            . e((string) ($step * .7)) . '" height="'
+            . e((string) $height) . '" rx="1"/></g>';
+    }
+    echo '</svg>';
 }
 
 /**
@@ -88,7 +150,9 @@ function view_render_telemetry_checkbox(
 /**
  * Render a photo telemetry table for one selected metric.
  *
- * @param array<int,array<string,mixed>> $rows Photo telemetry rows with filename and gallery title.
+ * @param list<array<string,int|float|string|null>> $rows Photo rows with filename,
+ *     gallery_title, optional prepared photo_url/gallery_url/preview_url and
+ *     the selected numeric metric field.
  * @param string $valueKey Metric field selected for display.
  * @param string $valueLabel Heading for the displayed metric.
  * @return void Emit the photo table or its empty-state message.
@@ -114,13 +178,37 @@ function view_render_telemetry_photo_table(
             . e($valueLabel)
             . '</th></tr></thead><tbody>';
     foreach ($rows as $row) {
+        $photo = e((string) ($row['filename'] ?? ''));
+        $gallery = e((string) ($row['gallery_title'] ?? ''));
+        if (!empty($row['photo_url'])) {
+            $photo = '<a class="telemetry-entity-link" href="'
+                . e((string) $row['photo_url']) . '">' . $photo . '</a>';
+        }
+        if (!empty($row['preview_url'])) {
+            $previewLabel = t('admin.gallery_editor.preview', 'Preview')
+                . ' ' . (string) ($row['filename'] ?? '');
+            $photo = '<span class="telemetry-photo-target"><button type="button" class="telemetry-photo-preview"'
+                . ' data-admin-image-preview data-preview-src="'
+                . e((string) $row['preview_url']) . '" data-preview-name="'
+                . e((string) ($row['filename'] ?? ''))
+                . '" data-preview-close-label="'
+                . e(t('admin.gallery_editor.images_close_preview', 'Close preview'))
+                . '" aria-label="' . e($previewLabel) . '" title="'
+                . e($previewLabel) . '">' . view_admin_menu_icon('galleries')
+                . '</button>' . $photo . '</span>';
+        }
+        if (!empty($row['gallery_url'])) {
+            $gallery = '<a class="telemetry-entity-link" href="'
+                . e((string) $row['gallery_url']) . '">' . $gallery . '</a>';
+        }
         echo
             '<tr><td>'
-                . e((string) ($row['filename'] ?? ''))
+                . $photo
                 . '</td><td>'
-                . e((string) ($row['gallery_title'] ?? ''))
+                . $gallery
                 . '</td><td>'
-                . e(number_format((float) ($row[$valueKey] ?? 0), 2))
+                // Opens are discrete counts; time averages retain two decimals.
+                . e(number_format((float) ($row[$valueKey] ?? 0), $valueKey === 'photo_views' ? 0 : 2))
                 . '</td></tr>';
     }
     echo '</tbody></table>';
@@ -168,333 +256,338 @@ function view_render_telemetry_key_value_table(
 }
 
 /**
- * Render telemetry summary controls from prepared report data.
- * @param array{page_title:string,settings_url:string,logs_url:string,export_urls:array<string,string>,dashboard_url:string,schema_ready:bool,schema_title:string,schema_message:string,public_enabled:bool,raw_retention_days:int,admin_excluded:bool,metrics:list<array{label:string,value:string}>,settings:array<string,string>,checkboxes:list<array{key:string,label:string,checked:bool}>,settings_action_url:string,csrf_html:string,maintenance_url:string,tables:array<string,list<array<string,int|float|string|null>>>} $viewModel Prepared status, settings, navigation and aggregate tables.
- * @return void No return value; effects are recorded in the owned state.
+ * Render one isolated telemetry preference using service-prepared field metadata.
+ *
+ * @param array{preferences:array<string,array{input_type:string,current:string,
+ *     default:string,validation:array<string,int>,available:bool}>,
+ *     settings_action_url:string,csrf_html:string} $model Prepared controls,
+ *     canonical defaults, action URL and authenticated native CSRF field.
+ * @param string $key Allowlisted telemetry preference identifier.
+ * @param string $label Localized short field label.
+ * @param string $hint Localized explanation retained in contextual help.
+ * @param string $tab Owning collection/storage navigation panel.
+ * @return void Emit one native scoped form with accessible persistence feedback.
+ */
+function view_render_telemetry_preference(
+    array $model,
+    string $key,
+    string $label,
+    string $hint,
+    string $tab,
+): void {
+    $field = $model['preferences'][$key];
+    $checkbox = $field['input_type'] === 'checkbox';
+    $default = $checkbox
+        ? ($field['default'] === '1'
+            ? t('admin.common.enabled', 'Enabled')
+            : t('admin.common.disabled', 'Disabled'))
+        : $field['default'];
+    $factory = t('admin.dashboard.content_factory_tooltip',
+        'Factory default: {value}', ['value' => $default]);
+    $id = 'telemetry-' . $key;
+    echo '<form class="telemetry-preference" method="post" action="'
+        . e($model['settings_action_url']) . '" data-telemetry-preference>'
+        . $model['csrf_html']
+        . '<input type="hidden" name="telemetry_preference" value="' . e($key) . '">'
+        . '<input type="hidden" name="telemetry_tab" value="' . e($tab) . '">'
+        . '<label for="' . e($id) . '" title="' . e($factory) . '">';
+    if (!$checkbox) {
+        echo '<span>' . e($label) . '</span>';
+    }
+    echo '<input id="' . e($id) . '" data-telemetry-input name="' . e($key)
+        . '" type="' . ($checkbox ? 'checkbox' : 'number')
+        . '" title="' . e($factory) . '" aria-description="' . e($factory) . '"';
+    if ($checkbox) {
+        echo ' value="1"' . ($field['current'] === '1' ? ' checked' : '');
+    } else {
+        echo ' value="' . e($field['current']) . '"';
+        foreach ($field['validation'] as $attribute => $value) {
+            echo ' ' . e($attribute) . '="' . e((string) $value) . '"';
+        }
+        echo ' required';
+    }
+    echo empty($field['available']) ? ' disabled' : '';
+    echo '>';
+    if ($checkbox) {
+        echo '<span>' . e($label) . '</span>';
+    }
+    echo '</label>';
+    view_render_admin_dashboard_compact_help($id . '-help', $label, [$hint]);
+    echo '<button type="submit" data-telemetry-save>'
+        . e(t('admin.common.save', 'Save')) . '</button>'
+        . '<span data-telemetry-feedback role="status" aria-live="polite">'
+        . (empty($field['available'])
+            ? e(t('admin.telemetry.settings_unavailable', 'Stored preferences are unavailable.')) : '')
+        . '</span>'
+        . '</form>';
+}
+
+/**
+ * Render the compact telemetry workspace from prepared values and destinations.
+ *
+ * @param array{page_title:string,settings_url:string,logs_url:string,
+ *     export_urls:array<string,string>,schema_ready:bool,
+ *     schema_title:string,schema_message:string,public_enabled:bool,
+ *     admin_excluded:bool,active_tab:string,
+ *     tab_urls:array<string,string>,metrics:list<array{label:string,value:string,
+ *     trend?:list<array{date:string,value:?float,formatted:string}>}>,
+ *     trend_days?:int,trend_rows?:list<array{date:string,values:list<string>}>,
+ *     preferences:array<string,array{input_type:string,current:string,
+ *     default:string,validation:array<string,int>,available:bool}>,
+ *     settings_action_url:string,csrf_html:string,maintenance_url:string,
+ *     tables:array<string,list<array<string,int|float|string|null>>>} $viewModel
+ *     Prepared status, preference metadata, safe links and aggregate tables.
+ * @return void Emit native navigable panels, scoped forms and read-only reports.
  */
 function view_render_admin_telemetry_dashboard(array $viewModel): void
 {
-    render_header((string) ($viewModel['page_title'] ?? ''));
-    echo '<div class="admin-telemetry-page">';
-    echo
-        '<section class="hero"><h1>'
-            . e(t('admin.telemetry.title', 'Anonymous telemetry'))
-            . '</h1><p>'
-            . e(t(
-                'admin.telemetry.description',
-                'Local, privacy-safe usage and performance statistics for tuning the gallery.',
-            ))
-            . '</p><nav class="nav">';
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($viewModel['settings_url'] ?? ''))
-            . '">'
-            . e(t(
-                'admin.settings.open_centralized',
-                'Open centralized settings',
-            ))
-            . '</a>';
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($viewModel['logs_url'] ?? ''))
-            . '">'
-            . e(t('admin.telemetry.operational_logs', 'Operational logs'))
-            . '</a>';
-    $exportUrls = (array) ($viewModel['export_urls'] ?? []);
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($exportUrls['all'] ?? ''))
-            . '">'
-            . e(t('admin.telemetry.export_all_traffic', 'Export all traffic'))
-            . '</a>';
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($exportUrls['non_bot'] ?? ''))
-            . '">'
-            . e(t(
-                'admin.telemetry.export_non_bot_traffic',
-                'Export non-bot-classified',
-            ))
-            . '</a>';
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($exportUrls['bot'] ?? ''))
-            . '">'
-            . e(t(
-                'admin.telemetry.export_bot_traffic',
-                'Export bot-classified',
-            ))
-            . '</a>';
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($exportUrls['unknown'] ?? ''))
-            . '">'
-            . e(t(
-                'admin.telemetry.export_unknown_traffic',
-                'Export unclassified',
-            ))
-            . '</a>';
-    echo
-        '<a class="button secondary" href="'
-            . e((string) ($viewModel['dashboard_url'] ?? ''))
-            . '">'
-            . e(t('admin.common.dashboard', 'Dashboard'))
-            . '</a></nav></section>';
-
-    if (empty($viewModel['schema_ready'])) {
-        echo
-            '<section class="panel"><h2>'
-                . e((string) ($viewModel['schema_title'] ?? ''))
-                . '</h2><p>'
-                . e((string) ($viewModel['schema_message'] ?? ''))
-                . '</p></section>';
-        echo '</div>';
+    render_header($viewModel['page_title']);
+    echo '<div class="admin-telemetry-page" data-telemetry-workspace'
+        . ' data-saving-label="' . e(t('admin.features.saving', 'Saving…')) . '"'
+        . ' data-failed-label="' . e(t('admin.telemetry.preference_unverified',
+            'Save could not be verified. Reload the saved state before trying again.')) . '"'
+        . ' data-reload-label="' . e(t('admin.telemetry.reload_saved', 'Reload saved state')) . '"'
+        . ' data-enabled-label="' . e(t('admin.common.enabled', 'Enabled')) . '"'
+        . ' data-disabled-label="' . e(t('admin.common.disabled', 'Disabled')) . '">';
+    echo '<header class="telemetry-toolbar"><h1>'
+        . e(t('admin.telemetry.title', 'Anonymous telemetry')) . '</h1>';
+    view_render_admin_dashboard_compact_help('telemetry-about',
+        t('admin.telemetry.title', 'Anonymous telemetry'), [
+            t('admin.telemetry.description', 'Local, privacy-safe usage and performance statistics for tuning the gallery.'),
+            t('admin.telemetry.collector_note', 'The public browser collector uses a neutral first-party endpoint to avoid false positives from privacy filters that block asset or route names containing telemetry.'),
+        ]);
+    echo '<span class="telemetry-collection-state">'
+        . e(t('admin.telemetry.public_telemetry_is', 'Public telemetry is')) . ' <strong data-telemetry-public-status>'
+        . e(!$viewModel['schema_ready'] ? t('admin.common.unknown', 'Unknown') : ($viewModel['public_enabled']
+            ? t('admin.common.enabled', 'Enabled')
+            : t('admin.common.disabled', 'Disabled'))) . '</strong></span></header>';
+    if (!$viewModel['schema_ready']) {
+        echo '<section class="telemetry-group"><h2>'
+            . e($viewModel['schema_title']) . '</h2><p>'
+            . e($viewModel['schema_message']) . '</p></section></div>';
         render_footer();
         return;
     }
-
-    echo
-        '<section class="panel"><h2>'
-            . e(t('admin.telemetry.privacy_status', 'Privacy status'))
-            . '</h2><div class="telemetry-privacy-note">';
-    echo
-        '<p>'
-            . e(t(
-                'admin.telemetry.privacy_text',
-                'This subsystem does not store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or exact locations.',
-            ))
-            . '</p>';
-    echo
-        '<p>'
-            . e(t('admin.telemetry.public_telemetry_is', 'Public telemetry is'))
-            . ' <strong>'
-            . e(
-                !empty($viewModel['public_enabled'])
-                    ? t('admin.common.enabled', 'enabled')
-                    : t('admin.common.disabled', 'disabled'),
-            )
-            . '</strong>. '
-            . e(t(
-                'admin.telemetry.raw_events_retained_for',
-                'Configured raw-event retention:',
-            ))
-            . ' '
-            . e((string) ($viewModel['raw_retention_days'] ?? 7))
-            . ' '
-            . e(t('admin.common.days', 'days'))
-            . '.</p>';
-    if (!empty($viewModel['admin_excluded'])) {
-        echo
-            '<p><strong>'
-                . e(t('admin.telemetry.admin_excluded_strong'))
-                . '</strong> '
-                . e(t('admin.telemetry.admin_excluded_help'))
+    $tabs = [
+        'overview' => t('admin.telemetry.tab_overview', 'Overview'),
+        'collection' => t('admin.telemetry.tab_collection', 'Collection and privacy'),
+        'storage' => t('admin.telemetry.tab_storage', 'History and maintenance'),
+        'reports' => t('admin.telemetry.tab_reports', 'Reports'),
+    ];
+    echo '<nav class="telemetry-tabs" aria-label="' . e($viewModel['page_title']) . '">';
+    foreach ($tabs as $tab => $label) {
+        echo '<a href="' . e($viewModel['tab_urls'][$tab])
+            . '" data-telemetry-tab="' . e($tab)
+            . '" id="telemetry-tab-' . e($tab) . '"'
+            . ($viewModel['active_tab'] === $tab ? ' aria-current="page"' : '')
+            . '>' . e($label) . '</a>';
+    }
+    echo '</nav>';
+    foreach ($tabs as $tab => $label) {
+        echo '<section id="telemetry-panel-' . e($tab)
+            . '" data-telemetry-panel="' . e($tab)
+            . '" aria-labelledby="telemetry-tab-' . e($tab) . '"'
+            . ($viewModel['active_tab'] !== $tab ? ' hidden' : '') . '>';
+        if ($tab === 'overview') {
+            echo '<div class="telemetry-section-heading"><h2>'
+                . e(t('admin.telemetry.last_30_days', 'Last 30 days')) . '</h2>';
+            view_render_admin_dashboard_compact_help('telemetry-overview-help', $label, [
+                t('admin.telemetry.overview_help', 'Historical totals remain available when collection is paused. A session is anonymous; photo time is capped by the configured viewing limit.'),
+                t('admin.telemetry.daily_help', 'Bars show retained daily observations, with a separate scale for each metric. Hover for exact values or open Daily detail. Missing or expired days are not filled with zeros. Image bytes exclude downloads.'),
+            ]);
+            if (!empty($viewModel['trend_rows'])) {
+                $dates = $viewModel['trend_rows'];
+                echo '<span class="telemetry-date-range"><time datetime="'
+                    . e($dates[0]['date']) . '">' . e($dates[0]['date'])
+                    . '</time> – <time datetime="'
+                    . e($dates[array_key_last($dates)]['date']) . '">'
+                    . e($dates[array_key_last($dates)]['date']) . '</time></span>';
+            }
+            echo '</div><div class="metric-grid">';
+            foreach ($viewModel['metrics'] as $metric) {
+                view_render_telemetry_metric_card(
+                    $metric['label'], $metric['value'], '',
+                    $metric['trend'] ?? [], $viewModel['trend_days'] ?? null,
+                );
+            }
+            echo '</div>';
+            if (!empty($viewModel['trend_rows'])) {
+                echo '<details class="telemetry-daily-details"><summary>'
+                    . e(t('admin.telemetry.daily_detail', 'Daily detail'))
+                    . '</summary><table class="telemetry-daily-table"><caption>'
+                    . e(t('admin.telemetry.daily_help', 'Bars show retained daily observations, with a separate scale for each metric. Hover for exact values or open Daily detail. Missing or expired days are not filled with zeros. Image bytes exclude downloads.'))
+                    . '</caption><thead><tr><th scope="col">'
+                    . e(t('admin.telemetry.date', 'Date')) . '</th>';
+                foreach ($viewModel['metrics'] as $metric) {
+                    echo '<th scope="col">' . e($metric['label']) . '</th>';
+                }
+                echo '</tr></thead><tbody>';
+                foreach ($viewModel['trend_rows'] as $row) {
+                    echo '<tr><th scope="row">' . e($row['date']) . '</th>';
+                    foreach ($row['values'] as $index => $value) {
+                        echo '<td data-label="'
+                            . e($viewModel['metrics'][$index]['label']) . '">'
+                            . e($value) . '</td>';
+                    }
+                    echo '</tr>';
+                }
+                echo '</tbody></table></details>';
+            }
+            view_render_telemetry_tables($viewModel['tables']);
+        } elseif ($tab === 'collection') {
+            echo '<div class="telemetry-groups"><section class="telemetry-group"><h2>'
+                . e(t('admin.telemetry.group_collection', 'Collection')) . '</h2>';
+            foreach ([
+                ['telemetry_enabled', 'collect_master', 'Telemetry subsystem', 'help_master', 'Pause collection without deleting history or changing the other preferences.'],
+                ['telemetry_public_usage_enabled', 'collect_usage', 'Public usage', 'help_usage', 'Count anonymous visits, page views and photo opens.'],
+                ['telemetry_performance_enabled', 'collect_performance', 'Browser performance', 'help_performance', 'Collect sampled browser loading and media timings. These samples are not a complete trace of every visit.'],
+                ['telemetry_cache_enabled', 'collect_cache', 'Cache efficiency', 'help_cache', 'Record measured cache hits and misses. This switch does not clear the cache.'],
+                ['telemetry_database_enabled', 'collect_database', 'Database health', 'help_database', 'Collect normalized query fingerprints, durations and errors without storing raw query parameters.'],
+            ] as [$key, $labelKey, $fallback, $hintKey, $hint]) {
+                view_render_telemetry_preference($viewModel, $key,
+                    t('admin.telemetry.' . $labelKey, $fallback),
+                    t('admin.telemetry.' . $hintKey, $hint), $tab);
+            }
+            echo '</section><section class="telemetry-group"><div class="telemetry-group-heading"><h2>'
+                . e(t('admin.telemetry.group_privacy', 'Privacy')) . '</h2>';
+            view_render_admin_dashboard_compact_help('telemetry-privacy-help',
+                t('admin.telemetry.privacy_status', 'Privacy status'), [
+                    t('admin.telemetry.privacy_text', 'This subsystem does not store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or exact locations.'),
+                ]);
+            echo '</div>';
+            view_render_telemetry_preference($viewModel, 'telemetry_respect_dnt',
+                t('admin.telemetry.collect_dnt', 'Respect Do Not Track'),
+                t('admin.telemetry.dnt_help', 'Honor the visitor browser’s Do Not Track preference when collecting public usage.'), $tab);
+            view_render_telemetry_preference($viewModel, 'telemetry_admin_excluded',
+                t('admin.telemetry.collect_exclude_admins', 'Exclude signed-in admins'),
+                t('admin.telemetry.admin_excluded_help'), $tab);
+            echo '<p class="telemetry-note" data-telemetry-admin-status'
+                . (!$viewModel['admin_excluded'] ? ' hidden' : '') . '>'
+                . e(t('admin.telemetry.admin_excluded_strong')) . '</p>';
+            echo '<a class="telemetry-related-link" href="' . e($viewModel['settings_url']) . '">'
+                . e(t('admin.telemetry.other_privacy_settings', 'Other site privacy settings')) . ' ↗</a>'
+                . '</section><section class="telemetry-group"><h2>'
+                . e(t('admin.telemetry.group_view_time', 'Photo viewing time')) . '</h2>';
+            view_render_telemetry_preference($viewModel, 'telemetry_max_photo_view_seconds',
+                t('admin.telemetry.view_limit', 'Counted seconds per photo'),
+                t('admin.telemetry.max_photo_view_time_hint', 'When someone opens a photo, we only count the first part of that session. If they leave the tab open for a long time, we stop counting after this limit so one forgotten tab does not make the numbers look bigger than real use.'), $tab);
+            echo '</section></div>';
+        } elseif ($tab === 'storage') {
+            echo '<div class="telemetry-groups"><section class="telemetry-group"><h2>'
+                . e(t('admin.telemetry.group_history', 'Usage history')) . '</h2>';
+            foreach ([
+                ['telemetry_raw_retention_days', 'retention_raw', 'Detailed events, days', 'raw_event_retention_hint', 'Detailed events are the largest records and support recent troubleshooting.'],
+                ['telemetry_hourly_retention_days', 'retention_hourly', 'Hourly totals, days', 'hourly_retention_hint', 'Hourly totals are smaller summaries for recent trends.'],
+                ['telemetry_daily_retention_days', 'retention_daily', 'Daily totals, days', 'daily_retention_hint', 'Daily totals support long-term trends.'],
+            ] as [$key, $labelKey, $fallback, $hintKey, $hint]) {
+                view_render_telemetry_preference($viewModel, $key,
+                    t('admin.telemetry.' . $labelKey, $fallback),
+                    t('admin.telemetry.' . $hintKey, $hint), $tab);
+            }
+            echo '</section><section class="telemetry-group"><h2>'
+                . e(t('admin.telemetry.group_database', 'Database diagnostics')) . '</h2>';
+            view_render_telemetry_preference($viewModel, 'telemetry_database_retention_days',
+                t('admin.telemetry.retention_database', 'SQL diagnostics, days'),
+                t('admin.telemetry.database_retention_hint', 'SQL query fingerprints are short-lived diagnostics. This independent retention does not shorten usage history.'), $tab);
+            echo '</section><section class="telemetry-group"><div class="telemetry-group-heading"><h2>'
+                . e(t('admin.telemetry.group_maintenance', 'Maintenance')) . '</h2>';
+            view_render_admin_dashboard_compact_help('telemetry-maintenance-help',
+                t('admin.telemetry.group_maintenance', 'Maintenance'), [
+                    t('admin.telemetry.maintenance_help', 'Combine detailed events into summaries and remove records past their retention limits. This action changes stored telemetry; opening this tab does not run it.'),
+                ]);
+            echo '</div><form method="post" action="' . e($viewModel['maintenance_url'])
+                . '">' . $viewModel['csrf_html'] . '<button type="submit">'
+                . e(t('admin.telemetry.run_rollup_purge', 'Run rollup and purge now'))
+                . '</button></form></section></div>';
+        } else {
+            echo '<div class="telemetry-groups"><section class="telemetry-group"><h2>'
+                . e(t('admin.telemetry.group_reports', 'HTML reports')) . '</h2>'
+                . '<p class="telemetry-note">'
+                . e(t('admin.telemetry.report_help', 'Open a standalone report in a new tab. Classification describes observed traffic; unclassified traffic stays separate.'))
                 . '</p>';
+            foreach ([
+                'all' => t('admin.telemetry.export_all_traffic', 'Export all traffic'),
+                'non_bot' => t('admin.telemetry.export_non_bot_traffic', 'Export non-bot-classified'),
+                'bot' => t('admin.telemetry.export_bot_traffic', 'Export bot-classified'),
+                'unknown' => t('admin.telemetry.export_unknown_traffic', 'Export unclassified'),
+            ] as $segment => $reportLabel) {
+                echo '<a class="telemetry-report-link" target="_blank" rel="noopener" href="'
+                    . e($viewModel['export_urls'][$segment]) . '">'
+                    . e($reportLabel) . ' <span aria-hidden="true">↗</span></a>';
+            }
+            echo '</section><section class="telemetry-group"><h2>'
+                . e(t('admin.telemetry.group_tools', 'Related tools')) . '</h2>'
+                . '<a class="telemetry-report-link" href="' . e($viewModel['logs_url']) . '">'
+                . e(t('admin.telemetry.operational_logs', 'Operational logs')) . ' ↗</a>'
+                . '<p class="telemetry-note">'
+                . e(t('admin.telemetry.logs_help', 'Open the separate Logs page for operational events and maintenance failures.'))
+                . '</p></section></div>';
+        }
+        echo '</section>';
     }
-    echo
-        '<p>'
-            . e(t(
-                'admin.telemetry.collector_note',
-                'The public browser collector uses a neutral first-party endpoint to avoid false positives from privacy filters that block asset or route names containing telemetry.',
-            ))
-            . '</p></div></section>';
-
-    echo
-        '<section class="panel"><h2>'
-            . e(t('admin.telemetry.last_30_days', 'Last 30 days'))
-            . '</h2><div class="metric-grid">';
-    foreach ((array) ($viewModel['metrics'] ?? []) as $metric) {
-        view_render_telemetry_metric_card(
-            (string) ($metric['label'] ?? ''),
-            (string) ($metric['value'] ?? ''),
-            (string) ($metric['hint'] ?? ''),
-        );
-    }
-    echo '</div></section>';
-
-    $settings = (array) ($viewModel['settings'] ?? []);
-    echo
-        '<details class="panel telemetry-settings-panel"><summary><h2>'
-            . e(t('admin.telemetry.settings', 'Settings'))
-            . '</h2></summary><form method="post" action="'
-            . e((string) ($viewModel['settings_action_url'] ?? ''))
-            . '" class="form-grid">'
-            . (string) ($viewModel['csrf_html'] ?? '');
-    echo '<div class="telemetry-settings-switches">';
-    foreach ((array) ($viewModel['checkboxes'] ?? []) as $checkbox) {
-        view_render_telemetry_checkbox(
-            (string) ($checkbox['key'] ?? ''),
-            (string) ($checkbox['label'] ?? ''),
-            !empty($checkbox['checked']),
-        );
-    }
-    echo '</div><div class="telemetry-settings-limits">';
-    echo
-        '<label>'
-            . e(t(
-                'admin.telemetry.max_photo_view_time',
-                'Maximum photo view time counted, seconds',
-            ))
-            . '<input type="number" min="10" max="3600" name="telemetry_max_photo_view_seconds" value="'
-            . e(
-                (string) (
-                    $settings['telemetry_max_photo_view_seconds'] ?? '900'
-                ),
-            )
-            . '"><span class="muted">'
-            . e(t(
-                'admin.telemetry.max_photo_view_time_hint',
-                'When someone opens a photo, we only count the first part of that session. If they leave the tab open for a long time, we stop counting after this limit so one forgotten tab does not make the numbers look bigger than real use.',
-            ))
-            . '</span></label>';
-    echo
-        '<label>'
-            . e(t(
-                'admin.telemetry.raw_event_retention',
-                'Raw event retention, days',
-            ))
-            . '<input type="number" min="1" max="90" name="telemetry_raw_retention_days" value="'
-            . e((string) ($settings['telemetry_raw_retention_days'] ?? '7'))
-            . '"><span class="muted">'
-            . e(t(
-                'admin.telemetry.raw_event_retention_hint',
-                'These are the detailed, line-by-line records. They are useful when you want to inspect exactly what happened, but they take the most space. This setting decides how long we keep the full detail before older entries are removed or condensed.',
-            ))
-            . '</span></label>';
-    echo
-        '<label>'
-            . e(t(
-                'admin.telemetry.hourly_retention',
-                'Hourly aggregate retention, days',
-            ))
-            . '<input type="number" min="7" max="730" name="telemetry_hourly_retention_days" value="'
-            . e((string) ($settings['telemetry_hourly_retention_days'] ?? '90'))
-            . '"><span class="muted">'
-            . e(t(
-                'admin.telemetry.hourly_retention_hint',
-                'These are the summary totals that say, for example, how many page views happened in each hour. They are much smaller than raw logs and are good for recent history, charts, and quick checks.',
-            ))
-            . '</span></label>';
-    echo
-        '<label>'
-            . e(t(
-                'admin.telemetry.database_retention',
-                'Database diagnostic retention, days',
-            ))
-            . '<input type="number" min="1" max="90" name="telemetry_database_retention_days" value="'
-            . e(
-                (string) (
-                    $settings['telemetry_database_retention_days'] ?? '7'
-                ),
-            )
-            . '"><span class="muted">'
-            . e(t(
-                'admin.telemetry.database_retention_hint',
-                'SQL query fingerprints are short-lived diagnostics. This independent retention does not shorten usage history.',
-            ))
-            . '</span></label>';
-    echo
-        '<label>'
-            . e(t(
-                'admin.telemetry.daily_retention',
-                'Daily aggregate retention, days',
-            ))
-            . '<input type="number" min="30" max="3650" name="telemetry_daily_retention_days" value="'
-            . e((string) ($settings['telemetry_daily_retention_days'] ?? '730'))
-            . '"><span class="muted">'
-            . e(t(
-                'admin.telemetry.daily_retention_hint',
-                'These are the broad day-by-day totals. They are the lightest records we keep and are meant for long-term trends, like comparing this month with last month or last year.',
-            ))
-            . '</span></label>';
-    echo
-        '</div><div class="bulk-row"><button type="submit">'
-            . e(t('admin.telemetry.save_settings', 'Save telemetry settings'))
-            . '</button></div></form>';
-    echo
-        '<form method="post" action="'
-            . e((string) ($viewModel['maintenance_url'] ?? ''))
-            . '">'
-            . (string) ($viewModel['csrf_html'] ?? '')
-            . '<button type="submit" class="button secondary">'
-            . e(t(
-                'admin.telemetry.run_rollup_purge',
-                'Run rollup and purge now',
-            ))
-            . '</button></form></details>';
-
-    view_render_telemetry_tables((array) ($viewModel['tables'] ?? []));
     echo '</div>';
     render_footer();
 }
 
 /**
- * Render paired photo rankings and browser/cache aggregate tables.
+ * Render photo rankings and browser/cache summaries as independent compact groups.
  *
- * @param array<string,mixed> $tables Controller-prepared aggregate table data.
- * @return void Outputs the dashboard's grouped report tables.
+ * @param array{top_photos?:list<array{filename?:string,gallery_title?:string,
+ *     photo_views?:int|float|string,photo_url?:string,gallery_url?:string,
+ *     preview_url?:string}>,
+ *     longest_photos?:list<array{filename?:string,gallery_title?:string,
+ *     avg_view_seconds?:int|float|string,photo_url?:string,gallery_url?:string,
+ *     preview_url?:string}>,
+ *     browser_mix?:list<array{browser_family?:string,sessions?:int|string}>,
+ *     cache_mix?:list<array{cache_result?:string|null,events?:int|string}>} $tables
+ *     Controller-prepared ranking and summary rows; photo rows may also
+ *     contain photo_url and gallery_url strings for native public navigation.
+ * @return void Emit four independently flowing groups with native table semantics.
  */
 function view_render_telemetry_tables(array $tables): void
 {
-    echo
-        '<div class="telemetry-table-grid"><section class="panel"><h2>'
-            . e(t('admin.telemetry.top_viewed_photos', 'Top viewed photos'))
-            . '</h2>';
-    view_render_telemetry_photo_table(
-        (array) ($tables['top_photos'] ?? []),
-        'photo_views',
-        t('admin.telemetry.views', 'Views'),
-    );
-    echo
-        '</section><section class="panel"><h2>'
-            . e(t(
-                'admin.telemetry.longest_viewed_photos',
-                'Longest viewed photos',
-            ))
-            . '</h2>';
-    view_render_telemetry_photo_table(
-        (array) ($tables['longest_photos'] ?? []),
-        'avg_view_seconds',
-        t('admin.telemetry.average_capped_seconds', 'Average capped seconds'),
-    );
-    echo
-        '</section></div><section class="panel telemetry-split"><div><h2>'
-            . e(t('admin.telemetry.browser_mix', 'Browser mix'))
-            . '</h2>';
-    view_render_telemetry_key_value_table(
-        (array) ($tables['browser_mix'] ?? []),
-        'browser_family',
-        'sessions',
-        t('admin.telemetry.browser', 'Browser'),
-        t('admin.telemetry.sessions', 'Sessions'),
-    );
-    echo
-        '</div><div><h2>'
-            . e(t('admin.telemetry.cache_events', 'Cache events'))
-            . '</h2>';
-    view_render_telemetry_key_value_table(
-        (array) ($tables['cache_mix'] ?? []),
-        'cache_result',
-        'events',
-        t('admin.telemetry.cache_result', 'Cache result'),
-        t('admin.telemetry.events', 'Events'),
-    );
-    echo '</div></section>';
+    echo '<div class="telemetry-groups telemetry-report-groups">';
+    foreach ([
+        ['top_photos', 'top_viewed_photos', 'Top viewed photos', 'photo_views', 'views', 'Views'],
+        ['longest_photos', 'longest_viewed_photos', 'Longest viewed photos', 'avg_view_seconds', 'average_capped_seconds', 'Average capped seconds'],
+    ] as [$key, $headingKey, $heading, $metric, $metricKey, $metricLabel]) {
+        echo '<section class="telemetry-group"><h2>'
+            . e(t('admin.telemetry.' . $headingKey, $heading)) . '</h2>';
+        view_render_telemetry_photo_table($tables[$key] ?? [], $metric,
+            t('admin.telemetry.' . $metricKey, $metricLabel));
+        echo '</section>';
+    }
+    foreach ([
+        ['browser_mix', 'browser_family', 'sessions', 'browser_mix', 'Browser mix', 'browser', 'Browser', 'sessions', 'Sessions'],
+        ['cache_mix', 'cache_result', 'events', 'cache_events', 'Cache events', 'cache_result', 'Cache result', 'events', 'Events'],
+    ] as [$key, $keyColumn, $valueColumn, $headingKey, $heading, $keyLabel, $keyFallback, $valueLabel, $valueFallback]) {
+        echo '<section class="telemetry-group"><h2>'
+            . e(t('admin.telemetry.' . $headingKey, $heading)) . '</h2>';
+        view_render_telemetry_key_value_table($tables[$key] ?? [],
+            $keyColumn, $valueColumn, t('admin.telemetry.' . $keyLabel, $keyFallback),
+            t('admin.telemetry.' . $valueLabel, $valueFallback));
+        echo '</section>';
+    }
+    echo '</div>';
 }
 
 /**
  * Render the explicit CSRF-protected POST maintenance action.
- * @param array<string,mixed> $viewModel Viewmodel supplied to this isolated operation.
- * @return void No return value; effects are recorded in the owned state.
+ * @param array{title:string,status_message:string,back_url:string,
+ *     result_json:string} $viewModel Prepared maintenance outcome and return URL.
+ * @return void Render the outcome and optional technical result without running work.
  */
 function view_render_admin_telemetry_maintenance(array $viewModel): void
 {
     $title = (string) ($viewModel['title'] ?? '');
     render_header($title);
     echo
-        '<section class="hero"><h1>'
+        '<div class="admin-telemetry-page" data-telemetry-workspace><header class="telemetry-toolbar"><h1>'
             . e($title)
-            . '</h1><p>'
+            . '</h1><a class="telemetry-related-link" href="'
+            . e($viewModel['back_url']) . '">'
+            . e(t('admin.telemetry.back_to_telemetry', 'Back to telemetry'))
+            . '</a></header><p class="telemetry-note">'
             . e(
                 (string) (
                     $viewModel['status_message'] ?? t(
@@ -503,17 +596,13 @@ function view_render_admin_telemetry_maintenance(array $viewModel): void
                     )
                 ),
             )
-            . '</p><nav class="nav"><a class="button" href="'
-            . e((string) ($viewModel['back_url'] ?? ''))
-            . '">'
-            . e(t('admin.telemetry.back_to_telemetry', 'Back to telemetry'))
-            . '</a></nav></section>';
+            . '</p>';
     echo
-        '<section class="panel"><h2>'
+        '<details class="telemetry-group"><summary>'
             . e(t('admin.telemetry.result', 'Result'))
-            . '</h2><pre>'
+            . '</summary><pre class="telemetry-maintenance-result">'
             . e((string) ($viewModel['result_json'] ?? ''))
-            . '</pre></section>';
+            . '</pre></details></div>';
     render_footer();
 }
 

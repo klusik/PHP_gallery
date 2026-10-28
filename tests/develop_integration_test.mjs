@@ -21,7 +21,7 @@ import {runInNewContext} from 'node:vm';
 import {buildBootstrapCandidate,requireBrokenAuthority,resolveIntegrationBootstrap,verifyBootstrapChain,validateBootstrapSource} from '../.github/scripts/integration-bootstrap.mjs';
 import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence,
     requireAuthorityUpdateSource,requireAuthorityUpdateSourcePaths,dispatchPreparedBasic,waitForPreparedBasic,
-    requireWinappVersion} from '../.github/scripts/develop-integration.mjs';
+    requireWinappVersion,dispatchAdvisoryMacos} from '../.github/scripts/develop-integration.mjs';
 import {bindTrustedBasicRoot,bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
 import {verifyIntegrationEvidence} from '../.github/scripts/release-promotion.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
@@ -257,7 +257,10 @@ const context={repository,workflowPath:'.github/workflows/develop-integration.ym
     ref:'refs/heads/main',runId:901,runAttempt:2,headSha:workflowSha};
 const request={branch,sourceSha,candidateSha,expectedDevelopSha:developSha,sourceBase:developSha,
     basicRunId:801,basicRunAttempt:3};
-requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,3));
+requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,4));
+requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,3),3);
+assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,3)),/BLOCKED/,
+    'historical mandatory macOS does not silently become the current advisory contract');
 assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,2)),/BLOCKED/,
     'protected-develop authority cannot accept the prior unsharded matrix');
 assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>ciOwnerWorkflowResponse(path,1)),/BLOCKED/,
@@ -266,13 +269,44 @@ const ownerNames=fullMatrixOwners();
 assert.deepEqual(ownerNames,[
     'Read-only generated-state and source preflight',
     'Positive production package (ubuntu-24.04)','Positive production package (windows-2025)',
-    'Positive production package (macos-latest)','Shared source contracts','Portable Node and WinApp',
+    'Shared source contracts','Portable Node and WinApp',
     ...['mysql:8.4','mariadb:10.11','mariadb:11.4'].flatMap(database=>
         [1,2,3,4].map(shard=>`PHP 8.5 workflows (${database}, Unicode, shard ${shard}/4)`)),
     ...[1,2,3,4].map(shard=>`PHP 8.1 source (unicode, shard ${shard}/4)`),
     ...[1,2,3,4].map(shard=>`PHP 8.5 source (ascii, shard ${shard}/4)`),
     'Required Chromium fixtures','Complete required CI matrix',
 ],'fresh integration evidence must preserve all exact current native owner labels and shard identities');
+
+{
+    const advisoryRequest={repository,branch:'feature/advisory',candidateSha,expectedDevelopSha:developSha};
+    const calls=[];
+    const provider=(path,method='GET',payload=null)=>{
+        calls.push({path,method,payload});
+        if (path===`repos/${repository}/git/ref/heads/feature/advisory`) {
+            return {object:{sha:candidateSha}};
+        }
+        assert.equal(path,`repos/${repository}/actions/workflows/gallery-workflows.yml/dispatches`,
+            'Advisory dispatch never polls its run or writes refs.');
+        assert.equal(method,'POST');
+        assert.deepEqual(payload,{ref:'feature/advisory',
+            inputs:{advisory_macos:true,checkout_ref:candidateSha,source_base:developSha},
+            return_run_details:true});
+        return {workflow_run_id:1001};
+    };
+    assert.deepEqual(dispatchAdvisoryMacos(advisoryRequest,context,provider),
+        {queued:true,runId:'1001',reason:'queued'});
+    assert.equal(calls.filter(call=>call.method==='POST').length,1);
+    assert.deepEqual(dispatchAdvisoryMacos(advisoryRequest,context,()=>({object:{sha:sourceSha}})),
+        {queued:false,reason:'source_moved'});
+    assert.deepEqual(dispatchAdvisoryMacos(advisoryRequest,context,(path,method,payload)=>{
+        if (method==='POST') throw new Error('Private provider diagnostics must not escape.');
+        return provider(path,method,payload);
+    }),{queued:false,reason:'dispatch_unavailable'});
+    assert.deepEqual(dispatchAdvisoryMacos(advisoryRequest,context,(path,method,payload)=>
+        method==='POST'?{}:provider(path,method,payload)),
+    {queued:false,reason:'run_unconfirmed'});
+    assert.throws(()=>dispatchAdvisoryMacos({...advisoryRequest,candidateSha:'moving-branch'},context,provider),/BLOCKED/);
+}
 
 {
     const source='ebde37ae7bd5c80ad1cb8733b7fb8fd2acb6cac1',tree='4f01e2e5bf24bd5b34137a515075b4105889f87c';
@@ -602,7 +636,7 @@ for (const [label,patch] of [
     const f=fixture();
     const checked=validateDevelopIntegration(request,context,repository,f.call);
     assert.deepEqual(checked.plan,{branch:'develop',oldSha:developSha,newSha:candidateSha});
-    assert.equal(checked.record.native_owners.length,28);
+    assert.equal(checked.record.native_owners.length,27);
     assert.equal(checked.record.source_sha,sourceSha);
     assert.equal(checked.record.candidate_sha,candidateSha);
 }
@@ -1074,7 +1108,7 @@ const recoveryRequest={...request,candidateSha:sourceSha};
     assert.equal(recovered.record.schema_version,1,'retain the artifact protocol accepted by existing release origins');
     assert.equal(recovered.record.recovery_mode,'existing-develop');
     assert.equal(recovered.record.ref_write,false);
-    assert.equal(recovered.record.native_owners.length,28,'fresh actual main-run owners, never old job IDs');
+    assert.equal(recovered.record.native_owners.length,27,'fresh actual main-run owners, never old job IDs');
     assert.equal(recovered.record.expected_develop_sha,developSha,'retain true historical source parent');
     assert.equal(f.state.updates.length,0,'recovery must never write any Git ref');
     assert.equal(f.state.develop,sourceSha);

@@ -38,6 +38,7 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Core\e;
+use function Gallery\Core\asset_url;
 use function Gallery\Core\render_admin_subtab_panel;
 use function Gallery\Core\render_admin_subtabs;
 use function Gallery\Core\render_admin_tab_panel;
@@ -1480,24 +1481,24 @@ function view_render_admin_theme_css_editor(array $model, array $errors): void
 
 /**
  * Present canonical advanced Theme definitions as bounded controls with independent resets.
- * @param array{definitions?:array<string,array{default:string,min:int,max:int,unit:string}>,values?:array<string,string>} $model Controller-prepared control limits and normalized saved values.
+ * @param array{definitions?:array<string,array{default:string,min:int,max:int,unit:string}>,values?:array<string,string>,switch_defaults?:array<string,bool>} $model Controller-prepared control limits and normalized saved values.
  * @return void Emits public-only spacing, elevation, typography and header controls for the shared Theme form.
  */
 function view_render_admin_theme_advanced_appearance(array $model): void
 {
     $definitions = $model['definitions'] ?? [];
     $values = $model['values'] ?? [];
+    $switchDefaults = (array) ($model['switch_defaults'] ?? []);
     echo
         '<fieldset class="theme-appearance-group theme-advanced-appearance"><legend>'
             . e(t('admin.theme.advanced.title', 'Advanced appearance'))
             . '</legend><input type="hidden" name="theme_advanced_present" value="1">';
     echo
-        '<p class="theme-appearance-group-hint">'
-            . e(t(
-                'admin.theme.advanced.hint',
-                'Public gallery presentation only. Defaults retain the installed appearance; each reset restores one control. Save Theme to apply preview changes.',
-            ))
-            . '</p>';
+        '<div class="theme-appearance-group-help">'
+            . view_admin_theme_appearance_context_help(
+                t('admin.theme.advanced.title', 'Advanced appearance'),
+                t('admin.theme.advanced.hint', 'Public gallery presentation only. Each reset restores one control. Use Save theme to apply spacing, typography and elevation changes.'),
+            ) . '</div>';
     $labels = [
         'gallery_grid_gap' => t(
             'admin.theme.advanced.gallery_grid_gap',
@@ -1563,9 +1564,10 @@ function view_render_admin_theme_advanced_appearance(array $model): void
                 '<input id="'
                     . e($id)
                     . '" type="checkbox" name="theme_header_transparent" value="1" data-theme-advanced-value'
+                    . view_admin_theme_appearance_switch_attributes('theme_header_transparent', $switchDefaults)
                     . ($value === '1' ? ' checked' : '')
                     . '>';
-            echo view_admin_theme_appearance_help($label, t(
+            echo view_admin_theme_appearance_context_help($label, t(
                 'admin.theme.advanced.header_hint',
                 'Removes only the public navigation header backdrop. Logo, links, language picker and buttons remain; hero and Admin are unchanged. Tune Header text color for your background.',
             ));
@@ -2687,6 +2689,47 @@ function view_admin_theme_appearance_help(string $label, string $hint): string
 }
 
 /**
+ * Render native Appearance help for progressive anchored popovers.
+ *
+ * @param string $label Specific preference name used to identify its help affordance.
+ * @param string $hint Translated explanatory text without trusted markup.
+ * @return string Escaped native disclosure enhanced to viewport-bounded contextual help.
+ */
+function view_admin_theme_appearance_context_help(string $label, string $hint): string
+{
+    // Sequential IDs prevent duplicate help targets within one rendered response.
+    static $nextId = 0;
+    $id = 'theme-appearance-help-' . ++$nextId;
+    return '<details class="theme-appearance-help" data-theme-appearance-help>'
+        . '<summary aria-label="'
+        . e(t('admin.theme.appearance.control_help', 'About {label}', ['label' => $label]))
+        . '">?</summary><div class="theme-appearance-help-panel" id="'
+        . e($id) . '"><strong>' . e($label) . '</strong><p>'
+        . e($hint) . '</p></div></details>';
+}
+
+/**
+ * Render switch hooks and a canonical factory description from prepared data.
+ * @param string $key Existing canonical checkbox name.
+ * @param array<string,bool> $defaults Controller-prepared installation defaults.
+ * @return string Escaped input attributes; absent metadata adds no factory claim.
+ */
+function view_admin_theme_appearance_switch_attributes(
+    string $key,
+    array $defaults,
+): string
+{
+    $attributes = ' data-theme-appearance-switch';
+    if (!array_key_exists($key, $defaults)) return $attributes;
+    $description = t('admin.dashboard.content_factory_tooltip', 'Factory default: {value}', [
+        'value' => $defaults[$key] ? t('admin.common.enabled', 'Enabled')
+            : t('admin.common.disabled', 'Disabled'),
+    ]);
+    return $attributes . ' title="' . e($description)
+        . '" aria-description="' . e($description) . '"';
+}
+
+/**
  * Render one canonical named color swatch and its unnamed editable HEX companion.
  *
  * @param string $key Controller-prepared theme color identity, used only for stable IDs and preview hooks.
@@ -2711,7 +2754,7 @@ function view_render_admin_theme_appearance_color_row(
             . '">'
             . e($label)
             . '</label>';
-    echo view_admin_theme_appearance_help($label, $hint);
+    echo view_admin_theme_appearance_context_help($label, $hint);
     echo
         '<input id="'
             . e($id)
@@ -2747,7 +2790,7 @@ function view_render_admin_theme_appearance_color_row(
  * @param string $selected Prepared saved layout value.
  * @param list<array{value:string,label:string}> $options Canonical prepared layout choices.
  * @param bool $global Whether this is the global layout control with its historical selection hook.
- * @return void Emits one named select and its associated visible scope description.
+ * @return void Emits one named select and its associated contextual scope description.
  */
 function view_render_admin_theme_appearance_card_layout_row(
     string $name,
@@ -2763,9 +2806,9 @@ function view_render_admin_theme_appearance_card_layout_row(
             . e($id)
             . '">'
             . e($label)
-            . '</label><p>'
-            . e($hint)
-            . '</p></div><select id="'
+            . '</label>'
+            . view_admin_theme_appearance_context_help($label, $hint)
+            . '</div><select id="'
             . e($id)
             . '" name="'
             . e($name)
@@ -2792,12 +2835,13 @@ function view_render_admin_theme_appearance_card_layout_row(
 /**
  * Render the public Appearance controls and animation settings with one shared live preview.
  *
- * @param array{theme?:array<string,string|int|bool>,advanced?:array{definitions?:array<string,array{default:string,min:int,max:int,unit:string}>,values?:array<string,string>},theme_background_url?:string,gps_maps_feature_enabled?:bool,gps_pin_enabled?:bool,gps_pin_background_enabled?:bool,gps_pin_size?:int,gps_pin_background_size?:int,page_width_mode?:string,custom_page_width?:int,tag_page_grid_settings?:array{columns:int,rows:int,items_per_page:int},tag_page_description_layout?:string,theme_gallery_description_layout?:string,description_layouts?:list<array{value:string,label:string}>,hero_tag_visible_limit?:int,hero_tag_display_all?:bool,hero_tag_scrollbar_enabled?:bool,hero_tag_scrollbar_rows?:int,hero_tag_sort_mode?:string,gallery_info_motion_ms?:int,admin_side_panel_motion_ms?:int,site_name?:string,preview?:array<string,string|int|bool>,admin_tags_url?:string,active_subtab?:string,max_columns?:int,max_rows?:int} $viewModel Controller-prepared appearance state, canonical bounds and preview values.
+ * @param array{theme?:array<string,string|int|bool>,advanced?:array{definitions?:array<string,array{default:string,min:int,max:int,unit:string}>,values?:array<string,string>},theme_background_url?:string,gps_maps_feature_enabled?:bool,gps_pin_enabled?:bool,gps_pin_background_enabled?:bool,gps_pin_size?:int,gps_pin_background_size?:int,page_width_mode?:string,custom_page_width?:int,tag_page_grid_settings?:array{columns:int,rows:int,items_per_page:int},tag_page_description_layout?:string,theme_gallery_description_layout?:string,description_layouts?:list<array{value:string,label:string}>,hero_tag_visible_limit?:int,hero_tag_display_all?:bool,hero_tag_scrollbar_enabled?:bool,hero_tag_scrollbar_rows?:int,hero_tag_sort_mode?:string,gallery_info_motion_ms?:int,admin_side_panel_motion_ms?:int,site_name?:string,preview?:array<string,string|int|bool>,admin_tags_url?:string,active_subtab?:string,max_columns?:int,max_rows?:int,switch_defaults?:array<string,bool>,preference_url?:string} $viewModel Controller-prepared appearance state, canonical bounds and preview values.
  * @return void Emits the Appearance subsection panels, bounded controls and shared preview.
  */
 function view_render_admin_theme_appearance_tab(array $viewModel): void
 {
     $theme = (array) ($viewModel['theme'] ?? []);
+    $switchDefaults = (array) ($viewModel['switch_defaults'] ?? []);
     $themeBackgroundUrl = (string) ($viewModel['theme_background_url'] ?? '');
     $gpsMapsFeatureEnabled = !empty($viewModel['gps_maps_feature_enabled']);
     $gpsPinEnabled = !empty($viewModel['gps_pin_enabled']);
@@ -2837,7 +2881,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
     }
     ob_start();
     echo
-        '<div class="admin-subtab-scope admin-theme-subtab-scope theme-appearance-workspace" data-admin-subtab-scope data-theme-preview-root data-theme-preview-context="'
+        '<div class="admin-subtab-scope admin-theme-subtab-scope theme-appearance-workspace" data-admin-subtab-scope data-admin-subtab-query="appearance_subtab" data-admin-subtab-prefix="admin-theme-appearance-subtab-" data-theme-preview-root data-theme-preview-context="'
             . (
                 $appearanceSubtab
                 === 'admin-theme-appearance-subtab-gallery-tags'
@@ -2846,16 +2890,22 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             )
             . '" data-theme-preview-background-url="'
             . e($themeBackgroundUrl)
+            . '" data-appearance-preference-url="' . e((string) ($viewModel['preference_url'] ?? ''))
+            . '" data-saving-label="' . e(t('admin.features.saving', 'Saving…'))
+            . '" data-saved-label="' . e(t('admin.features.saved', 'Saved'))
+            . '" data-failed-label="' . e(t('admin.features.save_unknown', 'Save could not be verified. Reload state before making another change.'))
+            . '" data-reload-label="' . e(t('admin.features.reload_state', 'Reload state'))
             . '">';
     echo
         '<header class="theme-appearance-heading"><h2>'
             . e(t('admin.theme.appearance.title', 'Visual appearance'))
-            . '</h2><p>'
-            . e(t(
-                'admin.theme.appearance.compact_description',
-                'Adjust your site’s colors, proportions and gallery tags.',
-            ))
-            . '</p></header>';
+            . '</h2>'
+            . view_admin_theme_appearance_context_help(
+                t('admin.theme.appearance.title', 'Visual appearance'),
+                t('admin.theme.appearance.compact_description', 'Adjust your site’s colors, proportions and gallery tags.'),
+            ) . '<span class="theme-appearance-save-hint" hidden>'
+            . e(t('admin.theme.appearance.save_scope_hint', 'Switches save immediately. Use Save theme for other changes.'))
+            . '</span></header>';
     echo
         '<div class="theme-appearance-settings" id="admin-theme-appearance-settings">';
     render_admin_subtabs(
@@ -3054,7 +3104,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
         '<div class="theme-appearance-control-row"><label for="theme-appearance-page-width">'
             . e($pageWidthLabel)
             . '</label>'
-            . view_admin_theme_appearance_help($pageWidthLabel, t(
+            . view_admin_theme_appearance_context_help($pageWidthLabel, t(
                 'admin.theme.appearance.page_width_hint',
                 'Controls the public page container. Full width follows the available screen width dynamically.',
             ))
@@ -3101,6 +3151,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 . '</legend>';
         echo
             '<label class="checkbox-label"><input type="checkbox" name="theme_gps_pin_enabled" value="1"'
+                . view_admin_theme_appearance_switch_attributes('theme_gps_pin_enabled', $switchDefaults)
                 . ($gpsPinEnabled ? ' checked' : '')
                 . ' data-theme-override-control data-theme-gps-pin-enabled> '
                 . e(t(
@@ -3110,6 +3161,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 . '</label>';
         echo
             '<label class="checkbox-label"><input type="checkbox" name="theme_gps_pin_background_enabled" value="1"'
+                . view_admin_theme_appearance_switch_attributes('theme_gps_pin_background_enabled', $switchDefaults)
                 . ($gpsPinBackgroundEnabled ? ' checked' : '')
                 . ' data-theme-override-control data-theme-gps-pin-background-enabled> '
                 . e(t(
@@ -3196,12 +3248,11 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 'admin.theme.appearance.tag_page_compact_legend',
                 'Tag-page layout',
             ))
-            . '</legend><p class="theme-appearance-group-hint">'
-            . e(t(
-                'admin.theme.appearance.tag_page_compact_hint',
-                'Choose how galleries appear on public tag pages.',
-            ))
-            . '</p>';
+            . '</legend><div class="theme-appearance-group-help">'
+            . view_admin_theme_appearance_context_help(
+                t('admin.theme.appearance.tag_page_compact_legend', 'Tag-page layout'),
+                t('admin.theme.appearance.tag_page_compact_hint', 'Choose how galleries appear on public tag pages.'),
+            ) . '</div>';
     echo
         '<div class="theme-appearance-slider-row"><label for="theme-appearance-tag-columns">'
             . e(t(
@@ -3247,18 +3298,17 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 'admin.theme.appearance.hero_tags_compact_legend',
                 'Gallery tags',
             ))
-            . '</legend><p class="theme-appearance-group-hint">'
-            . e(t(
-                'admin.theme.appearance.hero_tags_compact_hint',
-                'Applies to gallery cards and the headers of opened galleries.',
-            ))
-            . '</p>';
+            . '</legend><div class="theme-appearance-group-help">'
+            . view_admin_theme_appearance_context_help(
+                t('admin.theme.appearance.hero_tags_compact_legend', 'Gallery tags'),
+                t('admin.theme.appearance.hero_tags_compact_hint', 'Applies to gallery cards and the headers of opened galleries.'),
+            ) . '</div>';
     $tagOrderLabel = t('admin.theme.appearance.hero_tag_sort', 'Tag order');
     echo
         '<div class="theme-appearance-control-row"><label for="theme-appearance-hero-tag-sort">'
             . e($tagOrderLabel)
             . '</label>'
-            . view_admin_theme_appearance_help($tagOrderLabel, t(
+            . view_admin_theme_appearance_context_help($tagOrderLabel, t(
                 'admin.theme.appearance.hero_tag_sort_hint',
                 'Usage counts direct gallery and photo assignments across the installation; equal counts are ordered alphabetically.',
             ))
@@ -3279,6 +3329,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             . '</option></select></div>';
     echo
         '<label class="checkbox-label"><input type="checkbox" name="theme_hero_tag_display_all" value="1"'
+            . view_admin_theme_appearance_switch_attributes('theme_hero_tag_display_all', $switchDefaults)
             . ($heroTagDisplayAll ? ' checked' : '')
             . ' data-theme-hero-tag-display-all> '
             . e(t(
@@ -3306,7 +3357,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             . '" data-theme-hero-tag-limit-number><output for="theme-appearance-hero-tag-limit" data-theme-hero-tag-limit-display>'
             . $heroTagVisibleLimit
             . '</output>'
-            . view_admin_theme_appearance_help(
+            . view_admin_theme_appearance_context_help(
                 t(
                     'admin.theme.appearance.hero_tag_visible_limit_number',
                     'Visible tag count',
@@ -3319,6 +3370,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             . '</div>';
     echo
         '<label class="checkbox-label"><input type="checkbox" name="theme_hero_tag_scrollbar_enabled" value="1"'
+            . view_admin_theme_appearance_switch_attributes('theme_hero_tag_scrollbar_enabled', $switchDefaults)
             . ($heroTagScrollbarEnabled ? ' checked' : '')
             . ' data-theme-hero-tag-scrollbar-enabled> '
             . e(t(
@@ -3346,7 +3398,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             . '" data-theme-hero-tag-scrollbar-rows-number><output for="theme-appearance-hero-tag-rows" data-theme-hero-tag-scrollbar-rows-display>'
             . $heroTagScrollbarRows
             . '</output>'
-            . view_admin_theme_appearance_help(
+            . view_admin_theme_appearance_context_help(
                 t(
                     'admin.theme.appearance.hero_tag_scrollbar_rows_number',
                     'Maximum visible tag rows',
@@ -3380,24 +3432,21 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 'admin.theme.appearance.motion_legend',
                 'Interface animations',
             ))
-            . '</legend><p class="theme-appearance-group-hint">'
-            . e(t(
-                'admin.theme.appearance.motion_hint',
-                'Set the duration for each animation. Use 0 ms to turn that animation off.',
-            ))
-            . '</p>';
+            . '</legend><div class="theme-appearance-group-help">'
+            . view_admin_theme_appearance_context_help(
+                t('admin.theme.appearance.motion_legend', 'Interface animations'),
+                t('admin.theme.appearance.motion_hint', 'Set the duration for each animation. Use 0 ms to turn that animation off.'),
+            ) . '</div>';
     echo
         '<div class="theme-motion-control"><div class="theme-motion-control-description"><label for="theme-gallery-info-motion-slider">'
             . e(t(
                 'admin.theme.appearance.gallery_info_motion_duration',
                 'Gallery tag panel',
             ))
-            . '</label><p class="theme-appearance-group-hint">'
-            . e(t(
-                'admin.theme.appearance.gallery_info_motion_hint',
-                'Opening and closing speed for the public information panel on gallery cards.',
-            ))
-            . '</p></div><input id="theme-gallery-info-motion-slider" type="range" min="0" max="800" step="10" value="'
+            . '</label>'
+            . view_admin_theme_appearance_context_help(t('admin.theme.appearance.gallery_info_motion_duration', 'Gallery tag panel'),
+                t('admin.theme.appearance.gallery_info_motion_hint', 'Opening and closing speed for the public information panel on gallery cards.'),
+            ) . '</div><input id="theme-gallery-info-motion-slider" type="range" min="0" max="800" step="10" value="'
             . $galleryInfoMotionMs
             . '" data-theme-override-control data-theme-gallery-info-motion-slider><div class="theme-motion-control-value"><input type="number" name="theme_gallery_info_motion_ms" min="0" max="800" step="10" value="'
             . $galleryInfoMotionMs
@@ -3419,12 +3468,10 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 'admin.theme.appearance.admin_panel_motion_duration',
                 'Admin side panel',
             ))
-            . '</label><p class="theme-appearance-group-hint">'
-            . e(t(
-                'admin.theme.appearance.admin_panel_motion_hint',
-                'Opening and closing speed for the Edit gallery and Add gallery side panel.',
-            ))
-            . '</p></div><input id="theme-admin-side-panel-motion-slider" type="range" min="0" max="800" step="10" value="'
+            . '</label>'
+            . view_admin_theme_appearance_context_help(t('admin.theme.appearance.admin_panel_motion_duration', 'Admin side panel'),
+                t('admin.theme.appearance.admin_panel_motion_hint', 'Opening and closing speed for the Edit gallery and Add gallery side panel.'),
+            ) . '</div><input id="theme-admin-side-panel-motion-slider" type="range" min="0" max="800" step="10" value="'
             . $adminSidePanelMotionMs
             . '" data-theme-override-control data-theme-admin-side-panel-motion-slider><div class="theme-motion-control-value"><input type="number" name="theme_admin_side_panel_motion_ms" min="0" max="800" step="10" value="'
             . $adminSidePanelMotionMs
@@ -3448,7 +3495,9 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
     );
     ob_start();
     view_render_admin_theme_advanced_appearance(
-        (array) ($viewModel['advanced'] ?? []),
+        array_replace((array) ($viewModel['advanced'] ?? []), [
+            'switch_defaults' => $switchDefaults,
+        ]),
     );
     $advancedHtml = (string) ob_get_clean();
     render_admin_subtab_panel(
@@ -3555,7 +3604,9 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
 /**
  * Render the Theme Language tab from controller-prepared presentation data.
  *
- * @param array<string, mixed> $viewModel Controller-prepared language state.
+ * @param array{active_subtab?:string,language_packs:list<array{code:string,name:string,string_count:int,format_label:string,status_label:string,edit_url:string,coverage:array{translated_count:int,default_count:int}}>,admin_language:string,public_language:string,default_language:string,missing_translations:list<array{key:string,active_language:string,fallback_used:bool,last_seen:string}>,language_edit_code:string,language_editor_errors:list<string>,language_coverage:array{translated_count:int,default_count:int,missing_count:int,extra_count:int,missing_keys:list<string>,extra_keys:list<string>},language_pack_json:string,selector_state:array{id_prefix?:string,enabled_name?:string,languages_name?:string,design_name?:string,marker_name?:string,languages_target_id?:string,admin_setting_target?:bool,enabled?:bool,factory_enabled?:bool,languages?:list<string>,supported_languages?:list<string>,presentations?:array<string,array{name:string,flag_asset:string}>,errors?:array<string,string>,compact?:bool,detailed_design?:bool,theme_editor?:bool,parts?:string,public_language?:string,design?:array{preset:string,show_flags:bool,show_codes:bool,show_names:bool,orientation:string,density:string,alignment:string,active_style:string,presets:array<string,array<string,string|int|bool>>},design_defaults?:array{preset:string,show_flags:bool,show_codes:bool,show_names:bool,orientation:string,density:string,alignment:string,active_style:string,presets:array<string,array<string,string|int|bool>>},design_bounds?:array<string,array{0:int,1:int}>},editor_base_url:string,export_url:string,saved_notice?:bool,imported_notice?:bool,viewer_factory_enabled?:bool} $viewModel Controller-prepared language state.
+ *     Selector preset maps contain named color strings, use_theme_colors,
+ *     border_style and bounded integer spacing, radius, flag and font sizes.
  * @return void Emits scoped language defaults, viewer design, pack editing, and diagnostics panels.
  */
 function view_render_admin_theme_language_tab(array $viewModel): void
@@ -3587,18 +3638,32 @@ function view_render_admin_theme_language_tab(array $viewModel): void
     $languageCoverage = (array) ($viewModel['language_coverage'] ?? []);
     $languagePackJson = (string) ($viewModel['language_pack_json'] ?? '');
     $selectorState = (array) ($viewModel['selector_state'] ?? []);
+    $languageFlags = [];
+    foreach ($selectorState['presentations'] ?? [] as $code => $presentation) {
+        $asset = (string) ($presentation['flag_asset'] ?? '');
+        $languageFlags[$code] = $asset !== '' ? asset_url($asset) : '';
+    }
     $editorBaseUrl = (string) ($viewModel['editor_base_url'] ?? '');
     $exportUrl = (string) ($viewModel['export_url'] ?? '');
     ob_start();
     echo
-        '<div class="admin-subtab-scope admin-theme-subtab-scope theme-language-workspace" data-admin-subtab-scope><header class="theme-language-heading"><h2>'
+        '<div class="admin-subtab-scope admin-theme-subtab-scope theme-language-workspace" data-admin-subtab-scope'
+            . ' data-admin-subtab-query="language_subtab" data-admin-subtab-prefix="admin-theme-language-subtab-"'
+            . ' data-language-preference-url="' . e($editorBaseUrl) . '"'
+            . ' data-saving-label="' . e(t('admin.features.saving', 'Saving…'))
+            . '" data-saved-label="' . e(t('admin.features.saved', 'Saved'))
+            . '" data-failed-label="' . e(t('admin.features.save_unknown', 'Save could not be verified. Reload state before making another change.'))
+            . '" data-reload-label="' . e(t('admin.features.reload_state', 'Reload state'))
+            . '" data-interface-reload-label="' . e(t('admin.theme.language.reload_interface', 'Reload interface'))
+            . '"><header class="theme-language-heading"><h2>'
             . e(t('admin.theme.language.compact_title', 'Language'))
-            . '</h2><p>'
-            . e(t(
-                'admin.theme.language.compact_hint',
-                'Choose interface languages and customize the visitor switcher.',
-            ))
-            . '</p></header>';
+            . '</h2>'
+            . view_language_settings_help('theme-language-overview-help',
+                t('admin.theme.language.compact_title', 'Language'),
+                t('admin.theme.language.preferences_help',
+                    'Language choices save immediately. Administrator language affects your Admin session; use Reload interface to refresh labels after saving. Public language is the visitor default. Switcher design and translation files retain explicit Save.',
+                ),
+            ) . '</header>';
     if (!empty($viewModel['saved_notice'])) {
         echo
             '<section class="panel notice"><p>'
@@ -3666,21 +3731,23 @@ function view_render_admin_theme_language_tab(array $viewModel): void
         t('admin.theme.language.subtabs_label', 'Language subsections'),
     );
     ob_start();
-    echo '<div class="theme-language-defaults">';
+    echo '<div class="theme-language-defaults">'
+        . '<section class="theme-language-card theme-language-defaults-group"><h3>'
+        . e(t('admin.theme.language.interface_group', 'Interface languages')) . '</h3>';
     echo
-        '<fieldset class="theme-language-card admin-language-settings"><legend>'
+        '<fieldset class="theme-language-scope-row admin-language-settings" data-theme-language-preference-group="admin"><legend>'
             . e(t(
                 'admin.theme.language.admin_label',
                 'Admin interface language',
             ))
             . '</legend>';
     echo
-        '<label for="theme-language-admin"><span class="admin-visually-hidden">'
+        '<div class="theme-language-control-line"><label for="theme-language-admin"><span class="admin-visually-hidden">'
             . e(t(
                 'admin.theme.language.admin_label',
                 'Admin interface language',
             ))
-            . '</span><select id="theme-language-admin" name="cms_language" aria-describedby="theme-language-admin-scope">';
+            . '</span><select id="theme-language-admin" name="cms_language" data-language-flag-select aria-describedby="theme-language-admin-scope">';
     foreach ($languagePacks as $languagePack) {
         // $languageCode stores one selectable language code.
         $languageCode = (string) ($languagePack['code'] ?? '');
@@ -3694,7 +3761,7 @@ function view_render_admin_theme_language_tab(array $viewModel): void
         echo
             '<option value="'
                 . e($languageCode)
-                . '"'
+                . '" data-flag-url="' . e((string) ($languageFlags[$languageCode] ?? '')) . '"'
                 . ($adminLanguage === $languageCode ? ' selected' : '')
                 . '>'
                 . e($languageName)
@@ -3703,24 +3770,23 @@ function view_render_admin_theme_language_tab(array $viewModel): void
                 . ')</option>';
     }
     echo
-        '</select></label><p id="theme-language-admin-scope" class="theme-language-hint">'
-            . e(t(
-                'admin.theme.language.admin_compact_hint',
-                'Only your Admin session and browser.',
-            ))
-            . '</p></fieldset>';
+        '</select></label>'
+            . view_language_settings_help('theme-language-admin-scope',
+                t('admin.theme.language.admin_label', 'Admin interface language'),
+                t('admin.theme.language.admin_compact_hint', 'Only your Admin session and browser.'),
+            ) . '</div></fieldset>';
     echo
-        '<fieldset class="theme-language-card admin-language-settings"><legend>'
+        '<fieldset class="theme-language-scope-row admin-language-settings" data-theme-language-preference-group="public"><legend>'
             . e(t(
                 'admin.theme.language.public_default_label',
                 'Public site default',
             ))
-            . '</legend><label for="theme-language-public"><span class="admin-visually-hidden">'
+            . '</legend><div class="theme-language-control-line"><label for="theme-language-public"><span class="admin-visually-hidden">'
             . e(t(
                 'admin.theme.language.public_default_label',
                 'Public site default',
             ))
-            . '</span><select id="theme-language-public" name="public_language" aria-describedby="theme-language-public-scope">';
+            . '</span><select id="theme-language-public" name="public_language" data-language-flag-select aria-describedby="theme-language-public-scope">';
     foreach ($languagePacks as $languagePack) {
         // $languageCode stores one public language option value.
         $languageCode = (string) ($languagePack['code'] ?? '');
@@ -3734,7 +3800,7 @@ function view_render_admin_theme_language_tab(array $viewModel): void
         echo
             '<option value="'
                 . e($languageCode)
-                . '"'
+                . '" data-flag-url="' . e((string) ($languageFlags[$languageCode] ?? '')) . '"'
                 . ($publicLanguage === $languageCode ? ' selected' : '')
                 . '>'
                 . e($languageName)
@@ -3743,12 +3809,11 @@ function view_render_admin_theme_language_tab(array $viewModel): void
                 . ')</option>';
     }
     echo
-        '</select></label><p id="theme-language-public-scope" class="theme-language-hint">'
-            . e(t(
-                'admin.theme.language.public_compact_hint',
-                'Used by public visitors until they choose their own language.',
-            ))
-            . '</p></fieldset></div>';
+        '</select></label>'
+            . view_language_settings_help('theme-language-public-scope',
+                t('admin.theme.language.public_default_label', 'Public site default'),
+                t('admin.theme.language.public_compact_hint', 'Used by public visitors until they choose their own language.'),
+            ) . '</div>';
     echo
         '<p class="theme-language-fallback">'
             . e(t(
@@ -3756,12 +3821,14 @@ function view_render_admin_theme_language_tab(array $viewModel): void
                 'Translation fallback: {language}.',
                 ['language' => strtoupper($defaultLanguage)],
             ))
-            . '</p>';
+            . '</p></fieldset></section>';
     view_render_public_language_selector_settings_panel(array_replace($selectorState, [
         'parts' => 'choices',
         'theme_editor' => true,
         'compact' => true,
-    ]));
+    ] + (array_key_exists('viewer_factory_enabled', $viewModel)
+        ? ['factory_enabled' => (bool) $viewModel['viewer_factory_enabled']] : [])));
+    echo '</div>';
     $languageSettingsHtml = ob_get_clean();
     render_admin_subtab_panel(
         'admin-theme-language-subtab-settings',
@@ -3855,7 +3922,7 @@ function view_render_admin_theme_language_tab(array $viewModel): void
                 'admin.theme.language.editor_select',
                 'Language pack to edit',
             ))
-            . '<select name="language_pack_code" onchange="if (this.selectedOptions[0].dataset.editUrl) window.location.href=this.selectedOptions[0].dataset.editUrl;">';
+            . '<select id="theme-language-pack" name="language_pack_code" data-language-flag-select onchange="if (this.selectedOptions[0].dataset.editUrl) window.location.href=this.selectedOptions[0].dataset.editUrl;">';
     foreach ($languagePacks as $languagePack) {
         // $languageCode stores one editor-select option value.
         $languageCode = (string) ($languagePack['code'] ?? '');
@@ -3869,6 +3936,7 @@ function view_render_admin_theme_language_tab(array $viewModel): void
         echo
             '<option value="'
                 . e($languageCode)
+                . '" data-flag-url="' . e((string) ($languageFlags[$languageCode] ?? ''))
                 . '" data-edit-url="'
                 . e((string) ($languagePack['edit_url'] ?? ''))
                 . '"'

@@ -78,7 +78,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.144.14. Version 0.97 adds the recoverable gallery-trash
+application version 0.145. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -269,6 +269,14 @@ The global music layer adds `202610200001_tag_media_types.php` and
 relations are retained; `tags.media_type` defaults to `image`, with `music`
 and reserved `pdf` categories. The globally unique slug constraint is retained.
 The shared tag owner allocates a media-prefixed slug for non-image names.
+
+Admin's Images/Galleries filters select direct assignments from `image_tags`
+and `gallery_tags` over the same `image` vocabulary. A shared tag can appear
+in both; its displayed usage count and order follow that assignment scope.
+All tags retains unassigned visual tags and music. Existing non-Admin
+`admin_tag_rows()` callers retain the full visual vocabulary by default.
+The Documents choice reserves future PDF UI and cannot edit/assign PDF tags;
+this filter change introduces no migration, new tag identity or assignment table.
 
 `music_songs` stores optional logical title overrides. The composite primary
 key `(gallery_id, track_id)` in `music_track_instances` keeps each physical
@@ -1770,12 +1778,26 @@ are served only through validated generated filenames.
 
 ## Telemetry Tables
 
+Overview photo rankings read verified image slugs and gallery public paths in
+their existing bounded joins. If optional path columns cannot be verified,
+the same count/duration queries retain null route metadata and readable names.
+Daily charts reuse hourly aggregates and canonical session-day counts. Their
+image-byte column includes image/thumbnail traffic only; existing total-media
+report fields still include downloads. No schema migration is required.
+
 Telemetry is intentionally anonymous/bucketed. Use telemetry services instead of
 direct writes.
 
 ### `telemetry_settings`
 
 Stores telemetry preferences and limits.
+
+The compact Admin workspace changes one allowlisted key per scoped request
+through the existing telemetry settings service and confirms the persisted
+scalar by reading it back. Missing/unknown storage refuses writes; unavailable
+readback does not establish success or rollback. Complete-form compatibility,
+retention bounds and the separate explicit rollup/purge action remain supported.
+No telemetry schema or migration is added by this presentation change.
 
 ### `telemetry_sessions`
 

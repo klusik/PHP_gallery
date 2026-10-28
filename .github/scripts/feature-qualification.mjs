@@ -10,7 +10,7 @@
  */
 import {isDeepStrictEqual} from 'node:util';
 import {readCoverageArtifact} from './coverage-artifacts.mjs';
-import {fullMatrixOwners,requireCurrentWorkflowOwners} from './ci-owner-contract.mjs';
+import {evidenceMatrixOwners} from './ci-owner-contract.mjs';
 import {maintenanceRows} from './maintenance-authority.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
 
@@ -62,16 +62,17 @@ export function verifyFeatureBasic(basic,identity,repository,adapters) {
 
 /** Authenticate every required native FULL owner from its actual execution run and immutable dispatcher.
  * @param {string} repository Exact owner/repository.
- * @param {FullExecution} execution Original execution run, attempt and main-owned workflow source.
+ * @param {FullExecution} execution Original execution run, attempt and owner-selected immutable workflow source.
  * @param {Array<{id:number,name:string,status:string,conclusion:string}>} retained Exact required native owner rows.
  * @param {function(string):Record<string,unknown>} call Read-only provider adapter.
  * @returns {Record<string,unknown>[]} Complete actual job inventory; missing, failed, cancelled, duplicated or superseded execution throws.
  */
 export function verifyFeatureOwners(repository,execution,retained,call) {
-    if (!execution || !/^[1-9]\d*$/.test(execution.run_id ?? '') || !/^[1-9]\d*$/.test(execution.run_attempt ?? '')) {
+    if (!execution || !/^[1-9]\d*$/.test(execution.run_id ?? '') || !/^[1-9]\d*$/.test(execution.run_attempt ?? '')
+        || !Array.isArray(retained) || retained.some(row=>!row || typeof row.name!=='string')) {
         throw new Error('BLOCKED invalid feature execution identity.');
     }
-    requireCurrentWorkflowOwners(repository,execution.workflow_sha,call);
+    const required=evidenceMatrixOwners(retained,repository,execution.workflow_sha,call);
     const run=call(`repos/${repository}/actions/runs/${execution.run_id}`);
     // Publication can fail after successful execution; the sealed owner jobs, not aggregate green, qualify execution.
     if (run?.id!==Number(execution.run_id) || run.run_attempt!==Number(execution.run_attempt)
@@ -89,7 +90,7 @@ export function verifyFeatureOwners(repository,execution,retained,call) {
         }
     }
     const jobs=maintenanceRows(call,`repos/${repository}/actions/runs/${execution.run_id}/attempts/${execution.run_attempt}/jobs`,'jobs');
-    const names=fullMatrixOwners().map(name=>'Develop integration / '+name);
+    const names=required.map(name=>'Develop integration / '+name);
     if (!Array.isArray(retained) || retained.length!==names.length || new Set(retained.map(row=>row.id)).size!==names.length) {
         throw new Error('BLOCKED incomplete feature FULL record.');
     }

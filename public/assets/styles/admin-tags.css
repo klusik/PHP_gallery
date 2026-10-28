@@ -23,172 +23,360 @@
  * Split from admin.css on 2026-05-12 to keep admin styling modular.
  */
 
-/* Admin tag editor layout. */
-.admin-tags-hero {
-    margin-bottom: 1rem;
+/* Scope the compact editor to its page and existing side-panel variant. */
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack) {
+    --tag-surface: color-mix(in srgb, var(--panel) 42%, transparent);
+    --tag-line: color-mix(in srgb, var(--ink) 12%, transparent);
+    --tag-muted: color-mix(in srgb, var(--ink) 62%, var(--panel));
+    --tag-tint: color-mix(in srgb, var(--accent) 8%, transparent);
+    min-width: 0;
+    color: var(--ink);
+    font-size: .82rem;
 }
 
-.admin-tags-layout {
+.admin-page .admin-tags-page .admin-tags-toolbar,
+.admin-page .admin-tags-page .admin-tags-title {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+}
+
+.admin-page .admin-tags-page .admin-tags-toolbar {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-bottom: .65rem;
+}
+
+.admin-page .admin-tags-page .admin-tags-toolbar h1 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 650;
+}
+
+.admin-page .admin-tags-page .admin-tags-layout {
+    /* Purpose: keep catalog selection beside the selected editor.
+     * Type: length. Units: CSS pixels. Scope: full-page tag catalog.
+     * Consumers: catalog/editor grid-template-columns. Value: 300px.
+     * Rationale: match the compact reference width while letting text editing grow. */
+    --tag-catalog-width: 300px;
     display: grid;
-    grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
-    gap: 1rem;
+    grid-template-columns: minmax(0, var(--tag-catalog-width)) minmax(0, 1fr);
+    gap: .65rem;
     align-items: start;
 }
 
-.admin-tags-list-head {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-}
-
-.admin-tags-sort-form {
-    display: flex;
-    align-items: end;
-    flex-wrap: wrap;
-}
-
-.admin-tags-sort-form label {
+.admin-page .admin-tags-page .admin-tags-edit-panel {
     display: grid;
-    gap: 0.25rem;
-    min-width: 12rem;
-    font-weight: 700;
-}
-
-.admin-tags-sort-form label span {
-    font-size: 0.85rem;
-}
-
-.admin-tags-sort-form select {
-    width: 100%;
-}
-
-.admin-tags-list-panel,
-.admin-tags-edit-panel {
+    grid-template-columns: repeat(auto-fit,
+        minmax(min(100%, var(--tag-catalog-width)), 1fr));
+    align-items: start;
+    gap: .65rem;
     min-width: 0;
+    scroll-margin-top: 5rem;
 }
 
-.admin-tags-list {
-    display: grid;
-    gap: 0.5rem;
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack) .admin-content-group {
+    min-width: 0;
+    padding: .2rem .65rem .5rem;
+    border: 1px solid var(--tag-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--tag-surface);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
 }
 
-.admin-tag-row {
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    .admin-content-group > :is(h2, h3) {
     display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
     align-items: center;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--panel) 92%, #fff);
-    color: inherit;
-    text-decoration: none;
+    min-height: 38px;
+    box-sizing: border-box;
+    gap: .35rem;
+    margin: -.2rem -.65rem .3rem;
+    padding: .25rem .65rem;
+    border-bottom: 1px solid var(--tag-line);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+    border-radius: min(var(--radius, 8px), 8px)
+        min(var(--radius, 8px), 8px) 0 0;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    color: var(--ink);
+    font-size: .85rem;
+    font-weight: 650;
+    line-height: 1.25;
 }
 
-.admin-tag-row:hover,
-.admin-tag-row:focus,
-.admin-tag-row.is-active {
-    border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
-}
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    :is(a, button, summary) { text-decoration: none; }
 
-.admin-tag-row span {
-    display: grid;
-    gap: 0.15rem;
-    min-width: 0;
-}
-
-.admin-tag-row strong,
-.admin-tag-row small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.admin-tag-row small,
-.admin-tag-row em {
-    color: var(--muted);
-    font-size: 0.85rem;
-    font-style: normal;
-}
-
-.admin-tags-usage-panel {
-    display: grid;
-    gap: 0.75rem;
-    margin-top: 1.25rem;
-    padding-top: 1rem;
-    border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-}
-
-.admin-tags-usage-panel h3,
-.admin-tags-usage-group h4 {
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    :is(button, .button, select, input, textarea) {
+    box-sizing: border-box;
+    min-height: 28px;
+    max-width: 100%;
     margin: 0;
+    padding: 3px 7px;
+    border: 1px solid var(--tag-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font: inherit;
+    line-height: 1.4;
 }
 
-.admin-tags-usage-group {
-    display: grid;
-    gap: 0.5rem;
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    :is(button, .button):hover:not(:disabled) { background: var(--tag-tint); }
+
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    :is(a, button, input, textarea, select):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
-.admin-tags-usage-list {
+.admin-page .admin-tags-page .admin-tags-settings,
+.admin-page .admin-tags-page .admin-tags-editor-jump {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    min-height: 28px;
+    color: var(--ink);
+    font-size: .8rem;
+}
+
+.admin-page .admin-tags-page .admin-tags-editor-jump {
+    width: 28px;
+    margin-left: auto;
+}
+
+.admin-page .admin-tags-page .admin-tags-sort-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: .35rem;
+    margin: .35rem 0;
+    padding-bottom: .45rem;
+    border-bottom: 1px solid var(--tag-line);
+}
+
+.admin-page .admin-tags-page .admin-tags-sort-form label {
     display: grid;
-    gap: 0.45rem;
+    flex: 1;
+    min-width: 0;
+    gap: .15rem;
+    margin: 0;
+    font-size: .75rem;
+    font-weight: 400;
+    color: var(--tag-muted);
+}
+
+.admin-page .admin-tags-page .admin-tags-sort-form select { width: 100%; }
+
+/* Native Apply remains available without JavaScript. Enhanced selectors submit
+ * the same GET form immediately; content edits retain their explicit Save. */
+.admin-page .admin-tags-page .admin-tags-sort-form.is-enhanced > button {
+    display: none;
+}
+
+.admin-page .admin-tags-page .admin-tags-list {
+    display: block;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.admin-tags-usage-list li {
+.admin-page .admin-tags-page .admin-tag-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    min-width: 0;
+    min-height: 32px;
+    box-sizing: border-box;
+    padding: .15rem .35rem;
+    border: 0;
+    border-bottom: 1px solid var(--tag-line);
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
+    line-height: 1.35;
+}
+
+.admin-page .admin-tags-page .admin-tags-list > li:last-child > a {
+    border-bottom: 0;
+}
+
+.admin-page .admin-tags-page .admin-tag-row:is(:hover, .is-active) {
+    background: var(--tag-tint);
+}
+
+.admin-page .admin-tags-page .admin-tag-row.is-active {
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+.admin-page .admin-tags-page .admin-tag-copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .2rem .4rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .admin-tags-page .admin-tag-row strong { font-weight: 500; }
+
+.admin-page .admin-tags-page .admin-tag-row :is(small, em) {
+    color: var(--tag-muted);
+    font-size: .72rem;
+    font-style: normal;
+}
+
+.admin-page .admin-tags-page .admin-tag-row em {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack) .admin-tags-form {
     display: grid;
-    gap: 0.15rem;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
-    border-radius: calc(var(--radius) - 2px);
-    background: color-mix(in srgb, var(--panel) 96%, #fff);
+    gap: .3rem;
+    margin: 0;
 }
 
-.admin-tags-usage-list a {
-    font-weight: 700;
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    .admin-tags-field-heading {
+    display: flex;
+    align-items: center;
+    gap: .15rem;
+    margin: .2rem 0 0;
 }
 
-.admin-tags-usage-list small {
-    color: var(--muted);
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    .admin-tags-field-heading > label {
+    margin: 0;
+    font-weight: 500;
+    font-size: .8rem;
 }
 
-.admin-tags-form {
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    .admin-tags-form :is(input:not([type='hidden']), textarea) { width: 100%; }
+
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+    .admin-tags-form textarea { resize: vertical; }
+
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack) .bulk-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-top: .4rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-page .admin-tags-page .admin-tags-usage-panel {
     display: grid;
-    gap: 1rem;
+    gap: .4rem;
 }
 
-.admin-tags-form label {
+.admin-page .admin-tags-page .admin-tags-usage-group h4 {
+    margin: 0;
+    color: var(--tag-muted);
+    font-size: .75rem;
+    font-weight: 500;
+}
+
+.admin-page .admin-tags-page .admin-tags-usage-list {
     display: grid;
-    gap: 0.4rem;
-    font-weight: 700;
+    gap: .15rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
-.admin-tags-form input,
-.admin-tags-form textarea {
-    width: 100%;
-}
-
-.admin-tags-form .muted {
+.admin-page .admin-tags-page .admin-tags-usage-list a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    color: var(--ink);
     font-weight: 400;
+    overflow-wrap: anywhere;
 }
 
-@media (max-width: 880px) {
-    .admin-tags-layout {
-        grid-template-columns: 1fr;
-    }
+.admin-page .admin-tags-page .admin-tags-usage-list small {
+    display: block;
+    color: var(--tag-muted);
+    font-size: .75rem;
+}
 
-    .admin-tags-list-head {
-        align-items: start;
-        flex-direction: column;
-    }
+.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack) button.admin-tags-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 28px;
+    min-width: 28px;
+    width: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--tag-muted);
+    font-size: .82rem;
+    font-weight: 500;
+}
 
-    .admin-tags-sort-form label {
-        min-width: 0;
-        width: 100%;
+.admin-tags-help-panel {
+    position: absolute;
+    inset: auto;
+    width: 300px;
+    box-sizing: border-box;
+    /* Match the positioning owner's 8px gap on both viewport edges. */
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: .65rem;
+    overflow: auto;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .8rem;
+    line-height: 1.5;
+    box-shadow: none;
+}
+
+.admin-tags-help-panel::backdrop { background: transparent; }
+.admin-tags-help-panel > strong { font-size: .85rem; }
+.admin-tags-help-panel > p { margin: .35rem 0 0; }
+
+/* Purpose: stack catalog and editor groups before fields become cramped.
+ * Type: length. Units: CSS pixels. Scope: tag workspace breakpoint.
+ * Consumers: the following media query. Value: 760px.
+ * Rationale: retain native fields and complete group labels at narrow widths. */
+@media (max-width: 760px) {
+    .admin-page .admin-tags-page :is(.admin-tags-layout, .admin-tags-edit-panel) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    /* Purpose: clear the public header and sticky mobile Admin menu on jumps.
+     * Type: length. Units: rem. Scope: narrow/coarse tag editor anchor.
+     * Consumers: scroll-margin-top. Value: 10rem.
+     * Rationale: keep the editor heading below both observed sticky surfaces. */
+    .admin-page .admin-tags-page .admin-tags-edit-panel { scroll-margin-top: 10rem; }
+
+    .admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+        :is(button, .button, select, input:not([type='hidden']),
+        .admin-tags-settings, .admin-tags-editor-jump,
+        .admin-tag-row, .admin-tags-usage-list a) { min-height: 44px; }
+
+    .admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
+        :is(button.admin-tags-help, .admin-tags-editor-jump) {
+        min-width: 44px;
+        width: 44px;
+        flex-basis: 44px;
     }
 }

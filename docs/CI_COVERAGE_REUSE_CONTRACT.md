@@ -44,11 +44,21 @@ A separate authority checkout scans clean A with BASIC; candidate execution has
 read-only permissions and no persisted write credentials.
 
 FULL runs the complete required matrix on A: shared source contracts, portable
-Node/WinApp, packaging on three operating systems, four shards for each of three
+Node/WinApp, required Linux/Windows packaging, four shards for each of three
 databases, four shards for each PHP 8.1/8.5 source environment, required
 Chromium
-and the aggregate. All 28 actual native owners must pass. Failed, missing,
+and the aggregate. All 27 actual native owners must pass. Failed, missing,
 duplicated, cancelled or skipped mandatory owners are not successful evidence.
+
+Contract 4 dispatches macOS packaging independently from the selected feature
+workflow after preparation, with the same exact candidate A and immutable base
+P. Its central `production-package` suite retains actual outcomes and diagnostics
+in a separate Actions run. Runner queues, timeout, cancellation, failure or a
+dispatch refusal never delay or fail required integration. The advisory run
+cannot emit the protected required-check context or cancel required FULL through
+concurrency. Required Linux/Windows packaging and every functional owner remain
+mandatory. Historical contracts 1–3 retain their original required macOS owner;
+verified immutable workflow bytes decide the contract, never a missing job.
 
 The owner-selected feature dispatcher may publish the protected non-force FF
 after that complete qualification. A feature push or an unselected pull request
@@ -109,7 +119,7 @@ commit above observed main first. The workflow rejects multiple commits before
 generation and stops before FULL if generation publishes a child; apply the
 squash checkpoint and obtain fresh BASIC. FULL retains that final SHA.
 This reusable path prepares the branch and runs FULL plus the
-authoritative release audit. It requires all 29 native owners, unchanged
+authoritative release audit. It requires all 28 native owners, unchanged
 source/main leases, CI/test/docs-only scope and effective main protections.
 
 Only after the original installation record is uploaded does the workflow issue

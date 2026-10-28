@@ -857,7 +857,9 @@ function tag_model_description_column_ready(): bool
  * @param string $mediaType Media category image, music, or all; defaults to image.
  * @param bool $mediaTypeReady Whether tags.media_type was confirmed available; defaults to true.
  * @param bool $musicAssignmentReady Whether song/tag assignments are confirmed available; defaults to false.
- * @return list<array{id:int|string,name:string,slug:string,description:string,media_type:string,created_at:string,updated_at:string,gallery_count:int|string,image_count:int|string,music_count:int|string,usage_count:int|string}> Admin rows with usage aggregates.
+ * @param string $assignmentScope Catalog scope all (default), gallery or image; scoped
+ *     image-vocabulary rows require a matching assignment and count only it.
+ * @return list<array{id:int|string,name:string,slug:string,description:?string,media_type:string,created_at:string,updated_at:string,gallery_count:int|string,image_count:int|string,music_count:int|string,usage_count:int|string}> Admin rows with scoped usage aggregates; an empty list for no matches or refused namespace/scope pairs.
  */
 function tag_model_admin_rows(
     bool $descriptionReady,
@@ -866,7 +868,13 @@ function tag_model_admin_rows(
     string $mediaType = 'image',
     bool $mediaTypeReady = true,
     bool $musicAssignmentReady = false,
+    string $assignmentScope = 'all',
 ): array {
+    if (!in_array($assignmentScope, ['all', 'gallery', 'image'], true)
+        || !in_array($mediaType, ['all', 'image', 'music'], true)
+        || ($assignmentScope !== 'all' && $mediaType !== 'image')) {
+        return [];
+    }
     $safeSortField = in_array($sortField, ['name', 'usage'], true)
         ? $sortField
         : 'usage';
@@ -890,14 +898,26 @@ function tag_model_admin_rows(
     $musicCount = $musicAssignmentReady
         ? 'COUNT(DISTINCT mst.song_id)'
         : '0';
+    // Assignment scope narrows catalog membership and its count/sort only.
+    // It never changes the shared tag identity or drops the other usage counts.
+    $usageExpression = match ($assignmentScope) {
+        'gallery' => 'COUNT(DISTINCT gt.gallery_id)',
+        'image' => 'COUNT(DISTINCT it.image_id)',
+        default => 'COUNT(DISTINCT gt.gallery_id) + COUNT(DISTINCT it.image_id) + '
+            . $musicCount,
+    };
+    $having = match ($assignmentScope) {
+        'gallery' => ' HAVING COUNT(DISTINCT gt.gallery_id) > 0',
+        'image' => ' HAVING COUNT(DISTINCT it.image_id) > 0',
+        default => '',
+    };
     $stmt = db()->prepare(
         'SELECT t.id, t.name, t.slug, '
             . $descriptionColumn
             . ', ' . $typeField . ', t.created_at, t.updated_at,
         COUNT(DISTINCT gt.gallery_id) AS gallery_count,
         COUNT(DISTINCT it.image_id) AS image_count,
-        COUNT(DISTINCT gt.gallery_id) + COUNT(DISTINCT it.image_id) + '
-            . $musicCount . ' AS usage_count,
+        ' . $usageExpression . ' AS usage_count,
         ' . $musicCount . ' AS music_count
         FROM tags t
         LEFT JOIN gallery_tags gt ON gt.tag_id = t.id
@@ -907,7 +927,7 @@ function tag_model_admin_rows(
         GROUP BY t.id, t.name, t.slug'
             . $groupByDescription
             . ($mediaTypeReady ? ', t.media_type' : '')
-            . ', t.created_at, t.updated_at
+            . ', t.created_at, t.updated_at' . $having . '
         ORDER BY '
             . $orderBy,
     );

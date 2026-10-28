@@ -91,14 +91,6 @@ namespace Gallery\Core {
 
 namespace Gallery\Views {
     /**
-     * Omit unrelated section-introduction markup while rendering real health cards.
-     *
-     * @param array<string,mixed> $model Prepared section introduction, unused by this test.
-     * @return void
-     */
-    function view_render_admin_tab_intro(array $model): void {}
-
-    /**
      * Exclude unrelated developer controls without invoking host configuration.
      *
      * @param string $className Presentation wrapper, unused by this test.
@@ -114,6 +106,7 @@ namespace Gallery\Views {
 namespace {
     require_once __DIR__ . '/support/module_source.php';
     require_once dirname(__DIR__) . '/app/services/runtime_support.php';
+    require_once dirname(__DIR__) . '/app/views/admin_ui.php';
     require_once dirname(__DIR__) . '/app/views/admin_dashboard_sections.php';
     require_once dirname(__DIR__) . '/app/views/admin_diagnostics.php';
 
@@ -245,9 +238,8 @@ namespace {
             );
             if ($surface === 'dashboard') {
                 runtime_surface_assert(
-                    str_contains($html, '<strong>System ready</strong>')
-                        === !$action,
-                    'Runtime warnings must suppress the otherwise-ready dashboard card.',
+                    !str_contains($html, '<strong>System ready</strong>'),
+                    'Runtime snapshots must not claim end-to-end system readiness.',
                 );
             } else {
                 runtime_surface_assert(

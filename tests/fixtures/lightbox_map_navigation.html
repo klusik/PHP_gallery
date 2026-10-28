@@ -8,6 +8,7 @@ Purpose: Exercise production lightbox map navigation against synthetic media.
 Responsibilities:
   - Provide viewer controls, map containers and observable browser results.
 Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><title>Lightbox map navigation fixture</title>
 <style>
@@ -24,9 +25,18 @@ Author: Rudolf Klusal
 <div data-lightbox hidden data-lightbox-maps-enabled="1">
     <button data-lightbox-action="close">Close</button>
     <button data-lightbox-action="next">Next</button>
+    <button data-lightbox-action="fullscreen">Fullscreen</button>
+    <button data-lightbox-map>Map</button>
     <figure><a class="lightbox-stage-link" data-lightbox-stage><div class="lightbox-zoom-surface" data-lightbox-zoom-surface><img data-lightbox-img alt="Photo"></div></a></figure>
     <div class="lightbox-meta"><h2 data-lightbox-title></h2><p data-lightbox-description></p><span data-lightbox-counter></span></div>
-    <div data-lightbox-map-split hidden><button data-lightbox-map-split-close>Close map</button><div data-lightbox-map-split-canvas></div></div>
+    <div data-lightbox-map-split hidden>
+        <button data-lightbox-map-split-close>Close map</button>
+        <h2 data-lightbox-map-split-title></h2>
+        <div class="map-canvas" data-lightbox-map-split-canvas></div>
+        <nav data-lightbox-map-photo-nav>
+            <button>Previous photo</button><button>Next photo</button>
+        </nav>
+    </div>
 </div>
 <div data-map-overlay hidden></div>
 <script type="module">
@@ -109,7 +119,24 @@ Author: Rudolf Klusal
         select(192); await tick(); const exitRequest = pending.at(-1);
         document.dispatchEvent(new Event('fullscreenchange')); await tick();
         check(exitRequest.signal.aborted, 'fullscreen exit handler must abort selection');
-        document.querySelector('[data-lightbox-map-split-close]').click();
+        check(split.hidden && !overlay.classList.contains('is-map-split'),
+            'browser-owned Escape must close the split without another keydown');
+        check(!split.querySelector('[data-lightbox-map-photo-nav]').getBoundingClientRect().width,
+            'fullscreen exit must hide every split-map action');
+        document.dispatchEvent(new Event('fullscreenchange')); await tick();
+        check(!overlay.hidden && split.hidden,
+            'duplicate fullscreen notifications must retain the normal viewer');
+
+        // Page-delivered Escape (CSS fallback) must restore the same normal state.
+        overlay.classList.add('is-fullscreen', 'is-css-fullscreen', 'is-map-split');
+        split.hidden = false;
+        document.dispatchEvent(new Event('fullscreenchange'));
+        check(!split.hidden, 'native notifications must preserve CSS fullscreen');
+        document.dispatchEvent(new KeyboardEvent('keydown',
+            {key: 'Escape', bubbles: true, cancelable: true}));
+        await tick();
+        check(!overlay.hidden && split.hidden && !overlay.classList.contains('is-fullscreen'),
+            'one page-delivered Escape must leave fullscreen and close its map');
 
         select(193); await tick(); const nextRequest = pending.at(-1);
         document.querySelector('[data-lightbox-action="next"]').click(); await tick();
@@ -221,6 +248,54 @@ Author: Rudolf Klusal
         // Reuse the same production gallery-map pipeline with real photo markers and without a route.
         document.body.append(card); config.dataset.lightboxTotal = '200';
         const photoPoint = {id: 1, gallery_id: 7, lat: 49.5, lng: 13, source_type: 'exif_point', point_type: 'photo_point'};
+
+        // Hold Leaflet loading across fullscreen exit and a new viewer session.
+        galleryMapPayload = {title: 'Photo gallery', points: [photoPoint]};
+        setupGalleryLightbox(); card.click(); await tick();
+        // Simulate native ownership: F exits this mode. In the CSS shell F
+        // intentionally upgrades to native fullscreen instead of leaving it.
+        overlay.classList.add('is-fullscreen');
+        const leaflet = window.L;
+        window.L = null;
+        let releaseLeaflet;
+        window.galleryLeafletLoading = new Promise(resolve => { releaseLeaflet = resolve; });
+        card.dataset.mapPoint = JSON.stringify(photoPoint);
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'm', bubbles: true}));
+        await tick();
+        const mapsBeforeExit = maps.length;
+        document.querySelector('[data-lightbox-action="fullscreen"]').click();
+        check(!overlay.classList.contains('is-fullscreen') && split.hidden,
+            'fullscreen control must leave the simulated native session');
+        overlay.classList.add('is-fullscreen');
+        window.L = leaflet;
+        releaseLeaflet(); await tick();
+        check(split.hidden && maps.length === mapsBeforeExit,
+            'late Leaflet completion must not resurrect a split in a later fullscreen session');
+        delete window.galleryLeafletLoading;
+        document.querySelector('[data-lightbox-action="fullscreen"]').click();
+
+        // A completed map must release its runtime, geometry and unavailable state
+        // through browser-owned exit as well as the explicit fullscreen control.
+        overlay.classList.add('is-fullscreen');
+        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'm', bubbles: true}));
+        await tick(); await tick();
+        const splitMap = overlay.galleryLeafletSplitMap;
+        check(splitMap && !split.hidden, 'fullscreen map must render before exit');
+        split.classList.add('is-map-unavailable'); split.setAttribute('aria-disabled', 'true');
+        overlay.classList.add('is-map-split-disabled');
+        document.dispatchEvent(new Event('fullscreenchange')); await tick();
+        check(split.hidden && splitMap._mapPane === null && !overlay.galleryLeafletSplitMap,
+            'browser exit must dispose Leaflet and hide the split');
+        check(!overlay.classList.contains('is-map-split-disabled')
+            && !split.hasAttribute('aria-disabled')
+            && !document.querySelector('[data-lightbox-stage]').style.getPropertyValue('--lightbox-map-fit-width'),
+            'browser exit must clear unavailable and fitted-map geometry');
+        document.querySelector('[data-lightbox-action="close"]').click();
+        await tick();
+        check(overlay.hidden && location.href === galleryUrl,
+            'closing the fullscreen-exit scenario must restore its gallery URL');
+        teardownGalleryLightbox();
+        delete card.dataset.mapPoint;
         for (const withRoute of [true, false]) {
             galleryMapPayload = withRoute ? {...routePayload, points: [...routePoints, photoPoint]}
                 : {title: 'Photo gallery', source_type: 'exif_points', points: [photoPoint]};

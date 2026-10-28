@@ -1225,8 +1225,9 @@ namespace {
         $ordinary = \Gallery\Services\application_update_create_job('stable_update',
             ['branch' => 'main', 'target_version' => '1.2.1'], 'background');
         $ordinaryRoot = \Gallery\Services\application_update_job_dir($ordinary['id'])
-            . '/extract/release';
-        foreach (\Gallery\Core\release_file_policy_paths($repositoryRoot, 'updater') as $relative) {
+            . '/extract';
+        $ordinaryFiles = \Gallery\Core\release_file_policy_paths($repositoryRoot, 'updater');
+        foreach ($ordinaryFiles as $relative) {
             \Gallery\Services\application_update_ensure_dir(dirname($ordinaryRoot . '/' . $relative));
             copy($repositoryRoot . '/' . $relative, $ordinaryRoot . '/' . $relative);
         }
@@ -1238,7 +1239,25 @@ namespace {
             json_encode($ordinaryManifest, JSON_THROW_ON_ERROR));
         file_put_contents($ordinaryRoot . '/public/assets/styles/utilities.css',
             "\n/* Archive content accepted without the publisher sweep. */\n", FILE_APPEND);
-        $ordinary['stage'] = 'package_validate';
+        // Exercise the actual flat published archive through validation and
+        // extraction before the existing backup/activation/migration journey.
+        $ordinaryArchivePath = \Gallery\Services\application_update_job_dir($ordinary['id'])
+            . '/package.zip';
+        $ordinaryArchive = new \ZipArchive();
+        recovery_check($ordinaryArchive->open($ordinaryArchivePath, \ZipArchive::CREATE) === true,
+            'Cannot create the owned published-archive fixture.');
+        foreach ($ordinaryFiles as $relative) {
+            recovery_check($ordinaryArchive->addFile($ordinaryRoot . '/' . $relative, $relative),
+                'Cannot add a declared file to the published-archive fixture.');
+        }
+        recovery_check($ordinaryArchive->close(), 'Cannot finish the owned published archive.');
+        $ordinary['checkpoints']['archive_release_asset'] = [
+            'version' => '1.2.1',
+            'bytes' => filesize($ordinaryArchivePath),
+            'sha256' => hash_file('sha256', $ordinaryArchivePath),
+        ];
+        \Gallery\Services\application_update_remove_path($ordinaryRoot);
+        $ordinary['stage'] = 'archive_validate';
         recovery_check(session_status() !== PHP_SESSION_ACTIVE
             && $ordinary['admin_session_name'] === session_name()
             && $ordinary['admin_session_name'] !== '',
@@ -1268,6 +1287,8 @@ namespace {
                 && empty($ordinaryState['checkpoints']['activation_started'])
                 && !isset($ordinaryState['checkpoints']['recovery_verify_index'])
                 && !isset($ordinaryState['checkpoints']['recovery_ready_index'])
+                && !empty($ordinaryState['checkpoints']['archive_release_digest_verified'])
+                && $ordinaryState['checkpoints']['source_root'] === $ordinaryRoot
                 && !empty($ordinaryState['checkpoints']['publisher_integrity_disabled'])
                 && file_get_contents($root . '/app/bootstrap.php') === $beforeActivation,
                 'Ordinary activation failed to close admission before waiting or ran a disabled sweep.');

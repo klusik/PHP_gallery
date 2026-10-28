@@ -13,7 +13,7 @@ import {createHash} from 'node:crypto';
 
 /**
  * Build one complete synthetic workflow matrix for an immutable owner-contract fixture.
- * @param {1|2|3} version Historical PHP 8.3, prior unsharded PHP 8.5, or current four-shard PHP 8.1/8.5 matrix.
+ * @param {1|2|3|4} version Historical matrices 1–3 or current sharded coverage with advisory macOS.
  * @returns {string} Workflow source whose matrix and labels identify exactly the requested reviewed contract.
  */
 function ownerWorkflowSource(version) {
@@ -27,26 +27,43 @@ function ownerWorkflowSource(version) {
     const runtimeRows=[
         "          - php: '8.1'\n            normalization: unicode",
         "          - php: '8.5'\n            normalization: ascii"].join('\n');
-    const databaseMatrix=version===3
+    const databaseMatrix=version>=3
         ? "        database: ['mysql:8.4', 'mariadb:10.11', 'mariadb:11.4']\n        shard: [1, 2, 3, 4]\n        include:\n"+databaseRows
         : "        include:\n"+databaseRows;
-    const runtimeMatrix=version===3
+    const runtimeMatrix=version>=3
         ? "        php: ['8.1', '8.5']\n        shard: [1, 2, 3, 4]\n        include:\n"+runtimeRows
         : "        include:\n"+runtimeRows;
     const matrixPhp='$'+'{{ matrix.php }}';
     const matrixDatabase='$'+'{{ matrix.database }}';
     const matrixNormalization='$'+'{{ matrix.normalization }}';
     const matrixShard='$'+'{{ matrix.shard }}';
-    const databaseName=version===3
+    const databaseName=version>=3
         ? 'PHP '+matrixPhp+' workflows ('+matrixDatabase+', Unicode, shard '+matrixShard+'/4)'
         : 'PHP '+matrixPhp+' workflows ('+matrixDatabase+', Unicode)';
-    const runtimeName=version===3
+    const runtimeName=version>=3
         ? 'PHP '+matrixPhp+' source ('+matrixNormalization+', shard '+matrixShard+'/4)'
         : 'PHP '+matrixPhp+' source ('+matrixNormalization+')';
-    const extraJobs=version===3
+    const extraJobs=version>=3
         ? ['  shared-source-contracts:','    name: Shared source contracts',
             '  portable-node-winapp:','    name: Portable Node and WinApp']
         : [];
+    const packageJobs=[
+        '  production-package:','    strategy:','      matrix:','        include:',
+        "          - os: ubuntu-24.04\n            php: '8.1'",
+        "          - os: windows-2025\n            php: '8.5'",
+        ...(version<4 ? ["          - os: macos-latest\n            php: '8.5'"] : []),
+    ];
+    if (version===4) packageJobs.push(
+        '  macos-advisory:',
+        "    if: ${{ github.event_name == 'workflow_dispatch' && inputs.advisory_macos }}",
+        '    name: Advisory macOS production package',
+        '    runs-on: macos-latest',
+        "    php-version: '8.5'",
+        '    run: php scripts/audit.php --suite=production-package',
+        '  ci-gate:',
+        "    name: ${{ inputs.advisory_macos && 'Advisory macOS matrix gate (unused)' || 'Complete required CI matrix' }}",
+        '    if: ${{ always() && !inputs.advisory_macos }}',
+    );
     return [
         'name: Synthetic owner contract','jobs:',
         '  real-database-browser:','    name: '+databaseName,'    strategy:',
@@ -57,16 +74,16 @@ function ownerWorkflowSource(version) {
         '  runtime-compatibility:','    name: '+runtimeName,'    strategy:',
         '      matrix:',runtimeMatrix,
         '    steps:','      - uses: shivammathur/setup-php@v2','        with:',
-        '          php-version: '+matrixPhp,...extraJobs].join('\n')+'\n';
+        '          php-version: '+matrixPhp,...extraJobs,...packageJobs].join('\n')+'\n';
 }
 
 /**
  * Produce a complete Contents response for one reviewed immutable workflow fixture request.
  * @param {string} request Literal API request path.
- * @param {1|2|3} [version=3] Historical or current owner/BASIC invocation contract.
+ * @param {1|2|3|4} [version=4] Historical or current owner/BASIC invocation contract.
  * @returns {{type:string,path:string,sha:string,encoding:string,size:number,content:string}|null} Complete Git-hashed source response, or null for an unrelated endpoint.
  */
-export function ciOwnerWorkflowResponse(request,version=3) {
+export function ciOwnerWorkflowResponse(request,version=4) {
     const match=/\/contents\/(\.github\/workflows\/(?:gallery-workflows|candidate-preparation)\.yml)\?ref=[a-f0-9]{40}$/.exec(request);
     if (!match) return null;
     const path=match[1];

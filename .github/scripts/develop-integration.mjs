@@ -14,7 +14,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {readCoverageArtifact,loadIntegrationQualification} from './coverage-artifacts.mjs';
-import {fullMatrixOwners,requireCurrentWorkflowOwners} from './ci-owner-contract.mjs';
+import {fullMatrixOwners,requireCurrentWorkflowOwners,advisoryMatrixOwners} from './ci-owner-contract.mjs';
 import {requireOwnerRuleset} from './release-owner-authorization.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
 import {loadFeatureExecution,verifyFeatureOwners,verifyFeatureBasic} from './feature-qualification.mjs';
@@ -759,7 +759,8 @@ export function validateDevelopIntegration(request,context,repository,call,recov
         throw new Error('BLOCKED publisher must be the sole active job in the current integration run.');
     }
     const allowed=new Set([...FULL_OWNERS.map(name=>'Develop integration / '+name),...auxiliaryNames,
-        'Publish develop integration','Develop integration / Authoritative release audit','Inherited BASIC authority']);
+        'Publish develop integration','Develop integration / Authoritative release audit','Inherited BASIC authority',
+        ...advisoryMatrixOwners().map(name=>'Develop integration / '+name)]);
     if (jobs.some(job=>!allowed.has(job.name) || job.run_id!==Number(runId)
         || job.run_attempt!==Number(attempt) || job.workflow_name!=='Integrate into develop')
         || jobs.filter(job=>job.name==='Develop integration / Authoritative release audit').some(job=>
@@ -824,7 +825,8 @@ function validateFeatureIntegration(request,context,call,tree,basic,develop) {
         throw new Error('BLOCKED feature qualification stage is not the current active native job.');
     }
     const allowed=new Set([...auxiliary,stage,'Publish develop integration','Retain integration execution',
-        ...FULL_OWNERS.map(name=>'Develop integration / '+name),'Develop integration / Authoritative release audit']);
+        ...FULL_OWNERS.map(name=>'Develop integration / '+name),'Develop integration / Authoritative release audit',
+        ...advisoryMatrixOwners().map(name=>'Develop integration / '+name)]);
     if (request.qualifiedRun) allowed.add('Develop integration');
     if (jobs.some(job=>!allowed.has(job.name))) throw new Error('BLOCKED unexpected native feature qualification job.');
     const record={schema_version:2,repository,source_branch:request.branch,source_sha:request.sourceSha,
@@ -1194,6 +1196,52 @@ export function dispatchPreparedBasic(request,context,call) {
     }
 
     return String(dispatched.workflow_run_id);
+}
+
+/**
+ * Queue independent macOS packaging without waiting for its runner or outcome.
+ *
+ * The caller already published the leased prepared candidate. This dispatch
+ * selects that feature's workflow and gives its read-only advisory run the same
+ * immutable commit/base. Provider refusal is a visible advisory receipt and
+ * never changes required qualification or writes any Git ref.
+ *
+ * @param {{repository:string,branch:string,candidateSha:string,expectedDevelopSha:string}} request Prepared feature identity and immutable comparison base.
+ * @param {WorkflowContext} context Authenticated integration publisher context.
+ * @param {GithubApi} call Authenticated provider transport; only the dispatch is a mutation.
+ * @returns {{queued:boolean,runId?:string,reason:string}} Confirmed run identity or a bounded nonblocking dispatch refusal.
+ * @throws {Error} Rejects malformed or foreign inputs before any provider write.
+ */
+export function dispatchAdvisoryMacos(request,context,call) {
+    if (!request || !context || context.repository!==request.repository
+        || context.workflowPath!==WORKFLOW_PATH
+        || context.eventName!=='workflow_dispatch' || !trustedIntegrationRef(context)
+        || !trustedWorkflowRef(request.repository,context.workflowRef,false,
+            context.featureQualification ? context.ref : '')
+        || !validBranchName(request.branch) || !request.branch.startsWith('feature/')
+        || ![request.candidateSha,request.expectedDevelopSha,context.headSha]
+            .every(value=>/^[a-f0-9]{40}$/.test(value ?? ''))
+        || context.authorityUpdate) {
+        throw new Error('BLOCKED advisory macOS dispatch has no trusted prepared feature.');
+    }
+    try {
+        const head=call(`repos/${request.repository}/git/ref/heads/${encodedBranch(request.branch)}`);
+        if (head?.object?.sha!==request.candidateSha) {
+            return {queued:false,reason:'source_moved'};
+        }
+        const result=call(`repos/${request.repository}/actions/workflows/gallery-workflows.yml/dispatches`,'POST',{
+            ref:request.branch,
+            inputs:{advisory_macos:true,checkout_ref:request.candidateSha,
+                source_base:request.expectedDevelopSha},
+            return_run_details:true,
+        });
+        if (!Number.isSafeInteger(result?.workflow_run_id) || result.workflow_run_id<1) {
+            return {queued:false,reason:'run_unconfirmed'};
+        }
+        return {queued:true,runId:String(result.workflow_run_id),reason:'queued'};
+    } catch {
+        return {queued:false,reason:'dispatch_unavailable'};
+    }
 }
 
 /**

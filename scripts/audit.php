@@ -2539,7 +2539,7 @@ if ($delegatedToPreflight !== []) {
 if ($delegatedToPackaging !== []) {
     fwrite(
         STDOUT,
-        'Delegated to required exact-candidate three-platform production-package owner (not a local PASS): packaging'
+        'Delegated to required exact-candidate Linux/Windows production-package owners (not a local PASS): packaging'
             . "\n",
     );
 }

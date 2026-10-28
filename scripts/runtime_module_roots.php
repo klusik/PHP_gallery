@@ -215,6 +215,14 @@ return [
         'domain-admin-galleries-edit-page' => [
             'domain-admin-galleries-edit-metadata',
         ],
+        // Theme's gallery picker/preview already contains the complete access
+        // policy closure. Reuse its established owner without adding files or
+        // logical modules when scoped saves load canonical mutation responses.
+        'domain-admin-theme' => ['public-policy'],
+        // Telemetry already includes gallery access in its Admin layout. Reuse
+        // that complete policy closure while adding canonical scoped responses;
+        // this preserves file counts and duplicate/module ceilings.
+        'domain-admin-telemetry' => ['public-policy'],
         // Reuse the existing maintenance owner only where its complete historical
         // closure is already present, including Admin authentication. The edge
         // replaces four duplicated files without broadening any route's closure.

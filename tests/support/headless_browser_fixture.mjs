@@ -8,8 +8,10 @@
  *   - Expose native mouse button and modifier input through the shared fixture API.
  *   - Apply deterministic CSS viewport orientation and visual viewport scale changes.
  *   - Capture the loaded owned page as a full-document PNG without a second browser startup.
+ *   - Keep passive reads bounded across reloads of the same owned loopback tab.
  * File: tests/support/headless_browser_fixture.mjs
  * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  */
 import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
@@ -93,6 +95,57 @@ export function browserEvaluationResult(response) {
 }
 
 /**
+ * Read passive page state, admitting only a verified same-tab reload gap.
+ * A missing context does not complete a fixture: callers retain their existing
+ * readiness/result deadlines and must still observe the actual terminal marker.
+ *
+ * @param {function('Runtime.evaluate'|'Target.getTargetInfo'|'Page.getFrameTree', {expression?:string,returnByValue?:boolean,targetId?:string}):Promise<BrowserEvaluationResponse|{targetInfo?:{targetId:string,type:string,url:string}}|{frameTree?:{frame?:{url:string,securityOrigin:string}}}>} send Owned-session protocol sender; evaluates passive state or verifies the original target and committed main-frame origin.
+ * @param {string} expression Passive page observation; never a mutation to replay.
+ * @param {string} targetId Original owned page target identifier.
+ * @param {string} origin Expected loopback fixture origin including its port.
+ * @return {Promise<BrowserJsonValue|undefined>} Observed page value, or undefined for a verified reload gap or an omitted successful value; all other errors propagate.
+ */
+export async function readOwnedBrowserValue(send, expression, targetId, origin) {
+    try {
+        const response = await send('Runtime.evaluate', {
+            expression, returnByValue: true,
+        });
+        return browserEvaluationResult(response);
+    } catch (error) {
+        // Chromium may invalidate a passive read during the fixture's own
+        // reload (-32000 is the structural CDP error code). Support that
+        // transition permanently while the exact owned loopback target survives.
+        // Do not replay actions or reset limits.
+        if (error?.protocolCode !== -32000 || error?.message !==
+            'Owned Chromium DevTools Runtime.evaluate failed: Inspected target navigated or closed') {
+            throw error;
+        }
+        const {targetInfo} = await send('Target.getTargetInfo', {targetId});
+        if (targetInfo?.targetId !== targetId || targetInfo.type !== 'page') {
+            throw error;
+        }
+        let observedUrl = targetInfo.url;
+        if (observedUrl === '') {
+            // Chromium can omit TargetInfo.url while replacing the document.
+            // Require the surviving main frame's committed security origin as
+            // independent ownership evidence; empty/moved frames still fail.
+            const {frameTree} = await send('Page.getFrameTree', {});
+            if (frameTree?.frame?.securityOrigin !== origin) throw error;
+            observedUrl = frameTree.frame.url;
+        }
+        if (!URL.canParse(observedUrl) || new URL(observedUrl).origin !== origin) {
+            throw error;
+        }
+        return undefined;
+    }
+}
+
+/**
+ * By-value evaluation payload or a concrete evaluated application exception.
+ * @typedef {{result?:{value?:BrowserJsonValue},exceptionDetails?:{text?:string,exception?:{description?:string},stackTrace?:{callFrames?:Array<{functionName:string,lineNumber:number,columnNumber:number}>}}}} BrowserEvaluationResponse
+ */
+
+/**
  * A JSON-compatible value returned by a DevTools expression serialized by value.
  * @typedef {null|boolean|number|string|Array<BrowserJsonValue>|Record<string,BrowserJsonValue>} BrowserJsonValue
  */
@@ -111,6 +164,8 @@ export function browserEvaluationResult(response) {
 
 /**
  * Navigate one fresh owned tab to its loopback fixture and return the result marker.
+ * Passive observations survive verified same-tab reload gaps within the original
+ * deadlines; other protocol, application and ownership failures remain fatal.
  * @param {string} executable Installed Chromium or Edge executable path.
  * @param {string} url Loopback URL served by the calling fixture.
  * @param {string} profilePrefix Unique disposable profile prefix under cache.
@@ -226,6 +281,10 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         const target = targetInfos.find(info => info.type === 'page' && info.url === 'about:blank');
         if (!target) throw new Error('Owned loopback fixture page not found');
         const {sessionId} = await command('Target.attachToTarget', {targetId: target.targetId, flatten: true});
+        const readPageValue = expression => readOwnedBrowserValue(
+            (method, params) => command(method, params, sessionId),
+            expression, target.targetId, fixtureUrl.origin,
+        );
         await command('Page.enable', {}, sessionId);
         if (options.viewport) {
             const {width, height} = options.viewport;
@@ -262,11 +321,9 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         const navigationDeadline = Date.now() + startupTimeoutMs;
         let fixtureDocumentReady = false;
         while (Date.now() < navigationDeadline) {
-            const response = await command('Runtime.evaluate', {
-                expression: '({origin:location.origin,readyState:document.readyState})',
-                returnByValue: true,
-            }, sessionId);
-            const documentState = response.result?.value;
+            const documentState = await readPageValue(
+                '({origin:location.origin,readyState:document.readyState})',
+            );
             if (documentState?.origin === fixtureUrl.origin && documentState.readyState !== 'loading') {
                 fixtureDocumentReady = true;
                 break;
@@ -447,10 +504,9 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
             if (options.readResult) {
                 result = await options.readResult();
             } else {
-                const response = await command('Runtime.evaluate', {
-                    expression: 'document.getElementById("results")?.textContent || ""', returnByValue: true,
-                }, sessionId);
-                result = String(browserEvaluationResult(response) || '');
+                result = String(await readPageValue(
+                    'document.getElementById("results")?.textContent || ""',
+                ) || '');
             }
             if (/^BROWSER (PASS|FAIL)/.test(result)) break;
             await new Promise(resolve => setTimeout(resolve, fixtureResultPollMs));
@@ -459,10 +515,9 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
             if (options.readResult) {
                 result = await options.readResult();
             } else {
-                const response = await command('Runtime.evaluate', {
-                    expression: 'document.getElementById("results")?.textContent || ""', returnByValue: true,
-                }, sessionId);
-                result = String(browserEvaluationResult(response) || '');
+                result = String(await readPageValue(
+                    'document.getElementById("results")?.textContent || ""',
+                ) || '');
             }
         }
         let timeoutDetail = '';

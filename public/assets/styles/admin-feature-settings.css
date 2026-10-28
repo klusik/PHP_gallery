@@ -1,0 +1,1766 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-feature-settings.css
+ * Module Type: Stylesheet
+ * Purpose: Align specialized Admin settings and telemetry with compact surfaces.
+ * Responsibilities:
+ *   - Style search, central Settings, Smart Galleries and Music preferences
+ *   - Preserve native forms, selection controls and responsive editor layouts
+ *   - Keep contextual help and keyboard focus readable over translucent surfaces
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+/* These existing owners bound the migration; other specialist pages keep
+ * their own presentation. The ID in :is also defeats legacy Admin controls. */
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-workspace, .admin-smart-gallery-editor,
+    #music-manager, #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace, [data-telemetry-workspace]) {
+    --feature-settings-surface:
+        color-mix(in srgb, var(--panel) 42%, transparent);
+    --feature-settings-line:
+        color-mix(in srgb, var(--ink) 12%, transparent);
+    --feature-settings-muted:
+        color-mix(in srgb, var(--ink) 62%, var(--panel));
+    --feature-settings-tint:
+        color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--ink);
+    min-width: 0;
+}
+
+/* Flat, quiet actions retain their labels, disabled state and form semantics. */
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-editor, #music-manager,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace)
+    :is(button, .button, input[type="submit"]) {
+    box-sizing: border-box;
+    min-height: 28px;
+    padding: 3px 8px;
+    border: 1px solid var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .82rem;
+    line-height: 1.35;
+    text-decoration: none;
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-editor, #music-manager,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace)
+    :is(a, button, summary) {
+    text-decoration: none;
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-editor, #music-manager,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace)
+    :is(button, .button):hover:not(:disabled) {
+    background: var(--feature-settings-tint);
+    color: var(--ink);
+}
+
+/* Destructive actions retain their meaning within the transparent hierarchy. */
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-editor, #music-manager,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace)
+    :is(button, .button).danger {
+    border-color: color-mix(in srgb, var(--admin-danger) 35%, transparent);
+    color: var(--admin-danger);
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-editor, #music-manager,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace)
+    :is(button, input, select, textarea, a, summary):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+    .admin-smart-gallery-editor, #music-manager,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace)
+    :is(button, input, select):disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+    #music-manager) :is(input:not([type="checkbox"], [type="hidden"],
+    [type="radio"], [type="range"], [type="submit"]),
+    select, textarea) {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 28px;
+    max-width: 100%;
+    margin: 0;
+    padding: 4px 7px;
+    border: 1px solid var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: var(--feature-settings-surface);
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .84rem;
+    font-weight: 400;
+}
+
+/* Only preference checkboxes become switches. Music row selections retain
+ * their native selection boxes; radios, ranges and hidden fields are untouched. */
+.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"],
+.admin-page #music-manager .admin-music-preferences input[type="checkbox"] {
+    appearance: none;
+    position: relative;
+    flex: 0 0 26px;
+    width: 26px;
+    min-width: 26px;
+    height: 14px;
+    min-height: 14px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 38%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]::after,
+.admin-page #music-manager .admin-music-preferences
+    input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ink) 65%, var(--panel));
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]:checked,
+.admin-page #music-manager .admin-music-preferences
+    input[type="checkbox"]:checked {
+    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]:checked::after,
+.admin-page #music-manager .admin-music-preferences
+    input[type="checkbox"]:checked::after {
+    left: 14px;
+    background: var(--ink);
+}
+
+.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+    #admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-system, .admin-trash-workspace) label:has(input[type="checkbox"]),
+.admin-page #music-manager .admin-music-preferences .admin-music-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    padding: 0;
+    cursor: pointer;
+}
+
+/* Central Settings: give labels a real share of each field's width. A fluid
+ * grid adds columns only when complete label/control rows fit comfortably. */
+.admin-page .admin-settings-page .admin-settings-layout {
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 12px;
+}
+
+.admin-page .admin-settings-page :is(.admin-settings-toolbar,
+    .admin-settings-section.panel, .admin-settings-savebar,
+    .admin-settings-search-results) {
+    border-color: var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--feature-settings-surface);
+    box-shadow: none;
+    backdrop-filter: blur(12px);
+}
+
+.admin-page .admin-settings-page .admin-settings-toolbar {
+    gap: 10px;
+    padding: 6px 10px;
+}
+
+.admin-page .admin-settings-page .admin-settings-toolbar h1 {
+    font-size: 1.25rem;
+}
+
+.admin-page .admin-settings-page .admin-settings-search-shell {
+    min-height: 28px;
+    border-color: var(--feature-settings-line);
+    border-radius: 6px;
+    background: transparent;
+}
+
+.admin-page :is(.admin-settings-page, #music-manager)
+    input.admin-settings-search-input {
+    border: 0;
+    background: transparent;
+    padding: 3px 0;
+}
+
+.admin-page .admin-settings-page .admin-settings-search-icon {
+    font-size: 16px;
+}
+
+.admin-page .admin-settings-page .admin-settings-section.panel {
+    padding: 10px 12px;
+    /* A filtered ancestor would capture the viewport-fixed Save bar. */
+    backdrop-filter: none;
+}
+
+.admin-page .admin-settings-page .admin-settings-section-heading {
+    padding-bottom: 8px;
+    border-color: var(--feature-settings-line);
+}
+
+.admin-page .admin-settings-page .admin-settings-section-heading h2 {
+    font-size: 1rem;
+}
+
+.admin-page .admin-settings-page .admin-settings-section-heading p,
+.admin-page .admin-settings-page .admin-settings-field-copy > .muted {
+    color: var(--feature-settings-muted);
+    font-size: .8rem;
+}
+
+.admin-page .admin-settings-page .admin-settings-navigation .admin-tab {
+    min-height: 28px;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 4px;
+    color: var(--ink);
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.admin-page .admin-settings-page .admin-tab[aria-selected="true"] {
+    background: var(--feature-settings-tint);
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+.admin-page .admin-settings-page .admin-settings-group-form > fieldset.form-grid,
+.admin-page .admin-settings-page .admin-settings-upload-details
+    > fieldset.form-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 4px 20px;
+}
+
+.admin-page .admin-settings-page .admin-settings-group-form
+    .admin-settings-field {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, .85fr);
+    gap: 10px;
+    padding: 6px 0;
+    border: 0;
+}
+
+.admin-page .admin-settings-page .admin-settings-field-copy > label {
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.admin-page .admin-settings-page .admin-settings-summary-row {
+    padding: 8px 0;
+    gap: 12px;
+    border-color: var(--feature-settings-line);
+    font-size: .82rem;
+}
+
+.admin-page .admin-settings-page :is(.admin-settings-language-details,
+    .admin-settings-upload-details, .admin-settings-mobile > .panel) {
+    border-color: var(--feature-settings-line);
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-page .admin-settings-page .admin-settings-savebar {
+    gap: 8px;
+    padding: 5px;
+}
+
+.admin-page .admin-settings-page .admin-settings-savebar.is-dirty {
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+/* Help is a native light-dismiss popover. The workspace positions it beside
+ * the owning question mark even inside long or dynamically replaced forms. */
+.admin-page :is(.admin-settings-page, #music-manager) button.admin-settings-help {
+    flex: 0 0 auto;
+    min-width: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--feature-settings-muted);
+    font-weight: 400;
+    box-shadow: none;
+}
+
+.admin-settings-help-panel {
+    position: fixed;
+    inset: auto;
+    box-sizing: border-box;
+    width: min(280px, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    overflow: auto;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    color: var(--ink);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+    backdrop-filter: blur(16px);
+    font-size: .82rem;
+    line-height: 1.5;
+}
+
+.admin-settings-help-panel::backdrop { background: transparent; }
+
+/* Permanent progressive enhancement owned by Settings: older browsers retain
+ * inline descriptions instead of inaccessible popover triggers. Usage is
+ * unknown, so native form/help access is preserved without a version cutoff. */
+@supports not selector(:popover-open) {
+    .admin-page :is(.admin-settings-page, #music-manager)
+        button.admin-settings-help { display: none; }
+
+    .admin-page .admin-settings-page .admin-settings-field-copy {
+        display: grid;
+    }
+
+    .admin-settings-help-panel {
+        display: block;
+        position: static;
+        width: auto;
+        max-height: none;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+}
+
+/* Smart Gallery editors use this same root in the page and side panel. */
+.admin-page .admin-smart-galleries-page :is(.admin-smart-galleries-toolbar,
+    .admin-smart-gallery-index, .admin-smart-gallery-workspace),
+.admin-page .admin-side-panel-body > .admin-smart-gallery-workspace {
+    padding: 8px 10px;
+    border-color: var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--feature-settings-surface);
+    box-shadow: none;
+    backdrop-filter: blur(12px);
+}
+
+.admin-page .admin-side-panel-body:has(> .admin-smart-gallery-workspace) {
+    padding: 10px;
+}
+
+.admin-page .admin-smart-galleries-toolbar h1 { font-size: 1.25rem; }
+
+.admin-page .admin-smart-galleries-page .admin-smart-gallery-row {
+    margin: 0;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--feature-settings-line);
+    border-radius: 0;
+    background: transparent;
+}
+
+.admin-page .admin-smart-galleries-page .admin-smart-gallery-row:last-child {
+    border-bottom: 0;
+}
+
+.admin-page .admin-smart-gallery-editor [data-smart-gallery-editor] {
+    gap: 10px;
+}
+
+.admin-page .admin-smart-gallery-editor
+    :is(.admin-smart-gallery-placement, .admin-smart-gallery-details,
+    .admin-smart-gallery-enabled, .admin-edit-card, .smart-rule-group) {
+    padding: 8px;
+    border-color: var(--feature-settings-line);
+    border-radius: 6px;
+    background: var(--feature-settings-surface);
+    box-shadow: none;
+}
+
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-enabled {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.admin-page .admin-smart-gallery-editor .smart-rule-condition {
+    padding: 6px 0;
+    border: 0;
+    border-top: 1px solid var(--feature-settings-line);
+    border-radius: 0;
+    background: transparent;
+}
+
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-save-bar {
+    padding: 6px 0;
+    border-color: var(--feature-settings-line);
+    background: color-mix(in srgb, var(--panel) 85%, transparent);
+    backdrop-filter: blur(12px);
+}
+
+/* The first Features destination is an existing dashboard Content row.
+ * Keep neighboring content tools consistent within that already shared group. */
+.admin-page #admin-tab-maintenance.panel {
+    padding: 8px 10px;
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    box-shadow: none;
+}
+
+.admin-page #admin-tab-maintenance .admin-maintenance-compact-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin: 0 0 6px;
+}
+
+.admin-page #admin-tab-maintenance .admin-maintenance-compact-toolbar h2 {
+    margin: 0;
+    font-size: .94rem;
+}
+
+.admin-page #admin-tab-maintenance .admin-maintenance-report-shortcut {
+    min-height: 28px;
+    margin-left: auto;
+    padding: 3px 8px;
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .8rem;
+    text-decoration: none;
+}
+
+.admin-page #admin-tab-maintenance .admin-dashboard-maintenance-scope {
+    gap: 8px;
+}
+
+.admin-page #admin-maintenance-content .admin-content-display-workspace,
+.admin-page #admin-maintenance-navigation .admin-navigation-workspace,
+.admin-page #admin-maintenance-system .admin-system-health-workspace {
+    /* Keep complete setting groups together in top-to-bottom reading order.
+     * Type: length. Units: CSS pixels. Scope: Content/navigation/System health columns.
+     * Consumers: column-width. Value: 300px.
+     * Rationale: add a column only when its compact controls fit comfortably. */
+    --dashboard-content-column-width: 300px;
+    /* Bound the reading span to the same one-to-three principle as Features.
+     * Type: integer. Units: columns. Scope: Content/navigation/System health workspace.
+     * Consumers: column-count. Value: 3.
+     * Rationale: wide workspaces must not create a fourth settings column. */
+    --dashboard-content-column-limit: 3;
+    /* Match the reference Features spacing within and between whole groups.
+     * Type: length. Units: rem. Scope: Content/navigation/System health groups.
+     * Consumers: column-gap and group margin. Value: 0.65rem.
+     * Rationale: retain the same compact gutter around independent surfaces. */
+    --dashboard-content-group-gap: .65rem;
+    display: block;
+    column-width: var(--dashboard-content-column-width);
+    column-count: var(--dashboard-content-column-limit);
+    column-gap: var(--dashboard-content-group-gap);
+}
+
+/* Trash keeps safety evidence and explicit tasks beside its compact preferences. */
+.admin-page .admin-trash-workspace[data-admin-trash-panel] {
+    /* Match a complete reference preference group without stretching its rows.
+     * Type: length. Units: CSS pixels. Scope: Trash preference group.
+     * Consumers: group width. Value: 300px.
+     * Rationale: keep short names, help and compact numeric controls readable. */
+    --admin-trash-preference-width: 300px;
+    /* Match the other independent Maintenance group gutters.
+     * Type: length. Units: rem. Scope: Trash groups.
+     * Consumers: group margin. Value: .65rem.
+     * Rationale: use the same spacing as Features and Content and display. */
+    --dashboard-content-group-gap: .65rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-heading {
+    justify-content: flex-start;
+    gap: 4px 8px;
+    margin-bottom: .65rem;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-heading h2 {
+    font-size: .94rem;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-heading > form {
+    margin-left: auto;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-summary {
+    order: 1;
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: .8rem;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-settings-group {
+    width: min(100%, var(--admin-trash-preference-width));
+}
+
+.admin-page .admin-trash-workspace .admin-trash-settings {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-setting {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 32px;
+    gap: 4px;
+    border-bottom: 1px solid var(--feature-settings-line);
+}
+
+.admin-page .admin-trash-workspace .admin-trash-setting > label {
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-number-setting {
+    grid-template-columns: minmax(0, 1fr) 64px;
+    min-height: 32px;
+    gap: 6px;
+    margin: 0;
+    border-bottom: 1px solid var(--feature-settings-line);
+    font-size: .8rem;
+}
+
+.admin-page :is(#admin-maintenance-trash, .admin-trash-workspace)
+    .admin-trash-number-setting > input {
+    min-height: 28px;
+    margin: 0;
+    padding: 3px 6px;
+    border: 1px solid var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: var(--feature-settings-surface);
+    color: var(--ink);
+    font: inherit;
+}
+
+/* Only the module's bound preference form hides its classic Save fallback. */
+html[data-admin-trash-preferences-ready='1'] .admin-trash-settings
+    > button[type='submit'] { display: none; }
+
+.admin-page .admin-trash-workspace [data-admin-trash-settings-status] {
+    min-width: 0;
+    font-size: .72rem;
+    color: var(--feature-settings-muted);
+}
+
+.admin-page .admin-trash-workspace [data-save-state='saving'] { opacity: .7; }
+.admin-page .admin-trash-workspace :is([data-save-state='error'],
+    [data-save-state='unknown']) [data-admin-trash-settings-status] {
+    color: var(--admin-danger);
+}
+
+.admin-page .admin-trash-workspace .admin-trash-table {
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-table :is(th, td) {
+    padding: 6px 4px;
+    border-color: var(--feature-settings-line);
+    background: transparent;
+    color: var(--ink);
+    font-size: .8rem;
+    line-height: 1.4;
+}
+
+.admin-page .admin-trash-workspace .admin-trash-table .muted {
+    color: var(--feature-settings-muted);
+}
+
+.admin-page .admin-trash-workspace .admin-trash-table tr.is-attention {
+    background: color-mix(in srgb, var(--admin-danger) 6%, transparent);
+}
+
+.admin-page .admin-trash-workspace .admin-trash-list .table-scroll {
+    overflow: visible;
+}
+
+.admin-page :is(#admin-maintenance-trash, .admin-trash-workspace)
+    :is(.admin-trash-help > summary, button.admin-trash-help-trigger) {
+    display: inline-grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--feature-settings-muted);
+    box-shadow: none;
+    font-size: .82rem;
+    font-weight: 400;
+    list-style: none;
+}
+
+.admin-trash-help > summary::-webkit-details-marker { display: none; }
+.admin-trash-help-panel {
+    box-sizing: border-box;
+    width: min(300px, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    overflow: auto;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    color: var(--ink);
+    backdrop-filter: blur(12px);
+    font-size: .82rem;
+    font-weight: 400;
+    line-height: 1.45;
+}
+.admin-trash-help-panel[popover] { position: fixed; inset: auto; }
+.admin-trash-help-panel::backdrop { background: transparent; }
+.admin-trash-help-panel > strong { font-size: .85rem; }
+.admin-trash-help-panel > p { margin: 5px 0 0; }
+.admin-trash-help[open] { flex-basis: 100%; }
+.admin-trash-help[open] > .admin-trash-help-panel { width: 100%; }
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page :is(#admin-maintenance-trash, .admin-trash-workspace)
+        :is(.admin-trash-help > summary, button.admin-trash-help-trigger) {
+        width: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .admin-page :is(#admin-maintenance-trash, .admin-trash-workspace)
+        .admin-trash-number-setting > input { min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+    .admin-page .admin-trash-workspace .admin-trash-settings-group { width: 100%; }
+
+    .admin-page .admin-trash-workspace .admin-trash-table,
+    .admin-page .admin-trash-workspace .admin-trash-table tbody { display: block; }
+
+    .admin-page .admin-trash-workspace .admin-trash-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+
+    .admin-page .admin-trash-workspace .admin-trash-table tbody > tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--feature-settings-line);
+    }
+
+    .admin-page .admin-trash-workspace .admin-trash-table tbody td {
+        min-width: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    .admin-page .admin-trash-workspace .admin-trash-table
+        :is(td:first-child, td.admin-trash-actions) { grid-column: 1 / -1; }
+
+    .admin-page .admin-trash-workspace .admin-trash-table td::before {
+        display: block;
+        content: attr(data-label);
+        color: var(--feature-settings-muted);
+        font-size: .72rem;
+    }
+}
+
+/* Navigation shares the settings group geometry; its importer remains an
+ * explicit task, with freshness checks and fragment replacement owned by navdata. */
+.admin-page #admin-maintenance-navigation .admin-content-group {
+    min-height: 0;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+}
+
+.admin-page #admin-maintenance-navigation .admin-content-group > h3 {
+    gap: 4px;
+}
+
+.admin-page #admin-maintenance-navigation h3 > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    color: var(--ink);
+    font: inherit;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navigation-settings-shortcut {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    min-width: 28px;
+    margin-left: auto;
+    font-size: 16px;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-form {
+    justify-content: flex-start;
+    gap: 4px;
+    margin: .25rem 0;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-metrics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: .25rem 0;
+    padding: 0;
+    border: 0;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-metrics > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    min-height: 32px;
+    gap: 4px 10px;
+    padding-block: 4px;
+    border-bottom: 1px solid var(--feature-settings-line);
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-metrics dt {
+    color: var(--feature-settings-muted);
+    font-size: .8rem;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-metrics dd {
+    margin: 0;
+    color: var(--ink);
+    font-size: .8rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-page #admin-maintenance-navigation :is(.admin-navdata-import-note,
+    .admin-navdata-import-details, .admin-navdata-update-status,
+    .admin-navigation-unavailable, [data-navdata-card] > [role='status']) {
+    margin: .25rem 0;
+    color: var(--feature-settings-muted);
+    font-size: .8rem;
+    line-height: 1.4;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-details
+    > summary {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    gap: 5px;
+    color: var(--ink);
+    list-style: none;
+}
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-details
+    > summary::-webkit-details-marker { display: none; }
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-details
+    > summary::before { content: '›'; font-size: 16px; }
+
+.admin-page #admin-maintenance-navigation .admin-navdata-import-details[open]
+    > summary::before { content: '⌄'; }
+
+.admin-page #admin-maintenance-navigation .admin-navdata-update-status.has-error {
+    color: var(--admin-danger);
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page #admin-maintenance-navigation :is(h3 > a,
+        .admin-navdata-import-details > summary) { min-height: 44px; }
+
+    .admin-page #admin-maintenance-navigation .admin-navigation-settings-shortcut {
+        min-width: 44px;
+        flex-basis: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-page #admin-maintenance-navigation .admin-navdata-update-spinner {
+        animation: none;
+    }
+}
+
+/* Media tasks keep their existing mutation owners. Only complete groups flow
+ * between columns; status and explicit destructive actions remain readable. */
+.admin-page #admin-maintenance-media .admin-media-cache-workspace {
+    /* Match the approved settings workspace's available-width column flow.
+     * Type: length. Units: CSS pixels. Scope: Media and cache workspace.
+     * Consumers: column-width. Value: 300px.
+     * Rationale: reserve enough room for readable cache evidence and controls. */
+    --dashboard-media-column-width: 300px;
+    /* Bound the workspace to the same reading span as Content and Features.
+     * Type: integer. Units: columns. Scope: Media and cache workspace.
+     * Consumers: column-count. Value: 3.
+     * Rationale: avoid a fourth narrow task column on wide screens. */
+    --dashboard-media-column-limit: 3;
+    /* Share the reference gutter with the group's independent bottom margin.
+     * Type: length. Units: rem. Scope: Media and cache groups.
+     * Consumers: column-gap and group margin. Value: .65rem.
+     * Rationale: match the neighboring Content settings surfaces. */
+    --dashboard-content-group-gap: .65rem;
+    display: block;
+    column-width: var(--dashboard-media-column-width);
+    column-count: var(--dashboard-media-column-limit);
+    column-gap: var(--dashboard-content-group-gap);
+}
+
+.admin-page #admin-maintenance-media .admin-content-group {
+    min-height: 0;
+    overflow-wrap: anywhere;
+    color: var(--ink);
+}
+
+/* Runtime-hidden progress, stop and diagnostics controls must stay absent even
+ * when the owned form layout overrides the browser's default display rules. */
+.admin-page #admin-maintenance-media [hidden] { display: none !important; }
+
+.admin-page #admin-maintenance-media [data-dashboard-content-autosave]
+    > button[type='submit'] { display: none; }
+
+.admin-page #admin-maintenance-media [data-dashboard-save-status] {
+    font-size: .72rem;
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-media [data-save-state='saving'] { opacity: .7; }
+
+.admin-page #admin-maintenance-media :is(.is-warning,
+    [data-save-state='unknown'] > [data-dashboard-save-status],
+    [data-save-state='error'] > [data-dashboard-save-status],
+    [data-cache-cleanup-result][data-state='error']) {
+    color: var(--admin-danger);
+}
+
+.admin-page #admin-maintenance-media .admin-content-group > :not(h3) {
+    margin-block: .25rem;
+}
+
+.admin-page #admin-maintenance-media .admin-content-group > h3 {
+    gap: 4px;
+}
+
+.admin-page #admin-maintenance-media :is(strong, h3, a, span, dt, dd, p) {
+    color: inherit;
+}
+
+.admin-page #admin-maintenance-media .admin-content-group
+    :is(p, span, label, summary, dt, dd, th, td) {
+    font-size: .8rem;
+    line-height: 1.4;
+}
+
+.admin-page #admin-maintenance-media .admin-content-group
+    :is(p, .muted, .admin-site-maintenance-note) {
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-media .admin-content-group strong {
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.admin-page #admin-maintenance-media :is(form, .nav, .admin-cache-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    gap: 4px;
+    margin: 0;
+}
+
+.admin-page #admin-maintenance-media .admin-media-evidence {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-media .admin-content-group form > span,
+.admin-page #admin-maintenance-media .admin-content-group form > .nav {
+    flex-basis: 100%;
+}
+
+.admin-page #admin-maintenance-media .admin-content-group
+    :is(button, .button) {
+    max-width: 100%;
+    margin: 0;
+    padding: 3px 8px;
+    font-size: .78rem;
+    white-space: normal;
+    text-align: start;
+}
+
+.admin-page #admin-maintenance-media .admin-media-shortcut {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 32px;
+    gap: 4px;
+    border-bottom: 1px solid var(--feature-settings-line);
+}
+
+.admin-page #admin-maintenance-media .admin-media-shortcut:last-child {
+    border-bottom: 0;
+}
+
+.admin-page #admin-maintenance-media .admin-media-settings-shortcut {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    min-height: 28px;
+    margin-left: auto;
+    font-size: 16px;
+}
+
+.admin-page #admin-maintenance-media h3 > a:not(.admin-media-settings-shortcut) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    font: inherit;
+}
+
+.admin-page #admin-maintenance-media .admin-media-shortcut > strong > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    font: inherit;
+}
+
+.admin-page #admin-maintenance-media .admin-media-details {
+    clear: both;
+    padding-top: .25rem;
+    border-top: 1px solid var(--feature-settings-line);
+}
+
+.admin-page #admin-maintenance-media .admin-media-details > summary {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    gap: 5px;
+    color: var(--ink);
+    font-size: .78rem;
+    font-weight: 600;
+    list-style: none;
+}
+
+.admin-page #admin-maintenance-media .admin-media-details
+    > summary::-webkit-details-marker { display: none; }
+
+.admin-page #admin-maintenance-media .admin-media-details > summary::before {
+    content: '›';
+    font-size: 16px;
+}
+
+.admin-page #admin-maintenance-media .admin-media-details[open]
+    > summary::before { content: '⌄'; }
+
+/* Measurements are quiet rows, without metric tiles or a second card frame. */
+.admin-page #admin-maintenance-media .admin-cache-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: .25rem 0;
+}
+
+.admin-page #admin-maintenance-media .admin-cache-overview-grid > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    min-height: 28px;
+    gap: 4px 10px;
+    border-bottom: 1px solid var(--feature-settings-line);
+}
+
+.admin-page #admin-maintenance-media .admin-cache-overview-grid dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-page #admin-maintenance-media .admin-cache-overview-grid dt {
+    font-weight: 400;
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-media .admin-cache-help > summary {
+    width: 28px;
+    min-height: 28px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-weight: 400;
+}
+
+.admin-page #admin-maintenance-media .admin-cache-help > div {
+    width: min(300px, calc(100vw - 16px));
+    border-color: var(--feature-settings-line);
+    background: var(--feature-settings-surface);
+    color: var(--ink);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+}
+
+.admin-page #admin-maintenance-media .admin-cache-help
+    > .admin-dashboard-help-panel[popover] {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    max-height: calc(100dvh - 16px);
+}
+
+.admin-page #admin-maintenance-media .admin-content-group .is-warning,
+.admin-page #admin-maintenance-media .admin-content-group
+    [data-cache-cleanup-result][data-state='error'] {
+    color: var(--admin-danger);
+}
+
+.admin-page #admin-maintenance-media .admin-site-maintenance-settings-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.admin-page #admin-maintenance-media .admin-site-maintenance-settings-form
+    > label:not(.admin-compact-toggle) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(70px, 100px);
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-page #admin-maintenance-media input:not([type='checkbox'],
+    [type='radio'], [type='hidden']) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 28px;
+    padding: 3px 6px;
+    border: 1px solid var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: var(--feature-settings-surface);
+    color: var(--ink);
+    font: inherit;
+}
+
+.admin-page #admin-maintenance-media :is(.admin-thumbnail-check-result,
+    .admin-site-maintenance-metrics > div) {
+    padding: .25rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-page #admin-maintenance-media :is(.admin-thumbnail-check-result,
+    .admin-site-maintenance-cron) {
+    display: grid;
+    gap: 4px;
+}
+
+.admin-page #admin-maintenance-media [data-cache-status-feedback]:empty {
+    display: none;
+}
+
+.admin-page #admin-maintenance-media .admin-cache-owners {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.admin-page #admin-maintenance-media :is(th, td) {
+    padding: 4px 2px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page #admin-maintenance-media :is(.admin-media-settings-shortcut,
+        .admin-cache-action-icon, .admin-cache-refresh-icon) {
+        min-width: 44px;
+        width: 44px;
+        min-height: 44px;
+        flex-basis: 44px;
+    }
+
+    .admin-page #admin-maintenance-media :is(h3 > a,
+        .admin-media-shortcut strong > a, .admin-cache-help > summary,
+        .admin-media-details > summary) {
+        min-height: 44px;
+    }
+
+    .admin-page #admin-maintenance-media .admin-cache-help > summary {
+        width: 44px;
+    }
+}
+
+.admin-page :is(#admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace, [data-telemetry-workspace])
+    :is(.admin-content-group, .telemetry-group) {
+    display: flow-root;
+    break-inside: avoid;
+    box-sizing: border-box;
+    margin: 0 0 var(--dashboard-content-group-gap);
+    padding: .2rem .65rem .35rem;
+    border: 1px solid var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--feature-settings-surface);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+}
+
+.admin-page :is(#admin-maintenance-content, #admin-maintenance-media,
+    #admin-maintenance-navigation, #admin-maintenance-system,
+    .admin-trash-workspace, [data-telemetry-workspace])
+    :is(.admin-content-group > h3, .telemetry-group > h2,
+        .telemetry-group-heading) {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: var(--compact-heading-min-height, 38px);
+    margin: -.2rem -.65rem var(--compact-heading-after, .15rem);
+    padding: .25rem var(--compact-heading-end, .65rem) .25rem .65rem;
+    border-bottom: 1px solid var(--feature-settings-line);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+    border-radius: min(var(--radius, 8px), 8px)
+        min(var(--radius, 8px), 8px) 0 0;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    color: var(--ink);
+    font-size: .85rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.admin-page #admin-maintenance-content .admin-content-group > .admin-content-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 3px 6px;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid var(--feature-settings-line);
+}
+
+.admin-page #admin-maintenance-content .admin-content-group
+    > .admin-content-row:last-child { border-bottom: 0; }
+
+/* Match Features' switch-first row without inventing a master for compound settings. */
+.admin-page #admin-maintenance-content .admin-content-row:has(
+    > .admin-content-controls):not(.admin-seo-guard-settings) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.admin-page #admin-maintenance-content .admin-content-row:has(
+    > .admin-content-controls):not(.admin-seo-guard-settings)
+    > .admin-content-controls {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.admin-page #admin-maintenance-content .admin-content-row:has(
+    > .admin-content-controls):not(.admin-seo-guard-settings)
+    > .admin-content-copy {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.admin-page #admin-maintenance-content .admin-content-row:has(
+    > .admin-content-controls):not(.admin-seo-guard-settings)
+    > .admin-content-actions {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+.admin-page #admin-maintenance-content .admin-content-copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 4px;
+    grid-column: auto;
+}
+
+.admin-page #admin-maintenance-content .admin-content-copy > strong {
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+/* The setting name and trailing shortcut share one native destination. */
+.admin-page #admin-maintenance-content .admin-content-copy > strong > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    color: var(--ink);
+    font: inherit;
+    overflow-wrap: anywhere;
+}
+
+.admin-page #admin-maintenance-content .admin-content-controls {
+    grid-column: auto;
+    gap: 2px;
+}
+
+.admin-page #admin-maintenance-content .admin-content-controls .admin-compact-toggle {
+    align-items: center;
+    margin: 0;
+}
+
+.admin-page #admin-maintenance-content .admin-content-actions {
+    grid-column: 3;
+    flex-wrap: nowrap;
+    gap: 2px;
+}
+
+.admin-page #admin-maintenance-content form[data-dashboard-content-autosave]
+    .admin-content-actions > button[type="submit"] {
+    display: none;
+}
+
+.admin-page #admin-maintenance-content form[data-dashboard-content-autosave]
+    .admin-content-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.admin-page #admin-maintenance-content [data-dashboard-save-status] {
+    color: var(--feature-settings-muted);
+    font-size: .72rem;
+    white-space: nowrap;
+}
+
+.admin-page #admin-maintenance-content form[data-save-state="saving"] {
+    opacity: .7;
+}
+
+.admin-page #admin-maintenance-content form:is([data-save-state="error"],
+    [data-save-state="unknown"]) > [data-dashboard-save-status] {
+    grid-column: 1 / -1;
+    color: var(--admin-danger);
+    white-space: normal;
+}
+.admin-page #admin-maintenance-content .admin-content-actions > :is(a, button) {
+    min-height: 28px;
+    margin: 0;
+    padding: 3px 6px;
+    font-size: .78rem;
+}
+
+/* A checked native switch already conveys Enabled; keep its duplicate label
+ * available to assistive technology without spending a visible text column. */
+.admin-page #admin-maintenance-content .admin-compact-toggle:has(
+    input[aria-label]) > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.admin-page #admin-maintenance-content :is(a, button)[data-dashboard-compact-action] {
+    width: 28px;
+    min-width: 28px;
+    font-size: 0;
+}
+
+.admin-page #admin-maintenance-content [data-dashboard-compact-action]::before {
+    font-size: 16px;
+}
+
+.admin-page #admin-maintenance-content [data-dashboard-compact-action="save"]::before {
+    content: "✓";
+}
+
+.admin-page #admin-maintenance-content [data-dashboard-compact-action="settings"]::before {
+    content: "↗";
+}
+
+.admin-page #admin-maintenance-content .admin-content-override-count {
+    color: var(--feature-settings-muted);
+    font-size: .78rem;
+}
+
+.admin-page #admin-maintenance-content .admin-content-reset-details {
+    grid-column: 2 / -1;
+}
+
+.admin-page #admin-maintenance-content .admin-content-reset-details[open] {
+    grid-column: 1 / -1;
+}
+
+.admin-page #admin-maintenance-content .admin-content-reset-details > summary {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    font-size: .78rem;
+    text-decoration: none;
+}
+
+/* The crawler's independent protection and sampling choices keep their labels. */
+.admin-page #admin-maintenance-content .admin-seo-guard-settings .admin-content-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+}
+
+.admin-page #admin-maintenance-content .admin-seo-guard-settings .admin-compact-toggle {
+    font-size: .76rem;
+    font-weight: 400;
+}
+
+/* Native disclosures remain the readable no-script/older-browser fallback.
+ * Enhancement lifts only the help body to a nonblocking native top layer. */
+.admin-page #admin-tab-maintenance .admin-dashboard-help {
+    margin: 0;
+    font-size: .8rem;
+}
+
+.admin-page #admin-maintenance-content .admin-content-copy:has(
+    .admin-dashboard-help[open]) {
+    grid-column: 1 / -1;
+}
+
+.admin-page #admin-tab-maintenance .admin-dashboard-help[open],
+.admin-page #admin-tab-maintenance .admin-dashboard-help[open]
+    > .admin-dashboard-help-panel {
+    width: 100%;
+    max-width: 100%;
+}
+
+.admin-page #admin-tab-maintenance .admin-dashboard-help > summary,
+.admin-page #admin-tab-maintenance button.admin-dashboard-help-trigger {
+    display: inline-grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--ink) 62%, var(--panel));
+    box-shadow: none;
+    font-size: .82rem;
+    font-weight: 400;
+    line-height: 1;
+    list-style: none;
+    cursor: pointer;
+}
+
+.admin-dashboard-help > summary::-webkit-details-marker { display: none; }
+
+.admin-dashboard-help-panel {
+    box-sizing: border-box;
+    width: min(300px, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    overflow: auto;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    color: var(--ink);
+    backdrop-filter: blur(16px);
+    font-size: .82rem;
+    font-weight: 400;
+    line-height: 1.45;
+}
+
+.admin-dashboard-help-panel[popover] { position: fixed; inset: auto; }
+.admin-dashboard-help-panel::backdrop { background: transparent; }
+.admin-dashboard-help-panel > strong { font-size: .85rem; }
+.admin-dashboard-help-panel > p { margin: 5px 0 0; }
+
+.admin-page #admin-tab-maintenance :is(.admin-dashboard-help-trigger,
+    .admin-dashboard-help > summary, .admin-maintenance-report-shortcut):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* The owning subtab navigation is visible on the search destination too. */
+.admin-page #admin-tab-maintenance .admin-dashboard-maintenance-scope
+    > .admin-subtabs {
+    padding: 3px;
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+}
+
+.admin-page #admin-tab-maintenance .admin-subtabs .admin-subtab {
+    min-height: 28px;
+    padding: 3px 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .82rem;
+}
+
+.admin-page #admin-tab-maintenance .admin-subtab[aria-selected="true"] {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+.admin-page #admin-tab-maintenance .admin-subtab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Music keeps its native catalog selection and editor geometry. Preferences
+ * and existing contextual forms inherit the same translucent Theme surface. */
+.admin-page #music-manager { --music-radius: min(var(--radius, 8px), 8px); }
+
+/* Lift the header's own preference panel above the sticky catalog tabs. */
+.admin-page #music-manager .admin-music-header:has(
+    .admin-music-preferences[open]) {
+    position: relative;
+    z-index: 40;
+}
+
+.admin-page #music-manager :is(.admin-music-tabs, .admin-music-catalog,
+    .admin-music-preferences > form, .admin-music-album-options > div) {
+    border-color: var(--feature-settings-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--feature-settings-surface);
+    box-shadow: none;
+    backdrop-filter: blur(12px);
+}
+
+.admin-page #music-manager .admin-music-tabs .admin-tab {
+    min-height: 28px;
+    padding: 3px 8px;
+    color: var(--ink);
+}
+
+.admin-page #music-manager .admin-music-tabs .admin-tab[aria-selected="true"] {
+    border-color: transparent;
+    background: var(--feature-settings-tint);
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+@media (max-width: 850px) {
+    .admin-page .admin-settings-page .admin-settings-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* The mobile target belongs to the surrounding switch label, not its track. */
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page #admin-tab-maintenance .admin-subtabs .admin-subtab {
+        min-height: 44px;
+    }
+
+    .admin-page #admin-tab-maintenance .admin-dashboard-help > summary,
+    .admin-page #admin-tab-maintenance button.admin-dashboard-help-trigger,
+    .admin-page #admin-maintenance-content [data-dashboard-compact-action] {
+        width: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .admin-page #admin-tab-maintenance .admin-maintenance-report-shortcut,
+    .admin-page #admin-maintenance-content .admin-content-reset-details > summary,
+    .admin-page #admin-maintenance-content .admin-content-copy > strong > a {
+        min-height: 44px;
+    }
+
+    .admin-page :is(.admin-settings-page, .admin-smart-galleries-page,
+        .admin-smart-gallery-editor, #music-manager,
+        #admin-maintenance-content, #admin-maintenance-media,
+        #admin-maintenance-navigation, #admin-maintenance-system,
+        .admin-trash-workspace)
+        :is(button, .button, summary, select,
+        input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+        label:has(input[type="checkbox"])) {
+        min-height: 44px;
+    }
+
+    .admin-page :is(.admin-settings-page, #music-manager)
+        button.admin-settings-help { min-width: 44px; }
+
+    .admin-page .admin-settings-page .admin-settings-toolbar {
+        position: static;
+    }
+
+    .admin-page .admin-settings-page .admin-settings-group-form
+        .admin-settings-field {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+    }
+
+    .admin-page .admin-settings-page .admin-settings-summary-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+    }
+
+    .admin-page .admin-settings-page .admin-settings-field-copy {
+        justify-content: space-between;
+    }
+
+    .admin-page .admin-settings-page .admin-settings-edit-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+    }
+}
+
+/* Native system controls remain the supported high-contrast presentation. */
+@media (forced-colors: active) {
+    .admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+        #admin-maintenance-content, #admin-maintenance-media,
+        #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"],
+    .admin-page #music-manager .admin-music-preferences input[type="checkbox"] {
+        appearance: auto;
+        background: Canvas;
+        border-color: ButtonText;
+    }
+
+    .admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
+        #admin-maintenance-content, #admin-maintenance-media,
+        #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]::after,
+    .admin-page #music-manager .admin-music-preferences
+        input[type="checkbox"]::after { content: none; }
+
+    .admin-settings-help-panel, .admin-dashboard-help-panel,
+    .admin-trash-help-panel {
+        background: Canvas;
+        color: CanvasText;
+        border-color: CanvasText;
+        backdrop-filter: none;
+    }
+}
+
+/* System health uses the same groups; only problems spend a paragraph of text.
+ * Storage checks are advisory presentation of the prepared domain records. */
+.admin-page #admin-maintenance-system .admin-health-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    margin: 0 0 .45rem;
+    font-size: .85rem;
+}
+
+.admin-page #admin-maintenance-system .admin-system-health-row {
+    display: block;
+    min-width: 0;
+    margin: 0;
+    padding: .1rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--feature-settings-line);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: .8rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.admin-page #admin-maintenance-system .admin-system-health-row:last-child {
+    border-bottom: 0;
+}
+
+.admin-page #admin-maintenance-system .admin-health-check-heading {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    min-height: 28px;
+}
+
+.admin-page #admin-maintenance-system .admin-health-check-heading > strong {
+    flex: 1;
+    font-size: .8rem;
+    font-weight: 500;
+}
+
+.admin-page #admin-maintenance-system .admin-health-state {
+    flex: 0 0 1em;
+    color: var(--feature-settings-muted);
+    font-size: .8rem;
+    text-align: center;
+}
+
+.admin-page #admin-maintenance-system .is-state-available .admin-health-state {
+    color: color-mix(in srgb, var(--ink) 65%, var(--accent));
+}
+
+.admin-page #admin-maintenance-system .is-state-disabled {
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-system .is-attention {
+    background: color-mix(in srgb, var(--admin-danger) 5%, transparent);
+}
+
+.admin-page #admin-maintenance-system .admin-health-problem {
+    margin: .2rem 0 .3rem 1.35em;
+}
+
+.admin-page #admin-maintenance-system .admin-system-health-details {
+    display: block;
+    grid-column: auto;
+    margin: .2rem 0 0;
+    color: var(--feature-settings-muted);
+    font-size: .76rem;
+}
+
+.admin-page #admin-maintenance-system .admin-system-health-details > summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    cursor: pointer;
+}
+
+.admin-page #admin-maintenance-system :is(.admin-health-problem,
+    .admin-system-health-details) p {
+    margin: .25rem 0;
+}
+
+.admin-page #admin-maintenance-system .admin-system-health-row > span,
+.admin-page #admin-maintenance-system .admin-system-health-details > span {
+    display: block;
+    margin-top: .2rem;
+}
+
+.admin-page #admin-maintenance-system .admin-system-health-row > .admin-tab-badge {
+    display: inline-flex;
+}
+
+.admin-page #admin-maintenance-system .admin-health-tool,
+.admin-page #admin-maintenance-system .admin-health-devmode {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    min-height: 32px;
+    margin: 0;
+    padding: .15rem 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: .8rem;
+}
+
+.admin-page #admin-maintenance-system .admin-health-tool > a {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-height: 28px;
+    color: var(--ink);
+}
+
+.admin-page #admin-maintenance-system .admin-health-tool > a::after {
+    content: '↗';
+    margin-left: auto;
+    padding-left: .35rem;
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-system .admin-health-devmode {
+    flex-wrap: wrap;
+    margin-top: .3rem;
+    border-top: 1px solid var(--feature-settings-line);
+}
+
+.admin-page #admin-maintenance-system .admin-health-devmode > label {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: .45rem;
+    margin: 0;
+    font-size: inherit;
+}
+
+.admin-page #admin-maintenance-system form[data-dashboard-content-autosave]
+    .admin-content-actions { display: none; }
+
+.admin-page #admin-maintenance-system [data-dashboard-save-status] {
+    font-size: .72rem;
+    color: var(--feature-settings-muted);
+}
+
+.admin-page #admin-maintenance-system [data-save-state='saving'] { opacity: .7; }
+
+.admin-page #admin-maintenance-system :is([data-save-state='unknown'],
+    [data-save-state='error']) > [data-dashboard-save-status] {
+    flex-basis: 100%;
+    color: var(--admin-danger);
+}
+
+.admin-page #admin-maintenance-system .admin-health-migration {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    padding: .35rem 0;
+    font-size: .8rem;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page #admin-maintenance-system :is(.admin-health-tool > a,
+        .admin-health-devmode > label,
+        .admin-system-health-details > summary) { min-height: 44px; }
+}

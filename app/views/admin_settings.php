@@ -589,10 +589,16 @@ function view_render_admin_settings_section(
  * Render one centrally editable input with visible label, help text, and field error.
  *
  * @param string $id Stable setting identifier.
- * @param array<string,mixed> $entry Registry entry.
- * @param array<string,mixed> $errors Validation errors.
- * @param array<string,mixed> $submittedValues Submitted values.
- * @return void Emit the labeled input and optional errors.
+ * @param array{current?: string|int|bool, input_type?: string, group?: string,
+ *     label_key?: string, label?: string, description_key?: string,
+ *     description?: string, view_description?: string,
+ *     validation?: array{min?: int, max?: int, step?: int,
+ *         max_length?: int, allowed?: list<string|int>},
+ *     view_option_labels?: array<string,string>} $entry Prepared control metadata.
+ * @param array<string,string> $errors Messages keyed by invalid setting ID.
+ * @param array<string,string|int|bool> $submittedValues Submitted scalar values
+ *     keyed by setting ID, retained when validation fails.
+ * @return void Emit the labeled input, native contextual help and optional errors.
  */
 function view_render_admin_settings_input(
     string $id,
@@ -623,15 +629,19 @@ function view_render_admin_settings_input(
             . e(view_admin_settings_entry_label($entry))
             . '</label>';
     echo
-        '<details class="admin-settings-help"><summary aria-label="'
+        '<button type="button" class="admin-settings-help" popovertarget="'
+            . e($helpId)
+            . '" aria-controls="'
+            . e($helpId)
+            . '" aria-label="'
             . e(t('admin.settings.workspace.help_item', 'Help: {label}', [
                 'label' => view_admin_settings_entry_label($entry),
             ]))
-            . '">?</summary><span id="'
+            . '">?</button><span popover class="admin-settings-help-panel" id="'
             . e($helpId)
             . '">'
             . e(view_admin_settings_entry_description($entry))
-            . '</span></details>';
+            . '</span>';
     echo '</div><div class="admin-settings-field-control">';
     if ($type === 'checkbox') {
         $checked = array_key_exists($id, $submittedValues)

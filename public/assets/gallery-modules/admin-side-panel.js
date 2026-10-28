@@ -37,8 +37,8 @@ import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } fr
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20261023-picture-manager-context-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261021-upload-media-v1';
-import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261027-appearance-state-v1';
+import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20261027-appearance-state-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
 import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';

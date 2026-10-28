@@ -10,9 +10,26 @@
 # License: MIT License (see LICENSE file in repository)
 # Runtime lifecycle policy: docs/RUNTIME_SUPPORT.md.
 name: Isolated gallery workflows
+run-name: ${{ inputs.advisory_macos && format('Advisory macOS package {0}', inputs.checkout_ref) || 'Isolated gallery workflows' }}
 
 on:
   workflow_dispatch:
+    inputs:
+      advisory_macos:
+        description: Run only the independent advisory macOS package check.
+        required: false
+        type: boolean
+        default: false
+      checkout_ref:
+        description: Exact prepared commit for the advisory package check.
+        required: false
+        type: string
+        default: ''
+      source_base:
+        description: Immutable comparison base of that prepared candidate.
+        required: false
+        type: string
+        default: ''
   workflow_call:
     inputs:
       audit_profile:
@@ -37,7 +54,7 @@ permissions:
 # Later pushes replace obsolete runs; codegen checks always inspect the checkout,
 # never repair or commit files inside the authoritative qualification runner.
 concurrency:
-  group: gallery-qualification-${{ github.workflow }}-${{ github.ref }}
+  group: gallery-qualification-${{ github.workflow }}-${{ github.ref }}-${{ inputs.advisory_macos && 'macos-advisory' || 'required' }}
   cancel-in-progress: true
 
 # The helper actions use Node 24; node-version below selects the separate test runtime.
@@ -48,6 +65,7 @@ env:
 
 jobs:
   preflight:
+    if: ${{ !inputs.advisory_macos }}
     name: Read-only generated-state and source preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -115,6 +133,7 @@ jobs:
           retention-days: 7
 
   source-contracts:
+    if: ${{ !inputs.advisory_macos }}
     # Static contracts read the exact candidate independently of generated data.
     name: Shared source contracts
     runs-on: ubuntu-24.04
@@ -150,6 +169,7 @@ jobs:
           retention-days: 7
 
   portable:
+    if: ${{ !inputs.advisory_macos }}
     # Portable fixtures need no disposable DB or generated-state result; start
     # beside preflight so they cannot queue behind the twenty PHP shard jobs.
     name: Portable Node and WinApp
@@ -227,14 +247,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Preserve the three native owner names while covering the supported
-        # PHP floor and newest compatibility runtime on all three platforms.
+        # Mandatory package owners cover the PHP floor on Linux and newest
+        # runtime on Windows. Independent advisory macOS uses the same suite.
         include:
           - os: ubuntu-24.04
             php: '8.1'
           - os: windows-2025
-            php: '8.5'
-          - os: macos-latest
             php: '8.5'
     steps:
       - uses: actions/checkout@v7.0.1
@@ -252,6 +270,46 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: production-package-${{ runner.os }}
+          path: cache/test-audit/**/*
+          if-no-files-found: error
+          retention-days: 7
+
+  macos-advisory:
+    # Independent dispatch only: this job is never a required FULL dependency.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.advisory_macos }}
+    name: Advisory macOS production package
+    runs-on: macos-latest
+    # Bound the independent package check's execution after a runner is acquired.
+    # Type: integer. Units: minutes. Scope: this advisory package job.
+    # Consumers: GitHub Actions runner timeout.
+    # Rationale: ten minutes retains the package job's existing execution bound;
+    # unavailable capacity or a failed check affects only this separate run.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+          persist-credentials: false
+      - name: Verify exact advisory candidate
+        env:
+          EXPECTED_SHA: ${{ inputs.checkout_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${EXPECTED_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: zip, mbstring
+          coverage: none
+      - name: Central advisory macOS package policy and integrity
+        run: php scripts/audit.php --suite=production-package
+      - name: Retain actual advisory outcome and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: production-package-macOS-advisory
           path: cache/test-audit/**/*
           if-no-files-found: error
           retention-days: 7
@@ -483,8 +541,8 @@ jobs:
           retention-days: 7
 
   ci-gate:
-    name: Complete required CI matrix
-    if: ${{ always() }}
+    name: ${{ inputs.advisory_macos && 'Advisory macOS matrix gate (unused)' || 'Complete required CI matrix' }}
+    if: ${{ always() && !inputs.advisory_macos }}
     needs: [preflight, source-contracts, portable, production-package, real-database-browser, runtime-compatibility, browser-tests, release-audit]
     runs-on: ubuntu-24.04
     timeout-minutes: 5

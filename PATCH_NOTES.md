@@ -1,5 +1,569 @@
 # Patch notes
 
+## Version 0.145
+
+Reworked the administration workspace around compact, responsive settings,
+clearer navigation and independently saved preferences. Expanded Telemetry
+with navigable reports, linked photo rankings, on-demand previews and daily
+charts, and fixed reports disappearing when opened in a new browser tab.
+Unified lightbox fullscreen exit and split-map cleanup, and strengthened
+resumable updater downloads with a published-archive fallback bound to the
+original commit, exact byte count and SHA-256. Updated the hosted CI owner
+contract while retaining mandatory functional, database, browser, Linux and
+Windows coverage.
+
+### Highlights
+
+#### Compact Features workspace and factory comparison
+
+- Replaced the large feature cards with compact grouped tables, placing each
+  native switch before its feature name. Added distinct tinted group controls,
+  concise factory-state comparison and contextual technical help.
+- Added immediate saving for individual switches and explicit group patches.
+  Preserved unrelated capabilities when changing one feature, including values
+  changed from another administration surface. Refreshed authoritative group
+  markup and effective-state summaries without navigating away.
+- Added restoration of editable capability masters to their new-installation
+  defaults. Preserved subordinate preferences, stored subsystem data and the
+  distinction between a configured switch and its effective dependency state.
+- Adapted complete, variable-height groups to the available workspace width in
+  one to three columns. Kept groups intact, retained keyboard reading order and
+  removed the requirement for neighboring groups to share a row height.
+- Improved dedicated settings shortcuts for features such as gallery documents,
+  music, lightbox modes, Smart Galleries, languages, public tags, navigation
+  data, upload connections, migration, maintenance and media renaming.
+
+#### Responsive administration navigation
+
+- Added an optional desktop icon rail while retaining the expanded sidebar as
+  the initial presentation. Stored the desktop choice in installation-scoped
+  browser storage and synchronized that choice between tabs.
+- Added a separate hamburger disclosure at widths of 1100 pixels and below,
+  presenting the existing capability-filtered groups in a bounded contextual
+  panel. Kept the mobile open state independent of the desktop preference.
+- Fixed desktop navigation to scroll with the document in both expanded and
+  icon-rail modes. Removed the separate sidebar scroller and height cap so the
+  final account actions remained reachable through ordinary page scrolling.
+- Added dismissal through Escape, outside activation, focus leaving navigation
+  and destination selection, with appropriate focus restoration. Preserved
+  current-page indicators and enhanced sidebars replaced by Settings updates.
+
+#### Consistent Settings and Maintenance presentation
+
+- Applied compact translucent groups, restrained action styling, small native
+  switches and nearby question-mark help across the central Settings surface
+  and the affected specialist destinations.
+- Refined Public live search, lightbox browsing modes, Smart Gallery controls,
+  gallery PDF preferences and the Music Manager using their existing settings
+  owners and explicit content-editing workflows.
+- Reorganized Maintenance Content and display into flowing Public display,
+  gallery metadata and URL-safety groups. Added immediate saving for routine
+  switches while keeping override resets and path regeneration explicit.
+- Reworked Media and cache, Maps and navdata, and Trash around the same group
+  treatment. Kept scan status, counts, latest-import evidence, unavailable-action
+  reasons and destructive-operation controls visible where they were needed.
+- Clarified System health by grouping checks according to their purpose and
+  placing problems before healthy observations. Explained the difference
+  between verified storage, disabled configuration and a complete operational
+  test instead of presenting storage readiness as whole-system success.
+
+#### Theme Appearance and Language preferences
+
+- Restyled all five Appearance subsections: Colors & identity, Width & map pin,
+  Cards & tags, Animations and Advanced appearance. Preserved the shared live
+  preview and its pointer- and keyboard-operated divider.
+- Added independent immediate saves for the GPS pin, pin background,
+  display-all-tags, tag scrollbar and transparent-header switches. Kept colors,
+  text, layout, numeric values and other compound changes as drafts applied by
+  Save theme.
+- Added scoped Language preference saves for the administration language,
+  public default language and coupled viewer-language settings. Excluded other
+  Theme drafts and translation JSON from those requests.
+- Added bundled flag choices to the three language selectors while retaining
+  native select controls. Offered Reload interface after an administration
+  language change so the visible labels could be refreshed deliberately.
+- Preserved selected Appearance and Language subsections across reload and
+  browser Back/Forward navigation. Kept translation-pack editing, import,
+  export, diagnostics and viewer-switcher design as explicit workflows.
+
+#### More useful Telemetry overview and reports
+
+- Separated Telemetry into Overview, Collection and privacy, History and
+  maintenance, and Reports. Preserved the selected panel in its query URL and
+  browser history, and kept related Settings and Logs destinations explicit.
+- Added six compact daily charts beside the 30-day totals: anonymous sessions,
+  page views, photo opens, photo-view seconds, client errors and measured image
+  bytes. Added date/value tooltips and a native Daily detail table.
+- Preserved missing or expired data as gaps and retained observed zero values
+  where applicable. Kept image and thumbnail bytes separate from download
+  traffic in the overview without changing the existing total-media export
+  measurements.
+- Linked ranked photograph and gallery names to their ordinary public
+  destinations when verified route metadata was available. Added the existing
+  gallery Images preview interaction for hover, keyboard focus, click-to-pin
+  and Escape dismissal, loading a thumbnail only when opened.
+- Fixed standalone HTML report delivery to remain readable in the newly opened
+  tab. Preserved report URLs, traffic-segment filters, suggested filenames and
+  payloads, and applied a private, no-store response policy.
+
+#### Assignment-aware tag management
+
+- Reorganized tag management into compact catalog, editor and usage groups,
+  with contextual field help and a narrow-screen jump from catalog to editor.
+- Separated Images and Galleries filters by direct assignments over the same
+  shared visual-tag vocabulary. Allowed a tag assigned in both places to appear
+  in both filters, with usage counts and ordering appropriate to the selection.
+- Preserved unused visual tags and music in All tags, and retained the existing
+  Music scope. Reserved Documents for future PDF tagging and kept that option
+  unavailable for editing or assignment.
+- Applied filter and sort changes immediately through ordinary GET navigation.
+  Kept tag creation, renaming, descriptions, deletion and other content changes
+  behind their existing explicit save or confirmation actions.
+
+#### Predictable lightbox fullscreen exit
+
+- Unified F, the fullscreen control and native fullscreen-exit notifications
+  behind the same transition back to the ordinary lightbox. Closed the split
+  map, cleared fullscreen HUD state and retained the displayed photograph.
+- Fixed Escape ordering so a fullscreen lightbox with an open map left
+  fullscreen in one transition instead of first closing only the map and
+  leaving an inconsistent fullscreen layout.
+- Invalidated pending map-payload, Leaflet-loading and layout work when the
+  split closed. Prevented late asynchronous completion from reopening a pane
+  after fullscreen exit or rapid exit and reentry.
+- Retained independent M map toggling, CSS/mobile fullscreen support and the
+  later Escape action that closed the ordinary lightbox.
+
+#### Bounded updater recovery from ignored Range requests
+
+- Fixed archive-size observations after empty or partial files were written by
+  invalidating PHP's file-stat cache at the download measurement boundaries.
+- Added a bounded alternative when GitHub repeatedly returned a full HTTP 200
+  response to a requested continuation. After three incomplete full-response
+  restarts, selected the matching published production archive through separate
+  short metadata operations.
+- Bound the alternative to the original full commit, verified release version,
+  canonical repository/tag URL, positive byte count and provider SHA-256.
+  Required the complete raw archive digest before extraction.
+- Supported both flat production ZIPs and historical GitHub source wrappers
+  through the subsequent validation and installation pipeline. Retained finite
+  retries, worker budgets, extraction safeguards, activation and rollback rules.
+
+### Technical Details
+
+#### Backend ownership and authenticated mutation completion
+
+- Extended the existing controllers and services rather than introducing a
+  second settings store or a generic persistence endpoint. Retained the
+  Controller -> Service -> Model ownership of HTTP handling, domain policy and
+  database operations.
+- Added canonical `settings.update` JSON responses to the affected existing
+  Maintenance, Theme, Trash and Telemetry routes. Returned persisted values in
+  `setting_values` instead of treating submitted intent as proof of storage.
+  Preserved Admin authentication, CSRF verification and owned return targets.
+- Added explicit pending, confirmed, refused and unverified outcomes to the
+  enhanced preference workflows. Serialized writes within their relevant form
+  or workspace, preserved the user's intent after response loss and required
+  passive reconciliation before another potentially conflicting mutation.
+- Preserved complete native forms and direct POST consumers. Kept confirmed
+  refusal distinct from an uncertain completion: a failed response or readback
+  could follow an already persisted write and did not establish rollback.
+- Reused `app/views/admin_ui.php` for compact help and factory-value markup.
+  Kept deferred Maintenance sections and reused the existing contained
+  public-policy access closure for Theme and Telemetry responsibilities.
+
+#### Feature registry, scoped updates and factory defaults
+
+- Extended `save_feature_flags_from_post()` in
+  `app/services/feature_flags/admin.php` to accept explicit `feature_changes`
+  patches and the `factory_defaults` action alongside the complete legacy form.
+  Validated the complete scoped patch before admitting its first write.
+- Restricted patches to editable canonical capability keys and accepted only
+  explicit boolean representations. Rejected empty patches, unsupported keys,
+  invalid actions and mixed factory-reset/patch requests.
+- Preserved absence-as-disabled behavior for the complete legacy checkbox form,
+  while leaving absent keys untouched for scoped saves. Kept both transports
+  behind the same registry revision and canonical domain setters.
+- Extended `feature_capability_registry_revision()` to bind group membership and
+  factory values as well as the existing editability, sources and dependencies.
+  Prevented an older open form from applying stale group or reset semantics
+  after deployment changed the registry.
+- Used `fresh_default_enabled` where declared, otherwise the capability's
+  canonical default, for factory comparison and reset. Limited reset to
+  editable capability masters and preserved subsystem records and subordinate
+  options.
+- Updated `app/controllers/admin_features.php` to render the complete current
+  health snapshot after success or failure. Preserved partial domain-write
+  evidence when a later member failed, returned safe localized failure text and
+  kept persistence-driver details out of the response.
+- Added `public/assets/gallery-modules/admin-features.js` for serialized
+  updates, group replacement, focus retention and passive GET reconciliation.
+  Kept dependency blockers and configured/effective differences visible after
+  authoritative rerendering.
+
+#### Maintenance settings, diagnostics and destructive boundaries
+
+- Added `admin_dashboard_content_json_response()` in
+  `app/controllers/admin_dashboard.php` for canonical boolean responses and
+  safe refusals. Restricted Maintenance returns to the owned Content or System
+  destination rather than accepting arbitrary redirect URLs.
+- Added immediate preference handling for URL rewriting, public search, the
+  EXIF/GPS default, crawler protection/logging and viewer diagnostics through
+  their existing controllers. Preserved the paired crawler values when either
+  member changed.
+- Centralized Content factory metadata in
+  `admin_settings_content_factory_defaults()` and reused it in the Settings
+  registry. Kept factory values independent of both current overrides and
+  effective capability masters.
+- Preserved the public-search capability refusal and conclusive GPS-schema
+  requirement. Distinguished confirmed missing GPS storage from unknown schema
+  inspection and returned the persisted value without admitting the change.
+- Updated `app/controllers/site_maintenance.php` to return normalized persisted
+  schedule values, including enabled/request-trigger switches, UTC time, batch,
+  time budget and scheduling window. Kept those coupled fields in one guarded
+  save and retained the existing explicit task operations.
+- Updated `app/controllers/admin_trash.php` to reread Trash settings through
+  their owning service after guarded transitions. Preserved schema checks,
+  automatic-purge admission and fresh-retention behavior rather than inferring
+  them from a submitted switch.
+- Kept Trash restore, purge and Empty Trash confirmations separate from
+  preferences. Refreshed the canonical fragment after enhanced saving so
+  deadlines, pause evidence and control state remained aligned.
+- Reorganized the existing System health checks into runtime/recovery,
+  access/sign-in, galleries/files, maps/routes and public-features/reports groups,
+  with tools alongside. Added purpose, impact and guidance presentation without
+  creating new capability keys or changing their underlying schema authority.
+- Preserved bounded diagnostic context and escaped safe database identifiers
+  and request references. Kept raw SQL, database exceptions, credentials,
+  tokens and private filesystem paths out of the displayed diagnostic context.
+  Loading health remained a read operation rather than a repair or migration.
+
+#### Theme preference isolation and canonical values
+
+- Added `admin_theme_process_appearance_switch()` and
+  `admin_theme_process_language_preference()` behind the existing Theme POST
+  dispatcher and its shared CSRF verification. Routed scoped requests before
+  ordinary Theme form processing so unrelated drafts were not consumed.
+- Added `theme_appearance_switch_defaults()` and
+  `theme_appearance_switch_value()` in `app/services/theme.php`. Shared the
+  installation defaults with displayed metadata and canonical readback.
+- Routed the transparent-header preference through
+  `theme_advanced_appearance_save()` and the other allowlisted binary Appearance
+  preferences through `theme_layout_safe_save()`. Preserved the existing
+  capability checks, layout ownership and hero-tag revision behavior.
+- Kept Appearance requests limited to one allowlisted switch and its explicit
+  enabled value. Excluded staged colors, text, numeric layout values,
+  translation data and uploads from those requests.
+- Separated Language scopes for `cms_language`, `public_language`, and the
+  coupled `public_language_selector_enabled` and allowed-language list.
+  Normalized language codes through the translation service and refused an
+  empty viewer-language selection.
+- Preserved administration-language cookie intents and returned canonical
+  stored language values. Kept viewer-switcher design and pack JSON as staged
+  or explicit operations rather than incidental preference-save payloads.
+- Added the Appearance and Language workspace modules and scoped styles, and
+  extended nested-tab coordination for `appearance_subtab` and
+  `language_subtab`. Retained existing full-ID Appearance deep-link values.
+
+#### Telemetry settings, query shaping and report transport
+
+- Added one-key preference handling to
+  `app/controllers/admin_telemetry.php` using the existing settings definitions,
+  normalizer and save service. Validated numeric bounds and boolean values
+  before persistence and reread the stored scalar before confirming success.
+- Preserved explicit responses for invalid input, confirmed stored-value
+  disagreement and unavailable verification. Returned no invented saved value
+  after an unexpected storage failure, including failures after persistence.
+  Kept the legacy complete-form POST and explicit rollup/purge route supported.
+- Added `telemetry_ranking_paths_available()` to verify
+  `galleries.url_path`, `images.url_slug` and `images.modified_at` through central
+  schema inspection before including optional route/cache-identity columns.
+- Extended the existing ranking queries in `app/models/telemetry.php` with
+  gallery identity and optional public-path fields. Used null route metadata
+  when those columns were missing or unknown, preserving the original
+  read-only counts and durations without guessed photo destinations.
+- Added `admin_telemetry_photo_rows()` to prepare destinations through
+  `gallery_public_url()` and `image_public_url()` and previews through
+  `image_public_thumbnail_url()`. Kept destination authorization and ordinary
+  thumbnail-serving policy with their existing owners.
+- Bounded requested ranking thumbnails to 600 pixels and reused the gallery
+  Images preview owner and its single document overlay. Rendering the table
+  itself did not request thumbnail bytes.
+- Reused the existing hourly aggregate and canonical session-day queries for
+  the 30-day charts. Added `image_bytes` for image/thumbnail measurements while
+  retaining `media_bytes`, including downloads, for the existing report data.
+- Rendered compact SVG series and a native daily-data disclosure without a
+  charting dependency or additional chart request. Preserved date gaps and
+  retention-related missing session-day observations instead of synthesizing
+  a complete measured series.
+- Changed `cms_admin_telemetry_export()` from attachment disposition to
+  `Content-Disposition: inline` and added `Cache-Control: private, no-store`.
+  Preserved HTML content type, segment selection, filename generation and safe
+  plain-text 409/503 responses for missing or unverifiable report storage.
+
+#### Tag filtering and database compatibility
+
+- Added `admin_tag_catalog_filters()` in `app/services/tag_metadata.php` to map
+  catalog choices to allowlisted vocabulary and assignment-scope inputs. Kept
+  gallery/image usage selection separate from a tag's actual media namespace.
+- Extended `admin_tag_rows()` and `tag_model_admin_rows()` with an optional
+  `assignmentScope`, defaulting to `all` for existing consumers. Rejected
+  malformed scopes and combinations that applied visual assignment filters to
+  an incompatible namespace.
+- Used assignment-specific aggregate membership and usage expressions for
+  Images and Galleries. Preserved the other individual usage counts and the
+  globally shared tag identity, so editing a shared tag still affected every
+  place that referenced it.
+- Updated the tag controller to preserve the selected catalog context through
+  its existing save, rename, delete and panel-return paths. Kept filter state
+  separate from POST authority over a media category.
+- Refused to turn the Documents navigation placeholder into PDF edit authority.
+  Direct requests for that unavailable catalog state did not expose a PDF
+  editor or query reserved PDF rows for assignment.
+- Added no database migrations, tables, columns or indexes. Reused existing
+  `app_settings`, tag-assignment and telemetry storage. Preserved confirmed
+  legacy tag-schema handling and refused operations whose required schema
+  could not be verified.
+- Kept optional reporting enrichment degradable: missing or unknown route
+  metadata omitted links while readable rankings remained available. Required
+  conclusive storage for settings writes and retained the distinction between
+  unavailable schema and configuration-disabled integrations.
+
+#### Frontend layout, accessibility and progressive enhancement
+
+- Added `admin-navigation.js` and `admin-navigation.css`, and registered the
+  affected workspace modules and styles through the existing browser entry
+  point and shared administration stylesheet list.
+- Scoped desktop navigation storage by origin and installation asset mount.
+  Preserved an in-memory choice when storage access was denied, restored a
+  usable expanded state on a later document and kept scriptless grouped links.
+- Measured the sticky header for narrow navigation and handled resize and
+  sidebar replacement. Retained a resize-based measurement fallback when
+  `ResizeObserver` was unavailable and prevented focused navigation from being
+  hidden without a replacement focus target.
+- Added shared `public/assets/styles/admin-feature-settings.css` treatment for
+  fluid settings columns, translucent group surfaces, heading strips and
+  compact switch rows. Kept mobile label targets separate from switch visuals
+  and retained ordinary selection checkboxes for Music catalog row selection.
+- Enhanced native help disclosures to anchored light-dismiss popovers where
+  supported. Retained readable native/inline explanations when scripts or the
+  Popover API were unavailable, and retained native checkbox presentation in
+  forced-color mode.
+- Added `admin-tags-workspace.js` for immediate native filter/sort submission.
+  Cleared stale selection on usage-filter changes, retained it for sorting and
+  kept editable content fields outside the automatic navigation trigger.
+- Preserved explicit Save actions for native fallback forms and staged compound
+  edits. Prevented an unverified immediate save from being replayed indirectly
+  through a later whole-form submission.
+
+#### Lightbox state restoration and asynchronous map lifetime
+
+- Added `restoreWindowedLightboxState()` in
+  `public/assets/gallery-modules/lightbox.js` as the shared cleanup owner for
+  explicit and browser-owned fullscreen exit.
+- Stopped slideshow playback, removed native/CSS/mobile fullscreen and HUD
+  classes, hid help, cleared mobile document state, closed the split map,
+  scheduled zoom reclamping and released stage-focus state in that transition.
+- Prioritized fullscreen exit before ordinary split-map dismissal in the Escape
+  handler. Used the same cleanup from `fullscreenchange` when browser chrome
+  consumed Escape without delivering a page key event.
+- Added the monotonic `lightboxMapSplitGeneration` identity and
+  `isCurrentLightboxMapSplit()` checks around awaited payload, Leaflet and
+  element-size work. Required a live, visible fullscreen viewer and an unaborted
+  controller before a continuation could render.
+- Incremented the generation on split dismissal, invalidating earlier work
+  across exit/reentry. Preserved cancellation of map-photo navigation, Leaflet
+  and observer disposal, split-control hiding and geometry restoration.
+
+#### Updater transport, source binding and integrity
+
+- Added refreshed archive measurement in
+  `app/services/updates_jobs/download.php` and used it for initial offsets and
+  post-write completion checks in both cURL and PHP-stream paths. Fixed stale
+  sizes after writing a file that PHP had already statted.
+- Preserved conditional Range continuation for the pinned archive. Appended
+  only when continuation was honored; a fresh HTTP 200 response replaced the
+  previous prefix instead of appending duplicate archive bytes.
+- Required the stream fallback to write the complete requested chunk. Treated
+  positive short writes as errors and accepted package response data only for
+  HTTP 200/206, refusing unresolved redirect bodies as archive content.
+- Added durable bounded restart tracking. After three incomplete full-response
+  restarts, advanced fallback discovery through separate metadata slices for
+  the pinned commit's bootstrap version, published release asset and resolved
+  tag commit, with one metadata request per slice.
+- Required the release to be published and stable, the tag to match the parsed
+  version, exactly one `production.zip`, its canonical repository/tag download
+  URL, a positive integer size and a valid provider SHA-256 digest. Refused
+  drafts, prereleases, duplicate or digestless assets and mismatched identities.
+- Required the release tag to resolve to the original full commit. Retained
+  existing partial source bytes until asset binding succeeded, then cleared
+  obsolete URL, validator and size checkpoints before beginning the selected
+  asset transfer.
+- Persisted the selected asset's size and digest and required both to match the
+  complete local ZIP before archive parsing/extraction. Kept this raw-archive
+  check mandatory even when optional publisher per-file sweeps were disabled.
+- Extended `app/services/updates_filesystem.php` to recognize the flat
+  production layout alongside historical source-wrapper roots. Reused the
+  subsequent package validation, planning, activation and migration owners.
+- Cleared archive selection, fallback and digest receipts on retry while
+  retaining the original source commit. Preserved finite failure behavior
+  when metadata was unavailable or the selected asset also failed to support
+  progress, without extending hosting request timeouts.
+- Documented the installed-client boundary: the new downloader could help only
+  after its files were installed. Preserved complete manual deployment and
+  Finish FTP update as the supported alternative when an older client's first
+  upgrade could not finish within its hosting limits.
+
+#### Hosted CI owner contract and advisory macOS packaging
+
+- Added native owner contract 4 in `.github/scripts/ci-owner-contract.mjs`.
+  Retained 27 mandatory owners covering read-only preflight, shared source
+  contracts, portable Node/WinApp, Linux/Windows packaging, all database/runtime
+  shards, required Chromium and the aggregate gate.
+- Kept four shards for each of MySQL 8.4, MariaDB 10.11 and MariaDB 11.4, plus
+  four PHP 8.1 and four PHP 8.5 source-environment shards. Preserved the PHP 8.1
+  compatibility floor and the existing normalization distinctions.
+- Dispatched macOS packaging independently from the selected feature workflow
+  on the same exact prepared candidate and immutable base. Ran the same central
+  `production-package` suite on PHP 8.5 and retained actual results and
+  diagnostics in its separate Actions run.
+- Isolated advisory concurrency and check names from required FULL. Prevented
+  macOS runner queues, timeout, cancellation, failure or dispatch refusal from
+  delaying integration or emitting the protected required-matrix context.
+- Preserved mandatory macOS evidence for historical contracts 1-3. Selected the
+  applicable contract from authenticated complete immutable workflow bytes,
+  rather than interpreting a missing historical job as an advisory result.
+- Updated integration, reusable qualification and evidence fixtures for the
+  required/advisory split. Preserved failures for missing Linux/Windows or
+  functional owners and retained the actual adverse advisory outcome.
+- Preserved `scripts/audit.php` as the central test orchestrator and the
+  distinction between source qualification before develop admission and release
+  assembly from that protected source.
+
+#### Regression coverage and browser-harness reliability
+
+- Added `tests/admin_features_browser_test.mjs` with production controller/view
+  markup and isolated settings. Covered compact controls, group actions,
+  dependencies, factory reset, focus retention, serialized saves and passive
+  recovery after a committed write whose response was lost.
+- Covered Features layouts at 390, 1200, 1700 and 2560 pixels, plus a constrained
+  450-pixel workspace on a wide viewport. Rechecked intact groups and occupied
+  column counts after autosave and reset replaced their markup.
+- Added `tests/admin_navigation_browser_test.mjs` with the real shared
+  stylesheet list. Covered expanded/rail states, storage denial, preference
+  reload, replacement sidebars, narrow disclosure geometry, current-page
+  markers, focus/dismissal and final-link reachability through document scroll.
+- Extended Content, Maintenance health, runtime support and Trash fixtures for
+  canonical values, authentication/CSRF, schema refusal, grouped diagnostics,
+  escaping, coupled settings, pending exclusion and lost-response locking.
+  Preserved explicit lifecycle-action and confirmation assertions.
+- Added `tests/admin_tag_catalog_filters_test.php` and
+  `tests/admin_tags_layout_test.php`. Covered typed and confirmed-legacy
+  schemas; image-only, gallery-only, shared, unused, music and reserved-PDF tags;
+  scoped counts/order; unchanged default consumers; layout, escaping and
+  explicit content-save authority.
+- Added `tests/theme_appearance_switches_test.php` and
+  `tests/theme_language_preferences_test.php` around real Theme dispatch and
+  isolated storage. Extended rendering/browser fixtures for canonical success,
+  refusal, pending exclusion, draft isolation, history and response loss after
+  persistence.
+- Added `tests/admin_telemetry_workspace_test.php` and
+  `tests/admin_telemetry_workspace_browser_test.mjs`. Covered one-key ownership,
+  numeric validation, missing/unknown storage, failed reads, failures before and
+  after persistence, tab history, responsive production CSS and separate
+  maintenance actions.
+- Extended Telemetry rendering coverage through the actual overview controller,
+  service and public URL helpers. Covered renamed photos in nested galleries,
+  clean/query routing, missing route metadata, preview cache identity, absent
+  daily data, retained session gaps, zero series and image/download separation.
+- Covered on-demand preview decode, hover exit, focus, pinning, Escape, viewport
+  bounds and singleton overlay initialization. Waited for the production
+  image-load positioning handler before asserting geometry and retained strict
+  bounds with actual measurements in failure output.
+- Tightened passive browser-harness reads across verified reloads of the same
+  owned loopback tab. Retained the original deadline, exact origin including
+  port and independent frame/origin checks where target metadata was absent.
+  Kept closed/moved tabs, page assertions and other protocol failures fatal.
+- Extended the lightbox map fixture for native-exit notifications without a
+  page keydown, CSS Escape, duplicate exit events, runtime/geometry disposal
+  and late Leaflet completion after exit/reentry. Synchronized quick-tag race
+  checks with each new Keyboard Lock request and retained unlock assertions.
+- Added `tests/updater_download_transport_test.php` using real temporary
+  archives and persisted disposable jobs with confined HTTP/metadata boundaries.
+  Covered both transports, fresh sizes, Range/If-Range, full replacement,
+  durable fallback, short writes, redirect refusal, source identity, exact digest
+  validation, prefix preservation, retry cleanup and both archive layouts.
+- Extended `tests/updater_recovery_test.php` to exercise a real flat production
+  ZIP through extraction and package validation with mandatory raw digest
+  verification, then the existing gated activation/migration/finalization path.
+
+#### Documentation and supported compatibility paths
+
+- Updated the architecture, database, testing, settings-inventory, Admin design,
+  cache-maintenance, updater, CI and compatibility references alongside the
+  implementation.
+- Updated all four maintained manual source editions in English, Czech, German
+  and Swedish for the changed workspaces, fullscreen behavior, updater
+  boundaries and required/advisory CI model. Updated all four language catalogs
+  in their maintained PHP and JSON forms.
+- Preserved native no-JavaScript forms, readable help without Popover support,
+  storage-denied navigation, ordinary public authorization and older confirmed
+  schema paths where explicitly supported. Added no new browser framework,
+  charting library, Composer dependency or Node production build requirement.
+- Kept isolated regression coverage distinct from physical-device,
+  assistive-technology, browser-chrome fullscreen and real slow-host installation
+  acceptance. Preserved those operational verification boundaries in the
+  permanent compatibility documentation.
+
+### User Impact
+
+#### For visitors
+
+- Fixed return from fullscreen photo/map viewing so the ordinary lightbox kept
+  its photograph without stale map controls, fitted-map geometry or a delayed
+  map reopening after exit.
+- Preserved public route and media authorization when administrators followed
+  Telemetry ranking links or requested previews. Kept public language, display,
+  search and Theme behavior under their existing configuration and capability
+  owners.
+- Reduced the updater's repeated-prefix failure mode for installations running
+  the new downloader and downloading an exactly matching published archive,
+  while preserving bounded validation before installation.
+
+#### For administrators
+
+- Made dense configuration areas easier to scan through complete flowing
+  groups, compact switches, visible factory differences and help beside the
+  relevant control. Added an optional narrower desktop navigation rail and a
+  separate mobile menu.
+- Removed repeated Save steps for the supported routine preferences while
+  retaining explicit actions for compound design drafts, translations, tag
+  content, imports, maintenance tasks and destructive operations.
+- Made uncertain save outcomes visible and recoverable through a passive state
+  reload. Avoided automatically repeating a write that might already have
+  succeeded, and preserved unrelated drafts during scoped preference saves.
+- Made Telemetry usable as a navigable overview and reporting workspace, with
+  retained report tabs, linked rankings, on-demand previews and daily detail
+  that distinguished missing retention data from observed measurements.
+- Clarified tag filters as assignment views over shared tags and distinguished
+  health storage checks from complete functional tests. Kept unavailable
+  features and unsafe schema states explicit.
+- Documented the first-upgrade limit for old updater clients and the supported
+  complete manual deployment/Finish FTP update path when that first transfer
+  could not complete.
+
+#### For maintainers and self-hosting operators
+
+- Retained mandatory Linux/Windows packaging and all functional, database,
+  compatibility and Chromium owners while separating macOS availability from
+  the required integration outcome. Preserved historical evidence requirements.
+- Added focused regression coverage for the new transport, preference and
+  asynchronous-state boundaries without introducing new schema or a production
+  dependency toolchain.
+- Kept updater package selection tied to one original commit and verified raw
+  bytes. Refused missing, conflicting or unbound fallback assets instead of
+  borrowing a package from another version or silently extending worker limits.
+
 ## Version 0.144.14
 
 Recorded the release origin and predecessor metadata for Version 0.144.14.

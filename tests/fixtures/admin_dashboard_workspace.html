@@ -4,8 +4,8 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: tests/fixtures/admin_dashboard_workspace.html
 Module Type: Browser Test Fixture
-Purpose: Verify production dashboard deferral, retry, navigation and injected gallery controls.
-Responsibilities: Confine network reads to synthetic responses and first-party assets.
+Purpose: Verify dashboard deferral, preference autosave and injected controls.
+Responsibilities: Confine requests to synthetic persistence and first-party assets.
 Author: Rudolf Klusal
 License: MIT
 -->
@@ -13,6 +13,7 @@ License: MIT
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-feature-settings.css">
 <body class="admin-page"><main>
 <div class="admin-dashboard-page" data-admin-dashboard-workspace>
 <header class="admin-dashboard-toolbar"><h1>Overview</h1><button id="primary-action">Primary action</button></header>
@@ -26,7 +27,27 @@ License: MIT
 <div class="admin-action-grid"><article class="admin-action-card"><strong>Settings</strong><span>Global preferences</span><div class="nav"><a href="#settings">Open</a></div></article></div>
 </section>
 <section id="admin-tab-galleries" class="panel admin-tab-panel" data-admin-tab-panel><div data-dashboard-read="galleries" data-endpoint="/fixture-galleries" data-error="Galleries unavailable" data-retry="Retry">Loading galleries</div></section>
-<section id="admin-tab-maintenance" class="panel admin-tab-panel" data-admin-tab-panel>Maintenance fixture</section>
+<section id="admin-tab-maintenance" class="panel admin-tab-panel" data-admin-tab-panel>
+<div id="admin-maintenance-content" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
+<form class="admin-content-row" action="/fixture-content-search" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input type="checkbox" name="public_home_search_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save search">Save</button></div></form>
+<form class="admin-content-row" action="/fixture-content-gps" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input type="checkbox" name="exif_gps_default_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save GPS">Save</button></div></form>
+<form class="admin-content-row" action="/fixture-content-crawler" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input type="checkbox" name="seo_request_guard_enabled" checked></label><label><input type="checkbox" name="seo_request_guard_logging_enabled" title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save crawler">Save</button></div></form>
+</div>
+<div id="admin-maintenance-system" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
+<form class="admin-content-row admin-health-devmode" action="/fixture-system-devmode" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="system"><label><input type="checkbox" name="dev_mode_enabled">Viewer diagnostics</label><div class="admin-content-actions"><button type="submit">Save diagnostics</button></div></form>
+</div>
+<div id="admin-maintenance-media" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
+<article class="admin-site-maintenance-card"><p><span data-dashboard-schedule-state data-enabled-label="Enabled" data-disabled-label="Disabled">Enabled</span><span data-dashboard-schedule-time>00:00</span></p>
+<form action="/fixture-media-schedule" method="post" data-dashboard-schedule-preferences>
+<input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="site_maintenance_action" value="save">
+<label><input type="checkbox" name="site_maintenance_enabled" checked>Schedule</label>
+<label><input type="checkbox" name="site_maintenance_request_trigger_enabled" checked>Requests</label>
+<label>UTC<input type="time" name="site_maintenance_utc_time" value="00:00"></label>
+<label>Window<input type="number" name="site_maintenance_window_hours" min="0.25" max="24" step="0.25" value="3"></label>
+<label>Batch<input type="number" name="site_maintenance_batch_size" min="1" max="50" value="20"></label>
+<label>Budget<input type="number" name="site_maintenance_time_budget_seconds" min="3" max="120" value="20"></label>
+<button type="submit">Save</button></form></article>
+</div></section>
 </div></main><pre id="results">BROWSER PENDING</pre>
 <div id="cache-region-fixtures" hidden><!-- PRODUCTION_CACHE_REGIONS_MARKUP --></div>
 <script type="module">
@@ -36,6 +57,13 @@ import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-
 import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk-actions.js';
 const originalFetch = window.fetch.bind(window);
 let assertions = 0, summaryReads = 0, galleryReads = 0, releaseSummary = null, releaseGalleries = null, primaryClicks = 0;
+let contentSaveMode = 'success', contentWrites = 0, releaseContentSave = null;
+let scheduleWrites = 0;
+const contentPersisted = {
+    dev_mode_enabled:false,
+    public_home_search_enabled:true, exif_gps_default_enabled:true,
+    seo_request_guard_enabled:true, seo_request_guard_logging_enabled:false,
+};
 /** Assert fixture behavior. @param {boolean} value Expected result. @param {string} message Failure context. @return {void} Counts successful checks. */
 function check(value, message) { if (!value) throw new Error(message); assertions++; }
 /** Wait for an observable condition. @param {function():boolean} predicate DOM or request condition. @param {number} timeoutMs Maximum observation duration in milliseconds; ordinary UI waits use 1600 and checkpoint polling uses 6000. @return {Promise<void>} Resolves on success or throws a bounded failure. */
@@ -73,6 +101,63 @@ function clickSelection(input, checked, shiftKey = false) {
 window.fetch = /** Confine production reads to owned fixture data. @param {string|URL} url Request URL. @param {RequestInit} options Options. @return {Promise<Response>} Held response or safe first-party asset. */ async (url, options = {}) => {
     const path = new URL(url, location.href).pathname;
     if (path.startsWith('/public/assets/')) return originalFetch(url, options);
+    if (path === '/fixture-media-schedule') {
+        check(options.method === 'POST' && options.credentials === 'same-origin'
+            && options.redirect === 'error' && options.cache === 'no-store'
+            && options.headers.Accept === 'application/json'
+            && options.body.get('csrf_token') === 'fixture'
+            && options.body.get('site_maintenance_action') === 'save'
+            && options.body.get('ajax') === '1',
+            'Schedule autosave retains authentication, CSRF and the existing save action');
+        scheduleWrites++;
+        const values = {};
+        for (const field of ['site_maintenance_enabled','site_maintenance_request_trigger_enabled']) {
+            values[field] = options.body.has(field);
+        }
+        for (const field of ['site_maintenance_utc_time','site_maintenance_window_hours',
+            'site_maintenance_batch_size','site_maintenance_time_budget_seconds']) {
+            check(typeof options.body.get(field) === 'string', 'Coupled schedule values travel together');
+            values[field] = options.body.get(field);
+        }
+        const response = new Response(JSON.stringify({
+            ok:true, message:'Schedule saved', setting_values:values,
+            mutation:{type:'settings.update',entity:'settings',action:'update',entity_ids:[]},
+            panel:null, contexts:[], fallback:{redirect_url:'/must-not-navigate'},
+        }), {headers:{'Content-Type':'application/json'}});
+        if (contentSaveMode === 'lost') throw new Error('Schedule response lost after persistence');
+        if (contentSaveMode === 'hold') return new Promise(resolve => { releaseContentSave = () => resolve(response); });
+        return response;
+    }
+    if (['/fixture-content-search','/fixture-content-gps','/fixture-content-crawler','/fixture-system-devmode'].includes(path)) {
+        check(options.method === 'POST' && options.credentials === 'same-origin'
+            && options.headers.Accept === 'application/json'
+            && options.body.get('csrf_token') === 'fixture'
+            && options.body.get('maintenance_return') === (path.endsWith('devmode') ? 'system' : 'content')
+            && options.body.get('ajax') === '1',
+            'Content autosave retains its guarded route/body contract');
+        contentWrites++;
+        const fields = path.endsWith('devmode') ? ['dev_mode_enabled']
+            : path.endsWith('search') ? ['public_home_search_enabled']
+            : path.endsWith('gps') ? ['exif_gps_default_enabled']
+            : ['seo_request_guard_enabled','seo_request_guard_logging_enabled'];
+        if (contentSaveMode !== 'refuse') {
+            for (const field of fields) contentPersisted[field] = options.body.has(field);
+        }
+        const payload = {
+            ok:contentSaveMode !== 'refuse', message:'Preference result',
+            mutation:{type:'settings.update',entity:'settings',action:'update',entity_ids:[]},
+            panel:null, contexts:[], fallback:{redirect_url:'/must-not-navigate'},
+            setting_values:Object.fromEntries(fields.map(field => [field,contentPersisted[field]])),
+        };
+        const response = new Response(JSON.stringify(payload), {
+            status:payload.ok ? 200 : 422, headers:{'Content-Type':'application/json'},
+        });
+        if (contentSaveMode === 'lost') throw new Error('Lost after persistence');
+        if (contentSaveMode === 'hold') {
+            return new Promise(resolve => { releaseContentSave = () => resolve(response); });
+        }
+        return response;
+    }
     check(options.credentials === 'same-origin' && options.headers.Accept === 'application/json' && !options.body, 'Dashboard requests are credentialed reads');
     if (path === '/fixture-overview') {
         summaryReads++;
@@ -514,6 +599,112 @@ try {
     releaseAfterManualRead?.(new Response(JSON.stringify({ok:true,html:refreshedMarkup,cache_lifecycle:{regions_sample:[]}})));
     window.fetch = passiveFetch;
     window.fetch = priorFetch;
+    tab('maintenance');
+    const contentUrl = location.href;
+    const scheduleForm = document.querySelector('[data-dashboard-schedule-preferences]');
+    const scheduleSwitch = scheduleForm.elements.site_maintenance_enabled;
+    const scheduleTime = scheduleForm.elements.site_maintenance_utc_time;
+    check(scheduleWrites === 0 && getComputedStyle(scheduleForm.querySelector('button')).display === 'none',
+        'Schedule enhancement does not write on load or require a second Save');
+    contentSaveMode = 'hold';
+    releaseContentSave = null;
+    scheduleSwitch.click();
+    await until(() => releaseContentSave !== null);
+    check(scheduleSwitch.disabled && scheduleTime.disabled && scheduleWrites === 1,
+        'A schedule save serializes booleans and dependent numeric/time fields');
+    releaseContentSave();
+    await until(() => scheduleForm.dataset.saveState === 'saved');
+    check(!scheduleSwitch.checked && !scheduleTime.disabled && location.href === contentUrl
+        && document.querySelector('[data-dashboard-schedule-state]').textContent === 'Disabled',
+        'Confirmed schedule state updates in place without navigation or losing nodes');
+    contentSaveMode = 'success';
+    scheduleTime.value = '05:30';
+    scheduleTime.dispatchEvent(new Event('change',{bubbles:true}));
+    await until(() => scheduleWrites === 2 && !scheduleTime.disabled);
+    check(document.querySelector('[data-dashboard-schedule-time]').textContent === '05:30'
+        && scheduleForm.elements.site_maintenance_request_trigger_enabled.checked,
+        'Time changes preserve the independent request preference and reconcile the overview');
+    // One past the existing 50-image maximum exercises native range refusal.
+    scheduleForm.elements.site_maintenance_batch_size.value = '51';
+    scheduleForm.elements.site_maintenance_batch_size.dispatchEvent(new Event('change',{bubbles:true}));
+    check(scheduleWrites === 2, 'Invalid schedule fields cannot trigger a partial preference write');
+    scheduleForm.elements.site_maintenance_batch_size.value = '20';
+    contentSaveMode = 'lost';
+    scheduleSwitch.click();
+    await until(() => scheduleForm.dataset.saveState === 'unknown');
+    scheduleForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    check(scheduleWrites === 3 && scheduleSwitch.checked && scheduleTime.disabled,
+        'An uncertain schedule write retains intent and blocks replay until passive reload');
+    contentSaveMode = 'success';
+    const searchPreference = document.querySelector('input[name="public_home_search_enabled"]');
+    const searchForm = searchPreference.form;
+    check(contentWrites === 0 && getComputedStyle(searchForm.querySelector('button[type="submit"]')).display === 'none',
+        'Enhancement does not save on load and has no redundant Save button');
+    contentSaveMode = 'hold';
+    searchPreference.click();
+    await until(() => releaseContentSave !== null);
+    check(searchPreference.disabled && searchForm.getAttribute('aria-busy') === 'true'
+        && contentWrites === 1, 'One immediate write locks its form against overlapping mutations');
+    searchPreference.click();
+    check(contentWrites === 1, 'A pending preference cannot send a duplicate mutation');
+    releaseContentSave();
+    await until(() => searchForm.dataset.saveState === 'saved');
+    check(!searchPreference.checked && !contentPersisted.public_home_search_enabled
+        && !searchPreference.disabled && location.href === contentUrl,
+        'OFF saves immediately and retains the URL and original input node');
+    contentSaveMode = 'success';
+    searchPreference.click();
+    await until(() => searchForm.dataset.saveState === 'saved' && !searchPreference.disabled);
+    check(contentPersisted.public_home_search_enabled && searchPreference.checked,
+        'The same retained preference can save ON without rebinding');
+    const diagnostics = document.querySelector('input[name="dev_mode_enabled"]');
+    const diagnosticsForm = diagnostics.form;
+    contentSaveMode = 'hold';
+    const beforeDiagnostics = contentWrites;
+    diagnostics.click();
+    await until(() => !!releaseContentSave);
+    diagnosticsForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    check(diagnostics.disabled && contentWrites === beforeDiagnostics + 1,
+        'System diagnostics excludes a second write while its save is pending');
+    releaseContentSave(); releaseContentSave = null;
+    await until(() => diagnosticsForm.dataset.saveState === 'saved');
+    check(diagnosticsForm.querySelector('[data-dashboard-save-status]').textContent === 'Saved',
+        'System diagnostics displays owned save feedback');
+    check(contentPersisted.dev_mode_enabled && diagnostics.checked
+        && diagnostics === diagnosticsForm.querySelector('input[name="dev_mode_enabled"]')
+        && !diagnostics.disabled && location.href === contentUrl,
+        'System diagnostics uses canonical persisted state without navigation or node replacement');
+    contentSaveMode = 'lost';
+    diagnostics.click();
+    await until(() => diagnosticsForm.dataset.saveState === 'unknown');
+    diagnosticsForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    check(!contentPersisted.dev_mode_enabled && !diagnostics.checked
+        && diagnostics.disabled && contentWrites === beforeDiagnostics + 2,
+        'A lost System diagnostics response locks for passive reload without replay');
+    const gpsPreference = document.querySelector('input[name="exif_gps_default_enabled"]');
+    contentSaveMode = 'refuse';
+    gpsPreference.click();
+    await until(() => gpsPreference.form.dataset.saveState === 'error');
+    check(gpsPreference.checked && gpsPreference.disabled
+        && !searchPreference.disabled && location.href === contentUrl,
+        'A refused write restores authoritative state and isolates its reload gate');
+    const crawlerPreference = document.querySelector('input[name="seo_request_guard_enabled"]');
+    contentSaveMode = 'success';
+    crawlerPreference.click();
+    await until(() => crawlerPreference.form.dataset.saveState === 'saved');
+    check(!contentPersisted.seo_request_guard_enabled
+        && !contentPersisted.seo_request_guard_logging_enabled,
+        'Changing protection preserves the independent logging choice');
+    check(document.querySelector('input[name="seo_request_guard_logging_enabled"]').title === 'Factory default: Enabled',
+        'A factory tooltip remains independent of the stored OFF value');
+    contentSaveMode = 'lost';
+    const beforeLost = contentWrites;
+    searchPreference.click();
+    await until(() => searchForm.dataset.saveState === 'unknown');
+    searchForm.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    check(contentWrites === beforeLost + 1 && !contentPersisted.public_home_search_enabled
+        && !searchPreference.checked && searchPreference.disabled && location.href === contentUrl,
+        'Lost successful responses lock for reload without replay or fake rollback');
     const maintenance = document.querySelector('#admin-tab-maintenance');
     const values = ['content','media','navigation','trash','system'];
     maintenance.innerHTML = '<div class="admin-dashboard-maintenance-scope" data-admin-subtab-scope><nav data-admin-subtabs>'

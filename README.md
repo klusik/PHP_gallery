@@ -60,7 +60,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.144.14
+**Current Version:** 0.145
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -80,6 +80,21 @@ review their exact descendant scope, then apply the reviewed plan. Own-password
 quick actions retain unrelated preferences and token protection. Settings >
 Uploads integrates ordinary upload preferences and mobile connections; its
 legacy-menu switch restores old links without changing route availability.
+
+Maintenance > Maps and navdata uses the same compact translucent groups as
+Features and Content and display. The navdata name and trailing arrow open the
+same manager. Counts and the last import time remain visible; contextual help
+and Import details hold longer explanations. Update navdata remains an explicit
+in-place action with the existing freshness checks and no-JavaScript form.
+
+Maintenance > System health groups checks by runtime/recovery, access/sign-in,
+galleries/files, maps/routes, and public features/reports, with tools alongside.
+A checkmark means required storage was found, not that a complete workflow or
+external API connection passed. A dash marks a configured-off integration.
+Problems lead each group with visible guidance; question marks explain purpose,
+and Details retain safe database identifiers and request references. Viewer
+diagnostics uses the same guarded autosave and native POST fallback as Content
+and display. Loading health never starts repairs, migrations, or cleanup.
 
 Card orientation means vertical/photo above text and horizontal/photo beside
 text. Migration `202610020001_gallery_description_layout_semantics.php`
@@ -385,7 +400,12 @@ Admin-facing status labels only; neither changes the permanent `progressive` and
 - **Image tagging** - Tag individual images for detailed categorization
 - **Public tag pages** - Generate filterable listing pages by tag
 - **Tag suggestions** - Auto-complete tag input when editing
-- **Tag management** - Admin interface to create, rename, edit, or delete tags
+- **Tag management** - Admin interface to create, rename, edit, or delete tags;
+  compact catalog, editor and usage groups. Filters/sort switch immediately;
+  content changes retain explicit Save. Question marks explain fields; narrow screens provide a jump
+  from the catalog heading to the editor. Images and Galleries filter direct
+  assignments over shared tags; All includes unused tags. Documents reserves
+  future PDF tagging and stays disabled. Music tags keep their internal scope.
 
 ### Voting & Scoring
 - **Image voting** - Visitors can rate images (+1/-1 or like/dislike)
@@ -913,6 +933,13 @@ enabled by default; optional retention-based automatic purge is disabled by
 default and integrates with scheduled Site Maintenance. Existing installations
 receive the required state-machine storage through two ordered migrations.
 
+The Trash workspace follows the compact translucent Features layout. Its
+preferences remain visible and save immediately with JavaScript, including the
+coupled retention and batch values. A refused or unverified write locks the
+Trash controls until a passive state reload; it never replays the write. The
+classic Save form remains available without JavaScript. On narrow screens each
+entry keeps its metadata labels and confirmed actions without sideways scrolling.
+
 Settings links use stable identifiers such as
 `?page=admin_settings&section=appearance`. JavaScript tab changes preserve the
 section query without adding a scroll-driving fragment, so Back/Forward and
@@ -1245,7 +1272,23 @@ for transport requirements, diagnostics and recovery. Correctness never depends 
 
 #### Customizing Appearance
 
-Theme > Appearance > Gallery tags controls the public tag-page grid and card
+Appearance groups all five subsections—Colors & identity, Width & map pin,
+Cards & tags, Animations and Advanced appearance—into compact translucent
+surfaces. Longer explanations open beside plain question marks. The shared live
+preview and its browser-local pointer/keyboard divider remain available.
+The active subsection survives reload and Back/Forward through `appearance_subtab`;
+existing full-ID deep links remain supported.
+
+The GPS pin, pin background, display-all-tags, tag scrollbar and transparent
+header switches save immediately and individually through the guarded Theme
+route. Their tooltips show canonical installation defaults. Other color, text,
+layout and numeric changes remain drafts applied with **Save theme**. Switch
+requests exclude those drafts, translation JSON and uploads. A refused or
+unverified write locks its own switch and blocks whole-form replay until passive
+reload, without automatic retry. Native form saving remains supported without
+JavaScript. Existing capability checks and hero-tag revision updates still apply.
+
+Theme > Appearance > Cards & tags controls the public tag-page grid and card
 design independently from the normal gallery defaults.
 
 1. Go to **Theme** to customize colors, fonts, layout, the default lightbox
@@ -1734,6 +1777,19 @@ Admin and Public selectors and pack editor, reports key coverage against
 English, and provides JSON edit/import/export tools plus missing-key
 diagnostics.
 
+Theme > Language uses compact groups, native switches and contextual `?`
+help. The Admin, public-default and coupled viewer-language choices save
+immediately in separate authenticated, CSRF-protected requests. Other Theme
+and JSON drafts are excluded. Admin language changes offer **Reload interface**
+to refresh labels. An unverified save locks its group and prevents full-form
+replay until a passive reload; it is never retried automatically.
+All three language selectors show bundled flags, with native selects retained
+for fallback and form submission. The active Language subsection is recorded in
+`language_subtab`, preserving reload and browser Back/Forward navigation.
+Viewer switcher design remains a staged compound draft applied by **Save theme**;
+pack save/import and diagnostics keep their explicit actions. Without JavaScript,
+ordinary shared-form submission remains available.
+
 The reusable viewer-language settings panel is rendered by
 `app/views/admin_language_settings.php` in both Theme > Language and Settings >
 General. Both surfaces persist through the same translation service and
@@ -1822,6 +1878,12 @@ The codebase is organized for easy extension:
 
 The normal agent handoff runs the complete centrally registered regression suite
 in GitHub Actions through candidate preparation and the required hosted matrix.
+Integration requires all 27 native owners, including Linux/Windows packaging;
+macOS packaging runs independently on the same prepared SHA as an advisory
+check. Its runner queue, failure or timeout cannot block integration. Select the
+feature branch in **Integrate into develop → Use workflow from** to execute its
+changed workflow and tests directly. See the
+[CI contract](docs/CI_COVERAGE_REUSE_CONTRACT.md) for historical evidence rules.
 For explicitly requested local recovery or targeted diagnosis, the runner
 remains available:
 
