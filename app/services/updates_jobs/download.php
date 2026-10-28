@@ -48,7 +48,7 @@ use function Gallery\Core\run_migrations_bounded;
 /**
  * Return the remote archive URL for a persisted job without storing it in job state.
  *
- * @param array{operation:string,parameters:array{commit?:string,branch?:string},...<string,mixed>} $job Durable update job state.
+ * @param array{operation:string,parameters:array{commit?:string,branch?:string},checkpoints?:array{archive_commit?:string,archive_release_asset?:array{version:string,sha256:string,bytes:int}}} $job Operation, pinned commit and optional verified published archive.
  * @return string Trusted update URL.
  */
 function application_update_job_archive_url(array $job): string
@@ -56,6 +56,18 @@ function application_update_job_archive_url(array $job): string
     $operation = (string) ($job['operation'] ?? '');
     $parameters = (array) ($job['parameters'] ?? []);
     $commit = (string) ($job['checkpoints']['archive_commit'] ?? '');
+    $asset = $job['checkpoints']['archive_release_asset'] ?? null;
+    if (is_array($asset)) {
+        $version = (string) ($asset['version'] ?? '');
+        if (preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1
+            || preg_match('/^[0-9]+(?:\.[0-9]+){1,2}$/D', $version) !== 1
+            || preg_match('/^[a-f0-9]{64}$/D', (string) ($asset['sha256'] ?? '')) !== 1
+            || (int) ($asset['bytes'] ?? 0) <= 0) {
+            throw new RuntimeException('Persisted update asset identity is invalid.');
+        }
+        return 'https://github.com/' . \Gallery\Core\CMS_GITHUB_REPOSITORY
+            . '/releases/download/v_' . $version . '/production.zip';
+    }
     if ($commit !== '') {
         if (preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1) {
             throw new RuntimeException('Persisted update commit identity is invalid.');
@@ -71,21 +83,207 @@ function application_update_job_archive_url(array $job): string
 }
 
 /**
+ * Observe archive bytes after this request has changed the file.
+ *
+ * PHP caches successful stat results independently of writes through cURL or
+ * an open stream. Refresh both the initial offset and the completed byte count
+ * so a resumed transfer cannot report its previous size or reject completion.
+ *
+ * @param string $path Absolute path to this job's downloaded archive.
+ * @return int Current byte count, or zero when the archive does not exist yet.
+ * @throws RuntimeException When an existing archive cannot be measured.
+ */
+function application_update_download_size(string $path): int
+{
+    clearstatcache(true, $path);
+    if (!is_file($path)) {
+        return 0;
+    }
+    $size = filesize($path);
+    if ($size === false) {
+        throw new RuntimeException('Could not measure update archive bytes.');
+    }
+    return $size;
+}
+
+/**
+ * Yield an incomplete download or stop repeated unsupported Range restarts.
+ *
+ * The original archive commit and every completed installation checkpoint stay
+ * intact. Repeated restarts request the separately verified published archive;
+ * a source without a matching published archive requires manual deployment.
+ *
+ * @param array{id:string,checkpoints:array{archive_resume_restarts?:int,archive_fallback_pending?:bool,archive_release_asset?:array{version:string,sha256:string,bytes:int}}} $job Durable restart and archive-selection checkpoints.
+ * @param bool $restarted Whether this response replaced a nonempty prefix with a full HTTP 200 response.
+ * @return bool Always false; requests published-archive selection after source restarts, or throws when the selected asset also cannot resume.
+ * @throws RuntimeException When bounded transfers cannot resume this source.
+ */
+function application_update_download_incomplete(
+    array &$job,
+    bool $restarted,
+): bool {
+    if ($restarted) {
+        $job['checkpoints']['archive_resume_restarts'] =
+            (int) ($job['checkpoints']['archive_resume_restarts'] ?? 0) + 1;
+        application_update_save_job($job);
+        if ($job['checkpoints']['archive_resume_restarts']
+            >= APPLICATION_UPDATE_DOWNLOAD_RESTART_LIMIT) {
+            if (isset($job['checkpoints']['archive_release_asset'])) {
+                throw new RuntimeException(
+                    'Update archive source does not support resuming within the worker time limit.',
+                );
+            }
+            $job['checkpoints']['archive_fallback_pending'] = true;
+            application_update_save_job($job);
+        }
+    }
+    return false;
+}
+
+/**
+ * Select a published production archive for the same immutable source commit.
+ *
+ * Each invocation performs at most one GitHub metadata request. The release's
+ * canonical tag must resolve to archive_commit, and its sole production.zip
+ * asset must provide a SHA-256 digest and byte count. Only then may the old
+ * partial source ZIP be discarded. A crash before publication repeats selection
+ * against the same commit; it never combines two archives or changes the target.
+ *
+ * @param array{id:string,checkpoints:array{archive_commit?:string,archive_fallback_version?:string,archive_fallback_release?:array{version:string,sha256:string,bytes:int},archive_release_asset?:array{version:string,sha256:string,bytes:int},archive_fallback_pending?:bool,archive_url?:string,archive_etag?:string,archive_last_modified?:string,archive_expected_bytes?:int,archive_resume_restarts?:int}} $job Durable source and metadata checkpoints, updated by reference.
+ * @param array{deadline:float,seconds:float} $budget Current worker deadline and duration.
+ * @return bool Always false; a later slice downloads the selected archive.
+ * @throws RuntimeException When metadata or exact-commit/digest binding is unavailable.
+ */
+function application_update_download_select_release(
+    array &$job,
+    array $budget,
+): bool {
+    $commit = (string) ($job['checkpoints']['archive_commit'] ?? '');
+    if (preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1) {
+        throw new RuntimeException('Update archive fallback requires a pinned commit.');
+    }
+    $timeout = application_update_remote_timeout_seconds(
+        (float) $budget['deadline'], APPLICATION_UPDATE_COMMIT_LOOKUP_SECONDS,
+    );
+    if ($timeout <= 0) {
+        return false;
+    }
+    $api = 'https://api.github.com/repos/'
+        . \Gallery\Core\CMS_GITHUB_REPOSITORY;
+    $version = (string) ($job['checkpoints']['archive_fallback_version'] ?? '');
+    if ($version === '') {
+        $response = cms_github_api_get(
+            $api . '/contents/app/bootstrap.php?ref=' . $commit,
+            $timeout,
+            ['Accept: application/vnd.github.raw+json'],
+            true,
+        );
+        $version = application_update_version_from_bootstrap(
+            (string) $response['body'],
+        );
+        if ($version === null) {
+            throw new RuntimeException('Pinned update archive version is unavailable.');
+        }
+        $job['checkpoints']['archive_fallback_version'] = $version;
+        application_update_save_job($job);
+        return false;
+    }
+    if (application_update_normalize_version($version) !== $version) {
+        throw new RuntimeException('Pinned update archive version is invalid.');
+    }
+    $tag = 'v_' . $version;
+    $asset = $job['checkpoints']['archive_fallback_release'] ?? null;
+    if (!is_array($asset)) {
+        $response = cms_github_api_get(
+            $api . '/releases/tags/' . $tag,
+            $timeout,
+            ['Accept: application/vnd.github+json'],
+            true,
+        );
+        $release = json_decode((string) $response['body'], true);
+        $assets = is_array($release['assets'] ?? null)
+            ? array_values(array_filter(
+                $release['assets'],
+                static fn(mixed $entry): bool => is_array($entry)
+                    && ($entry['name'] ?? '') === 'production.zip',
+            )) : [];
+        $candidate = $assets[0] ?? [];
+        $digest = (string) ($candidate['digest'] ?? '');
+        $expectedUrl = 'https://github.com/'
+            . \Gallery\Core\CMS_GITHUB_REPOSITORY
+            . '/releases/download/' . $tag . '/production.zip';
+        if (($release['tag_name'] ?? '') !== $tag
+            || ($release['draft'] ?? null) !== false
+            || ($release['prerelease'] ?? null) !== false
+            || count($assets) !== 1
+            || ($candidate['browser_download_url'] ?? '') !== $expectedUrl
+            || !is_int($candidate['size'] ?? null)
+            || $candidate['size'] <= 0
+            || preg_match('/^sha256:([a-f0-9]{64})$/D', $digest, $match) !== 1) {
+            throw new RuntimeException('Matching published update archive is unavailable.');
+        }
+        $job['checkpoints']['archive_fallback_release'] = [
+            'version' => $version,
+            'sha256' => $match[1],
+            'bytes' => $candidate['size'],
+        ];
+        application_update_save_job($job);
+        return false;
+    }
+    $response = cms_github_api_get(
+        $api . '/commits/' . $tag,
+        $timeout,
+        ['Accept: application/vnd.github+json'],
+        true,
+    );
+    $tagCommit = json_decode((string) $response['body'], true);
+    if (($tagCommit['sha'] ?? '') !== $commit
+        || ($asset['version'] ?? '') !== $version) {
+        throw new RuntimeException('Published update archive belongs to a different commit.');
+    }
+    $archivePath = application_update_job_dir((string) $job['id'])
+        . '/package.zip';
+    if (is_file($archivePath) && !unlink($archivePath)) {
+        throw new RuntimeException('Could not replace partial update archive.');
+    }
+    unset(
+        $job['checkpoints']['archive_url'],
+        $job['checkpoints']['archive_etag'],
+        $job['checkpoints']['archive_last_modified'],
+        $job['checkpoints']['archive_expected_bytes'],
+    );
+    $job['checkpoints']['archive_resume_restarts'] = 0;
+    $job['checkpoints']['archive_release_asset'] = $asset;
+    $job['checkpoints']['archive_fallback_pending'] = false;
+    $job['progress'] = [
+        'current' => 0, 'total' => $asset['bytes'],
+        'message' => 'Downloading update package.',
+        'unit' => 'bytes',
+    ];
+    application_update_save_job($job);
+    return false;
+}
+
+/**
  * Stream a remote archive into the job workspace for a bounded amount of time.
  *
  * Partial files are kept between requests. cURL Range requests are preferred.
  * When a server ignores a resume Range and replies 200, the local partial file
  * is truncated before response bytes are written so duplicate data cannot be appended.
  *
- * @param array{id:string,operation:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
- * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Worker time budget.
- * @return bool True when the complete HTTP response finished in this request.
+ * @param array{id:string,operation:string,stage:string,trigger?:string,recovery_schema?:int,parameters:array{branch?:string,commit?:string},checkpoints:array{archive_commit?:string,archive_url?:string,archive_etag?:string,archive_last_modified?:string,archive_expected_bytes?:int,archive_resume_restarts?:int,archive_fallback_pending?:bool,archive_fallback_version?:string,archive_fallback_release?:array{version:string,sha256:string,bytes:int},archive_release_asset?:array{version:string,sha256:string,bytes:int}}} $job Durable source identity and transfer checkpoints, updated by reference.
+ * @param array{deadline:float,seconds:float} $budget Wall-clock worker deadline and duration.
+ * @return bool True for a complete response; false for a pinned lookup or incomplete transfer.
+ * @throws RuntimeException When transport, local storage or bounded resumption fails.
  */
 function application_update_job_download_slice(array &$job, array $budget): bool
 {
+    if (!empty($job['checkpoints']['archive_fallback_pending'])) {
+        return application_update_download_select_release($job, $budget);
+    }
     $jobDir = application_update_job_dir((string) $job['id']);
     $archivePath = $jobDir . '/package.zip';
-    $offset = is_file($archivePath) ? (int) filesize($archivePath) : 0;
+    $offset = application_update_download_size($archivePath);
     if (($job['recovery_schema'] ?? 0) === 1
         && ($job['operation'] ?? '') !== 'rollback'
         && empty($job['checkpoints']['archive_commit'])) {
@@ -268,7 +466,7 @@ function application_update_job_download_slice(array &$job, array $budget): bool
         fflush($handle);
         fclose($handle);
 
-        $size = is_file($archivePath) ? (int) filesize($archivePath) : 0;
+        $size = application_update_download_size($archivePath);
         $expectedBytes = $contentRangeTotal;
         if ($expectedBytes === null && $contentLength !== null) {
             $expectedBytes = $rangeHonored && $offset > 0
@@ -310,7 +508,10 @@ function application_update_job_download_slice(array &$job, array $budget): bool
             return true;
         }
         if ($errno === CURLE_OPERATION_TIMEDOUT && $size > 0) {
-            return false;
+            return application_update_download_incomplete(
+                $job,
+                $offset > 0 && $status === 200,
+            );
         }
         throw new RuntimeException(
             'Update archive download failed before completion.',
@@ -385,11 +586,12 @@ function application_update_job_download_slice(array &$job, array $budget): bool
             ));
         }
     }
-    if ($status >= 400) {
+    if (!in_array($status, [200, 206], true)) {
         fclose($remote);
         throw new RuntimeException('Update archive HTTP request failed.');
     }
 
+    $restarted = $offset > 0 && !$rangeHonored;
     $local = fopen($archivePath, $offset > 0 && $rangeHonored ? 'ab' : 'wb');
     if ($local === false) {
         fclose($remote);
@@ -413,7 +615,7 @@ function application_update_job_download_slice(array &$job, array $budget): bool
             }
             break;
         }
-        if (fwrite($local, $chunk) === false) {
+        if (fwrite($local, $chunk) !== strlen($chunk)) {
             fclose($local);
             fclose($remote);
             throw new RuntimeException('Could not write update archive chunk.');
@@ -423,7 +625,7 @@ function application_update_job_download_slice(array &$job, array $budget): bool
     fclose($local);
     fclose($remote);
 
-    $size = is_file($archivePath) ? (int) filesize($archivePath) : 0;
+    $size = application_update_download_size($archivePath);
     if ($responseEtag !== '') {
         $job['checkpoints']['archive_etag'] = $responseEtag;
     }
@@ -451,7 +653,10 @@ function application_update_job_download_slice(array &$job, array $budget): bool
             );
         }
     }
-    return $complete;
+    if ($complete) {
+        return true;
+    }
+    return application_update_download_incomplete($job, $restarted);
 }
 
 /**
@@ -511,8 +716,8 @@ function application_update_zip_entry_is_symlink(
  * central-directory index prevents a deliberately large but still permitted
  * archive from turning validation into one long shared-hosting request.
  *
- * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
- * @param ?array{deadline:float,seconds:float,...<string,int|float|string>} $budget Optional worker budget; null still caps one call by entry count.
+ * @param array{id:string,stage:string,checkpoints:array{archive_release_asset?:array{version:string,sha256:string,bytes:int},archive_release_digest_verified?:bool,archive_validate_index?:int,archive_uncompressed_bytes?:int,archive_entries?:int,extract_index?:int}} $job Archive identity and bounded validation cursor, updated by reference.
+ * @param array{deadline:float,seconds:float}|null $budget Optional worker budget; null still caps one call by entry count.
  * @return bool True when every archive entry has been validated.
  */
 function application_update_job_validate_archive(
@@ -523,6 +728,17 @@ function application_update_job_validate_archive(
         application_update_job_dir((string) $job['id']) . '/package.zip';
     if (!is_file($archivePath) || filesize($archivePath) === 0) {
         throw new RuntimeException('Downloaded update archive is empty.');
+    }
+    $asset = $job['checkpoints']['archive_release_asset'] ?? null;
+    if (is_array($asset)
+        && empty($job['checkpoints']['archive_release_digest_verified'])) {
+        if (application_update_download_size($archivePath) !== $asset['bytes']
+            || !hash_equals($asset['sha256'],
+                (string) hash_file('sha256', $archivePath))) {
+            throw new RuntimeException('Published update archive failed SHA-256 verification.');
+        }
+        $job['checkpoints']['archive_release_digest_verified'] = true;
+        application_update_save_job($job);
     }
     $zip = new ZipArchive();
     if ($zip->open($archivePath) !== true) {

@@ -2889,6 +2889,21 @@ supported. The first trusted archive URL is persisted for the job. Response
 `If-Range`; if a stable branch head changes and the origin returns a fresh
 `200`, the local partial archive is truncated before new bytes are accepted.
 Completion is checked against the known response size when available.
+Archive-size reads explicitly invalidate PHP's stat cache, including when an
+existing empty or partial file is overwritten. Stream writes must consume the
+whole chunk, and only successful 200/206 responses may supply package data.
+After three incomplete HTTP 200 restarts of a requested continuation, download
+selection advances in separate bounded metadata slices: pinned bootstrap
+version, published `production.zip` metadata, and exact tag-to-commit identity.
+The alternative retains the original full commit, discards the source prefix
+only after verification, and pins the provider's raw SHA-256 and byte count.
+Its canonical URL is derived from the repository and verified version; it is
+not an arbitrary provider URL. The raw asset digest is mandatory before
+extraction even when publisher per-file sweeps are disabled. Flat production
+archives and historical GitHub wrapper directories share subsequent validation,
+planning and activation. Failed archive retries clear every selection/digest
+receipt without changing the original commit. Missing/unpublished assets and
+unsupported older installed clients remain documented operational boundaries.
 `archive_validate` rejects unsafe absolute/traversal paths, symbolic links, more
 than 20,000 entries, files above 32 MiB, and more than 512 MiB total
 uncompressed data. Its central-directory scan checkpoints every 500 entries.

@@ -1489,6 +1489,25 @@ qualification remain separate evidence.
 
 ## Owner-selected feature qualification and protected-develop releases (#235)
 
+Current native owner contract 4 retains all functional shards and mandatory
+Linux/Windows packaging among 27 required jobs. Integration dispatches macOS
+packaging separately from the selected feature revision for the exact prepared
+candidate/base. Its genuine result remains advisory even when a runner is
+unavailable, times out or fails. Owner: `.github/scripts/ci-owner-contract.mjs`
+and the integration/reusable workflows. On 2026-10-28, integration runs
+`40725313291` and `40729700051` could not acquire a macOS runner and ended with
+cancelled packaging despite successful Linux/Windows packaging. The second run
+passed all functional owners. This observed capacity failure motivates the
+independent boundary; it establishes no production macOS adoption.
+
+Historical contracts 1–3 preserve mandatory macOS and their original owner
+counts. Readers authenticate complete Git-hashed workflow bytes before choosing
+the owner contract; missing native jobs never select a newer contract. Keep
+these readers until supported retained integration/release consumers are proven
+absent; their current usage is unknown. Regression fixtures reject missing
+Linux/Windows and historical macOS owners, preserve real adverse advisory
+outcomes, and exercise dispatch refusal without a ref write or run wait.
+
 Owners: integration/evidence and release origin/promotion readers. New
 integration
 schema 2 permits explicit owner-selected feature workflows and seals successful
@@ -2091,6 +2110,34 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
 
 ## Updater and release compatibility
 
+### UPD-6 — Source ZIPs without HTTP Range support
+
+- **Reason / protected scenario:** GitHub's codeload source archive can ignore
+  Range and return HTTP 200. Short workers then repeatedly replace the same
+  partial archive without reaching extraction. Cached PHP stat results can
+  additionally misreport newly written bytes, including resumed completion.
+- **Owner:** `updates_jobs/download.php` owns refreshed measurements, bounded
+  restart counting and published-archive selection. `updates_filesystem.php`
+  recognizes the flat production ZIP and the historical source wrapper.
+- **Safety:** Three incomplete full-response restarts select a published asset
+  through one metadata request per slice. Its canonical URL, version, original
+  full commit, positive size and SHA-256 are required. Raw ZIP digest validation
+  precedes extraction regardless of the optional per-file verifier. A retry
+  clears old archive receipts and keeps the commit. No request limit is raised.
+- **Evidence / tests:** On 2026-10-28, the source archive at `9cb0125e` ignored
+  a GET Range request and exceeded one two-second opportunity; the existing
+  published production asset returned the requested 206 byte range.
+  `updater_download_transport_test.php` covers both confined transport paths,
+  resumed file sizes, short writes, fallback identity and digest refusal,
+  evidence preservation and retry. Hosted execution must qualify the changed
+  candidate; an earlier green develop does not execute the added fixture.
+- **Usage / support rationale:** Production frequency and installed-client
+  distribution are unknown. Preserve source archives for unpublished snapshots
+  and older releases; no matching asset may be inferred from version alone.
+  The first hop from an older installed downloader remains operator acceptance
+  work. Safe retirement requires a supported upgrade floor and equivalent
+  bounded download/identity coverage, not a passing fast-network check.
+
 
 ### FILES-1 — Windows layout-migration sidecar sharing locks
 
@@ -2204,8 +2251,8 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
   resources with unchanged CMS activation ownership. It retains the existing
   pre-companion fixture. Policy regressions reject malformed, unsafe, duplicate,
   unordered or updater-owned resources. The real folder/ZIP builder checks full
-  font/license bytes, with complete package coverage on all three hosted
-  systems.
+  font/license bytes, with mandatory Linux/Windows package coverage and
+  independent advisory macOS coverage under current owner contract 4.
 - **Usage / retirement:** The supplied production failure confirms this reader
   generation remains deployed; aggregate adoption is unknown. Preserve the
   additive format until supported installed readers no longer validate the old

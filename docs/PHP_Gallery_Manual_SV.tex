@@ -3485,6 +3485,19 @@ Tillfälliga hämtnings- eller webbhotellsfel kan försöks igen. Ett paket vars
 
 Upptäckt av stabila utgåvor och paketarbete är separata begränsade åtgärder. En upptäcktsbegäran kan skapa ett beständigt bakgrundsjobb, medan en senare säker begäran eller CLI-köraren driver en kort del genom hämtning, arkivvalidering, uppackning, manifestverifiering, förberedelse, säkerhetskopiering för återställning, aktivering, migreringar och rensning. Range-begäranden kan återuppta avbrutna hämtningar, arbetarlås förhindrar samtidiga framsteg och ett gammalt lås kan återställas när dess ägare löpt ut. På inaktiva delade webbhotell schemalägger du \codeword{php scripts/application_update.php} från cron, t.ex. var femte minut. Varje anrop gör begränsad upptäckt eller driver befintligt bakgrundsarbete framåt; korrektheten beror inte på \codeword{set_time_limit()} eller \codeword{ignore_user_abort()}.
 
+Om källservern ignorerar Range växlar tre ofullständiga omstarter av hela
+svaret samma jobb till publicerade \filepath{production.zip}.
+Separata begränsade metadataanrop måste bekräfta att utgåvans tagg pekar på
+ursprunglig fullständig commit och att bilagan har kanonisk URL, byteantal
+och SHA-256. Arkivets hash kontrolleras före uppackning även när valfri
+kontroll av enskilda filer är avstängd. Platta produktionsarkiv och omslutna
+källarkiv använder samma senare installationssteg. Saknade eller felaktiga
+bilagor behåller ändlig felhantering; tidsgränserna höjs inte.
+En äldre installerad uppdaterare kan inte använda reparationen innan den
+har tagits emot. Kontrollera första uppgraderingen på en testkopia eller
+överför hela den kompatibla utgåvan manuellt och använd
+\ui{Slutför FTP-uppdatering}.
+
 Aktuella utgåvor stämmer också av den lilla uppsättningen programägda serverpolicyfiler under uppdateringsförberedelse och aktivering. Det skyddar installationer vars äldre uppdaterare hoppade över en policyfil: den validerade utgåvekopian jämförs och publiceras atomärt, återställningsmetadata utökas före ersättningen och en migreringsstödd uppstartsväg kan reparera ett redan aktiverat äldre träd. Avstämningen är begränsad till kända policysökvägar och ändrar inte gallerimedier eller användarkonfiguration.
 
 Före aktivering kan administratören avbryta eller försöka igen med ett återställningsbart jobb. Efter aktivering kan administrationens återställningsåtgärd återställa hanterade programfiler från den sparade återställningsögonblicksbilden, men filåterställning gör inte databasmigreringar ogjorda. Återställning av stabil utgåva, ren ominstallation och beta-installation förblir återupptagningsbara jobb med egen paketvalidering. Den fristående nödvägen \filepath{reset.php} är ett separat återställningsverktyg för att återgå till den stabila grenen när den vanliga administrationsrutten inte kan användas; den kräver ändå samma omsorgsfulla säkerhetskopiering och integritetsgranskning.
@@ -3822,7 +3835,12 @@ Python-docstrings använder ett gemensamt format.
 
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.
 
-Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt, obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet och~paketkontroller på~Linux, Windows och~macOS. Alla obligatoriska jobb och~kontrollen av~exakt SHA måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter de~slutliga källändringarna, inte vid~rutinmässig utveckling.
+Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt,
+obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet
+och~obligatoriska paketkontroller på~Linux och~Windows; macOS körs separat
+som~en rådgivande kontroll. Alla obligatoriska jobb och~kontrollen av~exakt SHA
+måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter
+de~slutliga källändringarna, inte vid~rutinmässig utveckling.
 
 Det värdbaserade portabla WinApp-jobbet installerar det befintliga
 Pillow-kravet i den Python-tolk som valts för revisionen, så att pixeltestet
@@ -3926,7 +3944,20 @@ Kommandona i detta avsnitt beskriver värdbaserade utgåvor och underhållarens 
 
 Aktuell kvalificering och~utgåvesammansättning beskrivs i~avsnittet om~underhållarverifiering och~i~\filepath{RELEASE.md}.
 
-Skapa produktionsmapp eller ZIP endast på uttrycklig begäran; den värdbaserade utgåvans artefakter använder samma PHP-verktyg automatiskt. Ange kandidatens tidsstämpel med \codeword{--timestamp} för deterministiska metadata. Verktyget nekar inaktuella manifest och befintliga utdata; \filepath{scripts/release_files.php} granskar bara medlemskap. Tre operativsystemsägare för paketering provar det verkliga verktyget oberoende av databasmatrisen. Uppvärmning av låst TinyTeX-cache enbart på main kräver granskad installation innan utgåvegrenar kan återanvända samma nyckel. En ren CMS-ändring kräver ingen ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och driftsättning kräver uttryckligt tillstånd. CI provar PHP 8.1 som kompatibilitetsgolv och PHP 8.5 som senaste representant. Alla tre databasvarianter använder PHP 8.5; historiska bevis behåller sina verkliga versioner.
+Skapa produktionsmapp eller ZIP endast på uttrycklig begäran; den värdbaserade
+utgåvans artefakter använder samma PHP-verktyg automatiskt. Ange kandidatens
+tidsstämpel med \codeword{--timestamp} för deterministiska metadata. Verktyget
+nekar inaktuella manifest och befintliga utdata;
+\filepath{scripts/release_files.php} granskar bara medlemskap. Obligatoriska
+Linux/Windows-paketägare provar det~verkliga verktyget oberoende
+av~databasmatrisen; macOS upprepar samma svit i~en separat rådgivande körning.
+Uppvärmning av låst TinyTeX-cache enbart på main kräver granskad installation
+innan utgåvegrenar kan återanvända samma nyckel. En ren CMS-ändring kräver ingen
+ny WinApp-installationsfil. Commit, tagg, publicering, uppladdning och
+driftsättning kräver uttryckligt tillstånd. CI provar PHP 8.1 som
+kompatibilitetsgolv och PHP 8.5 som senaste representant. Alla tre
+databasvarianter använder PHP 8.5; historiska bevis behåller sina verkliga
+versioner.
 
 Vid vanlig utveckling ska innehållet i~alla fyra \codeword{.tex}-källor ändras och~granskas tillsammans; bygg inte om~de~spårade PDF-filerna efter varje ändring. PDF-filerna får ligga efter källorna fram till~den~slutliga utgåveförberedelsen. Automatisk uppdatering av~version och~datum skapar inte innehållsdokumentation: nya funktioner, säkerhet, kompatibilitet och~driftrutiner måste föras in~redaktionellt i~de~engelska, tjeckiska, tyska och~svenska handböckerna.
 
@@ -4040,10 +4071,18 @@ feature-gren under \ui{Use workflow from} och~därefter källgrenen.
 Källan är~en commit över observerad develop. Värdbaserad förberedelse skapar
 runtime-moduler, inventering och~manifest, för~in ändrade genererade data
 i~slutlig kandidat och~startar nytt BASIC. En separat auktoritetsutcheckning
-granskar den~rena kandidaten. FULL behåller alla 28 obligatoriska ägare:
-källkontrakt, Node/WinApp, paket på~tre system, fyra shardar per~databas
+granskar den~rena kandidaten. FULL behåller alla 27 obligatoriska ägare:
+källkontrakt, Node/WinApp, Linux/Windows-paket, fyra shardar per~databas
 för~tre databaser, fyra shardar per~PHP-8.1/8.5-källmiljö, Chromium och~samlad kontroll.
 Saknade, misslyckade, avbrutna eller~överhoppade obligatoriska ägare stoppar integration.
+
+Efter förberedelsen startar valt feature-arbetsflöde macOS-paketering som~en
+separat rådgivande körning på~samma exakta kandidat och~bas. Den~centrala
+paketsviten sparar verkligt resultat och~diagnostik. Runner-köer, timeout,
+avbrott, fel eller~nekad start blockerar aldrig integrationen. Separata
+samtidighetsgrupper och~kontrollnamn skyddar obligatorisk FULL. Historiska
+ägaravtal 1--3 behåller obligatoriska macOS-bevis; autentiserade oföränderliga
+arbetsflödeskällor avgör vilket avtal som~gäller.
 
 Godkänd körning sparas före skyddad vanlig fast-forward.
 \codeword{qualify_only} sparar kvalificeringen utan skrivning till develop.

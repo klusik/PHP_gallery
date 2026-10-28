@@ -3607,6 +3607,20 @@ Vorübergehende Download- oder Hostingfehler können erneut versucht werden. Ein
 
 Stable-Erkennung und Paketverarbeitung sind getrennte begrenzte Vorgänge. Eine Erkennungsanfrage kann einen dauerhaften Hintergrundauftrag erstellen; eine spätere sichere Anfrage oder der CLI-Läufer führt einen kurzen Teilabschnitt über Download, Archivprüfung, Entpacken, Manifestprüfung, Vorbereitung, Rücknahmesicherung, Aktivierung, Migrationen und Bereinigung aus. Range-Anfragen können unterbrochene Downloads fortsetzen, Arbeitsprozesssperren verhindern paralleles Fortschreiten, und eine veraltete Sperre kann nach Ablauf ihres Besitzers wiederhergestellt werden. Planen Sie auf wenig frequentiertem Shared Hosting \codeword{php scripts/application_update.php} per Cron, beispielsweise alle fünf Minuten. Jeder Aufruf führt begrenzte Erkennung aus oder setzt vorhandene Hintergrundarbeit fort; die Korrektheit hängt nicht von \codeword{set_time_limit()} oder \codeword{ignore_user_abort()} ab.
 
+Ignoriert der Quellserver Range, wechseln drei unvollständige Neustarts
+der gesamten Antwort im selben Auftrag zum veröffentlichten
+\filepath{production.zip}. Getrennte begrenzte Metadatenabfragen müssen
+bestätigen, dass das Versions-Tag auf den ursprünglichen vollständigen Commit
+zeigt und der Anhang seine kanonische URL, Bytezahl und SHA-256 besitzt.
+Der Archiv-Hash wird vor dem Entpacken auch bei ausgeschalteter optionaler
+Einzeldateiprüfung geprüft. Flache Produktionsarchive und umschlossene
+Quellarchive verwenden dieselben weiteren Installationsschritte.
+Fehlende oder unpassende Anhänge behalten die endliche Fehlerbehandlung;
+Zeitlimits werden nicht erhöht. Ein älterer installierter Updater kann diese
+Reparatur erst nach deren Empfang verwenden. Prüfen Sie den ersten Übergang
+auf einer Testkopie oder übertragen Sie die vollständige kompatible Version
+manuell und verwenden Sie \ui{FTP-Aktualisierung abschließen}.
+
 Aktuelle Veröffentlichungen gleichen außerdem die kleine Menge anwendungseigener Serverrichtliniendateien während Vorbereitung und Aktivierung ab. Das schützt Installationen, deren älteres Aktualisierungssystem eine Richtliniendatei übersprungen hat: Die validierte Veröffentlichungskopie wird verglichen und atomar bereitgestellt, Rücknahmemetadaten werden vor dem Austausch erweitert, und ein migrationsgestützter Initialisierungsweg kann einen bereits aktivierten älteren Baum reparieren. Der Abgleich ist auf bekannte Richtlinienpfade begrenzt und verändert weder Galeriemedien noch Benutzerkonfiguration.
 
 Vor Aktivierung kann ein Administrator einen wiederherstellbaren Auftrag abbrechen oder erneut versuchen. Danach kann die administrative Wiederherstellungsaktion verwaltete Anwendungsdateien aus der gespeicherten Rücknahmemomentaufnahme wiederherstellen; Dateirücknahme kehrt Datenbankmigrationen jedoch nicht um. Stable-Wiederherstellung, saubere Neuinstallation und Beta-Installation bleiben fortsetzbare Aufträge mit eigener Paketprüfung. Der eigenständige Notfallweg \filepath{reset.php} ist ein getrenntes Wiederherstellungswerkzeug zur Rückkehr auf den Stable-Zweig, wenn die normale Administrationsroute nicht nutzbar ist; er erfordert weiterhin dieselbe sorgfältige Sicherungs- und Integritätsprüfung.
@@ -3960,7 +3974,13 @@ verwenden das einheitliche Format.
 
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus. Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED. Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein lokale Qualifikation.
 
-Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge, erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität und~Paketprüfungen auf~Linux, Windows und~macOS. Alle erforderlichen Jobs und~das~Gate für~das~exakte SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder Entwicklungsänderung.
+Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge,
+erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität
+und~verbindliche Paketprüfungen auf~Linux und~Windows; macOS läuft separat
+als~informative Prüfung. Alle erforderlichen Jobs und~das~Gate für~das~exakte
+SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier
+PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder
+Entwicklungsänderung.
 
 Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
 in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für
@@ -4064,7 +4084,21 @@ Die Befehle dieses Abschnitts beschreiben gehostete Releases und den erhaltenen 
 
 Der~aktuelle Qualifikations- und~Release-Ablauf steht im~Abschnitt zur~Maintainer-Verifikation und~in~\filepath{RELEASE.md}.
 
-Erstellen Sie Produktionsordner oder ZIP-Dateien nur auf ausdrückliche Anforderung; die gehosteten Release-Artefakte verwenden dasselbe PHP-Werkzeug automatisch. Übergeben Sie den Kandidatenzeitpunkt mit \codeword{--timestamp} für deterministische Metadaten. Veraltete Manifeste und vorhandene Ausgaben werden abgelehnt; \filepath{scripts/release_files.php} prüft nur die Mitgliedschaft. Drei Betriebssystem-Paketverantwortliche prüfen das echte Werkzeug unabhängig von der Datenbankmatrix. Der ausschließlich auf main ausgeführte, gesperrte TinyTeX-Cache-Aufbau benötigt vor gemeinsamer Nutzung durch Release-Zweige eine geprüfte Installation. Eine reine CMS-Änderung benötigt keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und Bereitstellung benötigen ausdrückliche Erlaubnis. CI prüft PHP 8.1 als Kompatibilitätsuntergrenze und PHP 8.5 als neuesten Vertreter. Alle drei Datenbankvarianten verwenden PHP 8.5; historische Nachweise behalten ihre tatsächlichen Versionen.
+Erstellen Sie Produktionsordner oder ZIP-Dateien nur auf ausdrückliche
+Anforderung; die gehosteten Release-Artefakte verwenden dasselbe PHP-Werkzeug
+automatisch. Übergeben Sie den Kandidatenzeitpunkt mit \codeword{--timestamp}
+für deterministische Metadaten. Veraltete Manifeste und vorhandene Ausgaben
+werden abgelehnt; \filepath{scripts/release_files.php} prüft nur die
+Mitgliedschaft. Verbindliche Linux/Windows-Paketverantwortliche prüfen das~echte
+Werkzeug unabhängig von~der Datenbankmatrix; macOS wiederholt dieselbe Suite
+in~einem separaten informativen Lauf. Der ausschließlich auf main ausgeführte,
+gesperrte TinyTeX-Cache-Aufbau benötigt vor gemeinsamer Nutzung durch
+Release-Zweige eine geprüfte Installation. Eine reine CMS-Änderung benötigt
+keinen neuen WinApp-Installer. Commit, Tag, Veröffentlichung, Upload und
+Bereitstellung benötigen ausdrückliche Erlaubnis. CI prüft PHP 8.1 als
+Kompatibilitätsuntergrenze und PHP 8.5 als neuesten Vertreter. Alle drei
+Datenbankvarianten verwenden PHP 8.5; historische Nachweise behalten ihre
+tatsächlichen Versionen.
 
 Während der~gewöhnlichen Entwicklung bearbeiten und~prüfen Sie die~Inhalte aller vier \codeword{.tex}-Quelldateien gemeinsam; erstellen Sie die~verfolgten PDFs nicht nach jeder Änderung neu. Die~PDFs dürfen bis~zur endgültigen Release-Vorbereitung hinter ihren Quellen zurückliegen. Automatische Versions- und~Datumsänderungen erzeugen keine sachliche Dokumentation: Neue Funktionen, Sicherheitsaspekte, Kompatibilität und~Betriebsverfahren müssen in~den~englischen, tschechischen, deutschen und~schwedischen Handbüchern redaktionell ergänzt werden.
 
@@ -4181,10 +4215,19 @@ Die~Quelle ist~ein Commit über dem beobachteten develop. Die~gehostete
 Vorbereitung erzeugt Runtime-Module, Inventar und~Manifest, übernimmt geänderte
 generierte Daten in~den endgültigen Kandidaten und~startet frisches BASIC.
 Ein separater Autoritäts-Checkout prüft den~sauberen Kandidaten.
-FULL behält alle 28 Pflichtbesitzer: Quellverträge, Node/WinApp,
-Pakete auf~drei Systemen, vier Shards je~Datenbank bei~drei Datenbanken,
+FULL behält alle 27 Pflichtbesitzer: Quellverträge, Node/WinApp,
+Linux/Windows-Pakete, vier Shards je~Datenbank bei~drei Datenbanken,
 vier Shards je~PHP-8.1/8.5-Quellumgebung, Chromium und~Gesamtprüfung.
 Fehlende, rote, abgebrochene oder~übersprungene Pflichtbesitzer stoppen die~Integration.
+
+Nach der~Vorbereitung startet der~gewählte Feature-Workflow macOS-Paketprüfungen
+als~separaten informativen Lauf mit~demselben exakten Kandidaten und~derselben
+Basis. Die~zentrale Paketsuite speichert das~tatsächliche Ergebnis und~Diagnosen.
+Runner-Warteschlangen, Timeout, Abbruch, Fehler oder~Startverweigerung blockieren
+die~Integration nicht. Getrennte Parallelitätsgruppen und~Prüfnamen schützen
+das~verbindliche FULL. Historische Besitzerverträge 1--3 behalten verpflichtende
+macOS-Nachweise; authentifizierte unveränderliche Workflow-Quellen bestimmen
+den~jeweiligen Vertrag.
 
 Erfolgreiche Ausführung wird vor~dem geschützten normalen Fast-forward
 gesichert. \codeword{qualify_only} speichert sie ohne develop-Schreibzugriff.

@@ -102,6 +102,12 @@ final one-commit candidate that integration will fast-forward.
   adverse direct dependencies. Require published SHA = selected one-commit
   source
   before FULL; generated children go through the squash checkpoint.
+- Current contract 4 requires Linux/Windows packaging among all 27 FULL owners.
+  Dispatch advisory macOS from the selected feature workflow on the exact
+  prepared SHA/base in a separate run. Preserve its real result; runner waits,
+  failure, timeout or dispatch refusal cannot block integration or share the
+  protected aggregate context/concurrency. Historical contracts 1–3 retain
+  mandatory macOS through authenticated immutable workflow bytes.
 - Bind delegated suites and every PHP shard to the same exact candidate. Require
   all native owners in aggregates and authenticated readers. Prove a complete,
   disjoint partition, preserving exclusive barriers and private resources.

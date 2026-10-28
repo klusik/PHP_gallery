@@ -1878,6 +1878,12 @@ The codebase is organized for easy extension:
 
 The normal agent handoff runs the complete centrally registered regression suite
 in GitHub Actions through candidate preparation and the required hosted matrix.
+Integration requires all 27 native owners, including Linux/Windows packaging;
+macOS packaging runs independently on the same prepared SHA as an advisory
+check. Its runner queue, failure or timeout cannot block integration. Select the
+feature branch in **Integrate into develop → Use workflow from** to execute its
+changed workflow and tests directly. See the
+[CI contract](docs/CI_COVERAGE_REUSE_CONTRACT.md) for historical evidence rules.
 For explicitly requested local recovery or targeted diagnosis, the runner
 remains available:
 

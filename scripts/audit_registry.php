@@ -157,7 +157,8 @@ $registry = [
     ],
 
     // Database-independent policy and real small-package proofs have one central
-    // owner; the required three-platform job executes them on the exact candidate.
+    // owner; required Linux/Windows jobs execute them on the exact candidate.
+    // Independent advisory macOS packaging repeats the same central suite.
     'packaging_tests' => [
         'production_file_policy_test.php',
         'production_package_test.php',

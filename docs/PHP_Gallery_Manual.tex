@@ -3483,6 +3483,18 @@ Temporary download or~hosting failures may~be~retried. A~package whose files do~
 
 Stable discovery and~package work are~separate bounded operations. A~discovery request may~create a~durable background job, while a~later safe request or~the~CLI runner advances a~short slice through download, archive validation, extraction, manifest verification, staging, rollback backup, activation, migrations, and~cleanup. Range requests can~resume interrupted downloads, worker locks prevent concurrent advancement, and~a~stale lock can~be~recovered after its~owner expires. On~idle shared hosting, schedule \codeword{php scripts/application_update.php} from~cron, for~example every five minutes. Each invocation performs bounded discovery or~advances existing background work; correctness does~not~depend on~\codeword{set_time_limit()} or~\codeword{ignore_user_abort()}.
 
+If~the~source server ignores Range, three incomplete full-response
+restarts switch the~same job to~the~published \filepath{production.zip}.
+Separate bounded metadata requests require the~release tag to~resolve to~the~original
+full commit and~require the~asset's canonical URL, byte count and~SHA-256.
+The~archive digest is~checked before extraction even when optional per-file
+publisher checks are~disabled. Flat production archives and~wrapped source
+archives use the~same later installation stages. Missing or~unmatched assets
+retain finite failure handling; request limits are~not~extended.
+An~older installed updater cannot use this repair before receiving it.
+Verify that first upgrade on~a~staging copy or~deploy the~complete compatible
+release manually and~use \ui{Finish FTP update}.
+
 Current releases also reconcile the~small set of~application-owned server-policy files during update preparation and~activation. This protects installations whose older updater skipped a~policy file: the~validated release copy is~compared and~published atomically, rollback metadata is~extended before replacement, and~a~migration-backed bootstrap path can~repair an~already activated older tree. The~reconciliation is~limited to~known policy paths and~does~not~alter gallery media or~user configuration.
 
 Before activation, an~administrator can~cancel or~retry a~recoverable job. After activation, the~Admin recovery action can~restore managed application files from~the~saved rollback snapshot, but~file rollback does~not~reverse database migrations. Stable restore, clean reinstall, and~beta installation remain resumable jobs with their own package validation. The~standalone \filepath{reset.php} emergency path is~a~separate recovery tool for~returning to~the~stable branch when the~normal Admin route cannot be~used; it~still requires the~same careful backup and~integrity review.
@@ -3818,7 +3830,12 @@ for~compatibility, while authored Python docstrings use one consistent format.
 
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
-Hosted qualification covers PHP/Node/WinApp tests, source contracts, required Chromium, real MySQL/MariaDB workflows, PHP compatibility and~Linux/Windows/macOS package checks. Every mandatory job and~the~exact-SHA gate must pass. The~release workflow compiles all~four PDF manuals once after the~final source edits, not~during routine development.
+Hosted qualification covers PHP/Node/WinApp tests, source contracts, required
+Chromium, real MySQL/MariaDB workflows, PHP compatibility and~required
+Linux/Windows package checks; macOS runs independently as~an~advisory check.
+Every mandatory job and~the~exact-SHA gate must pass. The~release workflow
+compiles all~four PDF manuals once after the~final source edits, not~during
+routine development.
 
 The~hosted portable WinApp job installs the~existing Pillow requirement into
 the~Python interpreter selected for~the~audit, so~tray-badge pixel coverage
@@ -3921,7 +3938,18 @@ The commands in this section describe hosted release ownership and the retained 
 
 The~current qualification and~release assembly sequence is~described in~the~maintainer verification section and~\filepath{RELEASE.md}.
 
-Create a~production folder or~ZIP only when explicitly requested; hosted release assets use the~same PHP builder automatically. Pass the~candidate epoch with \codeword{--timestamp} for~deterministic metadata. The~builder refuses stale manifests and~existing outputs; \filepath{scripts/release_files.php} inspects membership only. Three OS packaging owners cover the~real builder independently of~the~database matrix. The~main-only locked TinyTeX cache warmer requires reviewed installation before release branches can~reuse its exact key. A~CMS-only release does~not~require a~new WinApp installer. Commit, tag, publish, upload, and~deploy require explicit authorization. CI tests PHP 8.1 as~the~compatibility floor and~PHP 8.5 as~the~newest representative. All~three database variants run on~PHP 8.5; historical evidence retains its actual versions.
+Create a~production folder or~ZIP only when explicitly requested; hosted release
+assets use the~same PHP builder automatically. Pass the~candidate epoch with
+\codeword{--timestamp} for~deterministic metadata. The~builder refuses stale
+manifests and~existing outputs; \filepath{scripts/release_files.php} inspects
+membership only. Required Linux/Windows packaging owners cover the~real builder
+independently of~the~database matrix; macOS repeats the~same suite in~a~separate
+advisory run. The~main-only locked TinyTeX cache warmer requires reviewed
+installation before release branches can~reuse its exact key. A~CMS-only release
+does~not~require a~new WinApp installer. Commit, tag, publish, upload,
+and~deploy require explicit authorization. CI tests PHP 8.1 as~the~compatibility
+floor and~PHP 8.5 as~the~newest representative. All~three database variants run
+on~PHP 8.5; historical evidence retains its actual versions.
 
 During ordinary development, update all~four \codeword{.tex} sources together and~review their actual explanations; do~not~rebuild the~tracked PDFs after every change. The~PDFs may~lag behind the~sources until final release preparation. Automated version/date replacement is~not~semantic documentation generation: maintainers must add new feature, security, compatibility, and~operational content in~English, Czech, German, and~Swedish themselves.
 
@@ -4051,11 +4079,19 @@ Changes to~tests or~registries need no~preliminary installation on~main.
 The~source is~one commit above observed develop. Hosted preparation generates
 runtime modules, inventory and~manifest, folds changed generated data into
 the~final candidate and~obtains fresh BASIC. A~separate authority checkout
-inspects the~clean candidate. FULL retains all~28 required native owners:
-shared source contracts, portable Node/WinApp, packaging on~three operating
-systems, four shards for~each~of~three databases, four shards for~each PHP
+inspects the~clean candidate. FULL retains all~27 required native owners:
+shared source contracts, portable Node/WinApp, Linux/Windows packaging,
+four shards for~each~of~three databases, four shards for~each PHP
 8.1/8.5 source environment, required Chromium and~the~aggregate.
 Missing, failed, cancelled or~skipped mandatory owners block integration.
+
+After preparation, the~selected feature workflow dispatches macOS packaging
+as~an~independent advisory run on~the~same exact candidate and~base. It~executes
+the~central package suite and~retains its~actual result and~diagnostics.
+Runner queues, timeout, cancellation, failure or~dispatch refusal never block
+integration. Separate concurrency and~check names protect required FULL.
+Historical owner contracts 1--3 keep their original mandatory macOS proof;
+authenticated immutable workflow bytes determine the~applicable contract.
 
 Successful execution is~sealed before the~protected non-force fast-forward.
 \codeword{qualify_only} retains qualification without writing develop.

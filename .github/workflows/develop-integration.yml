@@ -290,7 +290,7 @@ jobs:
           import {spawnSync} from 'node:child_process';
           import {
             publishPreparedCandidate,selectDevelopIntegration,
-            dispatchPreparedBasic,waitForPreparedBasic,
+            dispatchPreparedBasic,waitForPreparedBasic,dispatchAdvisoryMacos,
           } from './.github/scripts/develop-integration.mjs';
           const api=(path,method='GET',payload=null)=>{
             const args=['api',path];
@@ -357,6 +357,20 @@ jobs:
             basic_run_attempt:qualified.basicRunAttempt,
           })) {
             appendFileSync(process.env.GITHUB_OUTPUT,`${name}=${value}\n`);
+          }
+          if(process.env.RECOVERY_MODE!=='true' && !context.authorityUpdate) {
+            try {
+              const advisory=dispatchAdvisoryMacos({repository:process.env.REPOSITORY,
+                branch:process.env.SOURCE_BRANCH,candidateSha:published.candidateSha,
+                expectedDevelopSha:process.env.DEVELOP_SHA},context,api);
+              console.log(`Advisory macOS packaging: ${advisory.reason}${advisory.runId ? ' (run '+advisory.runId+')' : ''}.`);
+              const result=advisory.runId
+                ? `[run ${advisory.runId}](https://github.com/${process.env.REPOSITORY}/actions/runs/${advisory.runId})`
+                : advisory.reason;
+              appendFileSync(process.env.GITHUB_STEP_SUMMARY,`Advisory macOS packaging: ${result}. Independent of required integration.\n`);
+            } catch {
+              console.log('Advisory macOS dispatch unavailable; required qualification continues.');
+            }
           }
           NODE
 

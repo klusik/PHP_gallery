@@ -85,7 +85,23 @@ function featureFixture() {
         assert.throws(()=>loadFeatureExecution(g.repository,'100',g.expected,g),/BLOCKED/);
     }
     const ownerRows=f.record.native_owners;
-    assert.equal(verifyFeatureOwners(f.repository,f.record.feature_qualification.execution,ownerRows,f.api).length,29);
+    assert.equal(verifyFeatureOwners(f.repository,f.record.feature_qualification.execution,ownerRows,f.api).length,28);
+    for (const outcome of ['failure','timed_out','cancelled','skipped',null]) {
+        const advisory=featureFixture();
+        advisory.jobs.push({id:1200,name:'Develop integration / Advisory macOS production package',
+            workflow_name:'Integrate into develop',run_id:100,run_attempt:1,
+            status:outcome===null?'queued':'completed',conclusion:outcome});
+        assert.doesNotThrow(()=>verifyFeatureOwners(advisory.repository,
+            advisory.record.feature_qualification.execution,advisory.record.native_owners,advisory.api),
+        'Advisory macOS never determines required qualification.');
+        for (const platform of ['ubuntu-24.04','windows-2025']) {
+            const missing=advisory.record.native_owners.filter(row=>
+                row.name!==`Develop integration / Positive production package (${platform})`);
+            assert.throws(()=>verifyFeatureOwners(advisory.repository,
+                advisory.record.feature_qualification.execution,missing,advisory.api),/BLOCKED/,
+            'Advisory macOS cannot replace either mandatory package platform.');
+        }
+    }
     assert.throws(()=>loadFeatureExecution(f.repository,'100',f.expected,{...f,download:()=>Buffer.from('corrupt archive')}),/BLOCKED/);
 }
 
@@ -140,7 +156,7 @@ process.stdout.write('PASS owner-selected feature FULL, sealed publication recov
         if (path.endsWith('/commits/'+env.CANDIDATE_SHA)) return {sha:env.CANDIDATE_SHA,parents:[{sha:env.SOURCE_BASE}],commit:{tree:{sha:f.expected.tree}}};
         throw new Error('Unexpected CI installation fixture: '+path);
     };
-    assert.equal(qualifyCiInstallation(env,call).native_owners.length,29,'CI main installation retains FULL plus release audit');
+    assert.equal(qualifyCiInstallation(env,call).native_owners.length,28,'CI main installation retains required FULL plus release audit');
     jobs.at(-1).conclusion='failure';
     assert.throws(()=>qualifyCiInstallation(env,call),/BLOCKED/,'a failed release audit prevents any PR qualification');
     jobs.at(-1).conclusion='success';

@@ -865,7 +865,7 @@ The workflow appears in the sidebar after reviewed default-branch installation.
 
 Active workflows use PHP 8.1 and PHP 8.5 only; all three database
 engines retain their complete scenarios on PHP 8.5. Ubuntu packaging also checks
-the PHP 8.1 floor, while Windows and macOS packaging use PHP 8.5. Historical
+the PHP 8.1 floor, while Windows and advisory macOS packaging use PHP 8.5. Historical
 qualification records retain their authenticated original matrix. The newest
 representative advances only through an explicit reviewed update. Reports use
 separate PHP/JS/MJS counts.
@@ -1537,11 +1537,11 @@ a recursive bot-triggered push. A source-only PASS is feedback, not handoff.
 | `runtime-compatibility` | Four central `hosted-full` PHP shards in each PHP 8.1 Unicode/intl and PHP 8.5 ASCII/no-intl environment; runtime probes remain per shard; floor shard 1 also owns whole-tree PHP 8.1 syntax | All eight native jobs required; no environment compatibility case removed |
 | `real-database-browser` | Four central `hosted-full` PHP shards for each PHP 8.5/MySQL 8.4, MariaDB 10.11 and MariaDB 11.4 environment. Each runner provisions a private database and application. The MySQL shards that own the two real-browser fixtures must execute them | All twelve native jobs required, with individual required DB/HTTP/race/browser PASS evidence in each owning shard |
 | `browser-tests` | Required Chromium `browser-map` fixtures via `scripts/audit.php --suite=browser-map` | Missing browser or fixture failures block the matrix |
-| `production-package` | Compact real-builder negative scenarios and complete production folder/ZIP membership and raw-byte integrity on Ubuntu, Windows and macOS | All three OS jobs required with zero missing mandatory package cases |
+| `production-package` | Compact real-builder negative scenarios and complete production folder/ZIP membership and raw-byte integrity on Ubuntu and Windows | Both OS jobs required with zero missing mandatory package cases |
 | `gallery-workflows:ci-gate` and `candidate-preparation:gate` | Aggregate required jobs, exact prepared SHA, immutable source base and current remote branch HEAD | FAIL, BLOCKED, missing, skipped, cancelled, superseded or stale required evidence refuses green handoff |
 | `release-audit` (release only) | Central `release` profile and mandatory sibling matrix after final hosted manual PDFs/metadata/manifest | Full release qualification of the exact prepared release candidate |
 
-This table describes source contract 3, with 28 required native owners. Its
+This table describes source contract 4, with 27 required native owners. Its
 protected installation remains separate from feature maintenance qualification;
 see `docs/CI_COVERAGE_REUSE_CONTRACT.md`. The five PHP/environment combinations
 retain their complete regression trees, partitioned deterministically rather
@@ -1553,6 +1553,17 @@ required job outcomes and remote-head check. Measure step/job wall time and
 runner cost separately; avoid inferring savings from a static ownership map.
 Optional local diagnostics remain usable offline but never promote stale,
 dirty-tree or incomplete hosted results to qualified status.
+
+After preparation, integration dispatches `Advisory macOS production package`
+through the existing reusable workflow's separate manual-dispatch mode, selecting
+the feature branch and checking out the exact prepared SHA. It executes the same
+central package suite on PHP 8.5 and retains its real outcome and diagnostics.
+The separate run has independent concurrency and cannot emit the protected
+`Complete required CI matrix` context. A queued, failed, timed-out, cancelled or
+unavailable advisory run never blocks integration. Regression fixtures cover
+those outcomes, missing mandatory Linux/Windows owners and provider refusal.
+Historical contracts 1–3 still require macOS: authenticating their immutable
+workflow source prevents missing old owners from being reinterpreted as advisory.
 
 ### Source-only authoring feedback
 
@@ -1613,8 +1624,9 @@ a minimal isolated payload: folder and ZIP membership, complete SHA-256
 content, deterministic output, missing/stale/unsafe inputs, links, destination
 protection, no-clobber and cleanup. The central packaging owner runs it
 independently of the SQL engine. The `production-package` CI matrix
-additionally builds a complete production folder and ZIP on Ubuntu, Windows and
-macOS and verifies every file against its source bytes. Windows owns real
+additionally builds a complete production folder and ZIP on Ubuntu and Windows
+and verifies every file against its source bytes. Independent advisory macOS
+packaging repeats that suite without blocking integration. Windows owns real
 junction/reparse-point rejection. A missing required capability or incomplete
 proof fails that owner. Legacy FTP, interactive collision naming and
 source-review/media packaging options have been removed with their
@@ -4926,6 +4938,31 @@ fetches retain the active session by posting to the current origin.
 
 ### Resumable application-update verification
 
+`updater_download_transport_test.php` runs the actual download owner with real
+temporary archive files and persisted jobs. Only cURL/HTTP stream and GitHub
+metadata boundaries are confined. It covers a previously statted empty file,
+partial and completed transfers, conditional Range append, ignored-Range full
+replacement, durable bounded fallback selection, stream short writes and
+unresolved redirects. Published fallback must perform one metadata call per
+slice, retain its full source commit, refuse draft/duplicate/unbound/digestless
+assets and another tag commit, preserve the old prefix on refusal, resume the
+selected asset, and verify its exact digest before ZIP parsing. Retry clears
+selection and digest checkpoints. Flat production and wrapped source roots both
+remain accepted. Hosted FULL discovers this fixture through the existing PHP
+registry; BASIC checks syntax and declaration documentation only. The fixture
+requires cURL, already installed by all hosted PHP owners, and performs no
+external network requests or real installation writes.
+
+The 2026-10-28 read-only provider observation for develop `9cb0125e` received
+HTTP 200 for a source ZIP Range request. Its complete 16,485,474-byte response
+took about 2.23 seconds on that connection; a separately capped two-second
+request ended with 11,182,369 bytes. The published `v_0.144.14/production.zip`
+returned HTTP 206 and exactly 1,024 requested bytes. These are observations of
+one connection, not hosting performance guarantees. Real slow-host acceptance
+must verify the old-client first hop and published-asset continuation on an
+owned staging installation; the new downloader cannot run before it is
+installed.
+
 The recovery fixture overlays the real declared updater file set in its owned
 installation, retains extra local PHP and old backup bytes, simulates a legacy
 active/gated job, and completes the new manual FTP operation through the real
@@ -4978,7 +5015,9 @@ The retained opt-in publisher verifier still rejects corrupt bytes when called
 directly. Job-driven publisher/FTP sweeps are disabled until explicitly enabled;
 fixtures assert absent sweep cursors and no diagnostic warning events.
 An ordinary background update with mismatched publisher hashes reaches activation
-under a held shared reader. Its real gate refuses an independent new reader with
+from a real flat production ZIP with a mandatory raw archive digest, through
+actual extraction and package validation, under a held shared reader. Its real
+gate refuses an independent new reader with
 503 before another lease is taken. After the old reader releases, the actual
 activation/migration/finalization pipeline completes and removes the gate.
 Job creation additionally retains its configured session name with no active

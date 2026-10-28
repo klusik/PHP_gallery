@@ -76,6 +76,15 @@ const APPLICATION_UPDATE_STATE_RENAME_ATTEMPTS = 10;
 const APPLICATION_UPDATE_STATE_RENAME_DELAY_US = 50_000;
 
 /**
+ * Bound restarts when an archive server ignores a continuation Range request.
+ * Type: int. Units: incomplete full-response restarts. Scope: one pinned job.
+ * Consumers: application_update_download_incomplete().
+ * Rationale: three restarts allow transient throughput recovery without an
+ * endless background chain repeatedly downloading the same archive prefix.
+ */
+const APPLICATION_UPDATE_DOWNLOAD_RESTART_LIMIT = 3;
+
+/**
  * Bound the independently persisted updater GC checkpoint before JSON decoding.
  * Type: int. Units: bytes. Scope: one updater GC evidence/checkpoint file.
  * Consumers: scheduled cache cleanup, read-only Maintenance Center evidence and
@@ -177,10 +186,11 @@ const APPLICATION_UPDATE_RECOVERY_MIGRATION_LIMIT = 1024;
 const APPLICATION_UPDATE_RECOVERY_SCHEMA_ROWS = 16384;
 
 /**
- * Keep stable commit resolution within an ordinary background slice.
- * Type: int. Units: seconds. Scope: one first-download GitHub API call.
- * Consumers: immutable archive source selection.
- * Rationale: two seconds bounds metadata I/O before package streaming begins.
+ * Keep immutable archive metadata within an ordinary background slice.
+ * Type: int. Units: seconds. Scope: one download-source GitHub API call.
+ * Consumers: commit resolution and published-archive fallback selection.
+ * Rationale: two seconds bounds each metadata hop before streaming begins;
+ * fallback selection performs only one such request per worker invocation.
  */
 const APPLICATION_UPDATE_COMMIT_LOOKUP_SECONDS = 2;
 

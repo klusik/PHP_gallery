@@ -24,8 +24,25 @@ import {verifyPredecessor} from '../.github/scripts/release-origin.mjs';
 import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
 import {coverageFixtureZip} from './support/coverage_artifact_fixture.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
-import {evidenceMatrixOwners,fullMatrixOwners,requireCurrentWorkflowOwners,requireIntegrationBasicProfile} from '../.github/scripts/ci-owner-contract.mjs';
+import {evidenceMatrixOwners,fullMatrixOwners,requireCurrentWorkflowOwners,requireIntegrationBasicProfile,workflowOwnerVersion} from '../.github/scripts/ci-owner-contract.mjs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+{
+    const workflow=read('.github/workflows/gallery-workflows.yml');
+    assert.equal(workflowOwnerVersion(workflow),4,
+        'Actual workflow bytes define required Linux/Windows and independent advisory macOS.');
+    for (const [before,after] of [
+        ["          - os: windows-2025\n            php: '8.5'",''],
+        ['  macos-advisory:','  removed-macos:'],
+        ['Advisory macOS matrix gate (unused)','Complete required CI matrix'],
+        ['always() && !inputs.advisory_macos','always()'],
+        ['    needs: [preflight, source-contracts, portable, production-package,',
+            '    needs: [macos-advisory, preflight, source-contracts, portable, production-package,'],
+    ]) {
+        assert.ok(workflow.includes(before),'Negative vector must change actual workflow source.');
+        assert.throws(()=>workflowOwnerVersion(workflow.replace(before,after)),/BLOCKED/,
+            'Missing mandatory platforms, missing advisory coverage and coupled aggregate contexts are rejected.');
+    }
+}
 /** Supply immutable synthetic workflow sources by retained lifecycle version to every release verification call.
  * @param {string} path Exact read-only source endpoint.
  * @param {number} version Historical owner contract selected from the retained record.
@@ -51,7 +68,8 @@ const releaseWorkflowFixture=(path,version,workflowSha)=>{
 const verifyQualification=(request,run,jobs,record,repository,currentHead,adapters={})=>{
     const observed=new Set(jobs.map(job=>job.name?.split(' / ').at(-1)));
     const ownerVersion=record.lifecycle_schema===1?1:(record.lifecycle_schema===2?2:
-        observed.has('Shared source contracts') || [...observed].some(name=>/shard \d+\/4\)$/.test(name))?3:
+        observed.has('Shared source contracts') || [...observed].some(name=>/shard \d+\/4\)$/.test(name))
+            ? (observed.has('Positive production package (macos-latest)')?3:4):
             ([...observed].some(name=>name.startsWith('PHP 8.3 '))?1:2));
     const workflowSha=run.head_sha ?? currentHead;
     const api=path=>releaseWorkflowFixture(path,ownerVersion,workflowSha);
@@ -69,12 +87,18 @@ const verifyQualification=(request,run,jobs,record,repository,currentHead,adapte
         if (path.endsWith(`/compare/${workflowSha}...${mainSha}`)) return {merge_base_commit:{sha:workflowSha}};
         assert.fail('Unexpected owner-contract fixture GET '+path);
     };
-    assert.deepEqual(evidenceMatrixOwners(current,repository,workflowSha,path=>provider(path,3)),
+    assert.deepEqual(evidenceMatrixOwners(current,repository,workflowSha,path=>provider(path,4)),
         fullMatrixOwners());
-    requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,3));
+    requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,4));
+    requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,3),3);
+    const historicalV3=fullMatrixOwners(3).map(name=>({name}));
+    assert.deepEqual(evidenceMatrixOwners(historicalV3,repository,workflowSha,path=>provider(path,3)),
+        fullMatrixOwners(3),'Old sharded records retain all 28 mandatory owners, including macOS.');
+    assert.throws(()=>evidenceMatrixOwners(current,repository,workflowSha,path=>provider(path,3)),/BLOCKED/,
+        'Historical W cannot waive its missing macOS owner.');
     requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,2),2);
     assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,2)),/exact requested owner matrix/,
-        'A retained v2 source cannot silently satisfy the default live v3 owner contract.');
+        'A retained v2 source cannot silently satisfy the default live v4 owner contract.');
     assert.throws(()=>requireCurrentWorkflowOwners(repository,workflowSha,path=>provider(path,1),2),/exact requested owner matrix/);
     assert.deepEqual(evidenceMatrixOwners(historicalV1,repository,workflowSha,provider),fullMatrixOwners(1),
         'Historical PHP 8.3 owners remain valid only with complete Git-hashed W inherited from main.');
@@ -86,7 +110,7 @@ const verifyQualification=(request,run,jobs,record,repository,currentHead,adapte
         current.filter(job=>job.name!=='Portable Node and WinApp'),
         [...current,current[4]],
         current.map((job,index)=>index===8?historicalV2[4]:job)]) {
-        assert.throws(()=>evidenceMatrixOwners(rows,repository,workflowSha,path=>provider(path,3)),/BLOCKED/,
+        assert.throws(()=>evidenceMatrixOwners(rows,repository,workflowSha,path=>provider(path,4)),/BLOCKED/,
             'Missing, duplicated and mixed shard/source/portable owner contracts never pass.');
     }
     assert.throws(()=>evidenceMatrixOwners(historicalV1,repository,workflowSha,path=>provider(path,3)),/workflow W/,

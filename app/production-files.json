@@ -2819,6 +2819,7 @@
         "tests/thumbnail_warmup_model_test.php",
         "tests/translation_catalog_consistency_test.php",
         "tests/updater_cache_gc_test.php",
+        "tests/updater_download_transport_test.php",
         "tests/updater_inventory_compatibility_test.php",
         "tests/updater_metadata_budget_test.php",
         "tests/updater_recovery_test.php",
