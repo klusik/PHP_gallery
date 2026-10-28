@@ -33,6 +33,15 @@
  */
 
 return [
+    'gallery_migration.import_tab' => 'Import galerie',
+    'gallery_migration.import_instructions' => 'Ve zdrojové galerii otevřete API, vygenerujte klíč a sem zkopírujte URL pro import galerie a klíč.',
+    'gallery_migration.import_destination' => 'Vytvoří zde novou podgalerii včetně fotografií a existujících náhledů.',
+    'gallery_migration.connection_options' => 'Nastavení připojení',
+    'gallery_migration.javascript_required' => 'Pro přenos balíčků galerie a zobrazení průběhu zapněte JavaScript.',
+    'gallery_migration.source_key_help' => 'Pro přenos galerie zkopírujte URL pro import galerie a tento klíč do cílové galerie v Upravit → Média → Import galerie. Klíč také povoluje přístup k tomuto zdrojovému stromu pro migraci.',
+    'gallery_migration.import_url' => 'URL pro import galerie',
+    'gallery_migration.copy_import_url' => 'Kopírovat URL pro import galerie',
+    'gallery_migration.source_api_title' => 'API klíč galerie',
     'admin.telemetry.daily_detail' => 'Denní detail',
     'admin.telemetry.daily_unavailable' => 'Denní detail není dostupný',
     'admin.telemetry.daily_help' => 'Sloupce ukazují dochovaná denní měření. Každý ukazatel má vlastní měřítko. Přesné hodnoty zobrazíte najetím myši nebo v Denním detailu. Chybějící či již smazané dny nedoplňujeme nulami. Přenesené bajty obrázků nezahrnují downloady.',

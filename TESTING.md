@@ -221,6 +221,16 @@ It covers scoped nested tabs, direct/live source groups, chooser replacement
 with readable titles and nonzero action icons under the production CSS cascade,
 without rebasing unrelated revision tokens, canonical completion and retained
 panel/URL state. Controlled audio/transport adapters do not qualify real codecs.
+Its Media import cases render the production pull form, verify separate source
+URL/key copy controls and omitted disabled-capability markup, then exercise
+manifest/status/package/completion through the real delegated migration owner.
+They cover scoped POST credentials/CSRF, a refused manifest, canonical mutation
+handoff, retained panel/URL, recursive scope OFF and a dynamically replaced
+import form. Desktop/narrow tab geometry includes Import. The transport adapter
+does not qualify a real two-installation transfer: manually check equal-version
+source/target, imported originals and thumbnail checksums, interrupted resume
+and temporary-key revocation before production use. Native no-script output
+explains that this staged transfer requires JavaScript.
 It also covers lazy album rows, preview without assignment, the shared-header
 preference, serial bulk writes with fresh CAS tokens, already-present skipping
 and exactly one outer editor after replacement. The repository database fixture
@@ -1106,7 +1116,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.146.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.147. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -2963,8 +2973,16 @@ confirm the classic path still creates exactly one gallery and remains the
 explicit server-side choice.
 
 Run `node tests/browser_upload_zip_worker_test.mjs` for the generated
-stored/Deflate mixed-archive worker fixture. Node is a development-only test
-convenience; it is not required by the deployed PHP application.
+stored/Deflate mixed-archive worker fixture, manual mixed-selection streaming,
+sparse large-archive admission above 64 MiB, global/drawer ordering, real worker
+integrity skips, exact lost-ACK batch replay and pre-write refusal of a malformed
+later archive. The clipboard Chromium fixture verifies that a prepared source
+ZIP has no PHP-size warning while direct originals and classic selections retain
+theirs. Manually select a large real ZIP on desktop and narrow layouts, then
+confirm bounded outgoing requests and the unchanged target gallery, including
+Retry after interrupted transport. Physical process memory and Safari/Firefox
+remain separate manual coverage. Node is a development-only test convenience;
+it is not required by the deployed PHP application.
 
 Run one focused test directly when diagnosing a failure:
 

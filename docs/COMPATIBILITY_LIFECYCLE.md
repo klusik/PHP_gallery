@@ -1741,12 +1741,20 @@ and Safari/Firefox/mobile qualification remain separate evidence requirements.
 Retirement of the manual alternative requires those supported-source/client
 acceptance proofs; it is not inferred from one successful Shared Album export.
 
-Manual ZIP selections retain the 64 MiB aggregate-original cap. Automatic
-sources
-use OPFS and the existing pull-driven worker/batcher seam, bounding one original
-to 64 MiB/the effective server limit instead of retaining every image. Both
-modes
-retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and
+Manual ZIP selections and automatic sources use the existing pull-driven
+worker/batcher seam, bounding one original to 64 MiB/the effective server limit
+instead of retaining every image. Automatic downloads use OPFS; manual picker
+Files are already disk-backed and need no OPFS copy. The former manual
+aggregate cap rejected an observed 259.9 MiB screenshot archive before upload;
+the preview also incorrectly compared that local source with a 48 MiB PHP
+request limit. Manual imports now retain metadata/cursors and exact pending ZIP
+batches for retry, preserve mixed-selection order, and inspect all selected
+archives before any server write. The inherited ZIP worker owner covers sparse
+80 MiB declared-original admission, real worker extraction, mixed order,
+integrity skips, exact lost-ACK replay and malformed-later-archive refusal.
+These synthetic scenarios do not measure real browser-process memory or prove
+Safari/Firefox/physical large-archive acceptance; that usage remains unknown.
+Both modes retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and
 explicit
 ZIP64/multi-disk refusal. Apple's actual exported ZIP appends 205 zero bytes
 after

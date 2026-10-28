@@ -43,8 +43,8 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026100
 import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261021-smart-photo-tags-v2';
-import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261021-smart-photo-tags-v2';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261029-manual-zip-v1';
+import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261029-manual-zip-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20261021-smart-photo-tags-v2';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20261012-pdf-fields-v1';
@@ -53,7 +53,7 @@ import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsaved
 import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning, adminOperationOwnsInput} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=20261003-grid-default-v1';
 import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261021-upload-media-v1';
-import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261017-music-v3';
+import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261029-manual-zip-v1';
 
 /**
  * Presentation metadata resolved from an enhanced link; refreshes need only name.

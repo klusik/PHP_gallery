@@ -331,7 +331,15 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
         $section = (string) ($_POST['return_media_section'] ?? '');
         if (in_array(
             $section,
-            ['images', 'music', 'pdf', 'presentation', 'artwork', 'archive'],
+            [
+                'images',
+                'music',
+                'pdf',
+                'presentation',
+                'import',
+                'artwork',
+                'archive',
+            ],
             true,
         )) {
             $params['media_section'] = $section;

@@ -7,6 +7,7 @@
  * Responsibilities:
  *   - Keep related fields and preview actions together in gallery editors
  *   - Keep tables and upload controls usable at narrow panel widths
+ *   - Present the gallery API import beside the existing upload tools
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -1110,4 +1111,290 @@
     display: inline-flex;
     align-items: center;
     margin: 0;
+}
+
+/* Shared transfer surface: Media import and the retained advanced API tools. */
+#admin-edit-media:has(#admin-gallery-media-import:not([hidden])) {
+    color: var(--ink);
+    background: var(--panel);
+}
+
+#admin-edit-media:has(#admin-gallery-media-import:not([hidden])) .gallery-editor-media-tabs {
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+#admin-edit-media:has(#admin-gallery-media-import:not([hidden])) .gallery-editor-media-tabs [role="tab"] {
+    color: var(--ink);
+}
+
+#admin-edit-media:has(#admin-gallery-media-import:not([hidden])) .gallery-editor-media-tabs [role="tab"].is-active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+#admin-edit-api .admin-gallery-api :is(h3, h4, .admin-upload-key-warning) {
+    color: var(--ink);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0.65rem;
+    color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-grid {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+#admin-edit-media .admin-gallery-migration-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card {
+    display: grid;
+    align-content: start;
+    gap: 0.65rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    color: inherit;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-api-tool-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel :is(h3, h4, p) {
+    margin: 0;
+    color: inherit;
+    overflow-wrap: anywhere;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel :is(h3, h4) {
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 650;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card label:not(.admin-checkbox-row) {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+    font-size: 0.82rem;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input:not([type="checkbox"]):not([type="hidden"]) {
+    width: 100%;
+    min-width: 0;
+    min-height: 32px;
+    height: auto;
+    box-sizing: border-box;
+    padding: 0.3rem 0.5rem;
+    color: var(--ink);
+    font-size: 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: min(var(--radius, 6px), 6px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input::placeholder {
+    color: color-mix(in srgb, var(--ink) 65%, transparent);
+    opacity: 1;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-api-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card .admin-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 28px;
+    margin: 0;
+    color: inherit;
+    font-size: 0.82rem;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"] {
+    appearance: none;
+    flex: 0 0 26px;
+    width: 26px;
+    min-width: 26px;
+    height: 14px;
+    min-height: 14px;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]::before {
+    content: "";
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]:checked {
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]:checked::before {
+    transform: translateX(12px);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-actions button,
+#admin-edit-api .admin-gallery-api button {
+    width: auto;
+    min-height: 28px;
+    padding: 0.25rem 0.6rem;
+    color: var(--ink);
+    font-size: 0.82rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+    border-radius: min(var(--radius, 6px), 6px);
+    background: transparent;
+    box-shadow: none;
+    text-decoration: none;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-actions button[type="submit"] {
+    border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel :focus-visible,
+#admin-edit-api .admin-gallery-api :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel .admin-inline-help > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    color: var(--ink);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel .admin-inline-help-content {
+    color: var(--ink);
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel .admin-inline-help-content[popover],
+#admin-edit-api .admin-gallery-api .admin-inline-help-content[popover] {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    box-sizing: border-box;
+    padding: 0.65rem;
+    color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+}
+
+#admin-edit-api .admin-gallery-api .admin-inline-help > summary {
+    color: var(--ink);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel > .muted,
+#admin-edit-media :is(.admin-gallery-import-instructions, .admin-gallery-import-destination, .admin-gallery-import-options) {
+    font-size: 0.82rem;
+}
+
+#admin-edit-media .admin-gallery-import-options {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+#admin-edit-media .admin-gallery-import-options > summary {
+    width: fit-content;
+    min-height: 28px;
+    padding: 0;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+#admin-edit-media .admin-gallery-import-options[open] > summary {
+    margin-bottom: 0.4rem;
+}
+
+:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-log {
+    max-width: 100%;
+    box-sizing: border-box;
+    color: var(--ink);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel :is(button, summary, .admin-checkbox-row),
+    #admin-edit-api .admin-gallery-api button,
+    #admin-edit-api .admin-gallery-api input:not([type="hidden"]),
+    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input:not([type="checkbox"]):not([type="hidden"]) {
+        min-height: 44px;
+    }
+
+    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel .admin-inline-help > summary,
+    #admin-edit-api .admin-gallery-api .admin-copy-icon {
+        min-width: 44px;
+    }
+
+    #admin-edit-api .admin-gallery-api .admin-upload-copy-row {
+        grid-template-columns: minmax(0, 1fr) 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"] {
+        appearance: auto;
+    }
+
+    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]::before {
+        display: none;
+    }
 }

@@ -45,7 +45,6 @@ async function harness() {
         browserUploadSessionId = () => 'original-session';
         browserProgressMetrics = () => ({});
         formatFileSize = value => String(value);
-        expandBrowserUploadArchives = async () => ({files,skipped:0});
         processFilesWithWorkerPool = async (items, config, onItem) => {
             for (let index=0;index<items.length;index++) {
                 throwIfUploadStreamAborted(config.signal);

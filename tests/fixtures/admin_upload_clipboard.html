@@ -18,7 +18,7 @@ License: MIT License (see LICENSE file in repository)
 <script type="module">
 import {setupGalleryUploadProgress} from '/public/assets/gallery-modules/admin-side-panel.js';
 import {clipboardUploadFiles} from '/public/assets/gallery-modules/admin-upload-selection.js?v=20261008-issue118-v3';
-import {allowGalleryUploadQueueTransition} from '/public/assets/gallery-modules/admin-upload-preview.js?v=20261017-music-v3';
+import {allowGalleryUploadQueueTransition} from '/public/assets/gallery-modules/admin-upload-preview.js?v=20261029-manual-zip-v1';
 import {browserUploadZipSelected} from '/public/assets/gallery-modules/admin-browser-upload.js';
 let assertions = 0;
 const posts = [], completions = [];
@@ -313,7 +313,7 @@ try {
         new File([wideBytes], 'wide.png', {type: 'image/png'}),
         new File([new Uint8Array(2048)], 'unreadable.png', {type: 'image/png'}),
         new File(['codec'], 'photo.heic', {type: 'image/heic'}),
-        new File(['archive'], 'photos.zip', {type: 'application/zip'}),
+        new File([new Uint8Array(2048)], 'photos.zip', {type: 'application/zip'}),
         new File(['svg'], '<b>unsafe.svg</b>', {type: 'image/svg+xml'})]) selection.items.add(file);
     validationInput.files = selection.files;
     validationInput.dispatchEvent(new Event('change', {bubbles: true}));
@@ -322,7 +322,7 @@ try {
     check(tiles.length === 8 && new FormData(validation).getAll('images[]').length === 8, 'Warnings retain every original occurrence in the native upload selection');
     check(tiles[0].textContent.includes('Repeated filename') && tiles[1].textContent.includes('Repeated filename'), 'Repeated filenames are visible without deduplicating deliberate selections');
     check(tiles[2].textContent.includes('Empty file') && tiles[4].textContent.includes('Exceeds 1.0 KiB'), 'Zero-byte and effective server-size warnings are per item');
-    check(tiles[6].textContent.includes('Enable prepared upload for ZIP'), 'ZIP warning reflects the current submit path');
+    check(tiles[6].textContent.includes('Enable prepared upload for ZIP') && tiles[6].textContent.includes('Exceeds 1.0 KiB'), 'Classic ZIP selection retains path and per-request warnings');
     check(tiles[7].textContent.includes('<b>unsafe.svg</b>') && !tiles[7].querySelector('b'), 'Untrusted filenames remain text rather than markup');
     await until(() => tiles[0].querySelector('img:not([hidden])'), 'Healthy file still receives a preview beside invalid selections');
     for (const index of [3, 4, 5]) {
@@ -334,6 +334,8 @@ try {
     preparedToggle.checked = true;
     preparedToggle.dispatchEvent(new Event('change', {bubbles: true}));
     check(!validationView.textContent.includes('Enable prepared upload for ZIP') && validationView.textContent.includes('Use classic upload for this format'), 'Switching preparation updates format warnings without dropping Files');
+    const preparedTiles = validationView.querySelectorAll('[data-upload-queue-id]');
+    check(!preparedTiles[6].textContent.includes('Exceeds') && preparedTiles[4].textContent.includes('Exceeds 1.0 KiB'), 'Prepared ZIP source size is independent of the preserved per-image server limit');
     validationView.querySelector('[data-upload-queue-action="remove"]').click();
     check(validationInput.files.length === 7 && !validationView.textContent.includes('Repeated filename'), 'Removing one occurrence clears stale collision warnings for the remaining file');
     validation.reset(); await settle();

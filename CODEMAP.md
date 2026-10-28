@@ -564,6 +564,7 @@ tag controller through the pagination and description-layout services.
 | Task | Files |
 | --- | --- |
 | Admin migration UI and side-panel completion | `app/controllers/gallery_migration.php`, `app/views/admin_gallery_migration.php`, `public/assets/gallery-modules/admin-gallery-migration.js`, `public/assets/gallery-modules/admin-side-panel.js` |
+| Media import entry and source copy controls | `app/controllers/admin_galleries_edit_page/tab_documents.php`, `app/views/admin_gallery_edit_tabs.php`, `app/controllers/upload_automation.php`, `app/views/upload_automation.php`; capability-gated Media import reuses the pull workflow, source copy controls expose the canonical URL separately from the key, and shared media panels own help. |
 | Migration service model | `app/services/gallery_migration.php` (parts in `app/services/gallery_migration/`) |
 | Manifest endpoint | Handler `cms_gallery_migration_manifest` |
 | Asset endpoint | Handler `cms_gallery_migration_asset` |

@@ -173,7 +173,9 @@ function selectionWarnings(state, file, repeatedName) {
         && !['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
         warnings.push(label(state.view, 'browserFormat'));
     }
-    if (state.uploadLimitBytes && file.size > state.uploadLimitBytes) {
+    // Browser ZIP imports send extracted images in bounded prepared batches;
+    // the source archive itself never crosses the PHP upload boundary.
+    if (!(isZip && preparing) && state.uploadLimitBytes && file.size > state.uploadLimitBytes) {
         warnings.push(label(state.view, 'largeUpload', {size: fileSize(state.uploadLimitBytes)}));
     }
     return warnings;

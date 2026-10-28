@@ -24,6 +24,7 @@ import {appendUploadProgressLog, i18n as globalI18n, i18nForElement} from './adm
  * @property {number} startIndex Zero-based next not-yet-prepared image; set by the existing upload cursor.
  * @property {AbortSignal} signal Current explicit attempt cancellation.
  * @property {ArchiveStreamEntry[]} entries Ordered metadata only, retaining worker indices after counted skips.
+ * @property {function(ArchiveStreamEntry):Promise<File|null>} readEntry Read and verify one descriptor; null counts an integrity skip.
  * @property {function():AsyncIterator<File>} [Symbol.asyncIterator] Pull one original at a time.
  * @property {function():Promise<void>} cancel Stop the disposable worker without deleting the source.
  * @property {function():Promise<void>} dispose Release the worker; metadata stays available for retry.
@@ -31,10 +32,10 @@ import {appendUploadProgressLog, i18n as globalI18n, i18nForElement} from './adm
 
 /** Open an immutable archive with the existing extraction policy and return its pull-driven File source.
  * @param {File} file Closed OPFS snapshot or ordinary disk-backed source archive.
- * @param {{uploadLimitBytes:number}} config Existing effective server per-image admission limit.
+ * @param {{uploadLimitBytes:number,allowEmpty?:boolean}} config Server per-image limit; manual mixed selections can retain an empty archive's counted skips.
  * @param {HTMLElement} progress Original form's progress/log surface.
  * @param {AbortSignal} signal First attempt cancellation signal.
- * @returns {Promise<BrowserArchiveStream>} Metadata-only stream; malformed or empty archives reject before server writes.
+ * @returns {Promise<BrowserArchiveStream>} Metadata-only stream; malformed archives and empty automatic sources reject before server writes.
  */
 export async function createBrowserArchiveStream(file, config, progress, signal) {
     const i18n = (key, fallback = '', parameters = {}) => i18nForElement(progress, key, globalI18n(key, fallback), parameters);
@@ -73,28 +74,106 @@ export async function createBrowserArchiveStream(file, config, progress, signal)
         catch (error) { await stop(); throw error; }
     };
     const inspected = await open();
-    if (!inspected.entries?.length) { await stop(); throw new Error(i18n('admin.browser_upload.zip_no_supported_images')); }
+    if (!inspected.entries?.length && !config.allowEmpty) { await stop(); throw new Error(i18n('admin.browser_upload.zip_no_supported_images')); }
     for (const [reason, count] of Object.entries(inspected.reasons || {})) {
         appendUploadProgressLog(progress, i18n('admin.icloud.skipped', '', {count, reason: i18n('admin.icloud.skip_' + reason)}));
     }
     stream = {pageCount: inspected.entries.length, startIndex: 0, signal, entries: inspected.entries, cancel: stop, dispose: stop};
+    stream.readEntry = async descriptor => {
+        await open();
+        const result = await request('readUploadZipEntry', {entryIndex: descriptor.index});
+        if (!result.entry) return null;
+        return new File([result.entry.blob], result.entry.name, {lastModified: file.lastModified});
+    };
     stream[Symbol.asyncIterator] = async function* () {
         if (stream.startIndex >= stream.entries.length) return;
         await open();
         let index = stream.startIndex;
         while (index < stream.entries.length) {
             const descriptor = stream.entries[index];
-            const result = await request('readUploadZipEntry', {entryIndex: descriptor.index});
-            if (!result.entry) {
+            const original = await stream.readEntry(descriptor);
+            if (!original) {
                 stream.entries.splice(index, 1);
                 stream.pageCount = stream.entries.length;
                 appendUploadProgressLog(progress, i18n('admin.icloud.skipped', '', {count: 1, reason: i18n('admin.icloud.skip_integrity')}));
                 continue;
             }
-            const entry = result.entry;
-            const original = new File([entry.blob], entry.name, {lastModified: file.lastModified});
             index++;
             yield original;
+        }
+    };
+    return stream;
+}
+
+/** Describe one selected original or archive descriptor without extracted bytes.
+ * @typedef {{name:string,webkitRelativePath?:string,file?:File,reader?:BrowserArchiveStream,entry?:ArchiveStreamEntry}} SelectionStreamEntry
+ */
+/** Describe the manual selection's metadata and retry cursor.
+ * @typedef {Object} BrowserUploadSelectionStream
+ * @property {number} pageCount Admitted originals, reduced for integrity skips.
+ * @property {number} startIndex Next unstaged original in the retained ordering.
+ * @property {AbortSignal} signal Current attempt's cancellation signal.
+ * @property {function():AsyncIterator<File>} [Symbol.asyncIterator] Read one original on demand.
+ * @property {function():Promise<void>} cancel Stop the current archive reader.
+ * @property {function():Promise<void>} dispose Release the reader, retaining metadata for retry.
+ */
+
+/** Inspect selected ZIPs before upload and stream their images among ordinary Files.
+ * @param {File[]} files Immutable sources in the selected drawer order.
+ * @param {{uploadLimitBytes:number}} config Effective server per-image limit.
+ * @param {HTMLElement} progress Original upload progress and localized log.
+ * @param {AbortSignal} signal Initial explicit attempt cancellation.
+ * @param {(function(SelectionStreamEntry,SelectionStreamEntry):number)|null} compare Natural folder ordering, or null to preserve drawer order.
+ * @returns {Promise<BrowserUploadSelectionStream>} Metadata-only source; invalid archives reject before server writes.
+ */
+export async function createBrowserUploadSelectionStream(files, config, progress, signal, compare = null) {
+    /** @type {SelectionStreamEntry[]} Ordered descriptors; no extracted payloads. */
+    const entries = [];
+    for (const file of files) {
+        if (signal.aborted) throw new Error(i18nForElement(progress, 'admin.icloud.cancelled'));
+        const zip = /\.zip$/i.test(file.name)
+            || ['application/zip', 'application/x-zip-compressed'].includes(file.type.toLowerCase());
+        if (!zip) {
+            entries.push({name: file.name, webkitRelativePath: file.webkitRelativePath, file});
+            continue;
+        }
+        appendUploadProgressLog(progress, i18nForElement(progress,
+            'admin.browser_upload.log_extracting_zip', '',
+            {name: file.name, bytes: file.size.toLocaleString() + ' B'}));
+        const reader = await createBrowserArchiveStream(file, {...config, allowEmpty: true}, progress, signal);
+        // Inspection retains directory metadata only. Keep at most one live
+        // reader during consumption, even when natural sorting interleaves ZIPs.
+        await reader.dispose();
+        for (const entry of reader.entries) entries.push({name: entry.name, reader, entry});
+    }
+    if (compare) entries.sort(compare);
+    let activeReader = null;
+    const dispose = async () => {
+        if (activeReader) await activeReader.dispose();
+        activeReader = null;
+    };
+    const stream = {pageCount: entries.length, startIndex: 0, signal, cancel: dispose, dispose};
+    stream[Symbol.asyncIterator] = async function* () {
+        let index = stream.startIndex;
+        while (index < entries.length) {
+            if (stream.signal.aborted) throw new Error(i18nForElement(progress, 'admin.icloud.cancelled'));
+            const descriptor = entries[index];
+            if (activeReader !== (descriptor.reader || null)) {
+                await dispose();
+                activeReader = descriptor.reader || null;
+            }
+            if (activeReader) activeReader.signal = stream.signal;
+            const file = descriptor.file || await activeReader.readEntry(descriptor.entry);
+            if (!file) {
+                entries.splice(index, 1);
+                stream.pageCount = entries.length;
+                appendUploadProgressLog(progress, i18nForElement(progress,
+                    'admin.icloud.skipped', '',
+                    {count: 1, reason: i18nForElement(progress, 'admin.icloud.skip_integrity')}));
+                continue;
+            }
+            index++;
+            yield file;
         }
     };
     return stream;

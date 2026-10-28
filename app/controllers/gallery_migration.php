@@ -1250,13 +1250,17 @@ function gallery_migration_admin_mutation_descriptor(
 }
 
 /**
- * Render the gallery migration controls for the API tab.
+ * Render shared migration controls for the API or Media tab.
  *
  * @param array{id:int|string,title?:string,name?:string,public_id?:string} $gallery Gallery row containing its identifier and display data.
+ * @param bool $importOnly Whether Media requests only the target-pull form.
  *
  * @return void Render the migration controls for the supplied gallery.
  */
-function render_admin_gallery_migration_panel(array $gallery): void
+function render_admin_gallery_migration_panel(
+    array $gallery,
+    bool $importOnly = false,
+): void
 {
     if (function_exists(
         'Gallery\\Views\\view_render_admin_gallery_migration_panel',
@@ -1265,6 +1269,7 @@ function render_admin_gallery_migration_panel(array $gallery): void
             $gallery,
             gallery_migration_current_version(),
             GALLERY_MIGRATION_RECONNECT_SECONDS,
+            $importOnly,
         );
     }
 }

@@ -103,11 +103,13 @@ and
 multi-disk structures still fail explicitly. These are admission bounds, not a
 measurement of total heap/decoder memory.
 
-Manual ZIP selections retain their aggregate 64-MiB original budget. Automatic
-imports retain one original/worker item and bounded packages, not an all-images
-File array. Integrity skips reduce the source count; remaining ZIP directory
-order
-is preserved. RAW/HEIC/HEIF, video/Live Photo motion and sidecars have localized
+Manual ZIP selections and automatic imports both retain one original/worker
+item and bounded packages, not an all-images File array. Manual archives can
+exceed 64 MiB in aggregate; the shared per-image, directory, entry-count and
+expanded-data bounds remain enforced. Manual selection streams also retain
+source descriptors and the existing exact batch/cursor across lost responses.
+Integrity skips reduce the source count; automatic imports preserve remaining
+ZIP directory order. RAW/HEIC/HEIF, video/Live Photo motion and sidecars have localized
 counted skips, with no rename-as-conversion or unrequested local lossy
 conversion.
 

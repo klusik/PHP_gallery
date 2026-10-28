@@ -177,7 +177,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.146.1';
+const CMS_VERSION = '0.147';
 ```
 
 Update-related code uses:
@@ -2775,8 +2775,20 @@ formatting.
 
 When browser-assisted upload is selected, the file input also accepts user ZIP
 archives such as iCloud Photos exports. Archives are inspected and expanded
-entirely in a short-lived browser worker before the normal image-preparation
-pool runs; the original user ZIP is never posted to PHP. The parser reads the
+through bounded metadata inspection in a browser worker before any server
+write. The manual selection then pulls one verified image at a time through
+`browser-upload-archive-stream.js` and the existing File-stream uploader;
+the original user ZIP is never posted to PHP. Mixed selections preserve drawer
+order or the standalone form's natural image order across archive boundaries.
+The source descriptors, cursor, upload session and exact pending batch survive
+an uncertain acknowledgment. Extracted originals are never collected into an
+all-images File array, so a large archive does not consume a 64 MiB aggregate
+retention budget. Per-image limits, bounded directory/expanded data, CRC checks,
+server request ceilings and prepared-thumbnail checks remain authoritative.
+Manual new-gallery visibility still follows the explicit form and server; the
+automatic iCloud source retains its Private/Unpublished requirement.
+The preview does not compare a locally expanded ZIP with the PHP request limit;
+ordinary originals retain their per-file size warnings. The parser reads the
 central directory, supports stored and Deflate entries, skips directories,
 hidden metadata, encrypted entries, unsupported compression and unsupported
 media, and verifies image signatures. It refuses traversal paths,
@@ -4508,31 +4520,43 @@ installs. It supports receive status and completion endpoints so a transfer can
 compare already-present files and avoid re-sending successful assets after
 reconnects.
 
+The gallery editor exposes target-pull directly under **Media → Import
+gallery**. `tab_documents.php` prepares the import fragment only when the
+existing `gallery_migration` capability is effective, and the shared migration
+view renders only the pull form there. The full bidirectional tools remain in
+the API area's advanced disclosure. Source API-key controls expose a separate
+canonical absolute `gallery_migration_manifest` URL using the current mount;
+the API key selects the source gallery, so credentials never belong in that URL.
+This adds no schema, route, runtime module or transfer protocol.
+
 The Admin migration endpoint is a JSON-only enhanced workflow. Authentication,
 CSRF, missing-gallery, expected step failures, and success responses therefore
 remain JSON and do not redirect the injected editor to a standalone Admin page.
 `target_pull` is a local persistent mutation as soon as the source manifest is
-accepted because `gallery_migration_prepare_target_job()` applies gallery
-metadata before asset transfer finishes. The pull-manifest and pull-complete
-responses consequently carry the canonical mutation result for the stable local
-gallery ID plus the current gallery and owning parent/root public render
-contexts. Imported slug changes use the new canonical render URL while the
-visible browser URL remains unchanged.
+accepted because `gallery_migration_prepare_target_job()` creates a child tree
+below the receiving gallery before asset transfer finishes. The receiving
+parent's settings remain unchanged. Pull-manifest and pull-complete responses
+carry canonical mutation metadata and public contexts for the receiving parent
+and imported root, using their current canonical URLs.
 
 `admin-gallery-migration.js` owns transfer progress, reconnect/status handling,
 cancellation, and log markup while transfer is active. When it runs inside the
 gallery side panel, it forwards canonical local pull results through
-`php-gallery:auxiliary-mutation-success`. The result also identifies the
-`gallery-edit` panel fragment. Final target-pull completion, and partial failure
-after manifest acceptance, explicitly request a server-rendered editor refresh
-through `admin-side-panel.js`; the active API tab and drawer remain mounted
-while stale Identity/Access/Display/Media values are replaced. This prevents a
-later Save from writing pre-import form values back over imported metadata.
-Public invalidation and panel refresh remain separate coordinator
-responsibilities, and a partial transfer failure is reported in the persistent
-drawer status after already-applied local state is synchronized. Source-push
+`php-gallery:auxiliary-mutation-success`. Completion and partial failure after
+manifest acceptance request public synchronization with `refreshPanel: false`.
+The current editor and its import form remain mounted, retaining progress,
+credentials, the selected Media subsection and independent gallery drafts.
+The shared coordinator owns public invalidation; the workflow keeps local
+progress and error feedback. Source-push
 completion emits a typed remote mutation result but declares no local public
 contexts.
+
+The import uses Theme glass surfaces and compact transparent actions. Native
+help disclosures opt into `gallery-media-panels.js` for trigger anchoring,
+viewport bounds, outside/Escape dismissal and focus restoration, including
+dynamically inserted forms. Native forms use POST even without enhancement to
+avoid putting API keys into query strings; transfer orchestration itself remains
+JavaScript-only, with an explicit no-script explanation.
 
 ## Flight recording and protected report delivery
 

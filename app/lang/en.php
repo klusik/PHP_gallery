@@ -33,6 +33,15 @@
  */
 
 return [
+    'gallery_migration.import_tab' => 'Import gallery',
+    'gallery_migration.import_instructions' => 'In the source gallery, open API, generate a key and copy the gallery import URL and key here.',
+    'gallery_migration.import_destination' => 'Creates a new subgallery here, including photos and existing thumbnails.',
+    'gallery_migration.connection_options' => 'Connection options',
+    'gallery_migration.javascript_required' => 'Enable JavaScript to transfer gallery packages and follow progress.',
+    'gallery_migration.source_key_help' => 'For gallery transfer, copy the gallery import URL and this key into the target gallery under Edit → Media → Import gallery. This key also authorizes migration access to this source tree.',
+    'gallery_migration.import_url' => 'Gallery import URL',
+    'gallery_migration.copy_import_url' => 'Copy gallery import URL',
+    'gallery_migration.source_api_title' => 'Gallery API key',
     'admin.telemetry.daily_detail' => 'Daily detail',
     'admin.telemetry.daily_unavailable' => 'No daily detail',
     'admin.telemetry.daily_help' => 'Bars show retained daily observations, with a separate scale for each metric. Hover for exact values or open Daily detail. Missing or expired days are not filled with zeros. Image bytes exclude downloads.',

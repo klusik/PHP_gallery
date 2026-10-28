@@ -39,7 +39,12 @@ use function Gallery\Services\t;
 /**
  * Render the compact gallery-scoped upload API key panel.
  *
- * @param array<string,mixed> $viewModel Controller-prepared gallery API-key panel.
+ * @param array{gallery_id:int,schema_ready:bool,schema_message:string,
+ *     endpoint:string,migration_url?:string,new_token:string,
+ *     token_action_url:string,csrf_html:string,return_tab:string,
+ *     return_url:string,tokens:list<array{id:int|string,label?:string,
+ *     created_at?:string,last_used_at?:string|null}>} $viewModel Prepared
+ *     API-key state, canonical URLs and safe token metadata.
  * @return void Render the API controls.
  */
 function view_render_admin_gallery_upload_automation_panel(array $viewModel): void
@@ -48,14 +53,16 @@ function view_render_admin_gallery_upload_automation_panel(array $viewModel): vo
         '<section class="panel admin-upload-automation-panel admin-upload-automation-compact admin-gallery-api">';
     echo
         '<div class="admin-upload-automation-head"><h3>'
-            . e(t('upload_automation.title', 'Watched-folder upload API'))
+            . e((string) ($viewModel['migration_url'] ?? '') !== ''
+                ? t('gallery_migration.source_api_title', 'Gallery API key')
+                : t('upload_automation.title', 'Watched-folder upload API'))
             . '</h3>';
     echo
-        '<details class="admin-inline-help"><summary aria-label="'
+        '<details data-gallery-media-widget class="admin-inline-help"><summary aria-label="'
             . e(t('upload_automation.help_label', 'About upload API keys'))
             . '" title="'
             . e(t('upload_automation.help_label', 'About upload API keys'))
-            . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">'
+            . '"><span aria-hidden="true">?</span></summary><div data-gallery-media-panel class="admin-inline-help-content">'
             . e(t(
                 'upload_automation.help',
                 'Generate a gallery-scoped API key for the Windows companion app. The key can upload only into this gallery and can be revoked at any time.',
@@ -65,6 +72,12 @@ function view_render_admin_gallery_upload_automation_panel(array $viewModel): vo
                 'upload_automation.endpoint_help',
                 'Use this exact endpoint with the generated API key in the Windows uploader. The query-string front-controller form is the portable canonical API URL; clean /api/upload routing is treated only as a compatibility fallback.',
             ))
+            . ((string) ($viewModel['migration_url'] ?? '') !== ''
+                ? ' ' . e(t(
+                    'gallery_migration.source_key_help',
+                    'For gallery transfer, copy the gallery import URL and this key into the target gallery under Edit → Media → Import gallery. This key also authorizes migration access to this source tree.',
+                ))
+                : '')
             . '</div></details></div>';
 
     if (empty($viewModel['schema_ready'])) {
@@ -89,6 +102,25 @@ function view_render_admin_gallery_upload_automation_panel(array $viewModel): vo
             . '" title="'
             . e(t('upload_automation.copy_endpoint', 'Copy endpoint'))
             . '"><span aria-hidden="true">⧉</span></button><span class="visually-hidden" data-admin-copy-status role="status" aria-live="polite"></span></div>';
+    if ((string) ($viewModel['migration_url'] ?? '') !== '') {
+        echo '<div class="admin-upload-copy-row" data-admin-copy-row><label>'
+            . '<span>' . e(t(
+                'gallery_migration.import_url',
+                'Gallery import URL',
+            ))
+            . '</span><input type="text" readonly data-admin-copy-input value="'
+            . e($viewModel['migration_url']) . '"></label>'
+            . '<button type="button" class="secondary admin-copy-icon"'
+            . ' data-admin-copy-button data-copy-success="'
+            . e(t('upload_automation.copied', 'Copied'))
+            . '" aria-label="'
+            . e(t('gallery_migration.copy_import_url', 'Copy gallery import URL'))
+            . '" title="'
+            . e(t('gallery_migration.copy_import_url', 'Copy gallery import URL'))
+            . '"><span aria-hidden="true">⧉</span></button>'
+            . '<span class="visually-hidden" data-admin-copy-status'
+            . ' role="status" aria-live="polite"></span></div>';
+    }
     if ((string) ($viewModel['new_token'] ?? '') !== '') {
         echo
             '<div class="admin-upload-copy-row admin-upload-new-key" data-admin-copy-row><label><span>'

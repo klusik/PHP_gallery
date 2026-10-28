@@ -18,20 +18,20 @@ import vm from 'node:vm';
  * @typedef {{newGallery?:boolean,loseAck?:boolean,loseCreate?:boolean,wrongPng?:boolean}} StreamOptions
  */
 /** Describe the existing stream coordinator with deterministic transport/storage adapters.
- * @typedef {{upload:typeof import('../../public/assets/gallery-modules/admin-browser-upload.js').uploadBrowserFileStream,state:{events:string[],requests:Array<{session:string,index:number,blob:Blob,endpoint:string,conversionToken:string}>,inserted:Set<string>,creations:Set<string>,createRequests:number,store:Map<string,Blob|{originalFile:File,originalSize:number,originalName:string,originalPath:string,variants:Array<{path:string,blob:Blob}>,sourceIndex:number}>,loseAck:boolean,loseCreate:boolean}}} StreamHarness
+ * @typedef {{upload:typeof import('../../public/assets/gallery-modules/admin-browser-upload.js').uploadBrowserFileStream,context:vm.Context,state:{events:string[],requests:Array<{session:string,index:number,blob:Blob,endpoint:string,conversionToken:string}>,inserted:Set<string>,creations:Set<string>,createRequests:number,store:Map<string,Blob|{originalFile:File,originalSize:number,originalName:string,originalPath:string,variants:Array<{path:string,blob:Blob}>,sourceIndex:number}>,loseAck:boolean,loseCreate:boolean}}} StreamHarness
  */
 
 /** Load the production stream/batcher while replacing only filesystem, codec and HTTP boundaries.
  * @param {StreamOptions} options Deliberate lost responses or wrong converter output.
  * @returns {Promise<StreamHarness>} Real stream coordinator and batcher with observable, synthetic transport effects.
  */
-async function streamHarness(options = {}) {
+export async function streamHarness(options = {}) {
     const state = {events: [], requests: [], inserted: new Set(), creations: new Set(), createRequests: 0, store: new Map(), loseAck: Boolean(options.loseAck), loseCreate: Boolean(options.loseCreate)};
     const config = {enabled: true, endpoint: '/prepared', thumbnailSizes: [], thumbnailFormats: [], workerCount: 1, uploadLimitBytes: 1024 * 1024, batchTargetBytes: 1024, maxItemsPerBatch: 1};
     const context = vm.createContext({URL, Blob, File, AbortController, Uint8Array, options, state, config, window: {location: {href: 'https://gallery.example/admin', origin: 'https://gallery.example'}},
         appendUploadProgressLog: () => {}, updateBasicProgress: () => {}, updateUploadProgressMetrics: () => {}, assertAdminOperationCurrent: () => {},
         i18nForElement: (element, key, fallback, parameters = {}) => {
-            assert.ok(element === form || element === progress, 'Image-stream messages use their original form/progress Admin scope');
+            assert.ok(element === form || element === progress || element === context.manualForm || element === context.manualProgress, 'Image-stream messages use their original form/progress Admin scope');
             return Object.entries(parameters).reduce((text, [name, value]) => text.replaceAll('{' + name + '}', String(value)), fallback || key);
         },
         i18n: (key, fallback, parameters = {}) => Object.entries(parameters).reduce((text, [name, value]) => text.replaceAll('{' + name + '}', String(value)), fallback || key)});
@@ -47,6 +47,7 @@ async function streamHarness(options = {}) {
         processFilesWithWorkerPool = async (files,settings,onItem) => {
             const file=files[0];
             state.events.push('prepare:'+settings.workerItemIdOffset);
+            state.events.push('file:'+file.name);
             await onItem({sourceIndex:settings.workerItemIdOffset,originalFile:options.wrongPng?new File(['changed'],file.name,{type:file.type}):file,
                 originalName:file.name,originalPath:'originals/'+file.name,originalDetectedFormat:'png',originalMime:file.type,originalSize:file.size,variants:[]},1,1);
         };
@@ -68,7 +69,7 @@ async function streamHarness(options = {}) {
         };
         this.upload=uploadBrowserFileStream;
     `, context);
-    return {upload: context.upload, state};
+    return {upload: context.upload, state, context};
 }
 
 /** Construct an ordered, regenerable synthetic source starting at the retained upload cursor.
@@ -124,4 +125,20 @@ assert.equal(lostCreate.state.creations.size, 1, 'Unknown creation acknowledgmen
 const pdf = await streamHarness({wrongPng: true});
 await assert.rejects(() => pdf.upload(form, progress, {key: 'pdf-default', prepared: null, unresolved: false}, imageStream(pdf.state.events)), /failed PNG preparation/);
 assert.equal(pdf.state.requests.length, 0, 'Default PDF mode still refuses changed converter originals before upload');
+
+const publicForm = {querySelector: selector => selector === '[name="upload_mode"]'
+    ? {value: 'new'} : selector === '[name="visibility"]' ? {value: 'public'} : null};
+const manualPublic = await streamHarness({newGallery: true});
+manualPublic.context.manualForm = publicForm;
+const publicResult = await manualPublic.upload(publicForm, progress,
+    {key: 'manual-public-create', prepared: null, unresolved: false},
+    imageStream(manualPublic.state.events), {sourceKind: 'selection'});
+assert.equal(publicResult.uploaded, 2, 'Manual selections preserve server-validated new-gallery visibility');
+assert.equal(manualPublic.state.createRequests, 1);
+const automaticPublic = await streamHarness({newGallery: true});
+automaticPublic.context.manualForm = publicForm;
+await assert.rejects(() => automaticPublic.upload(publicForm, progress,
+    {key: 'automatic-public-refusal', prepared: null, unresolved: false},
+    imageStream(automaticPublic.state.events), {sourceKind: 'images'}), /private_required/);
+assert.equal(automaticPublic.state.createRequests, 0, 'Automatic import keeps its private-new-target requirement');
 console.log('Existing image File-stream interleaving, exact batch/create replay and default strict PDF PNG preservation passed.');
