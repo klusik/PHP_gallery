@@ -2091,6 +2091,34 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
 
 ## Updater and release compatibility
 
+### UPD-5 — Source ZIPs without HTTP Range support
+
+- **Reason / protected scenario:** GitHub's codeload source archive can ignore
+  Range and return HTTP 200. Short workers then repeatedly replace the same
+  partial archive without reaching extraction. Cached PHP stat results can
+  additionally misreport newly written bytes, including resumed completion.
+- **Owner:** `updates_jobs/download.php` owns refreshed measurements, bounded
+  restart counting and published-archive selection. `updates_filesystem.php`
+  recognizes the flat production ZIP and the historical source wrapper.
+- **Safety:** Three incomplete full-response restarts select a published asset
+  through one metadata request per slice. Its canonical URL, version, original
+  full commit, positive size and SHA-256 are required. Raw ZIP digest validation
+  precedes extraction regardless of the optional per-file verifier. A retry
+  clears old archive receipts and keeps the commit. No request limit is raised.
+- **Evidence / tests:** On 2026-10-28, the source archive at `9cb0125e` ignored
+  a GET Range request and exceeded one two-second opportunity; the existing
+  published production asset returned the requested 206 byte range.
+  `updater_download_transport_test.php` covers both confined transport paths,
+  resumed file sizes, short writes, fallback identity and digest refusal,
+  evidence preservation and retry. Hosted execution must qualify the changed
+  candidate; an earlier green develop does not execute the added fixture.
+- **Usage / support rationale:** Production frequency and installed-client
+  distribution are unknown. Preserve source archives for unpublished snapshots
+  and older releases; no matching asset may be inferred from version alone.
+  The first hop from an older installed downloader remains operator acceptance
+  work. Safe retirement requires a supported upgrade floor and equivalent
+  bounded download/identity coverage, not a passing fast-network check.
+
 
 ### FILES-1 — Windows layout-migration sidecar sharing locks
 

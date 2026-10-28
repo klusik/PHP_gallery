@@ -3485,6 +3485,19 @@ Tillfälliga hämtnings- eller webbhotellsfel kan försöks igen. Ett paket vars
 
 Upptäckt av stabila utgåvor och paketarbete är separata begränsade åtgärder. En upptäcktsbegäran kan skapa ett beständigt bakgrundsjobb, medan en senare säker begäran eller CLI-köraren driver en kort del genom hämtning, arkivvalidering, uppackning, manifestverifiering, förberedelse, säkerhetskopiering för återställning, aktivering, migreringar och rensning. Range-begäranden kan återuppta avbrutna hämtningar, arbetarlås förhindrar samtidiga framsteg och ett gammalt lås kan återställas när dess ägare löpt ut. På inaktiva delade webbhotell schemalägger du \codeword{php scripts/application_update.php} från cron, t.ex. var femte minut. Varje anrop gör begränsad upptäckt eller driver befintligt bakgrundsarbete framåt; korrektheten beror inte på \codeword{set_time_limit()} eller \codeword{ignore_user_abort()}.
 
+Om källservern ignorerar Range växlar tre ofullständiga omstarter av hela
+svaret samma jobb till publicerade \filepath{production.zip}.
+Separata begränsade metadataanrop måste bekräfta att utgåvans tagg pekar på
+ursprunglig fullständig commit och att bilagan har kanonisk URL, byteantal
+och SHA-256. Arkivets hash kontrolleras före uppackning även när valfri
+kontroll av enskilda filer är avstängd. Platta produktionsarkiv och omslutna
+källarkiv använder samma senare installationssteg. Saknade eller felaktiga
+bilagor behåller ändlig felhantering; tidsgränserna höjs inte.
+En äldre installerad uppdaterare kan inte använda reparationen innan den
+har tagits emot. Kontrollera första uppgraderingen på en testkopia eller
+överför hela den kompatibla utgåvan manuellt och använd
+\ui{Slutför FTP-uppdatering}.
+
 Aktuella utgåvor stämmer också av den lilla uppsättningen programägda serverpolicyfiler under uppdateringsförberedelse och aktivering. Det skyddar installationer vars äldre uppdaterare hoppade över en policyfil: den validerade utgåvekopian jämförs och publiceras atomärt, återställningsmetadata utökas före ersättningen och en migreringsstödd uppstartsväg kan reparera ett redan aktiverat äldre träd. Avstämningen är begränsad till kända policysökvägar och ändrar inte gallerimedier eller användarkonfiguration.
 
 Före aktivering kan administratören avbryta eller försöka igen med ett återställningsbart jobb. Efter aktivering kan administrationens återställningsåtgärd återställa hanterade programfiler från den sparade återställningsögonblicksbilden, men filåterställning gör inte databasmigreringar ogjorda. Återställning av stabil utgåva, ren ominstallation och beta-installation förblir återupptagningsbara jobb med egen paketvalidering. Den fristående nödvägen \filepath{reset.php} är ett separat återställningsverktyg för att återgå till den stabila grenen när den vanliga administrationsrutten inte kan användas; den kräver ändå samma omsorgsfulla säkerhetskopiering och integritetsgranskning.

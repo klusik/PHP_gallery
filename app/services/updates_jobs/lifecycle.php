@@ -654,7 +654,7 @@ function application_update_cancel_job(string $jobId): array
  *
  * @param string $jobId Job identifier.
  * @param bool $automatic Whether bounded unattended retry admission is required.
- * @return array<string,mixed> Public job state, with result.last_failure retaining the preceding safe error message/reference, stage, at epoch and retryable flag when a retry clears the current error.
+ * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public state; result.last_failure retains the preceding safe error when a retry clears it.
  */
 function application_update_retry_job(string $jobId, bool $automatic = false): array
 {
@@ -740,6 +740,12 @@ function application_update_retry_job(string $jobId, bool $automatic = false): a
                 'archive_etag',
                 'archive_last_modified',
                 'archive_expected_bytes',
+                'archive_resume_restarts',
+                'archive_fallback_pending',
+                'archive_fallback_version',
+                'archive_fallback_release',
+                'archive_release_asset',
+                'archive_release_digest_verified',
                 'archive_validate_index',
                 'archive_entries',
                 'archive_uncompressed_bytes',

@@ -4926,6 +4926,31 @@ fetches retain the active session by posting to the current origin.
 
 ### Resumable application-update verification
 
+`updater_download_transport_test.php` runs the actual download owner with real
+temporary archive files and persisted jobs. Only cURL/HTTP stream and GitHub
+metadata boundaries are confined. It covers a previously statted empty file,
+partial and completed transfers, conditional Range append, ignored-Range full
+replacement, durable bounded fallback selection, stream short writes and
+unresolved redirects. Published fallback must perform one metadata call per
+slice, retain its full source commit, refuse draft/duplicate/unbound/digestless
+assets and another tag commit, preserve the old prefix on refusal, resume the
+selected asset, and verify its exact digest before ZIP parsing. Retry clears
+selection and digest checkpoints. Flat production and wrapped source roots both
+remain accepted. Hosted FULL discovers this fixture through the existing PHP
+registry; BASIC checks syntax and declaration documentation only. The fixture
+requires cURL, already installed by all hosted PHP owners, and performs no
+external network requests or real installation writes.
+
+The 2026-10-28 read-only provider observation for develop `9cb0125e` received
+HTTP 200 for a source ZIP Range request. Its complete 16,485,474-byte response
+took about 2.23 seconds on that connection; a separately capped two-second
+request ended with 11,182,369 bytes. The published `v_0.144.14/production.zip`
+returned HTTP 206 and exactly 1,024 requested bytes. These are observations of
+one connection, not hosting performance guarantees. Real slow-host acceptance
+must verify the old-client first hop and published-asset continuation on an
+owned staging installation; the new downloader cannot run before it is
+installed.
+
 The recovery fixture overlays the real declared updater file set in its owned
 installation, retains extra local PHP and old backup bytes, simulates a legacy
 active/gated job, and completes the new manual FTP operation through the real
@@ -4978,7 +5003,9 @@ The retained opt-in publisher verifier still rejects corrupt bytes when called
 directly. Job-driven publisher/FTP sweeps are disabled until explicitly enabled;
 fixtures assert absent sweep cursors and no diagnostic warning events.
 An ordinary background update with mismatched publisher hashes reaches activation
-under a held shared reader. Its real gate refuses an independent new reader with
+from a real flat production ZIP with a mandatory raw archive digest, through
+actual extraction and package validation, under a held shared reader. Its real
+gate refuses an independent new reader with
 503 before another lease is taken. After the old reader releases, the actual
 activation/migration/finalization pipeline completes and removes the gate.
 Job creation additionally retains its configured session name with no active

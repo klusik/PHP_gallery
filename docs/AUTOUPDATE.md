@@ -26,6 +26,42 @@ connection/write admission, without waiting for the child response. A host must
 have enough PHP capacity to serve independent requests. Single-worker built-in
 development servers retain the ordinary visitor-driven fallback.
 
+## Download source and interrupted transfers
+
+New jobs pin the configured source to one full GitHub commit. The downloader
+refreshes PHP's stat cache before measuring an existing partial archive and
+after writing response bytes. A supported HTTP Range continuation appends to
+that exact source; HTTP 200 replaces the old prefix. Positive short writes in
+the PHP stream fallback are errors, and unresolved redirects are not ZIP data.
+
+GitHub's source-archive endpoint may ignore Range. After three incomplete
+full-response restarts, the same job looks for the published `production.zip`
+instead of repeatedly fetching the same prefix. Three separate bounded metadata
+slices read the version from the pinned commit, the published release asset and
+the release tag's resolved commit. The tag must resolve to the original full
+commit. The asset must have its canonical repository/tag URL, a positive byte
+count and a provider SHA-256 digest; drafts, prereleases, duplicate assets and
+missing identities are refused. Existing partial bytes are discarded only
+after this binding succeeds. Both the ordinary source wrapper and the flat
+production ZIP layout remain supported.
+
+The published archive must match its saved byte count and raw SHA-256 before
+extraction, independently of the optional per-file publisher verifier. A retry
+discards archive-selection and validation receipts while retaining the original
+commit. Metadata unavailability follows the existing finite retry policy. An
+asset source that also repeatedly ignores Range fails rather than chaining
+forever. Unpublished beta snapshots may have no matching release asset; they
+cannot borrow another commit's package. Use a complete manual deployment and
+**Finish FTP update** if the chosen source cannot be downloaded within hosting
+limits. Request timeouts are not extended.
+
+This mechanism starts working only after its complete release is installed.
+An older installed downloader still performs the first upgrade using its own
+code. Publishing new updater files does not repair an older client's download
+loop before it has received those files. Verify that first hop on an owned
+copy of the actual installed version, or use the supported complete manual
+deployment if it cannot finish.
+
 Each handoff needs the existing private maintenance token and a random,
 single-use continuation ticket. Only the ticket's SHA-256 hash is stored.
 The controller requires an exact POST envelope and rejects mixed worker modes,

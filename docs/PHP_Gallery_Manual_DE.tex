@@ -3607,6 +3607,20 @@ Vorübergehende Download- oder Hostingfehler können erneut versucht werden. Ein
 
 Stable-Erkennung und Paketverarbeitung sind getrennte begrenzte Vorgänge. Eine Erkennungsanfrage kann einen dauerhaften Hintergrundauftrag erstellen; eine spätere sichere Anfrage oder der CLI-Läufer führt einen kurzen Teilabschnitt über Download, Archivprüfung, Entpacken, Manifestprüfung, Vorbereitung, Rücknahmesicherung, Aktivierung, Migrationen und Bereinigung aus. Range-Anfragen können unterbrochene Downloads fortsetzen, Arbeitsprozesssperren verhindern paralleles Fortschreiten, und eine veraltete Sperre kann nach Ablauf ihres Besitzers wiederhergestellt werden. Planen Sie auf wenig frequentiertem Shared Hosting \codeword{php scripts/application_update.php} per Cron, beispielsweise alle fünf Minuten. Jeder Aufruf führt begrenzte Erkennung aus oder setzt vorhandene Hintergrundarbeit fort; die Korrektheit hängt nicht von \codeword{set_time_limit()} oder \codeword{ignore_user_abort()} ab.
 
+Ignoriert der Quellserver Range, wechseln drei unvollständige Neustarts
+der gesamten Antwort im selben Auftrag zum veröffentlichten
+\filepath{production.zip}. Getrennte begrenzte Metadatenabfragen müssen
+bestätigen, dass das Versions-Tag auf den ursprünglichen vollständigen Commit
+zeigt und der Anhang seine kanonische URL, Bytezahl und SHA-256 besitzt.
+Der Archiv-Hash wird vor dem Entpacken auch bei ausgeschalteter optionaler
+Einzeldateiprüfung geprüft. Flache Produktionsarchive und umschlossene
+Quellarchive verwenden dieselben weiteren Installationsschritte.
+Fehlende oder unpassende Anhänge behalten die endliche Fehlerbehandlung;
+Zeitlimits werden nicht erhöht. Ein älterer installierter Updater kann diese
+Reparatur erst nach deren Empfang verwenden. Prüfen Sie den ersten Übergang
+auf einer Testkopie oder übertragen Sie die vollständige kompatible Version
+manuell und verwenden Sie \ui{FTP-Aktualisierung abschließen}.
+
 Aktuelle Veröffentlichungen gleichen außerdem die kleine Menge anwendungseigener Serverrichtliniendateien während Vorbereitung und Aktivierung ab. Das schützt Installationen, deren älteres Aktualisierungssystem eine Richtliniendatei übersprungen hat: Die validierte Veröffentlichungskopie wird verglichen und atomar bereitgestellt, Rücknahmemetadaten werden vor dem Austausch erweitert, und ein migrationsgestützter Initialisierungsweg kann einen bereits aktivierten älteren Baum reparieren. Der Abgleich ist auf bekannte Richtlinienpfade begrenzt und verändert weder Galeriemedien noch Benutzerkonfiguration.
 
 Vor Aktivierung kann ein Administrator einen wiederherstellbaren Auftrag abbrechen oder erneut versuchen. Danach kann die administrative Wiederherstellungsaktion verwaltete Anwendungsdateien aus der gespeicherten Rücknahmemomentaufnahme wiederherstellen; Dateirücknahme kehrt Datenbankmigrationen jedoch nicht um. Stable-Wiederherstellung, saubere Neuinstallation und Beta-Installation bleiben fortsetzbare Aufträge mit eigener Paketprüfung. Der eigenständige Notfallweg \filepath{reset.php} ist ein getrenntes Wiederherstellungswerkzeug zur Rückkehr auf den Stable-Zweig, wenn die normale Administrationsroute nicht nutzbar ist; er erfordert weiterhin dieselbe sorgfältige Sicherungs- und Integritätsprüfung.

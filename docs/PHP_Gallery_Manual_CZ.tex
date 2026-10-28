@@ -3461,6 +3461,18 @@ Dočasná selhání stahování či hostingu lze opakovat. Balíček, jehož sou
 
 Vyhledání stabilního vydání a~práce s~balíčkem jsou samostatné omezené operace. Požadavek vyhledání může vytvořit trvalou úlohu na pozadí, zatímco pozdější bezpečný požadavek nebo nástroj CLI posouvá krátký úsek přes stahování, ověření archivu, rozbalení, ověření manifestu, přípravu, zálohu pro vrácení, aktivaci, migrace a~úklid. Požadavky Range mohou obnovit přerušené stahování, zámky pracovních procesů brání souběžnému postupu a~zastaralý zámek lze obnovit po vypršení jeho vlastníka. Na nečinném sdíleném hostingu naplánujte \codeword{php scripts/application_update.php} z~cronu, například každých pět minut. Každé spuštění provádí omezené vyhledání nebo posouvá existující práci na pozadí; správnost nezávisí na \codeword{set_time_limit()} ani \codeword{ignore_user_abort()}.
 
+Ignoruje-li zdrojový server Range, tři nedokončené restarty celé odpovědi
+přepnou stejnou úlohu na publikovaný \filepath{production.zip}.
+Samostatné omezené požadavky na metadata musí potvrdit, že tag vydání ukazuje
+na původní úplný commit a~že příloha má kanonickou adresu, počet bajtů a~SHA-256.
+Otisk archivu se ověřuje před rozbalením i~při vypnuté volitelné kontrole
+jednotlivých souborů. Plochý produkční archiv i~zdrojový archiv s~obalovou
+složkou používají stejné další instalační kroky. Chybějící či neodpovídající
+příloha zachovává konečné zpracování selhání; časové limity se nezvyšují.
+Starší nainstalovaný aktualizátor nemůže tuto opravu použít před jejím přijetím.
+První přechod ověřte na testovací kopii nebo ručně nahrajte celé kompatibilní
+vydání a~použijte \ui{Dokončit FTP aktualizaci}.
+
 Současná vydání také během přípravy a~aktivace aktualizace uvádějí do souladu malou sadu souborů serverových pravidel vlastněných aplikací. To chrání instalace, jejichž starší aktualizátor přeskočil soubor pravidel: ověřená kopie vydání se porovná a~atomicky zveřejní, metadata vrácení se rozšíří před nahrazením a~počáteční postup podložený migrací může opravit již aktivovaný starší strom. Sladění je omezené na známé cesty pravidel a~nemění média galerií ani uživatelskou konfiguraci.
 
 Před aktivací může správce obnovitelnou úlohu zrušit nebo zopakovat. Po aktivaci může akce obnovy v~administraci obnovit spravované soubory aplikace z~uloženého snímku pro vrácení, ale vrácení souborů nevrací databázové migrace. Obnova stabilního vydání, čistá přeinstalace a~instalace beta zůstávají úlohami s~pokračováním a~vlastním ověřením balíčku. Samostatný nouzový postup \filepath{reset.php} je odděleným nástrojem obnovy pro návrat ke stabilní větvi, když nelze použít běžnou trasu administrace; stále vyžaduje stejně pečlivou zálohu a~kontrolu integrity.
