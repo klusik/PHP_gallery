@@ -1785,4 +1785,6 @@ return [
     'admin.telemetry.reload_saved' => 'Läs in sparat läge',
     'admin.telemetry.settings_unavailable' => 'Sparade inställningar är inte tillgängliga.',
     'admin.telemetry.preference_refused' => 'Det sparade värdet skiljer sig från din ändring. Granska det före ett nytt försök.',
+    'lightbox.fit_content' => 'Anpassa efter innehåll',
+    'lightbox.original_frame' => 'Visa originalram',
 ];

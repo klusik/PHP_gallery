@@ -3681,6 +3681,41 @@ gallery.json key: lightbox_browsing_mode
 
 ## Lightbox Client Zoom Model
 
+The same model detects conservative content bounds from an opaque RGBA sample.
+The viewer samples only the active already-decoded authorized source, with a
+maximum 256-pixel edge, and caches at most 64 normalized rectangles per setup.
+Contiguous low-variance near-black bands require a sustained transition.
+Matching opposite bands can support a darker edge when the other edge passes
+the strict bright-content test. Up to two retained blended boundary lines may
+precede the transition evidence. Uncertain edges, subtitle/logo pixels and
+natural dark gradients stay visible while independently proven edges can fit.
+Excessive bands retain their extent; pixel-read refusal keeps the original frame.
+No learning model, source rewrite, gallery scan or
+additional image request is involved. The sample canvas is released immediately.
+
+Content fit is initially enabled. The compact frame icon in both zoom groups
+switches between content fit and the original frame for this viewer session;
+switching resets zoom to 100%. The clipped zoom surface represents the visible
+content rectangle, while its image child retains full-source proportions and
+offsets. Normal stage fit, fullscreen/map panes, pan anchors and fade covers use
+that same rectangle. Quality demand accounts for the full-source pixels behind
+the crop. Existing synchronous explicit-zoom original promotion is preserved.
+Canvas decisions commit synchronously inside the current navigation guard, so
+no detached detection callback can overwrite a later target. Cache identities
+include detector version, image ID, authorized URLs and indexed dimensions;
+differently framed derivatives retain their complete frame.
+
+Decoded geometry is prepared without changing the displayed photograph: normal
+stage variables are measured temporarily and restored before paint. Navigation
+resets logical zoom but retains outgoing crop/size until the replacement commit.
+Incoming covers use viewport-positioned, proportional full-source boxes with
+inline unconstrained maxima, so fullscreen image CSS cannot shrink their crop
+geometry. Both the incoming cover and outgoing surface change opacity over the
+same duration; exposed portions of a differently shaped old image fade away.
+Commit installs the source, crop and stage in one task, and cancellation removes
+only the owning cover/fade styles. Resize and map/fullscreen changes refit the
+cover; commit remeasures after decode. Captions remain above the media cover.
+
 `app/controllers/public_gallery_lightbox.php` renders one semantic zoom-control
 group in the normal toolbar and a mirror
 for the existing fullscreen HUD. Both control the same server-rendered

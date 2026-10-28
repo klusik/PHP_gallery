@@ -57,13 +57,13 @@ $openSource = substr(
     (int) $openStart,
     (int) $openEnd - (int) $openStart,
 );
-$openResetPosition = strpos($openSource, 'resetLightboxZoom(false);');
+$openResetPosition = strpos($openSource, 'resetLightboxZoom(false, true);');
 $openCardPosition = strpos($openSource, 'const card = cards[normalizedIndex]');
 lightbox_zoom_lifecycle_assert(
     $openResetPosition !== false
         && $openCardPosition !== false
         && $openResetPosition < $openCardPosition,
-    'Zoom state must reset before the next card or lazy metadata is displayed.',
+    'Logical zoom must reset before navigation while the outgoing crop remains until replacement.',
 );
 
 $closeStart = strpos($lightboxSource, 'function close()');
@@ -105,8 +105,9 @@ $slideshowSource = substr(
     (int) $slideshowEnd - (int) $slideshowStart,
 );
 lightbox_zoom_lifecycle_assert(
-    str_contains($slideshowSource, 'resetLightboxZoom(false);'),
-    'Starting slideshow must clear manual zoom state.',
+    str_contains($slideshowSource, 'resetLightboxZoom(false, true);')
+        && str_contains($slideshowSource, 'applyLightboxZoomState(false);'),
+    'Starting slideshow must clear manual zoom and immediately retain the fitted crop.',
 );
 
 lightbox_zoom_lifecycle_assert(

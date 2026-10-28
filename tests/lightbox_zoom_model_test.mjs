@@ -16,6 +16,8 @@
  * Author:
  *   Rudolf Klusal
  *
+ * License: MIT License (see LICENSE file in repository)
+ *
  * Last Updated:
  *   2026-08-16
  */
@@ -26,6 +28,8 @@ import {
     LIGHTBOX_ZOOM_QUALITY_DETAIL_FACTOR,
     LIGHTBOX_ZOOM_QUALITY_MAX_DPR,
     LIGHTBOX_ZOOM_STEP,
+    LIGHTBOX_CONTENT_POLICY,
+    detectLightboxContentBounds,
     clampLightboxZoomScale,
     createLightboxZoomState,
     lightboxZoomPercentage,
@@ -156,4 +160,115 @@ assert(normalizedCandidates.length === 1, 'malformed and duplicate quality candi
 assert(normalizedCandidates[0].width === 1600, 'a duplicate source should retain its largest declared dimensions');
 assert(selectLightboxZoomQualityCandidate([], 2000) === null, 'an empty candidate set should fail safely');
 
-console.log('Lightbox zoom model tests passed.');
+/**
+ * Build exact bounded raster vectors without browser or image-file dependencies.
+ * @param {{left:number,top:number,right:number,bottom:number}} edges Content rectangle in the 128-square sample.
+ * @param {number} noise Maximum deterministic near-black noise level.
+ * @returns {{width:number,height:number,data:Uint8ClampedArray}} Opaque RGBA raster with textured bright content.
+ */
+function contentSample(edges, noise = 0) {
+    // Structural corpus size: each coordinate maps directly to one sample pixel.
+    const size = 128;
+    const data = new Uint8ClampedArray(size * size * 4);
+    for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+            const offset = (y * size + x) * 4;
+            const content = x >= edges.left && x < edges.right
+                && y >= edges.top && y < edges.bottom;
+            const level = content ? 80 + (x + y) % 120
+                : (x + y) % (noise + 1);
+            data.set([level, level, level, 255], offset);
+        }
+    }
+    return {width: size, height: size, data};
+}
+
+// Exact boundaries cover letterbox, pillarbox, asymmetric and four-sided mattes.
+for (const edges of [
+    {left: 0, top: 16, right: 128, bottom: 112},
+    {left: 24, top: 0, right: 104, bottom: 128},
+    {left: 9, top: 14, right: 100, bottom: 110},
+    {left: 0, top: 12, right: 128, bottom: 128},
+]) {
+    for (const noise of [0, 8]) {
+        const bounds = detectLightboxContentBounds(contentSample(edges, noise));
+        assert(bounds && bounds.left === edges.left / 128
+            && bounds.top === edges.top / 128
+            && bounds.right === edges.right / 128
+            && bounds.bottom === edges.bottom / 128,
+        'confident opaque matte bounds must match the exact corpus rectangle');
+    }
+}
+const fullFrame = {left: 0, top: 0, right: 128, bottom: 128};
+assert(detectLightboxContentBounds(contentSample(fullFrame)) === null,
+    'ordinary textured image must remain unchanged');
+const black = contentSample({left: 0, top: 0, right: 0, bottom: 0});
+assert(detectLightboxContentBounds(black) === null,
+    'black/fade frame must remain unchanged');
+const dark = contentSample({left: 0, top: 16, right: 128, bottom: 112});
+for (let offset = 0; offset < dark.data.length; offset += 4) {
+    if (dark.data[offset] > 0) dark.data.set([25, 25, 25], offset);
+}
+assert(detectLightboxContentBounds(dark) === null,
+    'ambiguous dark content must not establish a crop transition');
+const subtitles = contentSample({left: 0, top: 16, right: 128, bottom: 100});
+// A short subtitle interrupts the bottom matte before the real content begins.
+for (let x = 48; x < 80; x += 1) {
+    subtitles.data.set([255, 255, 255], (110 * 128 + x) * 4);
+}
+const subtitleBounds = detectLightboxContentBounds(subtitles);
+assert(subtitleBounds?.top === 16 / 128 && subtitleBounds?.bottom === 1
+    && subtitleBounds?.left === 0 && subtitleBounds?.right === 1,
+    'a subtitle must retain its edge while the independently proven top matte fits');
+const concert = contentSample({left: 0, top: 16, right: 128, bottom: 112});
+// Match the reported concert screenshot: a bright upper edge, only 18.75%
+// bright content at the lower edge, and dim side gradients without a hard cut.
+for (let y = 16; y < 112; y += 1) {
+    for (let x = 0; x < 128; x += 1) {
+        let level = 5 + (x + y) % 6;
+        if ((x >= 17 && x < 23) || (x >= 115 && x < 120)) level = 25;
+        if ((y < 64 && x >= 40 && x < 106)
+            || (y >= 64 && x >= 90 && x < 114)) level = 100;
+        concert.data.set([level, level, level], (y * 128 + x) * 4);
+    }
+}
+const concertBounds = detectLightboxContentBounds(concert);
+assert(concertBounds?.top === 16 / 128 && concertBounds?.bottom === 112 / 128
+    && concertBounds?.left === 0 && concertBounds?.right === 1,
+    'paired mattes must fit dark content without trimming natural dark side gradients');
+// Canvas downsampling may retain one dim mixed row outside the real content.
+// Evidence may look past it, but the actual crop must retain that boundary row.
+for (let x = 0; x < 128; x += 1) {
+    concert.data.set([25, 25, 25], (112 * 128 + x) * 4);
+}
+const blendedConcertBounds = detectLightboxContentBounds(concert);
+assert(blendedConcertBounds?.top === 16 / 128
+    && blendedConcertBounds?.bottom === 113 / 128
+    && blendedConcertBounds?.left === 0 && blendedConcertBounds?.right === 1,
+    'a blended boundary may delay transition evidence without cropping real pixels');
+const unpairedConcert = {...concert, data: concert.data.slice()};
+// Without an opposite matte, the same dim lower edge cannot use paired evidence.
+for (let y = 0; y < 16; y += 1) {
+    for (let x = 0; x < 128; x += 1) {
+        unpairedConcert.data.set([100, 100, 100], (y * 128 + x) * 4);
+    }
+}
+assert(detectLightboxContentBounds(unpairedConcert) === null,
+    'dim content must not qualify without a matching opposite strong matte');
+const transparent = contentSample({left: 16, top: 0, right: 112, bottom: 128});
+for (let offset = 3; offset < transparent.data.length; offset += 4) {
+    transparent.data[offset] = 0;
+}
+assert(detectLightboxContentBounds(transparent) === null,
+    'transparent pixels must never count as black mattes');
+assert(detectLightboxContentBounds(contentSample(
+    {left: 42, top: 0, right: 86, bottom: 128})) === null,
+    'excessive trim must preserve the original frame');
+assert(detectLightboxContentBounds({width: 300, height: 300,
+    data: new Uint8ClampedArray(0)}) === null,
+    'unbounded/malformed input must be rejected');
+assert(LIGHTBOX_CONTENT_POLICY.sampleEdge === 256
+    && LIGHTBOX_CONTENT_POLICY.cacheEntries === 64,
+    'sampling and cache design budgets must remain explicit');
+
+console.log('Lightbox zoom model tests passed. Content-fit corpus passed.');

@@ -4047,6 +4047,39 @@ controls, tap again to hide them, and confirm photos and music keep playing.
 
 ### Public Lightbox Zoom Verification
 
+The existing Node model owner also covers conservative content-fit vectors:
+letterbox/pillarbox/asymmetric/four-sided mattes, deterministic compression-like
+noise, unchanged ordinary/dark/black/transparent frames, subtitle contamination,
+oversized bands and malformed samples. The registered lightbox race browser
+owner additionally runs `tests/fixtures/lightbox_content_fit.html` at 1440x900
+and 390x844 with production styles and compressed in-memory JPEGs. It covers
+original-frame override, crop aspect, zoom, CSS fullscreen refusal, cache reuse,
+sample bounds and denied pixel reads. These assertions are hosted FULL coverage,
+not part of BASIC syntax/declaration feedback.
+The model and JPEG corpus also cover a bright upper content edge paired with
+a dark lower edge, retained blended boundary rows and natural dark side
+gradients. An unpaired dark edge must remain unchanged. Caption assertions keep
+the annotated edge visible while allowing an independently proven opposite
+matte to fit. The reported local concert image was additionally inspected through
+the actual protected preview route; no personal image is embedded in fixtures.
+The same fixture snapshots outgoing source/surface styles synchronously at
+navigation, checks incoming full-source proportions and unconstrained computed
+maxima during fades, and observes intermediate outgoing opacity. Its automatic
+slideshow changes between different crop aspects. Include a viewport resize
+inside the fade; incoming geometry must refit without exposing an original-frame
+intermediate, and cancellation/teardown must restore live-surface opacity.
+For tests against a live gallery, launch a presentation with
+`presentation=1&presentation_music=0` or confirm its soundtrack is off before
+playback. The standalone content-fit fixture has no playlist/audio source.
+
+Manual acceptance should compare film/game screenshots with bars on each side,
+including asymmetric borders, dark scenes and captions. Use the frame icon by
+the zoom percentage to compare the entire original frame and content fit.
+Verify fit in normal/fullscreen/map-split, after rotation, zoom/pan and repeated
+slideshow navigation. Keep legitimate viewport letterboxing when content and
+display aspects differ. Record actual low-end-phone timings and image corpus;
+the 256-pixel sample budget alone does not establish a latency guarantee.
+
 Require the registered seven PHP zoom contracts and Node model test in hosted
 full CI after changing lightbox markup, browser events,
 fullscreen/mobile CSS, quality candidates, cache-busting, translations, maps,

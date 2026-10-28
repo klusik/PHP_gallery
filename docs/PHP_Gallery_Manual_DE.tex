@@ -2509,6 +2509,26 @@ Am~Computer verschieben normales Mausrad-Scrollen und~Scrollen mit zwei Fingern 
 
 Bei 100~\% ist das Foto eingepasst und im Betrachter zentriert. Vollbild verwendet dasselbe Zoom- und Verschiebeverhalten; Schließen und andere Steuerungen bleiben bei vergrößertem Bild anklickbar.
 
+\ui{An Inhalt anpassen} blendet sicher erkannte schwarze Ränder innerhalb
+eines Screenshots aus und passt den Inhalt proportional ein. Das Rahmensymbol
+neben der Zoomanzeige bietet \ui{Originalrahmen anzeigen}; erneutes Betätigen
+aktiviert die Inhaltsanpassung wieder. Die Auswahl gilt beim Bildwechsel in
+dieser Sitzung; eine Änderung setzt den Zoom auf 100~\% zurück. Wegen des
+Inhaltsseitenverhältnisses nötiger Freiraum bleibt erhalten.
+Die Erkennung liest nur eine kleine Probe des aktiven dekodierten Bildes,
+höchstens 256~Pixel pro Seite, ohne maschinelles Lernen oder zusätzliche
+Bildanfragen. Passende gegenüberliegende Ränder können auch einen dunkleren
+Inhaltsrand bestätigen. Unsichere Kanten und Text bleiben sichtbar, während
+andere sicher erkannte Ränder ausgeblendet werden können. Verweigerte
+Pixelzugriffe behalten den ganzen Rahmen. Dateien, Vorschaubilder und
+Downloads bleiben unverändert.
+
+Manueller Bildwechsel und Diashow bereiten den Ausschnitt vor der ersten
+Anzeige des nächsten Fotos vor. Das bisherige Foto behält beim Laden seine
+Geometrie und wird beim Einblenden des neuen Bildes gleichzeitig ausgeblendet.
+Bei unterschiedlichen Bildformen verschwinden freiliegende Teile des alten
+Fotos dadurch nicht erst abrupt am Ende des Übergangs.
+
 Zoom über 100~\% fordert sofort die geschützte Quelle voller Qualität für das aktive Foto an. Die vorhandene Vorschau bleibt sichtbar, bis das größere Bild bereit ist; aktuelle Zoom- und Verschiebeposition bleiben erhalten. Im normalen, Vollbild- und mobilen Vollbildmodus zeigt diese Übertragung dieselbe Fortschrittsleiste mit Prozentwert und Byteanzahl. Fotowechsel, Schließen des Betrachters oder eine neuere Anfrage voller Qualität brechen die vorherige Übertragung ab. Eine fehlgeschlagene oder abgebrochene Anfrage voller Qualität belässt die geschützte Vorschau.
 
 Navigation, Diashow-Start, Schließen und erneutes Öffnen setzen den Betrachter auf zentrierte 100~\% zurück. Ein- oder Austritt aus dem Vollbild erhält den aktuellen Maßstab, solange das Foto selbst unverändert ist, und passt die Verschiebung an den neuen sichtbaren Bereich an. Präferenzen für reduzierte Bewegung entfernen den kurzen einzelnen Zoomübergang.

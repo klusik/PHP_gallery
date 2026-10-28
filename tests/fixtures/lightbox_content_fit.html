@@ -1,0 +1,301 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/lightbox_content_fit.html
+Module Type: Browser Test Fixture
+Purpose: Exercise presentation-only matte fitting through the production viewer.
+Responsibilities:
+  - Generate compressed authorized-source stand-ins without writing image files.
+  - Cover fitting, original override, zoom, fullscreen and capability refusal.
+  - Offer a manual preview using the production desktop/narrow CSS cascade.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en">
+<meta charset="utf-8">
+<title>Lightbox content fit</title>
+<link rel="stylesheet" href="../../public/assets/styles/base.css">
+<link rel="stylesheet" href="../../public/assets/styles/public.css">
+<link rel="stylesheet" href="../../public/assets/styles/lightbox.css">
+<body>
+<pre id="results">RUNNING</pre>
+<div id="cards"></div>
+<!-- Type: integer. Units: milliseconds. Scope: this fixture's slideshow.
+Consumers: the production slideshow timing reader.
+Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
+<div class="lightbox" data-lightbox data-lightbox-slideshow-visible-ms="500" data-lightbox-slideshow-transition-ms="600" hidden>
+    <button class="lightbox-close lightbox-hud" data-lightbox-action="close">Close</button>
+    <button class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous">&lt;</button>
+    <button class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next">&gt;</button>
+    <span class="lightbox-zoom-controls lightbox-zoom-controls-hud lightbox-hud" data-lightbox-zoom-controls>
+        <button data-lightbox-action="zoom-out">−</button>
+        <button data-lightbox-action="zoom-reset"><span data-lightbox-zoom-status>100%</span></button>
+        <button data-lightbox-action="zoom-in">+</button>
+    </span>
+    <figure>
+        <button type="button" class="lightbox-stage-link" data-lightbox-stage data-lightbox-zoom-viewport aria-label="Toggle fullscreen image">
+            <span class="lightbox-zoom-surface" data-lightbox-zoom-surface>
+                <img data-lightbox-img alt="Synthetic content-fit image">
+            </span>
+        </button>
+        <figcaption class="lightbox-meta">
+            <div class="lightbox-toolbar">
+                <span data-lightbox-counter></span>
+                <span class="lightbox-zoom-controls" data-lightbox-zoom-controls>
+                    <button data-lightbox-action="zoom-out">−</button>
+                    <button data-lightbox-action="zoom-reset"><span data-lightbox-zoom-status>100%</span></button>
+                    <button data-lightbox-action="zoom-in">+</button>
+                </span>
+                <button class="lightbox-fullscreen-link" data-lightbox-action="fullscreen">Fullscreen</button>
+                <button class="lightbox-slideshow-link" data-lightbox-action="slideshow">Slideshow</button>
+            </div>
+            <h2 data-lightbox-title></h2><p data-lightbox-description></p>
+        </figcaption>
+    </figure>
+</div>
+<script type="module">
+    import {setupGalleryLightbox, teardownGalleryLightbox}
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261028-content-fit-v4';
+
+    // Bound asynchronous fixture checkpoints, independently of slideshow speed.
+    // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
+    // Consumers: waitFor. Rationale: 12000 allows decode/layout on hosted Chromium.
+    const checkpointMs = 12000;
+    // Geometry comparisons admit sampled JPEG boundary interpolation, not wrong fits.
+    // Type: number. Units: relative fraction. Scope: fixture aspect comparisons.
+    // Consumers: checkFit. Rationale: 0.025 admits at most 2.5% sample rounding.
+    const aspectTolerance = 0.025;
+    const viewer = document.querySelector('[data-lightbox]');
+    const result = document.querySelector('#results');
+    const errors = [];
+    const canvasReads = [];
+    const nativeRead = CanvasRenderingContext2D.prototype.getImageData;
+    let refusePixels = false;
+    let transitionObservations = 0;
+    let outgoingFadeObservations = 0;
+    const preview = new URL(location.href).searchParams.has('preview');
+    window.addEventListener('error', event => errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
+
+    CanvasRenderingContext2D.prototype.getImageData = function (...args) {
+        canvasReads.push({width: this.canvas.width, height: this.canvas.height});
+        if (refusePixels) throw new DOMException('Controlled pixel refusal', 'SecurityError');
+        return nativeRead.apply(this, args);
+    };
+    // Use the permanent CSS fullscreen fallback without depending on activation.
+    viewer.requestFullscreen = () => Promise.reject(new Error('Controlled refusal'));
+
+    /**
+     * Generate a compressed bright scene with optional black or ambiguous mattes.
+     * @param {number} id Stable fixture card identity.
+     * @param {{x:number,y:number,width:number,height:number}} rect Pixel content rectangle in a 1280 by 720 raster.
+     * @param {string} color Content color, an intentionally dark case, or the concert regression pattern.
+     * @returns {HTMLAnchorElement} Mounted card using an in-memory JPEG only.
+     */
+    function makeCard(id, rect, color = '#4aa6ce') {
+        // Structural corpus dimensions model a 16:9 screenshot; no source file exists.
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const context = canvas.getContext('2d');
+        context.fillStyle = 'black';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = color === 'concert' ? '#050505' : color;
+        context.fillRect(rect.x, rect.y, rect.width, rect.height);
+        if (color === 'concert') {
+            // Model the reported screenshot's 50% bright upper edge and 20%
+            // bright lower edge, retaining natural dim gradients at the sides.
+            context.fillStyle = '#72a7d4';
+            context.fillRect(rect.width * 0.3, rect.y,
+                rect.width * 0.5, rect.height / 2);
+            context.fillRect(rect.width * 0.7, rect.y + rect.height / 2,
+                rect.width * 0.2, rect.height / 2);
+            const gradient = context.createLinearGradient(0, 0, rect.width, 0);
+            gradient.addColorStop(0, '#050505');
+            gradient.addColorStop(0.1, '#191919');
+            gradient.addColorStop(0.9, '#191919');
+            gradient.addColorStop(1, '#050505');
+            context.fillStyle = gradient;
+            context.fillRect(0, rect.y, rect.width * 0.2, rect.height);
+            context.fillRect(rect.width * 0.9, rect.y, rect.width * 0.1, rect.height);
+        } else if (color !== '#191919') {
+            context.fillStyle = '#dce9a0';
+            context.fillRect(rect.x + rect.width / 4, rect.y + rect.height / 4,
+                rect.width / 2, rect.height / 2);
+            context.fillStyle = '#182e48';
+            context.font = '36px sans-serif';
+            context.fillText('VISIBLE CONTENT', rect.x + rect.width / 4,
+                rect.y + rect.height / 2);
+        }
+        const card = document.createElement('a');
+        // JPEG quality 0.9 deliberately exercises compression at matte boundaries.
+        card.href = canvas.toDataURL('image/jpeg', 0.9);
+        Object.assign(card.dataset, {lightboxImage: '', imageId: String(id),
+            fullSrc: card.href, previewSrc: card.href, imageWidth: '1280',
+            imageHeight: '720', title: `Content-fit sample ${id}`});
+        card.textContent = `Sample ${id} `;
+        document.querySelector('#cards').append(card);
+        return card;
+    }
+
+    /**
+     * Fail with the owning geometry or lifecycle assertion.
+     * @param {boolean} condition Observed production behavior.
+     * @param {string} message Failure evidence.
+     * @returns {void} Throws for a failed expectation.
+     */
+    function check(condition, message) {
+        if (!condition) throw new Error(message);
+    }
+
+    /**
+     * Wait for a production-owned asynchronous checkpoint within one deadline.
+     * @param {function():boolean} ready Predicate observing live viewer state.
+     * @returns {Promise<void>} Resolves when ready, or rejects at the deadline.
+     */
+    async function waitFor(ready) {
+        const deadline = performance.now() + checkpointMs;
+        while (!ready()) {
+            if (performance.now() > deadline) throw new Error('Content-fit checkpoint timeout');
+            await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+        // Let the decoded-node installation finish its guarded paint boundaries.
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+
+    /**
+     * Open the real viewer and observe the newly installed decoded image node.
+     * @param {HTMLAnchorElement} card Target fixture source card.
+     * @returns {Promise<void>} Resolves after current identity and decode commit.
+     */
+    async function openCard(card) {
+        const outgoing = viewer.querySelector('[data-lightbox-img]');
+        const outgoingStyle = outgoing?.getAttribute('style');
+        const outgoingFrame = viewer.querySelector('[data-lightbox-zoom-surface]');
+        const frameStyle = outgoingFrame.getAttribute('style');
+        const wasDisplayed = !viewer.hidden && Boolean(outgoing?.getAttribute('src'));
+        card.click();
+        if (wasDisplayed) {
+            check(outgoing.getAttribute('style') === outgoingStyle
+                && outgoingFrame.getAttribute('style') === frameStyle,
+                'navigation must retain outgoing crop/zoom pixels before replacement');
+        }
+        await waitFor(() => {
+            checkTransitionFrame();
+            return viewer.querySelector('[data-lightbox-img]')
+                ?.dataset.lightboxImageId === card.dataset.imageId
+                && !viewer.querySelector('.lightbox-transition-image');
+        });
+    }
+
+    /**
+     * Inspect the real incoming fade before it becomes the live zoom surface.
+     * @returns {void} Throws if global image maxima distort the full-source box.
+     */
+    function checkTransitionFrame() {
+        const cover = viewer.querySelector('.lightbox-transition-image');
+        if (!cover || !cover.complete || !cover.naturalWidth) return;
+        const rect = cover.getBoundingClientRect();
+        const style = getComputedStyle(cover);
+        check(Math.abs(rect.width / rect.height
+            / (cover.naturalWidth / cover.naturalHeight) - 1) < aspectTolerance,
+            'incoming fade must retain full-source proportions before cropping');
+        check(style.maxWidth === 'none' && style.maxHeight === 'none',
+            'fullscreen image maxima must not shrink the incoming crop box');
+        if (cover.classList.contains('is-visible')) {
+            const outgoing = viewer.querySelector('[data-lightbox-zoom-surface]');
+            check(outgoing.style.opacity === '0',
+                'exposed outgoing pixels must fade instead of disappearing at commit');
+            const opacity = Number(getComputedStyle(outgoing).opacity);
+            if (opacity > 0 && opacity < 1) outgoingFadeObservations += 1;
+        }
+        transitionObservations += 1;
+    }
+
+    /**
+     * Compare the canonical visible frame against an expected content aspect.
+     * @param {number} aspect Expected content width divided by height.
+     * @returns {void} Throws if fitting distorts or fits the saved full frame.
+     */
+    function checkFit(aspect) {
+        const frame = viewer.querySelector('[data-lightbox-zoom-surface]').getBoundingClientRect();
+        check(frame.width > 0 && frame.height > 0, 'visible stage must be nonzero');
+        check(Math.abs(frame.width / frame.height / aspect - 1) < aspectTolerance,
+            `wrong content aspect ${frame.width}/${frame.height}; expected ${aspect}`);
+    }
+
+    const cards = [
+        makeCard(1, {x: 256, y: 72, width: 768, height: 576}),
+        makeCard(2, {x: 0, y: 90, width: 1280, height: 540}),
+        makeCard(3, {x: 160, y: 0, width: 960, height: 720}),
+        makeCard(4, {x: 0, y: 90, width: 1280, height: 540}, '#191919'),
+        makeCard(5, {x: 0, y: 90, width: 1280, height: 540}),
+        makeCard(6, {x: 0, y: 90, width: 1280, height: 540}, 'concert'),
+    ];
+    try {
+        setupGalleryLightbox();
+        await openCard(cards[0]);
+        if (preview) {
+            result.textContent = 'MANUAL PREVIEW: content fitted; use ▣ for original frame.';
+        } else {
+            check(viewer.dataset.lightboxContentFit === 'cropped', 'four-sided JPEG matte must be detected');
+            checkFit(4 / 3);
+            const analysisMs = viewer.dataset.lightboxContentAnalysisMs;
+            const readsBefore = canvasReads.length;
+            viewer.querySelector('[data-lightbox-action="content-fit"]').click();
+            checkFit(16 / 9);
+            check(viewer.dataset.lightboxContentFit === 'original', 'original-frame override must be exposed');
+            viewer.querySelector('[data-lightbox-action="content-fit"]').click();
+            viewer.querySelector('[data-lightbox-action="zoom-in"]').click();
+            checkFit(4 / 3);
+            check(viewer.classList.contains('is-zoomed'), 'crop must retain normal zoom controls');
+            viewer.querySelector('[data-lightbox-action="fullscreen"]').click();
+            await waitFor(() => viewer.classList.contains('is-css-fullscreen'));
+            checkFit(4 / 3);
+            check(canvasReads.length === readsBefore, 'toggle/zoom/fullscreen must not resample');
+            await openCard(cards[1]);
+            checkFit(1280 / 540);
+            await openCard(cards[2]);
+            checkFit(4 / 3);
+            await openCard(cards[5]);
+            checkFit(1280 / 540);
+            check(viewer.querySelector('[data-lightbox-img]').style.width === '100%',
+                'natural dark side gradients must remain inside the fitted concert frame');
+            await openCard(cards[3]);
+            check(viewer.dataset.lightboxContentFit === 'original', 'ambiguous dark scene must be unchanged');
+            refusePixels = true;
+            await openCard(cards[4]);
+            check(viewer.dataset.lightboxContentFit === 'original', 'pixel refusal must retain the original frame');
+            refusePixels = false;
+            const cachedReads = canvasReads.length;
+            await openCard(cards[0]);
+            checkFit(4 / 3);
+            check(canvasReads.length === cachedReads, 'revisiting a photo must reuse its rectangle');
+            check(canvasReads.every(read => read.width <= 256 && read.height <= 256),
+                'every pixel read must remain within the documented sample budget');
+            viewer.querySelector('[data-lightbox-action="slideshow"]').click();
+            await waitFor(() => {
+                checkTransitionFrame();
+                return viewer.querySelector('[data-lightbox-img]')
+                    ?.dataset.lightboxImageId === cards[1].dataset.imageId
+                    && !viewer.querySelector('.lightbox-transition-image');
+            });
+            checkFit(1280 / 540);
+            viewer.querySelector('[data-lightbox-action="slideshow"]').click();
+            check(transitionObservations > 0,
+                'manual and slideshow journeys must observe real incoming fade frames');
+            check(outgoingFadeObservations > 0,
+                'slideshow must observe a gradual outgoing fade for differing geometries');
+            check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
+            result.textContent = `BROWSER PASS: content fit, JPEG, original override, zoom, fullscreen, cache and denied pixels. First analysis: ${analysisMs} ms.`;
+        }
+    } catch (error) {
+        result.textContent = `BROWSER FAIL: ${error.stack}`;
+    } finally {
+        CanvasRenderingContext2D.prototype.getImageData = nativeRead;
+        if (!preview) teardownGalleryLightbox();
+    }
+</script>
+</body>
+</html>

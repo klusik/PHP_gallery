@@ -2410,6 +2410,24 @@ On~desktop, normal mouse-wheel movement and~two-finger trackpad scrolling pan an
 
 At~100\%, the~photograph is~fitted and~centered in~the~viewer. Full-screen mode uses the~same zoom and~pan behavior, and~its Close and~other controls remain clickable while the~image is~enlarged.
 
+\ui{Fit by~content} automatically hides confidently detected black borders
+stored inside a~screenshot, fitting the~remaining content proportionally.
+The~frame icon beside the~zoom percentage offers \ui{Show original frame};
+select it~again to~restore content fit. This session choice follows navigation
+and~resets zoom to~100\% when changed. Space required by~the~content's own
+aspect ratio remains visible around it.
+Detection reads only a~small sample of~the~active decoded image, at~most
+256~pixels per~edge, without machine learning or~extra image requests.
+Matched opposite borders can~support a~darker content edge. Uncertain edges
+and~text in~borders stay visible while other proven borders can~fit;
+unavailable pixel reads keep the~whole frame. Files, thumbnails and~downloads
+remain unchanged.
+
+Manual navigation and~slideshows prepare the~crop before the~next photograph
+appears. The~previous photograph retains its~geometry while loading; during
+the~transition it~fades out~as~the~next one fades in. Differing image shapes
+therefore do~not~leave old content visible until an~abrupt removal.
+
 Zooming above 100\% immediately requests the~protected full-quality source for~the~active photograph. The~existing preview remains visible until the~larger image is~ready, and~the~current zoom and~pan position are~preserved. In~normal, full-screen, and~mobile full-screen modes, this transfer shows the~same progress bar with a~percentage and~a~byte count. Changing photographs, closing the~viewer, or~starting a~newer full-quality request cancels the~previous transfer. A~failed or~cancelled full-quality request leaves the~protected preview in~place.
 
 Navigation, slideshow start, close, and~reopen return the~viewer to~a~centered 100\%. Entering or~leaving full screen keeps the~current scale when the~photograph itself has~not~changed and~adjusts pan to~the~new viewport. Reduced-motion preferences remove the~short discrete zoom transition.
