@@ -2418,7 +2418,8 @@ and~resets zoom to~100\% when changed. Space required by~the~content's own
 aspect ratio remains visible around it.
 Detection reads only a~small sample of~the~active decoded image, at~most
 256~pixels per~edge, without machine learning or~extra image requests.
-Matched opposite borders can~support a~darker content edge. Uncertain edges
+Matched opposite borders can~support two darker content edges when both show
+sustained variation; a~uniform dark fade remains unchanged. Uncertain edges
 and~text in~borders stay visible while other proven borders can~fit;
 unavailable pixel reads keep the~whole frame. Files, thumbnails and~downloads
 remain unchanged.

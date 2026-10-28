@@ -211,6 +211,42 @@ for (let offset = 0; offset < dark.data.length; offset += 4) {
 }
 assert(detectLightboxContentBounds(dark) === null,
     'ambiguous dark content must not establish a crop transition');
+// The reported game screenshots have equal 12.5% pillars, with one or both
+// adjacent content edges below level 40. Rotate the pattern to cover both axes.
+for (const vertical of [false, true]) {
+    for (const brightOpposite of [false, true]) {
+        const edges = vertical
+            ? {left: 16, top: 0, right: 112, bottom: 128}
+            : {left: 0, top: 16, right: 128, bottom: 112};
+        const game = contentSample(edges, 8);
+        for (let y = edges.top; y < edges.bottom; y += 1) {
+            for (let x = edges.left; x < edges.right; x += 1) {
+                // Levels 22--35 supply variation without strict bright evidence.
+                const across = vertical ? y : x;
+                const inward = vertical ? x : y;
+                const level = brightOpposite && inward >= 64
+                    ? 100 : 22 + across % 14;
+                game.data.set([level, level, level], (y * 128 + x) * 4);
+            }
+        }
+        const bounds = detectLightboxContentBounds(game);
+        assert(bounds?.left === edges.left / 128
+            && bounds?.top === edges.top / 128
+            && bounds?.right === edges.right / 128
+            && bounds?.bottom === edges.bottom / 128,
+        'matching mattes must fit one or two dim textured content edges');
+    }
+}
+const mismatchedDim = contentSample(
+    {left: 16, top: 0, right: 104, bottom: 128});
+for (let y = 0; y < 128; y += 1) {
+    for (let x = 16; x < 104; x += 1) {
+        const level = 22 + y % 14;
+        mismatchedDim.data.set([level, level, level], (y * 128 + x) * 4);
+    }
+}
+assert(detectLightboxContentBounds(mismatchedDim) === null,
+    'unequal dim edges must not borrow the matching-matte exception');
 const subtitles = contentSample({left: 0, top: 16, right: 128, bottom: 100});
 // A short subtitle interrupts the bottom matte before the real content begins.
 for (let x = 48; x < 80; x += 1) {
@@ -254,7 +290,7 @@ for (let y = 0; y < 16; y += 1) {
     }
 }
 assert(detectLightboxContentBounds(unpairedConcert) === null,
-    'dim content must not qualify without a matching opposite strong matte');
+    'dim content must not qualify without a matching opposite matte');
 const transparent = contentSample({left: 16, top: 0, right: 112, bottom: 128});
 for (let offset = 3; offset < transparent.data.length; offset += 4) {
     transparent.data[offset] = 0;

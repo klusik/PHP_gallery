@@ -12,8 +12,9 @@ The session original-frame override resets zoom and updates both existing HUD
 groups; a fade retains its captured mode until its target is committed.
 Teardown removes injected controls and clears the rectangle cache.
 Detection resolves edges independently: a dim natural side gradient cannot
-discard a proven horizontal matte pair. A matched opposite strong edge can
-support a sustained darker transition; dim boundary pixels retained after
+discard a proven horizontal matte pair. Matched opposite bands can support
+sustained darker transitions on both edges when each has spatial variation;
+an unmatched dim edge or uniform dark fade remains intact. Boundary pixels after
 downsampling remain inside the returned content rectangle.
 Preparation returns target crop/stage metrics without publishing them. Its
 temporary normal-stage measurement is restored in the same task, and incoming

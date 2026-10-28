@@ -56,7 +56,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
 </div>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox}
-        from '../../public/assets/gallery-modules/lightbox.js?v=20261028-content-fit-v4';
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261028-content-fit-v6';
 
     // Bound asynchronous fixture checkpoints, independently of slideshow speed.
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
@@ -87,10 +87,10 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     viewer.requestFullscreen = () => Promise.reject(new Error('Controlled refusal'));
 
     /**
-     * Generate a compressed bright scene with optional black or ambiguous mattes.
+     * Generate a compressed scene with optional black or ambiguous mattes.
      * @param {number} id Stable fixture card identity.
      * @param {{x:number,y:number,width:number,height:number}} rect Pixel content rectangle in a 1280 by 720 raster.
-     * @param {string} color Content color, an intentionally dark case, or the concert regression pattern.
+     * @param {string} color Content color, flat dark case, concert, dim-pair or dim-left regression pattern.
      * @returns {HTMLAnchorElement} Mounted card using an in-memory JPEG only.
      */
     function makeCard(id, rect, color = '#4aa6ce') {
@@ -101,9 +101,24 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         const context = canvas.getContext('2d');
         context.fillStyle = 'black';
         context.fillRect(0, 0, canvas.width, canvas.height);
-        context.fillStyle = color === 'concert' ? '#050505' : color;
+        context.fillStyle = color === 'concert' ? '#050505'
+            : color === 'dim-pair' || color === 'dim-left' ? '#161616' : color;
         context.fillRect(rect.x, rect.y, rect.width, rect.height);
-        if (color === 'concert') {
+        if (color === 'dim-pair' || color === 'dim-left') {
+            // Model dark game edges at levels 22--38: no strict level-40
+            // transition, but genuine variation beside equal black pillars.
+            const gradient = context.createLinearGradient(0, rect.y,
+                0, rect.y + rect.height);
+            gradient.addColorStop(0, '#161616');
+            gradient.addColorStop(1, '#262626');
+            context.fillStyle = gradient;
+            context.fillRect(rect.x, rect.y, rect.width, rect.height);
+            if (color === 'dim-left') {
+                context.fillStyle = '#b0b0b0';
+                context.fillRect(rect.x + rect.width * 0.75, rect.y,
+                    rect.width * 0.25, rect.height);
+            }
+        } else if (color === 'concert') {
             // Model the reported screenshot's 50% bright upper edge and 20%
             // bright lower edge, retaining natural dim gradients at the sides.
             context.fillStyle = '#72a7d4';
@@ -232,6 +247,8 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         makeCard(4, {x: 0, y: 90, width: 1280, height: 540}, '#191919'),
         makeCard(5, {x: 0, y: 90, width: 1280, height: 540}),
         makeCard(6, {x: 0, y: 90, width: 1280, height: 540}, 'concert'),
+        makeCard(7, {x: 160, y: 0, width: 960, height: 720}, 'dim-left'),
+        makeCard(8, {x: 160, y: 0, width: 960, height: 720}, 'dim-pair'),
     ];
     try {
         setupGalleryLightbox();
@@ -262,6 +279,14 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
             checkFit(1280 / 540);
             check(viewer.querySelector('[data-lightbox-img]').style.width === '100%',
                 'natural dark side gradients must remain inside the fitted concert frame');
+            for (const card of [cards[6], cards[7]]) {
+                await openCard(card);
+                checkFit(4 / 3);
+                const image = viewer.querySelector('[data-lightbox-img]');
+                check(parseFloat(image.style.left) < 0
+                    && parseFloat(image.style.width) > 125,
+                    'dim game content must remove both matching pillars');
+            }
             await openCard(cards[3]);
             check(viewer.dataset.lightboxContentFit === 'original', 'ambiguous dark scene must be unchanged');
             refusePixels = true;

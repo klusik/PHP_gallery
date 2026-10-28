@@ -15,10 +15,13 @@ The detector uses at most 256 by 256 sampled pixels (256 KiB RGBA), three-line
 minimum bands, at most 30% trim per edge and at least 40% retained per axis.
 Each line requires opaque channels at most 20, mean at most 12 and standard
 deviation at most 6. Two content lines need at least 35% pixels at level 40 or
-above. Matching opposite bands (within two sampled pixels) permit a darker
-transition only when the other edge passes that strict test: at least 15%
-bright pixels must persist over four lines. Up to two dim boundary lines may
-precede either evidence window; those lines remain inside the crop. Decisions
+above. Matching opposite bands (within two sampled pixels) permit darker
+transitions even when neither edge passes that strict test: each edge must
+either pass the strict test or have at least 15% pixels at level 24 or above
+and a level range of at least 12 on each of four lines. The range requirement
+retains flat dark fades. Unmatched dim edges keep the strict test.
+Up to two dim boundary lines may precede either evidence window; those lines
+remain inside the crop. Decisions
 are per edge, so an uncertain natural dark side does not reject valid top/bottom
 bands. Text remains visible; an uncertain caption edge can remain in full while
 the opposite matte fits. A genuinely black
@@ -40,6 +43,21 @@ machine; this is not a low-end-device or whole-slideshow guarantee. Real mobile
 performance, broader film/game corpora and assistive
 technology acceptance remain manual coverage. Cache retains at most 64
 rectangles, no pixels, and is discarded at setup teardown or page reload.
+
+The reported Mass Effect screenshots 0078/0079 exposed matching black pillars
+beside dim content: neither edge of 0078 passed the bright test, while only
+the right edge of 0079 did. The paired rule now recognizes both boundaries
+without requiring an independently bright side. The Node/JPEG corpus covers
+both dim edges, a bright/dim pair, both axes, unequal dim bands and unchanged
+uniform dark frames; the actual public image samples remain local diagnostic
+inputs rather than shipped photographs. Broader game-scene false positives
+and real-phone performance remain unknown; original-frame support is permanent.
+Local production-viewer diagnosis fitted both reported samples to 16:9 with
+both pillars removed at desktop and 390x844 sizes. Initial canvas analysis was
+about 8--21 ms on the authoring machine, including raster sampling; this is not
+a low-end-device guarantee. Simbrieftest navigation and fullscreen slideshow
+were inspected with its soundtrack explicitly disabled. The compressed fixture
+passed at both sizes, including crop/override/cache/zoom and both-layer fades.
 
 Manual and slideshow transitions retain outgoing crop geometry during loading.
 Target geometry is prepared without a visible full-frame intermediate. The
