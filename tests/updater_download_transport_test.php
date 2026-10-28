@@ -134,8 +134,8 @@ namespace Gallery\Services {
         string $path,
         string $mode,
         bool $useIncludePath = false,
-        $context = null,
-    ) {
+        mixed $context = null,
+    ): mixed {
         if (str_starts_with($path, 'https://')) {
             $GLOBALS['download_url'] = $path;
             $GLOBALS['download_context'] = \stream_context_get_options($context);
@@ -152,7 +152,7 @@ namespace Gallery\Services {
      * @param resource $stream Synthetic remote response, unused by this fixture.
      * @return array{wrapper_data:list<string>} HTTP status and header lines.
      */
-    function stream_get_meta_data($stream): array
+    function stream_get_meta_data(mixed $stream): array
     {
         return ['wrapper_data' => $GLOBALS['download_headers']];
     }
@@ -162,7 +162,7 @@ namespace Gallery\Services {
      * @param resource $stream Remote response whose native cursor reached EOF.
      * @return bool True only for a complete synthetic response at EOF.
      */
-    function feof($stream): bool
+    function feof(mixed $stream): bool
     {
         return $GLOBALS['download_complete'] && \feof($stream);
     }
@@ -173,7 +173,7 @@ namespace Gallery\Services {
      * @param string $bytes Requested response chunk.
      * @return int|false Native written byte count, optionally one byte short.
      */
-    function fwrite($stream, string $bytes): int|false
+    function fwrite(mixed $stream, string $bytes): int|false
     {
         if ($GLOBALS['download_short_write']) {
             return \fwrite($stream, substr($bytes, 0, -1));
