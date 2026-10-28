@@ -19,6 +19,8 @@ import {setupThemeAppearanceResize} from '/public/assets/gallery-modules/theme-a
 import {setupThemeAppearanceWorkspace} from '/public/assets/gallery-modules/admin-theme-appearance-workspace.js';
 let assertions = 0;
 const submits = [];
+// Viewport controls belong to the harness, outside later application mocks.
+const nativeViewportFetch = window.fetch.bind(window);
 /** Original real-rendered workspace used to exercise fresh initialization with saved browser preference. */
 const originalWorkspace=document.querySelector('.theme-appearance-workspace').outerHTML;
 /** Require a real input or layout invariant. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts passing assertions or throws. */
@@ -31,6 +33,20 @@ function edit(selector,value) { const element=find(selector); element.value=valu
 function tab(name) { find(`[data-admin-subtab-target="admin-theme-appearance-subtab-${name}"]`).click(); }
 /** Wait for layout and browser event processing. @return {Promise<void>} Resolves on a task boundary. */
 function settle() { return new Promise(/** Continue after layout tasks. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,30)); }
+
+/**
+ * Apply a harness viewport and await resize observers before layout assertions.
+ * @param {number} width Required viewport width in CSS pixels.
+ * @returns {Promise<void>} Confirm the requested width after two rendering
+ *     frames let native resize delivery and ResizeObserver updates complete.
+ */
+async function resizeViewport(width) {
+    const response = await nativeViewportFetch('/__viewport?width=' + width);
+    check(response.ok, 'harness accepts viewport width ' + width);
+    await new Promise(resolve => requestAnimationFrame(() =>
+        requestAnimationFrame(resolve)));
+    check(innerWidth === width, 'harness commits viewport width ' + width);
+}
 /** Send confined trusted mouse input through the disposable browser adapter. @param {string} type Mouse protocol event type. @param {number} x Viewport horizontal coordinate. @param {number} y Viewport vertical coordinate. @return {Promise<void>} Resolves after native pointer delivery. */
 async function mouse(type,x,y) { const response=await fetch(`/__mouse?type=${type}&x=${x}&y=${y}`); check(response.ok,`trusted separator pointer delivery ${type} ${x},${y} status${response.status}`); }
 /** Activate separator keyboard behavior without changing form values. @param {HTMLElement} handle Actual separator. @param {string} key Named adjustment key. @param {boolean} shift Whether the coarse step is requested. @return {void} Delivers a keyboard event to the existing focusable handle. */
@@ -123,7 +139,7 @@ try {
     check(document.activeElement===find('[data-admin-subtab-target="admin-theme-appearance-subtab-width-map"]'),'retained subsection keyboard navigation');
     await settle(); layout('horizontal','keyboard Width preserves chosen tag context');
     document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); await settle(); layout('horizontal','keyboard Cards and tags preserves chosen tag context');
-    await fetch('/__viewport?width=1280'); await settle();
+    await resizeViewport(1280);
     for (const name of ['colors','width-map','gallery-tags']) { tab(name); await settle(); const workspace=find('.theme-appearance-workspace'); check(workspace.scrollWidth<=workspace.clientWidth+1,'desktop '+name+' workspace has no overflow'); if(name==='gallery-tags') readableLayouts(150,'desktop'); }
     tab('colors'); await settle();
     const handle=find('[data-theme-appearance-resizer]'), controls=find('.theme-appearance-settings'), preview=find('.theme-appearance-preview');
@@ -151,13 +167,13 @@ try {
     check(controls.getBoundingClientRect().width<resetWidth-14,'reset leaves keyboard adjustment functional');
     handle.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})); await settle();
     check(Math.abs(controls.getBoundingClientRect().width/(controls.getBoundingClientRect().width+preview.getBoundingClientRect().width)-0.45)<0.003,'doubleclick resets shared column split');
-    await fetch('/__viewport?width=390'); await settle();
+    await resizeViewport(390);
     check(handle.getBoundingClientRect().width===0 && handle.getAttribute('aria-disabled')==='true','mobile stack hides and disables separator');
     const mobileWidth=controls.getBoundingClientRect().width; resizeKey(handle,'End'); await settle();
     check(Math.abs(controls.getBoundingClientRect().width-mobileWidth)<1,'hidden mobile separator cannot resize stacked form');
     for (const name of ['colors','width-map','gallery-tags']) { tab(name); await settle(); const workspace=find('.theme-appearance-workspace'); check(workspace.scrollWidth<=workspace.clientWidth+1,'mobile '+name+' workspace has no overflow'); check(find('[data-theme-live-preview]').getBoundingClientRect().width>0,'mobile '+name+' shared preview remains visible'); if(name==='gallery-tags') readableLayouts(120,'390px mobile viewport'); }
     check(document.querySelectorAll('[data-theme-live-preview]').length===1,'mobile retains one preview');
-    await fetch('/__viewport?width=1280'); await settle();
+    await resizeViewport(1280);
     resizeKey(handle,'ArrowLeft',true); await settle();
     const storageKey=`php-gallery:theme-appearance-width:${location.pathname}`, storedRatio=Number(localStorage.getItem(storageKey));
     check(storedRatio>0 && storedRatio<1,'resize persists only a bounded browser preference ratio');
@@ -165,14 +181,14 @@ try {
     setupThemeAppearanceResize(form); await settle();
     const freshControls=find('.theme-appearance-settings'), freshPreview=find('.theme-appearance-preview');
     check(Math.abs(freshControls.getBoundingClientRect().width/(freshControls.getBoundingClientRect().width+freshPreview.getBoundingClientRect().width)-storedRatio)<0.003,'fresh actual workspace restores saved split without app settings mutation');
-    await fetch('/__viewport?width=390'); await settle(); await fetch('/__viewport?width=1280'); await settle();
+    await resizeViewport(390); await resizeViewport(1280);
     check(Math.abs(freshControls.getBoundingClientRect().width/(freshControls.getBoundingClientRect().width+freshPreview.getBoundingClientRect().width)-storedRatio)<0.003,'saved ratio survives mobile stack and desktop restoration');
     resizeKey(find('[data-theme-appearance-resizer]'),'Enter'); await settle();
     check(localStorage.getItem(storageKey)===null,'reset discards browser override and returns CSS default');
     const publicFrame=document.createElement('iframe'); publicFrame.title='Isolated public card orientation'; publicFrame.style.cssText='display:block;width:100%;height:900px;border:0';
     const publicReady=new Promise(/** Await only the confined actual public fixture document. @param {function():void} resolve Completion callback. @return {void} Installs a one-shot frame load handler. */ resolve=>publicFrame.addEventListener('load',resolve,{once:true}));
     publicFrame.src='/__public_cards'; document.body.append(publicFrame); await publicReady; await settle(); await publicLayouts(publicFrame,false);
-    await fetch('/__viewport?width=390'); await settle(); await publicLayouts(publicFrame,true);
+    await resizeViewport(390); await publicLayouts(publicFrame,true);
     // Rebind the new controls after the existing fixture replaces the workspace.
     const {setupThemeAdvancedAppearance}=await import('/public/assets/gallery-modules/theme-customization.js');
     setupAdminNestedTabs(form);
@@ -188,7 +204,7 @@ try {
     find('[data-theme-advanced-reset][value="gallery_grid_gap"]').click();
     check(gap.value==='16' && padding.value==='8' && type.value==='120','spacing reset is independent');
     for(const width of [1280,390]) {
-        await fetch('/__viewport?width='+width); await settle();
+        await resizeViewport(width);
         const advanced=find('.theme-advanced-appearance');
         check(advanced.scrollWidth<=advanced.clientWidth+1 && advanced.getBoundingClientRect().right<=innerWidth+1,width+' advanced controls have no horizontal overflow');
         for(const control of advanced.querySelectorAll('input[type="number"],select,button')) check(control.getBoundingClientRect().width>0 && control.getBoundingClientRect().right<=innerWidth+1,width+' numeric alternatives and resets remain usable');
@@ -284,7 +300,7 @@ try {
     dispatchEvent(new PopStateEvent('popstate'));
     check(!find('#admin-theme-appearance-subtab-animations').hidden,
         'history accepts established full-ID deep links alongside short query values');
-    await nativeFetch('/__viewport?width=390'); await settle();
+    await resizeViewport(390);
     for(const name of ['colors','width-map','gallery-tags','animations','advanced']) {
         tab(name); await settle(); const workspace=find('.theme-appearance-workspace');
         check(workspace.scrollWidth<=workspace.clientWidth+1,

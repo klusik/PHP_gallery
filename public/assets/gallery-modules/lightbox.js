@@ -228,6 +228,9 @@ export function setupGalleryLightbox() {
     // lightboxGalleryMapPayloadPromises stores lazy gallery map fetches keyed by endpoint URL.
     const lightboxGalleryMapPayloadPromises = new Map();
 
+    // Monotonic render identity; closing/replacing a split invalidates its awaits.
+    let lightboxMapSplitGeneration = 0;
+
     // Maps also run on pages with no photo viewer, so their state must exist before the early return.
     // Runtime-only Leaflet viewport memory. It intentionally dies on page reload.
     const galleryLeafletViewportState = new Map();
@@ -5794,14 +5797,14 @@ export function setupGalleryLightbox() {
                 overlay.querySelector('[data-lightbox-action="help"]')?.focus();
                 return;
             }
-            if (lightboxMapSplit && !lightboxMapSplit.hidden) {
-                closeLightboxMapSplit();
-                lightboxMapButtons.find((button) => !button.hidden)?.focus();
-                return;
-            }
             if (isLightboxFullscreen()) {
                 event.preventDefault();
                 exitLightboxFullscreen();
+                return;
+            }
+            if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+                closeLightboxMapSplit();
+                lightboxMapButtons.find((button) => !button.hidden)?.focus();
                 return;
             }
             close();
@@ -6006,13 +6009,7 @@ export function setupGalleryLightbox() {
      * @returns {Promise<void>} Restore the ordinary viewer and release its shell.
      */
     async function exitLightboxFullscreen() {
-        stopLightboxSlideshow();
-        overlay.classList.remove('is-fullscreen');
-        overlay.classList.remove('is-css-fullscreen');
-        overlay.classList.remove('is-mobile-fullscreen');
-        closeLightboxMapSplit();
-        document.documentElement.classList.remove('has-mobile-lightbox');
-        document.body.classList.remove('has-mobile-lightbox');
+        restoreWindowedLightboxState();
         if (!isMobileTouchDevice && document.fullscreenElement) {
             try {
                 await document.exitFullscreen();
@@ -6025,9 +6022,29 @@ export function setupGalleryLightbox() {
         debugLightbox('exit');
     }
 
+    /**
+     * Restore the same viewer state after native, CSS or mobile fullscreen exit.
+     * @returns {void} Dispose the split map and pending work, stop playback,
+     *     clear fullscreen/HUD classes and remeasure the retained photograph.
+     */
+    function restoreWindowedLightboxState() {
+        stopLightboxSlideshow();
+        overlay.classList.remove('is-fullscreen');
+        overlay.classList.remove('is-css-fullscreen');
+        overlay.classList.remove('is-mobile-fullscreen');
+        overlay.classList.remove('is-ui-visible');
+        hideLightboxHelpPanel();
+        closeLightboxMapSplit();
+        document.documentElement.classList.remove('has-mobile-lightbox');
+        document.body.classList.remove('has-mobile-lightbox');
+        scheduleLightboxZoomReclamp();
+        clearLightboxStageFocus();
+    }
+
         /**
      * Synchronize native fullscreen changes without dismissing a CSS-only shell.
-     * @returns {void} Stop playback only after an actual native fullscreen exit.
+     * @returns {void} Restore the normal viewer and dispose its map after native
+     *     exit, or synchronize native entry without dismissing a CSS-only shell.
      */
     function syncLightboxFullscreenState() {
         if (isMobileTouchDevice) {
@@ -6040,15 +6057,9 @@ export function setupGalleryLightbox() {
                 close();
                 return;
             }
-            cancelMapPhotoNavigation();
-            overlay.classList.remove('is-fullscreen');
-            overlay.classList.remove('is-mobile-fullscreen');
-            overlay.classList.remove('is-ui-visible');
-            document.documentElement.classList.remove('has-mobile-lightbox');
-            document.body.classList.remove('has-mobile-lightbox');
-            stopLightboxSlideshow();
-            scheduleLightboxZoomReclamp();
-            clearLightboxStageFocus();
+            // Escape can be consumed by browser chrome without a page keydown.
+            // Use exactly the same cleanup as F and the fullscreen control.
+            restoreWindowedLightboxState();
             debugLightbox('sync:browser-exit');
             return;
         }
@@ -7658,13 +7669,16 @@ export function setupGalleryLightbox() {
      *
      * @param {string} json Serialized active photo map point.
      * @param {string} title Current photo title.
+     * @returns {Promise<void>} Render only while the requesting split is current.
      */
     async function openLightboxPhotoMapSplit(json, title) {
         if (!json || !json.trim()) {
             openLightboxMapUnavailable(title);
             return;
         }
+        const generation = lightboxMapSplitGeneration;
         const mapPayload = await photoMapPayloadWithGalleryRoute(parseMapPayload(json));
+        if (!isCurrentLightboxMapSplit(generation)) return;
         await openLightboxMapSplit(JSON.stringify(mapPayload), title);
     }
 
@@ -7688,9 +7702,12 @@ export function setupGalleryLightbox() {
      * Open the gallery-level route or map payload inside fullscreen split mode.
      *
      * @param {string} title Current viewer title fallback.
+     * @returns {Promise<void>} Render only while the requesting split is current.
      */
     async function openLightboxGalleryMapSplit(title) {
+        const generation = lightboxMapSplitGeneration;
         const payload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(title || i18n('lightbox.gallery_map', 'Gallery map')));
+        if (!isCurrentLightboxMapSplit(generation)) return;
         if (!payload || !payload.points.length) {
             openLightboxMapUnavailable(title || i18n('lightbox.map', 'Map'));
             return;
@@ -7706,7 +7723,7 @@ export function setupGalleryLightbox() {
      * @return {Promise<void>} Loads the map runtime and renders its points when the payload is usable.
      */
     async function openLightboxMapSplit(json, title) {
-        if (!sharedLightboxMapUiAvailable()) {
+        if (!sharedLightboxMapUiAvailable() || overlay.hidden || !isLightboxFullscreen()) {
             return;
         }
         // mapPayload stores the normalized point or route data for the split pane.
@@ -7715,7 +7732,9 @@ export function setupGalleryLightbox() {
         if (!points.length || !lightboxMapSplit || !lightboxMapSplitCanvas) {
             return;
         }
+        const generation = ++lightboxMapSplitGeneration;
         await ensureLeaflet();
+        if (!isCurrentLightboxMapSplit(generation)) return;
         clearLightboxSplitMapRuntime();
         lightboxMapSplit.hidden = false;
         lightboxMapSplit.classList.remove('is-map-unavailable');
@@ -7726,6 +7745,7 @@ export function setupGalleryLightbox() {
         scheduleLightboxZoomReclamp();
         requestAnimationFrame(() => updateFullscreenMapImageFit(cards[lightboxNavigation.index] || null));
         await waitForElementSize(lightboxMapSplitCanvas);
+        if (!isCurrentLightboxMapSplit(generation)) return;
         lightboxMapSplitCanvas.innerHTML = '';
         // map stores state or configuration for the gallery front-end flow.
         const map = L.map(lightboxMapSplitCanvas, {
@@ -7860,11 +7880,25 @@ export function setupGalleryLightbox() {
         }
     }
 
-        /**
-     * Handles close lightbox map split behavior for the gallery UI.
+    /**
+     * Check whether asynchronous split-map work still belongs to this viewer.
+     * @param {number} generation Render identity captured before awaiting work.
+     * @returns {boolean} True only for the current, open fullscreen viewer.
+     */
+    function isCurrentLightboxMapSplit(generation) {
+        return generation === lightboxMapSplitGeneration
+            && !controller.signal.aborted
+            && !overlay.hidden
+            && isLightboxFullscreen();
+    }
+
+    /**
+     * Close the split map and invalidate pending payload/runtime/layout work.
      * @param {boolean} cancelPhotoNavigation False only for dismissal by the owning popup selection.
+     * @returns {void} Dispose map resources, hide its controls and restore sizing.
      */
     function closeLightboxMapSplit(cancelPhotoNavigation = true) {
+        lightboxMapSplitGeneration += 1;
         if (cancelPhotoNavigation) {
             cancelMapPhotoNavigation();
         }

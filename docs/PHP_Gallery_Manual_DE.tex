@@ -2527,6 +2527,14 @@ Die Auswahl von \ui{Foto öffnen} in einer Galeriekartenmarkierung öffnet diese
 
 Eine Galerie mit gespeicherter Flugroute kann ihre Karte bereits vor dem ersten Fotoupload öffnen, auch auf Seiten ohne Lightbox-Markup. Die Karte umfasst alle gespeicherten Routenpunkte und behält die normalen Zurücksetzen-Steuerelemente; Routenpunkte werden nicht als Fotomarker behandelt. Ohne gespeicherte Koordinaten erscheint die normale Leerkartenmeldung. Galeriezugriff und wirksame Karteneinstellungen gelten weiter; die Karte lädt auf Anforderung.
 
+Das Verlassen der Foto-Vollbildansicht mit \codeword{F}, ihrer Schaltfläche
+oder dem vom Browser behandelten \codeword{Escape} schließt die geteilte Karte
+und stellt die normale Lightbox mit demselben Foto und Zoom wieder her.
+Ausstehendes Laden der Karte kann den Bereich danach nicht erneut öffnen.
+Im CSS-Vollbild führt einmaliges \codeword{Escape} denselben Übergang aus.
+\codeword{M} schaltet die Karte im Vollbild unabhängig um; ein weiteres
+\codeword{Escape} schließt die normale Lightbox.
+
 \subsection{Flugkarten und Navigationsdaten}
 \index{s00224@SimBrief}
 \index{f00104@Flugkarten}

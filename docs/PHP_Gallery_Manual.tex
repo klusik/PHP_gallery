@@ -2428,6 +2428,13 @@ Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~c
 
 A~gallery with a~saved flight route can~open its map before the~first photograph is~uploaded, including pages with no~lightbox markup. The~map fits all stored route points and~retains ordinary reset controls without treating route points as~photo markers. Without stored coordinates it~shows the~normal empty-map message. Gallery access and~effective map settings still apply; loading remains on~demand.
 
+Leaving photo fullscreen with \codeword{F}, its~control, or~the~browser's
+\codeword{Escape} closes the~split map and~returns to~the~ordinary lightbox
+with the~same photograph and~zoom. Pending map loading cannot reopen the~pane
+after exit. In~CSS fullscreen, one \codeword{Escape} performs the~same
+transition. \codeword{M} toggles the~map independently while fullscreen;
+a~later \codeword{Escape} closes the~ordinary lightbox.
+
 \subsection{Flight maps and~navigation data}
 \index{SimBrief}
 \index{flight maps}

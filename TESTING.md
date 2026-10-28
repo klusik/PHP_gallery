@@ -4153,6 +4153,13 @@ placement may float only when the existing solver finds clear space.
    request is needed. Delay metadata responses, select a second marker, then
    close the map or viewer: cancelled/older work
    must neither change the photo nor navigate away, including after reopen.
+   With a map open in native fullscreen, press Escape once: the ordinary
+   lightbox must remain open with the split map and all its actions hidden,
+   without large blue controls or an extra Escape to repair the layout.
+   Compare F and the fullscreen button, including while map loading is pending,
+   after rapid exit/reentry, and on desktop/narrow viewports. In CSS fullscreen
+   the page-delivered Escape follows the same transition. A later Escape closes
+   the ordinary viewer; M still toggles the map independently while fullscreen.
    Repeat after exiting fullscreen or changing
    photos with the keyboard. Fail a current lookup deliberately and confirm its
    canonical photo-page fallback still works.
@@ -4221,6 +4228,9 @@ executable and uses a fresh profile under
 lightbox module with synthetic photographs
 and controlled metadata responses. Its popup-shaped links exercise real DOM
 event routing and CSS fullscreen split state;
+it also checks browser-owned fullscreen exit without a page keydown, a single
+Escape from CSS fullscreen with a map, duplicate exit notifications, disposal
+of the split-map runtime/geometry and late Leaflet completion after exit/reentry.
 it does not validate Leaflet rendering, native fullscreen, touch gestures, or
 live database/media authorization. Run the
 manual matrix above for those integration checks. `--baseline` on either Node
@@ -7546,3 +7556,7 @@ retain capability/revision coverage; the advanced-owner regression verifies the
 header's partial save and canonical defaults. Real installation visual checks
 use only navigation, contextual help and preview/layout controls; persistent
 preference writes belong to disposable hosted fixtures.
+Viewport changes use the captured native harness transport and await two
+rendering frames before checking the committed width and responsive layout.
+This lets native resize delivery and ResizeObserver state settle without
+relaxing separator visibility, disabled-state or overflow assertions.

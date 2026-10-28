@@ -1,5 +1,25 @@
 # Compatibility lifecycle and retirement register
 
+## Lightbox fullscreen exit and split-map lifetime
+
+Owner: `public/assets/gallery-modules/lightbox.js`. Native browser fullscreen
+exit can consume Escape without delivering a page keydown. Both that event
+and the explicit F/control exit use the same normal-viewer cleanup: dispose
+Leaflet and its resize observer, hide split controls, clear fitted-map geometry
+and unavailable state, cancel map-photo selection and stop the slideshow.
+CSS/mobile fullscreen remains supported; page-delivered Escape leaves that
+shell with the same cleanup. M retains independent map toggling.
+
+Split-map payload, Leaflet-load and layout continuations retain a render
+generation. Closing the split invalidates their generation, including across
+rapid fullscreen exit/reentry, so late completion cannot reopen the pane.
+The existing native-refusal CSS fallback is permanent capability support;
+supported-browser/version usage remains unknown and no retirement is proposed.
+The registered browser fixture covers exit-event cleanup, CSS Escape and
+late runtime completion with synthetic media and a Leaflet boundary.
+Real browser-chrome Escape, mobile devices and production acceptance require
+manual verification; synthetic fullscreen events do not prove those paths.
+
 ## Telemetry preference transports
 
 Standalone report delivery keeps its existing Admin-only URL, segment filters,

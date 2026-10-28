@@ -2429,6 +2429,13 @@ Att välja \ui{Öppna fotografi} i en gallerikartmarkör öppnar fotografiet i a
 
 Ett galleri med sparad flygrutt kan öppna kartan innan det första fotot laddas upp, även på sidor utan lightbox-markup. Kartan anpassas till alla sparade ruttpunkter och behåller vanliga återställningskontroller; ruttpunkter behandlas inte som fotomarkörer. Utan sparade koordinater visas det vanliga meddelandet om en tom karta. Galleriets åtkomstregler och effektiva kartinställningar gäller fortfarande; inläsning sker på begäran.
 
+När fotots helskärm lämnas med \codeword{F}, dess knapp eller webbläsarens
+\codeword{Escape} stängs den delade kartan och den vanliga ljuslådan återställs
+med samma foto och zoom. Pågående kartinläsning kan inte öppna panelen igen
+efteråt. I CSS-helskärm ger ett enda \codeword{Escape} samma övergång.
+\codeword{M} växlar kartan separat i helskärm; ett senare \codeword{Escape}
+stänger den vanliga ljuslådan.
+
 \subsection{Flygkartor och navigeringsdata}
 \index{s00220@SimBrief}
 \index{f00081@flygkartor}
