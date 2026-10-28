@@ -1,5 +1,125 @@
 # Patch notes
 
+## Version 0.147
+
+Improved manual ZIP photo uploads by streaming selected archives through bounded
+upload batches. Added a direct gallery import workflow under Media, with a
+copyable source URL and the existing API transfer of originals and thumbnails.
+
+### Highlights
+
+#### Larger manual ZIP selections
+
+- Replaced eager extraction of every image in a selected ZIP with a metadata
+  inspection followed by reading and preparing one image at a time. Removed the
+  former 64 MiB aggregate-original retention cap from manual ZIP selections.
+- Preserved the shared per-image, archive-directory, entry-count, expanded-data
+  and server-request limits. Kept the original source ZIP in the browser rather
+  than posting that entire archive to PHP.
+- Preserved explicit drawer order for mixed selections of ordinary images and
+  ZIPs. Retained natural image ordering across archive boundaries in standalone
+  upload forms.
+- Retained source descriptors, the upload cursor, session identity and exact
+  unacknowledged batch for an explicit retry after a lost response. Inspected
+  every selected archive before the first server write.
+- Removed the misleading PHP request-size warning from source ZIPs when browser
+  preparation was enabled. Retained size warnings for direct image originals
+  and classic upload selections.
+
+#### Gallery import beside the upload tools
+
+- Added Edit gallery > Media > Import gallery, exposing the existing target-pull
+  transfer without opening the advanced API tools.
+- Added a separate Gallery import URL beside the source gallery's API-key
+  controls. Allowed administrators to generate a source key, copy the URL and
+  one-time key, and paste both into the receiving gallery's import form.
+- Reused the existing version-checked, resumable transfer of originals, existing
+  thumbnails and supported metadata. Created the imported source as a new child
+  of the receiving gallery; retained the receiving gallery's own settings.
+- Enabled Include subgalleries by default and placed reconnect settings under
+  Connection options. Retained the full export/import tools in the API area's
+  advanced disclosure.
+- Applied compact Theme glass surfaces, transparent actions, dark-theme
+  contrast, mobile control targets and trigger-anchored help. Kept progress,
+  errors, the active editor and independent gallery drafts in place.
+
+### Technical Details
+
+#### Upload preparation and retry
+
+- Added `createBrowserUploadSelectionStream()` to
+  `public/assets/gallery-modules/browser-upload-archive-stream.js` and routed
+  manual archive selections through the existing File-stream uploader in
+  `public/assets/gallery-modules/admin-browser-upload.js`.
+- Retained only source Files and archive-entry descriptors between reads, with
+  at most one active archive reader during consumption. Preserved integrity
+  checks and counted skips for corrupt or unsupported entries.
+- Kept the manual form's server-validated new-gallery visibility. Retained the
+  separate Private/Unpublished requirement for automatic iCloud imports.
+- Updated `public/assets/gallery-modules/admin-upload-preview.js` to distinguish
+  local source ZIP size from the prepared requests sent to PHP. Refreshed the
+  affected import chain and fixture module revisions.
+
+#### Gallery API and presentation
+
+- Prepared the capability-gated import fragment in
+  `app/controllers/admin_galleries_edit_page/tab_documents.php` and registered
+  its Media subsection in `app/views/admin_gallery_edit_tabs.php`.
+- Extended `app/controllers/upload_automation.php` and
+  `app/views/upload_automation.php` with a canonical absolute import endpoint,
+  keeping the installation mount and API key separate.
+- Reused `app/views/admin_gallery_migration.php` for the focused pull form and
+  full API tools. Kept native submission as POST so unavailable enhancement
+  could not place API keys in query strings; documented the JavaScript
+  requirement for staged transfer.
+- Reused the existing migration routes, scoped credentials, schema-readiness
+  checks and canonical mutation-completion coordinator. Added no database
+  migration or new transfer protocol.
+- Used the shared `gallery-media-panels.js` owner for anchored help, viewport
+  bounds, outside-click/Escape dismissal and focus restoration. Updated
+  `public/assets/styles/admin-gallery-api.css` and
+  `public/assets/styles/admin-gallery-media.css` for the compact controls.
+- Added English, Czech, German and Swedish interface text and synchronized all
+  four maintained manual sources and the upload/import references.
+
+#### Regression coverage
+
+- Extended `tests/browser_upload_zip_worker_test.mjs` with mixed-selection
+  streaming, real worker extraction, ordering, integrity skips, sparse archive
+  admission above 64 MiB, exact lost-acknowledgment batch replay and refusal of
+  a malformed later archive before any server write.
+- Extended the upload stream fixture to distinguish manual public-gallery
+  creation from automatic-source visibility restrictions. Updated the Chromium
+  clipboard fixture to preserve direct/classic size warnings while omitting
+  the prepared source-ZIP warning.
+- Extended `tests/admin_gallery_music_browser_test.mjs` and its production-view
+  fixture with the import tab, source copy fields, omitted disabled-capability
+  markup, scoped POST credentials and CSRF, manifest refusal, canonical
+  completion, retained panel/URL state and a dynamically replaced import form.
+- Added model coverage for using the copied source endpoint to construct package
+  requests while preserving a subdirectory installation mount.
+- Documented separate manual coverage for physical browser memory, large real
+  archives and Safari/Firefox; synthetic admission fixtures did not establish
+  those measurements or client guarantees.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery browsing and protected-media access remained unchanged; the
+  changes focused on administrator upload and import workflows.
+
+#### For administrators
+
+- Enabled larger supported manual ZIP selections without retaining every
+  extracted original at once, while preserving existing ingestion limits,
+  selection order and explicit retry behavior.
+- Made gallery-to-gallery copying available beside the regular Media tools,
+  including existing thumbnails and optional descendants. Kept same-version
+  compatibility, gallery-scoped keys and a new child destination explicit.
+- Improved readability and touch interaction for the transfer controls while
+  retaining the current editor, progress and actionable failure feedback.
+
 ## Version 0.146.1
 
 Improved lightbox content fitting for images with aligned black mattes beside dim, textured content edges. Preserved existing behavior for unmatched dim edges and uniform dark frames.
