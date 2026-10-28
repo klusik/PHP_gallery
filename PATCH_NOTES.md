@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.146.1
+
+Improved lightbox content fitting for images with aligned black mattes beside dim, textured content edges. Preserved existing behavior for unmatched dim edges and uniform dark frames.
+
+### Highlights
+
+#### Paired dim-edge detection
+
+- Recognized matching opposite black mattes when both adjacent content
+  edges showed sustained brightness variation, even when neither edge met the
+  existing bright-content threshold. Addressed
+  [#248](https://github.com/klusik/PHP_gallery/issues/248).
+- Preserved independent-edge detection, unmatched dim edges, uniform dark
+  fades, and original-frame support. Stored media remained unchanged.
+
+### Technical Details
+
+#### Frontend
+
+- Updated content-bound detection in
+  `public/assets/gallery-modules/lightbox-zoom-model.js` and synchronized the
+  imported module version in `public/assets/gallery-modules/lightbox.js`.
+- Bumped the detection-policy cache version.
+
+#### Tests and documentation
+
+- Extended model and browser-fixture coverage for paired dim edges across both
+  axes, bright/dim pairs, unequal dim mattes, and uniform dark frames.
+- Updated browser lifecycle, compatibility, architecture, testing, and English,
+  Czech, German, and Swedish manual documentation.
+
+### User Impact
+
+#### For visitors
+
+- Improved content fitting for screenshots with aligned black mattes beside
+  dim, textured content, while retaining the original image frame and avoiding
+  changes to stored media.
+
+#### For administrators and maintainers
+
+- Public administration behavior did not change. Documented detection limits
+  and added regression coverage; no database change was evidenced.
+
 ## Version 0.146
 
 Added automatic lightbox fitting around visible image content, with a session
