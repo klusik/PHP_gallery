@@ -33,8 +33,8 @@ Hosting cron can run `php scripts/site_maintenance.php --cache-only` every
 minute
 to drain already-staged updater trash independently of thumbnail maintenance.
 
-[Project website](https://klusik.github.io/PHP_gallery/) ·
-[Documentation and published-release references](https://klusik.github.io/PHP_gallery/docs/)
+[Project website](https://phpgallery.site/) ·
+[Documentation and published-release references](https://phpgallery.site/docs/)
 — translucent presentation in English, Czech, German and Swedish, with real
 application captures, optional light/dark appearance and screenshot enlargement.
 Website source, preview,

@@ -1081,7 +1081,9 @@ The project website has an isolated hosted suite:
 `php scripts/audit.php --suite=website`.
 It checks the explicit website-only artifact, all eight localized project
 routes,
-release-bound references and required Chromium at desktop, 390px and 320px
+exact canonical, EN/CS/DE/SV alternate, English `x-default` and Open Graph URLs
+under `https://phpgallery.site/`, release-bound references and required Chromium
+at desktop, 390px and 320px
 widths,
 including native keyboard disclosure and focus, both presentation palettes,
 composed 4.5:1 text contrast and unchanged screenshot bytes. A script-withheld

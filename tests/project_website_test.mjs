@@ -57,6 +57,28 @@ for (const locale of Object.values(locales)) {
 for (const page of pages) {
     const html = readFileSync(resolve(output,page),'utf8');
     const locale = page.startsWith('cs/') ? 'cs' : page.startsWith('de/') ? 'de' : page.startsWith('sv/') ? 'sv' : 'en';
+    const canonical = `https://phpgallery.site/${page.replace('index.html','')}`;
+    const canonicalUrls = [...html.matchAll(/<link rel="canonical" href="([^"]+)">/g)]
+        .map(match => match[1]);
+    const openGraphUrls = [...html.matchAll(/<meta property="og:url" content="([^"]+)">/g)]
+        .map(match => match[1]);
+    assert.deepEqual(canonicalUrls,[canonical],`${page}: exact production canonical URL.`);
+    assert.deepEqual(openGraphUrls,[canonical],`${page}: Open Graph must match canonical.`);
+    const documentPath = page.includes('docs/') ? 'docs/' : '';
+    const alternates = [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)">/g)]
+        .map(([,language,url]) => [language,url]);
+    assert.deepEqual(alternates,[
+        ['en',`https://phpgallery.site/${documentPath}`],
+        ['cs',`https://phpgallery.site/cs/${documentPath}`],
+        ['de',`https://phpgallery.site/de/${documentPath}`],
+        ['sv',`https://phpgallery.site/sv/${documentPath}`],
+        ['x-default',`https://phpgallery.site/${documentPath}`],
+    ],`${page}: all language alternates must preserve the document kind.`);
+    assert.doesNotMatch(
+        [...canonicalUrls,...openGraphUrls,...alternates.map(([,url]) => url)].join('\n'),
+        /https:\/\/klusik\.github\.io|\/PHP_gallery\//,
+        `${page}: production metadata must exclude the former origin and preview mount.`
+    );
     assert.ok(html.includes(`<html lang="${locale}">`));
     assert.ok(html.includes(release.url));
     assert.ok(html.includes(`/blob/${release.commit}/README.md`));
@@ -258,7 +280,7 @@ try {
     if (screenshots) assert.deepEqual(screenshotFiles.sort(),[
         'home-dark-1280.png','home-1280.png','docs-1280.png','home-390.png','docs-390.png','de-home-320.png','de-docs-320.png',
     ].sort(),'Every requested desktop/mobile screenshot must be retained.');
-    console.log('PASS website-only artifact; release-bound README, patch notes and four PDFs; eight project routes; desktop/390px/320px layouts; native no-script tabs/language navigation; both palettes; original captures, modal arrows/Escape/focus and source links.');
+    console.log('PASS website-only artifact; release-bound README, patch notes and four PDFs; eight project routes with production canonical/alternate/Open Graph URLs; desktop/390px/320px layouts; native no-script tabs/language navigation; both palettes; original captures, modal arrows/Escape/focus and source links.');
 } finally {
     await new Promise(done => server.close(done));
 }

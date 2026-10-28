@@ -1,13 +1,13 @@
 {
     "version": "0.145",
-    "generated_at": "2026-10-28T20:10:20+00:00",
+    "generated_at": "2026-10-28T20:35:59+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:527a0839805e09e9559d4e69d89987ac2f3c8651016f8324c137d98c5f7c8b29",
         "ARCHITECTURE.md": "sha256:ff4a2846d738dd36ad53dc8c4430a11b6a380e879a96c33d04cdeea181c38351",
         "PATCH_NOTES.md": "sha256:8204ca2beece0bacdb16bb082c6dc93e07780d199e24f63bb0ceaeec099b1811",
-        "README.md": "sha256:2ada161e0490b6c8849da315a17820f8f81c32d113de388ee9ee1055e99f48dd",
+        "README.md": "sha256:36003454d3fa4b1a0e94f9eb5b266366504bb235f959cd537d0800de10a34f68",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
         "app/AGENTS.md": "sha256:f55eabe4fbb35858958b5b2888e7a25069a101acbcc3e7bcd3810391ec2bbda8",
         "app/bootstrap.php": "sha256:fa1f74ebdaa80a6b166bb8991fd2d3d65cfa8ff8c60755c1420df2eda8bd575e",

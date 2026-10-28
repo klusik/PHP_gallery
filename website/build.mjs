@@ -27,6 +27,8 @@ if (!/^v_\d+\.\d+(?:\.\d+)?$/.test(release.tag_name) || release.draft !== false 
 const commit = execFileSync('git', ['rev-parse', `${release.tag_name}^{commit}`], {cwd:root, encoding:'utf8'}).trim();
 if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error('Release tag did not resolve to a full commit identity.');
 const repository = 'https://github.com/klusik/PHP_gallery';
+/** @type {string} Production origin shared by canonical, language and share metadata. */
+const siteBaseUrl = 'https://phpgallery.site';
 const source = `${repository}/blob/${commit}`;
 const manualFiles = {en:'PHP_Gallery_Manual.pdf', cs:'PHP_Gallery_Manual_CZ.pdf', de:'PHP_Gallery_Manual_DE.pdf', sv:'PHP_Gallery_Manual_SV.pdf'};
 for (const file of ['README.md', 'PATCH_NOTES.md', ...Object.values(manualFiles).map(name => `docs/${name}`)]) {
@@ -88,10 +90,10 @@ function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 }
 
-/** Return the project-relative route for a locale and document kind.
- * @param {string} locale Supported content locale, with English at the project root.
+/** Return the site-relative route for a locale and document kind.
+ * @param {string} locale Supported content locale, with English at the site root.
  * @param {string} page Document kind: home or docs.
- * @returns {string} Directory route under /PHP_gallery/.
+ * @returns {string} Directory route relative to the site root or preview mount.
  */
 function route(locale, page) {
     return `${locale === 'en' ? '' : locale + '/'}${page === 'docs' ? 'docs/' : ''}`;
@@ -219,7 +221,7 @@ function document(locale, page, body) {
     const t = content[locale];
     const prefix = '../'.repeat((locale === 'en' ? 0 : 1) + (page === 'docs' ? 1 : 0)) || './';
     const title = `PHP Gallery — ${page === 'home' ? t.title : t.docs}`;
-    const canonical = `https://klusik.github.io/PHP_gallery/${route(locale,page)}`;
+    const canonical = `${siteBaseUrl}/${route(locale,page)}`;
     const docs = prefix + route(locale,'docs');
     const overview = prefix + route(locale,'home');
     return `<!doctype html>
@@ -228,8 +230,8 @@ function document(locale, page, body) {
     <title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(page === 'home' ? t.lead : t.docsLead)}">
     <meta name="theme-color" content="#f3f5f5"><link rel="canonical" href="${canonical}">
-    ${Object.keys(content).map(language => `<link rel="alternate" hreflang="${language}" href="https://klusik.github.io/PHP_gallery/${route(language,page)}">`).join('\n')}
-    <link rel="alternate" hreflang="x-default" href="https://klusik.github.io/PHP_gallery/${route('en',page)}">
+    ${Object.keys(content).map(language => `<link rel="alternate" hreflang="${language}" href="${siteBaseUrl}/${route(language,page)}">`).join('\n')}
+    <link rel="alternate" hreflang="x-default" href="${siteBaseUrl}/${route('en',page)}">
     <link rel="stylesheet" href="${prefix}assets/site.css"><script src="${prefix}assets/site.js" defer></script>
     <meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(page === 'home' ? t.lead : t.docsLead)}"><meta property="og:url" content="${canonical}"><meta property="og:type" content="website">
 </head><body>
