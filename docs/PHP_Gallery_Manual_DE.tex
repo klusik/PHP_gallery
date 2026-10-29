@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.147}
+\newcommand{\version}{0.147.1}
 \newcommand{\manualdate}{29.~Oktober~2026}
 
 \hypersetup{
@@ -2533,9 +2533,14 @@ dieser Sitzung; eine Änderung setzt den Zoom auf 100~\% zurück. Wegen des
 Inhaltsseitenverhältnisses nötiger Freiraum bleibt erhalten.
 Die Erkennung liest nur eine kleine Probe des aktiven dekodierten Bildes,
 höchstens 256~Pixel pro Seite, ohne maschinelles Lernen oder zusätzliche
-Bildanfragen. Passende gegenüberliegende Ränder können auch zwei dunklere
-Inhaltsränder bestätigen, wenn beide anhaltende Helligkeitsunterschiede zeigen;
-ein gleichmäßig dunkles Bild bleibt unverändert. Unsichere Kanten und Text
+Bildanfragen. Passende gegenüberliegende Ränder können dunklere Inhaltsränder
+bestätigen. Ein Rand mit anhaltenden Helligkeitsunterschieden kann auch einen
+scharfen Helligkeitssprung an einer ebenmäßigen oder nur spärlich beleuchteten
+Gegenseite bestätigen. Eine zusätzliche Symmetrieprüfung misst beide schwarzen
+Ränder unabhängig und prüft scharfe Helligkeitssprünge an beiden Grenzen sowie
+anhaltende Details auf mindestens einer Seite. So werden auch nahezu schwarze
+Szenen erkannt. Gleichmäßig dunkle Bilder und allmähliche Übergänge
+bleiben unverändert. Unsichere Kanten und Text
 bleiben sichtbar, während andere sicher erkannte Ränder ausgeblendet werden
 können. Verweigerte
 Pixelzugriffe behalten den ganzen Rahmen. Dateien, Vorschaubilder und

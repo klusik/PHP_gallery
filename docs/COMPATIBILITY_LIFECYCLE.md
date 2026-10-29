@@ -16,18 +16,38 @@ minimum bands, at most 30% trim per edge and at least 40% retained per axis.
 Each line requires opaque channels at most 20, mean at most 12 and standard
 deviation at most 6. Two content lines need at least 35% pixels at level 40 or
 above. Matching opposite bands (within two sampled pixels) permit darker
-transitions even when neither edge passes that strict test: each edge must
-either pass the strict test or have at least 15% pixels at level 24 or above
-and a level range of at least 12 on each of four lines. The range requirement
-retains flat dark fades. Unmatched dim edges keep the strict test.
-Up to two dim boundary lines may precede either evidence window; those lines
-remain inside the crop. Decisions
+transitions even when neither edge passes that strict test: a dim transition
+needs at least 15% pixels at level 24 or above and a level range of at least 12
+on each of four lines. The range requirement
+retains flat dark fades. With matching bands, at least one edge must pass one
+of those transition tests independently. It may corroborate an opposite flat
+or sparsely lit edge only when its mean rises by at least 12 byte levels above
+the immediately adjacent matte line on each of four content lines. This step
+starts at the boundary without the two-line ramp allowance. Two unqualified
+mean steps cannot corroborate each other; uniform dim frames, gradual dark
+boundaries and unmatched dim edges retain their existing protection.
+Up to two dim boundary lines may precede a strict or dim transition window;
+those lines remain inside the crop. Decisions
 are per edge, so an uncertain natural dark side does not reject valid top/bottom
 bands. Text remains visible; an uncertain caption edge can remain in full while
 the opposite matte fits. A genuinely black
 photographic background may still resemble a matte. The original-frame toggle
 remains available even when no matte is found. It retains the session selection
 across navigation and resets zoom on a deliberate mode change.
+
+An incomplete axis additionally probes opaque bands with mean at most 4,
+retaining the ordinary channel ceiling 20 and deviation limit 6. Matching
+independently measured widths (within two sampled pixels) are only a symmetry
+hint: each cut must raise the mean at least six levels
+above its adjacent exterior line on each of four content lines. At least one
+cut must also show 15% pixels at level 12 or above and a range of at least 12
+on all four lines, starting at the same boundary without a ramp. This stricter
+exterior model localizes the black-to-near-black step that the ordinary band
+scan can absorb. Keeping the channel/noise limits while tightening the mean
+tolerates isolated compression specks at a blended boundary. No missing or
+unequal opposite band is invented, two uniform dim edges cannot corroborate
+each other, and the ordinary asymmetric path
+remains supported. Sampling, cache and trim limits are unchanged.
 
 Regression sources cover synthetic noise, dark/black/transparent frames,
 asymmetric/four-sided mattes and subtitle contamination, with a browser JPEG
@@ -58,6 +78,41 @@ about 8--21 ms on the authoring machine, including raster sampling; this is not
 a low-end-device guarantee. Simbrieftest navigation and fullscreen slideshow
 were inspected with its soundtrack explicitly disabled. The compressed fixture
 passed at both sizes, including crop/override/cache/zoom and both-layer fades.
+
+The additional Mass Effect samples 0003/0004 expose two distinct transition
+limits: the first has too few level-24 pixels on one content edge for all four
+lines; the second meets a nearly flat dim wall whose range is below 12.
+The paired mean-step rule addresses those edges using independently qualified
+content beside the opposite matte. Synthetic vectors cover both axes and
+orientations, retained gradual boundaries and unqualified flat pairs; compressed
+browser patterns cover sparse illumination and a flat wall. Actual screenshots
+remain local diagnostic inputs. Broader dark-scene false positives and real-phone
+performance remain unknown; the original-frame override remains permanent.
+Local Chromium inspection of their authorized 1600-pixel previews with the
+worktree viewer fitted both to the exact horizontal interval [0.125, 0.875]
+with full height at 1440x900 and 390x844. Rendered image identities and
+screenshots confirmed both scenes and subtitles remain visible. The inspection
+replayed captured production HTML because the local server had begun returning
+503; it does not establish live-installation or hosted FULL qualification.
+
+Samples 0051--0053 expose the remaining near-black cases: a starfield whose
+dark edge has too little mean rise for the ordinary rule, a scene whose left
+content is partly absorbed by the ordinary scan, and a mostly flat near-black
+edge opposite a sparsely lit textured edge. The stricter symmetric-pair path
+requires measured black bands, immediate steps on both sides and persistent
+texture on at least one. Synthetic regressions cover both axes/orientations,
+compression-like noise, absent/unequal bands, uniform fades, isolated points
+and gradual boundaries; browser JPEG patterns cover the starfield and dark
+interior. Real screenshots remain local diagnostic inputs. Broader dark-scene
+false positives and real-phone performance remain unknown.
+Live Chromium inspection fitted all three reported previews and originals to
+[0.125, 0.875] horizontally with full height. At 1440x900 and 390x844, all three
+retained their scene and subtitles through original-frame override, full-source
+zoom and fullscreen. The prior 0003/0004 cases still fitted both pillars. Initial
+analysis was about 9--13 ms on the authoring machine; this does not establish
+low-end-device performance or hosted FULL qualification. A captured production
+Canvas sample also exposed a level-9 compression speck on the outer boundary;
+the stricter mean preserves the real cut while retaining the channel/noise caps.
 
 Manual and slideshow transitions retain outgoing crop geometry during loading.
 Target geometry is prepared without a visible full-frame intermediate. The

@@ -1,5 +1,54 @@
 # Patch notes
 
+## Version 0.147.1
+
+Improved lightbox content-bound detection for dim screenshots and near-black
+images, while preserving safeguards against uncertain or gradual edges.
+
+### Highlights
+
+#### More reliable lightbox content bounds
+
+- Improved detection of sparse or flat dim edges when a qualifying opposite edge
+  confirmed a sharp brightness step.
+- Added detection of near-black scenes using independently measured symmetric
+  black bands, requiring sharp steps on both sides and sustained texture on at
+  least one side.
+- Preserved safeguards for gradual boundaries, uniform dark fades, unpaired or
+  unequal bands, and uncertain edges. Kept the original-frame override
+  unchanged.
+
+### Technical Details
+
+#### Frontend
+
+- Updated detection thresholds and cache version in
+  `public/assets/gallery-modules/lightbox-zoom-model.js`.
+- Advanced the lightbox module query version in
+  `public/assets/gallery-modules/lightbox.js` to invalidate stale browser caches.
+
+#### Tests and documentation
+
+- Added model and compressed-browser fixture coverage for sparse and flat edges,
+  starfields, near-black content, noise, and cases where symmetry must not
+  invent a crop.
+- Updated `TESTING.md`, the browser and compatibility lifecycle references, and
+  the English, Czech, German, and Swedish manuals with detection behavior,
+  limitations, and diagnostic evidence.
+- Updated the lightbox cache-version lifecycle assertion. No database or
+  stored-image changes were made.
+
+### User Impact
+
+#### For visitors
+
+- Improved lightbox framing for supported dim and near-black images while
+  retaining the option to view the original frame.
+
+#### For administrators
+
+- Administrator workflows did not change.
+
 ## Version 0.147
 
 Improved manual ZIP photo uploads by streaming selected archives through bounded

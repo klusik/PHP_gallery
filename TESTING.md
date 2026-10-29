@@ -1116,7 +1116,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.147. Release verification uses the
+This guide applies to PHP Gallery Version 0.147.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4085,8 +4085,17 @@ the actual protected preview route; no personal image is embedded in fixtures.
 Paired dim game edges cover both reported failure classes: a crop on only the
 bright side and no crop when both sides are dim. Node vectors exercise both
 axes and unequal dim mattes; compressed browser JPEGs require both pillars to
-disappear. Uniform dark frames remain unchanged. The actual reported Mass
-Effect samples are diagnostic inputs only, not committed fixture assets.
+disappear. Uniform dark frames remain unchanged. Additional sparse/flat edge
+vectors model samples 0003/0004 on both axes and
+in both orientations. Sharp mean steps need an independently qualified opposite
+transition; gradual boundaries and flat dim pairs remain intact. The compressed
+browser corpus includes sparse illumination and a dim flat wall. Actual reported
+Mass Effect samples are diagnostic inputs only, not committed fixture assets.
+The 0051--0053 corpus adds dark starfields and near-black content that the
+ordinary band scan can absorb. Both axes/orientations cover stricter symmetric
+cuts, while absent/unequal opposite bands, uniform dark fades, isolated points
+and gradual boundaries remain unchanged. Compressed browser patterns require
+both pillars to disappear while retaining all near-black content.
 The same fixture snapshots outgoing source/surface styles synchronously at
 navigation, checks incoming full-source proportions and unconstrained computed
 maxima during fades, and observes intermediate outgoing opacity. Its automatic

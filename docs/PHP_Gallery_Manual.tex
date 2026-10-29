@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.147}
+\newcommand{\version}{0.147.1}
 \newcommand{\manualdate}{29 October 2026}
 
 \hypersetup{
@@ -2431,8 +2431,13 @@ and~resets zoom to~100\% when changed. Space required by~the~content's own
 aspect ratio remains visible around it.
 Detection reads only a~small sample of~the~active decoded image, at~most
 256~pixels per~edge, without machine learning or~extra image requests.
-Matched opposite borders can~support two darker content edges when both show
-sustained variation; a~uniform dark fade remains unchanged. Uncertain edges
+Matched opposite borders can~support darker content edges. One edge with
+sustained variation can~also confirm a~sharp brightness step beside a~flat
+or~sparsely lit opposite edge. An~additional symmetry check measures both black
+bands independently and~verifies sharp steps at~both boundaries with sustained
+detail on~at~least one side. This also recognizes near-black scenes.
+A~uniform dark fade or~a~gradual boundary
+remains unchanged. Uncertain edges
 and~text in~borders stay visible while other proven borders can~fit;
 unavailable pixel reads keep the~whole frame. Files, thumbnails and~downloads
 remain unchanged.

@@ -22,7 +22,7 @@
  * License: MIT License (see LICENSE file in repository)
  *
  * Last Updated:
- *   2026-10-28
+ *   2026-10-29
  */
 
 export const LIGHTBOX_ZOOM_MIN_SCALE = 1;
@@ -39,14 +39,22 @@ export const LIGHTBOX_ZOOM_QUALITY_UPGRADE_THRESHOLD = 1;
  * minContent:number,transitionLight:number,transitionShare:number,
  * transitionDepth:number,transitionRamp:number,pairedTransitionShare:number,
  * pairedTransitionLight:number,pairedTransitionContrast:number,
- * pairedTransitionDepth:number,pairedBandTolerance:number,
+ * pairedTransitionDepth:number,pairedTransitionMeanRise:number,
+ * pairedBandTolerance:number,pairedBlackMean:number,
+ * pairedBoundaryMeanRise:number,pairedBoundaryLight:number,
  * aspectTolerance:number,version:string}.
  * Units: pixels, entries, byte levels and dimensionless fractions as below.
  * Scope: one active lightbox; no background gallery analysis.
  * Consumers: detectLightboxContentBounds and the lightbox canvas/cache owner.
  * Rationale: 256-square sampling caps RGBA storage at 256 KiB; 64 cached
  * rectangles bound session memory. These are conservative design budgets,
- * not measured low-end-device performance guarantees.
+ * not measured low-end-device performance guarantees. A 12-level mean rise
+ * over four adjacent lines admits dim scene cuts while rejecting gradual
+ * boundaries; a qualified opposite transition is mandatory corroboration.
+ * A separate symmetric candidate caps the band mean at 4, retaining the
+ * ordinary channel/noise limits, and needs a six-level rise on both sides.
+ * Sustained level-12 spatial variation on at least one side distinguishes
+ * near-black scenes from uniform fades.
  */
 export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
     sampleEdge: 256,
@@ -65,9 +73,13 @@ export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
     pairedTransitionLight: 24, // Accept dim game scenes above near-black noise.
     pairedTransitionContrast: 12, // Require visible variation, not a flat fade.
     pairedTransitionDepth: 4, // Paired dark edges need four persistent content lines.
+    pairedTransitionMeanRise: 12, // Sharp mean rise above the adjacent matte line.
     pairedBandTolerance: 2, // Opposite mattes may differ by two sample pixels.
+    pairedBlackMean: 4, // Separate padding from dim content despite JPEG specks.
+    pairedBoundaryMeanRise: 6, // Both symmetric cuts must have an immediate step.
+    pairedBoundaryLight: 12, // Dark texture can corroborate the opposite cut.
     aspectTolerance: 0.02, // Allow 2% derivative rounding, not a different frame.
-    version: 'content-v3', // Invalidate cached decisions when policy changes.
+    version: 'content-v5', // Invalidate cached decisions when policy changes.
 });
 
 /**
@@ -76,9 +88,14 @@ export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
  * Horizontal bands are found first, then columns within their content span.
  * An uncertain edge retains its extent without rejecting other proven edges.
  * Matched opposite mattes can establish darker sustained transitions on both
- * edges when each has spatial variation. An independent edge still needs the
- * ordinary bright-content test. Real dark backgrounds can resemble a matte,
- * so the viewer offers an original-frame override.
+ * edges. One qualifying opposite content edge can corroborate a sharp mean
+ * brightness step beside a flat or sparsely lit edge. Two flat dim edges remain
+ * uncertain. An independent edge still needs the ordinary bright-content test.
+ * An incomplete axis also probes stricter black bands: symmetry requires two
+ * measured cuts with immediate mean steps and sustained texture on one side.
+ * This keeps near-black content that the ordinary band scan may absorb.
+ * Real dark backgrounds can resemble a matte, so the viewer offers an
+ * original-frame override.
  *
  * @param {{width:number,height:number,data:Uint8ClampedArray}} sample Small RGBA raster, at most 256 pixels per axis.
  * @returns {{left:number,top:number,right:number,bottom:number}|null} Normalized content edges, or null when unchanged/uncertain.
@@ -93,7 +110,8 @@ export function detectLightboxContentBounds(sample) {
         || !(data instanceof Uint8ClampedArray)
         || data.length !== width * height * 4) return null;
 
-    const scanBand = (vertical, reverse, start, end) => {
+    const scanBand = (vertical, reverse, start, end,
+        meanLimit = policy.blackMean) => {
         const extent = vertical ? width : height;
         const limit = Math.floor(extent * policy.maxTrim);
         const count = end - start;
@@ -114,7 +132,7 @@ export function detectLightboxContentBounds(sample) {
                 squares += level * level;
             }
             const mean = sum / count;
-            if (!black || mean > policy.blackMean
+            if (!black || mean > meanLimit
                 || squares / count - mean * mean
                     > policy.blackDeviation * policy.blackDeviation) break;
         }
@@ -123,13 +141,14 @@ export function detectLightboxContentBounds(sample) {
         return band;
     };
     const hasTransition = (vertical, reverse, band, start, end, share,
-        depthCount, light = policy.transitionLight, contrast = 0) => {
+        depthCount, light = policy.transitionLight, contrast = 0,
+        rampLimit = policy.transitionRamp) => {
         if (band <= 0) return false;
         const extent = vertical ? width : height;
         const count = end - start;
         // Downsampling can leave a dim boundary line before real content. Look
         // only a bounded distance inward, keeping those lines inside the crop.
-        for (let ramp = 0; ramp <= policy.transitionRamp; ramp += 1) {
+        for (let ramp = 0; ramp <= rampLimit; ramp += 1) {
             let sustained = true;
             for (let depth = 0; depth < depthCount; depth += 1) {
                 const distance = band + ramp + depth;
@@ -156,6 +175,37 @@ export function detectLightboxContentBounds(sample) {
         }
         return false;
     };
+    // A dim wall or sparsely lit edge can lack the transition's pixel share
+    // or range. Require a sharp step from the last matte line on every inward
+    // line, without looking past a gradual boundary. Callers corroborate it
+    // through an ordinary opposite transition or the stricter symmetric pair.
+    const hasPairedBoundaryStep = (vertical, reverse, band, start, end,
+        meanRise = policy.pairedTransitionMeanRise) => {
+        if (band <= 0) return false;
+        const extent = vertical ? width : height;
+        const exterior = reverse ? extent - band : band - 1;
+        const count = end - start;
+        let exteriorSum = 0;
+        for (let position = start; position < end; position += 1) {
+            const offset = (vertical
+                ? position * width + exterior : exterior * width + position) * 4;
+            exteriorSum += Math.max(data[offset], data[offset + 1],
+                data[offset + 2]);
+        }
+        for (let depth = 0; depth < policy.pairedTransitionDepth; depth += 1) {
+            const line = reverse ? extent - 1 - band - depth : band + depth;
+            let sum = 0;
+            for (let position = start; position < end; position += 1) {
+                const offset = (vertical
+                    ? position * width + line : line * width + position) * 4;
+                if (data[offset + 3] !== 255) return false;
+                sum += Math.max(data[offset], data[offset + 1],
+                    data[offset + 2]);
+            }
+            if ((sum - exteriorSum) / count < meanRise) return false;
+        }
+        return true;
+    };
     const resolveAxis = (vertical, start, end) => {
         const first = scanBand(vertical, false, start, end);
         const last = scanBand(vertical, true, start, end);
@@ -165,17 +215,49 @@ export function detectLightboxContentBounds(sample) {
             policy.transitionShare, policy.transitionDepth);
         const paired = first > 0 && last > 0
             && Math.abs(first - last) <= policy.pairedBandTolerance;
-        // Matching geometry corroborates two dim edges even when neither has
-        // 35% bright pixels. Flat fades and unmatched dark edges stay intact.
-        const pairedSupported = paired
-            && (firstStrong || hasTransition(vertical, false, first, start, end,
-                policy.pairedTransitionShare, policy.pairedTransitionDepth,
-                policy.pairedTransitionLight, policy.pairedTransitionContrast))
-            && (lastStrong || hasTransition(vertical, true, last, start, end,
-                policy.pairedTransitionShare, policy.pairedTransitionDepth,
-                policy.pairedTransitionLight, policy.pairedTransitionContrast));
-        return {first: firstStrong || pairedSupported ? first : 0,
+        const firstSupported = firstStrong || (paired && hasTransition(
+            vertical, false, first, start, end, policy.pairedTransitionShare,
+            policy.pairedTransitionDepth, policy.pairedTransitionLight,
+            policy.pairedTransitionContrast));
+        const lastSupported = lastStrong || (paired && hasTransition(
+            vertical, true, last, start, end, policy.pairedTransitionShare,
+            policy.pairedTransitionDepth, policy.pairedTransitionLight,
+            policy.pairedTransitionContrast));
+        // At least one side must qualify without borrowing a mean step. This
+        // retains uniform dim/fade frames while allowing a real scene to meet
+        // one matte through a flat wall or a sparsely illuminated boundary.
+        const pairedSupported = paired && (firstSupported || lastSupported)
+            && (firstSupported
+                || hasPairedBoundaryStep(vertical, false, first, start, end))
+            && (lastSupported
+                || hasPairedBoundaryStep(vertical, true, last, start, end));
+        const resolved = {first: firstStrong || pairedSupported ? first : 0,
             last: lastStrong || pairedSupported ? last : 0};
+        if (resolved.first && resolved.last) return resolved;
+
+        // Near-black content can satisfy the ordinary matte ceiling for many
+        // lines. Symmetry is a hint to probe a stricter, independently measured
+        // pair, never permission to mirror a crop onto an unverified edge.
+        const hintedFirst = scanBand(vertical, false, start, end,
+            policy.pairedBlackMean);
+        const hintedLast = scanBand(vertical, true, start, end,
+            policy.pairedBlackMean);
+        if (hintedFirst <= 0 || hintedLast <= 0
+            || Math.abs(hintedFirst - hintedLast) > policy.pairedBandTolerance
+            || !hasPairedBoundaryStep(vertical, false, hintedFirst, start, end,
+                policy.pairedBoundaryMeanRise)
+            || !hasPairedBoundaryStep(vertical, true, hintedLast, start, end,
+                policy.pairedBoundaryMeanRise)) return resolved;
+
+        // Texture must start at the same measured cut (zero ramp), persist for
+        // four lines, and occupy the normal 15% share. A few bright points
+        // alone cannot supply the required texture share.
+        const hasTexture = reverse => hasTransition(vertical, reverse,
+            reverse ? hintedLast : hintedFirst, start, end,
+            policy.pairedTransitionShare, policy.pairedTransitionDepth,
+            policy.pairedBoundaryLight, policy.pairedTransitionContrast, 0);
+        return hasTexture(false) || hasTexture(true)
+            ? {first: hintedFirst, last: hintedLast} : resolved;
     };
     const {first: top, last: bottom} = resolveAxis(false, 0, width);
     const {first: left, last: right} = resolveAxis(true, top, height - bottom);

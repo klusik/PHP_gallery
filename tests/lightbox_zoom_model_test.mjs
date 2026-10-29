@@ -237,6 +237,128 @@ for (const vertical of [false, true]) {
         'matching mattes must fit one or two dim textured content edges');
     }
 }
+// Reported 0003 has fewer than 15% lit pixels at one edge; 0004 meets a
+// nearly flat dim wall. Equal opposite mattes plus a qualified textured edge
+// can corroborate a sharp mean step. Cover both axes and both orientations.
+for (const vertical of [false, true]) {
+    for (const reverse of [false, true]) {
+        for (const pattern of ['sparse', 'flat', 'gradual']) {
+            const edges = vertical
+                ? {left: 16, top: 0, right: 112, bottom: 128}
+                : {left: 0, top: 16, right: 128, bottom: 112};
+            const game = contentSample(edges, 8);
+            for (let y = edges.top; y < edges.bottom; y += 1) {
+                for (let x = edges.left; x < edges.right; x += 1) {
+                    const across = vertical ? y : x;
+                    const inward = reverse ? 127 - (vertical ? x : y)
+                        : vertical ? x : y;
+                    // A gradual edge cannot corroborate a dim opposite one.
+                    // Give that negative case independently bright evidence
+                    // so its untouched edge can legitimately fit on its own.
+                    let level = pattern === 'gradual' ? 100 : 22 + across % 14;
+                    if (inward < 64) {
+                        if (pattern === 'flat') level = 25;
+                        else if (pattern === 'gradual') {
+                            level = Math.min(35, 8 + (inward - 16) * 3)
+                                + across % 2;
+                        } else {
+                            // 10% light pixels are below the existing 15% test.
+                            level = across % 10 === 0 ? 28 : 17 + across % 3;
+                        }
+                    }
+                    game.data.set([level, level, level], (y * 128 + x) * 4);
+                }
+            }
+            const bounds = detectLightboxContentBounds(game);
+            const first = vertical ? 'left' : 'top';
+            const last = vertical ? 'right' : 'bottom';
+            const tested = reverse ? last : first;
+            const opposite = reverse ? first : last;
+            assert(bounds?.[opposite] === (reverse ? 16 / 128 : 112 / 128),
+                'the independently qualifying opposite matte must still fit');
+            assert(bounds?.[tested] === (pattern === 'gradual'
+                ? (reverse ? 1 : 0) : (reverse ? 112 / 128 : 16 / 128)),
+            'sharp sparse/flat edges must fit; gradual dark boundaries must remain');
+            assert(bounds?.[vertical ? 'top' : 'left'] === 0
+                && bounds?.[vertical ? 'bottom' : 'right'] === 1,
+            'boundary-step evidence must not trim the other axis');
+        }
+    }
+}
+// Samples 0051--0053 have black padding next to content that can itself pass
+// the ordinary near-black scan. The symmetric hint must find measured cuts,
+// including a mostly flat edge, without inventing an absent/asymmetric matte.
+for (const vertical of [false, true]) {
+    for (const reverse of [false, true]) {
+        for (const noise of [0, 2]) {
+            for (const pattern of ['starfield', 'near-black', 'unequal',
+                'unpaired', 'flat', 'isolated', 'gradual']) {
+                const start = pattern === 'unpaired' && reverse ? 0 : 16;
+                const end = pattern === 'unpaired' && !reverse ? 128
+                    : pattern === 'unequal' ? 104 : 112;
+                const edges = vertical
+                    ? {left: start, top: 0, right: end, bottom: 128}
+                    : {left: 0, top: start, right: 128, bottom: end};
+                const scene = contentSample(edges, noise);
+                for (let y = edges.top; y < edges.bottom; y += 1) {
+                    for (let x = edges.left; x < edges.right; x += 1) {
+                        const along = vertical ? x : y;
+                        const across = vertical ? y : x;
+                        const dimSide = reverse ? along >= 64 : along < 64;
+                        const distance = reverse ? end - 1 - along : along - start;
+                        let level = pattern === 'near-black'
+                            ? 14 + (across % 8 === 0 ? 40 : 0)
+                            : 22 + across % 14;
+                        if (dimSide) {
+                            level = pattern === 'near-black'
+                                ? 5 + across % 10 : 4 + across % 13;
+                            if (pattern === 'gradual') {
+                                level = Math.min(18, distance * 2) + across % 2;
+                            }
+                        }
+                        if (pattern === 'flat') level = 25;
+                        if (pattern === 'isolated') {
+                            // One bright point per line cannot supply 15% texture.
+                            level = across === 64 ? 88 : 8;
+                        }
+                        scene.data.set([level, level, level], (y * 128 + x) * 4);
+                    }
+                }
+                if (noise === 2) {
+                    // CPU Canvas sampling can leave one level-9 JPEG speck on
+                    // the exterior boundary; it must not shift the real cut.
+                    const exterior = reverse ? start - 1 : end;
+                    if (exterior >= 0 && exterior < 128) {
+                        const offset = (vertical ? 64 * 128 + exterior
+                            : exterior * 128 + 64) * 4;
+                        scene.data.set([9, 9, 9], offset);
+                    }
+                }
+                const bounds = detectLightboxContentBounds(scene);
+                if (pattern === 'starfield' || pattern === 'near-black') {
+                    assert(bounds?.left === edges.left / 128
+                        && bounds?.top === edges.top / 128
+                        && bounds?.right === edges.right / 128
+                        && bounds?.bottom === edges.bottom / 128,
+                    'symmetric black cuts must retain adjacent near-black content');
+                } else {
+                    assert(bounds === null,
+                        `symmetry must not invent a cut for ${pattern} content`);
+                }
+            }
+        }
+    }
+}
+// Mean steps alone cannot corroborate each other, even with isolated noise.
+const flatPair = contentSample({left: 16, top: 0, right: 112, bottom: 128});
+for (let y = 0; y < 128; y += 1) {
+    for (let x = 16; x < 112; x += 1) {
+        const level = y === 64 && x === 16 ? 100 : 25;
+        flatPair.data.set([level, level, level], (y * 128 + x) * 4);
+    }
+}
+assert(detectLightboxContentBounds(flatPair) === null,
+    'two flat dim edges with isolated noise must not establish a crop');
 const mismatchedDim = contentSample(
     {left: 16, top: 0, right: 104, bottom: 128});
 for (let y = 0; y < 128; y += 1) {

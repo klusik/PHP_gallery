@@ -56,7 +56,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
 </div>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox}
-        from '../../public/assets/gallery-modules/lightbox.js?v=20261028-content-fit-v6';
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261029-content-fit-v3';
 
     // Bound asynchronous fixture checkpoints, independently of slideshow speed.
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
@@ -90,7 +90,8 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
      * Generate a compressed scene with optional black or ambiguous mattes.
      * @param {number} id Stable fixture card identity.
      * @param {{x:number,y:number,width:number,height:number}} rect Pixel content rectangle in a 1280 by 720 raster.
-     * @param {string} color Content color, flat dark case, concert, dim-pair or dim-left regression pattern.
+     * @param {string} color Content color, flat dark case, concert, dim-pair,
+     * dim-left, sparse-left, flat-right, starfield-right or near-black-left pattern.
      * @returns {HTMLAnchorElement} Mounted card using an in-memory JPEG only.
      */
     function makeCard(id, rect, color = '#4aa6ce') {
@@ -101,10 +102,12 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         const context = canvas.getContext('2d');
         context.fillStyle = 'black';
         context.fillRect(0, 0, canvas.width, canvas.height);
+        const dimPattern = ['dim-pair', 'dim-left', 'sparse-left', 'flat-right',
+            'starfield-right', 'near-black-left'].includes(color);
         context.fillStyle = color === 'concert' ? '#050505'
-            : color === 'dim-pair' || color === 'dim-left' ? '#161616' : color;
+            : dimPattern ? '#161616' : color;
         context.fillRect(rect.x, rect.y, rect.width, rect.height);
-        if (color === 'dim-pair' || color === 'dim-left') {
+        if (dimPattern) {
             // Model dark game edges at levels 22--38: no strict level-40
             // transition, but genuine variation beside equal black pillars.
             const gradient = context.createLinearGradient(0, rect.y,
@@ -117,6 +120,46 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
                 context.fillStyle = '#b0b0b0';
                 context.fillRect(rect.x + rect.width * 0.75, rect.y,
                     rect.width * 0.25, rect.height);
+            }
+            if (color === 'sparse-left') {
+                // Fewer than 15% lit pixels: the mean step must corroborate
+                // the textured opposite edge, including real JPEG resampling.
+                context.fillStyle = '#121212';
+                context.fillRect(rect.x, rect.y, rect.width / 2, rect.height);
+                context.fillStyle = '#232323';
+                context.fillRect(rect.x, rect.y + rect.height * 0.4,
+                    rect.width / 2, rect.height * 0.1);
+            } else if (color === 'starfield-right') {
+                // Texture stays below level 24 beside a genuine black pillar.
+                const stars = context.createLinearGradient(0, rect.y,
+                    0, rect.y + rect.height);
+                stars.addColorStop(0, '#030303');
+                stars.addColorStop(1, '#111111');
+                context.fillStyle = stars;
+                context.fillRect(rect.x + rect.width / 2, rect.y,
+                    rect.width / 2, rect.height);
+            } else if (color === 'near-black-left') {
+                // The left scene passes the ordinary matte ceiling for more
+                // than its paired-band tolerance. Neither edge passes the old
+                // bright share, but the right scene has sustained variation.
+                const dim = context.createLinearGradient(0, rect.y,
+                    0, rect.y + rect.height);
+                dim.addColorStop(0, '#060606');
+                dim.addColorStop(1, '#0e0e0e');
+                context.fillStyle = dim;
+                context.fillRect(rect.x, rect.y, rect.width / 2, rect.height);
+                context.fillStyle = '#101010';
+                context.fillRect(rect.x + rect.width / 2, rect.y,
+                    rect.width / 2, rect.height);
+                context.fillStyle = '#404040';
+                context.fillRect(rect.x + rect.width / 2,
+                    rect.y + rect.height * 0.4,
+                    rect.width / 2, rect.height * 0.1);
+            } else if (color === 'flat-right') {
+                // A dim wall supplies a mean jump but no per-line contrast.
+                context.fillStyle = '#1b1b1b';
+                context.fillRect(rect.x + rect.width / 2, rect.y,
+                    rect.width / 2, rect.height);
             }
         } else if (color === 'concert') {
             // Model the reported screenshot's 50% bright upper edge and 20%
@@ -249,6 +292,10 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         makeCard(6, {x: 0, y: 90, width: 1280, height: 540}, 'concert'),
         makeCard(7, {x: 160, y: 0, width: 960, height: 720}, 'dim-left'),
         makeCard(8, {x: 160, y: 0, width: 960, height: 720}, 'dim-pair'),
+        makeCard(9, {x: 160, y: 0, width: 960, height: 720}, 'sparse-left'),
+        makeCard(10, {x: 160, y: 0, width: 960, height: 720}, 'flat-right'),
+        makeCard(11, {x: 160, y: 0, width: 960, height: 720}, 'starfield-right'),
+        makeCard(12, {x: 160, y: 0, width: 960, height: 720}, 'near-black-left'),
     ];
     try {
         setupGalleryLightbox();
@@ -279,7 +326,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
             checkFit(1280 / 540);
             check(viewer.querySelector('[data-lightbox-img]').style.width === '100%',
                 'natural dark side gradients must remain inside the fitted concert frame');
-            for (const card of [cards[6], cards[7]]) {
+            for (const card of cards.slice(6)) {
                 await openCard(card);
                 checkFit(4 / 3);
                 const image = viewer.querySelector('[data-lightbox-img]');
