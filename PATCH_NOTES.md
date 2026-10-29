@@ -1,5 +1,101 @@
 # Patch notes
 
+## Version 0.148
+
+Added per-gallery photo-card formats and refreshed the Display editor with
+compact translucent groups, contextual help and independent switch saves.
+Preserved existing responsive crops for galleries using the default format.
+
+### Highlights
+
+#### Photo-card formats for each gallery
+
+- Added Default, 16:9, 21:9, 4:3, 1:1, 4:5 and 9:16 choices under
+  **Edit gallery > Display > Photo cards > Photo card format**.
+- Kept Default at the existing desktop 4:3 and narrow-screen square crops.
+  Explicit formats applied on every screen to photo previews inside the
+  selected gallery, without inheriting into child galleries.
+- Preserved originals, lightbox images and gallery cover cards. Added format
+  preservation through `gallery.json` import/export and Trash recovery.
+
+#### Compact Display controls
+
+- Grouped grid, photo-card, gallery-card, navigation/map, visitor-interaction
+  and thumbnail-quality controls on translucent Theme surfaces.
+- Added native ratio choices with shape previews and compact contextual help
+  beside its trigger, with outside-click and Escape dismissal.
+- Added independent saves for filename, voting, Picture Game and supported
+  legacy GPS switches while retaining unrelated editor drafts.
+- Kept photo formats, coupled grid fields and recursive thumbnail copying in
+  the ordinary Save gallery workflow. Preserved full-form submission without
+  JavaScript.
+
+### Technical Details
+
+#### Backend and persistence
+
+- Extended `app/services/gallery_grid.php` with a closed format vocabulary,
+  explicit-input validation and allowlisted CSS ratios.
+- Stored preferences in the existing `app_settings` table under
+  `gallery_photo_card_ratio.<gallery-id>`, without a schema migration.
+  Missing or invalid stored/imported metadata retained the responsive default;
+  omitted editor fields preserved the saved preference.
+- Rejected invalid explicit formats before reserving an edit revision or
+  changing gallery fields. Removed settings for deleted subtree identities
+  and restored the format under the recovered gallery identity.
+- Added the authenticated editor action `save_display_preference`, retaining
+  CSRF checks, capability readiness, edit-revision ownership and canonical
+  mutation responses. Serialized switch writes and blocked automatic replay
+  after an uncertain result, with a link to review the current editor.
+
+#### Frontend
+
+- Applied explicit ratios through the public photo-grid view model and scoped
+  CSS for both thumbnail structures and restricted placeholders, without
+  regenerating thumbnails.
+- Updated `public/assets/gallery-modules/admin-gallery-compact-editor.js`
+  to acknowledge saved switch state and revisions without clearing text
+  drafts, and to refresh the public view through the existing completion owner.
+- Retained native disclosure help when the Popover API was unavailable and
+  advanced the compact-editor module import revision.
+
+#### Tests, documentation and maintenance
+
+- Added format round-trip, gallery-isolation, invalid-write and legacy-metadata
+  coverage, plus desktop/narrow browser geometry for all explicit formats.
+- Added browser checks for contextual help, isolated payloads, draft/revision
+  preservation, dynamic editor injection and uncertain-save replay refusal.
+- Extended real database/HTTP coverage for isolated saves, stale revisions,
+  sidecar metadata and Trash recovery. Updated the full browser journey for
+  the navigation group's breadcrumb disclosure.
+- Updated permanent architecture, storage, testing and compatibility references,
+  all four maintained manual sources and EN/CS/DE/SV catalogs.
+- Expanded reading paths, stage explanations and safety-boundary comments
+  across the ten current GitHub workflows without changing executable steps,
+  triggers, permissions or policy values.
+
+### User Impact
+
+#### For visitors
+
+- Added gallery-specific wide, square and portrait preview crops while
+  preserving the existing layout for galleries left at Default.
+- Kept original media, lightbox framing and gallery cover presentation unchanged.
+
+#### For administrators
+
+- Added a clearer Display workspace and a per-gallery format choice saved with
+  Save gallery. Independent switches preserved unsaved title and description
+  work and displayed their save state beside the control.
+- Required review of current values after an uncertain switch save before
+  another shared-form save, preventing silent replay of unverified intent.
+- Required no database migration, thumbnail regeneration or media conversion.
+
+#### For maintainers
+
+- Added workflow comments explaining stage ordering and existing safety
+  boundaries without changing automation behavior.
+
 ## Version 0.147.2
 
 Improved lightbox border fitting for compressed previews while preserving safeguards
