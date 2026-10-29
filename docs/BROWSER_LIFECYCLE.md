@@ -21,8 +21,12 @@ gradual boundaries remain intact. If an axis remains incomplete, a stricter
 black-pixel scan probes a symmetric pair before near-black content can be
 absorbed into a band. Both measured cuts need immediate sustained mean steps;
 one also needs sustained spatial variation. Symmetry never creates an unmeasured
-opposite cut. Boundary pixels after downsampling remain inside the returned
-content rectangle.
+opposite cut. If the stricter pair fails, a shared cut may retry at the larger
+measured width, within the existing two-pixel tolerance. Both ordinary band
+scans must admit every additional line as opaque black/noise, and immediate
+step/texture proof starts again at that cut. This handles compressed boundary
+mixing without borrowing an inward ramp or widening the sampling budget.
+Unproven boundary pixels remain inside the returned content rectangle.
 Preparation returns target crop/stage metrics without publishing them. Its
 temporary normal-stage measurement is restored in the same task, and incoming
 pixels are first painted with their crop already applied. Navigation retains

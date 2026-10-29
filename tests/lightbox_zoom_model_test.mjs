@@ -349,6 +349,80 @@ for (const vertical of [false, true]) {
         }
     }
 }
+// The same 0059 original produced two WebP boundary means: 1.87 locally and
+// 5.49 publicly. One or two blended exterior lines must not discard the pair;
+// excess depth, a nonblack line and a gradual content transition stay protected.
+for (const vertical of [false, true]) {
+    for (const reverse of [false, true]) {
+        for (const specimen of [
+            {mean: 1.87, depth: 1, kind: 'fit'},
+            {mean: 5.49, depth: 1, kind: 'fit'},
+            {mean: 1.87, depth: 2, kind: 'fit'},
+            {mean: 5.49, depth: 2, kind: 'fit'},
+            {mean: 5.49, depth: 3, kind: 'excess'},
+            {mean: 5.49, depth: 1, kind: 'nonblack'},
+            {mean: 5.49, depth: 2, kind: 'gradual'},
+        ]) {
+            const edges = vertical
+                ? {left: 16, top: 0, right: 112, bottom: 128}
+                : {left: 0, top: 16, right: 128, bottom: 112};
+            const scene = contentSample(edges);
+            for (let y = edges.top; y < edges.bottom; y += 1) {
+                for (let x = edges.left; x < edges.right; x += 1) {
+                    const along = vertical ? x : y;
+                    const across = vertical ? y : x;
+                    const dimSide = reverse ? along >= 64 : along < 64;
+                    const depth = reverse ? along - 16 : 111 - along;
+                    let level = dimSide ? 4 + across % 14 : 90 + across % 9;
+                    if (!dimSide && specimen.kind === 'gradual' && depth < 8) {
+                        level = 8 + depth * 2 + across % 2;
+                    }
+                    scene.data.set([level, level, level], (y * 128 + x) * 4);
+                }
+            }
+            for (let depth = 0; depth < specimen.depth; depth += 1) {
+                const along = reverse ? 15 - depth : 112 + depth;
+                for (let across = 0; across < 128; across += 1) {
+                    // Quantize the observed fractional mean over 128 pixels.
+                    const level = Math.floor(specimen.mean)
+                        + (across < Math.round(specimen.mean % 1 * 128) ? 1 : 0);
+                    const offset = (vertical ? across * 128 + along
+                        : along * 128 + across) * 4;
+                    scene.data.set([level, level, level], offset);
+                }
+            }
+            if (specimen.kind === 'nonblack') {
+                // A level-32 point violates the unchanged channel ceiling 20.
+                const along = reverse ? 15 : 112;
+                const offset = (vertical ? 64 * 128 + along
+                    : along * 128 + 64) * 4;
+                scene.data.set([32, 32, 32], offset);
+            }
+            const bounds = detectLightboxContentBounds(scene);
+            if (specimen.kind === 'fit') {
+                assert(bounds?.left === edges.left / 128
+                    && bounds?.top === edges.top / 128
+                    && bounds?.right === edges.right / 128
+                    && bounds?.bottom === edges.bottom / 128,
+                'both compression variants must recover the same measured cuts');
+            } else if (specimen.kind === 'gradual') {
+                assert(bounds === null,
+                    'alignment must not look past a gradual brightness ramp');
+            } else {
+                const first = vertical ? 'left' : 'top';
+                const last = vertical ? 'right' : 'bottom';
+                const dim = reverse ? last : first;
+                const bright = reverse ? first : last;
+                assert(bounds?.[dim] === (reverse ? 1 : 0),
+                    'unverified alignment must not authorize the dim opposite cut');
+                const retained = specimen.kind === 'nonblack' ? 15 : 16;
+                assert(bounds?.[bright] === (reverse
+                    ? retained / 128 : 1 - retained / 128),
+                'the independently bright edge must retain nonblack content');
+            }
+        }
+    }
+}
 // Mean steps alone cannot corroborate each other, even with isolated noise.
 const flatPair = contentSample({left: 16, top: 0, right: 112, bottom: 128});
 for (let y = 0; y < 128; y += 1) {

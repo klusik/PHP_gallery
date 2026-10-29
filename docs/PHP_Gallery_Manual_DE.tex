@@ -2539,7 +2539,10 @@ scharfen Helligkeitssprung an einer ebenmäßigen oder nur spärlich beleuchtete
 Gegenseite bestätigen. Eine zusätzliche Symmetrieprüfung misst beide schwarzen
 Ränder unabhängig und prüft scharfe Helligkeitssprünge an beiden Grenzen sowie
 anhaltende Details auf mindestens einer Seite. So werden auch nahezu schwarze
-Szenen erkannt. Gleichmäßig dunkle Bilder und allmähliche Übergänge
+Szenen erkannt. Kleine Kompressionsunterschiede an der Grenze können mit einem
+begrenzt angepassten gemeinsamen Ausschnitt geprüft werden. Jede zusätzliche
+Zeile muss weiterhin die Schwarzrandprüfungen bestehen; beide Übergänge zum
+Inhalt werden erneut geprüft. Gleichmäßig dunkle Bilder und allmähliche Übergänge
 bleiben unverändert. Unsichere Kanten und Text
 bleiben sichtbar, während andere sicher erkannte Ränder ausgeblendet werden
 können. Verweigerte

@@ -49,6 +49,15 @@ unequal opposite band is invented, two uniform dim edges cannot corroborate
 each other, and the ordinary asymmetric path
 remains supported. Sampling, cache and trim limits are unchanged.
 
+When that stricter pair fails and its widths differ, one shared candidate may
+retry at the larger measured width. The existing two-pixel tolerance bounds
+the refinement; each original band scan must already admit every additional
+line under the unchanged opacity, channel, mean and deviation limits. Both
+four-line immediate mean steps and the spatial-texture requirement are then
+rechecked at the new cut, with no ramp allowance. A gradual brightness ramp,
+an excessive width difference or a nonblack intermediate line cannot authorize
+this refinement. Independently proven asymmetric edges remain supported.
+
 Regression sources cover synthetic noise, dark/black/transparent frames,
 asymmetric/four-sided mattes and subtitle contamination, with a browser JPEG
 fixture for fitting/override/zoom/fullscreen/cache and pixel refusal. The reported
@@ -113,6 +122,25 @@ analysis was about 9--13 ms on the authoring machine; this does not establish
 low-end-device performance or hosted FULL qualification. A captured production
 Canvas sample also exposed a level-9 compression speck on the outer boundary;
 the stricter mean preserves the real cut while retaining the channel/noise caps.
+
+The public and local 0059 pages supplied byte-identical originals and detector
+modules but different 1600-pixel WebP previews. At the public sampled exterior
+column, mean 5.49 exceeded the stricter mean limit 4; the local mean was 1.87.
+The public stricter scan stopped one line early, so its immediate six-level
+step failed and only the independently bright right edge fitted. The shared-cut
+retry uses the ordinary scan's already verified black line and rechecks the
+true content transition. Both observed previews remain local diagnostic inputs;
+synthetic vectors cover their means on both axes/orientations, one/two blended
+lines, excessive depth, nonblack contamination and gradual transitions. The
+browser corpus additionally uses two lossy WebP variants of a synthetic scene.
+Broader encoder/device coverage remains unknown; original-frame support and
+the existing sample/cache/trim budgets remain permanent.
+Local Chromium inspection with the candidate model returned [0.125, 0.875]
+and full height for both actual previews and their identical original, at
+1440x900 and 390x844. Original-frame override, full-source zoom and fullscreen
+retained the measured scene. The public page used a temporary browser-only
+model substitution; production files were unchanged. Real-device and broader
+encoder acceptance remain manual coverage, not proof from these observations.
 
 Manual and slideshow transitions retain outgoing crop geometry during loading.
 Target geometry is prepared without a visible full-frame intermediate. The
