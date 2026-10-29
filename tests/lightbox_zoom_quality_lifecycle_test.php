@@ -392,7 +392,7 @@ lightbox_zoom_quality_lifecycle_assert(
         )
         && str_contains(
             $lightboxSource,
-            'lightbox-zoom-model.js?v=20261029-content-fit-v3',
+            'lightbox-zoom-model.js?v=20261029-content-fit-v4',
         ),
     'All public lightbox module paths must invalidate stale browser caches together.',
 );

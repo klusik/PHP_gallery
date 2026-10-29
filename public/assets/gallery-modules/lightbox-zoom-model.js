@@ -54,7 +54,9 @@ export const LIGHTBOX_ZOOM_QUALITY_UPGRADE_THRESHOLD = 1;
  * A separate symmetric candidate caps the band mean at 4, retaining the
  * ordinary channel/noise limits, and needs a six-level rise on both sides.
  * Sustained level-12 spatial variation on at least one side distinguishes
- * near-black scenes from uniform fades.
+ * near-black scenes from uniform fades. A mismatched pair may align inward
+ * by at most the two-pixel band tolerance only through lines already admitted
+ * by the ordinary black/noise scan; step and texture proof starts anew there.
  */
 export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
     sampleEdge: 256,
@@ -74,12 +76,12 @@ export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
     pairedTransitionContrast: 12, // Require visible variation, not a flat fade.
     pairedTransitionDepth: 4, // Paired dark edges need four persistent content lines.
     pairedTransitionMeanRise: 12, // Sharp mean rise above the adjacent matte line.
-    pairedBandTolerance: 2, // Opposite mattes may differ by two sample pixels.
+    pairedBandTolerance: 2, // Bound width mismatch and blended-edge refinement.
     pairedBlackMean: 4, // Separate padding from dim content despite JPEG specks.
     pairedBoundaryMeanRise: 6, // Both symmetric cuts must have an immediate step.
     pairedBoundaryLight: 12, // Dark texture can corroborate the opposite cut.
     aspectTolerance: 0.02, // Allow 2% derivative rounding, not a different frame.
-    version: 'content-v5', // Invalidate cached decisions when policy changes.
+    version: 'content-v6', // Invalidate cached decisions when policy changes.
 });
 
 /**
@@ -94,6 +96,8 @@ export const LIGHTBOX_CONTENT_POLICY = Object.freeze({
  * An incomplete axis also probes stricter black bands: symmetry requires two
  * measured cuts with immediate mean steps and sustained texture on one side.
  * This keeps near-black content that the ordinary band scan may absorb.
+ * A bounded shared cut can resolve compression-blended boundary lines only
+ * while both ordinary black-band scans still admit every removed line.
  * Real dark backgrounds can resemble a matte, so the viewer offers an
  * original-frame override.
  *
@@ -243,21 +247,37 @@ export function detectLightboxContentBounds(sample) {
         const hintedLast = scanBand(vertical, true, start, end,
             policy.pairedBlackMean);
         if (hintedFirst <= 0 || hintedLast <= 0
-            || Math.abs(hintedFirst - hintedLast) > policy.pairedBandTolerance
-            || !hasPairedBoundaryStep(vertical, false, hintedFirst, start, end,
-                policy.pairedBoundaryMeanRise)
-            || !hasPairedBoundaryStep(vertical, true, hintedLast, start, end,
-                policy.pairedBoundaryMeanRise)) return resolved;
+            || Math.abs(hintedFirst - hintedLast)
+                > policy.pairedBandTolerance) return resolved;
 
-        // Texture must start at the same measured cut (zero ramp), persist for
-        // four lines, and occupy the normal 15% share. A few bright points
-        // alone cannot supply the required texture share.
-        const hasTexture = reverse => hasTransition(vertical, reverse,
-            reverse ? hintedLast : hintedFirst, start, end,
-            policy.pairedTransitionShare, policy.pairedTransitionDepth,
-            policy.pairedBoundaryLight, policy.pairedTransitionContrast, 0);
-        return hasTexture(false) || hasTexture(true)
-            ? {first: hintedFirst, last: hintedLast} : resolved;
+        const confirmPair = (candidateFirst, candidateLast) => {
+            if (!hasPairedBoundaryStep(vertical, false, candidateFirst,
+                start, end, policy.pairedBoundaryMeanRise)
+                || !hasPairedBoundaryStep(vertical, true, candidateLast,
+                    start, end, policy.pairedBoundaryMeanRise)) return null;
+
+            // Texture starts at the measured cut (zero ramp), persists for
+            // four lines, and occupies the normal 15% share. A few bright
+            // points alone cannot supply the required texture share.
+            const hasTexture = reverse => hasTransition(vertical, reverse,
+                reverse ? candidateLast : candidateFirst, start, end,
+                policy.pairedTransitionShare, policy.pairedTransitionDepth,
+                policy.pairedBoundaryLight, policy.pairedTransitionContrast, 0);
+            return hasTexture(false) || hasTexture(true)
+                ? {first: candidateFirst, last: candidateLast} : null;
+        };
+        const hinted = confirmPair(hintedFirst, hintedLast);
+        if (hinted) return hinted;
+
+        // A blended exterior line can exceed the strict mean before the real
+        // content begins. Align only within the existing width tolerance and
+        // only through ordinary opaque black/noise lines. The -1 scan result
+        // means those checks held all the way through the trim limit.
+        const sharedBand = Math.max(hintedFirst, hintedLast);
+        if (hintedFirst === hintedLast
+            || (first !== -1 && first < sharedBand)
+            || (last !== -1 && last < sharedBand)) return resolved;
+        return confirmPair(sharedBand, sharedBand) || resolved;
     };
     const {first: top, last: bottom} = resolveAxis(false, 0, width);
     const {first: left, last: right} = resolveAxis(true, top, height - bottom);

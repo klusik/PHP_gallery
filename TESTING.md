@@ -1116,7 +1116,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.147.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.147.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4096,6 +4096,12 @@ ordinary band scan can absorb. Both axes/orientations cover stricter symmetric
 cuts, while absent/unequal opposite bands, uniform dark fades, isolated points
 and gradual boundaries remain unchanged. Compressed browser patterns require
 both pillars to disappear while retaining all near-black content.
+The cross-installation 0059 regression models the measured boundary means
+1.87 and 5.49 on both axes/orientations. One/two ordinary-black blended lines
+must recover the same content cuts; three lines, nonblack contamination and
+gradual brightness ramps cannot authorize alignment. The production browser
+fixture includes two compressed WebP variants in addition to the JPEG corpus.
+The actual public/local previews and originals remain diagnostic inputs only.
 The same fixture snapshots outgoing source/surface styles synchronously at
 navigation, checks incoming full-source proportions and unconstrained computed
 maxima during fades, and observes intermediate outgoing opacity. Its automatic
