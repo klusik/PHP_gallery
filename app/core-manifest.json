@@ -1,6 +1,6 @@
 {
     "version": "0.148",
-    "generated_at": "2026-10-29T12:56:36+00:00",
+    "generated_at": "2026-10-29T13:37:16+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -620,7 +620,7 @@
         "app/views/picture_game.php": "sha256:13e73c5cbbf49eb230a52437574ff342a3a37184a86f5a4369ac2a4c556e4ca8",
         "app/views/public_content_widgets.php": "sha256:b7badb543268ba3c1f8ebc4a94797448509cd7f1223d724356957275d4ea533c",
         "app/views/public_gallery_cards.php": "sha256:8be9ac319a7468b90540618ca9c76a091304c9b8b46acddc408ca1e7e92098ae",
-        "app/views/public_gallery_controls.php": "sha256:b6aaecdb1a0cb048caaa5732d1c29a651824a9b18702741f88ad283095b0b913",
+        "app/views/public_gallery_controls.php": "sha256:7b7f9bcc98282ce903e2a2615c6b1a67104f54a6186840741ca2d9413df47b1b",
         "app/views/public_gallery_lightbox.php": "sha256:77c80a0def2accc050626100a235d827a2197ca9d0f84daec681583d8eb37f2a",
         "app/views/public_gallery_pages.php": "sha256:91d9eff2e7d9b887c261c68d4343e0d65ed4aac1925c105d9b08631a759d59ba",
         "app/views/public_render_profiler.php": "sha256:93180f060395096a43988827f9a4908958b852ffc83f6deaf161a40b98d6fbc8",
@@ -921,9 +921,9 @@
         "public/assets/styles/mobile-gallery.css": "sha256:a4a5f9c33f3b1af5fdaa9e12ffdc1c8a2f9e060d1dd9ac283e880f42a713aa90",
         "public/assets/styles/public-content-widgets.css": "sha256:1524fe9e4f17767f9e711402c09b35634f666c870356093771c18878f819055d",
         "public/assets/styles/public-shared.css": "sha256:2cd2d6d6360e6f7092226b131ca43fd223ccd3b6ba8900847aa3ecfbcbc41879",
-        "public/assets/styles/public.css": "sha256:25ed5cb0c7ff7e9bdffa284a089b02dac912865c82adac1013a78332efec89fd",
+        "public/assets/styles/public.css": "sha256:a2eefe899f0e21c9eb3dac5e7ca2ee468ebfe9bfa9c6fcd96d6566a4d04d284d",
         "public/assets/styles/side-panel.css": "sha256:a9c69de60c3c58838da970e9c667a6de581502d2d12dcd66c23737c981940d3d",
-        "public/assets/styles/utilities.css": "sha256:c9f66407d4cdf88eddf508d47a0bcd528f82478837654ea868e71c34c29f90dd",
+        "public/assets/styles/utilities.css": "sha256:466567570d7aaa8337dc4915dcbce522a7acbf975e77f7e7609c326066e08835",
         "public/assets/telemetry.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/usage.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/vendor/pdfjs/pdf.min.js": "sha256:7662af706ecbf4ae9ba0f4f4ea50636617646c31d6c67aeca2338b1805a11c07",

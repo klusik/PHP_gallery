@@ -13,9 +13,14 @@ License: MIT License (see LICENSE file in repository)
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Public UX regression</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/public.css">
-<link rel="stylesheet" href="/public/assets/styles/public-shared.css">
 <link rel="stylesheet" href="/public/assets/styles/lightbox.css">
+<link rel="stylesheet" href="/public/assets/styles/public-shared.css">
+<link rel="stylesheet" href="/public/assets/styles/public-content-widgets.css">
+<link rel="stylesheet" href="/public/assets/styles/utilities.css">
+<link rel="stylesheet" href="/public/assets/styles.css">
+<link rel="stylesheet" href="/public/assets/styles/breadcrumbs.css">
 <link rel="stylesheet" href="/public/assets/styles/mobile-gallery.css">
 <style>
     :root { --ink:#f4f7fa; --panel:#243343; --paper:#132030;
@@ -33,6 +38,52 @@ License: MIT License (see LICENSE file in repository)
     <a class="public-language-button" hreflang="en" href="/?lang=en">English</a>
     <a data-public-login-return href="/index.php?page=admin_login">Login</a>
 </header>
+<div class="anonymous-preview-toolbar public-gallery-control-bar">
+    <div class="public-gallery-control-heading">
+        <a class="button secondary" href="#anonymous">
+            <span class="public-gallery-control-icon" aria-hidden="true">◉</span>View as anonymous</a>
+        <details class="public-gallery-control-help" data-gallery-media-widget>
+            <summary aria-label="View as anonymous"><span aria-hidden="true">?</span></summary>
+            <div class="public-gallery-control-help-panel" data-gallery-media-panel>
+                Review this gallery without inline admin controls, admin navigation,
+                hidden photos, or admin-only visibility.</div>
+        </details>
+    </div>
+</div>
+<div class="public-subgallery-sort-toolbar public-gallery-control-bar">
+    <div class="public-gallery-control-heading">
+        <span class="public-gallery-control-icon" aria-hidden="true">↕</span>
+        <strong>Sort subgalleries by date</strong>
+        <details class="public-gallery-control-help" data-gallery-media-widget>
+            <summary aria-label="Sort subgalleries by date"><span aria-hidden="true">?</span></summary>
+            <div class="public-gallery-control-help-panel" data-gallery-media-panel>
+                Preview the date order, then save it to update the real order for
+                everyone. Only subgalleries with a From date participate.
+                Undated cards keep their current positions.</div>
+        </details>
+    </div>
+    <div class="public-subgallery-sort-actions">
+        <a class="button secondary public-subgallery-sort-button" href="#default">↶ Default order</a>
+        <a class="button secondary public-subgallery-sort-button is-active" aria-current="true" href="#asc">↑ Oldest first</a>
+        <a class="button secondary public-subgallery-sort-button" href="#desc">↓ Newest first</a>
+        <form class="public-subgallery-sort-save-form" method="post" action="#save">
+            <button class="button public-subgallery-sort-save-button" type="submit">✓ Save this order</button>
+        </form>
+    </div>
+</div>
+<div class="public-reorder-toolbar public-gallery-control-bar">
+    <div class="public-gallery-control-heading">
+        <span class="public-gallery-control-icon" aria-hidden="true">⠿</span>
+        <strong>Move visible subgalleries</strong>
+        <details class="public-gallery-control-help" data-gallery-media-widget>
+            <summary aria-label="Move visible subgalleries"><span aria-hidden="true">?</span></summary>
+            <div class="public-gallery-control-help-panel" data-gallery-media-panel>
+                Drag only the cards shown on this page.
+                Other pagination pages are not touched.</div>
+        </details>
+    </div>
+    <span class="public-reorder-status" data-state="idle" aria-live="polite">Drag handles ready.</span>
+</div>
 <section class="grid public-tag-gallery-grid grid-columns-3">
     <article class="gallery-card"><p>Long tag description remains readable.</p>
         <a class="tag" href="#tag">a-very-long-tag-with-a-readable-label</a>
@@ -74,6 +125,8 @@ License: MIT License (see LICENSE file in repository)
 <script type="module">
 import {setupGalleryLightbox, teardownGalleryLightbox}
     from '/public/assets/gallery-modules/lightbox.js';
+import {setupGalleryMediaPanels}
+    from '/public/assets/gallery-modules/gallery-media-panels.js?v=20261024-short-presentation-v1';
 
 const params = new URLSearchParams(location.search);
 const result = document.querySelector('#results');
@@ -222,6 +275,47 @@ if (!params.has('case')) {
     }
 
     try {
+        setupGalleryMediaPanels();
+        for (const help of document.querySelectorAll('.public-gallery-control-help')) {
+            const trigger = help.querySelector('summary');
+            const panel = help.querySelector('[data-gallery-media-panel]');
+            const bar = help.closest('.public-gallery-control-bar');
+            const closedHeight = bar.getBoundingClientRect().height;
+            trigger.focus();
+            trigger.click();
+            await until(() => help.open && !panel.getAnimations().length,
+                'toolbar help must finish opening beside its trigger');
+            const bounds = panel.getBoundingClientRect();
+            check(bounds.left >= 0 && bounds.right <= innerWidth
+                && bounds.top >= 0 && bounds.bottom <= innerHeight,
+                'toolbar help must fit the viewport');
+            check(bar.getBoundingClientRect().height === closedHeight,
+                'toolbar help must overlay without shifting actions');
+            check(!document.querySelector('#cards').inert,
+                'toolbar help must leave the page usable');
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+                key:'Escape',bubbles:true,cancelable:true,
+            }));
+            await until(() => !help.open, 'Escape must close toolbar help');
+            check(document.activeElement === trigger, 'Escape must restore help focus');
+            trigger.click();
+            await until(() => help.open, 'help must reopen');
+            document.querySelector('#cards').click();
+            await until(() => !help.open, 'outside click must close toolbar help');
+        }
+        const status = document.querySelector('.public-reorder-status');
+        check(getComputedStyle(status).display === 'none', 'idle reorder status must be quiet');
+        status.dataset.state = 'error';
+        status.textContent = 'The order could not be saved. Reload the current page.';
+        check(status.getBoundingClientRect().height > 0, 'reorder failure must remain visible');
+        status.dataset.state = 'idle';
+        for (const target of document.querySelectorAll('.public-gallery-control-bar :is(.button, summary)')) {
+            // The fixture's narrow widths exercise the design contract's 44px boundary.
+            if (innerWidth <= 640) check(target.getBoundingClientRect().height >= 44,
+                'narrow toolbar actions must retain touch targets');
+        }
+        check(document.documentElement.scrollWidth <= innerWidth,
+            'toolbar labels and actions must wrap without horizontal scrolling');
         /* Type: number. Units: contrast ratio. Scope: normal fixture text.
            Consumers: representative public tag/media/map assertions.
            Rationale: 4.5 is the normal-text AA acceptance boundary. */

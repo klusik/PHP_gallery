@@ -17,104 +17,210 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  */
-/* Public admin-only card reordering for visible pagination pages. */
-.public-reorder-toolbar {
+/* Compact public Admin bars follow the visitor bell/PDF/music surface.
+   Type: CSS lengths/colors. Units: px, rem, sRGB. Scope: these three bars.
+   Consumers: preview, date-sort and visible-page reorder controls and help.
+   Rationale: 42% Theme backing and 12px blur retain the approved glass surface;
+   28px desktop / 44px narrow or coarse targets balance density and access. */
+.public-page .public-gallery-control-bar {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.85rem;
-    margin: 0.65rem 0 0.85rem;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid rgba(92, 64, 51, 0.16);
-    border-radius: 16px;
-    background: rgba(255, 253, 248, 0.92);
-    box-shadow: 0 10px 28px rgba(78, 48, 34, 0.08);
-}
-
-.public-reorder-toolbar strong {
-    display: block;
-    color: var(--text);
-    font-size: 0.92rem;
-}
-
-.public-reorder-toolbar p {
-    margin: 0.15rem 0 0;
-    color: var(--muted);
-    font-size: 0.84rem;
-}
-
-.public-subgallery-sort-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.85rem;
-    margin: 0.65rem 0 0.85rem;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid rgba(92, 64, 51, 0.16);
-    border-radius: 16px;
-    background: rgba(255, 253, 248, 0.92);
-    box-shadow: 0 10px 28px rgba(78, 48, 34, 0.08);
-}
-
-.public-subgallery-sort-toolbar strong {
-    display: block;
-    color: var(--text);
-    font-size: 0.92rem;
-}
-
-.public-subgallery-sort-toolbar p {
-    margin: 0.15rem 0 0;
-    color: var(--muted);
-    font-size: 0.84rem;
-}
-
-.public-subgallery-sort-actions {
-    display: flex;
-    flex: 0 0 auto;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.45rem;
+    gap: .25rem .65rem;
+    margin: .5rem 0;
+    padding: .2rem .65rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    color: var(--ink);
+    box-shadow: none;
 }
 
-.public-subgallery-sort-button.is-active {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: #fffdf8;
+/* Blur belongs to the contextual panel, so it can blur the underlying bar
+   and page independently instead of inheriting an ancestor backdrop root. */
+.public-page .public-gallery-control-bar:not(:has(details[open])) {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
-.public-subgallery-sort-save-form {
-    margin: 0;
+.public-page .public-gallery-control-heading {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    min-width: 0;
 }
 
-.public-subgallery-sort-save-button {
-    white-space: nowrap;
+.public-page .public-gallery-control-heading strong {
+    color: inherit;
+    font-size: .85rem;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
-.public-reorder-status {
+.public-page .public-gallery-control-icon {
     flex: 0 0 auto;
-    padding: 0.35rem 0.55rem;
-    border-radius: 999px;
-    background: rgba(92, 64, 51, 0.08);
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 800;
-    white-space: nowrap;
+    font-size: 16px;
+    line-height: 1;
 }
 
-.public-reorder-status[data-state="dragging"],
-.public-reorder-status[data-state="saving"] {
-    background: rgba(180, 83, 9, 0.12);
-    color: #92400e;
+.public-page .public-gallery-control-heading > .public-gallery-control-icon {
+    color: var(--accent);
 }
 
-.public-reorder-status[data-state="saved"] {
-    background: rgba(22, 101, 52, 0.12);
-    color: #166534;
+.public-page .public-subgallery-sort-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    min-width: 0;
 }
 
-.public-reorder-status[data-state="error"] {
-    background: rgba(185, 28, 28, 0.12);
-    color: #991b1b;
+.public-page .public-gallery-control-bar .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    min-height: 28px;
+    max-width: 100%;
+    padding: .15rem .45rem;
+    border: 1px solid transparent;
+    border-radius: min(var(--radius, 8px), 6px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .8rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: center;
+    text-decoration: none;
+}
+
+.public-page .public-gallery-control-bar .button:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.public-page .public-gallery-control-bar .button.is-active {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    box-shadow: inset 0 -1px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+.public-page .anonymous-preview-toolbar .button,
+.public-page .public-gallery-control-bar .public-subgallery-sort-save-button {
+    border-color: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.public-page .public-subgallery-sort-save-form {
+    margin: 0;
+    max-width: 100%;
+}
+
+.public-page .public-gallery-control-help {
+    flex: 0 0 auto;
+}
+
+.public-page .public-gallery-control-help summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-size: .85rem;
+    list-style: none;
+    cursor: pointer;
+}
+
+.public-gallery-control-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.public-page .public-gallery-control-help-panel {
+    box-sizing: border-box;
+    position: absolute;
+    z-index: 30;
+    inset: 100% auto auto 0;
+    width: min(24rem, 100%);
+    max-height: calc(100dvh - 1rem);
+    overflow: auto;
+    margin: .25rem 0 0;
+    padding: .65rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .85rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    text-align: start;
+}
+
+.public-page .public-gallery-control-help-panel[popover] {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    width: min(24rem, calc(100vw - 2rem));
+}
+
+.public-page .public-gallery-control-bar :is(a, button, summary):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.public-page .public-reorder-status {
+    flex: 0 0 auto;
+    max-width: 100%;
+    padding: .15rem .35rem;
+    border-radius: 4px;
+    color: var(--public-muted-ink, var(--ink));
+    font-size: .75rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.public-page .public-reorder-status[data-state="idle"] {
+    display: none;
+}
+
+.public-page .public-reorder-status:is([data-state="dragging"],
+    [data-state="saving"], [data-state="saved"]) {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.public-page .public-reorder-status[data-state="error"] {
+    background: color-mix(in srgb, var(--ink) 12%, var(--panel));
+    color: var(--ink);
+    border-inline-start: 2px solid var(--accent);
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .public-page .public-gallery-control-bar .button,
+    .public-page .public-gallery-control-help summary {
+        min-height: 44px;
+    }
+
+    .public-page .public-gallery-control-help summary {
+        min-width: 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    .public-page .public-gallery-control-bar,
+    .public-page .public-gallery-control-help-panel {
+        background: Canvas;
+        color: CanvasText;
+        border-color: CanvasText;
+    }
+
+    .public-page .public-gallery-control-bar .button.is-active {
+        border-color: Highlight;
+    }
 }
 
 .public-reorder-handle {
@@ -213,21 +319,6 @@ body.public-reorder-active {
 }
 
 @media (max-width: 720px) {
-    .public-reorder-toolbar,
-    .public-subgallery-sort-toolbar {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .public-reorder-status,
-    .public-subgallery-sort-actions {
-        white-space: normal;
-    }
-
-    .public-subgallery-sort-actions {
-        justify-content: flex-start;
-    }
-
     .public-reorder-handle span:last-child {
         display: none;
     }

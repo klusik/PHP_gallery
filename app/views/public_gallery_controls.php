@@ -49,7 +49,9 @@ use function Gallery\Services\t;
 /**
  * Render the admin-only subgallery date-sort preview toolbar.
  *
- * @param array<string,mixed> $viewModel Controller-prepared toolbar state.
+ * @param array{active_mode?:string,urls?:array{default?:string,asc?:string,
+ *     desc?:string},save_url?:string,csrf_html?:string,gallery_id?:int} $viewModel
+ *     Prepared preview links and authenticated save form state.
  * @return void Emits the admin-only date-sort controls.
  */
 function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
@@ -70,18 +72,20 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
     $descCurrent = $activeMode === 'desc' ? ' aria-current="true"' : '';
 
     echo
-        '<div class="public-subgallery-sort-toolbar" aria-label="'
+        '<div class="public-subgallery-sort-toolbar public-gallery-control-bar" aria-label="'
             . e(t('public.subgallery_sort.label', 'Subgallery sort'))
             . '">';
     echo
-        '<div><strong>'
+        '<div class="public-gallery-control-heading"><span class="public-gallery-control-icon" aria-hidden="true">↕</span><strong>'
             . e(t('public.subgallery_sort.title', 'Sort subgalleries by date'))
-            . '</strong><p>'
+            . '</strong><details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
+            . e(t('public.subgallery_sort.title', 'Sort subgalleries by date'))
+            . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
             . e(t(
                 'public.subgallery_sort.help',
                 'Only subgalleries with a From date participate. Undated cards keep their current positions. Preview the date order, then save it to update the real order for everyone.',
             ))
-            . '</p></div>';
+            . '</div></details></div>';
     echo '<div class="public-subgallery-sort-actions">';
     echo
         '<a class="'
@@ -90,7 +94,7 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
             . e((string) ($urls['default'] ?? ''))
             . '"'
             . $defaultCurrent
-            . '>'
+            . '><span class="public-gallery-control-icon" aria-hidden="true">↶</span>'
             . e(t('public.subgallery_sort.default', 'Default order'))
             . '</a>';
     echo
@@ -100,7 +104,7 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
             . e((string) ($urls['asc'] ?? ''))
             . '"'
             . $ascCurrent
-            . '>'
+            . '><span class="public-gallery-control-icon" aria-hidden="true">↑</span>'
             . e(t('public.subgallery_sort.asc', 'Oldest first'))
             . '</a>';
     echo
@@ -110,7 +114,7 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
             . e((string) ($urls['desc'] ?? ''))
             . '"'
             . $descCurrent
-            . '>'
+            . '><span class="public-gallery-control-icon" aria-hidden="true">↓</span>'
             . e(t('public.subgallery_sort.desc', 'Newest first'))
             . '</a>';
     if (in_array($activeMode, ['asc', 'desc'], true)) {
@@ -128,7 +132,7 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
                 . e($activeMode)
                 . '">';
         echo
-            '<button class="button public-subgallery-sort-save-button" type="submit">'
+            '<button class="button public-subgallery-sort-save-button" type="submit"><span class="public-gallery-control-icon" aria-hidden="true">✓</span>'
                 . e(t('public.subgallery_sort.save_active', 'Save this order'))
                 . '</button>';
         echo '</form>';
@@ -140,7 +144,9 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
 /**
  * Render the compact admin-only reorder toolbar for one visible pagination page.
  *
- * @param array<string,mixed> $viewModel Controller-prepared reorder state.
+ * @param array{kind?:string,endpoint?:string,gallery_id?:int,offset?:int,
+ *     visible_count?:int,total_count?:int,csrf_token?:string} $viewModel
+ *     Prepared visible-page identities, mutation destination and CSRF token.
  * @return void Emits the reorder toolbar for visible items.
  */
 function view_render_public_page_reorder_toolbar(array $viewModel): void
@@ -151,7 +157,7 @@ function view_render_public_page_reorder_toolbar(array $viewModel): void
         : t('public.reorder.photos', 'photos');
 
     echo
-        '<div class="public-reorder-toolbar" data-public-reorder-toolbar data-reorder-kind="'
+        '<div class="public-reorder-toolbar public-gallery-control-bar" data-public-reorder-toolbar data-reorder-kind="'
             . e($kind)
             . '" data-reorder-url="'
             . e((string) ($viewModel['endpoint'] ?? ''))
@@ -167,16 +173,20 @@ function view_render_public_page_reorder_toolbar(array $viewModel): void
             . e((string) ($viewModel['csrf_token'] ?? ''))
             . '">';
     echo
-        '<div><strong>'
+        '<div class="public-gallery-control-heading"><span class="public-gallery-control-icon" aria-hidden="true">⠿</span><strong>'
             . e(t('public.reorder.move_visible_items', 'Move visible {items}', [
                 'items' => $label,
             ]))
-            . '</strong><p>'
+            . '</strong><details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
+            . e(t('public.reorder.move_visible_items', 'Move visible {items}', [
+                'items' => $label,
+            ]))
+            . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
             . e(t(
                 'public.reorder.visible_page_help',
                 'Drag only the cards shown on this page. Other pagination pages are not touched.',
             ))
-            . '</p></div>';
+            . '</div></details></div>';
     echo
         '<span class="public-reorder-status" data-public-reorder-status aria-live="polite">'
             . e(t('public.reorder.ready', 'Ready.'))
@@ -398,46 +408,52 @@ function view_render_picture_manager_toolbar(array $viewModel): void
 /**
  * Render the administrator anonymous-preview control.
  *
- * @param array<string,mixed> $viewModel Controller-prepared preview state.
+ * @param array{is_preview?:bool,target_url?:string} $viewModel Prepared
+ *     visitor-preview state and canonical entry or exit destination.
  * @return void Emits the anonymous-preview status and action link.
  */
 function view_render_public_gallery_preview_toolbar(array $viewModel): void
 {
     $isPreview = !empty($viewModel['is_preview']);
-    echo '<div class="anonymous-preview-toolbar" role="status">';
+    echo '<div class="anonymous-preview-toolbar public-gallery-control-bar">';
     if ($isPreview) {
         echo
-            '<span><strong>'
+            '<div class="public-gallery-control-heading"><span class="public-gallery-control-icon" aria-hidden="true">◉</span><strong role="status">'
                 . e(t(
                     'public.preview.active_title',
                     'Anonymous preview active.',
                 ))
-                . '</strong> '
+                . '</strong><details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
+                . e(t('public.preview.active_title', 'Anonymous preview active.'))
+                . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
                 . e(t(
                     'public.preview.active_message',
                     'Admin controls are hidden and visitor visibility rules are being applied.',
                 ))
-                . '</span>';
+                . '</div></details></div>';
         echo
             '<a class="button" href="'
                 . e((string) ($viewModel['target_url'] ?? ''))
-                . '">'
+                . '"><span class="public-gallery-control-icon" aria-hidden="true">↶</span>'
                 . e(t('public.preview.exit', 'Exit preview'))
                 . '</a>';
     } else {
+        echo '<div class="public-gallery-control-heading">';
         echo
-            '<span>'
+            '<a class="button secondary" href="'
+                . e((string) ($viewModel['target_url'] ?? ''))
+                . '"><span class="public-gallery-control-icon" aria-hidden="true">◉</span>'
+                . e(t('public.preview.view_as_anonymous', 'View as anonymous'))
+                . '</a>';
+        echo
+            '<details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
+                . e(t('public.preview.view_as_anonymous', 'View as anonymous'))
+                . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
                 . e(t(
                     'public.preview.help',
                     'Review this gallery without inline admin controls, admin navigation, hidden photos, or admin-only visibility.',
                 ))
-                . '</span>';
-        echo
-            '<a class="button secondary" href="'
-                . e((string) ($viewModel['target_url'] ?? ''))
-                . '">'
-                . e(t('public.preview.view_as_anonymous', 'View as anonymous'))
-                . '</a>';
+                . '</div></details></div>';
     }
     echo '</div>';
 }

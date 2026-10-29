@@ -4158,6 +4158,15 @@ checks are optional reproduction steps only.
 Manual browser coverage remains required because the repository has no
 production browser-automation dependency:
 
+The registered `public_ux_browser_test.mjs` also covers public Admin preview,
+date-sort and reorder bars with the production public stylesheet cascade.
+Narrow layouts retain 44px actions, wrapping labels and visible failure feedback.
+Help uses the production media-panel owner and must remain viewport-bounded,
+avoid moving its bar, leave the page usable, close on outside click/Escape and
+restore keyboard focus. Manual desktop/narrow review includes active preview,
+all date choices, explicit Save, long translations and light/dark Theme colors;
+real touch devices and assistive technology remain separate acceptance work.
+
 The registered `public_ux_browser_test.mjs` adds isolated 320/390px and rotated
 landscape checks with production CSS. It covers tag-card width, modal focus
 entry/wrap/return, background isolation, reparented editor focus, unavailable maps,
