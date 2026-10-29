@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.148}
+\newcommand{\version}{0.148.1}
 \newcommand{\manualdate}{29~oktober~2026}
 
 \hypersetup{
@@ -974,6 +974,15 @@ Ordningen kan vara kronologisk, geografisk, berättande, alfabetisk eller manuel
 En inloggad administratör kan också ordna om direkta undergallerikort på den offentliga gallerisidan. Det kompakta offentliga verktygsfältet för ordning omfattar bara de kort som syns på aktuell pagineringssida. Sparbegäran innehåller sidans förskjutning och antal synliga kort, och servern vägrar ändringen om inskickade ID:n inte längre motsvarar samma aktuella delmängd. Den ändrar bara syskonens \codeword{sort_order}-värden; den ändrar inte övergallerier eller nästlar gallerier.
 
 När en administratör är inloggad på ett offentligt galleri kan direkta undergallerier med ifyllt \ui{Från}-datum också sorteras i förhandsvisningen från äldst till nyast eller från nyast till äldst. Undergallerier utan användbart datum behåller sina befintliga positioner. Förhandsvisningen är tillfällig tills \ui{Spara} väljs; sparandet skriver resultatet som den riktiga syskonordningen som alla besökare ser. Minst två daterade direkta undergallerier krävs för att datumordningen ska kunna sparas.
+
+De offentliga fälten för anonym förhandsvisning, datumsortering och ordning
+använder kompakta genomskinliga temaytor. Korta åtgärder ligger bredvid varandra
+när utrymme finns och radbryts med större tryckytor på smala skärmar. Enkla
+frågetecken öppnar förklaringar vid reglaget; Escape eller klick utanför stänger
+dem. Inbyggda utfällningar fungerar även utan JavaScript. Aktiv anonym
+förhandsvisning förblir synligt markerad. Dragberedskap döljs efter initiering;
+förlopp och fel förblir synliga. Datumförhandsvisningen sparas för alla besökare
+först med \ui{Spara denna ordning}.
 
 \subsection{Radera ett galleri med eftertanke}
 \index{g00096@galleri!r00198@radering}

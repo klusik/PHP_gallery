@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.148}
+\newcommand{\version}{0.148.1}
 \newcommand{\manualdate}{29.~října~2026}
 
 \hypersetup{
@@ -964,6 +964,15 @@ Pořadí může být chronologické, geografické, vyprávěcí, abecední nebo 
 Přihlášený správce může také měnit pořadí karet přímých podgalerií na veřejné stránce galerie. Kompaktní veřejný panel změny pořadí je omezen na karty viditelné na aktuální stránce stránkování. Požadavek uložení obsahuje posun této stránky a~počet viditelných položek; server změnu odmítne, pokud odeslaná ID již neodpovídají stejnému aktuálnímu výřezu. Mění pouze hodnoty \codeword{sort_order} sourozenců; nemění nadřazené galerie ani nevnořuje galerie.
 
 Přihlášený správce prohlížející veřejnou galerii může také dočasně seřadit přímé podřízené galerie s~vyplněným datem \ui{Od} od nejstarších po nejnovější nebo opačně. Podřízené galerie bez použitelného data zůstávají na svých místech. Náhled je dočasný, dokud nezvolíte \ui{Uložit}; uložení zapíše výsledek jako skutečné pořadí sourozenců zobrazované všem návštěvníkům. Pro uložení pořadí podle data jsou nutné alespoň dvě přímé podřízené galerie s~datem.
+
+Veřejné lišty anonymního náhledu, řazení podle data a~změny pořadí používají
+kompaktní průsvitné plochy vzhledu. Krátké akce zůstávají vedle sebe, pokud je
+místo; na~úzké obrazovce se~zalamují a~mají větší dotykové plochy. Prosté
+otazníky otevírají vysvětlení u~ovládacího prvku; Escape nebo kliknutí mimo je
+zavře. Nativní rozbalení funguje i~bez JavaScriptu. Aktivní anonymní náhled
+zůstává viditelně označený. Připravenost přetahování je po~inicializaci skrytá,
+ale průběh a~chyby zůstávají viditelné. Náhled řazení podle data se~pro všechny
+návštěvníky zapíše až~akcí \ui{Uložit toto pořadí}.
 
 \subsection{Promyšlené odstranění galerie}
 \index{g00040@galerie!o00121@odstranění}

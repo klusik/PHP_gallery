@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.148}
+\newcommand{\version}{0.148.1}
 \newcommand{\manualdate}{29 October 2026}
 
 \hypersetup{
@@ -971,6 +971,15 @@ Ordering may~be~chronological, geographical, narrative, alphabetical, or~manuall
 A~signed-in administrator can~also reorder the~direct subgallery cards on~the~public gallery page. The~compact public reorder toolbar is~limited to~the~cards visible on~the~current pagination page. The~save request includes that page's offset and~visible count, and~the~server refuses the~change if~the~submitted IDs no~longer match the~same current slice. It~changes sibling \codeword{sort_order} values only; it~does not~change gallery parents or~nest galleries.
 
 When an~administrator is~signed in~while viewing a~public gallery, direct child galleries that have~a~filled \ui{From} date can~also be~preview-sorted from~oldest to~newest or~newest to~oldest. Child galleries without a~usable date keep their existing positions. The~preview is~temporary until \ui{Save} is~chosen; saving writes the~result as~the~real sibling order seen by~all visitors. At~least two dated direct child galleries are~required before the~date order can~be~saved.
+
+The~public anonymous-preview, date-sort and~reorder bars use compact translucent
+Theme surfaces. Short actions remain inline when space permits and~wrap
+on~narrow screens with larger touch targets. Plain question marks open
+explanations beside their controls; Escape or~an~outside click closes them.
+Native disclosures remain usable without JavaScript. Active anonymous preview
+stays visibly labelled. Drag readiness is~quiet after setup; progress and~errors
+remain visible. Date sorting still requires \ui{Save this order} to~persist
+its~preview for~all visitors.
 
 \subsection{Delete a~gallery thoughtfully}
 \index{gallery!deletion}
