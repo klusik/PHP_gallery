@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "description": "Reviewed process overrides and optional Begin/Finish easter eggs. See winapp/GAME_CONTEXTS.md. Names are exact executable basenames; this file contains data only.",
+  "games": [
+    {
+      "id": "microsoft-flight-simulator",
+      "name": "Microsoft Flight Simulator",
+      "activity": "flight",
+      "executables": ["flightsimulator.exe", "flightsimulator2024.exe", "fsx.exe"]
+    },
+    {
+      "id": "cyberpunk-2077",
+      "name": "Cyberpunk 2077",
+      "executables": ["cyberpunk2077.exe"],
+      "begin": {
+        "en": "Let's begin, choom…",
+        "cs": "Jdeme na to, choome…",
+        "de": "Los geht's, Choom…",
+        "sv": "Nu kör vi, choom…"
+      },
+      "finish": {
+        "en": "Catch you later, choom…",
+        "cs": "Zatím, choome…",
+        "de": "Bis später, Choom…",
+        "sv": "Vi ses, choom…"
+      }
+    },
+    {
+      "id": "mass-effect-trilogy",
+      "name": "Mass Effect trilogy",
+      "executables": [
+        "masseffect.exe", "masseffect1.exe", "masseffect2.exe",
+        "me2game.exe", "masseffect3.exe"
+      ],
+      "begin": {
+        "en": "Let's go, Shepard…",
+        "cs": "Jdeme na to, Sheparde…",
+        "de": "Los geht's, Shepard…",
+        "sv": "Nu kör vi, Shepard…"
+      },
+      "finish": {
+        "en": "Mission complete, Shepard…",
+        "cs": "Mise splněna, Sheparde…",
+        "de": "Mission erfüllt, Shepard…",
+        "sv": "Uppdrag slutfört, Shepard…"
+      }
+    },
+    {
+      "id": "skyrim",
+      "name": "The Elder Scrolls V: Skyrim",
+      "executables": ["tesv.exe", "tesv_original.exe", "skyrimse.exe", "skyrimvr.exe"],
+      "begin": {
+        "en": "Adventure awaits, Dragonborn…",
+        "cs": "Dobrodružství čeká, Drakorozený…",
+        "de": "Das Abenteuer wartet, Drachenblut…",
+        "sv": "Äventyret väntar, Drakfödd…"
+      },
+      "finish": {
+        "en": "Rest well, Dragonborn…",
+        "cs": "Odpočiň si, Drakorozený…",
+        "de": "Ruh dich aus, Drachenblut…",
+        "sv": "Vila gott, Drakfödd…"
+      }
+    },
+    {
+      "id": "dragon-age-origins",
+      "name": "Dragon Age: Origins",
+      "executables": ["daorigins.exe"],
+      "begin": {
+        "en": "Let's go, Warden…",
+        "cs": "Jdeme na to, Strážce…",
+        "de": "Los geht's, Wächter…",
+        "sv": "Nu kör vi, Väktare…"
+      },
+      "finish": {
+        "en": "Rest well, Warden…",
+        "cs": "Odpočiň si, Strážce…",
+        "de": "Ruh dich aus, Wächter…",
+        "sv": "Vila gott, Väktare…"
+      }
+    },
+    {
+      "id": "dragon-age-2",
+      "name": "Dragon Age II",
+      "executables": ["dragonage2.exe"],
+      "begin": {
+        "en": "Let's go, Hawke…",
+        "cs": "Jdeme na to, Hawke…",
+        "de": "Los geht's, Hawke…",
+        "sv": "Nu kör vi, Hawke…"
+      },
+      "finish": {
+        "en": "Rest well, Hawke…",
+        "cs": "Odpočiň si, Hawke…",
+        "de": "Ruh dich aus, Hawke…",
+        "sv": "Vila gott, Hawke…"
+      }
+    },
+    {
+      "id": "dragon-age-inquisition",
+      "name": "Dragon Age: Inquisition",
+      "executables": ["dragonageinquisition.exe"],
+      "begin": {
+        "en": "Let's go, Inquisitor…",
+        "cs": "Jdeme na to, Inkvizitore…",
+        "de": "Los geht's, Inquisitor…",
+        "sv": "Nu kör vi, Inkvisitor…"
+      },
+      "finish": {
+        "en": "Rest well, Inquisitor…",
+        "cs": "Odpočiň si, Inkvizitore…",
+        "de": "Ruh dich aus, Inquisitor…",
+        "sv": "Vila gott, Inkvisitor…"
+      }
+    },
+    {
+      "id": "dragon-age-veilguard",
+      "name": "Dragon Age: The Veilguard",
+      "executables": ["dragon age the veilguard.exe"],
+      "begin": {
+        "en": "Let's go, Rook…",
+        "cs": "Jdeme na to, Rooku…",
+        "de": "Los geht's, Rook…",
+        "sv": "Nu kör vi, Rook…"
+      },
+      "finish": {
+        "en": "Rest well, Rook…",
+        "cs": "Odpočiň si, Rooku…",
+        "de": "Ruh dich aus, Rook…",
+        "sv": "Vila gott, Rook…"
+      }
+    }
+  ]
+}

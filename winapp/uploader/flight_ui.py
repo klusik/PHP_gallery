@@ -41,7 +41,7 @@ from uploader.flight_jobs import (
     saved_flights,
 )
 from uploader.flight_recorder import FlightRecorder
-from uploader.flight_report_translations import tr
+from uploader.game_presence import GamePresence
 from uploader.flight_workflow import FinalizationWorker
 from uploader.models import ImportJob, JsonValue
 from uploader.state_store import JobStateStore
@@ -140,6 +140,7 @@ class FlightHost(Protocol):
     status_var: tk.StringVar
     watcher_activity_var: tk.StringVar
     gallery_label_var: tk.StringVar
+    simulator_presence: GamePresence
 
     def api_key_request_blockers(self) -> list[str]:
         """List existing authenticated workers without adding this coordinator.
@@ -281,15 +282,17 @@ class FlightUI:
         host.root.after(PROGRESS_TICK_MS, self.tick)
 
     def text(self, key: str) -> str:
-        """Translate one new flight-specific control/status label.
+        """Translate shared controls using the cached game/flight context.
 
         Args:
-            key (str): Shared flight translation catalog key.
+            key (str): Shared flight translation catalog key, including
+                abandonment controls, confirmation, phase and completion.
 
         Returns:
-            str: Label in the selected UI language.
+            str: Label in the selected UI language; abandonment uses game
+                wording whenever no flight context is detected.
         """
-        return tr(self.ui_language.get(), key)
+        return self.host.simulator_presence.text(key, self.ui_language.get())
 
     def dialog_owner(self) -> tk.Misc:
         """Find the invoking window so related dialogs stay together.

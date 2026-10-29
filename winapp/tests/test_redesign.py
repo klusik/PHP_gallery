@@ -925,6 +925,80 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         MAIN.WatcherApp.flight_action(app)
         app.flights.finish_report.assert_called_once_with()
 
+    def test_action_wording_tracks_simulator_and_saved_key_in_all_languages(self) -> None:
+        """Keep Watcher and Import actions identical across presence changes.
+
+        Returns:
+            None: Both controls show localized game or flight Begin/Finish
+                and Abandon wording while retaining their enabled state and
+                saved key. SimBrief widgets follow flight detection reversibly.
+        """
+        from uploader.game_context import GameContext
+
+        expected = {
+            "en": (
+                "Begin game…", "Finish game…", "Begin flight…", "Finish flight…",
+            ),
+            "cs": (
+                "Zahájit hru…", "Dokončit hru…", "Zahájit let…", "Dokončit let…",
+            ),
+            "de": (
+                "Spiel beginnen…", "Spiel beenden…",
+                "Flug beginnen…", "Flug abschließen…",
+            ),
+            "sv": (
+                "Börja spel…", "Avsluta spel…",
+                "Börja flygning…", "Slutför flygning…",
+            ),
+        }
+        for language, labels in expected.items():
+            app = mock.Mock()
+            app.config = MAIN.WatcherConfig(gallery_url="https://gallery.test/")
+            app.gallery_url_var.get.return_value = app.config.gallery_url
+            app.api_key_revoke_running = False
+            app.api_key_request_blockers.return_value = []
+            app.flights.ui_language.get.return_value = language
+            app.simulator_presence = MAIN.GamePresence(lambda: "", WINAPP_DIR)
+            app.flights.text.side_effect = lambda key: app.simulator_presence.text(
+                key, language
+            )
+            # The four user-visible states are game/flight, each without/with key.
+            states = ((False, ""), (False, "saved"), (True, ""), (True, "saved"))
+            for (available, key), label in zip(states, labels):
+                with self.subTest(language=language, available=available, key=key):
+                    app.simulator_presence.available = available
+                    app.simulator_presence.context = (
+                        GameContext("simconnect", "Flight Simulator", "flight")
+                        if available else None
+                    )
+                    app.config.api_key = key
+                    app.api_key_var.get.return_value = key
+                    simbrief_widgets = (
+                        app.simbrief_button, app.simbrief_settings_button,
+                        app.simbrief_status_label,
+                    )
+                    for widget in simbrief_widgets:
+                        widget.reset_mock()
+                    MAIN.WatcherApp.refresh_connection_controls(app)
+                    for button in (app.finish_flight_button, app.import_revoke_button):
+                        button.configure.assert_called_with(text=label)
+                        button.state.assert_called_with(["!disabled"])
+                    for button in (app.abandon_flight_button, app.import_abandon_button):
+                        button.configure.assert_called_with(
+                            text=app.simulator_presence.text("abandon", language)
+                        )
+                        button.state.assert_called_with(
+                            ["!disabled"] if key else ["disabled"]
+                        )
+                    for widget in simbrief_widgets:
+                        if available:
+                            widget.grid.assert_called_once_with()
+                            widget.grid_remove.assert_not_called()
+                        else:
+                            widget.grid_remove.assert_called_once_with()
+                            widget.grid.assert_not_called()
+                    self.assertEqual(key, app.config.api_key)
+
     def test_finish_flight_is_below_gallery_and_title_can_shrink(self) -> None:
         """Keep the finish action visible independently of gallery title length.
 
@@ -1485,6 +1559,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms a rejected close retains the available version.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
         app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
@@ -1502,6 +1577,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.flights.stop.assert_called_once_with()
 
         self.assertFalse(app.exiting)
+        app.simulator_presence.stop.assert_not_called()
         self.assertEqual("0.4.1", app.update_available_version)
         dialogs.showwarning.assert_called_once()
 
@@ -1512,6 +1588,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms the keep-running choice leaves app and offer active.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
         app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
@@ -1544,14 +1621,17 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.hide_to_tray.assert_called_once_with()
         app.stop_tray_icon.assert_not_called()
         app.root.destroy.assert_not_called()
+        app.simulator_presence.stop.assert_not_called()
 
     def test_confirmed_close_clears_update_offer_before_teardown(self) -> None:
         """Clear the persistent offer only when shutdown reaches teardown.
 
         Returns:
-            None: Confirms confirmed shutdown clears the version and destroys Tk.
+            None: Confirms shutdown clears the version, stops presence checks
+                and destroys Tk.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
         app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
@@ -1585,6 +1665,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         self.assertIsNone(app.update_available_version)
         app.stop_tray_icon.assert_called_once_with()
         app.root.destroy.assert_called_once_with()
+        app.simulator_presence.stop.assert_called_once_with()
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

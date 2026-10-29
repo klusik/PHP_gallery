@@ -173,13 +173,36 @@ Unsupported servers leave reports local and retryable.
 ### Manual completion and saved PDFs
 
 **Finish flight…** sits directly below **Target gallery** in Watcher and Import;
-long gallery names shrink inside their own row. One click stops acquisition,
+without an available SimConnect connection it reads **Finish game…** instead.
+The corresponding no-key action is **Begin flight…** or **Begin game…**.
+A background observer checks every three seconds, even before Watcher starts
+and with recording or UTC sync disabled. SimConnect open/close takes priority;
+it requests no telemetry and changes no simulator state. When it is unavailable,
+known process names owned by the same Windows account provide an optional
+fallback without admin rights. Microsoft Flight Simulator processes retain
+flight wording. Cyberpunk 2077, the Mass Effect trilogy, Skyrim and Dragon Age
+have localized Begin/Finish easter eggs; unknown/ambiguous games retain general
+wording. Button actions, recording, reports and key handling remain unchanged.
+The SimBrief Load/Unload button, its settings icon and status appear only for
+a detected flight; changing context hides/restores them without unloading a plan.
+Abandon uses **Abandon flight…** or **Abandon game…** consistently in Watcher,
+Import and progress, including its localized confirmation and completion text.
+Abandonment stops uploader work and clears the local key; the game keeps running.
+
+The bundled offline catalog covers 10,405 games and 10,888 Windows executable
+rules from a dated Discord snapshot; it is broad rather than complete. Detection
+never downloads data or sends a process list. Add process names/phrases to
+`%APPDATA%\PHPGalleryUploader\game-contexts.json` and restart, without rebuilding.
+See [game context rules and examples](../docs/WINAPP_GAME_CONTEXTS.md) for schema,
+source provenance, account filtering, ambiguity and deliberate catalog updates.
+
+Long gallery names shrink inside their own row. One click stops acquisition,
 drains accepted work, creates all four PDF editions and completes their required
 delivery before revoking the saved key. No confirmation or success message box
 appears; successful progress closes after durable local key cleanup. Errors
 remain visible and retain work for retry. Settings retains direct key
 management.
-Without a saved key the enabled button reads **Begin flight…** and opens
+Without a saved key the enabled Begin button opens
 connection/API-key settings.
 If report delivery fails, **Keep locally and revoke key** finishes accepted work
 and continues the already-confirmed revocation. Ordinary Stop uses a separate
@@ -196,7 +219,8 @@ abandoned and removes the saved key from this PC. No connection test, report
 generation, further upload or server revocation is required. It also works when
 no flight tasks remain and only the obsolete key is still configured. Raw
 recordings, queued photograph sources, existing PDFs and acknowledged receipts
-remain local; the main action becomes **Begin flight…** for a new connection.
+remain local; the main action becomes Begin for a new connection, using
+flight, game or contextual wording according to the current detection.
 A key that remains valid on the server must be revoked separately in Admin.
 An already submitted revocation must settle before abandonment can begin.
 Failed worker shutdown or local configuration persistence keeps recovery visible
@@ -596,14 +620,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.10.0)
+## Windows installer (next version: 0.11.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.10.0**; this source version
+Gallery CMS release. The current source targets **0.11.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.10.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.11.0/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background

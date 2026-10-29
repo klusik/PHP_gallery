@@ -1331,7 +1331,27 @@ lokale Erstellung erledigt keine ausstehende Serverübertragung. Abbruch
 behält fertige Sprachfassungen. Beenden und Update berücksichtigen den Worker.
 Windows-Layout und Live-Abnahme bleiben eine gesonderte manuelle Prüfung.
 
-\ui{Flug abschließen} steht direkt unter der Zielgalerie; ein Klick startet
+Die Hauptaktionen in Watcher und Import heißen bei verfügbarem SimConnect
+\ui{Flug beginnen} und \ui{Flug abschließen}. Andernfalls dienen bekannte
+Spielprozesse desselben Windows-Kontos als optionale Erkennung ohne Adminrechte.
+Ein Microsoft-Flight-Simulator-Prozess behält die Flugtexte. Sonst erscheinen
+\ui{Spiel beginnen}/\ui{Spiel beenden} oder übersetzte Sprüche für Cyberpunk 2077,
+die Mass-Effect-Trilogie, Skyrim und Dragon Age. Unbekannte oder mehrdeutige
+Spiele behalten allgemeine Texte. Die Hintergrundprüfung erfolgt alle drei
+Sekunden, auch vor dem Beobachtungsstart und ohne Aufzeichnung/UTC-Synchronisation.
+SimConnect wird nur geöffnet/geschlossen, ohne Telemetrie oder Simulatoränderung;
+Prozessnamen bleiben lokal. Aktionen, Berichte und Schlüssel bleiben unverändert.
+SimBriefs Laden/Entfernen-Aktion, Einstellungssymbol und Status erscheinen nur
+bei erkanntem Flug; Ausblenden behält den geladenen Plan. Außerhalb eines Flugs
+verwenden Watcher, Import und Fortschritt \ui{Spiel aufgeben} samt passender
+Bestätigung und Statusmeldung. Die lokale Bereinigung lässt das Spiel weiterlaufen.
+Der umfangreiche Offlinekatalog ist unvollständig. Exakte Prozessnamen und
+optionale viersprachige Texte lassen sich in
+\filepath{\%APPDATA\%/PHPGalleryUploader/game-contexts.json} ergänzen;
+danach die App neu starten, ohne Neubau. Schema, Herkunft und Aktualisierung:
+\filepath{docs/WINAPP_GAME_CONTEXTS.md}.
+
+Die Abschlussaktion steht direkt unter der Zielgalerie; ein Klick startet
 Abschluss und Schlüsselwiderruf. Nach Fehlern behalten \ui{Lokal behalten und
 Schlüssel widerrufen} und Wiederholen die bereits bestätigte Absicht für
 dieselbe Verbindung in dieser App-Sitzung. Widerrufsabbruch, Schlüsselwechsel
@@ -1344,7 +1364,7 @@ Schlüssel. Nach Bestätigung stoppen die Worker und laufende Anfragen enden;
 ausstehende Übertragungen werden aufgegeben und der gespeicherte Schlüssel
 ohne Serverkontakt von diesem PC entfernt. Aufzeichnungen, Quellfotos, PDFs und
 Bestätigungen bleiben lokal erhalten. Dies funktioniert auch ohne ausstehende
-Flüge; die Hauptaktion wird zu \ui{Flug beginnen}. Einen weiterhin gültigen
+Flüge; die Hauptaktion wechselt zum Beginn. Einen weiterhin gültigen
 Serverschlüssel separat in Admin widerrufen. Ein gesendeter Widerruf muss zuerst
 enden; Stopp- oder Speicherfehler behalten Schlüssel und Wiederholung bei.
 
@@ -1359,7 +1379,7 @@ Schlüsselbindungen und Rohdaten bleiben erhalten. Abbruch behält fertige
 Fassungen. Protokollfehler nennen bereinigte Aktion, HTTP-Status, Inhaltstyp
 und einen begrenzten Antwortauszug.
 
-Ohne gespeicherten Schlüssel öffnet \ui{Flug beginnen} die API-Einstellungen.
+Ohne gespeicherten Schlüssel öffnet die Beginn-Aktion die API-Einstellungen.
 Flug und gegebenenfalls Version aufklappen, um einzelne PDFs zu sehen;
 Doppelklick öffnet den Standardviewer.
 \ui{Ordner mit PDFs öffnen} führt direkt zum PDF-Ordner. Namen enthalten UTC,

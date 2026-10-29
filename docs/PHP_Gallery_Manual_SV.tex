@@ -1270,7 +1270,27 @@ slutför inte väntande serverleverans. Avbrott behåller färdiga språkversion
 Avslut och uppdatering hanterar denna arbetare. Windows-layout och
 livegodkännande förblir en separat manuell kontroll.
 
-\ui{Slutför flygning} ligger direkt under målgalleriet; ett klick påbörjar
+Huvudåtgärderna i Watcher och Import heter \ui{Börja flygning} och
+\ui{Slutför flygning} när SimConnect är tillgängligt. Annars kan kända
+spelprocesser från samma Windows-konto användas utan administratörsrättigheter.
+En Microsoft Flight Simulator-process behåller flygtexterna. Övriga visar
+\ui{Börja spel}/\ui{Avsluta spel} eller översatta fraser för Cyberpunk 2077,
+Mass Effect-trilogin, Skyrim och Dragon Age. Okända eller tvetydiga spel behåller
+allmän text. Bakgrundskontrollen sker var tredje sekund, även före bevakning
+och utan inspelning/UTC-synkronisering. SimConnect öppnas/stängs utan telemetri
+eller simulatorändring; processnamn stannar lokalt. Åtgärder, rapporter och
+nyckelhantering förblir oförändrade. SimBriefs ladda/ta bort-knapp,
+inställningsikon och status visas bara vid upptäckt flygning; dold vy behåller
+den laddade planen. Annars använder Watcher, Import och förloppet
+\ui{Överge spel}, inklusive motsvarande bekräftelse och statustext.
+Den lokala rensningen låter spelet fortsätta köras. Den breda offlinekatalogen
+är ofullständig.
+Lägg till exakta processnamn och valfria fraser på fyra språk i
+\filepath{\%APPDATA\%/PHPGalleryUploader/game-contexts.json} och starta om appen,
+utan nytt bygge. Schema, källa och uppdatering beskrivs i
+\filepath{docs/WINAPP_GAME_CONTEXTS.md}.
+
+Slutför-åtgärden ligger direkt under målgalleriet; ett klick påbörjar
 återkallelse av nyckeln. Efter fel behåller \ui{Behåll lokalt och återkalla
 nyckeln} och Försök igen det redan bekräftade beslutet för samma anslutning
 i denna appsession. Avbruten återkallelse, nyckelbyte eller omstart överför
@@ -1283,7 +1303,7 @@ Efter bekräftelse stoppas arbetare och pågående anrop avslutas; väntande
 leverans överges och den sparade nyckeln tas bort från denna dator utan
 serverkontakt. Inspelningar, källfoton, PDF-filer och kvittenser behålls lokalt.
 Det fungerar även utan väntande flygningar; huvudåtgärden blir
-\ui{Påbörja flygning}. Återkalla en fortfarande giltig servernyckel separat
+startåtgärden. Återkalla en fortfarande giltig servernyckel separat
 i Admin. En skickad återkallelse måste först avslutas; stopp- eller sparfel
 behåller nyckeln och möjligheten att försöka igen.
 
@@ -1297,7 +1317,7 @@ stämmer av serverstatus. Gamla planer, nyckelkopplingar och rådata behålls.
 Avbrott behåller färdiga versioner. Protokollfel visar maskerad åtgärd,
 HTTP-status, innehållstyp och ett begränsat utdrag ur svaret.
 
-Utan sparad nyckel öppnar \ui{Börja flygning} API-inställningarna. Expanderade
+Utan sparad nyckel öppnar startåtgärden API-inställningarna. Expanderade
 flygningar och eventuella versioner visar PDF-filer; dubbelklick öppnar
 standardvisaren.
 \ui{Öppna mapp med PDF-filer} går direkt till PDF-mappen. Namn innehåller UTC,

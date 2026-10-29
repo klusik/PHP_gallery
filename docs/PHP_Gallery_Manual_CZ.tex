@@ -1256,7 +1256,26 @@ neuzavírá čekající doručení na~server. Zrušení zachová hotové jazykov
 Ukončení aplikace a~aktualizace tohoto pracovníka bezpečně dokončí nebo zruší.
 Rozložení ve~Windows a~živé ověření zůstávají samostatnou ruční kontrolou.
 
-Tlačítko \ui{Dokončit let} je přímo pod \ui{Cílovou galerií}; jediný klik
+Hlavní akce ve~Watcheru a~Importu používají \ui{Zahájit let} a~\ui{Dokončit let},
+pokud je~SimConnect dostupný. Při selhání mohou pomoci známé procesy her
+stejného účtu Windows, bez administrátorských práv. Proces Microsoft Flight
+Simulatoru rovněž zachová letecké popisky. Jinak se~použije \ui{Zahájit hru}
+a~\ui{Dokončit hru}, případně přeložené hlášky pro Cyberpunk 2077, trilogii
+Mass Effect, Skyrim a~Dragon Age. Neznámé nebo nejednoznačné hry zachovají obecné
+popisky. Kontrola probíhá každé tři sekundy i~před sledováním nebo při vypnutém
+záznamu a~UTC. SimConnect pouze otevře a~zavře, bez telemetrie a~změn simulátoru;
+procesy zůstávají místní. Akce, reporty a~práce s~klíčem se~nemění.
+Tlačítko načtení/odebrání SimBriefu, jeho nastavení a~stav jsou viditelné pouze
+při detekovaném letu; skrytí zachová načtený plán. Mimo let používají Watcher,
+Import i~průběh \ui{Opustit hru} včetně odpovídajícího potvrzení a~stavu.
+Původní místní úklid ponechá samotnou hru spuštěnou.
+Přibalený offline katalog je~rozsáhlý, ale neúplný. Přesné názvy procesů
+a~volitelné hlášky ve~čtyřech jazycích doplňte do~
+\filepath{\%APPDATA\%/PHPGalleryUploader/game-contexts.json} a~aplikaci restartujte,
+bez nového sestavení. Schéma, původ a~obnovu katalogu popisuje
+\filepath{docs/WINAPP_GAME_CONTEXTS.md}.
+
+Tlačítko dokončení je přímo pod \ui{Cílovou galerií}; jediný klik
 zahájí dokončení a~zrušení klíče. Po~chybě zachová \ui{Ponechat místně a~zrušit klíč} i~Opakovat
 již potvrzený záměr pro stejné připojení v~této instanci aplikace. Zrušení
 revokace, změna klíče nebo restart souhlas nepřenáší. Běžné Zastavení klíč
@@ -1267,7 +1286,7 @@ umožňuje místní obnovu po~smazání galerie nebo zrušení klíče. Po~potvr
 se~zastaví pracovníci a~vyčká se~na~běžící požadavky; čekající doručení
 se~opustí a~uložený klíč se~odstraní z~tohoto PC bez kontaktování serveru.
 Záznamy, zdrojové fotografie, PDF a~potvrzení zůstanou místně zachované.
-Funguje to~i~bez čekajících letů. Hlavní akce se~změní na~\ui{Zahájit let}.
+Funguje to~i~bez čekajících letů. Hlavní akce se~změní na~zahájení.
 Stále platný klíč zrušte samostatně v~Adminu. Již odeslaná revokace musí
 nejprve skončit; chyba zastavení nebo uložení konfigurace ponechá klíč
 a~možnost opakování.
@@ -1282,7 +1301,7 @@ vazby klíčů a~surová data zůstanou zachované. Zrušení ponechá dokončen
 Chyby protokolu uvádějí anonymizovanou akci, HTTP stav, typ obsahu a~krátký
 výpis odpovědi.
 
-Bez uloženého klíče se hlavní akce změní na~\ui{Zahájit let} a~otevře nastavení
+Bez uloženého klíče hlavní akce zahájení otevře nastavení
 API. Rozbalte let a~případnou verzi pro jednotlivá PDF; dvojklik otevře
 výchozí prohlížeč.
 \ui{Otevřít složku s~PDF} vede pouze do~složky PDF. Názvy obsahují zaznamenané
