@@ -8,16 +8,30 @@
 #   - Retain complete contextual reports and operational diagnostics.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
+
+# Reading path: manual dispatch -> bind selected source/evaluator SHA ->
+# central advisory profile -> concise summary plus complete report artifact.
+# Advice helps a maintainer review readability; it is separate from BASIC,
+# FULL and protected-branch qualification. Run failures still retain evidence.
 name: Code readability report
 run-name: Readability · ${{ github.ref_name }} · ${{ github.sha }}
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
   workflow_dispatch:
 
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Use the selected branch's own immutable source and evaluator together.
+  # The central profile owns discovery/reporting; YAML only provisions its
+  # runtimes and retains advice plus operational failure diagnostics.
   readability:
     name: Advisory source readability
     runs-on: ubuntu-24.04
@@ -31,6 +45,9 @@ jobs:
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -41,6 +58,9 @@ jobs:
           # downloading unrelated history for a whole-tree advisory report.
           fetch-depth: 1
           persist-credentials: false
+
+      # Require the dispatched branch, checkout and workflow revision to agree.
+      # An advisory result must not accidentally describe a different evaluator.
       - name: Verify selected branch and evaluator identity
         shell: bash
         env:
@@ -54,6 +74,9 @@ jobs:
           test "${WORKFLOW_REF}" = "${GITHUB_REPOSITORY}/.github/workflows/readability-report.yml@${GITHUB_REF}"
           printf 'Selected branch: %s\nImmutable source/evaluator SHA: %s\n' \
             "${GITHUB_REF_NAME}" "${GITHUB_SHA}" >> "${GITHUB_STEP_SUMMARY}"
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
@@ -61,8 +84,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
+      # Delegate whole-tree readability discovery and reporting to audit.php;
+      # recommendations do not become mandatory source qualification.
       - name: Central advisory profile
         run: php scripts/audit.php --profile=readability
+
+      # Find one central summary and append it to the Actions page. If a report
+      # could not be produced, direct the reader to retained diagnostics.
       - name: Publish concise advice summary
         if: ${{ always() }}
         shell: bash
@@ -75,6 +104,9 @@ jobs:
             echo 'Report unavailable; inspect audit diagnostics in the artifact.' \
               >> "${GITHUB_STEP_SUMMARY}"
           fi
+
+      # Upload complete advice and operational evidence even on failure, with
+      # the exact source SHA in the artifact name for later review.
       - name: Retain complete report and detailed diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v7.0.1

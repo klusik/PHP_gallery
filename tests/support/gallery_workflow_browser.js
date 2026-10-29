@@ -373,13 +373,16 @@ async () => {
         expect(displayTab);
         displayTab.click();
         await until(() => doc.querySelector('#admin-edit-display')?.classList.contains('is-active'));
-        const advancedDisplay = doc.querySelector('#admin-edit-display details.admin-display-advanced');
-        expect(advancedDisplay);
-        if (!advancedDisplay.open) advancedDisplay.querySelector('summary').click();
-        expect(advancedDisplay.open);
         const breadcrumbRadio = breadcrumbEditor?.querySelector('input[type="radio"][name="gallery_breadcrumb_style"][value="gradient"]');
         const breadcrumbCard = breadcrumbRadio?.closest('.breadcrumb-style-picker__option');
         expect(breadcrumbRadio && breadcrumbCard);
+        const breadcrumbDisclosure = breadcrumbRadio.closest(
+            '#admin-edit-display details.admin-display-subsection',
+        );
+        const breadcrumbToggle = breadcrumbDisclosure?.querySelector('summary');
+        expect(breadcrumbDisclosure && breadcrumbToggle);
+        if (!breadcrumbDisclosure.open) breadcrumbToggle.click();
+        expect(breadcrumbDisclosure.open);
         breadcrumbCard.scrollIntoView({block: 'center', inline: 'nearest'});
         const breadcrumbCardRect = breadcrumbCard.getBoundingClientRect();
         expect(breadcrumbCardRect.width > 0 && breadcrumbCardRect.height > 0

@@ -1802,4 +1802,11 @@ return [
     'admin.telemetry.preference_refused' => 'Der gespeicherte Wert weicht von Ihrer Änderung ab. Prüfen Sie ihn vor einem neuen Versuch.',
     'lightbox.fit_content' => 'An Inhalt anpassen',
     'lightbox.original_frame' => 'Originalrahmen anzeigen',
+    'admin.gallery_editor.photo_ratio_label' => 'Format der Fotokarten',
+    'admin.gallery_editor.photo_ratio_help' => 'Wählen Sie den Zuschnitt der Fotovorschauen nur für diese Galerie. Standard behält die bisherige Desktop- und Mobilansicht bei. Andere Formate gelten auf allen Bildschirmen. Originale, Lightbox und Galerie-Titelkarten bleiben unverändert.',
+    'admin.gallery_editor.photo_ratio_invalid' => 'Wählen Sie ein unterstütztes Fotokartenformat.',
+    'admin.gallery_editor.display_photos' => 'Fotokarten',
+    'admin.gallery_editor.display_gallery_cards' => 'Galeriekarten',
+    'admin.gallery_editor.display_navigation' => 'Navigation und Karten',
+    'admin.gallery_editor.display_interactions' => 'Besucherinteraktionen',
 ];

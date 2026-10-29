@@ -1,0 +1,167 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/gallery_display.html
+Module Type: Browser Test Fixture
+Purpose: Review real Display markup, format geometry and isolated switch saves.
+Responsibilities: Assert production cascade, safe drafts and dynamic fragments.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gallery Display</title></head><body class="admin-page">
+<main id="workspace"><!-- PRODUCTION_GALLERY_MARKUP --></main>
+<pre id="results"></pre>
+<script type="module">
+import {setupAdminGalleryCompactEditor} from '/public/assets/gallery-modules/admin-gallery-compact-editor.js';
+import {setupAdminGalleryGridControls} from '/public/assets/gallery-modules/admin-gallery-grid-controls.js';
+let assertions = 0;
+const originalFetch = window.fetch.bind(window);
+const originalUrl = location.href;
+const requests = [];
+let rejectSave = false;
+let revision = 1;
+const values = {show_filenames: true, voting_enabled: false,
+    picture_game_enabled: false, gps_map_enabled: false};
+/** Allow subpixel raster rounding in aspect-ratio comparisons.
+ * Type: number. Units: ratio difference. Scope: photo-slot geometry assertions.
+ * Consumers: responsive crop checks. Value: 0.01.
+ * Rationale: tolerate subpixel rounding without accepting a different format.
+ */
+const RATIO_TOLERANCE = .01;
+/** Require an observable layout or behavior invariant.
+ * @param {boolean} condition Expected invariant.
+ * @param {string} message Assertion explanation.
+ * @return {void} Count the passing assertion or fail the fixture.
+ */
+function check(condition, message) {
+    if (!condition) throw new Error(message);
+    assertions++;
+}
+/** Yield through native rendering without timer-based guesses.
+ * @return {Promise<void>} Resolve after two layout frames.
+ */
+function frame() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+/** Wait for the production switch feedback to settle within a frame budget.
+ * @param {Element} row Row owning the switch operation.
+ * @return {Promise<void>} Resolve when saved/unknown; throw after the frame cap.
+ */
+async function saved(row) {
+    // Type: number. Units: animation frames. Scope: synthetic save completion.
+    // Consumers: saved(). Value: 120. Rationale: bounded two-second UI allowance
+    // at ordinary refresh rates without loosening the production write deadline.
+    const MAX_SAVE_FRAMES = 120;
+    for (let index = 0; index < MAX_SAVE_FRAMES; index++) {
+        if (['saved', 'unknown'].includes(row.dataset.displaySaveState)) return;
+        await frame();
+    }
+    throw new Error('Switch feedback did not settle');
+}
+window.fetch = async (url, options) => {
+    if (new URL(url, location.href).pathname !== '/fixture-display') {
+        return originalFetch(url, options);
+    }
+    const body = options.body;
+    requests.push(Object.fromEntries(body));
+    if (rejectSave) throw new TypeError('Synthetic lost reply');
+    values[body.get('preference')] = body.get('value') === '1';
+    return new Response(JSON.stringify({ok: true, message: 'Saved',
+        edit_revision: String(++revision), setting_values: {...values},
+        mutation: {type: 'gallery.update', entity: 'gallery', action: 'update', entity_ids: [42]},
+        panel: null, contexts: [], fallback: {redirect_url: '/fixture-display'}}),
+        {headers: {'Content-Type': 'application/json'}});
+};
+setupAdminGalleryCompactEditor();
+setupAdminGalleryGridControls();
+// Visual review serves the same production markup without running assertions.
+if (!new URL(location.href).searchParams.has('visual')) {
+try {
+    let form = document.querySelector('form');
+    const input = form.querySelector('[name="show_filenames"]');
+    const row = input.closest('.admin-display-switch-row');
+    input.click();
+    await saved(row);
+    check(requests.length === 1 && requests[0].preference === 'show_filenames'
+        && requests[0].value === '0' && !('title' in requests[0])
+        && !('gallery_photo_card_ratio' in requests[0]), 'Switch must send only its own preference and authority');
+    check(form.querySelector('[name="title"]').value === 'Unsaved draft'
+        && form.querySelector('[name="edit_revision"]').value === '2'
+        && location.href === originalUrl, 'Save must preserve drafts, editor nodes, revision and URL');
+    const help = document.querySelector('#admin-edit-display .admin-inline-help');
+    help.querySelector('summary').click();
+    await frame();
+    const helpBox = help.querySelector('.admin-inline-help-content').getBoundingClientRect();
+    check(help.open && helpBox.left >= 0 && helpBox.right <= innerWidth,
+        'Help must remain anchored and inside the viewport');
+    await originalFetch('/__key?key=Escape');
+    await frame();
+    check(!help.open && document.activeElement === help.querySelector('summary'),
+        'Escape must dismiss help and restore trigger focus');
+    help.querySelector('summary').click(); await frame();
+    form.querySelector('[name="title"]').click(); await frame();
+    check(!help.open, 'Outside click must dismiss help');
+
+    const iframe = document.createElement('iframe');
+    iframe.title = 'Public photo cards';
+    iframe.style.cssText = 'width:100%;height:800px;border:0';
+    iframe.srcdoc = document.querySelector('#fixture-public-markup').innerHTML;
+    document.body.append(iframe);
+    await new Promise(resolve => iframe.addEventListener('load', resolve, {once:true}));
+    for (const width of [1280, 390]) {
+        await originalFetch('/__viewport?width=' + width); await frame();
+        check(document.documentElement.scrollWidth <= innerWidth,
+            'Display must fit the viewport without horizontal scrolling');
+        const switchStyle = getComputedStyle(input);
+        check(switchStyle.width === '26px' && switchStyle.height === '14px',
+            'Switch must retain the compact approved geometry');
+        if (width === 390) check(input.closest('label').getBoundingClientRect().height >= 44,
+            'Narrow switch labels must provide a comfortable target');
+        const publicDoc = iframe.contentDocument;
+        const grid = publicDoc.querySelector('.gallery-image-grid');
+        for (const [format, expected] of [['16 / 9',16/9], ['21 / 9',21/9],
+            ['4 / 3',4/3], ['1 / 1',1], ['4 / 5',4/5], ['9 / 16',9/16]]) {
+            grid.classList.add('has-photo-card-ratio');
+            grid.style.setProperty('--photo-card-ratio', format); await frame();
+            for (const image of grid.querySelectorAll('.image-preview-link img')) {
+                const box = image.getBoundingClientRect();
+                // Subpixel rounding of a CSS slot may differ by one percent.
+                check(box.width > 0 && box.height > 0
+                    && Math.abs(box.width / box.height - expected) < RATIO_TOLERANCE,
+                    'Explicit crop must apply to both picture structures at every width');
+            }
+        }
+        grid.classList.remove('has-photo-card-ratio');
+        grid.style.removeProperty('--photo-card-ratio'); await frame();
+        const box = grid.querySelector('img').getBoundingClientRect();
+        check(Math.abs(box.width / box.height - (width === 390 ? 1 : 4/3)) < RATIO_TOLERANCE,
+            'Default must preserve historic desktop and mobile crops: viewport='
+                + width + ', frame=' + iframe.contentWindow.innerWidth
+                + ', image=' + box.width + 'x' + box.height);
+    }
+    const replacement = form.cloneNode(true);
+    form.replaceWith(replacement);
+    form = replacement;
+    const reinjected = form.querySelector('[name="show_filenames"]');
+    reinjected.click(); await saved(reinjected.closest('.admin-display-switch-row'));
+    check(requests.length === 2 && requests[1].edit_revision === '2'
+        && form.querySelector('[name="title"]').value === 'Unsaved draft'
+        && location.href === originalUrl,
+        'Dynamically replaced editors must retain delegated saves and drafts');
+    rejectSave = true;
+    const voting = form.querySelector('[name="voting_enabled"]');
+    voting.click(); await saved(voting.closest('.admin-display-switch-row'));
+    check(voting.disabled && voting.checked, 'Lost reply must preserve intent and lock its switch');
+    const submit = new Event('submit', {bubbles: true, cancelable: true});
+    form.dispatchEvent(submit);
+    check(submit.defaultPrevented && requests.length === 3,
+        'Unverified writes must block full-form replay without automatic retry');
+    document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' Display assertions';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL ' + error.message + '\n' + error.stack;
+}
+}
+</script></body></html>

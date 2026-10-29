@@ -303,6 +303,12 @@ function gallery_mutation_model_delete_subtree_in_transaction(
         $galleryIds,
     );
     app_settings_model_delete($breadcrumbSettingKeys);
+    app_settings_model_delete(array_map(
+        static fn(int $galleryId): string => (
+            'gallery_photo_card_ratio.' . $galleryId
+        ),
+        $galleryIds,
+    ));
 
     return gallery_mutation_model_delete_fixed_rows(
         'galleries.id',

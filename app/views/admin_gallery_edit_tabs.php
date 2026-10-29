@@ -879,9 +879,100 @@ function view_render_admin_gallery_display_help(
 }
 
 /**
- * Render the Display tab with the grid first and infrequent settings collapsed.
+ * Render a gallery-owned binary preference or staged bulk-intent switch.
  *
- * @param array<string, mixed> $viewModel Controller-prepared display settings and labels.
+ * @param string $name Existing submitted field name.
+ * @param array{label:string,checked?:bool,help?:string} $item Prepared localized
+ *     label, checked state and optional contextual explanation.
+ * @param bool $autosave Whether this is an independently persisted preference;
+ *     false retains explicit full-form saving for recursive bulk intent.
+ * @return void Emit the native switch, help and an accessible local save status.
+ */
+function view_render_admin_gallery_display_switch(
+    string $name,
+    array $item,
+    bool $autosave = true,
+): void {
+    echo '<div class="admin-display-switch-row"><label class="checkbox-label">'
+        . '<input type="checkbox" name="' . e($name) . '" value="1"'
+        . (!empty($item['checked']) ? ' checked' : '')
+        . ($autosave ? ' data-gallery-display-preference' : '')
+        . '> <span>' . e($item['label']) . '</span></label>';
+    view_render_admin_gallery_display_help(
+        $item['label'],
+        (string) ($item['help'] ?? ''),
+    );
+    echo '<span data-gallery-display-status role="status" aria-live="polite"></span></div>';
+}
+
+/**
+ * Render one prepared presentation selector without querying domain policy.
+ *
+ * @param string $name Existing submitted field name.
+ * @param array{label:string,current?:string|null,inherit_label?:string,
+ *     options?:list<array{value:string,label:string}>,help?:string} $item Prepared
+ *     current choice, optional inherit choice, localized options and help.
+ * @return void Emit a labelled native select and its contextual help.
+ */
+function view_render_admin_gallery_display_select(string $name, array $item): void
+{
+    $current = (string) ($item['current'] ?? 'inherit');
+    echo '<div class="admin-display-option"><label><span>'
+        . e($item['label']) . '</span><select name="' . e($name) . '">';
+    $options = (array) ($item['options'] ?? []);
+    if (isset($item['inherit_label'])) {
+        array_unshift($options, [
+            'value' => 'inherit',
+            'label' => $item['inherit_label'],
+        ]);
+    }
+    foreach ($options as $option) {
+        $value = (string) $option['value'];
+        echo '<option value="' . e($value) . '"'
+            . ($current === $value ? ' selected' : '') . '>'
+            . e((string) $option['label']) . '</option>';
+    }
+    echo '</select></label>';
+    view_render_admin_gallery_display_help(
+        $item['label'],
+        (string) ($item['help'] ?? ''),
+    );
+    echo '</div>';
+}
+
+/**
+ * Render Display as independent translucent groups with native form controls.
+ *
+ * @param array{active?:bool,
+ *     grid?:array{ready?:bool,title?:string,help?:string,columns?:int,rows?:int,
+ *         max_columns?:int,max_rows?:int,default_columns?:int,default_rows?:int,
+ *         override_enabled?:bool,override_label?:string,columns_label?:string,
+ *         rows_label?:string,use_for_subgalleries?:bool,recursive_label?:string,
+ *         default_status_label?:string,custom_status_label?:string,
+ *         reset_default_label?:string,migration_message?:string},
+ *     photo_card_ratio?:array{current:string,label:string,help:string,
+ *         options:list<array{value:string,label:string,ratio:string}>},
+ *     filenames?:array{ready?:bool,checked?:bool,label:string,help?:string,
+ *         migration_message?:string},
+ *     voting?:array{visible?:bool,checked?:bool,label:string,help?:string},
+ *     picture_game?:array{visible?:bool,checked?:bool,label:string},
+ *     gps?:array{state?:string,current_mode?:string,label?:string,help?:string,
+ *         options?:list<array{value:string,label:string}>,checked?:bool,
+ *         legacy_label?:string,legacy_help?:string},
+ *     description_layout?:array{ready?:bool,current?:string|null,label?:string,
+ *         inherit_label?:string,help?:string,migration_message?:string,
+ *         options?:list<array{value:string,label:string}>},
+ *     count_badge?:array{ready?:bool,current?:string,label?:string,help?:string,
+ *         migration_message?:string,options?:list<array{value:string,label:string}>},
+ *     lightbox?:array{state?:string,current?:string,label?:string,help?:string,
+ *         inherit_label?:string,migration_message?:string,
+ *         options?:list<array{value:string,label:string}>},
+ *     breadcrumb_style?:array{field_name:string,current:string,label:string,
+ *         help?:string,options:list<array{value:string,label:string,...}>},
+ *     thumbnail_bounds?:array{ready?:bool,title?:string,help?:string,
+ *         control_html?:string,recursive_label?:string,recursive_help?:string,
+ *         migration_message?:string}} $viewModel Controller-prepared stored
+ *     values, readiness, labels, help and choice lists; views query no policy.
  * @return void Render the Display tab and all form controls.
  */
 function view_render_admin_gallery_display_tab(array $viewModel): void
@@ -893,7 +984,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
     if ((bool) ($grid['ready'] ?? false)) {
         $gridTitle = (string) ($grid['title'] ?? 'Display grid');
         echo
-            '<section class="admin-display-grid-primary"><div class="admin-display-section-head"><h3>'
+            '<section class="admin-display-grid-primary admin-display-group"><div class="admin-display-section-head"><h3>'
                 . e($gridTitle)
                 . '</h3>';
         view_render_admin_gallery_display_help(
@@ -969,260 +1060,140 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
                 . '</div>';
     }
 
-    $voting = (array) ($viewModel['voting'] ?? []);
+    $ratio = (array) ($viewModel['photo_card_ratio'] ?? []);
+    echo '<section class="admin-display-group"><h3>'
+        . e(t('admin.gallery_editor.display_photos', 'Photo cards'))
+        . '</h3>';
+    if ($ratio !== []) {
+        echo '<fieldset class="admin-display-ratio"><legend>'
+            . e((string) $ratio['label']) . '</legend>';
+        view_render_admin_gallery_display_help(
+            (string) $ratio['label'],
+            (string) $ratio['help'],
+        );
+        echo '<div class="admin-display-ratio-options">';
+        foreach ($ratio['options'] as $option) {
+            $value = (string) $option['value'];
+            // The default glyph depicts the historic desktop crop only;
+            // its actual mobile layout remains governed by the existing CSS.
+            $previewRatio = $option['ratio'] !== ''
+                ? (string) $option['ratio']
+                : '4 / 3';
+            echo '<label><input type="radio" name="gallery_photo_card_ratio"'
+                . ' value="' . e($value) . '"'
+                . ($ratio['current'] === $value ? ' checked' : '')
+                . '><span class="admin-display-ratio-glyph" aria-hidden="true"'
+                . ' style="--format-ratio: ' . e($previewRatio) . '"></span>'
+                . '<span>' . e((string) $option['label']) . '</span></label>';
+        }
+        echo '</div></fieldset>';
+    }
     $filenames = (array) ($viewModel['filenames'] ?? []);
-    if (
-        (bool) ($voting['visible'] ?? false)
-        || (bool) ($filenames['ready'] ?? false)
-    ) {
-        echo '<div class="admin-display-quick-options">';
-        if ((bool) ($voting['visible'] ?? false)) {
-            $label = (string) ($voting['label'] ?? '');
-            echo
-                '<div class="admin-display-quick-option"><label class="checkbox-label"><input type="checkbox" name="voting_enabled" value="1"'
-                    . ((bool) ($voting['checked'] ?? false) ? ' checked' : '')
-                    . '> '
-                    . e($label)
-                    . '</label>';
-            view_render_admin_gallery_display_help(
-                $label,
-                (string) ($voting['help'] ?? ''),
-            );
-            echo '</div>';
-        }
-        if ((bool) ($filenames['ready'] ?? false)) {
-            $label = (string) ($filenames['label'] ?? '');
-            echo
-                '<div class="admin-display-quick-option"><label class="checkbox-label"><input type="checkbox" name="show_filenames" value="1"'
-                    . (
-                        (bool) ($filenames['checked'] ?? false)
-                            ? ' checked'
-                            : ''
-                    )
-                    . '> '
-                    . e($label)
-                    . '</label>';
-            view_render_admin_gallery_display_help(
-                $label,
-                (string) ($filenames['help'] ?? ''),
-            );
-            echo '</div>';
-        }
-        echo '</div>';
+    if (!empty($filenames['ready'])) {
+        view_render_admin_gallery_display_switch('show_filenames', $filenames);
     }
+    echo '</section>';
 
-    echo
-        '<details class="admin-display-advanced"><summary>'
-            . e(
-                (string) (
-                    $viewModel['advanced_label'] ?? 'Advanced display settings'
-                ),
-            )
-            . '</summary><div class="admin-display-advanced-content"><div class="admin-display-advanced-options">';
-
-    $gps = (array) ($viewModel['gps'] ?? []);
-    if (($gps['state'] ?? 'hidden') === 'override') {
-        $currentMode = (string) ($gps['current_mode'] ?? 'inherit');
-        $label = (string) ($gps['label'] ?? '');
-        echo
-            '<div class="admin-display-option"><label><span>'
-                . e($label)
-                . '</span><select name="gps_map_enabled">';
-        foreach ((array) ($gps['options'] ?? []) as $option) {
-            $value = (string) ($option['value'] ?? '');
-            echo
-                '<option value="'
-                    . e($value)
-                    . '"'
-                    . ($currentMode === $value ? ' selected' : '')
-                    . '>'
-                    . e((string) ($option['label'] ?? ''))
-                    . '</option>';
-        }
-        echo '</select></label>';
-        view_render_admin_gallery_display_help(
-            $label,
-            (string) ($gps['help'] ?? ''),
-        );
-        echo '</div>';
-    } elseif (($gps['state'] ?? 'hidden') === 'legacy') {
-        $label = (string) ($gps['legacy_label'] ?? '');
-        echo
-            '<div class="admin-display-option admin-display-option-checkbox"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"'
-                . ((bool) ($gps['checked'] ?? false) ? ' checked' : '')
-                . '> '
-                . e($label)
-                . '</label>';
-        view_render_admin_gallery_display_help(
-            $label,
-            (string) ($gps['legacy_help'] ?? ''),
-        );
-        echo '</div>';
-    }
-
+    echo '<section class="admin-display-group"><h3>'
+        . e(t('admin.gallery_editor.display_gallery_cards', 'Gallery cards'))
+        . '</h3>';
     $descriptionLayout = (array) ($viewModel['description_layout'] ?? []);
-    if ((bool) ($descriptionLayout['ready'] ?? false)) {
-        $current = $descriptionLayout['current'] ?? null;
-        $label = (string) ($descriptionLayout['label'] ?? '');
-        echo
-            '<div class="admin-display-option"><label><span>'
-                . e($label)
-                . '</span><select name="description_layout"><option value="inherit"'
-                . ($current === null ? ' selected' : '')
-                . '>'
-                . e((string) ($descriptionLayout['inherit_label'] ?? ''))
-                . '</option>';
-        foreach ((array) ($descriptionLayout['options'] ?? []) as $option) {
-            $value = (string) ($option['value'] ?? '');
-            echo
-                '<option value="'
-                    . e($value)
-                    . '"'
-                    . ($current === $value ? ' selected' : '')
-                    . '>'
-                    . e((string) ($option['label'] ?? ''))
-                    . '</option>';
-        }
-        echo '</select></label>';
-        view_render_admin_gallery_display_help(
-            $label,
-            (string) ($descriptionLayout['help'] ?? ''),
-        );
-        echo '</div>';
-    }
-
     $countBadge = (array) ($viewModel['count_badge'] ?? []);
-    if ((bool) ($countBadge['ready'] ?? false)) {
-        $current = (string) ($countBadge['current'] ?? 'inherit');
-        $label = (string) ($countBadge['label'] ?? '');
-        echo
-            '<div class="admin-display-option"><label><span>'
-                . e($label)
-                . '</span><select name="count_badge_visibility">';
-        foreach ((array) ($countBadge['options'] ?? []) as $option) {
-            $value = (string) ($option['value'] ?? '');
-            echo
-                '<option value="'
-                    . e($value)
-                    . '"'
-                    . ($current === $value ? ' selected' : '')
-                    . '>'
-                    . e((string) ($option['label'] ?? ''))
-                    . '</option>';
-        }
-        echo '</select></label>';
-        view_render_admin_gallery_display_help(
-            $label,
-            (string) ($countBadge['help'] ?? ''),
-        );
-        echo '</div>';
-    }
-
     $lightbox = (array) ($viewModel['lightbox'] ?? []);
-    if (($lightbox['state'] ?? 'hidden') === 'ready') {
-        $current = (string) ($lightbox['current'] ?? 'inherit');
-        $label = (string) ($lightbox['label'] ?? '');
-        echo
-            '<div class="admin-display-option"><label><span>'
-                . e($label)
-                . '</span><select name="lightbox_browsing_mode"><option value="inherit"'
-                . ($current === 'inherit' ? ' selected' : '')
-                . '>'
-                . e((string) ($lightbox['inherit_label'] ?? ''))
-                . '</option>';
-        foreach ((array) ($lightbox['options'] ?? []) as $option) {
-            $value = (string) ($option['value'] ?? '');
-            echo
-                '<option value="'
-                    . e($value)
-                    . '"'
-                    . ($current === $value ? ' selected' : '')
-                    . '>'
-                    . e((string) ($option['label'] ?? ''))
-                    . '</option>';
+    $gps = (array) ($viewModel['gps'] ?? []);
+    foreach ([
+        ['name' => 'description_layout', 'item' => $descriptionLayout],
+        ['name' => 'count_badge_visibility', 'item' => $countBadge],
+    ] as $field) {
+        if (empty($field['item']['ready'])) {
+            continue;
         }
-        echo '</select></label>';
-        view_render_admin_gallery_display_help(
-            $label,
-            (string) ($lightbox['help'] ?? ''),
+        view_render_admin_gallery_display_select(
+            $field['name'],
+            $field['item'],
         );
-        echo '</div>';
     }
+    echo '</section>';
 
+    echo '<section class="admin-display-group"><h3>'
+        . e(t('admin.gallery_editor.display_navigation', 'Navigation and maps'))
+        . '</h3>';
+    if (($lightbox['state'] ?? '') === 'ready') {
+        view_render_admin_gallery_display_select(
+            'lightbox_browsing_mode',
+            $lightbox,
+        );
+    }
+    if (($gps['state'] ?? '') === 'override') {
+        $gps['current'] = $gps['current_mode'];
+        view_render_admin_gallery_display_select('gps_map_enabled', $gps);
+    } elseif (($gps['state'] ?? '') === 'legacy') {
+        $gps['label'] = $gps['legacy_label'];
+        $gps['help'] = $gps['legacy_help'];
+        view_render_admin_gallery_display_switch('gps_map_enabled', $gps);
+    }
     $breadcrumbStyle = (array) ($viewModel['breadcrumb_style'] ?? []);
     if ($breadcrumbStyle !== []) {
-        $label = (string) ($breadcrumbStyle['label'] ?? 'Breadcrumb style');
-        echo
-            '<div class="admin-display-option admin-display-option-breadcrumbs">';
-        view_render_breadcrumb_style_picker($breadcrumbStyle);
+        $label = (string) $breadcrumbStyle['label'];
+        echo '<details class="admin-display-subsection"><summary>'
+            . e($label) . '</summary><div class="admin-display-subsection-content">';
         view_render_admin_gallery_display_help(
             $label,
             (string) ($breadcrumbStyle['help'] ?? ''),
         );
-        echo '</div>';
+        view_render_breadcrumb_style_picker($breadcrumbStyle);
+        echo '</div></details>';
     }
-    echo '</div>';
+    echo '</section>';
 
-    foreach ([
-        $filenames,
-        $descriptionLayout,
-        $countBadge,
-        $lightbox,
-    ] as $item) {
-        $message = (string) ($item['migration_message'] ?? '');
-        if (
-            $message !== ''
-            && !(bool) ($item['ready'] ?? false)
-            && ($item['state'] ?? 'migration') === 'migration'
-        ) {
-            echo
-                '<p class="muted admin-display-unavailable">'
-                    . e($message)
-                    . '</p>';
-        }
-    }
-
+    $voting = (array) ($viewModel['voting'] ?? []);
     $pictureGame = (array) ($viewModel['picture_game'] ?? []);
-    if ((bool) ($pictureGame['visible'] ?? false)) {
-        echo
-            '<div class="admin-display-feature-row"><label class="checkbox-label"><input type="checkbox" name="picture_game_enabled" value="1"'
-                . ((bool) ($pictureGame['checked'] ?? false) ? ' checked' : '')
-                . '> '
-                . e((string) ($pictureGame['label'] ?? ''))
-                . '</label></div>';
+    if (!empty($voting['visible']) || !empty($pictureGame['visible'])) {
+        echo '<section class="admin-display-group"><h3>'
+            . e(t('admin.gallery_editor.display_interactions', 'Visitor interactions'))
+            . '</h3>';
+        if (!empty($voting['visible'])) {
+            view_render_admin_gallery_display_switch('voting_enabled', $voting);
+        }
+        if (!empty($pictureGame['visible'])) {
+            view_render_admin_gallery_display_switch(
+                'picture_game_enabled',
+                $pictureGame,
+            );
+        }
+        echo '</section>';
     }
 
     $thumbnailBounds = (array) ($viewModel['thumbnail_bounds'] ?? []);
-    if ((bool) ($thumbnailBounds['ready'] ?? false)) {
-        $title = (string) (
-            $thumbnailBounds['title'] ?? 'Responsive thumbnail quality bounds'
-        );
-        echo
-            '<details class="admin-display-subsection"><summary>'
-                . e($title)
-                . '</summary><div class="admin-display-subsection-content">';
+    if (!empty($thumbnailBounds['ready'])) {
+        $title = (string) $thumbnailBounds['title'];
+        echo '<section class="admin-display-group"><h3>' . e($title);
         view_render_admin_gallery_display_help(
             $title,
             (string) ($thumbnailBounds['help'] ?? ''),
         );
-        echo (string) ($thumbnailBounds['control_html'] ?? '');
-        echo
-            '<div class="admin-display-quick-option"><label class="checkbox-label"><input type="checkbox" name="gallery_thumbnail_bounds_recursive" value="1"> '
-                . e((string) ($thumbnailBounds['recursive_label'] ?? ''))
-                . '</label>';
-        view_render_admin_gallery_display_help(
-            (string) ($thumbnailBounds['recursive_label'] ?? ''),
-            (string) ($thumbnailBounds['recursive_help'] ?? ''),
+        echo '</h3>' . (string) ($thumbnailBounds['control_html'] ?? '');
+        // Recursive copying is a staged bulk action, not a saved preference.
+        $recursive = [
+            'label' => (string) $thumbnailBounds['recursive_label'],
+            'help' => (string) $thumbnailBounds['recursive_help'],
+        ];
+        view_render_admin_gallery_display_switch(
+            'gallery_thumbnail_bounds_recursive',
+            $recursive,
+            false,
         );
-        echo '</div></div></details>';
-    } elseif (($thumbnailBounds['migration_message'] ?? '') !== '') {
-        echo
-            '<p class="muted admin-display-unavailable">'
-                . e((string) $thumbnailBounds['migration_message'])
-                . '</p>';
+        echo '</section>';
     }
-
-    echo '</div></details></div>';
+    foreach ([$filenames, $descriptionLayout, $countBadge, $lightbox, $thumbnailBounds] as $item) {
+        if (!empty($item['migration_message'])
+            && empty($item['ready'])
+            && ($item['state'] ?? 'migration') === 'migration') {
+            echo '<p class="muted admin-display-unavailable">'
+                . e((string) $item['migration_message']) . '</p>';
+        }
+    }
+    echo '</div>';
     view_render_admin_tab_panel(
         'admin-edit-display',
         (string) ob_get_clean(),

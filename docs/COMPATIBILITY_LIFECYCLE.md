@@ -1,5 +1,23 @@
 # Compatibility lifecycle and retirement register
 
+## Gallery photo-card format and Display transport compatibility
+
+The physical-gallery photo-card format defaults to the existing responsive
+layout (4:3 desktop, square narrow cards). `gallery_grid.php` owns this
+permanently supported default: unset or malformed stored/imported metadata
+must not change existing galleries. Explicit selections affect photo previews
+only; originals, lightbox and cover cards retain their existing behavior.
+Both responsive and progressive picture structures consume the same crop slot.
+gallery.json/Trash preserve explicit formats and legacy snapshots use default.
+Display switches keep the native full-form fallback without JavaScript;
+enhanced writes use revision ownership, canonical completion and no automatic
+retry after uncertainty. Usage across deployed galleries is unknown. Hosted
+format/editor/browser/HTTP regressions own future evidence; BASIC is source
+feedback only, and desktop/narrow visual confirmation remains a separate check.
+The compact editor owns native disclosure support when the browser lacks the
+Popover API. Keep that fallback for ordinary help access; no browser-usage
+evidence currently justifies retiring it.
+
 ## Lightbox content fit and original-frame support
 
 Owners: `lightbox.js` and `lightbox-zoom-model.js`. Content fit is a browser-only

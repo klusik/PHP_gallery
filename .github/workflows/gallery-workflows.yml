@@ -9,61 +9,96 @@
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 # Runtime lifecycle policy: docs/RUNTIME_SUPPORT.md.
+
+# Reading path: callers supply one candidate SHA and comparison base.
+# Preflight guards generated state; independent source/portable owners start
+# alongside it. Package, database, runtime and browser jobs then fan out.
+# ci-gate joins their results. Test discovery stays in scripts/audit.php.
+# A separate advisory_macos dispatch runs only macOS packaging and cannot
+# publish the required aggregate or block the caller's integration.
 name: Isolated gallery workflows
 run-name: ${{ inputs.advisory_macos && format('Advisory macOS package {0}', inputs.checkout_ref) || 'Isolated gallery workflows' }}
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
+  # Manual entry is the independent advisory macOS package run.
   workflow_dispatch:
     inputs:
+
+      # Direct dispatch selects the independent package-only path.
       advisory_macos:
         description: Run only the independent advisory macOS package check.
         required: false
         type: boolean
         default: false
+
+      # Pin the candidate that all owners check, independent of workflow source.
       checkout_ref:
         description: Exact prepared commit for the advisory package check.
         required: false
         type: string
         default: ''
+
+      # Freeze the ancestor delta; unavailable history must block the audit.
       source_base:
         description: Immutable comparison base of that prepared candidate.
         required: false
         type: string
         default: ''
+  # Integration/maintenance call the complete reusable matrix with exact A/P.
   workflow_call:
     inputs:
+
+      # The caller selects full, or release with its additional audit owner.
       audit_profile:
         description: Central audit profile used by reusable release qualification.
         required: false
         type: string
         default: full
+
+      # Pin the candidate that all owners check, independent of workflow source.
       checkout_ref:
         description: Exact commit SHA/ref to qualify; direct CI defaults to the event SHA.
         required: false
         type: string
         default: ''
+
+      # Freeze the ancestor delta; unavailable history must block the audit.
       source_base:
         description: Explicit Git comparison base used by source-policy/documentation checks.
         required: false
         type: string
         default: ''
 
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
 
 # Later pushes replace obsolete runs; codegen checks always inspect the checkout,
 # never repair or commit files inside the authoritative qualification runner.
+
+# Separate required qualification from advisory macOS concurrency so
+# an advisory dispatch cannot cancel the caller's required matrix.
 concurrency:
   group: gallery-qualification-${{ github.workflow }}-${{ github.ref }}-${{ inputs.advisory_macos && 'macos-advisory' || 'required' }}
   cancel-in-progress: true
 
 # The helper actions use Node 24; node-version below selects the separate test runtime.
+
+# Workflow-wide environment inherited by jobs. A job/step may override
+# individual values; expressions are resolved by Actions before execution.
 env:
   # PRs compare against the target SHA; pushes include every commit since the prior head.
   # Manual runs compare against the first parent. Missing history blocks the source audit.
   PHP_GALLERY_SOURCE_BASE: ${{ inputs.source_base || github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || 'HEAD^' }}
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Cheap read-only safety gate: confirm the exact checkout and canonical
+  # generated-state freshness before expensive dependent coverage starts.
   preflight:
     if: ${{ !inputs.advisory_macos }}
     name: Read-only generated-state and source preflight
@@ -73,19 +108,31 @@ jobs:
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: zip, mbstring
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Compare actual HEAD with the caller's immutable candidate before running
+      # source or generated-state checks on the runner.
       - name: Verify exact candidate checkout
         shell: bash
         env:
@@ -98,8 +145,14 @@ jobs:
             exit 1
           fi
           echo "Qualifying candidate ${actual}"
+
+      # Refuse stale runtime/inventory/manifest and workflow/source contracts.
+      # Qualification checks prepared inputs; it does not regenerate them.
       - name: Central candidate preflight (read only)
         run: php scripts/audit.php --profile=candidate-preflight
+
+      # Print only the compact central failure report; detailed child evidence
+      # remains available in the following artifact.
       - name: Show actionable failure summary
         if: failure()
         shell: bash
@@ -107,6 +160,9 @@ jobs:
           if [[ -f cache/test-audit/latest.md ]]; then
             sed -n '1,150p' cache/test-audit/latest.md
           fi
+
+      # Keep reports even on failure so a blocked candidate has actionable
+      # evidence rather than only an exit code.
       - name: Upload preflight diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -132,6 +188,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Whole-tree source policy has its own native owner. It can start without
+  # waiting for generated-state preflight because it inspects source contracts.
   source-contracts:
     if: ${{ !inputs.advisory_macos }}
     # Static contracts read the exact candidate independently of generated data.
@@ -144,21 +202,35 @@ jobs:
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: pdo_sqlite, curl, gd, zip, dom, mbstring, intl
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Run the shared whole-tree syntax, declaration, policy and architecture
+      # owners once, preserving the central registry and existing debt budgets.
       - name: Central whole-tree source contracts
         run: php scripts/audit.php --profile=source-contracts
+
+      # Upload complete central source evidence whether the owner passes or fails.
       - name: Retain complete source diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -168,6 +240,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Run registered portable Node and WinApp fixtures once for this candidate.
+  # Declared image/PDF dependencies make missing capabilities fail visibly.
   portable:
     if: ${{ !inputs.advisory_macos }}
     # Portable fixtures need no disposable DB or generated-state result; start
@@ -183,24 +257,39 @@ jobs:
       PHP_GALLERY_REQUIRE_PILLOW: '1'
       PHP_GALLERY_FLIGHT_REPORT_QA_DIR: cache/test-audit/flight-report-samples
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: pdo_sqlite, curl, gd, zip, dom, mbstring, intl
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Provide the Python runtime used by portable companion fixtures; its
+      # resolved executable is passed explicitly to the central audit.
       - name: Select Python for portable WinApp coverage
         id: python
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
+
+      # Read the three owned requirement entries instead of copying version
+      # constraints into YAML. Refuse missing/ambiguous dependency selection.
       - name: Install the declared image and PDF test dependencies
         run: |
           python - <<'PY'
@@ -226,10 +315,15 @@ jobs:
               check=True,
           )
           PY
+
+      # Delegate every registered portable fixture to the central profile and
+      # provide the exact setup-python executable for its child processes.
       - name: Central portable Node and WinApp coverage
         env:
           PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
         run: php scripts/audit.php --profile=portable
+
+      # Retain portable outcomes and diagnostics independently of PHP shard logs.
       - name: Retain exact-candidate portable evidence
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -239,12 +333,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Required real package-builder checks on Linux and Windows. Each matrix
+  # entry is a separate runner/job with its own integrity evidence.
   production-package:
     needs: preflight
     name: Positive production package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
+      # Let all OS owners finish so one failure does not cancel other evidence.
       fail-fast: false
       matrix:
         # Mandatory package owners cover the PHP floor on Linux and newest
@@ -255,16 +352,27 @@ jobs:
           - os: windows-2025
             php: '8.5'
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: zip, mbstring
           coverage: none
+
+      # Exercise the real production builder and negative membership/integrity
+      # cases through its central suite on each mandatory OS.
       - name: Central mandatory package policy, smoke and complete folder/ZIP integrity
         run: php scripts/audit.php --suite=production-package
+
+      # Keep each OS result in a distinct artifact for exact-owner verification.
       - name: Upload exact-candidate packaging evidence and timings
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -274,6 +382,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Independent manual-dispatch branch of this workflow: run the same package
+  # suite on macOS, retaining its actual result outside the required matrix.
   macos-advisory:
     # Independent dispatch only: this job is never a required FULL dependency.
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.advisory_macos }}
@@ -286,10 +396,16 @@ jobs:
     # unavailable capacity or a failed check affects only this separate run.
     timeout-minutes: 10
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
+
+      # Require a full immutable SHA and identical checkout, so advisory results
+      # refer to the same prepared candidate as integration.
       - name: Verify exact advisory candidate
         env:
           EXPECTED_SHA: ${{ inputs.checkout_ref }}
@@ -298,13 +414,21 @@ jobs:
           set -euo pipefail
           [[ "${EXPECTED_SHA}" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: zip, mbstring
           coverage: none
+
+      # Use the same central package suite as required platforms; its outcome
+      # belongs to this independent advisory run.
       - name: Central advisory macOS package policy and integrity
         run: php scripts/audit.php --suite=production-package
+
+      # Keep real advisory evidence even on failure without changing required CI.
       - name: Retain actual advisory outcome and diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -314,6 +438,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Expand three database engines across four disjoint PHP shards each.
+  # Every job owns a disposable service and fixture namespace; the MySQL
+  # shards also execute their assigned real-application browser journeys.
   real-database-browser:
     needs: preflight
     name: PHP ${{ matrix.php }} workflows (${{ matrix.database }}, Unicode, shard ${{ matrix.shard }}/4)
@@ -322,6 +449,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Cartesian product: three engines times four shards gives twelve jobs.
         database: ['mysql:8.4', 'mariadb:10.11', 'mariadb:11.4']
         shard: [1, 2, 3, 4]
         include:
@@ -342,6 +470,7 @@ jobs:
           MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
           MYSQL_ROOT_HOST: '%'
         ports:
+          # Disposable runner port -> service container's native MySQL port.
           - 13316:3306
         options: --hostname gallery-workflow-ci
     env:
@@ -368,22 +497,34 @@ jobs:
       GALLERY_RUNTIME_NORMALIZATION: unicode
       GALLERY_SESSION_REQUIRED: '1'
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           # Preserve history for the event's comparison SHA, including multi-commit pushes.
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
           ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           # This source checkout has no npm install or package-manager cache to restore.
           package-manager-cache: false
+
+      # Find an executable browser only for assigned MySQL journeys. Missing
+      # required capability fails instead of silently skipping those cases.
       - name: Discover Chromium for the real application workflow
         id: workflow-browser
         if: matrix.real_browser
@@ -402,17 +543,26 @@ jobs:
           fi
           "$browser_path" --version
           printf 'browser_path=%s\n' "$browser_path" >> "$GITHUB_OUTPUT"
+
+      # Retain CPU/memory observations to interpret timings and concurrency
+      # without treating parallel jobs as processes on one shared runner.
       - name: Record actual runner resources
         shell: bash
         run: |
           getconf _NPROCESSORS_ONLN
           free --mebi
+
+      # The disposable harness provisions owned database/application fixtures
+      # and delegates discovery to audit.php; required sessions/races must run.
       - name: Central audit with mandatory real workflows and database races
         env:
           # Keep synthetic browser fixtures in their dedicated job; the disposable workflow test gets this executable directly.
           GALLERY_WORKFLOW_BROWSER: ${{ steps.workflow-browser.outputs.browser_path || 'disabled' }}
           GALLERY_WORKFLOW_BROWSER_REQUIRED: ${{ matrix.real_browser && '1' || '0' }}
         run: php scripts/gallery_workflow_ci.php
+
+      # Retain each matrix entry separately using its unique job index,
+      # including child process logs needed to diagnose failures.
       - name: Upload audit reports and process diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -430,6 +580,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Additional owner for the explicit release profile, including CI-only
+  # installation. Ordinary integration uses full and skips this job; current
+  # protected-develop release assembly does not call this matrix again.
   release-audit:
     needs: preflight
     name: Authoritative release audit
@@ -444,22 +597,36 @@ jobs:
       GALLERY_WORKFLOW_BROWSER: disabled
       GALLERY_SESSION_REQUIRED: '1'
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
           ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Run the additional central release profile for callers that explicitly
+      # request it; sibling jobs still own required DB/browser/package coverage.
       - name: Authoritative central release audit
         run: php scripts/audit.php --profile=release
+
+      # Retain central release results and qualification evidence for the caller.
       - name: Upload authoritative release evidence
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -473,6 +640,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # Expand the supported PHP floor/newest source environments across four
+  # shards each. PHP 8.1 exercises Unicode/intl; PHP 8.5 also verifies the
+  # ASCII path with intl explicitly disabled.
   runtime-compatibility:
     needs: preflight
     name: PHP ${{ matrix.php }} source (${{ matrix.normalization }}, shard ${{ matrix.shard }}/4)
@@ -481,6 +651,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Two source environments times four shards gives eight independent jobs.
         php: ['8.1', '8.5']
         shard: [1, 2, 3, 4]
         include:
@@ -505,24 +676,39 @@ jobs:
       GALLERY_RUNTIME_NORMALIZATION: ${{ matrix.normalization }}
       GALLERY_SESSION_REQUIRED: '1'
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           # Preserve history for the event's comparison SHA, including multi-commit pushes.
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: ${{ matrix.extensions }}
           ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           # This source checkout has no npm install or package-manager cache to restore.
           package-manager-cache: false
+
+      # Run this environment's assigned hosted-full shard through the central
+      # registry; shared source/portable/package owners remain separate jobs.
       - name: Central source audit
         run: php scripts/audit.php --profile=hosted-full
+
+      # Retain each matrix entry separately using its unique job index,
+      # including child process logs needed to diagnose failures.
       - name: Upload audit reports and process diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -540,6 +726,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Join every required owner even when an upstream job fails or is skipped.
+  # The aggregate succeeds only when each mandatory result is success;
+  # release-audit is additionally mandatory for the release profile.
   ci-gate:
     name: ${{ inputs.advisory_macos && 'Advisory macOS matrix gate (unused)' || 'Complete required CI matrix' }}
     if: ${{ always() && !inputs.advisory_macos }}
@@ -547,6 +736,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+
+      # Inspect needs results explicitly rather than relying on a skipped job
+      # to fail the run. Include release-audit only for the release profile.
       - name: Refuse failed, blocked, missing or skipped mandatory owners
         env:
           RESULTS: ${{ toJSON(needs) }}
@@ -557,15 +749,20 @@ jobs:
           node --input-type=module <<'NODE'
           import {appendFileSync} from 'node:fs';
           const results = JSON.parse(process.env.RESULTS);
+          // These are owner groups, not another registry of individual tests.
+          // Matrix group success requires all expanded jobs in that group.
           const required = ['preflight','source-contracts','portable','production-package','real-database-browser','runtime-compatibility','browser-tests'];
           if (process.env.AUDIT_PROFILE === 'release') required.push('release-audit');
           const bad = required.filter(owner => results[owner]?.result !== 'success');
+          // Write every required outcome before throwing, including missing ones.
           appendFileSync(process.env.GITHUB_STEP_SUMMARY,
             `Candidate: ${process.env.CANDIDATE_SHA}\nComparison base: ${process.env.SOURCE_BASE}\n` +
             required.map(owner => `- ${owner}: ${results[owner]?.result ?? 'MISSING'}`).join('\n') + '\n');
           if (bad.length) throw new Error('BLOCKED required CI owners: ' + bad.join(', '));
           NODE
 
+  # Dedicated required Chromium fixtures use loopback assets and production
+  # UI code. Real database/application journeys remain in their DB owners.
   browser-tests:
     needs: preflight
     name: Required Chromium fixtures
@@ -576,20 +773,32 @@ jobs:
       # The disposable database journey belongs to the database jobs; these fixtures use loopback assets.
       GALLERY_WORKFLOW_BROWSER: disabled
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
           ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Find and execute the installed Chromium binary, exporting its path
+      # through GITHUB_ENV for later steps. Absence is a mandatory failure.
       - name: Discover and verify required Chromium
         shell: bash
         run: |
@@ -606,8 +815,13 @@ jobs:
           fi
           "$browser_path" --version
           printf 'PHP_GALLERY_BROWSER=%s\n' "$browser_path" >> "$GITHUB_ENV"
+
+      # The browser-map suite owns fixture discovery and pass/fail policy;
+      # YAML does not maintain another list of browser tests.
       - name: Central required browser audit
         run: php scripts/audit.php --suite=browser-map
+
+      # Keep the central browser log and per-fixture diagnostics on every outcome.
       - name: Upload compact browser audit reports
         if: always()
         uses: actions/upload-artifact@v7.0.1

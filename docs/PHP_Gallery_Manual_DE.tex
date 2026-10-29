@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.147.2}
+\newcommand{\version}{0.148}
 \newcommand{\manualdate}{29.~Oktober~2026}
 
 \hypersetup{
@@ -518,7 +518,20 @@ Das sichtbare SimBrief-Feld akzeptiert eine Pilot ID oder einen Pilotennamen. Au
 
 Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{Anzeige} und \ui{Medienverwaltung}; anschließend folgen je nach Verfügbarkeit Bild- und Spezialwerkzeuge. Die obere fixierte Navigation hält die Diskette \ui{Speichern} beim Scrollen der Einstellungen und Fotolisten sichtbar. Ein Registerwechsel speichert nicht automatisch. Verwenden Sie nach der Bearbeitung die Schaltfläche und öffnen Sie die Galerie anschließend erneut, wenn Sie die gespeicherten Werte prüfen möchten. Längere Erklärungen stehen hinter per Tastatur erreichbaren Fragezeichen-Schaltflächen, seltenere Optionen unter aufklappbaren \ui{Erweitert}-Bereichen. Ein direkter Administrationseditor verwendet dieselben Felder; ein Browser ohne JavaScript nutzt die normale Formularübermittlung.
 
-\ui{Identität} hält Titel, Beschreibung, Datum, Ausgangssprache, SimBrief und Schlagwörter direkt erreichbar. Der erweiterte Abschnitt enthält Slug, Ordner, übergeordnete Galerie, Sortierreihenfolge und, sofern aktiviert, KI-Galerietext. \ui{API} zeigt einen kopierbaren Uploadendpunkt, Schlüsselbezeichnung und -aktion sowie einen neu erzeugten Schlüssel genau einmal; vorhandene Schlüssel erscheinen nur, wenn welche existieren. Die Neuerzeugung von KI-Metadaten, Migration und die globale API-Verwaltung liegen unter \ui{Erweiterte API-Werkzeuge}. \ui{Zugriff} bündelt Sichtbarkeit, Passwort, Freigabelink-Steuerungen und das NSFW-Kontrollkästchen; längere Richtlinienerklärungen stehen hinter Fragezeichen. \ui{Anzeige} beginnt mit dem Raster und den üblichen Schaltern für Abstimmung und Dateinamen; EXIF/GPS, Galeriekartenformat, Anzahlkennzeichnung, Lightbox-Modus, Picture Game, Vorschaubildgrenzen liegen unter \ui{Erweiterte Anzeigeeinstellungen}; Flugroutentext ist neben SimBrief unter \ui{Identität} verfügbar.
+\ui{Identität} hält Titel, Beschreibung, Datum, Ausgangssprache, SimBrief und Schlagwörter direkt erreichbar. Der erweiterte Abschnitt enthält Slug, Ordner, übergeordnete Galerie, Sortierreihenfolge und, sofern aktiviert, KI-Galerietext. \ui{API} zeigt einen kopierbaren Uploadendpunkt, Schlüsselbezeichnung und -aktion sowie einen neu erzeugten Schlüssel genau einmal; vorhandene Schlüssel erscheinen nur, wenn welche existieren. Die Neuerzeugung von KI-Metadaten, Migration und die globale API-Verwaltung liegen unter \ui{Erweiterte API-Werkzeuge}. \ui{Zugriff} bündelt Sichtbarkeit, Passwort, Freigabelink-Steuerungen und das NSFW-Kontrollkästchen; längere Richtlinienerklärungen stehen hinter Fragezeichen. \ui{Anzeige} verwendet kompakte durchscheinende Gruppen für Raster,
+Fotokarten, Galeriekarten, Navigation und Karten, Besucherinteraktionen und
+Vorschaubildqualität. Unter \ui{Fotokarten} wählen Sie Standard, 16:9, 21:9,
+4:3, 1:1, 4:5 oder 9:16. Standard behält die bisherigen 4:3-Vorschauen am
+Desktop und quadratischen Mobilvorschauen bei; explizite Formate gelten auf
+allen Bildschirmen nur für Fotos innerhalb dieser Galerie. Originale,
+Lightbox und Galerie-Titelkarten bleiben unverändert. Galerie speichern
+übernimmt das Format und weitere vorgemerkte Felder. Dateinamen-, Abstimmungs-
+und Picture-Game-Schalter speichern mit JavaScript unabhängig; rekursives
+Kopieren der Vorschaubildgrenzen und gekoppelte Rasterfelder bleiben vorgemerkt.
+Ein fehlgeschlagenes oder unbestätigtes Speichern bewahrt Entwürfe und sperrt
+das Gesamtformular bis zur Prüfung des aktuellen Editors. Hilfe öffnet neben
+dem Fragezeichen; Breadcrumb-Beispiele bleiben aufklappbar.
+Flugroutentext bleibt neben SimBrief unter \ui{Identität}.
 
 Unter \ui{Admin > Funktionen} sind \ui{PDF-Dokumente der Galerien}
 und~\ui{Galeriemusik} unabhängig schaltbar. Neue und~aktualisierte
@@ -954,9 +967,10 @@ Zugriff & Sichtbarkeit & \ui{Öffentlich} wird normal aufgelistet. \ui{Nicht ver
 Zugriff & Passwortschutz & Unabhängig von der Sichtbarkeit. Eine öffentliche, nicht veröffentlichte oder private Galerie kann eine eigene Passwortrichtlinie besitzen, wenn das Zugriffsschema verfügbar ist. Ein leeres Feld für das neue Passwort erhält das bestehende Passwort.\\
 Zugriff & Freigabelink & Kann erzeugt, neu erzeugt, widerrufen und optional mit einem Ablaufdatum versehen werden. Gespeichertes Tokenmaterial ist durch Hashes geschützt; ein älteres oder nicht entschlüsselbares Token muss möglicherweise neu erzeugt werden, bevor wieder ein kopierbarer Link angezeigt werden kann.\\
 Zugriff & NSFW / 18+ & Kennzeichnet den Galeriezweig für die Altersbestätigung anonymer Besucher. Der Schutz gilt gemäß der wirksamen Zugriffsrichtlinie auch für Untergalerien und ausgelieferte Medien.\\
-Anzeige & Picture Game & Erweiterte Option für das Vergleichsspiel in diesem Galeriezweig. Die Aktivierung des Spiels erfordert außerdem verfügbare Bildabstimmung.\\
+Anzeige & Picture Game & Besucherinteraktionsschalter für das Vergleichsspiel in diesem Galeriezweig. Die Aktivierung des Spiels erfordert außerdem verfügbare Bildabstimmung.\\
 Anzeige & Bildabstimmung & Aktiviert öffentliche Likes für Bilder dieser Galerie. Bei Deaktivierung bleiben gespeicherte Bewertungen erhalten; neue Abstimmungssteuerungen werden entfernt und neue Einsendungen blockiert.\\
 Anzeige & Dateinamen anzeigen & Standardmäßig aus. Ursprünglich hochgeladene Dateinamen bleiben ohne Aktivierung verborgen; benutzerdefinierte Fototitel und Beschreibungen werden weiterhin angezeigt.\\
+Anzeige & Fotokartenformat & Standard behält 4:3 am Desktop und quadratische Mobilvorschauen bei. 16:9, 21:9, 4:3, 1:1, 4:5 und 9:16 beschneiden nur Fotovorschauen innerhalb dieser Galerie auf allen Bildschirmen; Originale und Lightbox bleiben unverändert.\\
 Anzeige & EXIF/GPS-Anzeige & \ui{Globale Vorgabe verwenden}, \ui{Einschalten erzwingen} oder \ui{Ausschalten erzwingen}. Der wirksame Zustand steuert öffentliche GPS-Markierungen, EXIF-Galeriekarten und die Anzeige von GPS-Koordinaten.\\
 Anzeige & Breadcrumb-Stil & \ui{Standard / vom Design übernehmen} folgt der Designvorgabe; eine Galerie kann einen der neun registrierten Stile wählen. Ein ungültiger Override übernimmt die Designvorgabe, danach den integrierten Fallback \codeword{chevron}. Alle Vorgängerlinks umbrechen auf schmalen Bildschirmen und bleiben auch ohne JavaScript zugänglich.\\
 Anzeige & Beschreibungsformat der Galeriekarten & Übernimmt standardmäßig die Designvorgabe und kann, soweit unterstützt, das Kartenlayout dieser Galerie überschreiben.\\

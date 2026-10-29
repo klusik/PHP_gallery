@@ -8184,5 +8184,12 @@
     "admin.telemetry.preference_unverified": "Save could not be verified. Reload the saved state before trying again.",
     "admin.telemetry.reload_saved": "Reload saved state",
     "admin.telemetry.settings_unavailable": "Stored preferences are unavailable.",
-    "admin.telemetry.preference_refused": "The saved value differs from your change. Review it before trying again."
+    "admin.telemetry.preference_refused": "The saved value differs from your change. Review it before trying again.",
+    "admin.gallery_editor.photo_ratio_label": "Photo card format",
+    "admin.gallery_editor.photo_ratio_help": "Choose the crop of photo previews in this gallery only. Default preserves the current desktop and mobile layout. Other formats apply on every screen. Originals, lightbox and gallery cover cards stay unchanged.",
+    "admin.gallery_editor.photo_ratio_invalid": "Choose a supported photo card format.",
+    "admin.gallery_editor.display_photos": "Photo cards",
+    "admin.gallery_editor.display_gallery_cards": "Gallery cards",
+    "admin.gallery_editor.display_navigation": "Navigation and maps",
+    "admin.gallery_editor.display_interactions": "Visitor interactions"
 }

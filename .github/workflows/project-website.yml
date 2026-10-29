@@ -6,7 +6,15 @@
 # Responsibilities: Bind links to published releases, use the central website suite and isolate Pages permissions.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
+
+# Reading path: source change/manual/scheduled run -> build website ->
+# central browser verification -> preview/Pages artifact -> deploy from main.
+# A published stable release first dispatches a fresh main-owned build so
+# the website source comes from reviewed main rather than the release tag.
+# Feature runs produce reviewable previews; only main can enter deploy.
 name: Project website
+
+# Entry points and typed inputs: these select when this workflow can run.
 on:
   push:
     branches: [main, 'feature/**', 'fix/**', 'bugfix/**', 'hotfix/**', 'codex/**']
@@ -21,14 +29,27 @@ on:
   release:
     types: [published]
   schedule:
+    # Cron is UTC: refresh daily at 05:23 even without a source/release event.
     - cron: '23 5 * * *'
   workflow_dispatch:
+
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
+
+# Allow one active run per group. cancel-in-progress: false
+# lets an active operation finish rather than interrupting its writes.
 concurrency:
   group: project-website-${{ github.ref }}
   cancel-in-progress: false
+
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Stable publication event: validate the release and dispatch a build on
+  # reviewed main. The release-tag event itself does not build or deploy.
   refresh-main:
     name: Refresh published website through reviewed main
     if: ${{ github.event_name == 'release' && !github.event.release.draft && !github.event.release.prerelease }}
@@ -39,43 +60,74 @@ jobs:
       pages: read
       actions: write
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Validate published stable release metadata, then explicitly request main
+      # so website deployment does not execute the release-tag snapshot.
       - name: Validate stable publication and dispatch a fresh main-owned build
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/project-website-dispatch.mjs
+
+  # Build only website content, resolve actual published release metadata
+  # and run the central website/browser suite. Retain both diagnostic
+  # evidence and a downloadable preview before exposing the Pages artifact.
   build:
     name: Build and verify website
     if: ${{ github.event_name != 'release' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+
+    # Job outputs promote selected step outputs for needs.<job>.outputs in
+    # other jobs; values come from the steps that export each named output.
     outputs:
       source_sha: ${{ steps.identity.outputs.sha }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      # Export actual checkout SHA for the later deploy lease and freeze the
+      # main merge-base used by the central website suite.
       - id: identity
         name: Bind website source identity
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "PHP_GALLERY_SOURCE_BASE=$(git merge-base HEAD origin/main)" >> "$GITHUB_ENV"
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           coverage: none
+
+      # Read the latest published release and build its website links/content.
+      # Retain selected release metadata alongside the immutable website source.
       - name: Select a published release and build only website content
         env:
           GH_TOKEN: ${{ github.token }}
@@ -85,6 +137,9 @@ jobs:
           node website/build.mjs
           echo "Website source: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
           cat cache/website-output/release.json >> "$GITHUB_STEP_SUMMARY"
+
+      # Export an installed Chromium path for central website fixtures; absence
+      # fails this required browser capability instead of skipping it.
       - name: Require hosted Chromium
         shell: bash
         run: |
@@ -97,16 +152,25 @@ jobs:
           done
           echo '::error::Required website Chromium runtime is unavailable.'
           exit 1
+
+      # Use the central website suite for build/browser checks and screenshots.
+      # The resulting static output becomes the preview and Pages artifact.
       - name: Central website qualification
         env:
           PHP_GALLERY_WEBSITE_SCREENSHOTS: cache/website-visual
         run: php scripts/audit.php --suite=website
+
+      # Append the compact central report even after failure; detailed browser
+      # evidence is retained separately below.
       - name: Record audit summary
         if: always()
         run: |
           if test -f cache/test-audit/latest.md; then
             cat cache/test-audit/latest.md >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
@@ -118,15 +182,24 @@ jobs:
             cache/website-output/release.json
             cache/website-visual/*.png
           if-no-files-found: error
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: project-website-preview
           path: cache/website-output/
           include-hidden-files: true
           if-no-files-found: error
+
+      # Package the verified static website output for the later Pages deploy job.
       - uses: actions/upload-pages-artifact@v4
         with:
           path: cache/website-output/
+
+  # Only a successful main build may deploy. Serialize production separately,
+  # check main has not advanced, and publish the already verified artifact
+  # through the GitHub Pages Environment and OIDC authority.
   deploy:
     name: Deploy reviewed website to Pages
     needs: build
@@ -141,13 +214,19 @@ jobs:
       pages: write
       id-token: write
     environment:
+      # Pages receives the already verified artifact; deployment outputs its URL.
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+
+      # Compare live main with the successful build's frozen source immediately
+      # before deployment, preventing an older queued build from being published.
       - name: Refuse superseded main website sources
         env:
           GH_TOKEN: ${{ github.token }}
           WEBSITE_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: test "$(gh api repos/klusik/PHP_gallery/git/ref/heads/main --jq '.object.sha')" = "$WEBSITE_SOURCE_SHA"
+
+      # Deploy the retained Pages artifact and expose its URL to the Environment.
       - id: deployment
         uses: actions/deploy-pages@v4

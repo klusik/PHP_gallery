@@ -8184,5 +8184,12 @@
     "admin.telemetry.preference_unverified": "Uložení se nepodařilo ověřit. Před dalším pokusem načtěte uložený stav.",
     "admin.telemetry.reload_saved": "Načíst uložený stav",
     "admin.telemetry.settings_unavailable": "Uložená nastavení nejsou dostupná.",
-    "admin.telemetry.preference_refused": "Uložená hodnota se liší od vaší změny. Před dalším pokusem ji zkontrolujte."
+    "admin.telemetry.preference_refused": "Uložená hodnota se liší od vaší změny. Před dalším pokusem ji zkontrolujte.",
+    "admin.gallery_editor.photo_ratio_label": "Formát karet fotek",
+    "admin.gallery_editor.photo_ratio_help": "Zvolte ořez náhledů fotek pouze v této galerii. Výchozí zachová současný vzhled na počítači i mobilu. Ostatní formáty platí na všech obrazovkách. Originály, lightbox a titulní karty galerií se nemění.",
+    "admin.gallery_editor.photo_ratio_invalid": "Zvolte podporovaný formát karet fotek.",
+    "admin.gallery_editor.display_photos": "Karty fotek",
+    "admin.gallery_editor.display_gallery_cards": "Karty galerií",
+    "admin.gallery_editor.display_navigation": "Navigace a mapy",
+    "admin.gallery_editor.display_interactions": "Interakce návštěvníků"
 }

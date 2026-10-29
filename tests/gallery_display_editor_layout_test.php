@@ -5,10 +5,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/gallery_display_editor_layout_test.php
  * Module Type: Regression Test
- * Purpose: Verify the Display editor prioritizes its grid without dropping saved controls.
+ * Purpose: Verify gallery photo formats and compact Display controls.
  * Responsibilities:
  *   - Keep the grid before optional feature controls.
- *   - Keep advanced settings collapsed while preserving their submitted fields.
+ *   - Keep independently flowing groups and preserve submitted fields.
+ *   - Supply presentation-only markup for the registered browser fixture.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -34,6 +35,25 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /** Read fixture-only settings without installation storage.
+     * @param string $key Physical gallery preference key.
+     * @param string|null $default Unset preference fallback.
+     * @return string|null Stored fixture value or the supplied fallback.
+     */
+    function app_setting(string $key, ?string $default = null): ?string
+    {
+        return $GLOBALS['display_settings'][$key] ?? $default;
+    }
+
+    /** Persist a setting only in the disposable fixture map.
+     * @param string $key Physical gallery preference key.
+     * @param string $value Validated format identifier.
+     * @return void Store the setting without database or filesystem access.
+     */
+    function set_app_setting(string $key, string $value): void
+    {
+        $GLOBALS['display_settings'][$key] = $value;
+    }
     /** Interpolate one fixture label. @param string $key Translation key. @param string $fallback English label. @param array<string,string> $params Placeholders. @return string Fixture text. */
     function t(string $key, string $fallback = '', array $params = []): string
     {
@@ -63,6 +83,7 @@ namespace Gallery\Views {
 }
 
 namespace {
+    require_once dirname(__DIR__) . '/app/services/gallery_grid.php';
     require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
     require_once dirname(__DIR__) . '/app/views/public_gallery_lightbox.php';
     require_once dirname(__DIR__) . '/app/views/admin_gallery_forms.php';
@@ -81,6 +102,12 @@ namespace {
         ['value' => 'off', 'label' => 'Off'],
     ];
     $model = [
+        'photo_card_ratio' => [
+            'current' => '4:5',
+            'options' => \Gallery\Services\gallery_photo_card_ratio_options(),
+            'label' => 'Photo card format',
+            'help' => 'Crop previews in this gallery only. Originals stay unchanged.',
+        ],
         'active' => true,
         'advanced_label' => 'Advanced display settings',
         'grid' => [
@@ -164,23 +191,94 @@ namespace {
     \Gallery\Views\view_render_admin_gallery_display_tab($model);
     $html = (string) ob_get_clean();
 
+    if (in_array('--render', $argv ?? [], true)) {
+        require_once dirname(__DIR__) . '/app/controllers/shared_layout.php';
+        require_once dirname(__DIR__) . '/app/views/public_gallery_pages.php';
+        foreach (\Gallery\Controllers\shared_layout_admin_stylesheet_files() as $stylesheet) {
+            echo '<link rel="stylesheet" href="/public/'
+                . \Gallery\Core\e($stylesheet) . '">';
+        }
+        echo '<form class="admin-edit-gallery-form" action="/fixture-display">'
+            . '<input type="hidden" name="id" value="42">'
+            . '<input type="hidden" name="csrf_token" value="display-fixture">'
+            . '<input type="hidden" name="edit_revision" value="1">'
+            . '<label>Unsaved title <input name="title" value="Unsaved draft"></label>'
+            . $html . '<button type="submit">Save gallery</button></form>';
+        echo '<template id="fixture-public-markup"><div class="public-page">';
+        foreach (\Gallery\Controllers\shared_layout_public_stylesheet_files() as $stylesheet) {
+            echo '<link rel="stylesheet" href="/public/'
+                . \Gallery\Core\e($stylesheet) . '">';
+        }
+        // The runtime header appends this responsive stylesheet separately
+        // from shared_layout_public_stylesheet_files(); retain that full cascade.
+        echo '<link rel="stylesheet" href="/public/assets/styles/mobile-gallery.css">';
+        ob_start();
+        foreach (['progressive', 'responsive'] as $renderer) {
+            // Different intrinsic dimensions exercise cover cropping, while
+            // source promotion remains covered by the renderer's own tests.
+            $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320"'
+                . ' height="180"><rect width="320" height="180" fill="#8ab"/></svg>';
+            $source = 'data:image/svg+xml,' . rawurlencode($svg);
+            \Gallery\Views\view_render_public_gallery_image_card([
+                'class' => 'image-card',
+                'image_id' => 1,
+                'thumbnail_html' => '<picture data-fixture-renderer="' . $renderer
+                    . '"><img src="' . \Gallery\Core\e($source)
+                    . '" width="320" height="180" alt="Fixture photo"></picture>',
+            ]);
+        }
+        $cards = (string) ob_get_clean();
+        \Gallery\Views\view_render_public_gallery_image_section([
+            'visible' => true,
+            'gallery_id' => 42,
+            'grid_class' => ' pagination-grid-columns-2',
+            'cards_html' => $cards,
+        ]);
+        echo '</div></template>';
+        exit;
+    }
+
+    foreach (\Gallery\Services\gallery_photo_card_ratio_options() as $format) {
+        \Gallery\Services\gallery_photo_card_ratio_save(42, $format['value']);
+        display_editor_assert(
+            \Gallery\Services\gallery_photo_card_ratio(42) === $format['value']
+                && \Gallery\Services\gallery_photo_card_css_ratio(42) === $format['ratio']
+                && \Gallery\Services\gallery_photo_card_ratio(43) === 'default',
+            'Photo format did not round-trip or leaked into a different gallery.',
+        );
+    }
+    foreach (['invalid', '16 / 9', '', null, ['4:5'], 1] as $invalid) {
+        try {
+            \Gallery\Services\gallery_photo_card_ratio_save(42, $invalid);
+            throw new \RuntimeException('Invalid explicit format was accepted.');
+        } catch (\InvalidArgumentException) {
+            display_editor_assert(
+                \Gallery\Services\gallery_photo_card_ratio(42) === '9:16',
+                'Rejected format changed the previous setting.',
+            );
+        }
+        display_editor_assert(
+            \Gallery\Services\gallery_photo_card_ratio_normalize($invalid) === 'default',
+            'Unsupported legacy/imported metadata lost the historic fallback.',
+        );
+    }
+
     $gridPosition = strpos($html, 'name="grid_override_enabled"');
-    $advancedPosition = strpos(
-        $html,
-        '<details class="admin-display-advanced">',
-    );
+    $formatPosition = strpos($html, 'name="gallery_photo_card_ratio"');
     $pictureGamePosition = strpos($html, 'name="picture_game_enabled"');
     display_editor_assert(
         $gridPosition !== false
-            && $advancedPosition !== false
+            && $formatPosition !== false
             && $pictureGamePosition !== false
-            && $gridPosition < $advancedPosition
-            && $advancedPosition < $pictureGamePosition,
-        'Grid is not first or picture game escaped Advanced.',
+            && $gridPosition < $formatPosition
+            && $formatPosition < $pictureGamePosition,
+        'Display group order lost the grid, photo formats or visitor controls.',
     );
     display_editor_assert(
-        !str_contains($html, '<details class="admin-display-advanced" open'),
-        'Advanced display settings must be closed initially.',
+        !str_contains($html, '<details class="admin-display-advanced"')
+            && substr_count($html, 'admin-display-group') === 6
+            && substr_count($html, 'name="gallery_photo_card_ratio"') === 7,
+        'Display must expose flowing groups and all supported native format choices.',
     );
     display_editor_assert(
         str_contains($html, 'data-default-columns="4" data-default-rows="5"')
@@ -215,8 +313,7 @@ namespace {
         );
     }
     display_editor_assert(
-        substr_count($html, 'class="admin-display-subsection"') === 1
-            && !str_contains($html, 'flight_route_text')
+        !str_contains($html, 'flight_route_text')
             && str_contains(
                 $html,
                 'class="admin-inline-help-content">Hide GPS coordinates.</div>',

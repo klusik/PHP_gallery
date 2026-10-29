@@ -10,44 +10,75 @@
 #   - Delete the unchanged integrated feature ref after retaining its integration record
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
+
+# Reading path: select -> prepare -> publish-candidate -> inherited-basic
+# -> full -> retain-execution -> publish-develop. Dependencies, rather than
+# the order of job declarations below, determine execution order.
+# S is the selected source commit, P the frozen develop base, A the final
+# prepared candidate. Fresh BASIC and every required FULL owner must bind A.
+# The workflow-ref selector chooses the automation revision; source_branch
+# separately chooses the feature being integrated.
 name: Integrate into develop
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
   workflow_dispatch:
     inputs:
+
+      # Select the feature source separately from the workflow-ref selector.
       source_branch:
         description: Feature branch containing the completed one-commit squash to integrate.
         required: true
         type: string
+
+      # Allow only verified generated files to replace the selected feature
+      # commit under its exact old-head lease; fresh BASIC binds the new SHA.
       auto_squash_generated:
         description: Automatically fold verified generated files into the selected feature commit and continue.
         required: false
         type: boolean
         default: true
+
+      # Historical no-ref-write recovery is distinct from normal integration.
       recover_existing:
         description: Owner recovery only. Source must equal current develop and already have a retained exact-candidate successful maintenance FULL; refs remain unchanged.
         required: false
         type: boolean
         default: false
+
+      # Stop after retained execution so develop can be published separately.
       qualify_only:
         description: Prepare and seal complete feature qualification without writing develop; integrate later using its run ID.
         required: false
         type: boolean
         default: false
+
+      # Reuse only a sealed identical candidate/tree/base, never changed input.
       qualified_run:
         description: Optional sealed qualification run to reuse for the identical prepared candidate and base; FULL is not repeated.
         required: false
         type: string
         default: ''
 
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
 
+# Allow one active run per group. cancel-in-progress: false
+# lets an active operation finish rather than interrupting its writes.
 concurrency:
+  # All integrations share one develop target, even for different source refs.
   group: develop-integration
   cancel-in-progress: false
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Read-only admission: authenticate the owner dispatch, select one source
+  # commit directly above current develop and find its successful BASIC run.
+  # Export these frozen identities for every later job.
   select:
     name: Select squashed source
     runs-on: ubuntu-24.04
@@ -56,6 +87,9 @@ jobs:
       contents: read
       actions: read
       checks: read
+
+    # Job outputs promote selected step outputs for needs.<job>.outputs in
+    # other jobs; values come from the steps that export each named output.
     outputs:
       branch: ${{ steps.select.outputs.branch }}
       source_sha: ${{ steps.select.outputs.source_sha }}
@@ -64,14 +98,23 @@ jobs:
       basic_run_id: ${{ steps.select.outputs.basic_run_id }}
       basic_run_attempt: ${{ steps.select.outputs.basic_run_attempt }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Pass event/run/workflow identity to the domain helper, which authenticates
+      # the owner and source. GITHUB_OUTPUT exposes selected identities to jobs.
       - id: select
         name: Resolve exact source and latest BASIC evidence
         env:
@@ -92,6 +135,8 @@ jobs:
           import {appendFileSync} from 'node:fs';
           import {spawnSync} from 'node:child_process';
           import {selectDevelopIntegration} from './.github/scripts/develop-integration.mjs';
+          // Adapt gh's JSON API to the domain helper; transport failure throws.
+          // Inputs remain arguments/JSON rather than shell-interpolated commands.
           const api=(path,method='GET',payload=null)=>{
             const args=['api',path];
             if(method!=='GET') args.push('--method',method,'--input','-');
@@ -100,6 +145,8 @@ jobs:
             if(result.error||result.status!==0) throw new Error('GitHub API request failed: '+String(result.stderr||result.error));
             return JSON.parse(result.stdout);
           };
+          // Separate workflow authority (selected immutable automation) from
+          // the feature source that the helper is being asked to integrate.
           const context={repository:process.env.REPOSITORY,workflowPath:'.github/workflows/develop-integration.yml',
             workflowRef:process.env.WORKFLOW_REF,eventName:process.env.WORKFLOW_EVENT,ref:process.env.WORKFLOW_GIT_REF,
             runId:process.env.WORKFLOW_RUN_ID,runAttempt:process.env.WORKFLOW_RUN_ATTEMPT,headSha:process.env.WORKFLOW_SHA,
@@ -107,11 +154,15 @@ jobs:
             featureQualification:process.env.CI_AUTHORITY_UPDATE!=='true' && process.env.RECOVERY_MODE!=='true',
             qualifiedRun:process.env.QUALIFIED_RUN};
           const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api,process.env.RECOVERY_MODE==='true');
+          // Step outputs become job outputs, then needs.select.outputs downstream.
           for(const [name,value] of Object.entries({branch:selected.branch,source_sha:selected.sourceSha,
             develop_sha:selected.expectedDevelopSha,source_base:selected.sourceBase,basic_run_id:selected.basicRunId,
             basic_run_attempt:selected.basicRunAttempt})) appendFileSync(process.env.GITHUB_OUTPUT,`${name}=${value}\n`);
           NODE
 
+  # Run candidate-owned generation on S without repository write permission
+  # or persisted Git credentials. Upload only the three generated files;
+  # the privileged publisher independently verifies the archive and leases.
   prepare:
     name: Prepare integration artifacts
     needs: select
@@ -120,25 +171,40 @@ jobs:
     permissions:
       contents: read
       actions: write
+
+    # Job outputs promote selected step outputs for needs.<job>.outputs in
+    # other jobs; values come from the steps that export each named output.
     outputs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       # upload-artifact emits bare hex; authenticated provider metadata uses sha256:<hex>.
       artifact_digest: sha256:${{ steps.upload.outputs.artifact-digest }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.select.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: zip, mbstring
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Confirm checkout S has exactly parent P and that both remote refs still
+      # match selection. Recovery instead expects develop already equal to S.
       - name: Recheck selected one-commit source and current branch lease
         env:
           SOURCE_BRANCH: ${{ needs.select.outputs.branch }}
@@ -148,6 +214,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Freeze content identity and graph shape, not merely branch spelling.
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
           test "$(git rev-list --parents -n 1 "${SOURCE_SHA}")" = "${SOURCE_SHA} ${DEVELOP_SHA}"
           remote_sha="$(git ls-remote --heads origin "refs/heads/${SOURCE_BRANCH}" | cut -f1)"
@@ -156,9 +223,13 @@ jobs:
             exit 1
           fi
           observed_develop="$(git ls-remote --heads origin refs/heads/develop | cut -f1)"
+          # Normal work expects P; historical recovery expects already-admitted S.
           expected_develop="${DEVELOP_SHA}"
           if [[ "${RECOVERY_MODE}" == 'true' ]]; then expected_develop="${SOURCE_SHA}"; fi
           test "${observed_develop}" = "${expected_develop}"
+
+      # Use the source timestamp for repeatability; recovery performs checks
+      # only. Reject symlinks, then copy only the allowed generated payload.
       - name: Generate and verify candidate-owned artifacts
         env:
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
@@ -169,6 +240,7 @@ jobs:
           export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "${SOURCE_SHA}")"
           if [[ "${RECOVERY_MODE}" != 'true' ]]; then php scripts/prepare_candidate.php; fi
           php scripts/prepare_candidate.php --check
+          # The archive may contain only regular generated files, not link targets.
           test ! -L app/runtime/modules.php
           test ! -L app/production-files.json
           test ! -L app/core-manifest.json
@@ -176,6 +248,9 @@ jobs:
           cp app/runtime/modules.php "${RUNNER_TEMP}/develop-integration-prepared-state/modules.php"
           cp app/production-files.json "${RUNNER_TEMP}/develop-integration-prepared-state/production-files.json"
           cp app/core-manifest.json "${RUNNER_TEMP}/develop-integration-prepared-state/core-manifest.json"
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - id: upload
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -184,6 +259,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Independently evaluate final A using the selected workflow revision as
+  # BASIC authority. Retain report bytes and provider artifact identity for
+  # the later execution seal; this job cannot write repository contents.
   inherited-basic:
     name: Inherited BASIC authority
     needs: [select, publish-candidate]
@@ -192,25 +270,40 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+
+    # Job outputs promote selected step outputs for needs.<job>.outputs in
+    # other jobs; values come from the steps that export each named output.
     outputs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       # upload-artifact emits bare hex; authenticated provider metadata uses sha256:<hex>.
       artifact_digest: sha256:${{ steps.upload.outputs.artifact-digest }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.publish-candidate.outputs.final_source_sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: zip, mbstring
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Extract audit helpers from the immutable selected workflow revision into
+      # a separate directory, then evaluate final A without write credentials.
       - name: Evaluate source against trusted BASIC authority
         env:
           AUTHORITY_SHA: ${{ github.sha }}
@@ -222,12 +315,17 @@ jobs:
           set -euo pipefail
           trusted_root="${RUNNER_TEMP}/ci-inherited-basic"
           mkdir -p "${trusted_root}"
+          # Authority helpers are copied separately; candidate files remain A.
+          # The selected workflow may be main or the explicitly selected feature.
           git fetch --no-tags origin "${AUTHORITY_SHA}"
           git archive "${AUTHORITY_SHA}" scripts .github/scripts | tar -x -C "${trusted_root}"
           node "${trusted_root}/.github/scripts/trusted-basic.mjs" \
             --authority="${trusted_root}" \
             --candidate="${GITHUB_WORKSPACE}" \
             --output="${RUNNER_TEMP}/trusted-basic.json"
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - id: upload
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -238,6 +336,9 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Privileged boundary: accept only verified generated files, recheck S/P,
+  # and optionally fold them into the same one-commit feature candidate A.
+  # A changed SHA needs a newly dispatched, authenticated BASIC before FULL.
   publish-candidate:
     name: Publish prepared integration candidate
     needs: [select, prepare]
@@ -248,6 +349,9 @@ jobs:
       contents: write
       actions: write
       checks: read
+
+    # Job outputs promote selected step outputs for needs.<job>.outputs in
+    # other jobs; values come from the steps that export each named output.
     outputs:
       candidate_sha: ${{ steps.publish.outputs.candidate_sha }}
       candidate_tree: ${{ steps.publish.outputs.candidate_tree }}
@@ -255,14 +359,24 @@ jobs:
       basic_run_id: ${{ steps.publish.outputs.basic_run_id }}
       basic_run_attempt: ${{ steps.publish.outputs.basic_run_attempt }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Execute the helper from the owner-selected workflow checkout. Validate
+      # archive identity and leases, fold generated files when enabled, then
+      # authenticate fresh BASIC if A changed. macOS dispatch stays advisory.
       - id: publish
         name: Publish verified generated data through the main-owned API helper
         env:
@@ -307,12 +421,14 @@ jobs:
             featureQualification:process.env.CI_AUTHORITY_UPDATE!=='true' && process.env.RECOVERY_MODE!=='true'};
           let published;
           if(process.env.RECOVERY_MODE==='true') {
+            // Recovery validates the existing candidate and does not publish files.
             const selected=selectDevelopIntegration(process.env.SOURCE_BRANCH,context,process.env.REPOSITORY,api,true);
             if(selected.sourceSha!==process.env.SOURCE_SHA || selected.expectedDevelopSha!==process.env.DEVELOP_SHA) {
               throw new Error('BLOCKED recovery candidate changed before read-only publication.');
             }
             const candidate=api('repos/'+process.env.REPOSITORY+'/commits/'+selected.sourceSha);
             published={candidateSha:selected.sourceSha,candidateTree:candidate.commit.tree.sha};
+          // Normal publication authenticates the generated archive and exact S/P.
           } else published=publishPreparedCandidate({repository:process.env.REPOSITORY,branch:process.env.SOURCE_BRANCH,
             sourceSha:process.env.SOURCE_SHA,expectedDevelopSha:process.env.DEVELOP_SHA,
             autoSquashGenerated:process.env.AUTO_SQUASH_GENERATED==='true' && !context.authorityUpdate,
@@ -332,6 +448,8 @@ jobs:
             && published.candidateSha!==process.env.SOURCE_SHA;
 
           if(needsFreshBasic) {
+            // A bot-created replacement does not recursively trigger push CI.
+            // Explicit dispatch and authenticated readback bind BASIC to final A.
             const request={
               repository:process.env.REPOSITORY,
               branch:process.env.SOURCE_BRANCH,
@@ -359,6 +477,8 @@ jobs:
             appendFileSync(process.env.GITHUB_OUTPUT,`${name}=${value}\n`);
           }
           if(process.env.RECOVERY_MODE!=='true' && !context.authorityUpdate) {
+            // This separate run has no authority over the required FULL result.
+            // A dispatch/provider error is reported without blocking integration.
             try {
               const advisory=dispatchAdvisoryMacos({repository:process.env.REPOSITORY,
                 branch:process.env.SOURCE_BRANCH,candidateSha:published.candidateSha,
@@ -374,6 +494,9 @@ jobs:
           }
           NODE
 
+  # Execute the complete shared matrix on final A against frozen P.
+  # A qualified_run reuses a previously sealed identical execution instead;
+  # failed or skipped mandatory owners cannot become successful evidence.
   full:
     name: Develop integration
     needs: [select, publish-candidate, inherited-basic]
@@ -385,6 +508,9 @@ jobs:
       checkout_ref: ${{ needs.publish-candidate.outputs.candidate_sha }}
       source_base: ${{ needs.select.outputs.develop_sha }}
 
+  # Read-only seal before any develop write: authenticate all native FULL
+  # owners, independent BASIC and the exact candidate/tree/base. Retaining
+  # this archive permits safe publication recovery without another FULL.
   retain-execution:
     name: Retain integration execution
     needs: [select, prepare, publish-candidate, inherited-basic, full]
@@ -396,14 +522,23 @@ jobs:
       actions: read
       checks: read
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Validate exact native owner evidence and independent BASIC, then write
+      # a durable execution record. Publication may reuse only identical A/P.
       - name: Authenticate and seal execution before any protected write
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -435,9 +570,13 @@ jobs:
             basicRunAttempt:e.BASIC_RUN_ATTEMPT,basicArtifactId:Number(e.BASIC_ARTIFACT_ID),
             basicArtifactDigest:e.BASIC_ARTIFACT_DIGEST,qualifiedRun:e.QUALIFIED_RUN};
           const {record}=validateDevelopIntegration(request,context,e.GITHUB_REPOSITORY,api);
+          // Persist original execution evidence before granting publication success.
           writeFileSync(e.RUNNER_TEMP+'/develop-execution.json',JSON.stringify(record,null,2)+'\n');
           appendFileSync(e.GITHUB_STEP_SUMMARY,`Sealed complete execution for ${record.candidate_sha}; reuse run ${e.GITHUB_RUN_ID} to publish without repeating FULL.\n`);
           NODE
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: develop-integration-execution
@@ -445,6 +584,9 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Final privileged boundary: revalidate sealed execution, live source/base
+  # leases and required Checks/Commit Status, then request a non-force FF.
+  # Retain the integration record before deleting the unchanged feature ref.
   publish-develop:
     name: Publish develop integration
     needs: [select, prepare, publish-candidate, full, inherited-basic, retain-execution]
@@ -457,14 +599,23 @@ jobs:
       checks: write
       statuses: write
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Reauthenticate execution and live leases immediately before the guarded
+      # non-force publication. Recovery uses the separate no-ref-write helper.
       - name: Verify native owner evidence and fast-forward develop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -513,15 +664,22 @@ jobs:
             ...(context.authorityUpdate || context.featureQualification?{basicArtifactId:Number(process.env.BASIC_ARTIFACT_ID),
               basicArtifactDigest:process.env.BASIC_ARTIFACT_DIGEST}:{})};
           const result=(process.env.RECOVERY_MODE==='true' ? recoverDevelop : integrateDevelop)(request,context,process.env.REPOSITORY,api);
+          // The result records actual server state; uploading it precedes cleanup.
           writeFileSync(process.env.RECORD_PATH,JSON.stringify(result.record,null,2)+'\n');
           appendFileSync(process.env.GITHUB_STEP_SUMMARY,`${process.env.RECOVERY_MODE==='true' ? 'Recovered qualification for existing develop without a ref write' : 'Integrated exact candidate into develop'}: ${result.sha}.\n`);
           NODE
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: develop-integration-record
           path: ${{ runner.temp }}/develop-integration.json
           if-no-files-found: error
           retention-days: 90
+
+      # After retained integration evidence, delete only the selected feature
+      # ref with an exact candidate lease; concurrent new work refuses cleanup.
       - name: Delete integrated source branch
         if: ${{ success() && !inputs.qualify_only && !inputs.recover_existing }}
         env:

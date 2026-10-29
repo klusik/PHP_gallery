@@ -8184,5 +8184,12 @@
     "admin.telemetry.preference_unverified": "Sparandet kunde inte verifieras. Läs in det sparade läget före ett nytt försök.",
     "admin.telemetry.reload_saved": "Läs in sparat läge",
     "admin.telemetry.settings_unavailable": "Sparade inställningar är inte tillgängliga.",
-    "admin.telemetry.preference_refused": "Det sparade värdet skiljer sig från din ändring. Granska det före ett nytt försök."
+    "admin.telemetry.preference_refused": "Det sparade värdet skiljer sig från din ändring. Granska det före ett nytt försök.",
+    "admin.gallery_editor.photo_ratio_label": "Fotokortens format",
+    "admin.gallery_editor.photo_ratio_help": "Välj beskärning av fotoförhandsvisningar endast i detta galleri. Standard behåller nuvarande dator- och mobilvy. Övriga format gäller på alla skärmar. Original, ljuslåda och galleriernas omslagskort ändras inte.",
+    "admin.gallery_editor.photo_ratio_invalid": "Välj ett format som stöds för fotokorten.",
+    "admin.gallery_editor.display_photos": "Fotokort",
+    "admin.gallery_editor.display_gallery_cards": "Gallerikort",
+    "admin.gallery_editor.display_navigation": "Navigering och kartor",
+    "admin.gallery_editor.display_interactions": "Besökarinteraktioner"
 }

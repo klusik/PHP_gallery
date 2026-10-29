@@ -7,8 +7,16 @@
 #   - Accept only main-owned immutable toolchain inputs and verify their provenance
 #   - Save one reusable default-branch cache without building or publishing a release
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+# Reading path: main-owned toolchain change/manual dispatch -> restore
+# the exact TinyTeX cache -> provision on a miss -> verify -> save on main.
+# Release branches can reuse a default-branch cache. The key includes the
+# lock, package list and provisioner, so changed inputs select another cache.
+# This warm-up does not compile manuals or start a release.
 name: Warm locked manual toolchain
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
   push:
     branches: [main]
@@ -19,27 +27,45 @@ on:
       - '.github/workflows/manual-toolchain-cache.yml'
   workflow_dispatch:
 
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
 
+# Allow one active run per group. cancel-in-progress: false
+# lets an active operation finish rather than interrupting its writes.
 concurrency:
   group: main-manual-toolchain-cache
   cancel-in-progress: false
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Accept only this repository's main workflow so sibling release branches
+  # can trust the warmed default-branch cache and its locked provenance.
   warm:
     if: ${{ github.ref == 'refs/heads/main' && github.repository == 'klusik/PHP_gallery' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           coverage: none
+
+      # Use the same input-derived key as release assembly, allowing sibling
+      # release branches to restore the verified cache saved on main.
       - id: tinytex-cache
         name: Restore exact default-branch manual toolchain
         uses: actions/cache/restore@v6.1.0
@@ -49,18 +75,30 @@ jobs:
         with:
           path: ~/.TinyTeX
           key: tinytex-v2-ubuntu24.04-x86_64-${{ hashFiles('.github/texlive-lock.json', '.github/texlive-packages.txt', '.github/scripts/provision_tinytex.sh') }}
+
+      # Install the locked bundle with bounded transport time; a cache miss is
+      # an expected setup path, while an actual installation failure stops work.
       - name: Install locked TinyTeX bundle on cache miss
         if: ${{ steps.tinytex-cache.outputs.cache-hit != 'true' }}
         shell: bash
         timeout-minutes: 6
         run: timeout --kill-after=15s 300 bash .github/scripts/provision_tinytex.sh install
+
+      # Install the frozen declared package set rather than resolving a fresh
+      # unlocked environment; the provisioner owns provenance verification.
       - name: Provision frozen TeX Live packages on cache miss
         if: ${{ steps.tinytex-cache.outputs.cache-hit != 'true' }}
         shell: bash
         timeout-minutes: 11
         run: timeout --kill-after=15s 600 bash .github/scripts/provision_tinytex.sh provision
+
+      # Verify lock/package/provisioner provenance before making a restored or
+      # newly provisioned environment reusable by release jobs.
       - name: Verify complete locked toolchain provenance
         run: bash .github/scripts/provision_tinytex.sh verify
+
+      # Save only after successful verification and only on a cache miss.
+      # No release branch, manual PDF or publication is produced here.
       - name: Save verified default-branch toolchain
         if: ${{ success() && steps.tinytex-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6.1.0

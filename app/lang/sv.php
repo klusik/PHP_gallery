@@ -1796,4 +1796,11 @@ return [
     'admin.telemetry.preference_refused' => 'Det sparade värdet skiljer sig från din ändring. Granska det före ett nytt försök.',
     'lightbox.fit_content' => 'Anpassa efter innehåll',
     'lightbox.original_frame' => 'Visa originalram',
+    'admin.gallery_editor.photo_ratio_label' => 'Fotokortens format',
+    'admin.gallery_editor.photo_ratio_help' => 'Välj beskärning av fotoförhandsvisningar endast i detta galleri. Standard behåller nuvarande dator- och mobilvy. Övriga format gäller på alla skärmar. Original, ljuslåda och galleriernas omslagskort ändras inte.',
+    'admin.gallery_editor.photo_ratio_invalid' => 'Välj ett format som stöds för fotokorten.',
+    'admin.gallery_editor.display_photos' => 'Fotokort',
+    'admin.gallery_editor.display_gallery_cards' => 'Gallerikort',
+    'admin.gallery_editor.display_navigation' => 'Navigering och kartor',
+    'admin.gallery_editor.display_interactions' => 'Besökarinteraktioner',
 ];

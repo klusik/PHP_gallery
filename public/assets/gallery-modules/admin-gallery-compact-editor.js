@@ -3,20 +3,214 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: public/assets/gallery-modules/admin-gallery-compact-editor.js
  * Module Type: Browser Module
- * Purpose: Keep compact gallery-editor copy and language controls usable in injected panels.
- * Responsibilities: Update selected language flags and copy API values in dynamic editor fragments.
+ * Purpose: Keep compact gallery-editor controls usable in injected panels.
+ * Responsibilities: Save isolated Display switches, anchor help, update language flags and copy API values.
  * Author: Rudolf Klusal
  * License: MIT License
  */
 
+import { i18nForElement } from './admin-core.js?v=20261003-scoped-i18n-v1';
+import { completeAdminMutation } from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
+import { beginAdminPanelSave, acknowledgeAdminPanelSave } from './admin-panel-drafts.js?v=20261012-pdf-files-v1';
+import { captureAdminPanelOwner } from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
+
+/** Bound one isolated switch write without retrying an uncertain mutation.
+ * Type: number. Units: milliseconds. Scope: gallery Display autosave.
+ * Consumers: saveGalleryDisplayPreference(). Value: 15000.
+ * Rationale: match the established Admin preference request deadline.
+ */
+const DISPLAY_SAVE_TIMEOUT_MS = 15000;
+
+/** Keep contextual explanations clear of the visible viewport edges.
+ * Type: number. Units: CSS pixels. Scope: Display contextual help.
+ * Consumers: positionDisplayHelp(). Value: 12.
+ * Rationale: preserve the approved small panel edge gap on narrow screens.
+ */
+const DISPLAY_HELP_EDGE_PX = 12;
+
+/** @type {WeakMap<HTMLFormElement, {pending:number, failed:boolean, tail:Promise<void>}>} */
+const displaySaves = new WeakMap();
+
+/**
+ * Persist one switch through the editor's authenticated isolated-save action.
+ * @param {HTMLInputElement} input Original mounted native binary control.
+ * @param {boolean} desired Captured intent, retained while other saves finish.
+ * @param {{pending:number, failed:boolean, tail:Promise<void>}} state Shared
+ *     form queue; a failed write stops later queued writes and full-form replay.
+ * @return {Promise<void>} Update canonical switches/revision and public context;
+ *     preserve other drafts and lock uncertain results until editor review.
+ */
+async function saveGalleryDisplayPreference(input, desired, state) {
+    const form = input.form;
+    const row = input.closest('.admin-display-switch-row');
+    const status = row?.querySelector('[data-gallery-display-status]');
+    const text = (key, fallback) => i18nForElement(input, key, fallback);
+    if (!form || !row || !status) return;
+    if (state.failed || !form.isConnected) {
+        state.pending--;
+        status.textContent = text('admin.features.save_unknown', 'The save could not be verified. Reload current values before saving again.');
+        return;
+    }
+    const revision = form.querySelector('input[name="edit_revision"]');
+    const expected = String(revision?.value || '');
+    const panel = form.closest('[data-admin-side-panel]');
+    const submission = panel
+        ? beginAdminPanelSave(form, captureAdminPanelOwner(panel))
+        : null;
+    const body = new FormData();
+    body.set('action', 'save_display_preference');
+    body.set('id', String(form.querySelector('input[name="id"]')?.value || ''));
+    body.set('csrf_token', String(form.querySelector('input[name="csrf_token"]')?.value || ''));
+    body.set('edit_revision', expected);
+    body.set('preference', input.name);
+    body.set('value', desired ? '1' : '0');
+    body.set('ajax', '1');
+    row.dataset.displaySaveState = 'saving';
+    row.setAttribute('aria-busy', 'true');
+    status.textContent = text('admin.features.saving', 'Saving…');
+    try {
+        const response = await fetch(form.getAttribute('action'), {
+            method: 'POST', body, credentials: 'same-origin',
+            cache: 'no-store', redirect: 'error',
+            headers: {'Accept': 'application/json'},
+            signal: AbortSignal.timeout(DISPLAY_SAVE_TIMEOUT_MS),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true
+            || typeof result.setting_values?.[input.name] !== 'boolean'
+            || !/^[1-9][0-9]*$/.test(String(result.edit_revision || ''))) {
+            throw new Error('Unverified Display save');
+        }
+        if (form.isConnected && revision?.value === expected) {
+            if (submission) {
+                // Only the switch was submitted. Advance its revision without
+                // acknowledging unsaved title/description/language drafts.
+                submission.draft = null;
+                acknowledgeAdminPanelSave(submission, result);
+            } else if (revision) revision.value = result.edit_revision;
+            for (const control of form.querySelectorAll('[data-gallery-display-preference]')) {
+                const peer = control.closest('.admin-display-switch-row');
+                if (typeof result.setting_values[control.name] === 'boolean'
+                    && (control === input || !['queued', 'saving'].includes(peer?.dataset.displaySaveState))) {
+                    control.checked = result.setting_values[control.name];
+                }
+            }
+        }
+        row.dataset.displaySaveState = 'saved';
+        status.textContent = text('admin.features.saved', 'Saved');
+        try {
+            const completion = await completeAdminMutation(result);
+            if (!completion.synchronized) {
+                status.textContent = text('admin.side_panel.sync_failed_after_success', 'Saved. The public preview could not be refreshed.');
+            }
+        } catch {
+            status.textContent = text('admin.side_panel.sync_failed_after_success', 'Saved. The public preview could not be refreshed.');
+        }
+        input.disabled = false;
+    } catch {
+        state.failed = true;
+        row.dataset.displaySaveState = 'unknown';
+        status.textContent = text('admin.features.save_unknown', 'The save could not be verified. Reload current values before saving again.');
+        const latest = document.createElement('a');
+        latest.href = form.getAttribute('action');
+        latest.target = '_blank';
+        latest.rel = 'noopener';
+        latest.textContent = text('admin.gallery_editor.edit_review_open', 'Open current editor');
+        status.append(' ', latest);
+    } finally {
+        row.removeAttribute('aria-busy');
+        state.pending--;
+    }
+}
+
+/**
+ * Anchor an open native help disclosure in the browser's nonblocking top layer.
+ * @param {HTMLDetailsElement} help Open Display explanation beside its trigger.
+ * @return {void} Keep the readable glass panel inside the viewport.
+ */
+function positionDisplayHelp(help) {
+    const content = help.querySelector('.admin-inline-help-content');
+    const trigger = help.querySelector('summary');
+    if (!content || !trigger) return;
+    if (typeof content.showPopover === 'function') {
+        content.setAttribute('popover', 'manual');
+        if (!content.matches(':popover-open')) content.showPopover();
+    }
+    content.style.position = 'fixed';
+    content.style.inset = 'auto';
+    content.style.margin = '0';
+    const anchor = trigger.getBoundingClientRect();
+    const box = content.getBoundingClientRect();
+    const edge = DISPLAY_HELP_EDGE_PX;
+    content.style.left = `${Math.max(edge, Math.min(anchor.left,
+        innerWidth - box.width - edge))}px`;
+    const below = anchor.bottom + edge;
+    content.style.top = `${Math.max(edge, below + box.height < innerHeight - edge
+        ? below : anchor.top - box.height - edge)}px`;
+}
+
 /**
  * Bind controls once on the document so newly rendered drawer fragments work.
  *
- * @returns {void} Installs delegated copy and language events.
+ * @returns {void} Installs delegated copy, language, help and Display-save events
+ *     for full-page editors and dynamically injected drawer fragments.
  */
 export function setupAdminGalleryCompactEditor() {
     if (!document.body || document.body.dataset.adminGalleryCompactEditorBound === '1') return;
     document.body.dataset.adminGalleryCompactEditorBound = '1';
+
+    document.addEventListener('change', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)
+            || !input.matches('#admin-edit-display [data-gallery-display-preference]')
+            || !input.form) return;
+        const form = input.form;
+        const state = displaySaves.get(form)
+            || {pending: 0, failed: false, tail: Promise.resolve()};
+        displaySaves.set(form, state);
+        const desired = input.checked;
+        input.disabled = true;
+        input.closest('.admin-display-switch-row').dataset.displaySaveState = 'queued';
+        state.pending++;
+        state.tail = state.tail.then(() => saveGalleryDisplayPreference(input, desired, state));
+    });
+    document.addEventListener('submit', (event) => {
+        const state = displaySaves.get(event.target);
+        if (state && (state.pending > 0 || state.failed)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    }, true);
+
+    document.addEventListener('toggle', (event) => {
+        const help = event.target;
+        if (!(help instanceof HTMLDetailsElement)
+            || !help.matches('#admin-edit-display .admin-inline-help')) return;
+        const content = help.querySelector('.admin-inline-help-content');
+        if (help.open) positionDisplayHelp(help);
+        else if (typeof content?.hidePopover === 'function'
+            && content.matches(':popover-open')) content.hidePopover();
+    }, true);
+    document.addEventListener('click', (event) => {
+        for (const help of document.querySelectorAll('#admin-edit-display .admin-inline-help[open]')) {
+            if (!help.contains(event.target)) help.open = false;
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        const help = document.querySelector('#admin-edit-display .admin-inline-help[open]');
+        if (!help) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        help.open = false;
+        help.querySelector('summary')?.focus();
+    }, true);
+    for (const type of ['scroll', 'resize']) {
+        window.addEventListener(type, () => {
+            document.querySelectorAll('#admin-edit-display .admin-inline-help[open]')
+                .forEach(positionDisplayHelp);
+        }, true);
+    }
 
     /** Synchronize the visible picker summary and option state from its canonical select.
      * @param {Element} picker Language picker disclosure.

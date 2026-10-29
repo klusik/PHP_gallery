@@ -99,6 +99,7 @@ use function Gallery\Services\gallery_count_badge_presentation;
 use function Gallery\Services\gallery_effective_description_layout;
 use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_effective_grid_settings;
+use function Gallery\Services\gallery_photo_card_css_ratio;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
 use function Gallery\Services\gallery_count_dated_rows;
 use function Gallery\Services\gallery_effective_visibility;
@@ -1232,6 +1233,7 @@ function cms_gallery(): void
     });
 
     $imageSectionViewModel = [
+        'photo_card_ratio' => gallery_photo_card_css_ratio((int) $gallery['id']),
         'visible' => $images !== [],
         'reorder_toolbar_html' => $photoReorderToolbarHtml,
         'pagination_html' => $photoPaginationHtml,

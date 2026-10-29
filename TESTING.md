@@ -1116,7 +1116,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.147.2. Release verification uses the
+This guide applies to PHP Gallery Version 0.148. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1306,6 +1306,24 @@ The relevant automated owners are `tests/gallery_creation_preferences_test.php`,
 contract, and the registered panel lifecycle/browser fixtures. Their presence is
 not a substitute for the migrated database and actual browser review above.
 
+
+## Gallery photo-card formats and Display editor
+
+`gallery_display_editor_layout_test.php` covers format round-trips, gallery
+isolation, invalid explicit writes, legacy normalization, native radio choices
+and the compact group layout. Its `--render` mode supplies presentation-only
+markup to `gallery_display_browser_test.mjs`: production styles, wide/narrow
+crop geometry for both picture structures, default crops, help dismissal,
+isolated switch requests, retained text/revision and uncertain-save replay
+refusal. Renderer source promotion remains covered by its existing tests.
+The disposable database browser journey opens the navigation group's native
+breadcrumb disclosure and verifies the real panel save, persisted radio choice
+and unchanged document identity through the production handlers.
+`breadcrumb_workflow_integration_test.php` additionally covers real format
+persistence, sidecar/Trash recovery, invalid-format atomicity, isolated switch
+authority and stale-revision refusal. These functional/browser cases run in
+hosted FULL; feature BASIC alone does not execute them. Hosted qualification
+remains authoritative; local visual review is separate evidence.
 
 ## Qualification lifecycle (#235)
 

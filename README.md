@@ -60,7 +60,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.147.2
+**Current Version:** 0.148
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -141,7 +141,7 @@ Breadcrumb navigation offers nine styles through one accessible component:
 Minimal, Chevron, Pills, Surface, Ribbon (arrow segments), Nodes (connected
 dots), Tabs, Tiles (raised cards), and Gradient (theme-colored surface and
 accent stripe). In **Theme > Layout > Cards & badges**, gallery **Display >
-Advanced**, and Smart Gallery presentation controls, each native radio-card
+Navigation and maps**, and Smart Gallery presentation controls, each native radio-card
 option shows a real breadcrumb example so administrators can choose by
 appearance. The inherit card previews the effective Theme style; the controls
 support keyboard selection and work without JavaScript. **Default / inherit**
@@ -695,7 +695,9 @@ installations require no configuration edit after update.
   reviewed-pair/exact-gallery ledger controls, and AJAX **Delete this** cleanup
 
 #### Image Management
-- Per-gallery image grid
+- Per-gallery image grid and photo-card format (Default, 16:9, 21:9, 4:3,
+  1:1, 4:5, 9:16). Default preserves existing desktop/mobile crops; explicit
+  formats affect only photo previews inside that gallery.
 - Bulk image tagging and visibility changes
 - Inline image editing with side panel and public-card visibility eye controls
 - Drag-and-drop image reordering
@@ -999,6 +1001,16 @@ overwriting them. Per-gallery overrides stay with their galleries.
    settings. The editor's **Save gallery** bar stays at the bottom of the panel
    as you switch settings tabs. Upload photographs from **Images** or the upload
    action, then publish when ready.
+
+In **Display**, compact translucent groups keep grid, photo cards, gallery
+cards, navigation/maps, visitor interactions and thumbnail quality separate.
+Choose the crop under **Photo cards > Photo card format**, then **Save gallery**.
+The format does not inherit into child galleries or change originals, lightbox
+images or gallery cover cards. Filename, voting and Picture Game switches save
+independently with JavaScript while preserving other drafts. A lost/failed
+response locks its switch and blocks the shared save until the current editor
+is reviewed. Coupled grid fields and recursive thumbnail copying stay staged.
+Without JavaScript, the ordinary Save gallery form remains supported.
 
 To copy a gallery between installations, open **API** in the source gallery,
 generate an API key and copy the **Gallery import URL** and one-time key.

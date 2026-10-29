@@ -510,6 +510,10 @@ function write_gallery_sidecar(array $gallery): bool
         $data['presentation'] = gallery_presentation_settings($gallery);
     }
     $breadcrumbStyle = gallery_breadcrumb_style_override((int) $gallery['id']);
+    $photoCardRatio = gallery_photo_card_ratio((int) $gallery['id']);
+    if ($photoCardRatio !== 'default') {
+        $data['photo_card_ratio'] = $photoCardRatio;
+    }
     if ($breadcrumbStyle !== BREADCRUMB_STYLE_INHERIT) {
         $data['breadcrumb_style'] = $breadcrumbStyle;
     }
@@ -616,7 +620,8 @@ function write_gallery_sidecar(array $gallery): bool
  *     gallery_date:?string,gallery_date_end:?string,visibility:string,
  *     voting_enabled:int,show_filenames:int,description_layout:?string,
  *     count_badge_visibility:?string,lightbox_browsing_mode:?string,
- *     presentation_json:?string,breadcrumb_style:string,grid_columns:?int,
+ *     presentation_json:?string,breadcrumb_style:string,photo_card_ratio:string,
+ *     grid_columns:?int,
  *     grid_rows:?int,grid_use_for_subgalleries:int,thumbnail_min_size:?int,
  *     thumbnail_max_size:?int,banner_image_path:mixed,logo_image_path:mixed,
  *     separator_image_path:mixed,access_mode:mixed,access_listing:mixed,
@@ -674,6 +679,9 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'breadcrumb_style' => breadcrumb_style_normalize(
             $metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT,
             true,
+        ),
+        'photo_card_ratio' => gallery_photo_card_ratio_normalize(
+            $metadata['photo_card_ratio'] ?? null,
         ),
         'grid_columns' => isset($metadata['grid_columns'])
             ? (int) $metadata['grid_columns']
@@ -927,6 +935,12 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     $fields['created_at'] = now_sql();
     $fields['updated_at'] = now_sql();
     $createdGalleryId = gallery_model_insert($fields);
+    if ($candidate['photo_card_ratio'] !== 'default') {
+        gallery_photo_card_ratio_save(
+            $createdGalleryId,
+            $candidate['photo_card_ratio'],
+        );
+    }
     if ($candidate['breadcrumb_style'] !== BREADCRUMB_STYLE_INHERIT) {
         gallery_breadcrumb_style_save(
             $createdGalleryId,

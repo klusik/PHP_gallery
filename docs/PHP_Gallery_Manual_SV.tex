@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.147.2}
+\newcommand{\version}{0.148}
 \newcommand{\manualdate}{29~oktober~2026}
 
 \hypersetup{
@@ -513,7 +513,19 @@ Det synliga SimBrief-fältet accepterar ett~pilot-ID eller pilotnamn. Enbart sif
 
 De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visning} och \ui{Mediehantering}; därefter följer bildverktyg och specialverktyg när de är tillgängliga. Den fasta övre navigeringen håller diskettknappen \ui{Spara} synlig när inställningar eller fotolistan rullas. Att byta flik sparar inte automatiskt. Använd knappen efter redigering och öppna sedan galleriet igen om du vill verifiera de lagrade värdena. Längre förklaringar finns bakom frågeteckenskontroller som kan nås med tangentbordet, och mer sällan använda val ligger under utfällbara \ui{Avancerat}-avsnitt. En direkt administrationsredigerare använder samma fält, medan en webbläsare utan JavaScript använder vanlig formulärinlämning.
 
-\ui{Identitet} håller titel, beskrivning, datum, källspråk, SimBrief och taggar lätt tillgängliga. Dess avancerade avsnitt innehåller URL-namn, mapp, övergalleri, sorteringsordning och AI-galleritext när funktionen är~aktiverad. \ui{API} visar en kopierbar uppladdningsadress, nyckelns etikett och åtgärd samt en nyskapad nyckel endast en gång; befintliga nycklar visas bara när sådana finns. Omgenerering av AI-metadata, migrering och den globala API-hanteraren ligger under \ui{Avancerade API-verktyg}. \ui{Åtkomst} samlar synlighet, lösenord, delningslänkskontroller och NSFW-kryssrutan, med längre policyförklaringar under frågetecken. \ui{Visning} börjar med rutnätet och vanliga växlar för röstning och filnamn; EXIF/GPS, format för gallerikort, antalmarkering, ljuslådeläge, Bildspelet, miniatyrbildsgränser ligger under \ui{Avancerade visningsinställningar}; flygrutttext finns bredvid SimBrief under \ui{Identitet}.
+\ui{Identitet} håller titel, beskrivning, datum, källspråk, SimBrief och taggar lätt tillgängliga. Dess avancerade avsnitt innehåller URL-namn, mapp, övergalleri, sorteringsordning och AI-galleritext när funktionen är~aktiverad. \ui{API} visar en kopierbar uppladdningsadress, nyckelns etikett och åtgärd samt en nyskapad nyckel endast en gång; befintliga nycklar visas bara när sådana finns. Omgenerering av AI-metadata, migrering och den globala API-hanteraren ligger under \ui{Avancerade API-verktyg}. \ui{Åtkomst} samlar synlighet, lösenord, delningslänkskontroller och NSFW-kryssrutan, med längre policyförklaringar under frågetecken. \ui{Visning} använder kompakta genomskinliga grupper för rutnät,
+fotokort, gallerikort, navigering och kartor, besökarinteraktioner samt
+miniatyrbildskvalitet. Under \ui{Fotokort} väljer du Standard, 16:9, 21:9, 4:3,
+1:1, 4:5 eller 9:16. Standard behåller 4:3 på dator och kvadrater på mobil;
+uttryckliga format gäller på alla skärmar endast för foton i detta galleri.
+Original, ljuslåda och galleriernas omslagskort ändras inte. Spara galleri
+bekräftar formatet och andra förberedda fält. Växlar för filnamn, röstning och
+Bildspelet sparas separat med JavaScript; rekursiv kopiering av bildgränser och
+kopplade rutnätsfält förblir förberedda. Ett misslyckat eller obekräftat
+sparande bevarar utkast och blockerar hela formuläret tills den aktuella
+redigeraren granskats. Hjälpen öppnas bredvid frågetecknet; exempel på
+brödsmulor ligger kvar i en utfällbar sektion.
+Flygrutttext finns kvar bredvid SimBrief under \ui{Identitet}.
 
 I~\ui{Admin > Funktioner} är \ui{Galleriernas PDF-dokument}
 och~\ui{Gallerimusik} separata reglage. Båda är på för nya och~uppdaterade
@@ -917,9 +929,10 @@ API & Uppladdningsadress och nycklar & Kopiera den galleribegränsade adressen, 
 Åtkomst & Lösenordslås & Oberoende av synlighet. Ett offentligt, opublicerat eller privat galleri kan ha en egen lösenordspolicy när åtkomstschemat är tillgängligt. Ett tomt fält för nytt lösenord bevarar det befintliga lösenordet.\\
 Åtkomst & Delningslänk & Kan genereras, genereras om, återkallas och eventuellt ges en utgångstid. Lagrad tokeninformation skyddas med hash; en äldre token eller en token som inte kan dekrypteras kan behöva genereras om innan en kopierbar länk kan visas igen.\\
 Åtkomst & NSFW / 18+ & Markerar gallerigrenen för anonym åldersbekräftelse. Skyddet gäller även undergallerier och levererade medier enligt den effektiva åtkomstpolicyn.\\
-Visning & Bildspelet & Avancerat alternativ för jämförelsespelet i denna gallerigren. För att aktivera spelet måste även bildröstning vara tillgänglig.\\
+Visning & Bildspelet & Besökarväxel för jämförelsespelet i denna gallerigren. För att aktivera spelet måste även bildröstning vara tillgänglig.\\
 Visning & Bildröstning & Aktiverar offentliga gilla-markeringar för bilder i galleriet. Om den stängs av bevaras lagrade poäng, men nya röstningskontroller tas bort och nya röster blockeras.\\
 Visning & Visa filnamn & Avstängt som standard. Ursprungliga uppladdade filnamn döljs om detta inte aktiveras; egna bildtitlar och beskrivningar visas fortfarande.\\
+Visning & Fotokortens format & Standard behåller 4:3 på dator och kvadrater på mobil. 16:9, 21:9, 4:3, 1:1, 4:5 och 9:16 beskär endast fotoförhandsvisningar i detta galleri på alla skärmar; original och ljuslåda ändras inte.\\
 Visning & EXIF/GPS-visning & \ui{Använd global standard}, \ui{Tvinga på} eller \ui{Tvinga av}. Det effektiva tillståndet styr offentliga GPS-markörer, EXIF-kartor för gallerier och visning av GPS-koordinater.\\
 Visning & Brödsmulestil & \ui{Standard / ärv från temat} följer Temas val; galleriet kan välja en av nio registrerade stilar. Ett ogiltigt galleriundantag ärvs från Tema och därefter används den inbyggda reservstilen \codeword{chevron}. Alla länkar till överordnade gallerier radbryts på smala skärmar och är åtkomliga även utan JavaScript.\\
 Visning & Beskrivningsformat för gallerikort & Ärver Tema som standard och kan åsidosätta kortlayouten för detta galleri där det stöds.\\
@@ -2773,7 +2786,7 @@ Vid migrering mellan gallerier kontrolleras den slutliga filens placering både 
 
 Temaområdet styr webbplatsens identitet, färger, mått, sidbredd, bakgrunder, profilering, favicon-resurser, språk, gallerikortspresentation, standardvärden för ljuslådan, GPS-presentation, favoritnavigering och offentlig miniatyrbildsrendering. Inställningar använder normaliserade skalära värden eller avgränsade tjänstemodeller.
 
-Välj den globala standarden för brödsmulor under \ui{Tema > Layout > Kort och märken}. Galleriredigerarens \ui{Visning > Avancerat} och presentationskontrollerna för smarta gallerier kan ärva eller åsidosätta den. Varje val visas som ett inbyggt radiokort med ett faktiskt renderat brödsmulexempel, så administratören kan välja efter utseende. Kortet \ui{Standard / ärv från temat} i galleri- och smartgallerikontrollerna visar Temas aktuella effektiva stil. Radiokorten fungerar med tangentbord och utan JavaScript. De stabila ID:na är \codeword{minimal}, \codeword{chevron}, \codeword{pills}, \codeword{surface}, \codeword{ribbon}, \codeword{nodes}, \codeword{tabs}, \codeword{tiles} och \codeword{gradient}. Band (\codeword{ribbon}) bildar pilsegment, Sammanlänkade noder (\codeword{nodes}) förbinder dekorativa punkter, Flikar (\codeword{tabs}) är kompakta, Plattor (\codeword{tiles}) är upphöjda rektanglar och Färgövergång (\codeword{gradient}) ger en temafärgad yta med accentstrimma. Alla länkar till överordnade gallerier förblir nåbara när sökvägen radbryts och även utan JavaScript.
+Välj den globala standarden för brödsmulor under \ui{Tema > Layout > Kort och märken}. Galleriredigerarens \ui{Visning > Navigering och kartor} och presentationskontrollerna för smarta gallerier kan ärva eller åsidosätta den. Varje val visas som ett inbyggt radiokort med ett faktiskt renderat brödsmulexempel, så administratören kan välja efter utseende. Kortet \ui{Standard / ärv från temat} i galleri- och smartgallerikontrollerna visar Temas aktuella effektiva stil. Radiokorten fungerar med tangentbord och utan JavaScript. De stabila ID:na är \codeword{minimal}, \codeword{chevron}, \codeword{pills}, \codeword{surface}, \codeword{ribbon}, \codeword{nodes}, \codeword{tabs}, \codeword{tiles} och \codeword{gradient}. Band (\codeword{ribbon}) bildar pilsegment, Sammanlänkade noder (\codeword{nodes}) förbinder dekorativa punkter, Flikar (\codeword{tabs}) är kompakta, Plattor (\codeword{tiles}) är upphöjda rektanglar och Färgövergång (\codeword{gradient}) ger en temafärgad yta med accentstrimma. Alla länkar till överordnade gallerier förblir nåbara när sökvägen radbryts och även utan JavaScript.
 
 Underfliken \ui{Animationer} ställer in öppnings- och stängningstiden för den offentliga informationsrutan på gallerikort och Admin-sidopanelen. Båda värdena kan vara 0--800~ms; 0 stänger av respektive rörelse. Standardvärdena är 320~ms respektive 260~ms. Den offentliga panelen innehåller galleriets titel, beskrivning, datum och hela tagglistan. Den inbyggda utfällningen fungerar även utan JavaScript; med JavaScript hålls panelen inom visningsområdet och kan stängas genom att klicka utanför eller trycka på Escape. Interaktionen följer webbläsarens inställning för minskad rörelse.
 
