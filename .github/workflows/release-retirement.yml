@@ -8,8 +8,16 @@
 #   - Require complete tag/publication/sync/CI evidence and an exact remote branch lease
 #   - Never modify main/develop, release tags or published assets
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+# Reading path: choose plan for read-only eligibility, or retire for the
+# separately approved deletion of one completed release branch.
+# This manual/historical cleanup path is separate from the automatic ready
+# draft cleanup in release-promotion.yml. Both protect exact ref identity;
+# neither option grants permission to rewrite protected branches or tags.
 name: Reviewed release branch retirement
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
   workflow_dispatch:
     inputs:
@@ -17,79 +25,120 @@ on:
         description: The exact canonical release/v_X.Y[.Z] ref.
         required: true
         type: string
+
+      # Choices select separate guarded jobs; the default is shown below.
       mode:
         description: Read-only eligibility plan or owner-approved cleanup.
         required: true
         type: choice
         default: plan
         options: [plan, retire]
+
+      # Retire mode requires an explicit owner acceptance reference.
       manual_review:
         description: Owner acceptance reference, mandatory for retire.
         required: false
         type: string
 
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
   actions: read
   pull-requests: read
 
+# Allow one active run per group. cancel-in-progress: false
+# lets an active operation finish rather than interrupting its writes.
 concurrency:
   group: release-retirement-${{ inputs.release_branch }}
   cancel-in-progress: false
 
+# Workflow-wide environment inherited by jobs. A job/step may override
+# individual values; expressions are resolved by Actions before execution.
 env:
   RELEASE_BRANCH: ${{ inputs.release_branch }}
   RETIRE_MODE: ${{ inputs.mode }}
   MANUAL_REVIEW: ${{ inputs.manual_review }}
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Read-only plan from main: inspect immutable release/publication evidence,
+  # reconciliation and active dependencies without granting contents: write.
   plan:
     if: ${{ inputs.mode == 'plan' }}
     name: Read-only release branch retirement eligibility
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+
+      # Reject events/refs outside the reviewed main-owned manual cleanup entry.
       - name: Require maintainer dispatch from main
         shell: bash
         run: |
           test "${GITHUB_EVENT_NAME}" = workflow_dispatch
           test "${GITHUB_REF}" = refs/heads/main
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # The cleanup helper reads evidence and dependencies to explain eligibility;
+      # plan mode retains read-only repository permissions.
       - name: Inspect immutable release, reconciliation and active branch leases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/release-retirement.mjs
 
+  # Explicit retire mode enters the release-retirement Environment and gains
+  # scoped write permission. Revalidate all proof and the exact remote head
+  # immediately before deleting only the requested completed release ref.
   retire:
     if: ${{ inputs.mode == 'retire' }}
     name: Owner-approved leased release ref deletion
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # GitHub applies any installed approval rules for this named Environment.
     environment: release-retirement
     permissions:
       contents: write
       actions: read
       pull-requests: read
     steps:
+
+      # Recheck that this Environment-gated cleanup was manually selected on main.
       - name: Require approved main dispatch
         shell: bash
         run: |
           test "${GITHUB_EVENT_NAME}" = workflow_dispatch
           test "${GITHUB_REF}" = refs/heads/main
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # The helper repeats proof and live-head checks at deletion time. Only the
+      # selected release ref can be removed; advanced/dependent refs are refused.
       - name: Revalidate exact ref lease and retire only the named completed release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -9,9 +9,24 @@
 #   - Require one final prepared commit before explicit maintenance FULL and a reviewed CI installation PR
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
+
+# Reading path: ordinary push -> basic -> retained source evidence.
+# The remaining jobs run only for an explicit maintenance/install_ci dispatch.
+# BASIC checks syntax and changed named-declaration documentation; integration
+# owns generated preparation and the complete functional matrix.
+# Actions expressions (${{ ... }}) read event, input and earlier-job values.
+# YAML uses # comments; run: | contains a script in the selected shell.
+# uses: runs an action/reusable workflow; with: supplies its inputs.
+# id: gives a step an address for steps.<id>.outputs and .outcome.
+# GITHUB_OUTPUT exports step outputs; GITHUB_ENV configures later steps;
+# GITHUB_STEP_SUMMARY adds Markdown to the run's human-readable summary.
+# run: | preserves script newlines; run: >- folds YAML lines into one command.
+# Inside a script, use that language's comments (# in Bash, // in JavaScript).
 name: Basic source checks
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
+  # Ordinary pushes receive only fast BASIC feedback on this working ref.
   push:
     branches:
       - 'feature/**'
@@ -19,6 +34,7 @@ on:
       - 'bugfix/**'
       - 'hotfix/**'
       - 'codex/**'
+  # The Actions Run workflow button can explicitly request maintenance FULL.
   workflow_dispatch:
     inputs:
       maintenance_full:
@@ -32,38 +48,61 @@ on:
         type: boolean
         default: false
 
+# Default GITHUB_TOKEN scope. A job-level permissions block replaces this
+# default; permissions omitted from that block receive no access.
 permissions:
   contents: read
 
+# Serialize by source ref and replace obsolete runs when a newer event
+# arrives. Different feature/release refs use different groups.
 concurrency:
   group: basic-source-${{ github.ref }}
   cancel-in-progress: true
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Fast feedback on the exact event SHA. Check the current remote head
+  # before and after the audit so a superseded commit cannot qualify a branch.
   basic:
     name: Basic source checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
+      # Publish a check result, without permission to change source files.
       checks: write
     env:
+      # BASIC is source-only; browser capabilities belong to FULL owners.
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Require a supported working branch and an unchanged remote event SHA.
+      # The merge-base with origin/main fixes the delta consumed by BASIC.
       - id: identity
         name: Bind the source comparison base
         shell: bash
@@ -76,9 +115,15 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test "$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)" = "${GITHUB_SHA}"
           echo "PHP_GALLERY_SOURCE_BASE=$(git merge-base "${GITHUB_SHA}" origin/main)" >> "${GITHUB_ENV}"
+
+      # Delegate syntax and changed named-declaration documentation to the sole
+      # audit orchestrator; this profile does not execute functional FULL tests.
       - id: audit
         name: Central BASIC syntax and declaration checks
         run: php scripts/audit.php --profile=basic --changed
+
+      # Run even after a failed audit and recheck the remote head. A newer push
+      # invalidates evidence from this older event SHA.
       - id: current
         if: ${{ always() }}
         name: Reject superseded BASIC source evidence
@@ -86,6 +131,9 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)" = "${GITHUB_SHA}"
+
+      # Combine the audit and live-head outcomes into a SHA-bound Actions check.
+      # The external_id carries run, attempt and SHA for later authentication.
       - if: ${{ always() }}
         name: Publish BASIC source identity without a FULL context
         env:
@@ -98,6 +146,8 @@ jobs:
           node --input-type=module <<'NODE'
           import {writeFileSync} from 'node:fs';
           const e=process.env;
+          // A successful audit is insufficient if the remote head has moved.
+          // Retain provider run/attempt identity for integration's evidence reader.
           const check={name:'Basic source qualification',head_sha:e.GITHUB_SHA,status:'completed',
             conclusion:e.AUDIT_OUTCOME==='success'&&e.CURRENT_OUTCOME==='success'?'success':'failure',
             external_id:`basic:${e.GITHUB_RUN_ID}:${e.GITHUB_RUN_ATTEMPT}:${e.GITHUB_SHA}`,
@@ -106,6 +156,9 @@ jobs:
           writeFileSync(e.RUNNER_TEMP+'/basic-source-check.json',JSON.stringify(check));
           NODE
           gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/basic-source-check.json"
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - if: ${{ always() }}
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -118,6 +171,9 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Explicit maintenance path only: validate one commit above main, generate
+  # canonical artifacts and publish them only to the selected working branch.
+  # A generated child stops here for squash and fresh BASIC before FULL.
   prepare:
     needs: basic
     if: ${{ github.event_name == 'workflow_dispatch' && (inputs.maintenance_full || inputs.install_ci) }}
@@ -126,34 +182,55 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+
+    # Job outputs promote selected step outputs for needs.<job>.outputs in
+    # other jobs; values come from the steps that export each named output.
     outputs:
       source_base: ${{ steps.guard.outputs.source_base }}
       candidate_sha: ${{ steps.publish.outputs.candidate_sha }}
       preparation_changed: ${{ steps.publish.outputs.changed }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+
+      # Provision the PHP runtime/extensions used by the following central helper.
+      # coverage: none avoids collecting code-coverage instrumentation here.
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: zip, mbstring
           coverage: none
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Record server policy visibility using the existing token, so later
+      # installation decisions can distinguish missing access from source failure.
       - name: Inspect live release control visibility with the existing workflow token
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/release-readiness.mjs
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: live-release-readiness
           path: ${{ runner.temp }}/release-readiness.json
           if-no-files-found: error
           retention-days: 90
+
+      # Refuse protected/non-branch refs, moved heads and multiple commits.
+      # Maintenance FULL starts only from one direct child of the frozen base.
       - id: guard
         name: Check branch identity and source provenance
         shell: bash
@@ -191,12 +268,18 @@ jobs:
           fi
           echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
           echo "source_base=${source_base}" >> "${GITHUB_OUTPUT}"
+
+      # Find source-policy failures before spending time regenerating artifacts.
+      # The central profile uses the previously frozen source comparison base.
       - name: Cheap source-policy preflight before generation
         env:
           PHP_GALLERY_SOURCE_BASE: ${{ steps.guard.outputs.source_base }}
           PHP_GALLERY_BROWSER: disabled
           GALLERY_WORKFLOW_BROWSER: disabled
         run: php scripts/audit.php --profile=release-preflight
+
+      # Generate runtime modules, inventory and manifest in their owned order.
+      # Fix SOURCE_DATE_EPOCH to the source commit, then check without repairing.
       - name: Prepare and verify canonical candidate artifacts
         shell: bash
         run: |
@@ -205,6 +288,10 @@ jobs:
           export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "${GITHUB_SHA}")"
           php scripts/prepare_candidate.php
           php scripts/prepare_candidate.php --check
+
+      # Stage only the three generated paths and recheck the remote source.
+      # Reuse an identical already-published tree; refuse a different writer.
+      # A new child requires squash plus fresh BASIC before maintenance FULL.
       - id: publish
         name: Commit only generated artifacts with a non-forced branch lease
         shell: bash
@@ -213,6 +300,7 @@ jobs:
         run: |
           set -euo pipefail
           git add -- app/runtime/modules.php app/production-files.json app/core-manifest.json
+          # A no-op preserves the event SHA, avoiding unnecessary qualification.
           if git diff --cached --quiet; then
             echo "changed=false" >> "${GITHUB_OUTPUT}"
             echo "All generated artifacts already match their authored inputs."
@@ -223,6 +311,7 @@ jobs:
             echo "changed=true" >> "${GITHUB_OUTPUT}"
           fi
           candidate_sha="$(git rev-parse HEAD)"
+          # Refuse out-of-order publication if another writer advanced the branch.
           remote_sha="$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
           if [[ "${remote_sha}" == "${SOURCE_SHA}" ]]; then
             if [[ "${candidate_sha}" != "${SOURCE_SHA}" ]]; then
@@ -249,11 +338,15 @@ jobs:
             exit 1
           fi
           if [[ "${candidate_sha}" != "${SOURCE_SHA}" ]]; then
+            # FULL must see the final squashed SHA, not a generated child commit.
             echo '::error::Preparation published generated changes. Squash the complete prepared tree, obtain fresh BASIC, and dispatch FULL on that final SHA.' >&2
             exit 1
           fi
           echo "candidate_sha=${candidate_sha}" >> "${GITHUB_OUTPUT}"
           echo "Prepared candidate SHA: ${candidate_sha}"
+
+      # Show the compact existing audit summary on failure; the artifact below
+      # retains detailed reports without flooding successful logs.
       - name: Show source/preparation failure diagnostics
         if: failure()
         shell: bash
@@ -261,6 +354,9 @@ jobs:
           if [[ -f cache/test-audit/latest.md ]]; then
             sed -n '1,150p' cache/test-audit/latest.md
           fi
+
+      # Retain available source failures even when preparation failed early.
+      # Missing optional diagnostics do not hide the original failing step.
       - name: Upload source preflight diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -285,6 +381,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Call the shared matrix on the prepared SHA. install_ci selects its
+  # additional release audit; an ordinary push never reaches this job.
   qualify:
     name: Full CI for the published prepared SHA
     needs: prepare
@@ -295,6 +393,8 @@ jobs:
       checkout_ref: ${{ needs.prepare.outputs.candidate_sha }}
       source_base: ${{ needs.prepare.outputs.source_base }}
 
+  # After matrix execution, check both its result and the live feature head.
+  # Publish exact-SHA check contexts only for that unchanged candidate.
   gate:
     name: Reject superseded qualification
     needs: [prepare, qualify]
@@ -305,9 +405,15 @@ jobs:
       contents: read
       checks: write
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.candidate_sha }}
+
+      # A green matrix authorizes only its exact candidate. Recheck live HEAD
+      # so a later feature push cannot inherit that older result.
       - id: gate
         name: Verify successful qualification and unchanged published branch head
         shell: bash
@@ -326,6 +432,9 @@ jobs:
             exit 1
           fi
           echo "PASS prepared candidate ${CANDIDATE_SHA}; remote branch head is unchanged."
+
+      # Write the candidate summary and public check contexts for the verified
+      # aggregate. A reusable job's prefixed name alone may not match branch rules.
       - name: Publish SHA-bound hosted qualification result
         if: ${{ always() }}
         env:
@@ -357,6 +466,9 @@ jobs:
           NODE
           gh api "repos/${GITHUB_REPOSITORY}/check-runs" --method POST --input "${RUNNER_TEMP}/prepared-matrix-check.json"
 
+  # Optional CI-only installation proposal after every preceding gate.
+  # The helper authenticates native owners and scope, retains its record,
+  # and opens a bot PR that still needs normal human review.
   install-ci:
     name: Propose qualified CI installation
     needs: [prepare, qualify, gate]
@@ -373,21 +485,36 @@ jobs:
       CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate_sha }}
       SOURCE_BASE: ${{ needs.prepare.outputs.source_base }}
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # Authenticate the complete native matrix, source/main leases and CI-only
+      # scope before preparing a proposed main installation record.
       - name: Verify every native owner and installation scope
         run: node .github/scripts/ci-installation.mjs qualify
+
+      # Persist the listed evidence/output files beyond this ephemeral runner.
+      # The artifact name identifies what downstream jobs or maintainers retrieve.
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: ci-installation-record
           path: ${{ runner.temp }}/ci-installation.json
           if-no-files-found: error
           retention-days: 90
+
+      # Use the retained qualification to open the bot installation PR.
+      # Normal protected review/merge policy still controls installation.
       - name: Propose the exact qualified candidate for human review
         run: node .github/scripts/ci-installation.mjs propose

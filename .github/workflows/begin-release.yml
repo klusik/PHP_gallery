@@ -9,9 +9,16 @@
 #   - Dispatch assembly on that release branch without relying on token-created push events
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
+
+# Reading path: maintainer supplies version -> freeze current develop ->
+# create release/v_<version> -> explicitly dispatch release-qualification.yml.
+# The selected workflow branch supplies the automation, while protected
+# develop supplies the already-qualified product source. This starts assembly;
+# reviewed completion and manual publication are later, separate stages.
 name: Begin Release
 run-name: Begin release ${{ inputs.version }}
 
+# Entry points and typed inputs: these select when this workflow can run.
 on:
   workflow_dispatch:
     inputs:
@@ -20,11 +27,19 @@ on:
         required: true
         type: string
 
+# This short handoff needs contents: write to create the release ref and
+# actions: write to dispatch assembly explicitly with the same Actions token.
 permissions:
   contents: write
   actions: write
 
+# Jobs form a dependency graph: needs orders jobs and exposes their outputs.
+# Steps inside one job run sequentially on that job's runner.
 jobs:
+
+  # Short API handoff: the helper checks maintainer identity and immutable
+  # release state, freezes develop, creates/reuses its exact release ref,
+  # and explicitly dispatches assembly because token writes do not chain it.
   create-release-branch:
     name: Create release branch from develop
     runs-on: ubuntu-24.04
@@ -32,13 +47,22 @@ jobs:
     # Consumers: Actions timeout; Rationale: 5 minutes bound short API handoff work.
     timeout-minutes: 5
     steps:
+
+      # Check out the selected snapshot; with.ref pins source identity where set.
+      # with: controls checkout depth and whether Git credentials remain available.
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+
+      # Select the Node runtime for repository MJS helpers/fixtures.
+      # Package-manager caching is disabled for this framework-free source checkout.
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
           package-manager-cache: false
+
+      # The helper authenticates the maintainer and version-specific handoff.
+      # It preserves existing tags/advanced refs and reconciles retry readback.
       - name: Freeze develop, create release branch and dispatch assembly
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
