@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.147.2
+
+Improved lightbox border fitting for compressed previews while preserving safeguards
+against uncertain or gradual image boundaries.
+
+### Highlights
+
+#### More reliable lightbox border fitting
+
+- Added a bounded shared-cut retry for compressed boundary blending. Each added
+  line had to pass the existing black/noise checks, and the cut had to retain
+  sharp transitions and texture while staying within the two-pixel tolerance.
+- Preserved safeguards against excessive crop depth, nonblack contamination, and
+  gradual transitions.
+
+### Technical Details
+
+#### Frontend
+
+- Updated content-bound detection in
+  `public/assets/gallery-modules/lightbox-zoom-model.js`.
+- Advanced the content-policy cache version to `content-v6` and the lightbox
+  module query version to `content-fit-v4`.
+
+#### Tests and documentation
+
+- Added regression coverage for measured boundary means across both axes and
+  orientations, including blended lines and refusal cases.
+- Added two lossy WebP browser fixture variants.
+- Updated browser lifecycle and compatibility documentation and the English,
+  Czech, German, and Swedish manuals.
+- Made no database or stored-image changes.
+
+### User Impact
+
+#### For visitors
+
+- Improved lightbox framing for supported compressed previews while retaining
+  safeguards against uncertain boundaries.
+
+#### For administrators
+
+- Administrator workflows did not change.
+
 ## Version 0.147.1
 
 Improved lightbox content-bound detection for dim screenshots and near-black
