@@ -2416,8 +2416,13 @@ relaci prohlížeče a~její změna obnoví přiblížení 100~\%. Okraje nutné
 poměru stran samotného obsahu zůstávají viditelné.
 Detekce čte pouze malý vzorek aktivního dekódovaného obrázku, nejvýše
 256~bodů na~stranu, bez strojového učení a~dalších požadavků na~obrázky.
-Odpovídající protilehlé pruhy mohou potvrdit oba tmavší okraje obsahu, pokud
-oba vykazují trvalé rozdíly jasu; jednolitý tmavý snímek se nemění. Nejisté
+Odpovídající protilehlé pruhy mohou potvrdit tmavší okraje obsahu. Okraj
+s~trvalými rozdíly jasu může potvrdit i~ostrý jasový skok u~jednolitého nebo
+jen řídce osvětleného protilehlého okraje. Doplňková kontrola symetrie změří
+oba černé pruhy nezávisle a~ověří ostré jasové skoky na~obou hranách spolu
+s~trvalými detaily alespoň na~jedné straně. Rozpozná tak i~téměř černé scény.
+Jednolitý tmavý snímek ani
+pozvolný přechod se nemění. Nejisté
 hrany a~text v~pruzích zůstávají viditelné, zatímco jiné prokázané pruhy lze
 skrýt. Nedostupné čtení pixelů ponechá celý rám. Soubory, náhledy i~stahované
 originály zůstávají beze změny.

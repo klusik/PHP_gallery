@@ -2433,8 +2433,13 @@ innehållsanpassningen. Valet följer bildbyten under sessionen och en ändring
 finns kvar runt bilden.
 Detekteringen läser bara ett litet prov av den aktiva avkodade bilden, högst
 256~pixlar per sida, utan maskininlärning eller extra bildförfrågningar.
-Matchande motsatta kanter kan stödja två mörkare innehållskanter när båda visar
-ihållande ljusvariation; en jämnt mörk bild förblir oförändrad. Osäkra
+Matchande motsatta kanter kan stödja mörkare innehållskanter. En kant med
+uthållig ljusvariation kan även bekräfta ett skarpt ljussteg vid en jämn eller
+sparsamt belyst motsatt kant. En extra symmetrikontroll mäter båda svarta
+kanterna oberoende och kontrollerar skarpa ljussteg vid båda gränserna samt
+ihållande detaljer på minst en sida. Den känner även igen nästan svarta scener.
+Jämnt mörka bilder och gradvisa övergångar
+förblir oförändrade. Osäkra
 kanter och text förblir synliga medan andra säkert identifierade kanter kan
 döljas. Nekad pixelåtkomst behåller hela ramen. Filer, miniatyrbilder och
 nedladdningar förblir oförändrade.

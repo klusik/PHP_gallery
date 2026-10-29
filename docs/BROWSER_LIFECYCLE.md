@@ -13,9 +13,16 @@ groups; a fade retains its captured mode until its target is committed.
 Teardown removes injected controls and clears the rectangle cache.
 Detection resolves edges independently: a dim natural side gradient cannot
 discard a proven horizontal matte pair. Matched opposite bands can support
-sustained darker transitions on both edges when each has spatial variation;
-an unmatched dim edge or uniform dark fade remains intact. Boundary pixels after
-downsampling remain inside the returned content rectangle.
+sustained darker transitions on both edges. One independently qualifying edge
+may corroborate a sharp mean brightness step beside an opposite flat or sparsely
+lit edge. The step must persist from the boundary; it cannot borrow a ramp or
+another unqualified mean step. Unmatched dim edges, uniform dark fades and
+gradual boundaries remain intact. If an axis remains incomplete, a stricter
+black-pixel scan probes a symmetric pair before near-black content can be
+absorbed into a band. Both measured cuts need immediate sustained mean steps;
+one also needs sustained spatial variation. Symmetry never creates an unmeasured
+opposite cut. Boundary pixels after downsampling remain inside the returned
+content rectangle.
 Preparation returns target crop/stage metrics without publishing them. Its
 temporary normal-stage measurement is restored in the same task, and incoming
 pixels are first painted with their crop already applied. Navigation retains
