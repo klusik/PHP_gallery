@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.148.1
+
+Restyled the public gallery’s administrative preview, date-sort, and reorder
+controls with compact translucent surfaces and contextual help, while preserving
+their existing save and preview behavior.
+
+### Highlights
+
+#### Public gallery administrative controls
+
+- Grouped anonymous preview, date-sort, and visible-page reorder controls into
+  compact, wrapping toolbars with contextual help disclosures.
+- Kept the active preview visibly labelled and reorder progress and failures
+  visible.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `app/views/public_gallery_controls.php`,
+  `public/assets/styles/public.css`, and
+  `public/assets/styles/utilities.css` for the toolbar styling, responsive
+  layouts, and help-panel interactions.
+- Preserved the existing media-panel behavior for viewport fitting,
+  outside-click and Escape dismissal, and focus return.
+- Kept desktop actions at least 28px and narrow-screen or coarse-pointer
+  actions at least 44px.
+
+#### Tests and documentation
+
+- Extended `tests/fixtures/public_ux.html` to load production styles and cover
+  help-panel behavior, reorder feedback, touch targets, and horizontal overflow.
+- Updated `TESTING.md`, `docs/ADMIN_DESIGN.md`, and the English, Czech, German,
+  and Swedish manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Visitor-facing gallery behavior did not change.
+
+#### For administrators
+
+- Made preview, date-sort, and reorder controls more compact and usable on
+  narrow screens, with help available from anchored disclosures.
+- Date-sort previews still required an explicit save to persist the order for
+  visitors.
+
 ## Version 0.148
 
 Added per-gallery photo-card formats and refreshed the Display editor with
