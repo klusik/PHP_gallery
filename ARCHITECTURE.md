@@ -6480,6 +6480,23 @@ mode change; token, ancestor and unrelated state remain. HTTP returns bounded
 acknowledged row state. Dynamic fragments retain the shared canonical mutation
 envelope and coordinator.
 
+## Gallery photo-card formats and Display preferences
+
+Gallery Display reuses `gallery_grid.php` for the physical-gallery photo-card
+format allowlist and `app_settings` for `gallery_photo_card_ratio.<id>`. Default
+emits no override; explicit ratios reach only that gallery's photo grid through
+the controller/view model and a CSS variable shared by both thumbnail structures.
+Public normalization/CSS lookup reads the closed ratio map directly; localized
+editor option models are built only by the Admin presentation boundary.
+No schema migration, new runtime module or thumbnail regeneration is required.
+The format survives gallery.json import/export and Trash recovery; subtree
+deletion removes its setting. Display groups use the shared glass treatment.
+Isolated switch POSTs retain the existing authenticated editor route, CSRF,
+edit-revision lease and mutation envelope. Only the selected switch is submitted;
+canonical state and revision are acknowledged without clearing text drafts.
+Writes serialize per mounted form; uncertainty prevents replay. Grid settings
+remain a coupled staged object, and recursive bounds copying remains explicit.
+
 ## Integrated upload and appearance workspaces
 
 Settings Uploads edits format/rename, worker/batch limits and thumbnail chunks

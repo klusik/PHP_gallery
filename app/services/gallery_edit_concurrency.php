@@ -129,8 +129,13 @@ function gallery_edit_comparison(array $gallery): array
 /**
  * Preserve non-secret draft values for no-JavaScript review without storing them in a session.
  *
- * @param array<string,mixed> $input Submitted editor fields; credentials and transport fields are untrusted.
- * @return array<string,mixed> Allowlisted draft values, including structured translation/attachment entries.
+ * @param array{gallery_photo_card_ratio?:string,grid_override_enabled?:string,
+ *     translations?:array<string,array{title?:string,description?:string}>,...}
+ *     $input Submitted editor fields; credentials and transport are untrusted.
+ * @return array{gallery_photo_card_ratio?:string,grid_override_enabled?:string,
+ *     translations?:array<string,array{title?:string,description?:string}>,...}
+ *     Allowlisted non-secret draft fields, including photo format, translations
+ *     and existing attachment/editor fields for conflict review.
  */
 function gallery_edit_review_draft(array $input): array
 {
@@ -147,6 +152,7 @@ function gallery_edit_review_draft(array $input): array
         'clear_access_password',
         'access_token_expires_at',
         'grid_override_enabled',
+        'gallery_photo_card_ratio',
         'gallery_thumbnail_min_size',
         'gallery_thumbnail_max_size',
         'gallery_thumbnail_bounds_recursive',

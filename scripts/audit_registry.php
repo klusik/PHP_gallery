@@ -434,6 +434,15 @@ $registry = [
             'php_argument' => true,
             'timeout' => 60,
         ],
+        // Bound the production Display layout and isolated switch journey.
+        // Type: int. Units: seconds. Scope: one disposable Chromium fixture.
+        // Consumers: central browser suite. Value: 60.
+        // Rationale: include PHP rendering, responsive frames and owned teardown.
+        'gallery_display_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
         'gallery_tags_browser_test.mjs' => [
             'browser' => true,
             'php_argument' => true,

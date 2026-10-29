@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Keep main-page gallery grid settings independent from gallery-page grids
- *   - Allow each gallery to define its own grid override
+ *   - Allow each gallery to define its own grid override and photo-card format
  *   - Allow child galleries to inherit an outer gallery grid only when that outer gallery allows it
  *   - Preserve the existing global pagination settings as the compatibility fallback
  *
@@ -43,6 +43,24 @@ use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\gallery_model_all_rows_by_folder_path;
 use function Gallery\Models\gallery_model_reset_grid_overrides;
+
+/**
+ * Keep public photo-slot lookup independent of localized editor option models.
+ * Type: array<string,string>. Units: CSS width/height ratio pairs.
+ * Scope: physical-gallery photo-card formats; default emits no override.
+ * Consumers: gallery_photo_card_ratio_options(), normalization and CSS lookup.
+ * Rationale: one closed storage/CSS vocabulary preserves historic defaults and
+ * avoids constructing or translating Admin controls on public render paths.
+ */
+const GALLERY_PHOTO_CARD_RATIOS = [
+    'default' => '',
+    '16:9' => '16 / 9',
+    '21:9' => '21 / 9',
+    '4:3' => '4 / 3',
+    '1:1' => '1 / 1',
+    '4:5' => '4 / 5',
+    '9:16' => '9 / 16',
+];
 
 /**
  * Return true when the gallery-grid override columns exist in the database.
@@ -353,4 +371,111 @@ function gallery_grid_form_rows(array $gallery): int
     }
     $settings = gallery_effective_grid_settings($gallery);
     return (int) $settings['rows'];
+}
+
+/**
+ * List the supported photo-card formats in their editor order.
+ *
+ * Default deliberately emits no CSS override: desktop retains 4:3 and narrow
+ * layouts retain square cards. This permanent compatibility choice is owned
+ * here, rather than rewriting existing galleries or their original media.
+ *
+ * @return list<array{value:string,label:string,ratio:string}> Stable storage
+ *     values, localized labels and allowlisted CSS aspect ratios; default has
+ *     an empty ratio so the existing responsive cascade remains authoritative.
+ */
+function gallery_photo_card_ratio_options(): array
+{
+    $options = [];
+    foreach (GALLERY_PHOTO_CARD_RATIOS as $value => $ratio) {
+        $options[] = [
+            'value' => $value,
+            'label' => $value === 'default'
+                ? t('admin.features.factory_match', 'Default')
+                : $value,
+            'ratio' => $ratio,
+        ];
+    }
+    return $options;
+}
+
+/**
+ * Normalize stored or imported photo-card format metadata.
+ *
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Untrusted
+ *     stored/imported format; unsupported values preserve the historic layout.
+ * @return string Supported format identifier, or default for absent/bad data.
+ */
+function gallery_photo_card_ratio_normalize(mixed $value): string
+{
+    return is_string($value)
+        && array_key_exists($value, GALLERY_PHOTO_CARD_RATIOS)
+        ? $value
+        : 'default';
+}
+
+/**
+ * Validate explicit editor input before the gallery edit lease or side effects.
+ *
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Submitted
+ *     format; unlike legacy reads, invalid explicit writes must be refused.
+ * @return string Exact allowlisted format identifier.
+ * @throws \InvalidArgumentException When the submitted format is unsupported.
+ */
+function gallery_photo_card_ratio_validate(mixed $value): string
+{
+    if (!is_string($value) || gallery_photo_card_ratio_normalize($value) !== $value) {
+        throw new \InvalidArgumentException(t(
+            'admin.gallery_editor.photo_ratio_invalid',
+            'Choose a supported photo card format.',
+        ));
+    }
+    return $value;
+}
+
+/**
+ * Read this physical gallery's format without inheriting another gallery's choice.
+ *
+ * @param int $galleryId Physical gallery identity; nonpositive IDs use default.
+ * @return string Saved supported identifier, or the historic responsive default.
+ */
+function gallery_photo_card_ratio(int $galleryId): string
+{
+    return $galleryId > 0
+        ? gallery_photo_card_ratio_normalize(app_setting(
+            'gallery_photo_card_ratio.' . $galleryId,
+            'default',
+        ))
+        : 'default';
+}
+
+/**
+ * Persist one validated photo-card format using the existing settings model.
+ *
+ * @param int $galleryId Physical gallery owning the preference.
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Explicit
+ *     format identifier; invalid input never reaches persistence.
+ * @return string Canonical persisted format identifier.
+ * @throws \InvalidArgumentException When identity or format is invalid.
+ */
+function gallery_photo_card_ratio_save(int $galleryId, mixed $value): string
+{
+    $ratio = gallery_photo_card_ratio_validate($value);
+    if ($galleryId < 1) {
+        throw new \InvalidArgumentException('A physical gallery is required.');
+    }
+    set_app_setting('gallery_photo_card_ratio.' . $galleryId, $ratio);
+    return $ratio;
+}
+
+/**
+ * Resolve a safe CSS ratio for the selected physical gallery's photo grid.
+ *
+ * @param int $galleryId Physical gallery owning the rendered grid.
+ * @return string Allowlisted CSS ratio or an empty string for the unchanged
+ *     responsive layout; never a raw database value.
+ */
+function gallery_photo_card_css_ratio(int $galleryId): string
+{
+    return GALLERY_PHOTO_CARD_RATIOS[gallery_photo_card_ratio($galleryId)];
 }

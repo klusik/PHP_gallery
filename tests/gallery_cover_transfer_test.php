@@ -492,6 +492,8 @@ namespace {
                 static fn(): bool => false,
             'gallery_breadcrumb_style_override' =>
                 static fn(int $id): string => 'inherit',
+            'gallery_photo_card_ratio' =>
+                static fn(int $id): string => 'default',
             'gallery_grid_schema_ready' => static fn(): bool => false,
             'thumbnail_bounds_schema_ready' => static fn(): bool => false,
             'gallery_access_assert_public_policy_available' =>

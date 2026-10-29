@@ -95,6 +95,8 @@ use function Gallery\Services\gallery_editor_unique_slug;
 use function Gallery\Services\gallery_editor_update_fields;
 use function Gallery\Services\gallery_breadcrumb_style_save;
 use function Gallery\Services\gallery_breadcrumb_style_validate;
+use function Gallery\Services\gallery_photo_card_ratio_validate;
+use function Gallery\Services\gallery_photo_card_ratio_save;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
@@ -1175,7 +1177,9 @@ function admin_gallery_checkbox_input(
  * Persist gallery edits through the shared admin edit implementation.
  *
  * @param array{id:int|string,folder_path?:string,edit_revision?:int|string|null,...} $gallery Request snapshot identifying the gallery; replaced by the reserved row before writing.
- * @param array{edit_revision?:int|string,cover_image_id?:int|string,description?:string,...} $input Submitted editor fields, including optional cover mode and edit_revision for complete forms.
+ * @param array{edit_revision?:int|string,cover_image_id?:int|string,
+ *     description?:string,gallery_photo_card_ratio?:string,...} $input Submitted
+ *     editor fields, optional cover/photo format and full-form edit revision.
  * @param array<string,array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int}> $files PHP upload descriptors indexed by editor asset field.
  * @param string $returnTab Validated editor tab retained after saving.
  * @param bool $completeForm True for full-form checkbox semantics and mandatory submitted revision.
@@ -1189,6 +1193,11 @@ function admin_save_gallery_from_input(
     string $returnTab,
     bool $completeForm = true,
 ): array {
+    if (array_key_exists('gallery_photo_card_ratio', $input)) {
+        $input['gallery_photo_card_ratio'] = gallery_photo_card_ratio_validate(
+            $input['gallery_photo_card_ratio'],
+        );
+    }
     if (array_key_exists('gallery_breadcrumb_style', $input)) {
         $input['gallery_breadcrumb_style'] = gallery_breadcrumb_style_validate(
             $input['gallery_breadcrumb_style'],
@@ -1217,7 +1226,10 @@ function admin_save_gallery_from_input(
  * Apply the authenticated request after the service reserved its edit revision.
  *
  * @param array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...} $gallery Current row returned by the reservation.
- * @param array{edit_revision?:int|string,cover_image_id?:int|string,description?:string,scheduled_publish_at?:string,...} $input Submitted editor transport fields, including optional title-picture mode and UTC publication time (empty cancels).
+ * @param array{edit_revision?:int|string,cover_image_id?:int|string,
+ *     description?:string,scheduled_publish_at?:string,
+ *     gallery_photo_card_ratio?:string,...} $input Validated editor fields,
+ *     optional title-picture/photo format and UTC publication time (empty cancels).
  * @param array<string,array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int}> $files PHP upload descriptors indexed by field name.
  * @param string $returnTab Validated editor tab.
  * @param bool $completeForm True for the full editor, false for a partial action.
@@ -2091,6 +2103,12 @@ function admin_save_gallery_owned_input(
     gallery_editor_update_fields($galleryId, $fields);
     if ($submittedBreadcrumbStyle !== null) {
         gallery_breadcrumb_style_save($galleryId, $submittedBreadcrumbStyle);
+    }
+    if (array_key_exists('gallery_photo_card_ratio', $input)) {
+        gallery_photo_card_ratio_save(
+            $galleryId,
+            $input['gallery_photo_card_ratio'],
+        );
     }
     if ($shouldUpdateLocalization) {
         content_save_localizations(

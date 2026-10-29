@@ -756,7 +756,15 @@ function view_render_quick_photo_tag_popover(array $viewModel): void
 /**
  * Render the selected-gallery photo section.
  *
- * @param array<string,mixed> $viewModel Controller-prepared photo-section state.
+ * @param array{visible?:bool,reorder_toolbar_html?:string,pagination_html?:string,
+ *     grid_class?:string,photo_card_ratio?:string,gallery_id?:int,
+ *     total_count?:int,revision?:string,current_page?:int,total_pages?:int,
+ *     lightbox_enabled?:bool,lightbox_endpoint?:string,lightbox_total?:int,
+ *     lightbox_browsing_mode?:string,lightbox_maps_enabled?:bool,
+ *     gallery_map_url?:string,gallery_map_title?:string,cards_html?:string}
+ *     $viewModel Prepared photo-section markup, identity, pagination and
+ *     allowlisted CSS ratio (empty retains the historic responsive format).
+ * @return void Emit the photo section or nothing when it is not visible.
  */
 function view_render_public_gallery_image_section(array $viewModel): void
 {
@@ -769,6 +777,10 @@ function view_render_public_gallery_image_section(array $viewModel): void
     echo
         '<section class="grid gallery-image-grid'
             . e((string) ($viewModel['grid_class'] ?? ''))
+            . (!empty($viewModel['photo_card_ratio'])
+                ? ' has-photo-card-ratio" style="--photo-card-ratio: '
+                    . e((string) $viewModel['photo_card_ratio'])
+                : '')
             . '" data-public-reorder-list="photo" data-gallery-image-list data-public-context-gallery-id="'
             . (int) ($viewModel['gallery_id'] ?? 0)
             . '" data-public-image-total-count="'

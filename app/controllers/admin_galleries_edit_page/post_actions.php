@@ -69,7 +69,9 @@ use function Gallery\Services\admin_log_event;
  * ends in redirect_to(), so this never falls through to page rendering.
  *
  * @param array{id:int,folder_path:string} $gallery Authorized physical gallery identity and storage path passed to domain handlers.
- * @param array{media_renamer_feature_enabled:bool} $capabilities Resolved availability for the guarded rename action.
+ * @param array{media_renamer_feature_enabled:bool,voting_ready?:bool,
+ *     picture_game_ready?:bool,gps_map_ready?:bool,gps_map_override_ready?:bool}
+ *     $capabilities Resolved availability for guarded rename and Display actions.
  * @return void Dispatches a guarded mutation and its JSON response or redirect.
  */
 function admin_edit_gallery_handle_post(
@@ -91,6 +93,10 @@ function admin_edit_gallery_handle_post(
         }
     } else {
         verify_csrf();
+    }
+    if (($_POST['action'] ?? '') === 'save_display_preference') {
+        admin_edit_gallery_save_display_preference($gallery, $capabilities);
+        return;
     }
     if ((string) ($_POST['archive_media_action'] ?? '') !== '') {
         admin_edit_gallery_handle_archive_media_action($gallery);
@@ -225,6 +231,91 @@ function admin_edit_gallery_handle_post(
         return;
     }
     admin_edit_gallery_handle_save($gallery, $returnTab);
+}
+
+/**
+ * Save one Display switch without replaying drafts from the shared editor form.
+ *
+ * Authentication and CSRF are enforced by the enclosing editor dispatcher.
+ * The existing save owner retains revision, capability and sidecar policy.
+ *
+ * @param array{id:int|string,folder_path:string,edit_revision?:int|string,...}
+ *     $gallery Authorized gallery snapshot, replaced by the leased current row.
+ * @param array{voting_ready?:bool,picture_game_ready?:bool,gps_map_ready?:bool,
+ *     gps_map_override_ready?:bool,...} $capabilities Resolved control readiness.
+ * @return void Emit a canonical mutation envelope with read-back switch values
+ *     and the new edit revision, or a safe refusal with no automatic retry.
+ */
+function admin_edit_gallery_save_display_preference(
+    array $gallery,
+    array $capabilities,
+): void {
+    $galleryId = (int) $gallery['id'];
+    try {
+        $name = $_POST['preference'] ?? null;
+        $value = $_POST['value'] ?? null;
+        $allowed = [
+            'show_filenames' =>
+                \Gallery\Services\gallery_filename_display_schema_ready(),
+            'voting_enabled' => !empty($capabilities['voting_ready']),
+            'picture_game_enabled' => !empty($capabilities['picture_game_ready']),
+            'gps_map_enabled' => !empty($capabilities['gps_map_ready'])
+                && empty($capabilities['gps_map_override_ready']),
+        ];
+        if (!is_string($name) || empty($allowed[$name])
+            || !in_array($value, ['0', '1'], true)) {
+            throw new \InvalidArgumentException('Unsupported Display preference.');
+        }
+        $input = [
+            $name => $value,
+            // Missing revisions are explicitly refused, including partial saves.
+            'edit_revision' => $_POST['edit_revision'] ?? '',
+        ];
+        // Disabling voting also disables its dependent game; enabling the game
+        // continues to enable voting through the existing gallery save policy.
+        if ($name === 'voting_enabled' && $value === '0') {
+            $input['picture_game_enabled'] = '0';
+        }
+        $saved = admin_save_gallery_from_input(
+            $gallery,
+            $input,
+            [],
+            'admin-edit-display',
+            false,
+        );
+        $gallery = $saved['gallery'];
+        $payload = admin_edit_gallery_success_response(
+            $gallery,
+            t('admin.features.saved', 'Saved'),
+            'admin-edit-display',
+            $saved,
+        );
+        $payload['setting_values'] = [
+            'show_filenames' => (int) ($gallery['show_filenames'] ?? 0) === 1,
+            'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
+            'picture_game_enabled' =>
+                (int) ($gallery['picture_game_enabled'] ?? 0) === 1,
+            'gps_map_enabled' => (int) ($gallery['gps_map_enabled'] ?? 0) === 1,
+        ];
+    } catch (Throwable) {
+        http_response_code(409);
+        $payload = admin_mutation_error_envelope(
+            t(
+                'admin.features.save_unknown',
+                'The save could not be verified. Reload current values before saving again.',
+            ),
+            'gallery_display_save_unverified',
+            admin_mutation_descriptor(
+                'gallery.update',
+                'gallery',
+                'update',
+                [$galleryId],
+            ),
+        );
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo json_encode($payload, JSON_THROW_ON_ERROR);
 }
 
 /**

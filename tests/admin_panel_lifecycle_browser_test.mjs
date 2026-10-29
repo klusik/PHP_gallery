@@ -28,7 +28,7 @@ const browserStartupTimeoutMs = 30000;
 /** Chromium executable supplied by the central browser registry. */
 const executable = process.argv[2];
 /** Explicit fixture allowlist; alternate wrapper never exposes arbitrary repository files. */
-const fixtureName = ['admin_upload_clipboard.html', 'cooperative_gallery.html', 'admin_cooperative_proposals.html', 'admin_operation_keys.html', 'admin_cooperative_galleries.html', 'admin_update_jobs.html', 'admin_settings_workspace.html', 'admin_upload_workspace.html', 'admin_gallery_quick_access.html', 'admin_dashboard_workspace.html', 'admin_smart_galleries.html', 'public_home_creation.html', 'admin_trash_confirmation.html', 'admin_gallery_tree.html', 'admin_gallery_features.html', 'theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'gallery_tags.html'].includes(process.argv[3]) ? process.argv[3] : 'admin_panel_lifecycle.html';
+const fixtureName = ['admin_upload_clipboard.html', 'cooperative_gallery.html', 'admin_cooperative_proposals.html', 'admin_operation_keys.html', 'admin_cooperative_galleries.html', 'admin_update_jobs.html', 'admin_settings_workspace.html', 'admin_upload_workspace.html', 'admin_gallery_quick_access.html', 'admin_dashboard_workspace.html', 'admin_smart_galleries.html', 'public_home_creation.html', 'admin_trash_confirmation.html', 'admin_gallery_tree.html', 'admin_gallery_features.html', 'theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'gallery_tags.html', 'gallery_display.html'].includes(process.argv[3]) ? process.argv[3] : 'admin_panel_lifecycle.html';
 if (!executable) {
     console.log('SKIP panel lifecycle browser: no Chromium executable supplied.');
     process.exit(0);
@@ -41,8 +41,10 @@ let sendMouse = null;
 /** @type {function(number): Promise<void>|null} Owned fixture viewport adapter. */
 let setFixtureWidth = null;
 /** Actual presentation-only PHP output, generated without application bootstrap. */
-const galleryMarkup = ['admin_gallery_tree.html', 'admin_gallery_features.html'].includes(fixtureName) && executable
-    ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/admin_gallery_tree_render_fixture.php')], {encoding: 'utf8', windowsHide: true}) : '';
+const galleryMarkup = fixtureName === 'gallery_display.html'
+    ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/gallery_display_editor_layout_test.php'), '--render'], {encoding: 'utf8', windowsHide: true})
+    : ['admin_gallery_tree.html', 'admin_gallery_features.html'].includes(fixtureName) && executable
+        ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/admin_gallery_tree_render_fixture.php')], {encoding: 'utf8', windowsHide: true}) : '';
 /** Real Theme presentation output without installation bootstrap or persistence. */
 const themeMarkup = ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html'].includes(fixtureName)
     ? execFileSync(process.argv[4] || process.env.PHP_BINARY || 'php', [path.join(root, 'tests/support/theme_appearance_fixture.php'), ...(fixtureName === 'theme_language.html' ? ['--language-editor'] : [])], {encoding: 'utf8', windowsHide: true}) : '';
@@ -225,7 +227,7 @@ async function serveFixture(request, response) {
     if (pathname === '/__public_cards' && fixtureName === 'theme_appearance.html') {
         response.setHeader('Content-Type','text/html; charset=utf-8'); response.end(publicCardMarkup); return;
     }
-    if (pathname === '/__viewport' && ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'admin_settings_workspace.html', 'admin_dashboard_workspace.html', 'admin_panel_lifecycle.html', 'admin_update_jobs.html'].includes(fixtureName)) {
+    if (pathname === '/__viewport' && ['theme_appearance.html', 'theme_media.html', 'theme_layout.html', 'theme_language.html', 'theme_custom_css.html', 'gallery_creation.html', 'gallery_display.html', 'admin_settings_workspace.html', 'admin_dashboard_workspace.html', 'admin_panel_lifecycle.html', 'admin_update_jobs.html'].includes(fixtureName)) {
         const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
         if (![390, 1280].includes(width) && !(fixtureName === 'admin_panel_lifecycle.html' && width === 320)) { response.writeHead(400).end(); return; }
         try { await browserReady; await setFixtureWidth(width); response.end('ok'); }

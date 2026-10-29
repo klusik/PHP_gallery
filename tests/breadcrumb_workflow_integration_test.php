@@ -332,6 +332,7 @@ try {
         $formNode,
     );
     $editorFields['gallery_breadcrumb_style'] = 'ribbon';
+    $editorFields['gallery_photo_card_ratio'] = '4:5';
     $editorFields['return_tab'] = 'admin-edit-display';
     $savedOverride = envelope(
         $admin->request(
@@ -363,7 +364,8 @@ try {
         JSON_THROW_ON_ERROR,
     );
     check(
-        ($sidecar['breadcrumb_style'] ?? '') === 'ribbon',
+        ($sidecar['breadcrumb_style'] ?? '') === 'ribbon'
+            && ($sidecar['photo_card_ratio'] ?? '') === '4:5',
         'Gallery sidecar did not retain the explicit breadcrumb override.',
     );
     $rerendered = $admin->request($editorRoute);
@@ -449,6 +451,35 @@ try {
         'Rejected style input partially changed the gallery or its override.',
     );
 
+    $stage = 'invalid photo format is atomic';
+    $invalidFields['gallery_breadcrumb_style'] = 'ribbon';
+    $invalidFields['gallery_photo_card_ratio'] = 'not-a-format';
+    $invalid = $admin->request($editorRoute, $invalidFields, true);
+    check($invalid['status'] >= 400 && $invalid['status'] < 500
+        && empty($invalid['json']['ok']), 'Invalid explicit photo format was accepted.');
+    check(row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$galleryId]) === $beforeGallery,
+        'Rejected photo format changed gallery fields or reserved its revision.');
+
+    $stage = 'isolated switch keeps the photo format and title';
+    $switchInput = [
+        'csrf_token' => $csrf,
+        'action' => 'save_display_preference',
+        'preference' => 'show_filenames',
+        'value' => '1',
+        'edit_revision' => (string) $beforeGallery['edit_revision'],
+        'title' => 'This unrelated draft must never be persisted',
+    ];
+    $switchSaved = envelope($admin->request($editorRoute, $switchInput, true), 'Display switch');
+    $afterSwitch = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$galleryId]);
+    check($afterSwitch['title'] === $beforeGallery['title']
+        && (int) $afterSwitch['show_filenames'] === 1
+        && ($switchSaved['setting_values']['show_filenames'] ?? null) === true,
+        'Switch save replayed unrelated input or omitted canonical state.');
+    $stale = $admin->request($editorRoute, $switchInput, true);
+    check($stale['status'] === 409 && empty($stale['json']['ok'])
+        && row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$galleryId]) === $afterSwitch,
+        'Stale isolated switch save was not refused before mutation.');
+
     $stage = 'Trash snapshot and restore preserve override';
     check(
         $admin->request('/index.php?page=admin_bulk_galleries', [
@@ -474,7 +505,8 @@ try {
         JSON_THROW_ON_ERROR,
     );
     check(
-        ($snapshot['galleries'][0]['breadcrumb_style'] ?? '') === 'ribbon',
+        ($snapshot['galleries'][0]['breadcrumb_style'] ?? '') === 'ribbon'
+            && ($snapshot['galleries'][0]['photo_card_ratio'] ?? '') === '4:5',
         'Trash snapshot did not retain the gallery breadcrumb override.',
     );
     check(
@@ -508,6 +540,10 @@ try {
         )['setting_value'] === 'ribbon',
         'Trash restore did not restore the explicit breadcrumb style.',
     );
+    check((string) row($pdo,
+        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+        ['gallery_photo_card_ratio.' . $restoredId])['setting_value'] === '4:5',
+        'Trash restore lost the photo-card format.');
     breadcrumb_workflow_assert_public_style($anonymous, $publicPath, 'ribbon');
     echo
         "PASS gallery workflow breadcrumb Theme inheritance panel persistence validation and Trash restore\n";

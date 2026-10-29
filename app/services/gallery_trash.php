@@ -910,8 +910,18 @@ function gallery_trash_existing_columns(string $table, array $columns): array
 /**
  * Build one durable gallery snapshot record without generated ids or caches.
  *
- * @param array<string,mixed> $gallery Live gallery row.
- * @return array<string,mixed> Restore-safe gallery metadata.
+ * @param array{id:int|string,folder_path:string,cover_image_id?:int|string|null,
+ *     cover_image_ids?:string|null,cover_image_path?:string|null,...} $gallery
+ *     Live gallery identity, title-picture metadata and restorable scalar fields.
+ * @return array{folder_path:string,parent_folder_path:?string,tags:string,
+ *     cover_image_relative_path:?string,breadcrumb_style:string,
+ *     photo_card_ratio:string,
+ *     translations?:array<string,array{title?:string,description?:string}>,
+ *     flight_map?:array{map_source_type?:string,route_text?:string,
+ *         resolved_points_json?:string,unresolved_points_json?:string,
+ *         point_count?:int|string,resolved_at?:string|null},...}
+ *     Restore-safe identity, optional localizations/route metadata, saved
+ *     presentation settings and the allowlisted restorable gallery columns.
  */
 function gallery_trash_snapshot_gallery_record(array $gallery): array
 {
@@ -933,6 +943,9 @@ function gallery_trash_snapshot_gallery_record(array $gallery): array
         'cover_image_relative_path' =>
             gallery_trash_cover_relative_path($gallery),
         'breadcrumb_style' => gallery_breadcrumb_style_override(
+            (int) ($gallery['id'] ?? 0),
+        ),
+        'photo_card_ratio' => gallery_photo_card_ratio(
             (int) ($gallery['id'] ?? 0),
         ),
     ];
@@ -2479,7 +2492,10 @@ function gallery_trash_entry_can_purge(array $entry): bool
  * Re-apply database-only gallery fields after the folder was re-imported.
  *
  * @param int $galleryId Recreated gallery identifier.
- * @param array<string,mixed> $record Snapshot gallery fields keyed by storage field name.
+ * @param array{breadcrumb_style?:string,photo_card_ratio?:string,tags?:string,
+ *     content_language?:string|null,
+ *     translations?:array<string,array{title?:string,description?:string}>,...}
+ *     $record Snapshot presentation, tags, translations and restorable columns.
  * @return void Reapplies the stored gallery settings and supported localized metadata.
  */
 function gallery_trash_apply_gallery_snapshot(
@@ -2503,6 +2519,10 @@ function gallery_trash_apply_gallery_snapshot(
             $record['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT,
             true,
         ),
+    );
+    gallery_photo_card_ratio_save(
+        $galleryId,
+        gallery_photo_card_ratio_normalize($record['photo_card_ratio'] ?? null),
     );
 
     if (isset($record['tags']) && is_string($record['tags'])) {

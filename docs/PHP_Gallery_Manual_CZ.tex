@@ -511,7 +511,19 @@ Viditelné pole SimBrief přijímá ID pilota nebo jeho jméno. Samotné čísli
 
 Běžné pracovní oblasti jsou \ui{Identita}, \ui{API}, \ui{Přístup}, \ui{Zobrazení} a~\ui{Správa médií}; podle dostupnosti následují nástroje pro obrázky a~specializované úlohy. Horní přichycená navigace ponechává disketu \ui{Uložit} dostupnou při posouvání nastavení i~seznamu fotografií. Změna karty automaticky neukládá. Po úpravách použijte tlačítko a~chcete-li ověřit uložené hodnoty, galerii znovu otevřete. Delší vysvětlení jsou dostupná přes ovládací prvky s~otazníkem přístupné z~klávesnice a~méně časté volby jsou pod rozbalovacími prvky \ui{Pokročilé}. Přímý editor v~administraci používá stejná pole; prohlížeč bez JavaScriptu odesílá formulář běžným způsobem.
 
-\ui{Identita} ponechává snadno dostupný název, popis, datum, zdrojový jazyk, SimBrief a~štítky. Její pokročilý oddíl obsahuje identifikátor v~URL, složku, nadřazenou galerii, pořadí a~text galerie od AI, je-li povolen. \ui{API} zobrazuje kopírovatelný koncový bod nahrávání, označení a~akci klíče a~nově vygenerovaný klíč pouze jednou; existující klíče se zobrazují, jen pokud nějaké jsou. Obnova metadat pomocí AI, migrace a~globální správce API jsou pod \ui{Pokročilé nástroje API}. \ui{Přístup} seskupuje viditelnost, heslo, ovládání odkazu pro sdílení a~zaškrtávací pole NSFW; delší vysvětlení pravidel jsou pod otazníky. \ui{Zobrazení} začíná mřížkou a~běžnými přepínači hlasování a~názvů souborů; EXIF/GPS, formát karty galerie, odznak počtu, režim lightboxu, hra s~fotografiemi, meze náhledů jsou pod \ui{Pokročilá nastavení zobrazení}; text letové trasy je dostupný vedle SimBrief v~oddílu \ui{Identita}.
+\ui{Identita} ponechává snadno dostupný název, popis, datum, zdrojový jazyk, SimBrief a~štítky. Její pokročilý oddíl obsahuje identifikátor v~URL, složku, nadřazenou galerii, pořadí a~text galerie od AI, je-li povolen. \ui{API} zobrazuje kopírovatelný koncový bod nahrávání, označení a~akci klíče a~nově vygenerovaný klíč pouze jednou; existující klíče se zobrazují, jen pokud nějaké jsou. Obnova metadat pomocí AI, migrace a~globální správce API jsou pod \ui{Pokročilé nástroje API}. \ui{Přístup} seskupuje viditelnost, heslo, ovládání odkazu pro sdílení a~zaškrtávací pole NSFW; delší vysvětlení pravidel jsou pod otazníky. \ui{Zobrazení} používá kompaktní průsvitné skupiny pro mřížku, karty fotek,
+karty galerií, navigaci a~mapy, interakce návštěvníků a~kvalitu náhledů.
+Ve skupině \ui{Karty fotek} zvolte Výchozí, 16:9, 21:9, 4:3, 1:1, 4:5 nebo 9:16.
+Výchozí zachovává dosavadní náhledy 4:3 na počítači a~čtvercové na mobilu;
+zvolený poměr platí na všech obrazovkách pouze pro fotky uvnitř této galerie.
+Originály, lightbox a~titulní karty galerií se nemění. Formát a~ostatní
+rozpracované volby potvrzuje Uložit galerii. Přepínače názvů souborů,
+hlasování a~Picture Game se s~JavaScriptem ukládají samostatně; rekurzivní
+kopírování mezí náhledů a~spojené volby mřížky zůstávají rozpracované.
+Neúspěšné či neověřené uložení přepínače zachová texty a~zablokuje odeslání
+celého formuláře do kontroly aktuálního editoru. Nápověda se otevírá vedle
+otazníku; ukázky drobečkové navigace zůstávají rozbalovací.
+Text letové trasy zůstává vedle SimBrief v~\ui{Identitě}.
 
 V~\ui{Administrace > Funkce} jsou \ui{PDF dokumenty galerií} a~\ui{Hudba
 galerií} nezávislé přepínače. Nové i~aktualizované instalace bez uložené volby
@@ -910,6 +922,7 @@ Přístup & NSFW / 18+ & Označuje větev galerií pro anonymní potvrzení věk
 Zobrazení & Hra s~fotografiemi & Pokročilá volba porovnávací hry v~této větvi galerií. Povolení hry vyžaduje také dostupné hlasování o~obrázcích.\\
 Zobrazení & Hlasování o~obrázcích & Povolí veřejná označení oblíbených obrázků v~této galerii. Vypnutí uchová uložené skóre, ale odstraní ovládací prvky nových hlasů a~zablokuje nové příspěvky.\\
 Zobrazení & Zobrazovat názvy souborů & Ve výchozím stavu vypnuto. Původní názvy nahraných souborů zůstávají skryté, dokud není volba povolena; vlastní názvy a~popisy fotografií se nadále zobrazují.\\
+Zobrazení & Formát karet fotek & Výchozí zachová náhledy 4:3 na počítači a~čtvercové na mobilu. Volby 16:9, 21:9, 4:3, 1:1, 4:5 a~9:16 ořezávají pouze náhledy fotek uvnitř této galerie na všech obrazovkách; originály a~lightbox se nemění.\\
 Zobrazení & Zobrazení EXIF/GPS & \ui{Použít globální výchozí hodnotu}, \ui{Vynutit zapnutí} nebo \ui{Vynutit vypnutí}. Účinný stav řídí veřejné značky GPS, mapy EXIF galerie a~zobrazení souřadnic GPS.\\
 Zobrazení & Styl drobečkové navigace & \ui{Výchozí / převzít z nastavení vzhledu} přebírá volbu Vzhledu; galerie může vybrat kterýkoli z~devíti registrovaných stylů. Neplatné přepsání dědí volbu Vzhledu, poté vestavěný styl \codeword{chevron}. Odkazy na všechny předky se na úzkých obrazovkách zalamují a~zůstávají dostupné i~bez JavaScriptu.\\
 Zobrazení & Formát popisu karty galerie & Ve výchozím stavu dědí Vzhled a~tam, kde je to podporováno, může přepsat rozvržení karty této galerie.\\

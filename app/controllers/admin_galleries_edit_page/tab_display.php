@@ -59,6 +59,8 @@ use function Gallery\Services\gallery_effective_gps_map_enabled;
 use function Gallery\Services\gallery_effective_grid_settings;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
 use function Gallery\Services\gallery_filename_display_schema_ready;
+use function Gallery\Services\gallery_photo_card_ratio;
+use function Gallery\Services\gallery_photo_card_ratio_options;
 use function Gallery\Services\gallery_gps_map_storage_value;
 use function Gallery\Services\gallery_grid_form_columns;
 use function Gallery\Services\gallery_grid_form_rows;
@@ -80,9 +82,18 @@ use function Gallery\Views\render_admin_thumbnail_bound_slider;
 /**
  * Render the Display tab panel.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
+ * @param array{id:int|string,gps_map_enabled?:int|string|null,
+ *     description_layout?:string|null,count_badge_visibility?:string|null,
+ *     lightbox_browsing_mode?:string|null,grid_columns?:int|string|null,
+ *     grid_rows?:int|string|null,grid_use_for_subgalleries?:int|string,
+ *     thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null,
+ *     picture_game_enabled?:int|string,voting_enabled?:int|string,
+ *     show_filenames?:int|string} $gallery Identity and saved Display fields.
  * @param string $activeEditTab Currently selected editor tab.
- * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @param array{gps_map_override_ready:bool,gps_map_ready:bool,
+ *     lightbox_mode_ready:bool,lightbox_mode_feature_enabled:bool,
+ *     picture_game_ready:bool,voting_ready:bool} $capabilities Prepared feature
+ *     and schema readiness used to expose only supported controls.
  * @return void Render the Display tab.
  */
 function admin_edit_gallery_render_display_tab(
@@ -506,6 +517,18 @@ function admin_edit_gallery_render_display_tab(
         'lightbox' => $lightbox,
         'breadcrumb_style' => $breadcrumbStyle,
         'grid' => $grid,
+        'photo_card_ratio' => [
+            'current' => gallery_photo_card_ratio((int) $gallery['id']),
+            'options' => gallery_photo_card_ratio_options(),
+            'label' => t(
+                'admin.gallery_editor.photo_ratio_label',
+                'Photo card format',
+            ),
+            'help' => t(
+                'admin.gallery_editor.photo_ratio_help',
+                'Choose the crop of photo previews in this gallery only. Default preserves the current desktop and mobile layout. Other formats apply on every screen. Originals, lightbox and gallery cover cards stay unchanged.',
+            ),
+        ],
         'thumbnail_bounds' => $thumbnailBounds,
     ]);
 }

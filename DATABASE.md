@@ -2626,6 +2626,17 @@ gallery-relative filenames so ZIP import can remap them after image IDs are
 rebuilt. See [the selection contract](docs/TITLE_PICTURE_SELECTION.md) for
 public access filtering and mode behavior.
 
+## Physical-gallery photo-card format storage
+
+Photo preview formats use the existing `app_settings` table, with the stable
+key `gallery_photo_card_ratio.<physical-gallery-id>`. Values are `default`,
+`16:9`, `21:9`, `4:3`, `1:1`, `4:5` and `9:16`; there is no new schema column.
+Absent/invalid stored values retain historic responsive crops. Explicit invalid
+editor values are rejected before an edit lease or target mutation. Omitted
+fields preserve saved state. gallery.json and Trash metadata carry
+`photo_card_ratio`; legacy metadata defaults safely and subtree deletion removes
+the old ID's setting before recovery writes the restored ID's value.
+
 ## Gallery-card orientation compatibility
 
 The semantics migration delegates persistence to

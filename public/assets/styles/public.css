@@ -323,6 +323,28 @@ button.is-update-pending {
     object-fit: cover;
     cursor: zoom-in;
 }
+
+/* Explicit gallery formats override desktop and narrow square slots together.
+   Default emits no class/variable and retains the existing responsive layout.
+   Ratios are allowlisted by gallery_grid.php; both thumbnail pipelines and
+   restricted placeholders share this slot without changing source media. */
+.public-page .gallery-image-grid.has-photo-card-ratio .image-stage,
+.public-page .gallery-image-grid.has-photo-card-ratio .image-preview-link,
+.public-page .gallery-image-grid.has-photo-card-ratio .image-preview-link picture,
+.public-page .gallery-image-grid.has-photo-card-ratio .nsfw-placeholder {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: var(--photo-card-ratio);
+}
+
+.public-page .gallery-image-grid.has-photo-card-ratio .image-preview-link img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: var(--photo-card-ratio);
+    object-fit: cover;
+}
 .image-meta {
     padding: 0.75rem;
 }

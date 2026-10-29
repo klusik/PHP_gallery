@@ -1854,4 +1854,11 @@ return [
     'admin.telemetry.preference_refused' => 'Uložená hodnota se liší od vaší změny. Před dalším pokusem ji zkontrolujte.',
     'lightbox.fit_content' => 'Přizpůsobit podle obsahu',
     'lightbox.original_frame' => 'Zobrazit původní rám',
+    'admin.gallery_editor.photo_ratio_label' => 'Formát karet fotek',
+    'admin.gallery_editor.photo_ratio_help' => 'Zvolte ořez náhledů fotek pouze v této galerii. Výchozí zachová současný vzhled na počítači i mobilu. Ostatní formáty platí na všech obrazovkách. Originály, lightbox a titulní karty galerií se nemění.',
+    'admin.gallery_editor.photo_ratio_invalid' => 'Zvolte podporovaný formát karet fotek.',
+    'admin.gallery_editor.display_photos' => 'Karty fotek',
+    'admin.gallery_editor.display_gallery_cards' => 'Karty galerií',
+    'admin.gallery_editor.display_navigation' => 'Navigace a mapy',
+    'admin.gallery_editor.display_interactions' => 'Interakce návštěvníků',
 ];
