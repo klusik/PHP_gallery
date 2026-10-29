@@ -40,7 +40,6 @@ use RuntimeException;
 use Throwable;
 
 use function Gallery\Core\admin_anonymous_preview_active;
-use function Gallery\Core\anonymous_preview_url;
 use function Gallery\Core\append_cms_footer_script;
 use function Gallery\Core\append_cms_head_extras;
 use function Gallery\Core\csrf_field;
@@ -431,29 +430,6 @@ function picture_manager_share_filename(
         $baseName = 'photo-' . (int) ($image['id'] ?? 0);
     }
     return $baseName . '.' . $extension;
-}
-
-/**
- * Render public gallery preview toolbar.
- *
- * Used by HTTP controller routing for this workflow.
- *
- * @param array $gallery Gallery row or gallery data.
- */
-function render_public_gallery_preview_toolbar(array $gallery): void
-{
-    if (!current_user()) {
-        return;
-    }
-    // $isPreview stores whether the current request is already using anonymous visitor rules.
-    $isPreview = admin_anonymous_preview_active();
-    // $baseUrl stores the clean gallery URL used to avoid carrying image or pagination state unexpectedly.
-    $baseUrl = gallery_public_url($gallery);
-
-    \Gallery\Views\view_render_public_gallery_preview_toolbar([
-        'is_preview' => $isPreview,
-        'target_url' => anonymous_preview_url($baseUrl, !$isPreview),
-    ]);
 }
 
 /**

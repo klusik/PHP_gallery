@@ -188,7 +188,7 @@ function view_script_asset_for_context(
  * Render the prepared public/Admin document head, branding and navigation shell.
  *
  * @param string $title Page title before site branding is appended.
- * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,visit_progress?:bool,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context and ordered stylesheet URLs; direct callers must supply stylesheet URLs because asset selection belongs to the layout controller.
+ * @param array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,public_preview_url?:string,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,visit_progress?:bool,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} $model Prepared context and ordered stylesheet URLs; direct callers must supply stylesheet URLs because asset selection belongs to the layout controller.
  * @param string $requestUri Current request URI used for navigation state.
  * @param string $page Normalized route identifier, defaulting to the public home page.
  * @return void Emits the head, header and opening main element with manual overrides limited to public pages.
@@ -362,6 +362,25 @@ function view_render_header(
                         . '</a>';
             }
         }
+    }
+    $previewUrl = (string) ($model['public_preview_url'] ?? '');
+    if ($user && $bodyClass === 'public-page' && $previewUrl !== '') {
+        $previewLabel = $anonymousPreview
+            ? t('public.preview.exit', 'Exit preview')
+            : t('public.preview.view_as_anonymous', 'View as anonymous');
+        $previewHelp = $anonymousPreview
+            ? t('public.preview.active_title', 'Anonymous preview active.')
+            : t('public.preview.help', 'Review this gallery without inline admin controls, admin navigation, hidden photos, or admin-only visibility.');
+        echo '<a class="public-header-action public-header-preview'
+            . ($anonymousPreview ? ' is-preview-active' : '')
+            . '" data-public-anonymous-preview title="' . e($previewHelp)
+            . '" href="' . e($previewUrl) . '">'
+            . '<span class="public-header-action-icon" aria-hidden="true">'
+            . '<svg class="admin-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            . 'stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7'
+            . '-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'
+            . '</svg></span><span class="public-header-action-label">'
+            . e($previewLabel) . '</span></a>';
     }
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {

@@ -142,22 +142,18 @@ function view_render_public_subgallery_date_sort_toolbar(array $viewModel): void
 }
 
 /**
- * Render the compact admin-only reorder toolbar for one visible pagination page.
+ * Render the admin-only reorder data and live feedback for one pagination page.
  *
  * @param array{kind?:string,endpoint?:string,gallery_id?:int,offset?:int,
  *     visible_count?:int,total_count?:int,csrf_token?:string} $viewModel
  *     Prepared visible-page identities, mutation destination and CSRF token.
- * @return void Emits the reorder toolbar for visible items.
+ * @return void Emits the existing drag owner with no idle instruction row.
  */
 function view_render_public_page_reorder_toolbar(array $viewModel): void
 {
     $kind = (string) ($viewModel['kind'] ?? 'photo');
-    $label = $kind === 'gallery'
-        ? t('public.reorder.subgalleries', 'subgalleries')
-        : t('public.reorder.photos', 'photos');
-
     echo
-        '<div class="public-reorder-toolbar public-gallery-control-bar" data-public-reorder-toolbar data-reorder-kind="'
+        '<div class="public-reorder-toolbar" data-public-reorder-toolbar data-reorder-kind="'
             . e($kind)
             . '" data-reorder-url="'
             . e((string) ($viewModel['endpoint'] ?? ''))
@@ -173,24 +169,7 @@ function view_render_public_page_reorder_toolbar(array $viewModel): void
             . e((string) ($viewModel['csrf_token'] ?? ''))
             . '">';
     echo
-        '<div class="public-gallery-control-heading"><span class="public-gallery-control-icon" aria-hidden="true">⠿</span><strong>'
-            . e(t('public.reorder.move_visible_items', 'Move visible {items}', [
-                'items' => $label,
-            ]))
-            . '</strong><details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
-            . e(t('public.reorder.move_visible_items', 'Move visible {items}', [
-                'items' => $label,
-            ]))
-            . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
-            . e(t(
-                'public.reorder.visible_page_help',
-                'Drag only the cards shown on this page. Other pagination pages are not touched.',
-            ))
-            . '</div></details></div>';
-    echo
-        '<span class="public-reorder-status" data-public-reorder-status aria-live="polite">'
-            . e(t('public.reorder.ready', 'Ready.'))
-            . '</span>';
+        '<span class="public-reorder-status" data-public-reorder-status data-state="idle" aria-live="polite"></span>';
     echo '</div>';
 }
 
@@ -403,59 +382,6 @@ function view_render_picture_manager_toolbar(array $viewModel): void
             . '</p>';
     echo '</div>';
     echo '</section>';
-}
-
-/**
- * Render the administrator anonymous-preview control.
- *
- * @param array{is_preview?:bool,target_url?:string} $viewModel Prepared
- *     visitor-preview state and canonical entry or exit destination.
- * @return void Emits the anonymous-preview status and action link.
- */
-function view_render_public_gallery_preview_toolbar(array $viewModel): void
-{
-    $isPreview = !empty($viewModel['is_preview']);
-    echo '<div class="anonymous-preview-toolbar public-gallery-control-bar">';
-    if ($isPreview) {
-        echo
-            '<div class="public-gallery-control-heading"><span class="public-gallery-control-icon" aria-hidden="true">◉</span><strong role="status">'
-                . e(t(
-                    'public.preview.active_title',
-                    'Anonymous preview active.',
-                ))
-                . '</strong><details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
-                . e(t('public.preview.active_title', 'Anonymous preview active.'))
-                . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
-                . e(t(
-                    'public.preview.active_message',
-                    'Admin controls are hidden and visitor visibility rules are being applied.',
-                ))
-                . '</div></details></div>';
-        echo
-            '<a class="button" href="'
-                . e((string) ($viewModel['target_url'] ?? ''))
-                . '"><span class="public-gallery-control-icon" aria-hidden="true">↶</span>'
-                . e(t('public.preview.exit', 'Exit preview'))
-                . '</a>';
-    } else {
-        echo '<div class="public-gallery-control-heading">';
-        echo
-            '<a class="button secondary" href="'
-                . e((string) ($viewModel['target_url'] ?? ''))
-                . '"><span class="public-gallery-control-icon" aria-hidden="true">◉</span>'
-                . e(t('public.preview.view_as_anonymous', 'View as anonymous'))
-                . '</a>';
-        echo
-            '<details class="public-gallery-control-help" data-gallery-media-widget><summary aria-label="'
-                . e(t('public.preview.view_as_anonymous', 'View as anonymous'))
-                . '"><span aria-hidden="true">?</span></summary><div class="public-gallery-control-help-panel" data-gallery-media-panel>'
-                . e(t(
-                    'public.preview.help',
-                    'Review this gallery without inline admin controls, admin navigation, hidden photos, or admin-only visibility.',
-                ))
-                . '</div></details></div>';
-    }
-    echo '</div>';
 }
 
 /**

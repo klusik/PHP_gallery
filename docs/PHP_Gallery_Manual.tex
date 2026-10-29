@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.148.1}
+\newcommand{\version}{0.148.2}
 \newcommand{\manualdate}{29 October 2026}
 
 \hypersetup{
@@ -972,14 +972,12 @@ A~signed-in administrator can~also reorder the~direct subgallery cards on~the~pu
 
 When an~administrator is~signed in~while viewing a~public gallery, direct child galleries that have~a~filled \ui{From} date can~also be~preview-sorted from~oldest to~newest or~newest to~oldest. Child galleries without a~usable date keep their existing positions. The~preview is~temporary until \ui{Save} is~chosen; saving writes the~result as~the~real sibling order seen by~all visitors. At~least two dated direct child galleries are~required before the~date order can~be~saved.
 
-The~public anonymous-preview, date-sort and~reorder bars use compact translucent
-Theme surfaces. Short actions remain inline when space permits and~wrap
-on~narrow screens with larger touch targets. Plain question marks open
-explanations beside their controls; Escape or~an~outside click closes them.
-Native disclosures remain usable without JavaScript. Active anonymous preview
-stays visibly labelled. Drag readiness is~quiet after setup; progress and~errors
-remain visible. Date sorting still requires \ui{Save this order} to~persist
-its~preview for~all visitors.
+The~public header provides \ui{View as anonymous} for~a~signed-in administrator
+and~\ui{Exit preview} while visitor rules are~active. It~preserves the~current
+public destination and~locale. There is~no~separate preview or~idle reorder
+instruction bar. Card handles retain drag ordering; progress, saved results
+and~failures remain visible when relevant. Date sorting keeps its~compact
+translucent bar, anchored question-mark help and~explicit \ui{Save this order}.
 
 \subsection{Delete a~gallery thoughtfully}
 \index{gallery!deletion}
@@ -2478,6 +2476,13 @@ Navigation, slideshow start, close, and~reopen return the~viewer to~a~centered 1
 Zoom affects presentation only. It~does not~alter the~stored photograph or~bypass media authorization. Password, share-link, NSFW, Smart Gallery, map, voting, pagination, and~lightbox metadata rules continue to~apply.
 
 \subsection{EXIF and~map policy}
+
+Gallery maps and~the~lightbox map share compact translucent Theme chrome,
+a~small title and~transparent Close action. Reset, zoom and~the~native
+\ui{Keep current centered} switch wrap within one map toolbar. Fullscreen
+and~slideshow split maps retain their pane geometry and~use the~same controls.
+Narrow/touch actions have larger targets; route rendering, viewport memory,
+provider attribution, Escape and~focus return remain available.
 
 EXIF is~information many cameras and~phones save inside a~photograph. It~can~include capture date, camera, lens, exposure, dimensions, orientation, and~GPS coordinates. PHP Gallery can~use this information for~date suggestions, maps, technical details, ordering assistance, and~duplicate review.
 

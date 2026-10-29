@@ -1116,7 +1116,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.148.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.148.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4158,8 +4158,14 @@ checks are optional reproduction steps only.
 Manual browser coverage remains required because the repository has no
 production browser-automation dependency:
 
-The registered `public_ux_browser_test.mjs` also covers public Admin preview,
-date-sort and reorder bars with the production public stylesheet cascade.
+The registered `public_ux_browser_test.mjs` also covers public header preview,
+date-sort help and reorder feedback with the production stylesheet cascade.
+Idle reordering reserves no row; progress and errors remain visible. The shared
+header rendering fixture checks native preview/exit URLs and actual-admin-only
+visibility, including the anonymous-preview exit action.
+Map checks retain viewport bounds, compact glass chrome, the native follow
+switch and 44px narrow controls. The map navigation fixture retains normal and
+fullscreen/lightbox behavior; manual review also includes slideshow split maps.
 Narrow layouts retain 44px actions, wrapping labels and visible failure feedback.
 Help uses the production media-panel owner and must remain viewport-bounded,
 avoid moving its bar, leave the page usable, close on outside click/Escape and

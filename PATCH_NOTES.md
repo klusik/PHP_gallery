@@ -1,5 +1,64 @@
 # Patch notes
 
+## Version 0.148.2
+
+Moved public preview controls into the signed-in public header and refreshed
+shared map controls with compact translucent styling, while preserving map
+navigation and access behavior.
+
+### Highlights
+
+#### Public preview and reorder controls
+
+- Moved anonymous-preview entry and exit controls into the public header on
+  Home, Gallery, Smart Gallery, and Tag pages.
+- Removed the idle reorder instruction row while retaining reorder handles and
+  live save and error feedback.
+
+#### Shared map controls
+
+- Added compact translucent styling for gallery, lightbox, fullscreen, and
+  slideshow map controls, including narrow-screen touch targets and
+  forced-colors support.
+
+### Technical Details
+
+#### Backend
+
+- Prepared same-installation preview and exit URLs in
+  `app/controllers/shared_layout.php`.
+- Removed the separate preview toolbar renderer and its gallery-page wiring.
+
+#### Frontend
+
+- Updated `app/views/layout.php` and
+  `app/views/public_gallery_controls.php` for header preview controls and
+  reorder feedback.
+- Updated `public/assets/styles/public-shared.css`,
+  `public/assets/styles/lightbox.css`, and
+  `public/assets/styles/utilities.css` for shared map and reorder styling.
+
+#### Tests and documentation
+
+- Updated `tests/fixtures/public_ux.html`,
+  `tests/theme_public_css_cascade_test.php`, and
+  `tests/public_gallery_mvc_boundary_test.php` for preview, reorder feedback,
+  map controls, and responsive styling.
+- Updated `TESTING.md`, `docs/ADMIN_DESIGN.md`, and the English, Czech, German,
+  and Swedish manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Gallery and map navigation and access behavior did not change.
+
+#### For administrators
+
+- Made preview entry and exit available from the signed-in public header.
+- Removed the idle reorder instruction while keeping save progress and errors
+  visible.
+
 ## Version 0.148.1
 
 Restyled the public gallery’s administrative preview, date-sort, and reorder

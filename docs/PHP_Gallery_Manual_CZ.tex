@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.148.1}
+\newcommand{\version}{0.148.2}
 \newcommand{\manualdate}{29.~října~2026}
 
 \hypersetup{
@@ -965,14 +965,12 @@ Přihlášený správce může také měnit pořadí karet přímých podgaleri�
 
 Přihlášený správce prohlížející veřejnou galerii může také dočasně seřadit přímé podřízené galerie s~vyplněným datem \ui{Od} od nejstarších po nejnovější nebo opačně. Podřízené galerie bez použitelného data zůstávají na svých místech. Náhled je dočasný, dokud nezvolíte \ui{Uložit}; uložení zapíše výsledek jako skutečné pořadí sourozenců zobrazované všem návštěvníkům. Pro uložení pořadí podle data jsou nutné alespoň dvě přímé podřízené galerie s~datem.
 
-Veřejné lišty anonymního náhledu, řazení podle data a~změny pořadí používají
-kompaktní průsvitné plochy vzhledu. Krátké akce zůstávají vedle sebe, pokud je
-místo; na~úzké obrazovce se~zalamují a~mají větší dotykové plochy. Prosté
-otazníky otevírají vysvětlení u~ovládacího prvku; Escape nebo kliknutí mimo je
-zavře. Nativní rozbalení funguje i~bez JavaScriptu. Aktivní anonymní náhled
-zůstává viditelně označený. Připravenost přetahování je po~inicializaci skrytá,
-ale průběh a~chyby zůstávají viditelné. Náhled řazení podle data se~pro všechny
-návštěvníky zapíše až~akcí \ui{Uložit toto pořadí}.
+Veřejné záhlaví nabízí přihlášenému správci \ui{Zobrazit jako anonymní}
+a~při aktivních návštěvnických pravidlech \ui{Ukončit náhled}. Zachovává
+aktuální veřejný cíl a~jazyk. Samostatná lišta náhledu ani nečinné informace
+o~přesouvání nezabírá místo. Úchyty karet nadále mění pořadí; průběh,
+výsledek uložení a~chyby se~zobrazí podle potřeby. Řazení podle data zachovává
+kompaktní průsvitnou lištu, nápovědu u~otazníku a~výslovné uložení pořadí.
 
 \subsection{Promyšlené odstranění galerie}
 \index{g00040@galerie!o00121@odstranění}
@@ -2464,6 +2462,13 @@ Navigace, zahájení prezentace, zavření a~opětovné otevření vracejí proh
 Přiblížení ovlivňuje pouze prezentaci. Nemění uloženou fotografii ani neobchází oprávnění médií. Pravidla hesel, odkazů pro sdílení, NSFW, chytrých galerií, map, hlasování, stránkování a~metadat lightboxu nadále platí.
 
 \subsection{Pravidla EXIF a~map}
+
+Mapy galerie a~lightboxu sdílejí kompaktní průsvitný vzhled, malý nadpis
+a~průhlednou akci zavření. Obnovení, zoom a~nativní přepínač centrování
+aktuální polohy se~zalamují v~jedné mapové liště. Mapa v~celoobrazovkovém
+režimu a~slideshow zachovává rozdělení ploch a~používá stejné ovládání.
+Úzké a~dotykové rozhraní má větší cíle; trasy, paměť výřezu, uvedení
+poskytovatele, Escape a~návrat zaměření zůstávají zachovány.
 
 EXIF jsou informace, které mnoho fotoaparátů a~telefonů ukládá uvnitř fotografie. Mohou zahrnovat datum pořízení, fotoaparát, objektiv, expozici, rozměry, orientaci a~souřadnice GPS. PHP Gallery je může používat pro návrhy dat, mapy, technické podrobnosti, pomoc s~řazením a~kontrolu duplicit.
 

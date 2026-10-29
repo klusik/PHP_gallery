@@ -39,6 +39,7 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\anonymous_preview_url;
 use function Gallery\Core\asset_url;
 use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
@@ -450,7 +451,7 @@ function shared_layout_admin_chrome_model(): array
  * @param string $scriptName Current front-controller script name.
  * @param string $page Current route/page identifier; visual background editor metadata is document-only for Home and Gallery routes.
  * @param string $headExtras Already-buffered trusted head extras.
- * @return array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,visit_progress?:bool,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} Prepared header assets and policy; unreadable optional overrides use an empty public URL, and preview background metadata is populated only for active, allowed Home/Gallery document requests.
+ * @return array{user?:array{id?:int|string,username?:string,email?:string|null}|null,anonymous_preview?:bool,public_preview_url?:string,site_name?:string,theme?:array<string,string|int|bool>,body_class?:string,page_width_class?:string,active_language?:string,favicon_url?:string|null,favicon_version?:string,custom_css_url?:string,custom_css_version?:int,custom_css_overrides_url?:string,stylesheet_urls?:list<string>,head_extras?:string,canonical_url?:string,dev_mode_active?:bool,branding?:array{banner_url:string,logo_url:string,separator_url:string},visual_background?:array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string}|null,language_selector?:array{enabled:bool,classes?:string,style?:string,show_codes?:bool,show_names?:bool,show_flags?:bool,items:list<array{code:string,name:string,flag_asset:string,active:bool,url:string}>},favorite_gallery_items?:list<array{id:int|string,title:string,url:string,gallery?:array<string,scalar|null>|null}>,visit_progress?:bool,viewer_accounts_enabled?:bool,viewer_logged_in?:bool,viewer_open_registration?:bool,update_pending?:bool,update_label?:string,admin_test_runs_enabled?:bool,admin_test_run_active?:bool,admin_login_return?:string,admin_chrome?:array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool}} Prepared header assets and policy; unreadable optional overrides use an empty public URL, and preview background metadata is populated only for active, allowed Home/Gallery document requests.
  */
 function shared_layout_header_model(
     ?array $currentGallery,
@@ -535,6 +536,14 @@ function shared_layout_header_model(
     return [
         'user' => is_array($user) ? $user : null,
         'anonymous_preview' => $anonymousPreview,
+        'public_preview_url' => $user && $bodyClass === 'public-page'
+            && !$visualPreview
+            && in_array($page, ['home', 'gallery', 'smart_gallery', 'tag'], true)
+            ? anonymous_preview_url(
+                current_login_return_target(),
+                !$anonymousPreview,
+            )
+            : '',
         'site_name' => $siteName,
         'theme' => $theme,
         'body_class' => $bodyClass,

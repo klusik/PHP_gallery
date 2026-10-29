@@ -17,9 +17,9 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  */
-/* Compact public Admin bars follow the visitor bell/PDF/music surface.
-   Type: CSS lengths/colors. Units: px, rem, sRGB. Scope: these three bars.
-   Consumers: preview, date-sort and visible-page reorder controls and help.
+/* The date-sort bar follows the visitor bell/PDF/music surface.
+   Type: CSS lengths/colors. Units: px, rem, sRGB. Scope: the date-sort bar.
+   Consumers: date-sort controls and help.
    Rationale: 42% Theme backing and 12px blur retain the approved glass surface;
    28px desktop / 44px narrow or coarse targets balance density and access. */
 .public-page .public-gallery-control-bar {
@@ -106,7 +106,6 @@
     box-shadow: inset 0 -1px color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
-.public-page .anonymous-preview-toolbar .button,
 .public-page .public-gallery-control-bar .public-subgallery-sort-save-button {
     border-color: color-mix(in srgb, var(--ink) 20%, transparent);
 }
@@ -171,6 +170,19 @@
 .public-page .public-gallery-control-bar :is(a, button, summary):focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+}
+
+/* Reordering keeps its existing mutation owner and live status, without an
+   idle instruction row. Progress and failures reappear in the same list. */
+.public-page .public-reorder-toolbar {
+    display: flex;
+    margin: .35rem 0;
+}
+
+.public-page .public-reorder-toolbar:has(
+    > .public-reorder-status[data-state="idle"]
+) {
+    display: none;
 }
 
 .public-page .public-reorder-status {

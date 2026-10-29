@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.148.1}
+\newcommand{\version}{0.148.2}
 \newcommand{\manualdate}{29.~Oktober~2026}
 
 \hypersetup{
@@ -1013,15 +1013,12 @@ Ein angemeldeter Administrator kann auch die direkten Untergaleriekarten auf der
 
 Betrachtet ein angemeldeter Administrator eine öffentliche Galerie, können direkte Untergalerien mit ausgefülltem \ui{Von}-Datum auch vorläufig vom ältesten zum neuesten oder vom neuesten zum ältesten Datum sortiert werden. Untergalerien ohne brauchbares Datum behalten ihre Positionen. Die Vorschau ist vorübergehend, bis \ui{Speichern} gewählt wird; das Speichern schreibt das Ergebnis als tatsächliche Geschwisterreihenfolge für alle Besucher. Mindestens zwei datierte direkte Untergalerien sind erforderlich, bevor die Datumsreihenfolge gespeichert werden kann.
 
-Die öffentlichen Leisten für anonyme Vorschau, Datumssortierung und Reihenfolge
-verwenden kompakte durchscheinende Designflächen. Kurze Aktionen bleiben bei
-Platz nebeneinander; auf schmalen Bildschirmen umbrechen sie mit größeren
-Berührungsflächen. Einfache Fragezeichen öffnen Erklärungen neben dem jeweiligen
-Element; Escape oder ein Klick außerhalb schließt sie. Native Aufklappelemente
-bleiben ohne JavaScript nutzbar. Die aktive anonyme Vorschau bleibt sichtbar
-gekennzeichnet. Die Ziehbereitschaft ist nach der Initialisierung ausgeblendet;
-Fortschritt und Fehler bleiben sichtbar. Erst \ui{Diese Reihenfolge speichern}
-speichert die Datumsvorschau für alle Besucher.
+Der öffentliche Kopfbereich bietet angemeldeten Administratoren die anonyme
+Vorschau und bei aktiven Besucherregeln deren Beendigung. Öffentliches Ziel
+und Sprache bleiben erhalten. Eine eigene Vorschauzeile und eine untätige
+Sortierinformation entfallen. Kartengriffe behalten die Reihenfolgefunktion;
+Fortschritt, Speicherergebnis und Fehler erscheinen bei Bedarf. Datumsortierung
+behält die kompakte transparente Leiste, verankerte Hilfe und explizites Speichern.
 
 \subsection{Eine Galerie bedacht löschen}
 \index{g00117@Galerie!l00166@Löschen}
@@ -2586,6 +2583,13 @@ Navigation, Diashow-Start, Schließen und erneutes Öffnen setzen den Betrachter
 Zoom betrifft nur die Präsentation. Er verändert das gespeicherte Foto nicht und umgeht keine Medienautorisierung. Regeln für Passwort, Freigabelink, NSFW, Smart Galleries, Karten, Abstimmung, Seitennavigation und Lightbox-Metadaten gelten weiterhin.
 
 \subsection{EXIF- und Kartenrichtlinie}
+
+Galerie- und Lightbox-Karten teilen kompakte durchscheinende Designflächen,
+einen kleinen Titel und eine transparente Schließen-Aktion. Zurücksetzen,
+Zoom und der native Schalter zum Zentrieren umbrechen in einer Kartenleiste.
+Vollbild- und Diashow-Karten behalten ihre geteilte Geometrie und dieselben
+Steuerungen. Schmale und Touch-Ansichten erhalten größere Ziele; Routen,
+Ausschnittspeicher, Quellenangabe, Escape und Fokusrückgabe bleiben erhalten.
 
 EXIF sind Informationen, die viele Kameras und Telefone in einem Foto speichern. Sie können Aufnahmedatum, Kamera, Objektiv, Belichtung, Abmessungen, Orientierung und GPS-Koordinaten enthalten. PHP Gallery kann sie für Datumsvorschläge, Karten, technische Details, Sortierhilfen und Duplikatprüfung verwenden.
 

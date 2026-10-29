@@ -798,9 +798,6 @@ function cms_gallery(): void
     ob_start();
     render_public_gallery_branding_separator($gallery, $publicOnly);
     $brandingSeparatorHtml = (string) ob_get_clean();
-    ob_start();
-    render_public_gallery_preview_toolbar($gallery);
-    $previewToolbarHtml = (string) ob_get_clean();
 
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled =
@@ -1324,7 +1321,6 @@ function cms_gallery(): void
         'notice' => $publicNotice,
         'hero' => $heroViewModel + ['cooperative_links' => $cooperativeLinks],
         'branding_separator_html' => $brandingSeparatorHtml,
-        'preview_toolbar_html' => $previewToolbarHtml,
         'search_bar' => public_search_bar_view_model($gallery),
         'picture_manager_toolbar_html' => $pictureManagerToolbarHtml,
         'has_list_content' =>
