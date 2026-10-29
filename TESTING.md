@@ -604,6 +604,23 @@ admission, an initially dormant recorder, live recording pause/resume without
 stopping photo uploads, rejected switch changes during finalization, and invalid
 report-language rollback. Configuration fixtures save through one store and
 reload through a new store to preserve existing paths and local choices.
+The primary Watcher/Import action fixtures cover localized Begin/Finish
+game/flight wording for both saved-key states in all four interface languages.
+Native presence fixtures cover simulator start/exit/restart, unavailable DLLs,
+empty handles, handle cleanup and observer cancellation without telemetry
+requests. `test_game_presence.py` covers SimConnect priority, process-only MSFS,
+context replacement on game exit, four-language phrases, original/Legendary
+Mass Effect versus Andromeda, shared-name/multiple-game ambiguity, catalog
+provenance counts and profile additions/malformed rows. Native adapter fixtures
+retain exact limited-access masks, SID ownership, inaccessible-process rejection
+and handle cleanup. The real current-process visibility check runs on Windows
+and reports its platform skip elsewhere; it uses existing account privileges.
+Live simulator/game detection, standard-account access on the target PC and
+installed Windows layout remain manual acceptance coverage.
+The same context fixtures exercise reversible SimBrief button/settings/status
+visibility and game/flight Abandon control, confirmation, phase and completion
+text in all four languages, preserving the saved-key admission and cancellation
+behavior. SimBrief context changes hide controls without clearing a loaded plan.
 Scrollable-page fixtures cover showing a scrollbar for overflow and reclaiming
 its width when the whole page fits. During Windows visual acceptance, inspect
 borderless contextual icons and readable tooltips, matching rounded-panel
@@ -1116,7 +1133,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.148.2. Release verification uses the
+This guide applies to PHP Gallery Version 0.148.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.148.2}
+\newcommand{\version}{0.148.3}
 \newcommand{\manualdate}{29 October 2026}
 
 \hypersetup{
@@ -1259,7 +1259,27 @@ in \filepath{manual-report.json}; local creation does not resolve pending
 remote delivery. Cancellation retains finished editions. Shutdown/update drains
 this worker. Windows layout and live acceptance remain a~separate manual check.
 
-The~\ui{Finish flight} button sits below \ui{Target gallery}; one click
+The~Begin/Finish actions in~Watcher and~Import use \ui{Begin flight} and~
+\ui{Finish flight} when SimConnect is~available. If~it~fails, known game
+processes owned by~the~same Windows account provide an~optional fallback,
+without admin rights. A~Microsoft Flight Simulator process also selects flight
+wording. Otherwise the~labels are~\ui{Begin game}/\ui{Finish game}, with localized
+easter eggs for~Cyberpunk 2077, the~Mass Effect trilogy, Skyrim and~Dragon Age.
+Unknown or~ambiguous games keep general wording. The~background observer checks
+every three seconds, even before watching starts or~with recording/UTC sync
+disabled. It~opens/closes SimConnect without telemetry or~simulator writes;
+process names stay local. Actions, reports and~key handling remain unchanged.
+SimBrief's Load/Unload control, settings icon and~status appear only for~a~detected
+flight; hiding retains the~loaded plan. Outside a~flight context, Watcher,
+Import and~progress use \ui{Abandon game} with matching confirmation and~status
+text. The~existing local cleanup leaves the~game running.
+The~bundled offline process catalog is~broad but~incomplete. Add exact process
+names and~optional four-language phrases in~
+\filepath{\%APPDATA\%/PHPGalleryUploader/game-contexts.json}, then restart;
+no~rebuild is~needed. The~schema, source and~refresh instructions are~in~
+\filepath{docs/WINAPP_GAME_CONTEXTS.md}.
+
+The~Finish button sits below \ui{Target gallery}; one click
 authorizes completion and~key revocation. After failure, \ui{Keep locally and revoke key} and
 Retry retain the~same connection's confirmed intent in~this app session.
 Cancelling revocation, changing credentials, or~restarting clears that consent.
@@ -1271,7 +1291,7 @@ After confirmation, workers stop and~in-flight requests settle; pending delivery
 is~abandoned and~the~saved key is~removed from this PC without contacting
 the~server. Recordings, photograph sources, PDFs and~receipts remain local.
 It~also works with no~pending sessions. The~main action becomes
-\ui{Begin flight}. A~still-valid server key needs separate revocation in~Admin.
+the~Begin action. A~still-valid server key needs separate revocation in~Admin.
 Submitted revocation must settle first; shutdown or~configuration-save failure
 keeps the~key and~recovery available for~retry.
 
@@ -1285,7 +1305,7 @@ server status. Old plans, bindings, and~raw data remain intact. Cancellation
 retains finished editions. Protocol errors include redacted HTTP/action/type
 context and~a~bounded response excerpt.
 
-Without a~saved key the~main action reads \ui{Begin flight} and opens API
+Without a~saved key the~main Begin action opens API
 settings. Expand a~flight and, when present, its version to~see PDFs;
 double-click opens the~default
 viewer. \ui{Open folder with PDFs} opens only the~PDF folder. Filenames contain

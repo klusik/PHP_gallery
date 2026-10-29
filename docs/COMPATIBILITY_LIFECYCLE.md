@@ -1,5 +1,21 @@
 # Compatibility lifecycle and retirement register
 
+## WinApp optional game context
+
+`game_presence.py` owns label selection: SimConnect first, then offline exact
+process rules restricted by `windows_game_processes.py` to the current account's
+SID and existing limited query rights. Missing/denied APIs, catalogs or identities,
+unknown games and ambiguous matches permanently retain general game wording;
+they never gate watching, recording, reports or key handling. The bundled
+Discord snapshot is incomplete; profile JSON additions require no app rebuild.
+These fallbacks support ordinary games and PCs without SimConnect. No usage
+evidence justifies retirement. Hosted fixtures own deterministic behavior;
+the maintainer reported Cyberpunk detection during watcher operation on
+2026-10-29, while exact game build/account rights and deployment prevalence
+remain unknown. SimBrief controls follow cached flight detection without
+unloading plans, and local abandonment uses matching game/flight vocabulary.
+Live simulator transitions and the revised control layout remain manual checks.
+
 ## Gallery photo-card format and Display transport compatibility
 
 The physical-gallery photo-card format defaults to the existing responsive

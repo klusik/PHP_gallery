@@ -1,5 +1,85 @@
 # Patch notes
 
+## Version 0.148.3
+
+Updated the Windows companion to 0.11.0 with game-aware action labels,
+optional offline process detection and localized contextual phrases, while
+preserving upload, recording, report and API-key workflows.
+
+### Highlights
+
+#### Contextual Windows companion actions
+
+- Added a read-only SimConnect presence check that selects the existing
+  Begin flight and Finish flight labels when a simulator is available.
+- Added a fallback for known game processes owned by the same Windows
+  account, using limited process and token queries without elevation.
+  Microsoft Flight Simulator processes also retain flight wording when
+  SimConnect is unavailable.
+- Added localized Begin/Finish phrases for Cyberpunk 2077, the Mass Effect
+  trilogy, Skyrim and Dragon Age. Unknown games and ambiguous matches
+  retained general Begin game and Finish game wording.
+- Hid the SimBrief Load/Unload button, settings icon and status outside a
+  detected flight context, and restored them when a flight was detected
+  without unloading a saved plan.
+- Updated Abandon controls, confirmation, progress and completion messages
+  to use game or flight wording consistently in all four interface
+  languages. Local abandonment retained its existing cleanup and left
+  the game running.
+
+#### Extensible offline game catalog
+
+- Added a dated offline catalog with 10,405 games and 10,888 Windows
+  executable rules, filtered from Discord's public detectable-game list.
+- Added reviewed process and phrase overrides, plus optional
+  `%APPDATA%\PHPGalleryUploader\game-contexts.json` additions that take
+  effect after an app restart without rebuilding.
+
+### Technical Details
+
+#### Windows companion
+
+- Added `winapp/uploader/game_presence.py` for background presence
+  observation and cached context, `winapp/uploader/game_context.py` for
+  offline matching, and `winapp/uploader/windows_game_processes.py`
+  for same-account process inspection and native handle cleanup.
+- Added `winapp/uploader/resources/game-processes.json` with source
+  provenance and `winapp/uploader/resources/game-contexts.json` with
+  reviewed overrides. Matching used exact executable basenames; launchers,
+  shared runtimes and ambiguous names could not establish a specific game.
+- Added `scripts/import_winapp_game_catalog.py` for deliberate catalog
+  refreshes from a complete saved source response. Installed apps made no
+  catalog downloads and did not log, save or upload process inventories.
+- Updated `winapp/gallery_watch_upload.pyw`,
+  `winapp/uploader/flight_ui.py` and the shared translations for
+  contextual controls, preserving the existing action handlers and
+  saved-key admission.
+
+#### Tests and documentation
+
+- Added `winapp/tests/test_game_presence.py` and extended the existing
+  SimConnect, redesign and flight-UI fixtures for fallback priority,
+  account isolation, denied access, cleanup, ambiguity, profile overrides,
+  language variants and reversible SimBrief visibility.
+- Updated `docs/WINAPP_GAME_CONTEXTS.md`, `winapp/README.md`,
+  `TESTING.md`, the compatibility register and all four manual sources.
+
+### User Impact
+
+#### For desktop users
+
+- Made the companion's primary actions and local abandonment fit the
+  detected game or flight, including while Watcher was running.
+- Kept detection optional: unavailable APIs, unreadable process identities
+  and unknown or ambiguous games retained general wording.
+- Preserved watching, uploads, flight recording, report delivery and
+  credential handling.
+
+#### For visitors and administrators
+
+- Kept public gallery and web administration behavior and database schema
+  unchanged.
+
 ## Version 0.148.2
 
 Moved public preview controls into the signed-in public header and refreshed

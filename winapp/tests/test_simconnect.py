@@ -30,6 +30,7 @@ import struct
 import sys
 import tempfile
 import threading
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -40,6 +41,7 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader import simconnect_location as SIM
+from uploader import game_presence as PRESENCE
 from uploader.diagnostics import redact_text
 
 
@@ -63,6 +65,92 @@ def packet_header(packet, receive_id):
     packet.dwVersion = 0
     packet.dwID = receive_id
     return packet
+
+
+class SimulatorPresenceTests(unittest.TestCase):
+    """Keep label detection independent of telemetry and native side effects."""
+
+    def test_presence_reconnects_and_closes_without_requesting_data(self) -> None:
+        """Observe start, exit and restart using only open/close operations.
+
+        Returns:
+            None: Every successful probe closes its handle, while a failed
+                open clears availability without data or simulator writes.
+        """
+        observer = PRESENCE.GamePresence(lambda: "saved-runtime.dll", WINAPP_DIR)
+        dll = FakeSimConnectDLL()
+        with (
+            mock.patch.object(PRESENCE, "os", types.SimpleNamespace(name="nt")),
+            mock.patch.object(
+                PRESENCE.SimConnectLocationClient, "resolve_dll_path",
+                return_value=(Path("runtime.dll"), []),
+            ),
+            mock.patch.object(PRESENCE.ctypes, "WinDLL", return_value=dll, create=True),
+        ):
+            self.assertTrue(observer.probe())
+            dll.open_result = -2147467259  # Native E_FAIL: simulator unavailable.
+            self.assertFalse(observer.probe())
+            dll.open_result = 0
+            self.assertTrue(observer.probe())
+        self.assertEqual(2, dll.close_count)
+        self.assertEqual(
+            ["open", "close", "open", "open", "close"],
+            [name for name, _arguments in dll.calls],
+        )
+
+    def test_unavailable_runtime_and_empty_handle_use_general_wording(self) -> None:
+        """Treat missing runtimes, load failures and empty handles as absent.
+
+        Returns:
+            None: Optional presence failures remain false and never close an
+                invalid handle or require a simulator for ordinary games.
+        """
+        observer = PRESENCE.GamePresence(lambda: "", WINAPP_DIR)
+        with (
+            mock.patch.object(PRESENCE, "os", types.SimpleNamespace(name="nt")),
+            mock.patch.object(
+                PRESENCE.SimConnectLocationClient, "resolve_dll_path",
+                return_value=(None, []),
+            ) as resolve,
+            mock.patch.object(PRESENCE.ctypes, "WinDLL", create=True) as load,
+        ):
+            self.assertFalse(observer.probe())
+            load.assert_not_called()
+            resolve.return_value = (Path("runtime.dll"), [])
+            load.side_effect = OSError("runtime unavailable")
+            self.assertFalse(observer.probe())
+            load.side_effect = None
+            # Successful HRESULT alone is insufficient without a native handle.
+            load.return_value.SimConnect_Open.return_value = 0
+            self.assertFalse(observer.probe())
+            load.return_value.SimConnect_Close.assert_not_called()
+
+    def test_observer_clears_cached_presence_when_stopped(self) -> None:
+        """Retain changing probe results only until observer cancellation.
+
+        Returns:
+            None: Start/exit/restart observations reach the cache, bounded
+                waits use the declared interval, and teardown clears it.
+        """
+        observer = PRESENCE.GamePresence(lambda: "", WINAPP_DIR)
+        observer.cancelled = mock.Mock()
+        observer.cancelled.is_set.side_effect = [False, False, False, True]
+        observed = []
+        observer.cancelled.wait.side_effect = lambda _delay: observed.append(
+            observer.available
+        )
+        with (
+            mock.patch.object(observer, "probe", side_effect=[True, False, True]),
+            mock.patch.object(PRESENCE, "current_user_game_processes", return_value=set()),
+        ):
+            observer.run()
+        self.assertEqual([True, False, True], observed)
+        self.assertFalse(observer.available)
+        observer.cancelled.wait.assert_has_calls([
+            mock.call(PRESENCE.PRESENCE_POLL_SECONDS)
+        ] * len(observed))
+        observer.stop()
+        observer.cancelled.set.assert_called_once_with()
 
 
 class FakeSimConnectDLL:

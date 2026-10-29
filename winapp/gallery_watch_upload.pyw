@@ -132,6 +132,7 @@ from uploader.models import (
 )
 from uploader.simconnect_location import SimCameraLocation, SimConnectCameraClient, SimulatorInfo
 from uploader.simconnect_time import UtcSyncManager
+from uploader.game_presence import GamePresence
 from uploader.flight_jobs import read_document
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.state_store import (
@@ -4902,7 +4903,8 @@ class WatcherApp:
             RuntimeError: Raised when Tkinter is not available.
 
         Returns:
-            None: Creates the window, settings and idle worker coordinators.
+            None: Creates the window, settings and idle worker coordinators,
+                then starts the read-only game-presence observer.
         """
         if tk is None or ttk is None or filedialog is None or messagebox is None:
             raise RuntimeError("Tkinter is not available in this Python installation.")
@@ -4922,6 +4924,9 @@ class WatcherApp:
         self.job_store = JobStateStore(STATE_PATH, self.config.activity_history_limit)
         self.events: "queue.Queue[Any]" = queue.Queue()
         self.utc_sync = UtcSyncManager(self.emit_utc_activity)
+        self.simulator_presence = GamePresence(
+            lambda: self.config.simconnect_dll_path, CONFIG_DIR
+        )
         self.worker: Optional[WatcherThread] = None
         self.manual_worker: Optional[ManualUploadThread] = None
         self.preflight_worker: Optional[ImportPreflightThread] = None
@@ -5046,6 +5051,7 @@ class WatcherApp:
             revoke_upload_key, self.resume_flight_photos,
         )
         self.build_ui()
+        self.simulator_presence.start()
         self.configure_window_icon()
         self.start_tray_icon()
         self.startup_tray_deadline = (
@@ -5812,7 +5818,8 @@ class WatcherApp:
             parent (tk.Misc): Tkinter frame that receives the controls.
 
         Returns:
-            None: Adds gallery, offline abandonment, folder, UTC and flight controls.
+            None: Adds gallery, offline abandonment, folder, UTC and flight
+                controls, retaining SimBrief widgets for contextual visibility.
         """
         parent.columnconfigure(0, weight=1)
         hero = GlassCard(parent, padding=(14, 8))
@@ -5839,20 +5846,29 @@ class WatcherApp:
             command=self.flight_action,
         )
         self.finish_flight_button.grid(row=0, column=0, sticky="w")
-        ttk.Button(flight_actions, textvariable=self.flights.simbrief_button_var,
+        self.simbrief_button = ttk.Button(
+            flight_actions, textvariable=self.flights.simbrief_button_var,
             command=self.flights.toggle_simbrief,
-        ).grid(row=0, column=1, padx=(6, 0))
-        icon_button(flight_actions, "settings",
+        )
+        self.simbrief_button.grid(row=0, column=1, padx=(6, 0))
+        self.simbrief_settings_button = icon_button(
+            flight_actions, "settings",
             lambda: self.flights.load_simbrief(change_identity=True),
             self.flights.text("simbrief_identity"),
-        ).grid(row=0, column=2, padx=(4, 0))
+        )
+        self.simbrief_settings_button.grid(row=0, column=2, padx=(4, 0))
         self.abandon_flight_button = ttk.Button(
             flight_actions, text=self.flights.text("abandon"),
             command=self.abandon_flight,
         )
         self.abandon_flight_button.grid(row=0, column=3, padx=(6, 0))
-        ttk.Label(flight_actions, textvariable=self.flights.simbrief_status_var,
-                  style="Muted.TLabel").grid(row=1, column=1, sticky="w", pady=(4, 0))
+        self.simbrief_status_label = ttk.Label(
+            flight_actions, textvariable=self.flights.simbrief_status_var,
+            style="Muted.TLabel",
+        )
+        self.simbrief_status_label.grid(
+            row=1, column=1, sticky="w", pady=(4, 0)
+        )
 
         card = GlassCard(parent, padding=(14, 10))
         card.grid(row=1, column=0, sticky="ew", padx=6, pady=4)
@@ -7495,11 +7511,13 @@ class WatcherApp:
         self.refresh_revoke_button_state()
 
     def refresh_connection_controls(self) -> None:
-        """Refresh connection controls while allowing Revoke to initiate Stop.
+        """Refresh connection controls and cached game-specific wording.
 
         Returns:
             None: Displays active work, keeps Finish available and enables
-                offline abandonment whenever a saved key is present.
+                offline abandonment whenever a saved key is present. Begin
+                and Finish use the cached SimConnect or process-based context.
+                SimBrief controls are visible only for a detected flight.
         """
         current_url = self.gallery_url_var.get().strip()
         current_key = self.api_key_var.get().strip()
@@ -7529,6 +7547,10 @@ class WatcherApp:
             blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
         self.revoke_blocker_var.set(blocker_text)
         enabled = key_present and credentials_saved
+        action = "finish" if saved_key else "begin"
+        action_label = self.simulator_presence.action_label(
+            action, self.flights.ui_language.get()
+        )
         for attr in ("revoke_button",):
             button = getattr(self, attr, None)
             if button is not None:
@@ -7536,15 +7558,22 @@ class WatcherApp:
         for attr in ("finish_flight_button", "import_revoke_button"):
             button = getattr(self, attr, None)
             if button is not None:
-                button.configure(text=self.flights.text(
-                    "finish_flight" if saved_key else "begin_flight"
-                ))
+                button.configure(text=action_label)
                 button.state(["!disabled"])
         for attr in ("abandon_flight_button", "import_abandon_button"):
             button = getattr(self, attr, None)
             if button is not None:
                 button.configure(text=self.flights.text("abandon"))
                 button.state(["!disabled"] if saved_key else ["disabled"])
+        for attr in (
+            "simbrief_button", "simbrief_settings_button", "simbrief_status_label",
+        ):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                if self.simulator_presence.flight_detected:
+                    widget.grid()
+                else:
+                    widget.grid_remove()
         entry_state = "disabled" if self.api_key_revoke_running else "normal"
         for attr in ("api_key_entry", "gallery_url_entry"):
             entry = getattr(self, attr, None)
@@ -7824,6 +7853,7 @@ class WatcherApp:
         Returns:
             None: Retains the update indicator when shutdown is deferred or
                 canceled, and clears it only before confirmed app teardown.
+                Confirmed teardown also stops the simulator-presence observer.
         """
         self.flights.stop()
         self.utc_sync.stop()
@@ -7892,6 +7922,7 @@ class WatcherApp:
                 return
         self.set_update_available(None)
         self.stop_tray_icon()
+        self.simulator_presence.stop()
         self.root.destroy()
 
     def open_config_folder(self) -> None:

@@ -71,6 +71,9 @@ class FlightUITests(unittest.TestCase):
             open_local_path=Mock(),
             open_log_file=Mock(),
             gallery_label_var=Mock(get=Mock(return_value="Target gallery: Test gallery")),
+            simulator_presence=flight_ui.GamePresence(
+                lambda: "", Path(tempfile.gettempdir())
+            ),
         )
 
     def _ui(self, host: SimpleNamespace) -> flight_ui.FlightUI:
@@ -156,6 +159,36 @@ class FlightUITests(unittest.TestCase):
             ui, flight_ui.FlightUI
         )
         return ui
+
+    def test_abandon_dialog_uses_cached_game_or_flight_wording(self) -> None:
+        """Pass contextual translated text through the real confirmation adapter.
+
+        Returns:
+            None: The game/flight title and confirmation agree in every
+                language; declining them never starts abandonment.
+        """
+        from uploader.game_context import GameContext
+        from uploader.flight_report_translations import tr
+
+        host = self._host()
+        ui = self._ui(host)
+        del ui.text  # Exercise the real adapter instead of the fixture label shim.
+        for language in ("en", "cs", "de", "sv"):
+            ui.ui_language.get.return_value = language
+            for flight in (False, True, False):
+                host.simulator_presence.context = (
+                    GameContext("simconnect", "Flight Simulator", "flight")
+                    if flight else None
+                )
+                with patch.object(flight_ui, "messagebox") as dialogs:
+                    dialogs.askyesno.return_value = False
+                    ui.abandon()
+                dialogs.askyesno.assert_called_once_with(
+                    tr(language, "abandon" if flight else "abandon_game"),
+                    tr(language, "confirm_abandon" if flight else "confirm_abandon_game"),
+                    parent=host.root,
+                )
+                self.assertIsNone(ui.operation)
 
     def test_abandon_cancels_producers_without_resuming_delivery(self) -> None:
         """Stop active and failed-flight work before forgetting the saved key.
