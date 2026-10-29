@@ -2146,6 +2146,212 @@ svg.leaflet-image-layer.leaflet-interactive path {
 body.has-map-overlay {
     overflow: hidden;
 }
+
+/* Shared public map chrome includes the gallery overlay and the lightbox's
+   normal, fullscreen split and slideshow maps. Tile/route colors stay owned
+   by the map provider. Type: CSS lengths/colors. Units: px, rem, sRGB.
+   Scope: public map surfaces and controls. Consumers: the shared Leaflet UI.
+   Rationale: 42% Theme backing/12px blur and 8px maximum rounding match media
+   panels; 28px desktop and 44px narrow/coarse targets preserve accessibility.
+   The .7 backdrop brightness keeps Theme text legible over bright map tiles
+   without changing provider tiles, markers or routes themselves. */
+.public-page {
+    --public-map-surface: color-mix(in srgb, var(--panel) 42%, transparent);
+    --public-map-line: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.public-page .public-header-preview svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.public-page .site-header .nav .public-header-preview.is-preview-active {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.public-page .map-overlay {
+    background: transparent;
+    padding: .5rem;
+}
+
+.public-page .map-overlay .map-dialog {
+    width: min(72rem, calc(100vw - 1rem));
+    max-width: 100%;
+    max-height: calc(100dvh - 1rem);
+    padding: .5rem .65rem;
+    border: 1px solid var(--public-map-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--public-map-surface);
+    backdrop-filter: blur(12px) brightness(.7);
+    -webkit-backdrop-filter: blur(12px) brightness(.7);
+    box-shadow: 0 .35rem 1.25rem rgb(0 0 0 / 12%);
+    color: var(--ink);
+}
+
+.public-page .map-dialog h2 {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    margin: 0 4.5rem .4rem 0;
+    color: var(--ink);
+    font-size: .85rem;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.public-page .map-overlay .map-close {
+    top: .5rem;
+    right: .65rem;
+    min-height: 28px;
+    padding: .15rem .45rem;
+    border: 1px solid var(--public-map-line);
+    border-radius: min(var(--radius, 8px), 6px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font-size: .8rem;
+    font-weight: 600;
+}
+
+.public-page .map-dialog .map-canvas {
+    height: min(72dvh, 720px);
+    min-height: min(240px, 45dvh);
+    border-radius: min(var(--radius, 8px), 6px);
+}
+
+.public-page .map-dialog .map-attribution-note {
+    margin: .35rem 0 0;
+    color: var(--public-muted-ink);
+    font-size: .75rem;
+}
+
+.public-page .gallery-map-viewport-control {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .15rem;
+    max-width: min(28rem, calc(100vw - 4rem));
+    padding: .2rem;
+    border: 1px solid var(--public-map-line);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: var(--public-map-surface);
+    backdrop-filter: blur(12px) brightness(.7);
+    -webkit-backdrop-filter: blur(12px) brightness(.7);
+    box-shadow: none;
+    color: var(--ink);
+}
+
+.public-page .gallery-map-viewport-control button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: auto;
+    min-height: 28px;
+    min-width: 28px;
+    padding: .1rem .4rem;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font: 600 .8rem/1.35 var(--font-family, sans-serif);
+}
+
+.public-page .gallery-map-viewport-control button:first-child {
+    min-width: 0;
+    font-size: .75rem;
+}
+
+.public-page .gallery-map-viewport-checkbox {
+    min-height: 28px;
+    max-width: none;
+    padding: .1rem .4rem;
+    gap: .4rem;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    font: 600 .75rem/1.35 var(--font-family, sans-serif);
+}
+
+.public-page .gallery-map-viewport-checkbox input {
+    appearance: none;
+    position: relative;
+    box-sizing: border-box;
+    width: 26px;
+    height: 14px;
+    margin: 0;
+    border: 1px solid var(--public-map-line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.public-page .gallery-map-viewport-checkbox input::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink);
+}
+
+.public-page .gallery-map-viewport-checkbox input:checked {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+
+.public-page .gallery-map-viewport-checkbox input:checked::before {
+    left: 13px;
+}
+
+.public-page .gallery-map-viewport-control button:hover,
+.public-page .gallery-map-viewport-checkbox:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.public-page .gallery-map-viewport-control :is(button, input):focus-visible,
+.public-page .map-overlay .map-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.public-page .gallery-map-viewport-checkbox:focus-within {
+    box-shadow: none;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .public-page .gallery-map-viewport-control button,
+    .public-page .gallery-map-viewport-checkbox,
+    .public-page .map-dialog h2,
+    .public-page .map-overlay .map-close {
+        min-height: 44px;
+    }
+
+    .public-page .gallery-map-viewport-control button {
+        min-width: 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    .public-page .map-overlay .map-dialog,
+    .public-page .gallery-map-viewport-control {
+        background: Canvas;
+        color: CanvasText;
+        border-color: CanvasText;
+    }
+
+    .public-page .gallery-map-viewport-checkbox input {
+        appearance: auto;
+    }
+
+    .public-page .gallery-map-viewport-checkbox input::before {
+        display: none;
+    }
+}
 .exif-admin-summary dl {
     display: grid;
     gap: 0.35rem 1rem;

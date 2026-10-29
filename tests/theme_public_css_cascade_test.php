@@ -139,6 +139,9 @@ namespace {
                     'body_class' => $bodyClass,
                     'user' => $user,
                     'anonymous_preview' => $anonymousPreview,
+                    'public_preview_url' => $anonymousPreview
+                        ? '/gallery/photos?lang=en'
+                        : '/gallery/photos?lang=en&view_as=anonymous',
                     'admin_test_runs_enabled' => $testRunsEnabled,
                     'admin_test_run_active' => $testRunActive,
                     'update_pending' => $updatePending,
@@ -210,8 +213,8 @@ namespace {
         $actionLabels[] = trim($label->textContent);
     }
     cascade_require(
-        $actionLabels === ['Admin', 'Test run', 'Updates', 'Logout'],
-        'the authenticated public header must render all four compact action labels in order',
+        $actionLabels === ['View as anonymous', 'Admin', 'Test run', 'Updates', 'Logout'],
+        'the authenticated public header must include preview with the compact actions',
     );
     cascade_require(
         $publicHeaderXPath->query(
@@ -233,9 +236,23 @@ namespace {
             adminLoginReturn: $adminLoginReturn,
         ));
         $loginXPath = new DOMXPath($loginHeader);
+        $previewAction = $loginXPath->query('//a[@data-public-anonymous-preview]');
+        cascade_require(
+            $previewAction->length === ($loginUser !== null ? 1 : 0),
+            'only an actual signed-in administrator receives the preview action',
+        );
+        if ($anonymousPreview) {
+            cascade_require(
+                $previewAction->item(0)?->getAttribute('href')
+                    === '/gallery/photos?lang=en'
+                    && trim($previewAction->item(0)?->textContent ?? '')
+                        === 'Exit preview',
+                'active preview keeps a native header exit with the prepared locale',
+            );
+        }
         $loginAction = $loginXPath->query(
-            '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")'
-                . ' and @title="Admin login"]',
+            '//a[@title="Admin login" and contains(concat(" ", normalize-space(@class), " "), " public-header-action ")'
+                . ']',
         );
         $loginHref = $loginAction->item(0)?->getAttribute('href') ?? '';
         $loginQuery = [];
@@ -245,12 +262,12 @@ namespace {
                 && ($loginQuery['page'] ?? '') === 'admin_login'
                 && ($loginQuery['return'] ?? '') === $adminLoginReturn
                 && $loginXPath->query(
-                    '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+                    '//a[@title="Admin login" and contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
                         . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")'
                         . ' and text()="Admin login"]',
                 )->length === 1
                 && $loginXPath->query(
-                    '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+                    '//a[@title="Admin login" and contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
                         . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-icon ")]'
                         . '/svg[@class="admin-menu-icon"]',
                 )->length === 1,

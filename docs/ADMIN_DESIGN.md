@@ -108,8 +108,14 @@ clear of primary gallery/photo previews as well as header and action controls.
 
 ## Public gallery Admin bars
 
-Public gallery anonymous-preview, date-sort and visible-page reorder controls
-use compact glass bars: 42% Theme panel backing, quiet foreground lines and
+Anonymous preview belongs in the public header beside the signed-in actions.
+Only an actual administrator receives its prepared same-installation URL;
+active preview keeps an explicit Exit preview action in that same header.
+Do not reserve a separate preview block or idle reorder instruction row.
+Card handles already explain drag ordering. Keep the reorder data owner and
+live progress/saved/error feedback, showing its row only when actionable.
+
+The date-sort controls use a compact glass bar: 42% Theme backing, lines and
 rounding capped at 8px. Keep short icon/label actions at 28px on desktop and
 44px on narrow/coarse screens. Date choices use a restrained active tint and
 accent line; only saving the preview persists the order. Preserve native links,
@@ -117,9 +123,18 @@ POST/CSRF fields and the visible active anonymous-preview state. Routine
 explanations sit behind plain question marks using the existing
 `gallery-media-panels.js` disclosure owner: trigger anchoring, viewport fitting,
 outside/Escape dismissal and focus return. Native details remain available
-without enhancement. Hide idle drag readiness after setup; retain progress,
-saved and failure feedback beside the affected controls. The shared bar styles
-belong to `utilities.css`; public search retains its own existing layout.
+without enhancement. The shared bar styles belong to `utilities.css`;
+public search retains its own existing layout.
+
+Public map chrome uses the same 42% glass surface, quiet Theme lines and
+rounding capped at 8px. Keep the map title compact, Close transparent and the
+reset/zoom/follow controls in a wrapping toolbar over the map. Follow uses the
+native 26 by 14px switch with 28px desktop / 44px narrow or coarse targets.
+Apply the shared Leaflet control styling to gallery maps and the lightbox's
+normal, fullscreen split and slideshow map presentations. Preserve modal map
+keyboard ownership, Escape/focus return, viewport memory, markers/routes,
+provider attribution and fullscreen geometry. The large map remains a viewer;
+small contextual help continues to use the anchored panel contract.
 
 ## Public Picture manager HUD
 

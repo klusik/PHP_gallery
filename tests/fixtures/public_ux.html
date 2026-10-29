@@ -37,19 +37,10 @@ License: MIT License (see LICENSE file in repository)
 <header class="site-header">
     <a class="public-language-button" hreflang="en" href="/?lang=en">English</a>
     <a data-public-login-return href="/index.php?page=admin_login">Login</a>
+    <nav class="nav"><a class="public-header-action public-header-preview" href="?view_as=anonymous">
+        <span class="public-header-action-icon" aria-hidden="true">◉</span>
+        <span class="public-header-action-label">View as anonymous</span></a></nav>
 </header>
-<div class="anonymous-preview-toolbar public-gallery-control-bar">
-    <div class="public-gallery-control-heading">
-        <a class="button secondary" href="#anonymous">
-            <span class="public-gallery-control-icon" aria-hidden="true">◉</span>View as anonymous</a>
-        <details class="public-gallery-control-help" data-gallery-media-widget>
-            <summary aria-label="View as anonymous"><span aria-hidden="true">?</span></summary>
-            <div class="public-gallery-control-help-panel" data-gallery-media-panel>
-                Review this gallery without inline admin controls, admin navigation,
-                hidden photos, or admin-only visibility.</div>
-        </details>
-    </div>
-</div>
 <div class="public-subgallery-sort-toolbar public-gallery-control-bar">
     <div class="public-gallery-control-heading">
         <span class="public-gallery-control-icon" aria-hidden="true">↕</span>
@@ -71,19 +62,7 @@ License: MIT License (see LICENSE file in repository)
         </form>
     </div>
 </div>
-<div class="public-reorder-toolbar public-gallery-control-bar">
-    <div class="public-gallery-control-heading">
-        <span class="public-gallery-control-icon" aria-hidden="true">⠿</span>
-        <strong>Move visible subgalleries</strong>
-        <details class="public-gallery-control-help" data-gallery-media-widget>
-            <summary aria-label="Move visible subgalleries"><span aria-hidden="true">?</span></summary>
-            <div class="public-gallery-control-help-panel" data-gallery-media-panel>
-                Drag only the cards shown on this page.
-                Other pagination pages are not touched.</div>
-        </details>
-    </div>
-    <span class="public-reorder-status" data-state="idle" aria-live="polite">Drag handles ready.</span>
-</div>
+<div class="public-reorder-toolbar"><span class="public-reorder-status" data-state="idle" aria-live="polite"></span></div>
 <section class="grid public-tag-gallery-grid grid-columns-3">
     <article class="gallery-card"><p>Long tag description remains readable.</p>
         <a class="tag" href="#tag">a-very-long-tag-with-a-readable-label</a>
@@ -97,6 +76,19 @@ License: MIT License (see LICENSE file in repository)
     </section>
 </div>
 <section class="map-dialog"><h2>Map</h2><p class="muted map-attribution-note">Attribution</p></section>
+<div class="map-overlay" id="map-chrome-review" hidden>
+    <div class="map-dialog"><button class="map-close">Close</button>
+        <h2>A long gallery route title that wraps naturally on narrow screens</h2>
+        <div class="map-canvas leaflet-container">
+            <div class="leaflet-top leaflet-left"><div class="leaflet-control leaflet-bar gallery-map-viewport-control">
+                <button title="Reset map zoom">Reset</button><button title="Zoom in">+</button>
+                <button title="Zoom out">−</button>
+                <label class="gallery-map-viewport-checkbox"><input type="checkbox">
+                    <span>Keep current centered</span></label>
+            </div></div>
+        </div><p class="map-attribution-note">Map data © OpenStreetMap.</p>
+    </div>
+</div>
 <div id="cards"></div>
 <div class="lightbox" data-lightbox hidden aria-label="Photo viewer"
     data-lightbox-maps-enabled="0" data-lightbox-transition-ms="0">
@@ -305,10 +297,57 @@ if (!params.has('case')) {
         }
         const status = document.querySelector('.public-reorder-status');
         check(getComputedStyle(status).display === 'none', 'idle reorder status must be quiet');
+        check(status.parentElement.getBoundingClientRect().height === 0,
+            'idle reordering must not reserve an instruction row');
         status.dataset.state = 'error';
         status.textContent = 'The order could not be saved. Reload the current page.';
         check(status.getBoundingClientRect().height > 0, 'reorder failure must remain visible');
         status.dataset.state = 'idle';
+        const mapReview = document.querySelector('#map-chrome-review');
+        mapReview.hidden = false;
+        const mapDialog = mapReview.querySelector('.map-dialog');
+        const mapBounds = mapDialog.getBoundingClientRect();
+        check(mapBounds.left >= 0 && mapBounds.right <= innerWidth
+            && mapBounds.top >= 0 && mapBounds.bottom <= innerHeight,
+            'map dialog must fit narrow and landscape viewports');
+        check(parseFloat(getComputedStyle(mapDialog).borderRadius) <= 8
+            && getComputedStyle(mapDialog).backdropFilter.includes('blur'),
+            'map chrome must retain the compact glass treatment');
+        const follow = mapReview.querySelector('input');
+        check(follow.getBoundingClientRect().width === 26
+            && follow.getBoundingClientRect().height === 14,
+            'map follow checkbox must use the compact switch geometry');
+        follow.click();
+        check(follow.checked, 'map follow retains native checkbox activation');
+        if (innerWidth <= 640) {
+            for (const action of mapReview.querySelectorAll('button, label')) {
+                check(action.getBoundingClientRect().height >= 44,
+                    'narrow map actions retain comfortable interaction targets');
+            }
+        }
+        mapReview.hidden = true;
+        const splitReview = document.createElement('div');
+        splitReview.className = 'lightbox is-fullscreen is-map-split';
+        splitReview.innerHTML = '<figure><div class="lightbox-stage-link"></div>'
+            + '<section class="lightbox-map-split"><div class="lightbox-map-split-canvas">'
+            + mapReview.querySelector('.map-canvas').innerHTML
+            + '</div><button class="lightbox-map-split-close">Close</button>'
+            + '<nav class="lightbox-map-split-nav">'
+            + '<button class="lightbox-map-split-nav-button">Previous photo</button>'
+            + '</nav></section></figure>';
+        document.body.append(splitReview);
+        for (const slideshow of [false, true]) {
+            splitReview.classList.toggle('is-slideshow', slideshow);
+            const mapControl = splitReview.querySelector('.gallery-map-viewport-control');
+            const navigation = splitReview.querySelector('.lightbox-map-split-nav-button');
+            check(getComputedStyle(mapControl).backdropFilter.includes('blur')
+                && getComputedStyle(navigation).color === getComputedStyle(mapControl).color
+                && parseFloat(getComputedStyle(navigation).borderRadius) <= 8,
+                'fullscreen and slideshow maps must share Theme glass controls');
+            if (innerWidth <= 640) check(navigation.getBoundingClientRect().height >= 44,
+                'narrow split-map navigation retains touch targets');
+        }
+        splitReview.remove();
         for (const target of document.querySelectorAll('.public-gallery-control-bar :is(.button, summary)')) {
             // The fixture's narrow widths exercise the design contract's 44px boundary.
             if (innerWidth <= 640) check(target.getBoundingClientRect().height >= 44,

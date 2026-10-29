@@ -83,7 +83,6 @@ foreach ([
     'view_render_public_subgallery_date_sort_toolbar',
     'view_render_public_page_reorder_toolbar',
     'view_render_picture_manager_toolbar',
-    'view_render_public_gallery_preview_toolbar',
     'view_render_public_gallery_branding_header',
     'view_render_public_gallery_branding_separator',
     'view_render_public_gallery_breadcrumbs',
