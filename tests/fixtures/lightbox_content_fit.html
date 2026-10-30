@@ -14,11 +14,19 @@ License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lightbox content fit</title>
 <link rel="stylesheet" href="../../public/assets/styles/base.css">
 <link rel="stylesheet" href="../../public/assets/styles/public.css">
 <link rel="stylesheet" href="../../public/assets/styles/lightbox.css">
-<body>
+<link rel="stylesheet" href="../../public/assets/styles/public-shared.css">
+<link rel="stylesheet" href="../../public/assets/styles/mobile-gallery.css">
+<style>
+    /* Deliberately conspicuous gallery content behind the real viewer shell. */
+    #cards { min-height: 100vh; background: repeating-linear-gradient(
+        45deg, #ff00d4 0 60px, #00ff88 60px 120px); }
+</style>
+<body class="public-page">
 <pre id="results">RUNNING</pre>
 <div id="cards"></div>
 <!-- Type: integer. Units: milliseconds. Scope: this fixture's slideshow.
@@ -56,7 +64,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
 </div>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox}
-        from '../../public/assets/gallery-modules/lightbox.js?v=20261030-transition-isolation-v1';
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261030-modal-background-v4';
 
     // Bound asynchronous fixture checkpoints, independently of slideshow speed.
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
@@ -76,6 +84,19 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     let outgoingFadeObservations = 0;
     const preview = new URL(location.href).searchParams.has('preview');
     const pixels = new URL(location.href).searchParams.has('pixels');
+    const nativeFullscreen = new URL(location.href).searchParams.has('native');
+    if (new URL(location.href).searchParams.has('touch')) {
+        Object.defineProperty(navigator, 'maxTouchPoints', {value: 2, configurable: true});
+        Object.defineProperty(navigator, 'userAgent', {value: 'Fixture Mobile', configurable: true});
+    }
+    const background = document.querySelector('#cards');
+    let backgroundWrites = 0;
+    let backgroundMutations = 0;
+    let shellFrames = 0;
+    let shellViolation = '';
+    let shellFrameRequest = 0;
+    let inertObserver = null;
+    let restoreInertProbe = null;
     window.addEventListener('error', event => errors.push(event.message));
     window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
 
@@ -85,22 +106,77 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         return nativeRead.apply(this, args);
     };
     // Use the permanent CSS fullscreen fallback without depending on activation.
-    viewer.requestFullscreen = () => Promise.reject(new Error('Controlled refusal'));
+    if (!nativeFullscreen) {
+        viewer.requestFullscreen = () => Promise.reject(new Error('Controlled refusal'));
+    }
+
+    /**
+     * Observe shell DOM and computed styles on fullscreen animation-frame callbacks.
+     * @returns {void} Records violations without modifying production viewer state.
+     */
+    function observeShellFrame() {
+        if (!viewer.hidden && (viewer.classList.contains('is-fullscreen')
+            || viewer.classList.contains('is-mobile-fullscreen'))) {
+            const rect = viewer.getBoundingClientRect();
+            const style = getComputedStyle(viewer);
+            if (!viewer.isConnected || document.querySelector('[data-lightbox]') !== viewer
+                || !background.inert || backgroundWrites || backgroundMutations
+                || style.opacity !== '1' || style.display === 'none'
+                || style.backgroundColor !== 'rgb(5, 5, 5)'
+                || rect.left !== 0 || rect.top !== 0
+                || rect.width !== innerWidth || rect.height !== innerHeight) {
+                if (!shellViolation) {
+                    shellViolation = `unstable shell: ${backgroundWrites} inert writes, `
+                        + `${backgroundMutations} mutations, ${style.backgroundColor}, `
+                        + `${rect.left}/${rect.top}/${rect.width}/${rect.height}`;
+                    errors.push(shellViolation);
+                }
+            }
+            shellFrames += 1;
+        }
+        shellFrameRequest = requestAnimationFrame(observeShellFrame);
+    }
+
+    /**
+     * Count background writes separately from its final inert value.
+     * @returns {void} Starts a per-frame shell probe after initial modal isolation.
+     */
+    function startShellObservation() {
+        const nativeInert = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'inert');
+        check(background.inert && typeof nativeInert?.set === 'function',
+            'initial gallery must be isolated by native inert');
+        Object.defineProperty(background, 'inert', {
+            configurable: true,
+            get: () => nativeInert.get.call(background),
+            set: (value) => {
+                backgroundWrites += 1;
+                nativeInert.set.call(background, value);
+            },
+        });
+        restoreInertProbe = () => { delete background.inert; };
+        inertObserver = new MutationObserver(records => {
+            backgroundMutations += records.length;
+        });
+        inertObserver.observe(background, {attributes: true, attributeFilter: ['inert']});
+        shellFrameRequest = requestAnimationFrame(observeShellFrame);
+    }
 
     /**
      * Generate a compressed scene with optional black or ambiguous mattes.
      * @param {number} id Stable fixture card identity.
-     * @param {{x:number,y:number,width:number,height:number}} rect Pixel content rectangle in a 1280 by 720 raster.
+     * @param {{x:number,y:number,width:number,height:number}} rect Pixel content rectangle inside the generated raster.
      * @param {string} color Content color, flat dark case, concert, dim-pair,
      * dim-left, sparse-left, flat-right, starfield-right, near-black-left,
      * blend-local or blend-public regression pattern.
+     * @param {number} rasterHeight Structural source height; 720 models ordinary screenshots and 360 leaves native fullscreen letterboxing on the tested displays.
      * @returns {HTMLAnchorElement} Mounted card using an in-memory JPEG only.
      */
-    function makeCard(id, rect, color = '#4aa6ce') {
-        // Structural corpus dimensions model a 16:9 screenshot; no source file exists.
+    function makeCard(id, rect, color = '#4aa6ce', rasterHeight = 720) {
+        // Structural corpus dimensions model 16:9 or native-lane 32:9 sources;
+        // no source file exists. The latter keeps a real backdrop probe visible.
         const canvas = document.createElement('canvas');
         canvas.width = 1280;
-        canvas.height = 720;
+        canvas.height = rasterHeight;
         const context = canvas.getContext('2d');
         context.fillStyle = 'black';
         context.fillRect(0, 0, canvas.width, canvas.height);
@@ -222,7 +298,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         card.href = canvas.toDataURL(blendPattern ? 'image/webp' : 'image/jpeg', 0.9);
         Object.assign(card.dataset, {lightboxImage: '', imageId: String(id),
             fullSrc: card.href, previewSrc: card.href, imageWidth: '1280',
-            imageHeight: '720', title: `Content-fit sample ${id}`});
+            imageHeight: String(rasterHeight), title: `Content-fit sample ${id}`});
         card.textContent = `Sample ${id} `;
         document.querySelector('#cards').append(card);
         return card;
@@ -338,7 +414,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     /**
      * Hold actual slideshow handoffs for pixel comparisons in both crop directions.
      * @param {HTMLAnchorElement[]} targets Uncropped then cropped source cards.
-     * @returns {Promise<void>} Resolves after covered/live captures of each target.
+     * @returns {Promise<void>} Resolves after paused-fade, covered and live captures of each target.
      */
     async function checkSlideshowPixels(targets) {
         const advance = document.createElement('button');
@@ -367,19 +443,74 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
             for (const [index, target] of targets.entries()) {
                 targetId = target.dataset.imageId;
                 releaseCommit = null;
-                viewer.querySelector('[data-lightbox-action="slideshow"]').click();
-                await waitFor(() => releaseCommit !== null);
+                if (nativeFullscreen && index === 0) {
+                    await capturePixelPhase(advance, 'manual-s');
+                    await waitFor(() => viewer.matches(':fullscreen'));
+                    check(document.fullscreenElement === viewer,
+                        'trusted manual S must give the lightbox native fullscreen ownership');
+                    check(getComputedStyle(viewer, '::backdrop').backgroundColor
+                        === 'rgb(5, 5, 5)', 'native backing must match the opaque shell');
+                } else {
+                    viewer.querySelector('[data-lightbox-action="slideshow"]').click();
+                }
+                await waitFor(() => {
+                    const incoming = viewer.querySelector('.lightbox-transition-image');
+                    const opacity = incoming ? Number(getComputedStyle(incoming).opacity) : 0;
+                    return incoming?.dataset.lightboxImageId === targetId
+                        && opacity > 0 && opacity < 1;
+                });
                 const cover = viewer.querySelector('.lightbox-transition-image');
-                check(cover?.dataset.lightboxImageId === targetId
-                    && getComputedStyle(cover).opacity === '1',
-                    'pixel capture must observe the fully opaque target before handoff');
                 const rect = cover.getBoundingClientRect();
+                const outgoingRect = viewer.querySelector(
+                    '[data-lightbox-zoom-surface]').getBoundingClientRect();
+                // The cover retains the full source box; only its clipped
+                // content can cover a probe. CSSOM serializes equal insets as
+                // one/two/three values, using the ordinary four-side shorthand.
+                const insets = cover.style.clipPath
+                    ? cover.style.clipPath.slice('inset('.length, -1)
+                        .split(' ').map(value => Number.parseFloat(value) / 100)
+                    : [0, 0, 0, 0];
+                check(insets.length >= 1 && insets.length <= 4
+                    && insets.every(Number.isFinite),
+                    `unexpected incoming clipping: ${cover.style.clipPath}`);
+                const incomingVisible = {
+                    left: rect.left + rect.width
+                        * (insets[3] ?? insets[1] ?? insets[0]),
+                    top: rect.top + rect.height * insets[0],
+                };
+                // The 5x5 raster patch centered at 24/24 must lie outside BOTH
+                // visible image boxes, accounting for presentation clipping.
+                // Its outer edge is 26/26: the inset avoids the shell's rounded
+                // keyboard focus outline after trusted native fullscreen entry.
+                // Fail on unsuitable geometry instead of calling photo pixels
+                // a backdrop failure when native fullscreen resizes the viewport.
+                check([incomingVisible, outgoingRect].every(
+                    box => box.left > 26 || box.top > 26),
+                    `backdrop probe overlaps a photo: ${JSON.stringify({
+                        viewport: [innerWidth, innerHeight], incoming: incomingVisible,
+                        outgoing: outgoingRect,
+                    })}`);
                 // These structural source fractions lie inside flat green/blue
                 // patches, away from JPEG boundaries, matte edges and text.
                 advance.dataset.pixelSamples = JSON.stringify([
                     {x: rect.left + rect.width / 2, y: rect.top + rect.height * 0.35},
                     {x: rect.left + rect.width / 2, y: rect.top + rect.height * 0.82},
+                    // Both fits leave this inset corner outside photo/HUD/focus chrome.
+                    {x: 24, y: 24},
                 ]);
+                const fadingLayers = [cover,
+                    viewer.querySelector('[data-lightbox-zoom-surface]')];
+                check(fadingLayers.every(layer => layer.getAnimations().some(
+                    animation => animation.transitionProperty === 'opacity')),
+                'each photograph layer must have its own real opacity transition');
+                const animations = fadingLayers.flatMap(layer => layer.getAnimations());
+                animations.forEach(animation => animation.pause());
+                await capturePixelPhase(advance, `fading-${index}`);
+                animations.forEach(animation => animation.play());
+                await waitFor(() => releaseCommit !== null
+                    && getComputedStyle(cover).opacity === '1');
+                check(cover.dataset.lightboxImageId === targetId,
+                    'pixel capture must retain the fully opaque target before handoff');
                 await capturePixelPhase(advance, `covered-${index}`);
                 releaseCommit();
                 await waitFor(() => viewer.querySelector('[data-lightbox-img]')
@@ -391,6 +522,9 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
                     'pixel journey must switch from cropped to original and back');
                 await capturePixelPhase(advance, `stable-${index}`);
             }
+            check(shellFrames > 0 && backgroundWrites === 0 && backgroundMutations === 0,
+                `automatic slides must retain uninterrupted modal isolation and backing: `
+                    + `${shellFrames} frames, ${backgroundWrites} writes, ${backgroundMutations} mutations`);
         } finally {
             HTMLImageElement.prototype.decode = nativeDecode;
             advance.remove();
@@ -411,15 +545,24 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         makeCard(11, {x: 160, y: 0, width: 960, height: 720}, 'starfield-right'),
         makeCard(12, {x: 160, y: 0, width: 960, height: 720}, 'near-black-left'),
         makeCard(13, {x: 160, y: 0, width: 960, height: 720}, 'blend-local'),
-        makeCard(14, {x: 160, y: 0, width: 960, height: 720}, 'blend-public'),
+        makeCard(14, {x: 160, y: 0, width: 960,
+            height: pixels && nativeFullscreen ? 320 : 720}, 'blend-public',
+        pixels && nativeFullscreen ? 360 : 720),
     ];
-    const pixelTargets = pixels ? [
+    // Native fullscreen can choose a different screen aspect from emulation.
+    // Wide sources keep the probe outside both crop/original fits. The ordinary
+    // desktop/narrow/touch lanes retain their original 16:9 and 4:3 corpus.
+    const pixelTargets = !pixels ? [] : nativeFullscreen ? [
+        makeCard(15, {x: 0, y: 0, width: 1280, height: 360}, '#4aa6ce', 360),
+        makeCard(16, {x: 256, y: 36, width: 768, height: 288}, '#4aa6ce', 360),
+    ] : [
         makeCard(15, {x: 0, y: 0, width: 1280, height: 720}),
         makeCard(16, {x: 256, y: 72, width: 768, height: 576}),
-    ] : [];
+    ];
     try {
         setupGalleryLightbox();
         await openCard(pixels ? cards[cards.length - 1] : cards[0]);
+        startShellObservation();
         if (pixels) {
             await checkSlideshowPixels(pixelTargets);
             check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
@@ -489,6 +632,9 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     } catch (error) {
         result.textContent = `BROWSER FAIL: ${error.stack}`;
     } finally {
+        cancelAnimationFrame(shellFrameRequest);
+        inertObserver?.disconnect();
+        restoreInertProbe?.();
         CanvasRenderingContext2D.prototype.getImageData = nativeRead;
         if (!preview) teardownGalleryLightbox();
     }

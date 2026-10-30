@@ -215,6 +215,45 @@ The focused fixture passed manual and automatic transitions, including a narrow
 viewport change during the fade. Real-phone performance and broader geometry
 corpora remain manual coverage; these local observations do not qualify FULL.
 
+## Retained modal isolation during slideshow
+
+Owner: `public/assets/gallery-modules/public-modal-lifecycle.js`. Automatic
+navigation and transition child-list mutations previously restored every
+covered branch's original `inert` state and immediately reapplied isolation.
+The browser fixture observed 38 property writes and 38 attribute mutations on
+one retained gallery branch. The owner now reconciles the desired sibling set:
+unchanged branches retain isolation without writes, removed/moved branches are
+restored before new baselines are captured, and new branches are isolated.
+Pre-existing inert state and nested editor/map focus remain supported.
+
+The user observed underlying gallery cards flashing in Chrome native S mode
+with cropping both enabled and disabled. Discrete internal-browser screenshots
+of live 0.148.4 showed an opaque full-viewport viewer and native backing, but
+could miss the short display artifact; they do not disprove that observation
+or establish a Chrome compositor defect. Removing the demonstrated background
+state churn is independently verified; broader display/GPU acceptance remains
+manual coverage. Native `::backdrop` now explicitly matches the `#050505` shell.
+The first supplied 60 fps recording was subsequently identified as live
+0.148.4, not the local candidate. Frame 252 at 4.200 seconds showed one frame of
+the page header over the fullscreen photo, before the first photo crossfade.
+On 2026-10-30 the user then tested the corrected localhost and reported no
+gallery-page flash, supplying a separate local recording. This is local
+acceptance evidence, not proof of a particular browser compositor cause or of
+the new patch on every live browser/GPU combination.
+Touch swipe styling also retains the incoming opacity transition instead of
+replacing it with transform-only timing. Existing CSS fullscreen fallback and
+image access, decoding, crop and cancellation owners remain supported.
+
+The public UX owner verifies zero retained-background writes, including actual
+navigation, cover-like child changes and nested/moved layers. The lightbox
+browser owner uses selected public/mobile production styles, not the full
+authenticated bundle or generated Theme/custom CSS. It checks shell DOM
+geometry/computed isolation every animation frame and compares a corner
+backdrop pixel patch at a paused fade and handoff, including trusted manual S
+native entry, CSS fallback and touch. Actual Smart Gallery acceptance remains
+separate. Local negative/positive browser checks do not replace hosted
+exact-candidate qualification.
+
 ## Lightbox fullscreen exit and split-map lifetime
 
 Owner: `public/assets/gallery-modules/lightbox.js`. Native browser fullscreen

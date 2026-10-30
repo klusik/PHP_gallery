@@ -29,24 +29,38 @@ const backgroundObserver = new MutationObserver(() => {
 });
 
 /**
- * Restore covered branches and isolate siblings of the current modal branch.
- * @returns {void} Preserves pre-existing inert state, including nested layouts.
+ * Reconcile covered siblings without reactivating unchanged background branches.
+ *
+ * Photo navigation and transition layers mutate the viewer subtree frequently.
+ * Retained siblings must stay inert throughout those updates: restoring and
+ * reapplying their state needlessly invalidates the entire covered gallery.
+ * Restore removed branches before capturing additions so a moved nested editor
+ * keeps its original state and can regain focus inside the current viewer.
+ *
+ * @returns {void} Preserves original inert state across navigation and nested layouts.
  */
 function isolateCurrentLayer() {
-    covered.forEach((inert, element) => { element.inert = inert; });
-    covered.clear();
+    const desired = new Set();
     let branch = layers.at(-1)?.element;
     while (branch && branch !== document.body) {
         const parent = branch.parentElement;
         if (!parent) break;
         [...parent.children].forEach((sibling) => {
             if (sibling !== branch && sibling instanceof HTMLElement) {
-                covered.set(sibling, sibling.inert);
-                sibling.inert = true;
+                desired.add(sibling);
             }
         });
         branch = parent;
     }
+    covered.forEach((inert, element) => {
+        if (desired.has(element)) return;
+        if (element.inert !== inert) element.inert = inert;
+        covered.delete(element);
+    });
+    desired.forEach((element) => {
+        if (!covered.has(element)) covered.set(element, element.inert);
+        if (!element.inert) element.inert = true;
+    });
 }
 
 /**

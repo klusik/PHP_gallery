@@ -141,6 +141,11 @@ ready. Complementary outgoing/incoming fades use additive light compositing
 The existing opacity fade is permanent compatibility support in engines without
 that blend mode; decode, access, crop geometry and cancellation stay with the
 shared lightbox owner. Physical galleries use the same transition.
+The same modal owner keeps covered gallery branches continuously inert across
+slides rather than restoring and reapplying the entire background on each image
+mutation. Native fullscreen has an explicit opaque backing, and touch swipe
+styles preserve the incoming image's opacity fade. Closing or moving nested
+viewer content still restores its original isolation state.
 
 When the Smart Gallery presentation disables slideshow, slideshow controls are
 omitted and the `S` shortcut becomes a no-op for that viewer instance. Normal
