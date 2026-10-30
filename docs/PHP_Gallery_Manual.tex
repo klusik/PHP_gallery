@@ -1890,11 +1890,14 @@ publication; release continues to~trust qualified develop.
 
 After signing in, an~administrator sees private controls for~the~dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and~account settings. Many edits open in~the~right-side panel, leaving the~gallery visible while one item is~changed and~saved.\footnote{A~full Admin page remains available for~workflows that need more space or~when browser enhancement is~unavailable.}
 
-On~public pages, the~Admin, Test run, Updates, and~Logout actions use compact,
-32-pixel-high transparent outlined controls with 16-pixel icons and~localized
-labels. The~Admin login action shown to~anonymous visitors, including in~anonymous
-previews, uses the~same treatment and~alignment. Language choices remain governed
-by~Theme settings.
+On~public pages, anonymous preview/Exit preview, Admin, Test run, Updates,
+and~Logout use compact transparent outlined icon buttons: 32~pixels square
+with 16-pixel glyphs. Localized names appear as~native hover tooltips and~remain
+available to~screen readers, including disabled Test run and~pending Updates.
+Anonymous Admin login uses the~same treatment, including in~anonymous previews.
+Show gallery map uses a~pin icon with its localized tooltip and~accessible name.
+Header and~gallery-map targets grow to~44~pixels on~narrow or~touch screens.
+Language choices remain governed by~Theme settings.
 
 The~public gallery itself also exposes contextual Admin controls while a~normal administrator session is~active. Gallery and~photo pencil controls open the~same full editors in~the~side panel. Compact gallery removal uses the~recoverable trash workflow when Trash is~enabled; disabling Trash returns future gallery removals to~the~legacy permanent subtree-deletion service. Compact photo removal is~deliberately labeled \ui{Remove photo ... from CMS}: that quick public-page action removes the~catalog image row and~does not~run the~full source-file deletion service. Use the~normal photo/bulk deletion workflow when the~original file and~generated derivatives should also be~deleted. Anonymous-preview mode hides these contextual Admin controls.
 

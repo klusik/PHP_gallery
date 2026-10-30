@@ -1228,10 +1228,14 @@ runs immediately after snapshot equality is confirmed.
 readiness hooks. These source tests do not substitute for the required
 hosted candidate matrix or any separately requested manual browser
 qualification.
-`tests/theme_public_css_cascade_test.php` also covers the compact Admin login
-action in anonymous public and anonymous-preview headers, including its
-localized label/icon and exact return target, while preserving the plain Admin
-page fallback.
+`tests/theme_public_css_cascade_test.php` also covers public header icon actions
+with screen-reader-only names and native localized hover tooltips, including
+anonymous Admin login, anonymous preview/Exit preview, disabled Test run and
+pending Updates. It preserves login return targets and the plain Admin page
+fallback. Manually inspect signed-in and anonymous headers and the gallery-map
+pin at desktop/narrow widths, including keyboard focus and 44px touch targets.
+The public UX browser fixture uses the same icon-only preview markup while
+retaining its strict no-horizontal-overflow check at 320px and landscape widths.
 
 HTTP visual-preview failures retain their bounded stage/status context and
 source location in `cache/test-audit/public-visual-preview-failure.json`, without

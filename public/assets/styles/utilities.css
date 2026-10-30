@@ -719,17 +719,22 @@ body.public-reorder-active {
     }
 }
 
-/* Public-header Admin actions match the map control while retaining labels. */
+/* Public-header actions retain native tooltips and screen-reader-only labels.
+   Type: CSS lengths. Units: rem/px. Scope: public header and gallery map.
+   Consumers: layout.php and public_gallery_pages.php icon controls.
+   Rationale: 2rem square targets match the 32px desktop toolbar; narrow/coarse
+   input uses 44px targets while decorative header glyphs remain 1rem (16px). */
 .public-page .site-header .nav .public-header-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.3rem;
+    gap: 0;
     box-sizing: border-box;
-    width: auto;
+    width: 2rem;
+    min-width: 2rem;
     height: 2rem;
     min-height: 2rem;
-    padding: 0 0.5rem;
+    padding: 0;
     border: 1px solid var(--accent-dark);
     border-radius: var(--radius, 16px);
     background: transparent;
@@ -767,6 +772,16 @@ body.public-reorder-active {
 
 .public-page .site-header .nav .public-header-action.is-disabled {
     cursor: default;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .public-page .site-header .nav .public-header-action,
+    .public-page .hero-actions .map-button.hero-icon-button {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
 }
 
 /* Gallery-card description layouts for public pages. */
