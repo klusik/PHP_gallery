@@ -59,12 +59,15 @@ then scroll the notification list, with the heading and bulk actions retained.
   Avoid hero panels and metric tiles for simple actions.
 - Keep the toolbar on one level. Its control target is 28 px with a 16 px glyph;
   preserve comfortable, accessible tap interaction on mobile.
-- Public-page Admin, Test run, Updates and Logout actions use compact,
-  32 px-high transparent outlined controls with a 16 px icon and localized
-  label. The Admin login action shown to anonymous visitors, including in
-  anonymous previews, uses the same treatment and alignment as signed-in
-  actions. Match the Show gallery map control, keep the treatment unfilled, and
-  leave language choices governed by Theme settings.
+- Public-page anonymous preview/Exit preview, Admin, Test run, Updates and
+  Logout actions use compact 32 px-square transparent outlined icon controls
+  with 16 px glyphs. Keep localized names as screen-reader-only text and native
+  hover tooltips, including disabled Test run and pending Updates states.
+  Anonymous Admin login uses the same treatment, including in anonymous
+  previews. Show gallery map uses a pin icon matching the existing gallery hero
+  actions and retains its localized tooltip and accessible name. Header and
+  gallery-map targets grow to at least 44 px on narrow/coarse screens; language
+  choices remain governed by Theme settings.
 - Do not underline Admin UI text, labels, links, or controls. Use color,
   spacing, icons, and borders to communicate hierarchy and interaction.
 

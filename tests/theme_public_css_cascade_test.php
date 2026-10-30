@@ -211,6 +211,12 @@ namespace {
             . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")]'
     ) as $label) {
         $actionLabels[] = trim($label->textContent);
+        cascade_require(
+            str_contains(' ' . $label->getAttribute('class') . ' ', ' visually-hidden ')
+                && $label->parentNode?->getAttribute('title')
+                    === trim($label->textContent),
+            'each header icon retains its accessible name and localized hover tooltip',
+        );
     }
     cascade_require(
         $actionLabels === ['View as anonymous', 'Admin', 'Test run', 'Updates', 'Logout'],
@@ -246,6 +252,8 @@ namespace {
                 $previewAction->item(0)?->getAttribute('href')
                     === '/gallery/photos?lang=en'
                     && trim($previewAction->item(0)?->textContent ?? '')
+                        === 'Exit preview'
+                    && $previewAction->item(0)?->getAttribute('title')
                         === 'Exit preview',
                 'active preview keeps a native header exit with the prepared locale',
             );
@@ -264,6 +272,7 @@ namespace {
                 && $loginXPath->query(
                     '//a[@title="Admin login" and contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
                         . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")'
+                        . ' and contains(concat(" ", normalize-space(@class), " "), " visually-hidden ")'
                         . ' and text()="Admin login"]',
                 )->length === 1
                 && $loginXPath->query(
@@ -328,6 +337,7 @@ namespace {
                 . ' and contains(concat(" ", normalize-space(@class), " "), " is-disabled ")'
                 . ' and @aria-disabled="true" and @title="Test run running"]'
                 . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")'
+                . ' and contains(concat(" ", normalize-space(@class), " "), " visually-hidden ")'
                 . ' and text()="Test run running"]',
         )->length === 1
             && $runningXPath->query(
@@ -336,7 +346,7 @@ namespace {
                     . '/svg[@class="admin-menu-icon"]',
             )->length === 1
             && $runningXPath->query('//form[@action="/index.php?page=admin_test_run_start"]')->length === 0,
-        'an active Test run uses the disabled icon-and-label action and removes its form',
+        'an active Test run retains its disabled icon, hidden label and tooltip without a form',
     );
     $adminHeader = new DOMDocument();
     @$adminHeader->loadHTML(cascade_header_html(

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.148.6}
+\newcommand{\version}{0.149.0}
 \newcommand{\manualdate}{30.~Oktober~2026}
 
 \hypersetup{
@@ -1986,11 +1986,16 @@ vor dem geschützten Schreiben; Releases vertrauen weiterhin qualifiziertem deve
 
 Nach der Anmeldung sieht ein Administrator private Steuerungen für Übersicht, Galerien, Fotos, Design, Schlagwörter, Wartung, Aktualisierungen, Protokolle und Kontoeinstellungen. Viele Bearbeitungen öffnen sich im rechten Seitenbereich, sodass die Galerie sichtbar bleibt, während ein Eintrag geändert und gespeichert wird.\footnote{Eine vollständige Administrationsseite bleibt für Abläufe verfügbar, die mehr Platz benötigen, oder wenn die Browsererweiterung nicht verfügbar ist.}
 
-Auf öffentlichen Seiten verwenden Admin-, Testlauf-, Updates- und Abmelden-
-Aktionen kompakte, 32 Pixel hohe transparente, umrandete Bedienelemente mit
-16-Pixel-Symbolen und lokalisiertem Text. Die Admin-Anmeldung für anonyme
-Besucher, auch in anonymen Vorschauen, verwendet dieselbe Gestaltung und
-Ausrichtung. Die Sprachauswahl bleibt weiterhin unter Design konfiguriert.
+Auf öffentlichen Seiten verwenden anonyme Vorschau/Vorschau beenden, Admin,
+Testlauf, Updates und Abmelden kompakte transparente, umrandete Symboltasten:
+32~Pixel im Quadrat mit 16-Pixel-Symbolen. Lokalisierte Namen erscheinen als
+native Tooltips beim Darüberfahren und bleiben für Screenreader verfügbar,
+auch bei laufendem Testlauf und verfügbaren Updates. Die anonyme Admin-Anmeldung
+verwendet dieselbe Gestaltung, auch in anonymen Vorschauen. Galerie-Karte
+anzeigen verwendet eine Stecknadel mit lokalisiertem Tooltip und zugänglichem
+Namen. Auf schmalen oder Touch-Bildschirmen wachsen die Ziele im Kopfbereich
+und für die Galerie-Karte auf mindestens 44~Pixel. Die Sprachauswahl bleibt
+unter Design konfiguriert.
 
 Auch die öffentliche Galerie zeigt kontextbezogene Administrationssteuerungen, solange eine normale Administratorsitzung aktiv ist. Die Stiftschaltflächen von Galerien und Fotos öffnen dieselben vollständigen Editoren im Seitenbereich. Die kompakte Galerieentfernung verwendet bei aktiviertem Papierkorb den wiederherstellbaren Papierkorbablauf; bei deaktiviertem Papierkorb erfolgen zukünftige Galerieentfernungen wieder über den bisherigen Dienst zur endgültigen Teilbaum-Löschung. Die kompakte Fotoentfernung ist bewusst als \ui{Foto ... aus dem CMS entfernen} beschriftet: Diese Schnellaktion auf der öffentlichen Seite entfernt die Bildzeile aus dem Katalog und führt nicht den vollständigen Dienst zur Originaldateilöschung aus. Verwenden Sie den normalen Foto-/Sammellöschablauf, wenn auch die Originaldatei und erzeugte Ableitungen gelöscht werden sollen. Der anonyme Vorschaumodus blendet diese kontextbezogenen Administrationssteuerungen aus.
 

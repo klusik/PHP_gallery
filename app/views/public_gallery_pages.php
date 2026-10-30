@@ -260,7 +260,8 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
  *     cooperative_links?:list<array{url:string,label:string}>
  * } $viewModel Controller-prepared hero state, including policy-gated media
  *     counts and escaped-or-trusted presentation fragments.
- * @return void Render the hero and prepared actions.
+ * @return void Render the hero and prepared actions with accessible icon labels
+ *     and native hover tooltips.
  */
 function view_render_public_gallery_hero(array $viewModel): void
 {
@@ -375,14 +376,19 @@ function view_render_public_gallery_hero(array $viewModel): void
                 . '</span></button></form>';
     }
     if (!empty($viewModel['map_available'])) {
+        $mapLabel = t('gallery.show_map', 'Show gallery map');
         echo
-            '<button type="button" class="button secondary map-button" data-gallery-map-url="'
+            '<button type="button" class="button secondary hero-icon-button map-button" data-gallery-map-url="'
                 . e((string) ($viewModel['map_url'] ?? ''))
                 . '" data-gallery-map-title="'
                 . e((string) ($viewModel['title'] ?? ''))
-                . '">'
-                . e(t('gallery.show_map', 'Show gallery map'))
-                . '</button>';
+                . '" aria-label="'
+                . e($mapLabel)
+                . '" title="'
+                . e($mapLabel)
+                . '"><span aria-hidden="true">&#128205;</span><span class="visually-hidden">'
+                . e($mapLabel)
+                . '</span></button>';
     }
     if (!empty($viewModel['picture_game_available'])) {
         $pictureGameLabel = t('gallery.play_picture_game', 'Play picture game');
