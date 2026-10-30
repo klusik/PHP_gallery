@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.148.3}
-\newcommand{\manualdate}{29~oktober~2026}
+\newcommand{\version}{0.148.4}
+\newcommand{\manualdate}{30~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1036,6 +1036,16 @@ resten är utelämnade; brickorna har ett litet horisontellt mellanrum.
 Använd \ui{Förhandsgranska} för att se aktuellt antal träffar och riktiga bildkort som matchar, och spara sedan och publicera vid behov. Bilder och filer ligger kvar i sina fysiska gallerier, så ändringar av metadata eller betyg ändrar medlemskapet omedelbart. Det redaktionella betyget är privat och oberoende av besökarnas röstning. Administratörer kan även använda \ui{Spara sökning som smart galleri} från den offentliga sökningen.
 
 Välj \ui{Olistat} för åtkomst endast via URL, \ui{Rotgalleri} för att visa det smarta galleriet på startsidan eller \ui{Placering som undergalleri} för att låta fysiska gallerier koppla in det. I varje fysisk galleriredigerare väljer du om kopplingen hör hemma \ui{Ovanför galleriinnehållet} eller \ui{Nedanför galleriinnehållet} och anger ett ordningsvärde. Kopplingar ovanför visas först, sedan vanliga undergallerier och fotografier, och sist kopplingar nedanför. Lika ordningsvärden avgörs konsekvent med det smarta galleriets ID. Befintliga kopplingar får som standard placeringen nedanför med ordning~0.
+
+Under \ui{Identitet} i det fysiska galleriet visas \ui{Smart Gallery-kopplingar} före avancerade inställningar. Bara bifogade rader är synliga.
+Välj \ui{+ Smarta gallerier}, skriv ett namn och aktivera en träff.
+Högst åtta träffar visas; bredare sökningar visar visat och totalt antal.
+Varje rad har egen placering, ordning och \ui{Koppla loss}.
+Ändringarna är utkast tills \ui{Spara galleri}. \ui{Skapa smart galleri} öppnar definitionsredigeraren separat. Piltangenter och Enter når
+träffarna; Escape stänger den förankrade panelen. Utan JavaScript finns vanliga
+urvalsfält kvar. Bildspelet väntar på nästa avkodade bild och använder additiva
+övergångar i webbläsare som stöder det, utan en mörk puls mellan lika ljusa
+bilder; äldre webbläsare behåller den vanliga övergången.
 
 Samma virtuella galleri kan kopplas under flera fysiska gallerier med oberoende placering och ordning i varje övergalleri. Avsnittet \ui{Används i fysiska gallerier} i det smarta galleriets redigerare visar varje övergalleri och låter dig spara dess placering och ordning eller \ui{Koppla bort} det utan att ändra andra övergallerier. När redigeraren öppnas i administrationens sidopanel stannar åtgärderna i panelen; vanlig formulärinlämning är fortfarande tillgänglig när JavaScript är avstängt. Ett offentligt smart galleri som placeras under ett privat eller annars begränsat övergalleri ärver ändå övergalleriets gräns för offentlig åtkomst för kortet.
 
@@ -2491,6 +2501,8 @@ Manuella bildbyten och bildspel förbereder beskärningen innan nästa fotografi
 visas. Den gamla bilden behåller sin geometri under laddningen och tonas sedan
 ut samtidigt som den nya tonas in. Vid olika bildformer försvinner synliga
 delar av den gamla bilden därför inte abrupt först vid övergångens slut.
+Bildspelets övergång utesluter visarens bakgrund så att färger och ljusstyrka förblir
+desamma när täckbilden tas bort, även mellan beskurna och hela bildrutor.
 
 Zoomning över 100~\% begär omedelbart den skyddade källan i full kvalitet för det aktiva fotografiet. Den befintliga förhandsvisningen förblir synlig tills den större bilden är klar, och aktuell zoom- och panoreringsposition bevaras. I vanligt läge, helskärmsläge och mobilt helskärmsläge visar överföringen samma förloppsrad med procenttal och byteantal. Att byta fotografi, stänga visaren eller starta en nyare begäran om full kvalitet avbryter föregående överföring. En misslyckad eller avbruten begäran om full kvalitet lämnar den skyddade förhandsvisningen på plats.
 

@@ -592,7 +592,18 @@ function view_render_admin_gallery_editor_tabs(
 /**
  * Render the Identity tab from controller-prepared presentation data.
  *
- * @param array<string, mixed> $viewModel Controller-prepared values and trusted legacy fragments.
+ * @param array{active?:bool,gallery:array{title?:string,description?:string,
+ *     slug?:string,sort_order?:int},labels?:array<string,string>,
+ *     folder_name?:string,tags?:string,tag_suggestions_attribute?:string,
+ *     date_fields_html?:string,description_hint_html?:string,
+ *     localization_html?:string,source_language_html?:string,
+ *     simbrief_html?:string,openai_html?:string,parent_picker_html?:string,
+ *     tag_datalist_html?:string,smart_attachments?:array{metadata_ready:bool,
+ *     migration_notice_html:string,definitions:list<array{id:int,title:string,
+ *     edit_url:string,visibility_state:string,assigned:bool,placement:string,
+ *     placement_order:int,relationship_valid:bool}>,create_url:string,
+ *     labels:array<string,string>}|null} $viewModel Prepared values and trusted
+ *     date, localization, parent picker and optional-feature fragments.
  * @return void Emits Identity fields and the controller-prepared parent picker fragment.
  * @author Rudolf Klusal
  */
@@ -640,6 +651,10 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
             . (string) ($viewModel['localization_html'] ?? '')
             . '</div></div>';
 
+    if (is_array($smartAttachments)) {
+        view_render_admin_gallery_smart_attachments($smartAttachments);
+    }
+
     $advancedSummary = trim((string) ($gallery['slug'] ?? ''));
     $folderSummary = trim((string) ($viewModel['folder_name'] ?? ''));
     if ($folderSummary !== '' && $folderSummary !== $advancedSummary) {
@@ -685,9 +700,6 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
             . '<input name="sort_order" type="number" value="'
             . (int) ($gallery['sort_order'] ?? 0)
             . '"></label></div>';
-    if (is_array($smartAttachments)) {
-        view_render_admin_gallery_smart_attachments($smartAttachments);
-    }
     echo '</div></details></div>';
     echo (string) ($viewModel['tag_datalist_html'] ?? '');
 
@@ -699,154 +711,128 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
 }
 
 /**
- * Render Smart Gallery attachment controls from controller-prepared rows.
+ * Render searchable attachment additions and editable attached rows.
  *
- * @param array<string, mixed> $viewModel Controller-prepared attachment state and labels.
- * @return void Emit attachment groups and their editable placement controls.
+ * @param array{metadata_ready:bool,migration_notice_html:string,
+ *     definitions:list<array{id:int,title:string,edit_url:string,
+ *     visibility_state:string,assigned:bool,placement:string,
+ *     placement_order:int,relationship_valid:bool}>,create_url:string,
+ *     labels:array<string,string>} $viewModel Prepared rows, destinations,
+ *     schema availability and localized labels.
+ * @return void Emit staged fields inside the existing gallery save form.
  */
 function view_render_admin_gallery_smart_attachments(array $viewModel): void
 {
-    $labels = (array) ($viewModel['labels'] ?? []);
-    $groups = (array) ($viewModel['groups'] ?? []);
-    $definitions = (array) ($viewModel['definitions'] ?? []);
-
-    $title = (string) ($labels['title'] ?? 'Smart Gallery attachments');
-    echo
-        '<div class="admin-edit-card is-wide admin-gallery-advanced-smart"><div class="admin-gallery-advanced-section-heading"><h3>'
-            . e($title)
-            . '</h3><details class="admin-inline-help"><summary aria-label="'
-            . e($title)
-            . '" title="'
-            . e($title)
-            . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">'
-            . e((string) ($labels['help'] ?? ''))
-            . '</div></details></div>';
-    if (!(bool) ($viewModel['metadata_ready'] ?? false)) {
-        echo (string) ($viewModel['migration_notice_html'] ?? '');
-    } elseif ($definitions === []) {
-        echo
-            '<p class="muted">'
-                . e(
-                    (string) (
-                        $labels['empty'] ?? 'No Smart Galleries exist yet.'
-                    ),
-                )
-                . '</p>';
+    $labels = $viewModel['labels'];
+    $definitions = $viewModel['definitions'];
+    $title = $labels['title'];
+    echo '<section class="admin-edit-card is-wide admin-gallery-smart-attachments"'
+        . ' data-smart-attachments><div class="admin-smart-attachment-heading">'
+        . '<h3>' . e($title) . '</h3>';
+    view_render_admin_gallery_display_help(
+        $title,
+        $labels['help'] . ' ' . $labels['order_help'] . ' ' . $labels['save_hint'],
+    );
+    echo '</div>';
+    if (!$viewModel['metadata_ready']) {
+        echo $viewModel['migration_notice_html'];
     } else {
-        echo
-            '<input type="hidden" name="smart_gallery_children_present" value="1">';
-        echo
-            '<div class="admin-smart-gallery-current-groups" aria-label="'
-                . e(
-                    (string) (
-                        $labels['current_attachments']
-                        ?? 'Current Smart Gallery attachments'
-                    ),
-                )
-                . '">';
-        foreach ($groups as $group) {
-            $rows = (array) ($group['rows'] ?? []);
-            echo
-                '<section class="admin-smart-gallery-current-group"><h4>'
-                    . e((string) ($group['label'] ?? ''))
-                    . '</h4>';
-            if ($rows === []) {
-                echo
-                    '<p class="muted">'
-                        . e(
-                            (string) (
-                                $labels['group_empty']
-                                ?? 'No Smart Galleries in this placement area.'
-                            ),
-                        )
-                        . '</p>';
-            } else {
-                echo '<ul class="admin-smart-gallery-current-list">';
-                foreach ($rows as $row) {
-                    echo
-                        '<li><strong>'
-                            . e((string) ($row['title'] ?? ''))
-                            . '</strong><span>'
-                            . e((string) ($row['status'] ?? ''))
-                            . '</span></li>';
-                }
-                echo '</ul>';
-            }
-            echo '</section>';
-        }
-        echo '</div>';
-        echo
-            '<h4>'
-                . e((string) ($labels['settings'] ?? 'Attachment settings'))
-                . '</h4><div class="admin-smart-gallery-child-list">';
+        echo '<input type="hidden" name="smart_gallery_children_present" value="1">'
+            . '<div data-smart-attachment-rows>';
+        $attached = 0;
         foreach ($definitions as $definition) {
-            $smartId = (int) ($definition['id'] ?? 0);
-            $assigned = (bool) ($definition['assigned'] ?? false);
-            $placement = (string) ($definition['placement'] ?? 'bottom');
-            echo
-                '<div class="admin-smart-gallery-child-row'
-                    . ($assigned ? ' is-attached' : '')
-                    . '">';
-            echo
-                '<label class="checkbox-label"><input type="checkbox" name="smart_gallery_children['
-                    . $smartId
-                    . '][enabled]" value="1"'
-                    . ($assigned ? ' checked' : '')
-                    . '> <span><strong>'
-                    . e((string) ($definition['title'] ?? ''))
-                    . '</strong><small>'
-                    . e((string) ($definition['visibility_state'] ?? ''))
-                    . '</small></span></label>';
-            echo
-                '<label>'
-                    . e(
-                        (string) (
-                            $labels['placement'] ?? 'Placement for this parent'
-                        ),
-                    )
-                    . '<select name="smart_gallery_children['
-                    . $smartId
-                    . '][placement]"><option value="top"'
-                    . ($placement === 'top' ? ' selected' : '')
-                    . '>'
-                    . e(
-                        (string) (
-                            $labels['placement_top'] ?? 'Above gallery content'
-                        ),
-                    )
-                    . '</option><option value="bottom"'
-                    . ($placement === 'bottom' ? ' selected' : '')
-                    . '>'
-                    . e(
-                        (string) (
-                            $labels['placement_bottom']
-                            ?? 'Below gallery content'
-                        ),
-                    )
-                    . '</option></select></label>';
-            echo
-                '<label>'
-                    . e((string) ($labels['order'] ?? 'Order'))
-                    . '<input type="number" min="-100000" max="100000" name="smart_gallery_children['
-                    . $smartId
-                    . '][placement_order]" value="'
-                    . (int) ($definition['placement_order'] ?? 0)
-                    . '"></label>';
-            if (
-                $assigned
-                && !(bool) ($definition['relationship_valid'] ?? true)
-            ) {
-                echo
-                    '<p class="error">'
-                        . e((string) ($labels['relationship_invalid'] ?? ''))
-                        . '</p>';
+            if (!$definition['assigned']) {
+                continue;
             }
-            echo '</div>';
+            $attached++;
+            view_render_admin_gallery_smart_attachment_row($definition, $labels);
         }
-        echo
-            '</div><p class="muted">'
-                . e((string) ($labels['order_help'] ?? ''))
-                . '</p>';
+        echo '</div><p class="muted" data-smart-attachment-empty'
+            . ($attached > 0 ? ' hidden' : '') . '>'
+            . e($labels['none_attached']) . '</p>';
+        echo '<div class="admin-smart-attachment-actions">'
+            . '<details class="admin-inline-help admin-smart-attachment-picker"'
+            . ' data-smart-attachment-picker><summary>'
+            . '<span aria-hidden="true">+</span> ' . e($labels['add'])
+            . '</summary><div class="admin-inline-help-content">'
+            . '<label>' . e($labels['search'])
+            . '<input type="search" data-smart-attachment-search'
+            . ' autocomplete="off"></label>'
+            . '<div data-smart-attachment-results></div>'
+            . '<p class="muted" role="status" data-smart-attachment-status'
+            . ' data-hint="' . e($labels['search_hint']) . '"'
+            . ' data-empty="' . e($labels['no_matches']) . '"'
+            . '>'
+            . e($labels['search_hint']) . '</p></div></details>'
+            . '<a href="' . e($viewModel['create_url']) . '"'
+            . ' target="_blank" rel="noopener">'
+            . e($labels['create']) . ' <span aria-hidden="true">↗</span></a>'
+            . '</div>';
+        echo '<script type="application/json" data-smart-attachment-catalog>'
+            . json_encode($definitions, JSON_HEX_TAG | JSON_HEX_AMP
+                | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR)
+            . '</script><template data-smart-attachment-template>';
+        view_render_admin_gallery_smart_attachment_row([
+            'id' => 0, 'title' => '', 'edit_url' => '',
+            'visibility_state' => '', 'assigned' => true,
+            'placement' => 'bottom', 'placement_order' => 0,
+            'relationship_valid' => true,
+        ], $labels);
+        echo '</template><noscript><details><summary>' . e($labels['add'])
+            . '</summary>';
+        foreach ($definitions as $definition) {
+            if (!$definition['assigned']) {
+                view_render_admin_gallery_smart_attachment_row($definition, $labels);
+            }
+        }
+        echo '</details></noscript>';
+    }
+    echo '</section>';
+}
+
+/**
+ * Render one attachment's native selection, placement and order fields.
+ *
+ * @param array{id:int,title:string,edit_url:string,visibility_state:string,
+ *     assigned:bool,placement:string,placement_order:int,
+ *     relationship_valid:bool} $definition Prepared attachment or template row.
+ * @param array<string,string> $labels Localized field and action labels.
+ * @return void Emit fields preserving the server's existing attachment payload.
+ */
+function view_render_admin_gallery_smart_attachment_row(
+    array $definition,
+    array $labels,
+): void {
+    $id = $definition['id'];
+    $name = 'smart_gallery_children[' . $id . ']';
+    echo '<div class="admin-smart-attachment-row" data-smart-attachment-id="'
+        . $id . '"><div class="admin-smart-attachment-name">'
+        . '<label class="admin-smart-attachment-selection">'
+        . '<input type="checkbox" name="' . $name . '[enabled]" value="1"'
+        . ($definition['assigned'] ? ' checked' : '') . '>'
+        . '<span>' . e($definition['title']) . '</span></label>'
+        . '<a data-smart-attachment-title href="' . e($definition['edit_url'])
+        . '" target="_blank" rel="noopener">' . e($definition['title'])
+        . ' <span aria-hidden="true">↗</span></a>'
+        . '<small data-smart-attachment-state>'
+        . e($definition['visibility_state']) . '</small></div><label>'
+        . e($labels['placement']) . '<select name="' . $name . '[placement]">';
+    foreach (['top', 'bottom'] as $placement) {
+        echo '<option value="' . $placement . '"'
+            . ($definition['placement'] === $placement ? ' selected' : '')
+            . '>' . e($labels['placement_' . $placement]) . '</option>';
+    }
+    // These native bounds mirror smart_gallery_attachment_order_value();
+    // the service remains authoritative for the per-parent order policy.
+    echo '</select></label><label>' . e($labels['order'])
+        . '<input type="number" min="-100000" max="100000" name="'
+        . $name . '[placement_order]" value="'
+        . $definition['placement_order'] . '"></label>'
+        . '<button type="button" class="button secondary"'
+        . ' data-smart-attachment-remove hidden>' . e($labels['detach'])
+        . '</button>';
+    if ($definition['assigned'] && !$definition['relationship_valid']) {
+        echo '<p class="error">' . e($labels['relationship_invalid']) . '</p>';
     }
     echo '</div>';
 }

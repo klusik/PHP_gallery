@@ -56,7 +56,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
 </div>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox}
-        from '../../public/assets/gallery-modules/lightbox.js?v=20261029-content-fit-v4';
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261030-transition-isolation-v1';
 
     // Bound asynchronous fixture checkpoints, independently of slideshow speed.
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
@@ -75,6 +75,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     let transitionObservations = 0;
     let outgoingFadeObservations = 0;
     const preview = new URL(location.href).searchParams.has('preview');
+    const pixels = new URL(location.href).searchParams.has('pixels');
     window.addEventListener('error', event => errors.push(event.message));
     window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
 
@@ -279,7 +280,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
 
     /**
      * Inspect the real incoming fade before it becomes the live zoom surface.
-     * @returns {void} Throws if global image maxima distort the full-source box.
+     * @returns {void} Throws for distorted geometry or background-contaminated blending.
      */
     function checkTransitionFrame() {
         const cover = viewer.querySelector('.lightbox-transition-image');
@@ -289,6 +290,13 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         check(Math.abs(rect.width / rect.height
             / (cover.naturalWidth / cover.naturalHeight) - 1) < aspectTolerance,
             'incoming fade must retain full-source proportions before cropping');
+        check(style.mixBlendMode === 'plus-lighter',
+            'complementary fades must add light without a midpoint brightness dip');
+        const figure = viewer.querySelector('[data-lightbox-stage]').closest('figure');
+        check(cover.parentElement === figure
+            && getComputedStyle(figure).isolation === 'isolate'
+            && getComputedStyle(figure).backgroundColor === 'rgba(0, 0, 0, 0)',
+            'photographs must blend against transparency without adding the overlay background');
         check(style.maxWidth === 'none' && style.maxHeight === 'none',
             'fullscreen image maxima must not shrink the incoming crop box');
         if (cover.classList.contains('is-visible')) {
@@ -313,6 +321,82 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
             `wrong content aspect ${frame.width}/${frame.height}; expected ${aspect}`);
     }
 
+    /**
+     * Hold a screenshot checkpoint until the browser driver or a person advances it.
+     * @param {HTMLButtonElement} advance Visible fixture-only continuation control.
+     * @param {string} phase Unique covered/stable checkpoint identity.
+     * @returns {Promise<void>} Resolves after the checkpoint's own click.
+     */
+    function capturePixelPhase(advance, phase) {
+        advance.dataset.pixelPhase = phase;
+        advance.textContent = `Continue ${phase}`;
+        return new Promise(resolve => {
+            advance.addEventListener('click', () => resolve(), {once: true});
+        });
+    }
+
+    /**
+     * Hold actual slideshow handoffs for pixel comparisons in both crop directions.
+     * @param {HTMLAnchorElement[]} targets Uncropped then cropped source cards.
+     * @returns {Promise<void>} Resolves after covered/live captures of each target.
+     */
+    async function checkSlideshowPixels(targets) {
+        const advance = document.createElement('button');
+        advance.type = 'button';
+        advance.dataset.pixelAdvance = '';
+        // Keep the fixture control clear of both sampled photograph patches.
+        advance.style.cssText = 'position:fixed;right:1rem;bottom:1rem;z-index:10';
+        viewer.append(advance);
+        const nativeDecode = HTMLImageElement.prototype.decode;
+        let targetId = '';
+        let releaseCommit = null;
+        // Stall only the final live-node decode acknowledgement. The real CSS
+        // fade finishes naturally; the incoming cover stays fully opaque while
+        // the driver captures it, without replacing the production transition.
+        HTMLImageElement.prototype.decode = function (...args) {
+            const decoded = nativeDecode.apply(this, args);
+            if (this.hasAttribute('data-lightbox-img')
+                && this.dataset.lightboxImageId === targetId) {
+                return decoded.then(() => new Promise(resolve => {
+                    releaseCommit = resolve;
+                }));
+            }
+            return decoded;
+        };
+        try {
+            for (const [index, target] of targets.entries()) {
+                targetId = target.dataset.imageId;
+                releaseCommit = null;
+                viewer.querySelector('[data-lightbox-action="slideshow"]').click();
+                await waitFor(() => releaseCommit !== null);
+                const cover = viewer.querySelector('.lightbox-transition-image');
+                check(cover?.dataset.lightboxImageId === targetId
+                    && getComputedStyle(cover).opacity === '1',
+                    'pixel capture must observe the fully opaque target before handoff');
+                const rect = cover.getBoundingClientRect();
+                // These structural source fractions lie inside flat green/blue
+                // patches, away from JPEG boundaries, matte edges and text.
+                advance.dataset.pixelSamples = JSON.stringify([
+                    {x: rect.left + rect.width / 2, y: rect.top + rect.height * 0.35},
+                    {x: rect.left + rect.width / 2, y: rect.top + rect.height * 0.82},
+                ]);
+                await capturePixelPhase(advance, `covered-${index}`);
+                releaseCommit();
+                await waitFor(() => viewer.querySelector('[data-lightbox-img]')
+                    ?.dataset.lightboxImageId === targetId
+                    && !viewer.querySelector('.lightbox-transition-image'));
+                viewer.querySelector('[data-lightbox-action="slideshow"]').click();
+                check(viewer.dataset.lightboxContentFit
+                    === (index === 0 ? 'original' : 'cropped'),
+                    'pixel journey must switch from cropped to original and back');
+                await capturePixelPhase(advance, `stable-${index}`);
+            }
+        } finally {
+            HTMLImageElement.prototype.decode = nativeDecode;
+            advance.remove();
+        }
+    }
+
     const cards = [
         makeCard(1, {x: 256, y: 72, width: 768, height: 576}),
         makeCard(2, {x: 0, y: 90, width: 1280, height: 540}),
@@ -329,10 +413,18 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         makeCard(13, {x: 160, y: 0, width: 960, height: 720}, 'blend-local'),
         makeCard(14, {x: 160, y: 0, width: 960, height: 720}, 'blend-public'),
     ];
+    const pixelTargets = pixels ? [
+        makeCard(15, {x: 0, y: 0, width: 1280, height: 720}),
+        makeCard(16, {x: 256, y: 72, width: 768, height: 576}),
+    ] : [];
     try {
         setupGalleryLightbox();
-        await openCard(cards[0]);
-        if (preview) {
+        await openCard(pixels ? cards[cards.length - 1] : cards[0]);
+        if (pixels) {
+            await checkSlideshowPixels(pixelTargets);
+            check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
+            result.textContent = 'BROWSER PASS: cropped/original slideshow pixel checkpoints.';
+        } else if (preview) {
             result.textContent = 'MANUAL PREVIEW: content fitted; use ▣ for original frame.';
         } else {
             check(viewer.dataset.lightboxContentFit === 'cropped', 'four-sided JPEG matte must be detected');

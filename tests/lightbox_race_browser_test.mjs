@@ -12,6 +12,7 @@
  *   - Gate actual local image responses and browser decode completion.
  *   - Deliver sparse metadata and decoded images out of order.
  *   - Verify close/reopen invalidation, resource cancellation, and zoom promotion.
+ *   - Compare rendered colors before and after cropped/original slideshow handoffs.
  *
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -40,6 +41,15 @@ const interactionDeadlineMs = 12000;
 // Consumers: interact() phase observation cadence.
 // Rationale: a short interval keeps input close to each fixture checkpoint while remaining bounded.
 const interactionPollMs = 20;
+// Purpose: Average a flat screenshot patch without sampling JPEG edges or text.
+// Type: integer. Units: raster pixels. Scope: slideshow handoff screenshots.
+// Consumers: screenshotPatches. Rationale: radius 2 gives a stable 5x5 patch.
+const screenshotPatchRadius = 2;
+// Purpose: Reject a visible brightness step when the decoded cover is removed.
+// Type: number. Units: 8-bit sRGB channel levels. Scope: slideshow handoffs.
+// Consumers: interactPixels. Rationale: 1 admits raster rounding, but rejects
+// the observed 5-level background addition in the previous compositor path.
+const handoffChannelTolerance = 1;
 if (!executable || executable.startsWith('--')) {
     console.log('SKIP lightbox race browser test: supply the path to an installed Chrome/Edge executable.');
     process.exit(0);
@@ -172,6 +182,89 @@ const server = createServer(async (request, response) => {
 
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const fixtureUrl = `http://127.0.0.1:${server.address().port}/`;
+
+/**
+ * Read flat photograph patches from an actual browser-composited PNG.
+ * @param {LightboxRaceBrowserControls} controls Owned fixture protocol operations.
+ * @param {string} png Base64 screenshot bytes captured at the current checkpoint.
+ * @returns {Promise<number[][]>} Ordered patches, each with mean red/green/blue levels.
+ */
+async function screenshotPatches(controls, png) {
+    const patches = await controls.evaluate(`(async () => {
+        const raster = new Image();
+        raster.src = ${JSON.stringify(`data:image/png;base64,${png}`)};
+        await raster.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = raster.naturalWidth;
+        canvas.height = raster.naturalHeight;
+        const context = canvas.getContext('2d');
+        context.drawImage(raster, 0, 0);
+        const ratio = raster.naturalWidth / innerWidth;
+        const radius = ${screenshotPatchRadius};
+        const side = radius * 2 + 1;
+        const points = JSON.parse(document.querySelector('[data-pixel-advance]')
+            .dataset.pixelSamples);
+        return points.map(point => {
+            const x = Math.round(point.x * ratio) - radius;
+            const y = Math.round(point.y * ratio) - radius;
+            if (x < 0 || y < 0 || x + side > canvas.width
+                || y + side > canvas.height) throw new Error('Patch outside screenshot');
+            const pixels = context.getImageData(x, y, side, side).data;
+            const channels = [0, 0, 0];
+            for (let offset = 0; offset < pixels.length; offset += 4) {
+                channels.forEach((value, channel) => {
+                    channels[channel] = value + pixels[offset + channel];
+                });
+            }
+            return channels.map(value => value / (side * side));
+        });
+    })()`);
+    assert.ok(Array.isArray(patches) && patches.length > 0,
+        'Screenshot must yield real photograph color patches');
+    return patches;
+}
+
+/**
+ * Compare real composited pixels at both sides of each automatic crop handoff.
+ * @param {LightboxRaceBrowserControls} controls Owned screenshot and fixture controls.
+ * @returns {Promise<void>} Resolves after both directions retain their rendered colors.
+ */
+async function interactPixels(controls) {
+    const captures = new Map();
+    const deadline = Date.now() + interactionDeadlineMs;
+    while (Date.now() < deadline) {
+        const phase = await controls.evaluate(
+            `document.querySelector('[data-pixel-advance]')?.dataset.pixelPhase || ''`);
+        if (typeof phase === 'string' && phase && !captures.has(phase)) {
+            const patches = await screenshotPatches(
+                controls, await controls.captureScreenshot());
+            captures.set(phase, patches);
+            if (phase.startsWith('stable-')) {
+                const covered = captures.get(phase.replace('stable-', 'covered-'));
+                assert.ok(covered, 'The opaque cover must be captured before its live image');
+                assert.equal(patches.length, covered.length,
+                    'Both screenshots must sample the same photograph patches');
+                for (const [patch, channels] of patches.entries()) {
+                    for (const [channel, value] of channels.entries()) {
+                        assert.ok(Math.abs(value - covered[patch][channel])
+                            <= handoffChannelTolerance,
+                        `${phase} patch ${patch} channel ${channel}: cover `
+                            + `${covered[patch][channel]}, live ${value}`);
+                    }
+                }
+                console.log(`Slideshow pixel evidence ${phase}: ${JSON.stringify(patches)}`);
+            }
+            await controls.evaluate(
+                `document.querySelector('[data-pixel-advance]').click()`);
+            if (phase === 'stable-1') return;
+        }
+        await new Promise(resolve => setTimeout(resolve, interactionPollMs));
+    }
+    const result = await controls.evaluate(
+        `document.querySelector('#results')?.textContent || ''`);
+    throw new Error(`Slideshow pixel checkpoints incomplete: ${result}`);
+}
+
 try {
     let fullscreenScreenshotPath = '';
     let fullscreenEvidence = null;
@@ -260,6 +353,13 @@ try {
         assert.equal(contentFit.exitCode, 0, 'Content-fit browser must exit successfully');
         assert.ok(contentFit.result?.includes('BROWSER PASS'),
             'Content-fit fixture must pass at each supported layout');
+        const pixels = await runHeadlessBrowserFixture(executable,
+            `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels`,
+            'lightbox-handoff-pixels-profile-', {viewport, interact: interactPixels});
+        console.log(pixels.result);
+        assert.equal(pixels.exitCode, 0, 'Pixel-comparison browser must exit successfully');
+        assert.ok(pixels.result?.includes('BROWSER PASS'),
+            'Cropped/original handoffs must retain their actual rendered colors');
     }
 } finally {
     server.close();

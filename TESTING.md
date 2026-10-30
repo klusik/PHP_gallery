@@ -1133,7 +1133,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.148.3. Release verification uses the
+This guide applies to PHP Gallery Version 0.148.4. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4143,6 +4143,14 @@ maxima during fades, and observes intermediate outgoing opacity. Its automatic
 slideshow changes between different crop aspects. Include a viewport resize
 inside the fade; incoming geometry must refit without exposing an original-frame
 intermediate, and cancellation/teardown must restore live-surface opacity.
+The same owner runs `lightbox_content_fit.html?pixels` at both viewports.
+It holds the final live-node decode acknowledgement after the actual fade has
+finished, captures the opaque cover, releases the commit and captures the live
+image. It compares mean RGB values of flat 5x5 screenshot patches within one
+8-bit channel level for cropped-to-original and original-to-cropped slides.
+These are browser-composited pixels, not canvas copies of the source image.
+The incoming layer and live stage must share a transparent isolated figure;
+including the overlay background adds its color until the cover disappears.
 For tests against a live gallery, launch a presentation with
 `presentation=1&presentation_music=0` or confirm its soundtrack is off before
 playback. The standalone content-fit fixture has no playlist/audio source.
@@ -5399,6 +5407,28 @@ ranges, and physical-gallery thumbnail guardrails.
 predicate, stable ordering, bounded page/lightbox windows, route policy,
 side-panel enhancement, preview renderer reuse, download authorization
 structure, and normal-gallery slideshow default.
+
+`gallery_display_editor_layout_test.php` also renders the physical gallery's
+Smart attachment section from a 100-definition catalog. The registered
+`gallery_display_browser_test.mjs` exercises bounded name results, escaped
+labels, duplicate exclusion, keyboard commitment, staged add/detach fields,
+viewport-bounded panels and dynamically replaced editors without writes.
+The confined keyboard adapter admits Enter for this fixture, and the fixture
+requires successful adapter responses before asserting focus or commitment.
+`lightbox_content_fit.html`, owned by `lightbox_race_browser_test.mjs`, checks
+additive incoming composition during actual manual and slideshow fades while
+retaining outgoing geometry and the gradual exposed-edge fade.
+Its `?pixels` journey also compares actual screenshot colors on both sides of
+automatic crop/original handoffs, including the final cover removal.
+
+Manual acceptance: open a physical gallery's editor from its public page and
+standalone Admin; verify the compact Identity attachment section at desktop and
+390px widths. Attach by name, change Above/Below and order, detach, then save
+through the existing drawer and reopen to confirm persistence. Confirm keyboard
+Escape/outside dismissal, no horizontal overflow and 44px narrow targets. Keep
+live installations read-only; use localhost for writes and disable soundtrack
+playback when inspecting slideshow brightness. Older blend-mode support and real
+mobile/GPU behavior remain separate manual coverage.
 
 The registered `gallery_workflow_integration_test.php` exercises photo-tag
 membership through a disposable migrated MySQL/MariaDB database and the real

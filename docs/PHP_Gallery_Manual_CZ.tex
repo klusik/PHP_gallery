@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.148.3}
-\newcommand{\manualdate}{29.~října~2026}
+\newcommand{\version}{0.148.4}
+\newcommand{\manualdate}{30.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1025,6 +1025,17 @@ mezi štítky je malá vodorovná mezera.
 Pomocí \ui{Náhled} zobrazte aktuální počet shod a~skutečné karty odpovídajících fotografií, poté galerii uložte a~případně zveřejněte. Obrázky i~soubory zůstávají ve svých fyzických galeriích, takže změny metadat nebo hodnocení okamžitě mění jejich příslušnost. Redakční hodnocení je soukromé a~nezávislé na hlasování návštěvníků. Správci mohou také ve veřejném vyhledávání použít \ui{Uložit vyhledávání jako chytrou galerii}.
 
 Zvolte \ui{Neuvedená v~seznamech} pro přístup pouze přes URL, \ui{Kořenová galerie} pro zobrazení chytré galerie na domovské stránce nebo \ui{Umístění jako podgalerie}, aby ji mohly připojit fyzické galerie. V~editoru každé fyzické galerie vyberte, zda připojení patří \ui{Nad obsah galerie} nebo \ui{Pod obsah galerie}, a~přiřaďte mu hodnotu pořadí. Nejprve se vykreslí připojení nad obsahem, poté běžné podgalerie a~fotografie a~nakonec připojení pod obsahem. Shodné hodnoty pořadí se jednotně rozlišují podle ID chytré galerie. Existující připojení mají ve výchozím stavu umístění pod obsahem a~pořadí~0.
+
+V~záložce \ui{Identita} fyzické galerie je oddíl \ui{Připojené chytré
+galerie} před pokročilými nastaveními. Viditelné jsou pouze připojené položky.
+Zvolte \ui{+ Chytré galerie}, napište název a~aktivujte nalezenou položku.
+Panel ukáže nejvýše osm shod; širší hledání uvede počet zobrazených a~všech shod.
+Každý řádek má vlastní umístění, pořadí a~akci \ui{Odpojit}.
+Změny zůstávají návrhem do~\ui{Uložit galerii}. Odkaz \ui{Vytvořit chytrou galerii} otevře samostatný editor definice. Šipky a~Enter zpřístupní
+výsledky, Escape zavře panel ukotvený u~spouštěče. Bez JavaScriptu zůstávají
+nativní pole výběru. Prezentace čeká na~dekódování dalšího snímku
+a~v~podporovaných prohlížečích používá aditivní prolínání bez tmavého pulzu
+mezi stejně jasnými snímky; starší prohlížeče zachovají běžné prolínání.
 
 Stejnou virtuální galerii lze připojit pod několik fyzických galerií, s~nezávislým umístěním a~pořadím u~každého rodiče. Oddíl \ui{Použito ve fyzických galeriích} v~editoru chytré galerie ukazuje všechny rodiče a~umožňuje uložit jejich umístění a~pořadí nebo použít \ui{Odpojit}, aniž se změní ostatní rodiče. Je-li editor otevřený v~postranním panelu administrace, tyto akce zůstávají v~panelu; při vypnutém JavaScriptu je dostupné běžné odeslání formuláře. Veřejná chytrá galerie umístěná pod soukromou nebo jinak omezenou nadřazenou galerií nadále pro svou kartu dědí hranici jejího veřejného přístupu.
 
@@ -2473,6 +2484,8 @@ Ruční navigace i~prezentace připraví ořez před prvním zobrazením další
 fotografie. Původní snímek si během načítání zachová geometrii a~při přechodu
 postupně mizí současně s~objevováním nového. Při rozdílných tvarech snímků
 tak odhalené části předchozí fotografie nezmizí náhle až na~konci přechodu.
+Prolínání v~prezentaci nezahrnuje pozadí prohlížeče, takže odstranění překryvného snímku
+zachová stejné barvy i~jas, také při střídání oříznutých a~celých snímků.
 
 Přiblížení nad 100~\% okamžitě vyžádá chráněný zdroj plné kvality aktivní fotografie. Stávající náhled zůstává viditelný, dokud větší obrázek není připraven, a~aktuální přiblížení i~poloha posunutí se zachovávají. V~běžném, celoobrazovkovém i~mobilním celoobrazovkovém režimu přenos zobrazuje stejný ukazatel průběhu s~procentem a~počtem bajtů. Změna fotografie, zavření prohlížeče nebo zahájení novějšího požadavku plné kvality ruší předchozí přenos. Neúspěšný nebo zrušený požadavek plné kvality ponechá chráněný náhled na místě.
 

@@ -2904,6 +2904,12 @@ export function setupGalleryLightbox() {
      * important when consecutive photographs have different aspect ratios: the old
      * image keeps its old cropped rectangle while fading out. The new image fades
      * in through a proportional full-source box clipped to its prepared bounds.
+     * Both images blend inside the transparent, isolated figure. Including the
+     * overlay background in the additive blend would brighten the incoming image
+     * until its cover is removed, causing a second pulse at the live-image handoff.
+     * The decorated manual 3D carousel retains its outer cover: its perspective
+     * changes fixed-position coordinates and its raised stage covers inner layers.
+     * Slideshow disables those decorations and uses the isolated figure normally.
      * Once the transition is
      * fully opaque, the real zoom surface is switched underneath it using dimensions
      * calculated from the same decoded target. The transition is removed only after
@@ -2927,8 +2933,10 @@ export function setupGalleryLightbox() {
             return Promise.resolve(false);
         }
 
+        const transitionHost = threeDCarouselEnabled && !lightboxSlideshowActive
+            ? overlay : stageLink.closest('figure');
         const targetMetrics = prepareDecodedLightboxGeometry(loadedImage);
-        if (!targetMetrics) {
+        if (!targetMetrics || !(transitionHost instanceof HTMLElement)) {
             return Promise.resolve(false);
         }
         activeLightboxTransitionToken += 1;
@@ -2950,7 +2958,7 @@ export function setupGalleryLightbox() {
         const transitionDuration = currentLightboxTransitionDuration();
         transitionNode.style.setProperty('--lightbox-transition-duration', `${transitionDuration}ms`);
         transitionImage = transitionNode;
-        overlay.append(transitionNode);
+        transitionHost.append(transitionNode);
 
         return decodeLoadedImage(transitionNode).then(() => new Promise((resolve) => {
             if (

@@ -183,6 +183,32 @@ full-source box in fullscreen and misaligned the crop. Both layers now fade,
 so exposed old content outside a differently shaped incoming image does not
 disappear abruptly. Cancellation restores opacity only for its owning cover;
 viewport/map/fullscreen changes and final decode remeasure the target.
+Complementary fades now use `plus-lighter` on the incoming cover. Normal
+source-over alpha compositing attenuated the outgoing image twice, producing a
+25% brightness dip at equal half opacity. Additive light preserves the intended
+weighted blend while retaining the exposed-edge fade for different geometries.
+The cover now belongs to the transparent, isolated figure containing the live
+stage. Isolating only the outer overlay included its background in the additive
+blend: an actual local slideshow's opaque cover was about 5 sRGB levels brighter
+than the stable image at identical geometry. Removing it caused a second pulse.
+The local 37-to-38 sequence was captured before and after this correction with
+an empty soundtrack. Its mean end-of-fade color difference fell from about
+5 levels to below 0.3 levels; image resampling still differs at individual edges.
+The existing Chromium owner also compares screenshot patches before/after real
+automatic cropped-to-original and original-to-cropped handoffs at 1440x900 and
+390x844. Its decode acknowledgement gate holds the fully opaque cover for a
+capture, then releases the unchanged production commit. The one-level channel
+tolerance admits raster rounding without admitting the observed background jump.
+The decorated manual 3D carousel permanently retains the outer cover: its
+perspective changes fixed-position coordinates and its raised stage would hide
+an inner cover. The shared lightbox owner keeps that existing presentation path;
+slideshow disables these decorations and uses the isolated figure in every mode.
+The CSS lightbox owner permanently retains ordinary opacity compositing in
+engines without this blend mode; there is no browser usage evidence authorizing
+removal of that fallback. The content-fit browser fixture checks the real
+computed blend mode and transparent isolation during manual and slideshow
+transitions. Broader GPU and
+real-device brightness acceptance remains manual coverage.
 The actual local 6-to-7 transition was inspected with the soundtrack explicitly
 disabled: outgoing/incoming opacity was about 0.795/0.205 during the blend.
 The focused fixture passed manual and automatic transitions, including a narrow

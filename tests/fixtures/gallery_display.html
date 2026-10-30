@@ -81,6 +81,42 @@ setupAdminGalleryGridControls();
 if (!new URL(location.href).searchParams.has('visual')) {
 try {
     let form = document.querySelector('form');
+    const smart = form.querySelector('[data-smart-attachments]');
+    const picker = smart.querySelector('[data-smart-attachment-picker]');
+    const search = smart.querySelector('[data-smart-attachment-search]');
+    const rows = smart.querySelector('[data-smart-attachment-rows]');
+    await frame();
+    check(rows.childElementCount === 1 && smart.querySelectorAll('[name]').length === 4,
+        'A hundred catalog definitions must produce fields only for the attached row');
+    picker.querySelector('summary').click(); await frame();
+    search.value = 'Collection'; search.dispatchEvent(new Event('input', {bubbles:true}));
+    check(picker.querySelectorAll('[data-smart-attachment-add]').length === 8
+        && picker.querySelector('[data-smart-attachment-status]').textContent === '8 / 99',
+        'Broad name matches must stay bounded and report their displayed/total count');
+    check(getComputedStyle(picker.querySelector('[data-smart-attachment-add]')).backgroundColor === 'rgba(0, 0, 0, 0)',
+        'Standalone Admin styles must preserve transparent picker actions');
+    search.value = '<safe>'; search.dispatchEvent(new Event('input', {bubbles:true}));
+    check(picker.querySelectorAll('[data-smart-attachment-add]').length === 1
+        && !picker.querySelector('safe'), 'Search must render plain escaped titles');
+    check((await originalFetch('/__key?key=Enter')).ok,
+        'Trusted keyboard adapter must admit this fixture Enter'); await frame();
+    check(document.activeElement?.dataset.smartAttachmentAdd === '100'
+        && rows.childElementCount === 1, 'Enter must select a result without submitting the gallery');
+    check((await originalFetch('/__key?key=Enter')).ok,
+        'Trusted keyboard adapter must admit this fixture Enter'); await frame();
+    check(rows.childElementCount === 2 && !picker.open && requests.length === 0
+        && form.querySelector('[name="smart_gallery_children[100][enabled]"]').checked,
+        'Explicit commitment stages one row without a mutation or navigation');
+    rows.querySelector('[data-smart-attachment-id="100"] [data-smart-attachment-remove]').click();
+    check(rows.childElementCount === 1 && !form.querySelector('[name="smart_gallery_children[100][enabled]"]'),
+        'Detach removes only its staged fields');
+    picker.querySelector('summary').click(); await frame();
+    search.value = 'Collection 1'; search.dispatchEvent(new Event('input', {bubbles:true}));
+    check(!picker.querySelector('[data-smart-attachment-add="1"]'),
+        'An attached identity cannot be added twice');
+    await originalFetch('/__key?key=Escape'); await frame();
+    check(!picker.open && document.activeElement === picker.querySelector('summary'),
+        'Attachment Escape dismisses the panel and returns trigger focus');
     const input = form.querySelector('[name="show_filenames"]');
     const row = input.closest('.admin-display-switch-row');
     input.click();
@@ -115,6 +151,14 @@ try {
         await originalFetch('/__viewport?width=' + width); await frame();
         check(document.documentElement.scrollWidth <= innerWidth,
             'Display must fit the viewport without horizontal scrolling');
+        picker.querySelector('summary').click(); await frame();
+        const pickerBox = picker.querySelector('.admin-inline-help-content').getBoundingClientRect();
+        check(pickerBox.left >= 0 && pickerBox.right <= innerWidth
+            && pickerBox.top >= 0 && pickerBox.bottom <= innerHeight,
+            'Attachment picker must remain anchored within the desktop/narrow viewport');
+        if (width === 390) check(picker.querySelector('summary').getBoundingClientRect().height >= 44,
+            'Attachment actions must retain narrow touch targets');
+        await originalFetch('/__key?key=Escape'); await frame();
         const switchStyle = getComputedStyle(input);
         check(switchStyle.width === '26px' && switchStyle.height === '14px',
             'Switch must retain the compact approved geometry');
@@ -145,6 +189,15 @@ try {
     const replacement = form.cloneNode(true);
     form.replaceWith(replacement);
     form = replacement;
+    await frame();
+    const newSmart = form.querySelector('[data-smart-attachments]');
+    newSmart.querySelector('[data-smart-attachment-picker] > summary').click(); await frame();
+    const newSearch = newSmart.querySelector('[data-smart-attachment-search]');
+    newSearch.value = '<safe>'; newSearch.dispatchEvent(new Event('input', {bubbles:true}));
+    newSmart.querySelector('[data-smart-attachment-add="100"]').click(); await frame();
+    check(newSmart.querySelector('[data-smart-attachment-rows]').childElementCount === 2
+        && !smart.isConnected && location.href === originalUrl,
+        'Replaced editor fragments retain attachment controls without rebinding');
     const reinjected = form.querySelector('[name="show_filenames"]');
     reinjected.click(); await saved(reinjected.closest('.admin-display-switch-row'));
     check(requests.length === 2 && requests[1].edit_revision === '2'
