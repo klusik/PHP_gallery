@@ -1,5 +1,91 @@
 # Patch notes
 
+## Version 0.148.4
+
+Improved Smart Gallery attachment editing and corrected lightbox slideshow
+brightness when photographs changed, including transitions between cropped
+and original frames.
+
+### Highlights
+
+#### Smart Gallery attachment editing
+
+- Moved Smart Gallery attachments into the physical gallery editor's Identity
+  tab, before Advanced settings, and showed only attached galleries as editable
+  rows.
+- Added a compact name-search panel beside the attachment action, with at most
+  eight unattached matches and a displayed/total count for broader searches.
+- Kept placement above or below gallery content, order and Detach together in
+  each attached row. Additions, removals and placement changes remained staged
+  until Save gallery.
+- Added direct links to edit an attached definition or create a Smart Gallery
+  separately, with keyboard access and native attachment fields retained when
+  JavaScript was unavailable.
+
+#### Stable slideshow brightness
+
+- Removed the midpoint dark pulse caused by ordinary compositing of two
+  complementary fading photographs.
+- Fixed the brightness step when the incoming cover was removed after a fade.
+  The photograph layers blended against transparency without adding the viewer
+  background to the incoming image.
+- Preserved decoded-image readiness, outgoing crop geometry and the gradual
+  disappearance of exposed edges when consecutive photographs had different
+  shapes. The shared viewer applied the correction to physical and Smart
+  Galleries.
+
+### Technical Details
+
+#### Backend and presentation
+
+- Updated the attachment view model in
+  `app/controllers/admin_galleries_edit_page/tab_identity.php` and the markup in
+  `app/views/admin_gallery_edit_tabs.php` for attached rows, prepared editor
+  destinations and a reusable native-field template.
+- Extended `public/assets/gallery-modules/admin-gallery-compact-editor.js` with
+  bounded catalog filtering, staged add/detach controls, duplicate exclusion
+  and contextual-panel keyboard behavior. Updated the owning import revision
+  in `public/assets/gallery.js` and scoped the compact layout in
+  `public/assets/styles/side-panel.css` for standalone Admin and public drawers.
+- Updated `public/assets/gallery-modules/lightbox.js` and
+  `public/assets/styles/lightbox.css` to combine additive incoming composition
+  with a transparent isolated figure for slideshow transitions. Kept the
+  decorated manual 3D carousel's outer cover to preserve its perspective and
+  stacking behavior.
+- Reused existing translated actions and help without expanding the language
+  catalogs. Preserved existing Save, authentication, CSRF, relationship and
+  cycle validation; no database migration was introduced.
+- Retained the existing opacity fade for browsers without additive blend-mode
+  support and kept presentation cropping independent of stored image files.
+
+#### Tests and documentation
+
+- Extended `tests/gallery_display_editor_layout_test.php` and
+  `tests/fixtures/gallery_display.html` with a 100-definition catalog,
+  bounded search results, escaped labels, staged fields and dynamic-editor
+  coverage. Extended the existing Admin browser harness's confined Enter-key
+  adapter and checked its responses before focus assertions.
+- Extended `tests/fixtures/lightbox_content_fit.html` and
+  `tests/lightbox_race_browser_test.mjs` to compare actual screenshot colors
+  before and after automatic cropped-to-original and original-to-cropped
+  handoffs at 1440x900 and 390x844, within one 8-bit channel level.
+- Updated `TESTING.md`, `docs/SMART_GALLERIES.md`, the compatibility register
+  and all four maintained manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Made slideshows retain consistent brightness through the blend and final
+  image handoff, including changes between cropped and uncropped photographs.
+
+#### For administrators
+
+- Replaced the full catalog of attachment controls with attached rows and
+  name search, reducing clutter as more Smart Galleries were created.
+- Kept attachment changes in the existing gallery-save workflow, with
+  placement, order and removal available beside each attached gallery.
+
 ## Version 0.148.3
 
 Updated the Windows companion to 0.11.0 with game-aware action labels,
