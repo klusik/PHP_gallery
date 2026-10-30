@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.148.5}
+\newcommand{\version}{0.148.6}
 \newcommand{\manualdate}{30~oktober~2026}
 
 \hypersetup{
@@ -2507,6 +2507,11 @@ Under bildbyten förblir galleriet i bakgrunden spärrat utan återaktivering
 mellan fotografierna. När visaren stängs återställs ursprungligt tillstånd
 även för inbäddade redigerare och kartor. Inbyggd helskärm behåller en ogenomskinlig
 bakgrund, och pekskärmens svepstilar bevarar fotografiernas övergång.
+I helskärm ritas inte sidans täckta sidhuvud och kort, men deras layout och
+rullningsläge bevaras. De återställs när helskärm avslutas; inbäddade kartor
+och värdar för inbyggda dialoger behåller sin synlighet. Smarta gallerier
+återanvänder länken till samma källgalleri och uppdaterar adress, sökväg och
+tillgängligt namn när källan ändras.
 
 Zoomning över 100~\% begär omedelbart den skyddade källan i full kvalitet för det aktiva fotografiet. Den befintliga förhandsvisningen förblir synlig tills den större bilden är klar, och aktuell zoom- och panoreringsposition bevaras. I vanligt läge, helskärmsläge och mobilt helskärmsläge visar överföringen samma förloppsrad med procenttal och byteantal. Att byta fotografi, stänga visaren eller starta en nyare begäran om full kvalitet avbryter föregående överföring. En misslyckad eller avbruten begäran om full kvalitet lämnar den skyddade förhandsvisningen på plats.
 

@@ -254,6 +254,24 @@ native entry, CSS fallback and touch. Actual Smart Gallery acceptance remains
 separate. Local negative/positive browser checks do not replace hosted
 exact-candidate qualification.
 
+After live 0.148.5 the user confirmed physical-gallery playback worked but
+Smart Gallery still flashed. A new 60 fps recording contains six page exposures
+near photo changes, lasting one or two frames, with HUD controls hidden. Thus
+the previous localhost acceptance did not establish Smart Gallery acceptance.
+Smart source metadata recreated a blurred source link on each photo; the owner
+now reconciles that link without mutation when its source is unchanged.
+Fullscreen additionally marks covered page branches to suppress painting with
+CSS visibility while preserving layout. Marker restoration is separate from
+inert state, protects newer modal paths and native dialog hosts, and runs on
+fullscreen class changes, exit and teardown. This is a rendering defense, not
+proof of a particular Chrome/GPU defect. The supplied local Smart route was
+inspected with audio absent. On 2026-10-30 the user replayed the feature on
+Windows and macOS and reported no page flashing on localhost. Acceptance on
+the newly deployed live patch remains separate. The reported SDR/HDR handoff
+appearance is outside this change; decode and tone-mapping behavior remain
+unchanged. Native and touch fixtures now include populated Smart source links
+and explicit background-paint checks alongside existing physical-gallery lanes.
+
 ## Lightbox fullscreen exit and split-map lifetime
 
 Owner: `public/assets/gallery-modules/lightbox.js`. Native browser fullscreen

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.148.5}
+\newcommand{\version}{0.148.6}
 \newcommand{\manualdate}{30 October 2026}
 
 \hypersetup{
@@ -2509,6 +2509,11 @@ without being reactivated between photographs. Closing the~viewer restores
 the~original background state, including nested editors and~maps. Native
 fullscreen retains an~opaque backing, and~touch swipe styling preserves
 the~photograph fade.
+In~fullscreen, the~covered page header and~cards stop painting while their
+layout and~scroll position remain intact. Leaving fullscreen restores them;
+nested maps and~native dialog hosts retain their own visibility. A~Smart
+Gallery reuses an~unchanged source-gallery link and~updates its~address,
+breadcrumb and~accessible name when the~source changes.
 
 Zooming above 100\% immediately requests the~protected full-quality source for~the~active photograph. The~existing preview remains visible until the~larger image is~ready, and~the~current zoom and~pan position are~preserved. In~normal, full-screen, and~mobile full-screen modes, this transfer shows the~same progress bar with a~percentage and~a~byte count. Changing photographs, closing the~viewer, or~starting a~newer full-quality request cancels the~previous transfer. A~failed or~cancelled full-quality request leaves the~protected preview in~place.
 

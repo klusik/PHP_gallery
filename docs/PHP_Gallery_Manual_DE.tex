@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.148.5}
+\newcommand{\version}{0.148.6}
 \newcommand{\manualdate}{30.~Oktober~2026}
 
 \hypersetup{
@@ -2616,6 +2616,11 @@ Reaktivierung gesperrt. Beim Schließen wird der ursprüngliche Zustand auch
 für verschachtelte Editoren und Karten wiederhergestellt. Natives Vollbild
 behält eine deckende Hintergrundfläche; Touch-Wischstile erhalten die
 Überblendung der Fotos.
+Im Vollbild werden verdeckte Kopfzeile und Karten nicht gezeichnet; Layout
+und Scrollposition bleiben erhalten. Beim Verlassen werden sie wieder sichtbar.
+Verschachtelte Karten und native Dialogcontainer behalten ihre Sichtbarkeit.
+Smart Galleries verwenden denselben Link bei unveränderter Quellgalerie und
+aktualisieren Adresse, Pfad und zugänglichen Namen bei einem Quellenwechsel.
 
 Zoom über 100~\% fordert sofort die geschützte Quelle voller Qualität für das aktive Foto an. Die vorhandene Vorschau bleibt sichtbar, bis das größere Bild bereit ist; aktuelle Zoom- und Verschiebeposition bleiben erhalten. Im normalen, Vollbild- und mobilen Vollbildmodus zeigt diese Übertragung dieselbe Fortschrittsleiste mit Prozentwert und Byteanzahl. Fotowechsel, Schließen des Betrachters oder eine neuere Anfrage voller Qualität brechen die vorherige Übertragung ab. Eine fehlgeschlagene oder abgebrochene Anfrage voller Qualität belässt die geschützte Vorschau.
 

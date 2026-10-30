@@ -6,6 +6,7 @@
  * Purpose: Give public viewer overlays one focus and background owner.
  * Responsibilities:
  *   - Isolate covered content and restore its original inert state.
+ *   - Suspend covered page painting during fullscreen viewer playback.
  *   - Keep keyboard focus in the topmost viewer or map layer.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -15,9 +16,17 @@
 const layers = [];
 /** @type {Map<HTMLElement,boolean>} */
 const covered = new Map();
-const backgroundObserver = new MutationObserver(() => {
+/** @type {Map<HTMLElement,string|null>} Original paint-marker values. */
+const paintCovered = new Map();
+const backgroundObserver = new MutationObserver((records) => {
     const element = layers.at(-1)?.element;
     if (!element) return;
+    // Thumbnail/HUD classes change frequently. Only owned shell changes,
+    // native dialog ownership and structural moves affect background coverage.
+    if (!records.some((record) => record.type === 'childList'
+        || layers.some((layer) => layer.element === record.target)
+        || (record.attributeName === 'open'
+            && record.target instanceof HTMLDialogElement))) return;
     isolateCurrentLayer();
     // A nested editor can move from an inert background branch into the viewer.
     // Restore its inherited state before retrying the focus it could not accept
@@ -27,6 +36,61 @@ const backgroundObserver = new MutationObserver(() => {
         focusCurrentLayer();
     }
 });
+
+/**
+ * Collect sibling branches outside one modal's complete ancestor path.
+ * @param {HTMLElement|undefined} element Modal surface, or no remaining owner.
+ * @returns {Set<HTMLElement>} Covered branches without any modal ancestor.
+ */
+function modalBackgroundBranches(element) {
+    const branches = new Set();
+    let branch = element;
+    while (branch && branch !== document.body) {
+        const parent = branch.parentElement;
+        if (!parent) break;
+        [...parent.children].forEach((sibling) => {
+            if (sibling !== branch && sibling instanceof HTMLElement) {
+                branches.add(sibling);
+            }
+        });
+        branch = parent;
+    }
+    return branches;
+}
+
+/**
+ * Remove covered page paint while preserving layout and nested viewer surfaces.
+ * @param {Set<HTMLElement>} inertBranches Branches covered by the current focus owner.
+ * @returns {void} Reconciles owned markers and restores exact prior values on exit.
+ */
+function isolateFullscreenPaint(inertBranches) {
+    const fullscreen = layers.find((layer) => layer.element.isConnected
+        && !layer.element.hidden
+        && layer.element.matches('.is-fullscreen, .is-mobile-fullscreen'));
+    const dialogs = [...document.querySelectorAll('dialog')];
+    // The fullscreen shell's siblings can contain a newer body-level map or a
+    // native dialog. Keep those top layers and their ancestor branches visible.
+    // Include closed native dialog hosts: showModal() chooses focus synchronously,
+    // before a MutationObserver could reveal a previously suppressed host.
+    const desired = new Set([...modalBackgroundBranches(fullscreen?.element)]
+        .filter((branch) => inertBranches.has(branch)
+            && !dialogs.some((dialog) => branch.contains(dialog))));
+    paintCovered.forEach((original, branch) => {
+        if (desired.has(branch)) return;
+        if (branch.getAttribute('data-public-modal-paint-suppressed') === 'fullscreen') {
+            if (original === null) branch.removeAttribute('data-public-modal-paint-suppressed');
+            else branch.setAttribute('data-public-modal-paint-suppressed', original);
+        }
+        paintCovered.delete(branch);
+    });
+    desired.forEach((branch) => {
+        if (!paintCovered.has(branch)) {
+            paintCovered.set(branch,
+                branch.getAttribute('data-public-modal-paint-suppressed'));
+            branch.setAttribute('data-public-modal-paint-suppressed', 'fullscreen');
+        }
+    });
+}
 
 /**
  * Reconcile covered siblings without reactivating unchanged background branches.
@@ -40,18 +104,7 @@ const backgroundObserver = new MutationObserver(() => {
  * @returns {void} Preserves original inert state across navigation and nested layouts.
  */
 function isolateCurrentLayer() {
-    const desired = new Set();
-    let branch = layers.at(-1)?.element;
-    while (branch && branch !== document.body) {
-        const parent = branch.parentElement;
-        if (!parent) break;
-        [...parent.children].forEach((sibling) => {
-            if (sibling !== branch && sibling instanceof HTMLElement) {
-                desired.add(sibling);
-            }
-        });
-        branch = parent;
-    }
+    const desired = modalBackgroundBranches(layers.at(-1)?.element);
     covered.forEach((inert, element) => {
         if (desired.has(element)) return;
         if (element.inert !== inert) element.inert = inert;
@@ -61,6 +114,7 @@ function isolateCurrentLayer() {
         if (!covered.has(element)) covered.set(element, element.inert);
         if (!element.inert) element.inert = true;
     });
+    isolateFullscreenPaint(desired);
 }
 
 /**
@@ -129,7 +183,10 @@ export function openPublicModal(element, source = null) {
     element.setAttribute('aria-modal', 'true');
     element.tabIndex = -1;
     isolateCurrentLayer();
-    backgroundObserver.observe(document.body, {childList: true, subtree: true});
+    backgroundObserver.observe(document.body, {
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: ['class', 'hidden', 'open'],
+    });
     focusCurrentLayer();
 }
 

@@ -33,7 +33,7 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
-import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261030-modal-background-v4';
+import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261030-smart-paint-v5';
 import {galleryPresentationOptions, galleryPresentationRequested} from './gallery-presentation.js?v=20261024-short-presentation-v1';
 import {
     stopGalleryMusicViewer,

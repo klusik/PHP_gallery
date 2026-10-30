@@ -146,6 +146,12 @@ slides rather than restoring and reapplying the entire background on each image
 mutation. Native fullscreen has an explicit opaque backing, and touch swipe
 styles preserve the incoming image's opacity fade. Closing or moving nested
 viewer content still restores its original isolation state.
+Fullscreen also suspends painting of the covered page branches while preserving
+their layout. The active viewer, nested maps and native dialog hosts retain
+their own visibility; leaving fullscreen restores the original page markers.
+The source-gallery link keeps the same DOM node across photos from the same
+source, and updates its destination, breadcrumb and accessible name only when
+the source changes. Missing source metadata clears the link.
 
 When the Smart Gallery presentation disables slideshow, slideshow controls are
 omitted and the `S` shortcut becomes a no-op for that viewer instance. Normal

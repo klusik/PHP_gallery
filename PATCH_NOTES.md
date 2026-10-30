@@ -1,5 +1,80 @@
 # Patch notes
 
+## Version 0.148.6
+
+Improved Smart Gallery fullscreen playback by suspending covered page painting
+and preserving the source-gallery control across photo changes.
+
+### Highlights
+
+#### Fullscreen background painting
+
+- Suspended painting of covered gallery headers, cards and other page branches
+  while the fullscreen viewer was active, retaining their layout and scroll
+  position. Leaving fullscreen or closing the viewer restored their original
+  marker state.
+- Preserved visible nested maps, moved editors and native dialog hosts while
+  keeping background interaction isolated.
+
+#### Stable Smart Gallery source links
+
+- Reused the existing source-gallery link when consecutive photos came from
+  the same source, avoiding repeated replacement of its glass layer.
+- Updated the existing link's address, breadcrumb, tooltip and accessible name
+  when the source changed, and cleared the link when metadata was absent.
+
+### Technical Details
+
+#### Frontend lifecycle and compatibility
+
+- Updated `public/assets/gallery-modules/public-modal-lifecycle.js` to reconcile
+  fullscreen paint markers separately from saved `inert` state. Covered branches
+  used scoped visibility rules in `public/assets/styles/lightbox.css`.
+- Restricted class-change reconciliation to owned shells and observed structural
+  and native-dialog ownership changes. Unrelated thumbnail and HUD class changes
+  did not rebuild background coverage.
+- Kept newer modal paths visible and exempted native dialog hosts so synchronous
+  `showModal()` focus did not depend on a later visibility-observer callback.
+- Updated `public/assets/gallery-modules/lightbox.js` to reconcile source links
+  and advanced the complete shared import chain for cached browser modules.
+- Preserved image authorization, stored photographs, decoding, crop geometry and
+  HDR tone-mapping behavior. No database migration or version-independent
+  installer change was introduced.
+
+#### Tests and documentation
+
+- Extended `tests/fixtures/public_ux.html` with fullscreen background-paint,
+  retained-layout, exact marker restoration, class-only exit, moved editor,
+  nested map and registered native dialog visibility/focus checks.
+- Extended `tests/fixtures/lightbox_content_fit.html` and
+  `tests/lightbox_race_browser_test.mjs` so physical and Smart metadata both ran
+  native fullscreen and touch pixel journeys. Added per-frame background-paint
+  checks, zero unchanged-source mutations, in-place source changes and missing
+  metadata clearing alongside the existing photograph-color comparisons.
+- Updated `TESTING.md`, `docs/SMART_GALLERIES.md`, the compatibility register and
+  all four maintained manual sources. Recorded successful localhost acceptance
+  on Windows and macOS while keeping live deployment acceptance separate.
+- Added `AGENTS.md` instructions for creating feature branches without inheriting
+  the base branch's upstream, tracking the same-named remote feature after push,
+  and checking upstream configuration separately from commit freshness.
+
+### User Impact
+
+#### For visitors
+
+- Kept covered Smart Gallery page content out of fullscreen rendering while
+  photographs changed, and preserved source-gallery navigation without replacing
+  its unchanged control.
+- Retained gallery layout when returning from fullscreen and existing image,
+  zoom, map and soundtrack behavior.
+
+#### For administrators and maintainers
+
+- Preserved nested editor, map and native dialog ownership during fullscreen
+  use and restored the covered page when the viewer exited.
+- Made feature-branch tracking checks explicit to prevent a feature from
+  accidentally following `origin/develop`.
+
 ## Version 0.148.5
 
 Improved fullscreen slideshow stability by keeping covered gallery content

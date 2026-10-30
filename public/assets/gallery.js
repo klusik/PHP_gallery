@@ -114,7 +114,7 @@ import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-v
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261030-modal-background-v4';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261030-smart-paint-v5';
 import { setupQuickPhotoTags } from './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
 import {
     setupAdminGalleryFilters,
@@ -135,7 +135,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261030-modal-background-v4';
+} from './gallery-modules/admin-operations.js?v=20261030-smart-paint-v5';
 
 /**
  * Runs a setup callback after the DOM is ready.

@@ -19,6 +19,16 @@
  */
 /* Voting and lightbox */
 
+/* Inert blocks interaction but still permits page painting. Fullscreen viewers
+   also remove covered page branches from painting during Smart photo updates.
+   The modal owner marks only branches outside the fullscreen shell and active
+   nested/native dialogs. Visibility preserves layout/scroll; descendant rules
+   also cover page controls that explicitly restore their own visibility. */
+:root [data-public-modal-paint-suppressed="fullscreen"],
+:root [data-public-modal-paint-suppressed="fullscreen"] * {
+    visibility: hidden !important;
+}
+
 .vote-row {
     display: flex;
     align-items: center;

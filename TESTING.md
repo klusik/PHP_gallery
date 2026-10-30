@@ -1133,7 +1133,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.148.5. Release verification uses the
+This guide applies to PHP Gallery Version 0.148.6. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4207,6 +4207,11 @@ not only the final boolean: navigating the retained viewer and installing,
 replacing or removing transition children must produce zero writes on unchanged
 covered gallery branches. Late siblings, removed branches, pre-existing inert
 state and nested map/editor moves retain their separate restore/focus checks.
+Fullscreen coverage also checks paint suppression without layout removal,
+explicitly visible descendants, exact original marker restoration, class-only
+exit, moved editor visibility, body-level nested maps and synchronous native
+dialog focus. Closed native dialog hosts remain exempt so `showModal()` does
+not have to wait for an observer to restore visibility.
 The content-fit screenshot journey includes conspicuous gallery content behind
 selected production public/mobile stylesheets. It checks shell DOM geometry
 and computed styles on each animation frame, plus a corner screenshot patch
@@ -4226,6 +4231,13 @@ chrome as gallery leakage. This isolated fixture does not load the authenticated
 bundle, generated Theme/custom styles or actual Smart Gallery markup. It cannot
 prove absence of every GPU/display-only frame artifact on a user's Chrome
 installation; retain actual-device acceptance.
+Both physical and Smart metadata now run the native and touch pixel journeys.
+Smart fixtures include the production source-gallery glass link, require zero
+DOM mutations for an unchanged source, and verify in-place destination/title/
+accessible-name changes and clearing absent source metadata. Per-frame checks
+require the covered gallery to remain unpainted during fullscreen. These probes
+verify the rendering contract, not the absence of every compositor/capture
+artifact on real hardware.
 The map browser fixture also
 checks marker names and standalone-map Escape. The PHP
 `public_ux_presentation_test.php` exercises rich-text snippets, all four

@@ -71,6 +71,15 @@ squash requires an exact old-head lease and the
 [checkpoint](.github/AGENTS.md#squash-checkpoint-after-preparation).
 Do not routinely prune refs.
 
+Create features with `git switch --no-track --create feature/name origin/develop`
+from the verified base; never inherit that base branch's upstream.
+Its first push uses `git push --set-upstream origin HEAD:refs/heads/feature/name`.
+Verify `git branch -vv` after creation/push and
+before handoff: `develop` tracks `origin/develop`, `main` tracks `origin/main`,
+and each feature tracks only its own same-named remote branch (or has no
+upstream before first push). Check commit equality separately from tracking;
+a correct upstream does not prove freshness. Preserve protected-write rules.
+
 Never commit credentials, config.php, caches, uploads or deploy archives. Use
 config.example.php and existing access services. Ignored `.claude/`, `.codex/`,
 `.agent/`, `.agent-local/` hold only tool paths/settings/notes; ignore new state
