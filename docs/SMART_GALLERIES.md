@@ -86,12 +86,23 @@ longer consume the physical child-gallery pagination slice. A hidden, private,
 disabled, cyclic, or otherwise unavailable attachment is filtered before the
 group is emitted, so it leaves no blank public panel.
 
-The physical gallery editor shows current Top/Bottom groups plus placement/order
-controls for every Smart Gallery. The Smart Gallery editor shows every physical
+The physical gallery editor exposes Smart Gallery attachments directly in
+Identity, before Advanced settings. It renders only attached rows, with each
+parent's placement/order and a staged Detach action. The + Smart Galleries action opens
+a compact glass panel beside its trigger; typing a name returns at most eight
+unattached matches, with a displayed/total count for broader queries. The catalog
+is one presentation-only JSON snapshot, rather than a grid of controls for every
+definition. Enter/arrow keys move into results; activating a result creates its
+native fields without sending a mutation. Escape/outside click dismiss the
+panel. Existing translated selection actions and help keep the common vocabulary
+without growing the language catalogs. A separate Create action opens the Smart Gallery editor in a new tab.
+Additions, removals and placement/order changes persist only with Save gallery;
+the existing authenticated, CSRF-protected mutation and cycle validation remain
+authoritative. Without JavaScript, native attachment checkboxes and an Add
+disclosure remain available. The Smart Gallery editor also shows every physical
 parent and lets the administrator update that parent's placement/order or detach
-it. These are ordinary server forms and therefore work without JavaScript;
-inside the Admin drawer, existing delegated AJAX handlers submit and refresh the
-owned panel without changing the browser URL. If the new columns are missing or
+it. Inside the Admin drawer, existing delegated AJAX handlers submit and refresh
+the owned panel without changing the browser URL. If the new columns are missing or
 their schema state is unknown, reads retain bottom/zero compatibility but
 attachment mutations are refused before any junction row is deleted.
 
@@ -123,6 +134,13 @@ breaker as public rendering. It does not preload original files or the complete
 result set. Existing lightbox pending-request, stale-result, keyboard, touch,
 fullscreen, zoom, and slideshow lifecycle logic remains shared with normal
 galleries.
+
+Slideshow retains the outgoing decoded image until the next full source is
+ready. Complementary outgoing/incoming fades use additive light compositing
+(`plus-lighter`) so an equal-brightness pair does not darken at the midpoint.
+The existing opacity fade is permanent compatibility support in engines without
+that blend mode; decode, access, crop geometry and cancellation stay with the
+shared lightbox owner. Physical galleries use the same transition.
 
 When the Smart Gallery presentation disables slideshow, slideshow controls are
 omitted and the `S` shortcut becomes a no-op for that viewer instance. Normal

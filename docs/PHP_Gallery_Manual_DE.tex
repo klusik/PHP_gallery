@@ -1082,6 +1082,19 @@ Mit \ui{Vorschau} sehen Sie die aktuelle Trefferzahl und die tatsächlich passen
 
 Wählen Sie \ui{Nicht gelistet} für Zugriff nur über die URL, \ui{Stammgalerie}, um die Smart Gallery auf der Startseite zu zeigen, oder \ui{Platzierung als Untergalerie}, damit physische Galerien sie einbinden können. Wählen Sie in jedem physischen Galerieeditor, ob eine Einbindung \ui{Über dem Galerieinhalt} oder \ui{Unter dem Galerieinhalt} erscheinen soll, und geben Sie einen Reihenfolgewert an. Einbindungen oberhalb erscheinen zuerst, danach gewöhnliche Untergalerien und Fotos und schließlich Einbindungen unterhalb. Gleiche Reihenfolgewerte werden einheitlich anhand der Smart-Gallery-ID aufgelöst. Vorhandene Einbindungen stehen standardmäßig unterhalb mit Reihenfolge~0.
 
+Im Reiter \ui{Identität} der physischen Galerie steht \ui{Smart-Gallery-Einbindungen} vor den erweiterten Einstellungen. Nur eingebundene Zeilen
+bleiben sichtbar. Wählen Sie \ui{+ Intelligente Galerien}, geben Sie einen Namen
+ein und aktivieren Sie einen Treffer. Höchstens acht Treffer erscheinen;
+breitere Suchen zeigen die angezeigte und gesamte Trefferzahl. Jede Zeile hat eigene Platzierung,
+Reihenfolge und \ui{Trennen}. Änderungen bleiben bis \ui{Galerie speichern}
+ein Entwurf. \ui{Intelligente Galerie erstellen} öffnet den
+Definitionseditor separat. Pfeiltasten und Enter erreichen die Treffer;
+Escape schließt das verankerte Panel. Ohne JavaScript bleiben native
+Auswahlfelder verfügbar. Die Diashow wartet auf das nächste dekodierte Bild
+und verwendet in unterstützenden Browsern additive Überblendungen ohne dunklen
+Impuls zwischen gleich hellen Bildern; ältere Browser behalten die normale
+Überblendung.
+
 Dieselbe virtuelle Galerie kann unter mehreren physischen Galerien eingebunden werden, jeweils mit eigener Platzierung und Reihenfolge. Der Abschnitt \ui{In physischen Galerien verwendet} des Smart-Gallery-Editors zeigt alle übergeordneten Galerien und erlaubt, deren Platzierung/Reihenfolge zu speichern oder die Einbindung mit \ui{Trennen} zu lösen, ohne andere übergeordnete Galerien zu verändern. Wird der Editor im Administrations-Seitenbereich geöffnet, bleiben diese Aktionen dort; bei deaktiviertem JavaScript steht die gewöhnliche Formularübermittlung zur Verfügung. Die Karte einer öffentlichen Smart Gallery unter einer privaten oder anderweitig eingeschränkten übergeordneten Galerie erbt weiterhin deren öffentliche Zugriffsgrenze.
 
 Öffentliche Ergebnisse und Zählungen wenden stets dieselbe Quellzugriffsrichtlinie an wie gewöhnliche öffentliche Galerieinhalte. Ein passendes Foto zählt nur dann, wenn seine physische Galerie öffentlich gelistet und für den aktuellen Besucher zugänglich ist und das Foto selbst öffentlich ist. Bestehende Regeln für Passwort, Freigabelink, geerbte Sichtbarkeit, nicht veröffentlichte Galerien und Altersbeschränkung gelten daher weiterhin. Routen mit Abfrageparametern funktionieren ohne Umschreibung; sprechende \texttt{/smart/<slug>}-URLs sind optional.
@@ -2595,6 +2608,9 @@ Anzeige des nächsten Fotos vor. Das bisherige Foto behält beim Laden seine
 Geometrie und wird beim Einblenden des neuen Bildes gleichzeitig ausgeblendet.
 Bei unterschiedlichen Bildformen verschwinden freiliegende Teile des alten
 Fotos dadurch nicht erst abrupt am Ende des Übergangs.
+Die Diashow-Überblendung schließt den Hintergrund des Betrachters aus. Farben und
+Helligkeit bleiben beim Entfernen des Deckbildes gleich, auch beim Wechsel
+zwischen beschnittenen und vollständigen Bildern.
 
 Zoom über 100~\% fordert sofort die geschützte Quelle voller Qualität für das aktive Foto an. Die vorhandene Vorschau bleibt sichtbar, bis das größere Bild bereit ist; aktuelle Zoom- und Verschiebeposition bleiben erhalten. Im normalen, Vollbild- und mobilen Vollbildmodus zeigt diese Übertragung dieselbe Fortschrittsleiste mit Prozentwert und Byteanzahl. Fotowechsel, Schließen des Betrachters oder eine neuere Anfrage voller Qualität brechen die vorherige Übertragung ab. Eine fehlgeschlagene oder abgebrochene Anfrage voller Qualität belässt die geschützte Vorschau.
 

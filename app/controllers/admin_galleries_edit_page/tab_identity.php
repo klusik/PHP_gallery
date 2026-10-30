@@ -37,6 +37,7 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_flight_map_row;
 use function Gallery\Services\gallery_flight_map_unresolved_from_row;
@@ -239,8 +240,13 @@ function admin_edit_gallery_render_identity_tab(
  * Placement and ordering are stored per parent gallery, so this card only
  * describes attachments as they apply to the gallery being edited.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
- * @return ?array<string, mixed> View model, or null when the feature is unavailable.
+ * @param array{id:int|string} $gallery Physical gallery identity being edited.
+ * @return array{metadata_ready:bool,migration_notice_html:string,
+ *     definitions:list<array{id:int,title:string,edit_url:string,
+ *     visibility_state:string,assigned:bool,placement:string,
+ *     placement_order:int,relationship_valid:bool}>,create_url:string,
+ *     labels:array<string,string>}|null Attachment rows, prepared destinations
+ *     and localized labels, or null when the feature is unavailable.
  */
 function admin_edit_gallery_smart_gallery_attachments_view_model(array $gallery): ?array
 {
@@ -276,44 +282,6 @@ function admin_edit_gallery_smart_gallery_attachments_view_model(array $gallery)
         $migrationNoticeHtml = (string) ob_get_clean();
     }
 
-    $groups = [];
-    foreach ([
-        'top' => 'Above gallery content',
-        'bottom' => 'Below gallery content',
-    ] as $groupKey => $fallbackLabel) {
-        $groupRows = [];
-        foreach ($attachedRows as $attachedRow) {
-            if (($attachedRow['placement'] ?? 'bottom') !== $groupKey) {
-                continue;
-            }
-            $state = ($attachedRow['visibility'] ?? '') === 'public'
-            && !empty($attachedRow['enabled'])
-                ? t('smart_gallery.public', 'Published')
-                : t('smart_gallery.not_public', 'Not publicly visible');
-            $diagnostic = empty($attachedRow['relationship_valid'])
-                ? ' · '
-                . t(
-                    'smart_gallery.relationship_invalid_short',
-                    'relationship needs repair',
-                )
-                : '';
-            $groupRows[] = [
-                'title' => (string) $attachedRow['title'],
-                'status' => t('smart_gallery.order_value', 'order {order}', [
-                    'order' => (int) ($attachedRow['placement_order'] ?? 0),
-                ]) . ' · ' . $state . $diagnostic,
-            ];
-        }
-        $groups[] = [
-            'key' => $groupKey,
-            'label' => t(
-                'smart_gallery.placement_' . $groupKey,
-                $fallbackLabel,
-            ),
-            'rows' => $groupRows,
-        ];
-    }
-
     $definitions = [];
     foreach ($smartGalleryDefinitions as $smartDefinition) {
         $smartId = (int) $smartDefinition['id'];
@@ -322,6 +290,7 @@ function admin_edit_gallery_smart_gallery_attachments_view_model(array $gallery)
         $definitions[] = [
             'id' => $smartId,
             'title' => (string) $smartDefinition['title'],
+            'edit_url' => url_for('admin_smart_galleries', ['id' => $smartId]),
             'visibility_state' => ($smartDefinition['visibility'] ?? '')
                 === 'public'
             && !empty($smartDefinition['enabled'])
@@ -342,9 +311,26 @@ function admin_edit_gallery_smart_gallery_attachments_view_model(array $gallery)
     return [
         'metadata_ready' => $attachmentMetadataReady,
         'migration_notice_html' => $migrationNoticeHtml,
-        'groups' => $groups,
         'definitions' => $definitions,
+        'create_url' => url_for('admin_smart_galleries', ['new' => 1]),
         'labels' => [
+            'add' => t('smart_gallery.admin_title', 'Smart Galleries'),
+            'search' => t('gallery_picker.search', 'Search'),
+            'search_hint' => t(
+                'gallery_picker.help',
+                'Type to search, then press Enter or click a result to select it.',
+            ),
+            'no_matches' => t(
+                'gallery_picker.no_results',
+                'No matching galleries found.',
+            ),
+            'detach' => t('smart_gallery.hide_from_here', 'Detach'),
+            'create' => t('smart_gallery.create', 'Create Smart Gallery'),
+            'none_attached' => t('admin.common.none', 'None'),
+            'save_hint' => t(
+                'admin.gallery_editor.savebar_help',
+                'Saves gallery settings, including presentation defaults.',
+            ),
             'title' => t(
                 'smart_gallery.children_title',
                 'Smart Gallery attachments',
@@ -352,22 +338,6 @@ function admin_edit_gallery_smart_gallery_attachments_view_model(array $gallery)
             'help' => t(
                 'smart_gallery.children_help',
                 'Attach virtual galleries above or below this physical gallery content. Placement and order apply only to this parent gallery.',
-            ),
-            'empty' => t(
-                'smart_gallery.children_empty',
-                'No Smart Galleries exist yet.',
-            ),
-            'current_attachments' => t(
-                'smart_gallery.current_attachments',
-                'Current Smart Gallery attachments',
-            ),
-            'group_empty' => t(
-                'smart_gallery.attachment_group_empty',
-                'No Smart Galleries in this placement area.',
-            ),
-            'settings' => t(
-                'smart_gallery.attachment_settings',
-                'Attachment settings',
             ),
             'placement' => t(
                 'smart_gallery.attachment_placement',

@@ -22,11 +22,112 @@ import { captureAdminPanelOwner } from './admin-panel-lifecycle.js?v=20260920-pa
 const DISPLAY_SAVE_TIMEOUT_MS = 15000;
 
 /** Keep contextual explanations clear of the visible viewport edges.
- * Type: number. Units: CSS pixels. Scope: Display contextual help.
+ * Type: number. Units: CSS pixels. Scope: gallery editor contextual panels.
  * Consumers: positionDisplayHelp(). Value: 12.
  * Rationale: preserve the approved small panel edge gap on narrow screens.
  */
 const DISPLAY_HELP_EDGE_PX = 12;
+
+/** Bound visible search choices without rendering the full attachment catalog.
+ * Type: number. Units: result buttons. Scope: one open attachment picker.
+ * Consumers: renderSmartAttachmentResults(). Value: 8.
+ * Rationale: eight choices fit a compact panel; a count identifies broader matches.
+ */
+const SMART_ATTACHMENT_RESULT_LIMIT = 8;
+
+/** @typedef {{id:number,title:string,edit_url:string,visibility_state:string}} SmartAttachmentChoice */
+/** @type {WeakMap<HTMLElement, SmartAttachmentChoice[]>} */
+const smartAttachmentCatalogs = new WeakMap();
+
+/**
+ * Enhance newly mounted attachment fields while retaining native no-script forms.
+ * @return {void} Cache presentation-only choices and expose staged detach actions.
+ */
+function setupSmartAttachments() {
+    for (const root of document.querySelectorAll('[data-smart-attachments]')) {
+        if (smartAttachmentCatalogs.has(root)) continue;
+        const catalog = root.querySelector('[data-smart-attachment-catalog]');
+        if (!catalog) continue;
+        try {
+            const choices = JSON.parse(catalog.textContent);
+            if (!Array.isArray(choices)) continue;
+            smartAttachmentCatalogs.set(root, choices);
+            root.dataset.smartAttachmentsBound = '1';
+            root.querySelectorAll('[data-smart-attachment-remove]')
+                .forEach(button => { button.hidden = false; });
+        } catch {
+            // Retain native attached-row fields if damaged markup cannot enhance.
+            // This view owner permanently supports ordinary gallery POST saves.
+        }
+    }
+}
+
+/**
+ * Show a bounded set of name matches, excluding already staged attachments.
+ * @param {HTMLElement} root Mounted attachment section in the gallery form.
+ * @return {void} Replace only picker results, without changing submitted fields.
+ */
+function renderSmartAttachmentResults(root) {
+    const input = root.querySelector('[data-smart-attachment-search]');
+    const results = root.querySelector('[data-smart-attachment-results]');
+    const status = root.querySelector('[data-smart-attachment-status]');
+    const query = input.value.trim().toLocaleLowerCase();
+    const attached = new Set(Array.from(root.querySelectorAll(
+        '[data-smart-attachment-rows] [data-smart-attachment-id]'
+    ), row => Number(row.dataset.smartAttachmentId)));
+    const matches = query ? (smartAttachmentCatalogs.get(root) || [])
+        .filter(row => !attached.has(row.id)
+            && row.title.toLocaleLowerCase().includes(query)) : [];
+    results.replaceChildren();
+    for (const row of matches.slice(0, SMART_ATTACHMENT_RESULT_LIMIT)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'button secondary';
+        button.dataset.smartAttachmentAdd = String(row.id);
+        const name = document.createElement('strong');
+        name.textContent = row.title;
+        const state = document.createElement('small');
+        state.textContent = row.visibility_state;
+        button.append(name, state);
+        results.append(button);
+    }
+    status.textContent = !query ? status.dataset.hint
+        : !matches.length ? status.dataset.empty
+        : matches.length > SMART_ATTACHMENT_RESULT_LIMIT
+            ? `${SMART_ATTACHMENT_RESULT_LIMIT} / ${matches.length}` : '';
+    positionDisplayHelp(root.querySelector('[data-smart-attachment-picker]'));
+}
+
+/**
+ * Stage one explicitly selected attachment using the server-rendered row template.
+ * @param {HTMLElement} root Mounted attachment section in the gallery form.
+ * @param {number} id Exact identity from the current picker result.
+ * @return {void} Add native fields, leaving persistence to the existing Save action.
+ */
+function addSmartAttachment(root, id) {
+    const choice = smartAttachmentCatalogs.get(root)?.find(row => row.id === id);
+    const rows = root.querySelector('[data-smart-attachment-rows]');
+    if (!choice || rows.querySelector(`[data-smart-attachment-id="${id}"]`)) return;
+    const row = root.querySelector('[data-smart-attachment-template]')
+        .content.firstElementChild.cloneNode(true);
+    row.dataset.smartAttachmentId = String(id);
+    const title = row.querySelector('[data-smart-attachment-title]');
+    title.textContent = choice.title + ' ↗';
+    title.href = choice.edit_url;
+    row.querySelector('.admin-smart-attachment-selection span').textContent = choice.title;
+    row.querySelector('[data-smart-attachment-state]').textContent = choice.visibility_state;
+    for (const field of row.querySelectorAll('[name]')) {
+        field.name = field.name.replace('smart_gallery_children[0]',
+            `smart_gallery_children[${id}]`);
+    }
+    row.querySelector('[data-smart-attachment-remove]').hidden = false;
+    rows.append(row);
+    root.querySelector('[data-smart-attachment-empty]').hidden = true;
+    root.querySelector('[data-smart-attachment-search]').value = '';
+    root.querySelector('[data-smart-attachment-picker]').open = false;
+    row.querySelector('select').focus();
+    row.querySelector('input').dispatchEvent(new Event('change', {bubbles: true}));
+}
 
 /** @type {WeakMap<HTMLFormElement, {pending:number, failed:boolean, tail:Promise<void>}>} */
 const displaySaves = new WeakMap();
@@ -125,7 +226,7 @@ async function saveGalleryDisplayPreference(input, desired, state) {
 
 /**
  * Anchor an open native help disclosure in the browser's nonblocking top layer.
- * @param {HTMLDetailsElement} help Open Display explanation beside its trigger.
+ * @param {HTMLDetailsElement} help Open editor explanation or attachment picker.
  * @return {void} Keep the readable glass panel inside the viewport.
  */
 function positionDisplayHelp(help) {
@@ -152,12 +253,52 @@ function positionDisplayHelp(help) {
 /**
  * Bind controls once on the document so newly rendered drawer fragments work.
  *
- * @returns {void} Installs delegated copy, language, help and Display-save events
+ * @returns {void} Installs delegated attachment, copy, language, help and Display-save events
  *     for full-page editors and dynamically injected drawer fragments.
  */
 export function setupAdminGalleryCompactEditor() {
     if (!document.body || document.body.dataset.adminGalleryCompactEditorBound === '1') return;
     document.body.dataset.adminGalleryCompactEditorBound = '1';
+
+    setupSmartAttachments();
+    new MutationObserver(setupSmartAttachments)
+        .observe(document.body, {childList: true, subtree: true});
+    document.addEventListener('input', event => {
+        if (event.target instanceof Element && event.target.matches('[data-smart-attachment-search]')) {
+            renderSmartAttachmentResults(event.target.closest('[data-smart-attachments]'));
+        }
+    });
+    document.addEventListener('click', event => {
+        if (!(event.target instanceof Element)) return;
+        const button = event.target.closest('[data-smart-attachment-add], [data-smart-attachment-remove]');
+        if (!button) return;
+        const root = button.closest('[data-smart-attachments]');
+        if (button.hasAttribute('data-smart-attachment-add')) {
+            addSmartAttachment(root, Number(button.dataset.smartAttachmentAdd));
+        } else {
+            button.closest('[data-smart-attachment-id]').remove();
+            root.querySelector('[data-smart-attachment-empty]').hidden =
+                root.querySelector('[data-smart-attachment-rows]').childElementCount > 0;
+            const picker = root.querySelector('[data-smart-attachment-picker]');
+            picker.querySelector('summary').focus();
+            root.querySelector('input').dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    document.addEventListener('keydown', event => {
+        if (!(event.target instanceof Element) || event.isComposing
+            || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        const picker = event.target.closest('[data-smart-attachment-picker]');
+        if (!picker || !['Enter', 'ArrowDown', 'ArrowUp'].includes(event.key)) return;
+        if (event.target.matches('[data-smart-attachment-search]')) {
+            event.preventDefault();
+            picker.querySelector('[data-smart-attachment-add]')?.focus();
+        } else if (event.key !== 'Enter') {
+            event.preventDefault();
+            const buttons = Array.from(picker.querySelectorAll('[data-smart-attachment-add]'));
+            const index = buttons.indexOf(event.target) + (event.key === 'ArrowDown' ? 1 : -1);
+            (buttons[index] || picker.querySelector('input')).focus();
+        }
+    });
 
     document.addEventListener('change', (event) => {
         const input = event.target;
@@ -185,20 +326,26 @@ export function setupAdminGalleryCompactEditor() {
     document.addEventListener('toggle', (event) => {
         const help = event.target;
         if (!(help instanceof HTMLDetailsElement)
-            || !help.matches('#admin-edit-display .admin-inline-help')) return;
+            || !help.matches('#admin-edit-display .admin-inline-help, .admin-gallery-smart-attachments .admin-inline-help')) return;
         const content = help.querySelector('.admin-inline-help-content');
-        if (help.open) positionDisplayHelp(help);
+        if (help.open) {
+            positionDisplayHelp(help);
+            if (help.matches('[data-smart-attachment-picker]')) {
+                renderSmartAttachmentResults(help.closest('[data-smart-attachments]'));
+                help.querySelector('input').focus();
+            }
+        }
         else if (typeof content?.hidePopover === 'function'
             && content.matches(':popover-open')) content.hidePopover();
     }, true);
     document.addEventListener('click', (event) => {
-        for (const help of document.querySelectorAll('#admin-edit-display .admin-inline-help[open]')) {
+        for (const help of document.querySelectorAll('#admin-edit-display .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]')) {
             if (!help.contains(event.target)) help.open = false;
         }
     });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
-        const help = document.querySelector('#admin-edit-display .admin-inline-help[open]');
+        const help = document.querySelector('#admin-edit-display .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]');
         if (!help) return;
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -207,7 +354,7 @@ export function setupAdminGalleryCompactEditor() {
     }, true);
     for (const type of ['scroll', 'resize']) {
         window.addEventListener(type, () => {
-            document.querySelectorAll('#admin-edit-display .admin-inline-help[open]')
+            document.querySelectorAll('#admin-edit-display .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]')
                 .forEach(positionDisplayHelp);
         }, true);
     }

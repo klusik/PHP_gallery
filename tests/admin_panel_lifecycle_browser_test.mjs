@@ -145,7 +145,7 @@ async function attachKeyboard(profilePath) {
     if (navigation.errorText) throw new Error('Owned fixture navigation failed');
     /** Resize only the disposable Theme page for responsive layout coverage. @param {number} width Validated viewport width. @return {Promise<void>} Resolves after metrics are applied. */
     setFixtureWidth = async width => { await command('Emulation.setDeviceMetricsOverride', {width, height: 900, deviceScaleFactor: 1, mobile: false}, sessionId); };
-    /** Send a complete native key press to the attached fixture page. @param {string} key Confined Tab, Escape or creation-fixture Enter. @param {boolean} shift Whether Shift is held. @return {Promise<void>} Resolves after key-down and key-up delivery. */
+    /** Send a complete native key press to the attached fixture page. @param {string} key Confined Tab, Escape or allowlisted creation/tag/Display Enter. @param {boolean} shift Whether Shift is held. @return {Promise<void>} Resolves after key-down and key-up delivery. */
     sendKey = async (key, shift) => {
         const params = {key, code: key, windowsVirtualKeyCode: key === 'Tab' ? 9 : key === 'Enter' ? 13 : 27, modifiers: shift ? 8 : 0};
         await command('Input.dispatchKeyEvent', {...params, type: key === 'Enter' ? 'keyDown' : 'rawKeyDown', ...(key === 'Enter' ? {text: '\r', unmodifiedText: '\r'} : {})}, sessionId);
@@ -247,7 +247,12 @@ async function serveFixture(request, response) {
     if (pathname === '/__key') {
         const parameters = new URL(request.url, 'http://localhost').searchParams;
         const key = parameters.get('key');
-        if (!['Tab', 'Escape'].includes(key) && !(fixtureName === 'gallery_creation.html' && key === 'Enter') && !(fixtureName === 'gallery_tags.html' && key === 'Enter')) { response.writeHead(400).end(); return; }
+        if (!['Tab', 'Escape'].includes(key)
+            && !(key === 'Enter' && ['gallery_creation.html',
+                'gallery_tags.html', 'gallery_display.html'].includes(fixtureName))) {
+            response.writeHead(400).end();
+            return;
+        }
         try {
             await browserReady;
             await sendKey(key, parameters.get('shift') === '1');

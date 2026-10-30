@@ -50,6 +50,7 @@
     align-items: center;
     padding: 1rem;
     background: rgba(20, 15, 10, 0.88);
+    isolation: isolate;
 }
 .lightbox[hidden] {
     display: none;
@@ -337,6 +338,11 @@
 }
 .lightbox figure {
     grid-area: stage;
+    /* Blend only photograph layers against transparency. Blending against the
+       overlay's dark background adds that color to the incoming photograph,
+       then loses it abruptly when the fade cover becomes the ordinary image.
+       Keep this group transparent so differently cropped edges fade naturally. */
+    isolation: isolate;
     display: grid;
     justify-items: center;
     align-items: center;
@@ -804,6 +810,14 @@
     pointer-events: none;
     transition: opacity var(--lightbox-transition-duration, 80ms) ease;
     will-change: opacity;
+    /* Both decoded layers fade with complementary opacity. Add their light
+       instead of multiplying the outgoing layer by the incoming transparency:
+       ordinary source-over compositing loses 25% brightness at the midpoint.
+       The isolated transparent figure excludes the overlay background from
+       this addition, preserving the same colors when the cover is removed.
+       Keep the existing opacity fade as permanent support in older engines
+       without plus-lighter; the shared lightbox owner retains decode/geometry. */
+    mix-blend-mode: plus-lighter;
 }
 .lightbox-transition-image.is-visible {
     opacity: 1;

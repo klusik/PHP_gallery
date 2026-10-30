@@ -3317,3 +3317,159 @@ body.has-admin-side-panel {
         padding-bottom: 9rem;
     }
 }
+
+/* Smart attachments are a staged relationship editor, independent of Advanced.
+   Use the same Theme glass as visitor/PDF/music contextual panels. */
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    box-shadow: none;
+    container-type: inline-size;
+}
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-heading,
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-heading h3 {
+    margin: 0;
+    font-size: .85rem;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments .muted {
+    margin: 0;
+    font-size: .78rem;
+}
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 13rem) 5rem auto;
+    align-items: end;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-name { align-self: center; min-width: 0; }
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-name > a { display: none; }
+:is(.admin-page, .admin-side-panel) [data-smart-attachments-bound] .admin-smart-attachment-name > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    gap: 4px;
+    font-size: .85rem;
+    font-weight: 600;
+}
+:is(.admin-page, .admin-side-panel) [data-smart-attachments-bound] .admin-smart-attachment-selection {
+    display: none;
+}
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-name small {
+    display: block;
+    color: var(--muted);
+    font-size: .75rem;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments label {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    margin: 0;
+    font-size: .78rem;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments :is(input:not([type=checkbox]), select) {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    min-height: 28px;
+    padding: 3px 6px;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+    color: var(--ink);
+    font: inherit;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments :is(a, button, summary) {
+    color: var(--ink);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments :is(button, summary) {
+    min-height: 28px;
+    padding: 3px 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
+    font-size: .8rem;
+    cursor: pointer;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments .admin-inline-help > summary {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    height: auto;
+    min-width: 28px;
+    list-style: none;
+}
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-picker { display: none; }
+:is(.admin-page, .admin-side-panel) [data-smart-attachments-bound] .admin-smart-attachment-picker { display: block; }
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-picker > summary {
+    outline: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+    outline-offset: -1px;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments .admin-inline-help-content {
+    box-sizing: border-box;
+    width: min(24rem, calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+    color: var(--ink);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    font-size: .8rem;
+}
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments
+.admin-smart-attachment-picker [data-smart-attachment-results] > button {
+    display: grid;
+    width: 100%;
+    gap: 2px;
+    padding: 6px 0;
+    text-align: start;
+    background: transparent;
+    color: var(--ink);
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+:is(.admin-page, .admin-side-panel) [data-smart-attachment-results] small { color: var(--muted); }
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-actions > a { font-size: .78rem; }
+:is(.admin-page, .admin-side-panel) .admin-smart-attachment-row > .error { grid-column: 1 / -1; }
+:is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments :is(a, button, summary, input, select):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+@container (max-width: 640px) {
+    :is(.admin-page, .admin-side-panel) .admin-smart-attachment-row {
+        grid-template-columns: minmax(0, 1fr) 5rem auto;
+    }
+    :is(.admin-page, .admin-side-panel) .admin-smart-attachment-name { grid-column: 1 / -1; }
+}
+@media (max-width: 640px), (pointer: coarse) {
+    :is(.admin-page, .admin-side-panel) .admin-gallery-smart-attachments
+    :is(button, summary, a, select, input:not([type=checkbox])),
+    :is(.admin-page, .admin-side-panel) [data-smart-attachments-bound] .admin-smart-attachment-name > a {
+        min-height: 44px;
+    }
+    :is(.admin-page, .admin-side-panel) .admin-smart-attachment-actions > a {
+        display: inline-flex;
+        align-items: center;
+    }
+}

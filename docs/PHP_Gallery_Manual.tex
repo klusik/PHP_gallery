@@ -1030,6 +1030,18 @@ Use \ui{Preview} to~see the~current match count and~real matching photo cards, t
 
 Choose \ui{Unlisted} for~URL-only access, \ui{Root gallery} to~show the~Smart Gallery on~the~homepage, or~\ui{Subgallery placement} to~let physical galleries attach it. In~each physical gallery editor, select whether an~attachment belongs \ui{Above gallery content} or~\ui{Below gallery content} and~give it~an~order value. Above attachments render first, then ordinary subgalleries and~photos, then Below attachments. Equal order values are~resolved consistently by~Smart Gallery ID. Existing attachments default to~Below with order~0.
 
+The~physical editor's \ui{Identity} tab shows \ui{Smart Gallery attachments}
+before \ui{Advanced gallery settings}. Only attached rows remain visible.
+Use \ui{+ Smart Galleries}, type a~name, and~activate a~matching result;
+at~most eight matches appear, with a~displayed/total count for~broader searches.
+Each row has its~own placement, order and~\ui{Detach} action.
+These edits remain a~draft until \ui{Save gallery}. \ui{Create Smart Gallery}
+opens the~definition editor in~a~new tab. Keyboard arrows and~Enter
+reach the~results; Escape closes the~anchored panel. Native selection fields
+remain available without JavaScript. Slideshow waits for~the~next decoded
+image and~uses additive fades in~supporting browsers to~avoid a~dark pulse
+between equally bright images; older browsers retain the~ordinary fade.
+
 The~same virtual gallery may~be~attached beneath several physical galleries, with independent placement and~order in~each parent. The~Smart Gallery editor's \ui{Used in~physical galleries} section shows every parent and~lets you~save its~placement/order or~\ui{Detach} it~without changing other parents. When the~editor is~opened in~the~Admin side panel, these actions stay in~that panel; ordinary form submission remains available when JavaScript is~disabled. A~public Smart Gallery placed beneath a~private or~otherwise restricted parent still inherits that parent's public access boundary for~the~card.
 
 Public results and~counts always apply the~same source-access policy as~ordinary public gallery content. A~matching photograph contributes only when its physical gallery is~publicly listed and~accessible to~the~current visitor and~the~photograph itself is~public. Existing password, share-link, inherited visibility, unpublished-gallery, and~age-restriction rules therefore continue to~apply. Query-string routes work without rewriting and~clean \texttt{/smart/<slug>} URLs are~optional.
@@ -2488,6 +2500,9 @@ Manual navigation and~slideshows prepare the~crop before the~next photograph
 appears. The~previous photograph retains its~geometry while loading; during
 the~transition it~fades out~as~the~next one fades in. Differing image shapes
 therefore do~not~leave old content visible until an~abrupt removal.
+The~slideshow blend excludes the~viewer background so~removing the~incoming cover keeps
+the~same colors and~brightness, including changes between cropped and~original
+frames.
 
 Zooming above 100\% immediately requests the~protected full-quality source for~the~active photograph. The~existing preview remains visible until the~larger image is~ready, and~the~current zoom and~pan position are~preserved. In~normal, full-screen, and~mobile full-screen modes, this transfer shows the~same progress bar with a~percentage and~a~byte count. Changing photographs, closing the~viewer, or~starting a~newer full-quality request cancels the~previous transfer. A~failed or~cancelled full-quality request leaves the~protected preview in~place.
 

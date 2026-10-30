@@ -191,6 +191,62 @@ namespace {
     \Gallery\Views\view_render_admin_gallery_display_tab($model);
     $html = (string) ob_get_clean();
 
+    // A hundred definitions exercise the requested catalog scale; only the
+    // attached identity belongs in active form controls before an explicit add.
+    $smartModel = [
+        'metadata_ready' => true,
+        'migration_notice_html' => '',
+        'definitions' => [],
+        'create_url' => '/smart-editor?new=1',
+        'labels' => [
+            'title' => 'Smart Gallery attachments',
+            'help' => 'Attach above or below this gallery.',
+            'order_help' => 'Order is independent for each placement.',
+            'none_attached' => 'None',
+            'add' => 'Smart Galleries', 'search' => 'Search',
+            'search_hint' => 'Type a name.', 'no_matches' => 'No matches.',
+            'detach' => 'Detach',
+            'create' => 'Create in a new tab', 'save_hint' => 'Save with gallery.',
+            'placement' => 'Placement', 'placement_top' => 'Above content',
+            'placement_bottom' => 'Below content', 'order' => 'Order',
+            'relationship_invalid' => 'Relationship needs repair.',
+        ],
+    ];
+    for ($id = 1; $id <= 100; $id++) {
+        $smartModel['definitions'][] = [
+            'id' => $id,
+            'title' => $id === 100 ? 'Collection <safe> 100' : 'Collection ' . $id,
+            'edit_url' => '/smart-editor?id=' . $id,
+            'visibility_state' => 'Published', 'assigned' => $id === 1,
+            'placement' => 'bottom', 'placement_order' => -3,
+            'relationship_valid' => true,
+        ];
+    }
+    ob_start();
+    \Gallery\Views\view_render_admin_gallery_smart_attachments($smartModel);
+    $smartHtml = (string) ob_get_clean();
+    display_editor_assert(
+        str_contains($smartHtml, 'data-smart-attachment-template')
+            && str_contains($smartHtml, 'Collection &lt;safe&gt; 100')
+            && !str_contains($smartHtml, 'admin-smart-gallery-child-list')
+            && substr_count(
+                substr($smartHtml, 0, (int) strpos($smartHtml, '<script')),
+                'name="smart_gallery_children[',
+            ) === 3,
+        'Only attached rows have active fields; catalog markup is escaped and additions remain staged.',
+    );
+    $missingModel = $smartModel;
+    $missingModel['metadata_ready'] = false;
+    $missingModel['migration_notice_html'] = '<p>Migration required</p>';
+    ob_start();
+    \Gallery\Views\view_render_admin_gallery_smart_attachments($missingModel);
+    $missingHtml = (string) ob_get_clean();
+    display_editor_assert(
+        str_contains($missingHtml, 'Migration required')
+            && !str_contains($missingHtml, 'smart_gallery_children_present'),
+        'Unavailable placement storage must not submit an attachment replacement.',
+    );
+
     if (in_array('--render', $argv ?? [], true)) {
         require_once dirname(__DIR__) . '/app/controllers/shared_layout.php';
         require_once dirname(__DIR__) . '/app/views/public_gallery_pages.php';
@@ -203,7 +259,7 @@ namespace {
             . '<input type="hidden" name="csrf_token" value="display-fixture">'
             . '<input type="hidden" name="edit_revision" value="1">'
             . '<label>Unsaved title <input name="title" value="Unsaved draft"></label>'
-            . $html . '<button type="submit">Save gallery</button></form>';
+            . $smartHtml . $html . '<button type="submit">Save gallery</button></form>';
         echo '<template id="fixture-public-markup"><div class="public-page">';
         foreach (\Gallery\Controllers\shared_layout_public_stylesheet_files() as $stylesheet) {
             echo '<link rel="stylesheet" href="/public/'
@@ -344,10 +400,16 @@ namespace {
             'sort_order' => 0,
         ],
         'simbrief_html' => $simbriefHtml,
+        'smart_attachments' => $smartModel,
     ];
     ob_start();
     \Gallery\Views\view_render_admin_gallery_identity_tab($identityModel);
     $identityHtml = (string) ob_get_clean();
+    display_editor_assert(
+        strpos($identityHtml, 'data-smart-attachments')
+            < strpos($identityHtml, 'admin-gallery-advanced-settings'),
+        'Smart attachments must remain directly discoverable before Advanced settings.',
+    );
     display_editor_assert(
         substr_count($identityHtml, 'name="flight_route_text"') === 1
             && str_contains(
