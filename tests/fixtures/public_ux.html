@@ -116,9 +116,9 @@ License: MIT License (see LICENSE file in repository)
 </div>
 <script type="module">
 import {setupGalleryLightbox, teardownGalleryLightbox}
-    from '/public/assets/gallery-modules/lightbox.js?v=20261030-modal-background-v4';
+    from '/public/assets/gallery-modules/lightbox.js?v=20261030-smart-paint-v5';
 import {openPublicModal, closePublicModal}
-    from '/public/assets/gallery-modules/public-modal-lifecycle.js?v=20261030-modal-background-v4';
+    from '/public/assets/gallery-modules/public-modal-lifecycle.js?v=20261030-smart-paint-v5';
 import {setupGalleryMediaPanels}
     from '/public/assets/gallery-modules/gallery-media-panels.js?v=20261024-short-presentation-v1';
 
@@ -382,7 +382,11 @@ if (!params.has('case')) {
         document.body.append(nestedDialog);
         const preInert = document.createElement('section');
         preInert.inert = true;
+        preInert.setAttribute('data-public-modal-paint-suppressed', 'original');
         document.body.append(preInert);
+        const nativeDialog = document.createElement('dialog');
+        nativeDialog.innerHTML = '<button autofocus>Native action</button>';
+        document.body.append(nativeDialog);
         setupGalleryLightbox(); cards[0].focus(); cards[0].click();
         await until(() => overlay.dataset.currentImageId === '1'
             && stage.clientWidth > 0 && overlay.querySelector('img').naturalWidth > 0,
@@ -419,12 +423,34 @@ if (!params.has('case')) {
         check(overlay.contains(document.activeElement), 'Shift+Tab must stay inside');
         document.dispatchEvent(new KeyboardEvent('keydown', {key:'Tab',bubbles:true,cancelable:true}));
         check(overlay.contains(document.activeElement), 'Tab must stay inside');
+        const initialFullscreen = overlay.matches('.is-fullscreen, .is-mobile-fullscreen');
+        const explicitVisible = document.createElement('span');
+        explicitVisible.style.visibility = 'visible';
+        explicitVisible.textContent = 'Covered Smart gallery content';
+        background.append(explicitVisible);
+        const backgroundBounds = background.getBoundingClientRect();
+        if (!initialFullscreen) overlay.classList.add('is-fullscreen');
+        await until(() => getComputedStyle(background).visibility === 'hidden'
+            && getComputedStyle(explicitVisible).visibility === 'hidden',
+        'fullscreen must suppress covered page paint, including explicitly visible children');
+        check(background.getBoundingClientRect().height === backgroundBounds.height,
+            'paint suppression must retain background layout');
+        openPublicModal(nativeDialog);
+        nativeDialog.showModal();
+        check(getComputedStyle(nativeDialog).visibility === 'visible'
+            && nativeDialog.contains(document.activeElement),
+        'native dialogs must retain synchronous visibility and initial focus');
+        nativeDialog.close();
+        closePublicModal(nativeDialog);
+        nativeDialog.remove();
         check(nestedDialog.inert, 'a body-level editor must be covered initially');
         overlay.append(nestedDialog);
         nestedDialog.hidden = false;
         nestedInput.focus();
         await until(() => !nestedDialog.inert && document.activeElement === nestedInput,
             'a reparented editor must regain its original state and input focus');
+        check(getComputedStyle(nestedInput).visibility === 'visible',
+            'a moved editor must regain paint as well as interaction');
         nestedDialog.hidden = true;
         overlay.querySelector('[data-lightbox-action="close"]').focus();
         document.body.append(nestedDialog);
@@ -441,6 +467,10 @@ if (!params.has('case')) {
         openPublicModal(nestedMap);
         check(overlay.inert && !nestedMap.inert,
             'a nested map must isolate the viewer without retaining its own inert state');
+        check(getComputedStyle(nestedMap).visibility === 'visible'
+            && nestedMap.contains(document.activeElement)
+            && getComputedStyle(stage).visibility === 'visible',
+        'a body-level map and retained fullscreen media must remain painted');
         closePublicModal(nestedMap);
         nestedMap.remove();
         check(!overlay.inert, 'closing the nested map must reactivate the retained viewer');
@@ -462,6 +492,14 @@ if (!params.has('case')) {
         await new Promise(resolve => requestAnimationFrame(resolve));
         check(background.inert && backgroundWrites === 0 && backgroundMutations === 0,
             `retained gallery must never toggle inert during slide changes: ${backgroundWrites} writes, ${backgroundMutations} mutations`);
+        if (!initialFullscreen) {
+            overlay.classList.remove('is-fullscreen');
+            await until(() => getComputedStyle(background).visibility === 'visible',
+                'class-only fullscreen exit must restore page paint before close');
+            check(!background.hasAttribute('data-public-modal-paint-suppressed')
+                && preInert.getAttribute('data-public-modal-paint-suppressed') === 'original',
+            'fullscreen exit must restore exact original marker state');
+        }
         check([...overlay.querySelectorAll('[data-lightbox-map]')]
             .every(button => button.hidden && button.disabled
                 && getComputedStyle(button).display === 'none'), 'unavailable maps must be hidden and disabled');
@@ -486,6 +524,10 @@ if (!params.has('case')) {
         check(!document.querySelector('#cards').inert, 'close must restore background');
         check(!nestedDialog.inert, 'close must restore the editor original inert state');
         check(preInert.inert, 'close must preserve a pre-existing inert branch');
+        check(!background.hasAttribute('data-public-modal-paint-suppressed')
+            && getComputedStyle(explicitVisible).visibility === 'visible'
+            && preInert.getAttribute('data-public-modal-paint-suppressed') === 'original',
+        'close must restore original page painting and marker values');
         preInert.remove();
         const language = new URL(document.querySelector('[hreflang]').href);
         check(!language.searchParams.has('photo') && language.searchParams.get('lang') === 'en'

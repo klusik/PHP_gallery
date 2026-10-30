@@ -76,7 +76,7 @@ import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } 
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=20261006-lightbox-navigation-v1';
 import { createLightboxResourceLifecycle } from './lightbox-resource-lifecycle.js?v=20261011-resource-decode-v2';
-import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261030-modal-background-v4';
+import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261030-smart-paint-v5';
 import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,
@@ -4790,7 +4790,50 @@ export function setupGalleryLightbox() {
         showLightboxHud();
     }
 
-        /**
+    /**
+     * Reconcile the Smart source link without replacing an unchanged glass layer.
+     * @param {HTMLElement} card Authorized photo metadata with optional source-gallery fields.
+     * @returns {void} Reuses the link across slides, updates changed sources or hides absent metadata.
+     */
+    function updateLightboxSourceGallery(card) {
+        if (!(sourceGallery instanceof HTMLElement)) return;
+        const sourceTitle = (card.dataset.sourceGalleryTitle || '').trim();
+        const breadcrumb = (card.dataset.sourceGalleryBreadcrumb || sourceTitle).trim();
+        const url = (card.dataset.sourceGalleryUrl || '').trim();
+        if (sourceTitle === '' || url === '') {
+            if (sourceGallery.hasChildNodes()) sourceGallery.replaceChildren();
+            if (!sourceGallery.hidden) sourceGallery.hidden = true;
+            return;
+        }
+        let link = sourceGallery.querySelector('a');
+        let path = link?.querySelector('.lightbox-source-gallery-path');
+        if (!(link instanceof HTMLAnchorElement) || !(path instanceof HTMLElement)) {
+            link = document.createElement('a');
+            const icon = document.createElement('span');
+            icon.className = 'lightbox-source-gallery-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = '📁';
+            path = document.createElement('span');
+            path.className = 'lightbox-source-gallery-path';
+            const open = document.createElement('span');
+            open.className = 'lightbox-source-gallery-open';
+            open.setAttribute('aria-hidden', 'true');
+            open.textContent = '↗';
+            link.append(icon, path, open);
+            sourceGallery.replaceChildren(link);
+        }
+        const label = (sourceGallery.dataset.sourceGalleryLabel || 'Source gallery').trim();
+        const accessibleName = `${label}: ${breadcrumb}`;
+        if (link.getAttribute('href') !== url) link.setAttribute('href', url);
+        if (link.title !== breadcrumb) link.title = breadcrumb;
+        if (link.getAttribute('aria-label') !== accessibleName) {
+            link.setAttribute('aria-label', accessibleName);
+        }
+        if (path.textContent !== breadcrumb) path.textContent = breadcrumb;
+        if (sourceGallery.hidden) sourceGallery.hidden = false;
+    }
+
+    /**
      * Open the lightbox at a specific index.
      *
      * @param {number} index Zero-based image index.
@@ -4907,35 +4950,7 @@ export function setupGalleryLightbox() {
         const descriptionText = (card.dataset.description || '').trim();
         description.textContent = descriptionText;
         description.hidden = descriptionText === '';
-        if (sourceGallery instanceof HTMLElement) {
-            const sourceGalleryTitle = (card.dataset.sourceGalleryTitle || '').trim();
-            const sourceGalleryBreadcrumb = (card.dataset.sourceGalleryBreadcrumb || sourceGalleryTitle).trim();
-            const sourceGalleryUrl = (card.dataset.sourceGalleryUrl || '').trim();
-            sourceGallery.replaceChildren();
-            if (sourceGalleryTitle !== '' && sourceGalleryUrl !== '') {
-                const sourceGalleryLink = document.createElement('a');
-                sourceGalleryLink.href = sourceGalleryUrl;
-                sourceGalleryLink.title = sourceGalleryBreadcrumb;
-                const sourceGalleryIcon = document.createElement('span');
-                sourceGalleryIcon.className = 'lightbox-source-gallery-icon';
-                sourceGalleryIcon.setAttribute('aria-hidden', 'true');
-                sourceGalleryIcon.textContent = '📁';
-                const sourceGalleryPath = document.createElement('span');
-                sourceGalleryPath.className = 'lightbox-source-gallery-path';
-                sourceGalleryPath.textContent = sourceGalleryBreadcrumb;
-                const sourceGalleryOpen = document.createElement('span');
-                sourceGalleryOpen.className = 'lightbox-source-gallery-open';
-                sourceGalleryOpen.setAttribute('aria-hidden', 'true');
-                sourceGalleryOpen.textContent = '↗';
-                sourceGalleryLink.append(sourceGalleryIcon, sourceGalleryPath, sourceGalleryOpen);
-                const sourceGalleryLabel = (sourceGallery.dataset.sourceGalleryLabel || 'Source gallery').trim();
-                sourceGalleryLink.setAttribute('aria-label', `${sourceGalleryLabel}: ${sourceGalleryBreadcrumb}`);
-                sourceGallery.append(sourceGalleryLink);
-                sourceGallery.hidden = false;
-            } else {
-                sourceGallery.hidden = true;
-            }
-        }
+        updateLightboxSourceGallery(card);
         updateLightboxCounters(`${normalizedIndex + 1} / ${cards.length}`);
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentSourceGalleryId = card.dataset.sourceGalleryId

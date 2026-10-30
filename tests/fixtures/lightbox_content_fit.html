@@ -59,12 +59,13 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
                 <button class="lightbox-slideshow-link" data-lightbox-action="slideshow">Slideshow</button>
             </div>
             <h2 data-lightbox-title></h2><p data-lightbox-description></p>
+            <p class="lightbox-source-gallery" data-lightbox-source-gallery hidden></p>
         </figcaption>
     </figure>
 </div>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox}
-        from '../../public/assets/gallery-modules/lightbox.js?v=20261030-modal-background-v4';
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261030-smart-paint-v5';
 
     // Bound asynchronous fixture checkpoints, independently of slideshow speed.
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
@@ -85,6 +86,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     const preview = new URL(location.href).searchParams.has('preview');
     const pixels = new URL(location.href).searchParams.has('pixels');
     const nativeFullscreen = new URL(location.href).searchParams.has('native');
+    const smart = new URL(location.href).searchParams.has('smart');
     if (new URL(location.href).searchParams.has('touch')) {
         Object.defineProperty(navigator, 'maxTouchPoints', {value: 2, configurable: true});
         Object.defineProperty(navigator, 'userAgent', {value: 'Fixture Mobile', configurable: true});
@@ -121,6 +123,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
             const style = getComputedStyle(viewer);
             if (!viewer.isConnected || document.querySelector('[data-lightbox]') !== viewer
                 || !background.inert || backgroundWrites || backgroundMutations
+                || getComputedStyle(background).visibility !== 'hidden'
                 || style.opacity !== '1' || style.display === 'none'
                 || style.backgroundColor !== 'rgb(5, 5, 5)'
                 || rect.left !== 0 || rect.top !== 0
@@ -299,6 +302,13 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
         Object.assign(card.dataset, {lightboxImage: '', imageId: String(id),
             fullSrc: card.href, previewSrc: card.href, imageWidth: '1280',
             imageHeight: String(rasterHeight), title: `Content-fit sample ${id}`});
+        if (smart) {
+            Object.assign(card.dataset, {
+                sourceGalleryTitle: 'Source one',
+                sourceGalleryBreadcrumb: 'Games › Source one',
+                sourceGalleryUrl: '/gallery/source-one',
+            });
+        }
         card.textContent = `Sample ${id} `;
         document.querySelector('#cards').append(card);
         return card;
@@ -417,6 +427,16 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
      * @returns {Promise<void>} Resolves after paused-fade, covered and live captures of each target.
      */
     async function checkSlideshowPixels(targets) {
+        const sourceLink = viewer.querySelector('[data-lightbox-source-gallery] a');
+        if (smart) check(sourceLink instanceof HTMLAnchorElement,
+            'Smart playback must include its real source-gallery glass control');
+        let sourceMutations = 0;
+        const sourceObserver = smart ? new MutationObserver(records => {
+            sourceMutations += records.length;
+        }) : null;
+        sourceObserver?.observe(sourceLink.parentElement, {
+            childList: true, subtree: true, attributes: true, characterData: true,
+        });
         const advance = document.createElement('button');
         advance.type = 'button';
         advance.dataset.pixelAdvance = '';
@@ -517,6 +537,9 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
                     ?.dataset.lightboxImageId === targetId
                     && !viewer.querySelector('.lightbox-transition-image'));
                 viewer.querySelector('[data-lightbox-action="slideshow"]').click();
+                if (smart) check(viewer.querySelector(
+                    '[data-lightbox-source-gallery] a') === sourceLink,
+                'unchanged Smart source links must retain their DOM and glass layer');
                 check(viewer.dataset.lightboxContentFit
                     === (index === 0 ? 'original' : 'cropped'),
                     'pixel journey must switch from cropped to original and back');
@@ -525,7 +548,35 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
             check(shellFrames > 0 && backgroundWrites === 0 && backgroundMutations === 0,
                 `automatic slides must retain uninterrupted modal isolation and backing: `
                     + `${shellFrames} frames, ${backgroundWrites} writes, ${backgroundMutations} mutations`);
+            if (smart) {
+                check(sourceMutations === 0,
+                    `unchanged Smart source metadata must not mutate: ${sourceMutations}`);
+                sourceObserver.disconnect();
+                // The handoff gate has finished; ordinary metadata navigation
+                // must use native decode rather than waiting for another capture.
+                HTMLImageElement.prototype.decode = nativeDecode;
+                Object.assign(targets[0].dataset, {
+                    sourceGalleryTitle: 'Source two',
+                    sourceGalleryBreadcrumb: 'Other games › Source two',
+                    sourceGalleryUrl: '/gallery/source-two',
+                });
+                await openCard(targets[0]);
+                check(viewer.querySelector('[data-lightbox-source-gallery] a') === sourceLink
+                    && sourceLink.getAttribute('href') === '/gallery/source-two'
+                    && sourceLink.title === 'Other games › Source two'
+                    && sourceLink.getAttribute('aria-label') === 'Source gallery: Other games › Source two'
+                    && sourceLink.querySelector('.lightbox-source-gallery-path').textContent
+                        === 'Other games › Source two',
+                'a new Smart source must update the existing accessible link');
+                delete targets[1].dataset.sourceGalleryTitle;
+                delete targets[1].dataset.sourceGalleryUrl;
+                await openCard(targets[1]);
+                const source = viewer.querySelector('[data-lightbox-source-gallery]');
+                check(source.hidden && !source.hasChildNodes(),
+                    'missing Smart source metadata must clear and hide the previous link');
+            }
         } finally {
+            sourceObserver?.disconnect();
             HTMLImageElement.prototype.decode = nativeDecode;
             advance.remove();
         }

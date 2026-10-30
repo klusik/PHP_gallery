@@ -403,25 +403,29 @@ try {
         assert.ok(pixels.result?.includes('BROWSER PASS'),
             'Cropped/original handoffs must retain their actual rendered colors');
     }
-    const nativePixels = await runHeadlessBrowserFixture(executable,
-        `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels&native`,
-        'lightbox-native-background-profile-', {
-            viewport: contentFitViewports[0], interact: interactPixels,
-        });
-    console.log(nativePixels.result);
-    assert.equal(nativePixels.exitCode, 0, 'Native slideshow browser must exit successfully');
-    assert.ok(nativePixels.result?.includes('BROWSER PASS'),
-        'Plain photo opening followed by trusted S must retain native fullscreen backing');
-    const touchPixels = await runHeadlessBrowserFixture(executable,
-        `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels&touch`,
-        'lightbox-touch-background-profile-', {
-            viewport: contentFitViewports[1], touchEmulation: true,
-            interact: interactPixels,
-        });
-    console.log(touchPixels.result);
-    assert.equal(touchPixels.exitCode, 0, 'Touch slideshow browser must exit successfully');
-    assert.ok(touchPixels.result?.includes('BROWSER PASS'),
-        'Touch swipe styling must preserve both slideshow opacity transitions');
+    // Both physical and Smart metadata must retain the native/touch journeys.
+    for (const smart of ['', '&smart']) {
+        const nativePixels = await runHeadlessBrowserFixture(executable,
+            `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels&native${smart}`,
+            'lightbox-native-background-profile-', {
+                viewport: contentFitViewports[0], interact: interactPixels,
+            });
+        console.log(nativePixels.result);
+        assert.equal(nativePixels.exitCode, 0, 'Native slideshow browser must exit successfully');
+        assert.ok(nativePixels.result?.includes('BROWSER PASS'),
+            'Plain photo opening followed by trusted S must retain native fullscreen backing');
+        const touchPixels = await runHeadlessBrowserFixture(executable,
+            `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels&touch${smart}`,
+            'lightbox-touch-background-profile-', {
+                viewport: contentFitViewports[1], touchEmulation: true,
+                interact: interactPixels,
+            });
+        console.log(touchPixels.result);
+        assert.equal(touchPixels.exitCode, 0, 'Touch slideshow browser must exit successfully');
+        assert.ok(touchPixels.result?.includes('BROWSER PASS'),
+            'Touch swipe styling must preserve both slideshow opacity transitions');
+    }
+
 } finally {
     server.close();
 }
