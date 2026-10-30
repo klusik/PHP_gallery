@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.148.4}
+\newcommand{\version}{0.148.5}
 \newcommand{\manualdate}{30.~Oktober~2026}
 
 \hypersetup{
@@ -2611,6 +2611,11 @@ Fotos dadurch nicht erst abrupt am Ende des Übergangs.
 Die Diashow-Überblendung schließt den Hintergrund des Betrachters aus. Farben und
 Helligkeit bleiben beim Entfernen des Deckbildes gleich, auch beim Wechsel
 zwischen beschnittenen und vollständigen Bildern.
+Beim Bildwechsel bleibt die Galerie im Hintergrund ohne zwischenzeitliche
+Reaktivierung gesperrt. Beim Schließen wird der ursprüngliche Zustand auch
+für verschachtelte Editoren und Karten wiederhergestellt. Natives Vollbild
+behält eine deckende Hintergrundfläche; Touch-Wischstile erhalten die
+Überblendung der Fotos.
 
 Zoom über 100~\% fordert sofort die geschützte Quelle voller Qualität für das aktive Foto an. Die vorhandene Vorschau bleibt sichtbar, bis das größere Bild bereit ist; aktuelle Zoom- und Verschiebeposition bleiben erhalten. Im normalen, Vollbild- und mobilen Vollbildmodus zeigt diese Übertragung dieselbe Fortschrittsleiste mit Prozentwert und Byteanzahl. Fotowechsel, Schließen des Betrachters oder eine neuere Anfrage voller Qualität brechen die vorherige Übertragung ab. Eine fehlgeschlagene oder abgebrochene Anfrage voller Qualität belässt die geschützte Vorschau.
 

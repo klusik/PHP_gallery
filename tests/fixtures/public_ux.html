@@ -116,7 +116,9 @@ License: MIT License (see LICENSE file in repository)
 </div>
 <script type="module">
 import {setupGalleryLightbox, teardownGalleryLightbox}
-    from '/public/assets/gallery-modules/lightbox.js';
+    from '/public/assets/gallery-modules/lightbox.js?v=20261030-modal-background-v4';
+import {openPublicModal, closePublicModal}
+    from '/public/assets/gallery-modules/public-modal-lifecycle.js?v=20261030-modal-background-v4';
 import {setupGalleryMediaPanels}
     from '/public/assets/gallery-modules/gallery-media-panels.js?v=20261024-short-presentation-v1';
 
@@ -190,6 +192,8 @@ if (!params.has('case')) {
     }
     const overlay = document.querySelector('[data-lightbox]');
     const stage = overlay.querySelector('[data-lightbox-stage]');
+    let inertProbeObserver = null;
+    let restoreInertProbe = null;
     const cards = [];
     const media = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200"><rect width="1800" height="1200" fill="steelblue"/></svg>');
@@ -376,6 +380,9 @@ if (!params.has('case')) {
         const nestedInput = document.createElement('input');
         nestedDialog.append(nestedInput);
         document.body.append(nestedDialog);
+        const preInert = document.createElement('section');
+        preInert.inert = true;
+        document.body.append(preInert);
         setupGalleryLightbox(); cards[0].focus(); cards[0].click();
         await until(() => overlay.dataset.currentImageId === '1'
             && stage.clientWidth > 0 && overlay.querySelector('img').naturalWidth > 0,
@@ -386,6 +393,27 @@ if (!params.has('case')) {
         check(overlay.getAttribute('role') === 'dialog'
             && overlay.getAttribute('aria-modal') === 'true', 'viewer must be modal');
         check(document.querySelector('#cards').inert, 'background must be inert');
+        const background = document.querySelector('#cards');
+        const nativeInert = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'inert');
+        check(typeof nativeInert?.get === 'function'
+            && typeof nativeInert?.set === 'function', 'native inert accessor must be available');
+        let backgroundWrites = 0;
+        let backgroundMutations = 0;
+        Object.defineProperty(background, 'inert', {
+            configurable: true,
+            get: () => nativeInert.get.call(background),
+            set: (value) => {
+                backgroundWrites += 1;
+                nativeInert.set.call(background, value);
+            },
+        });
+        restoreInertProbe = () => { delete background.inert; };
+        inertProbeObserver = new MutationObserver(records => {
+            backgroundMutations += records.length;
+        });
+        inertProbeObserver.observe(background, {
+            attributes: true, attributeFilter: ['inert'],
+        });
         check(overlay.contains(document.activeElement), 'opening must place focus inside');
         document.dispatchEvent(new KeyboardEvent('keydown', {key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
         check(overlay.contains(document.activeElement), 'Shift+Tab must stay inside');
@@ -402,6 +430,38 @@ if (!params.has('case')) {
         document.body.append(nestedDialog);
         await until(() => nestedDialog.inert,
             'a returned editor must become covered background again');
+        const lateSibling = document.createElement('section');
+        document.body.append(lateSibling);
+        await until(() => lateSibling.inert, 'new background branches must be isolated');
+        lateSibling.remove();
+        await until(() => !lateSibling.inert, 'removed branches must regain their original state');
+        const nestedMap = document.createElement('section');
+        nestedMap.innerHTML = '<button data-map-close>Close map</button>';
+        document.body.append(nestedMap);
+        openPublicModal(nestedMap);
+        check(overlay.inert && !nestedMap.inert,
+            'a nested map must isolate the viewer without retaining its own inert state');
+        closePublicModal(nestedMap);
+        nestedMap.remove();
+        check(!overlay.inert, 'closing the nested map must reactivate the retained viewer');
+        cards[1].click();
+        await until(() => overlay.querySelector('[data-lightbox-img]')
+            ?.dataset.lightboxImageId === '2', 'retained viewer must navigate');
+        cards[0].click();
+        await until(() => overlay.querySelector('[data-lightbox-img]')
+            ?.dataset.lightboxImageId === '1', 'retained viewer must return');
+        // Model the three separate child-list tasks of cover install, live-image
+        // replacement and cover removal; each observer callback must retain inert.
+        const coverProbe = document.createElement('span');
+        overlay.append(coverProbe);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const replacementProbe = coverProbe.cloneNode();
+        coverProbe.replaceWith(replacementProbe);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        replacementProbe.remove();
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        check(background.inert && backgroundWrites === 0 && backgroundMutations === 0,
+            `retained gallery must never toggle inert during slide changes: ${backgroundWrites} writes, ${backgroundMutations} mutations`);
         check([...overlay.querySelectorAll('[data-lightbox-map]')]
             .every(button => button.hidden && button.disabled
                 && getComputedStyle(button).display === 'none'), 'unavailable maps must be hidden and disabled');
@@ -425,13 +485,19 @@ if (!params.has('case')) {
         check(document.activeElement === cards[0], 'close must return to the original opener');
         check(!document.querySelector('#cards').inert, 'close must restore background');
         check(!nestedDialog.inert, 'close must restore the editor original inert state');
+        check(preInert.inert, 'close must preserve a pre-existing inert branch');
+        preInert.remove();
         const language = new URL(document.querySelector('[hreflang]').href);
         check(!language.searchParams.has('photo') && language.searchParams.get('lang') === 'en'
             && language.searchParams.get('view_as') === 'anonymous', 'language links must retain album context');
         parent.postMessage({type:'public-ux-case',ok:true}, location.origin);
     } catch (error) {
         parent.postMessage({type:'public-ux-case',ok:false,error:error.stack}, location.origin);
-    } finally { teardownGalleryLightbox(); }
+    } finally {
+        inertProbeObserver?.disconnect();
+        restoreInertProbe?.();
+        teardownGalleryLightbox();
+    }
 }
 </script>
 </body></html>

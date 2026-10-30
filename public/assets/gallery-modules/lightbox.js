@@ -76,7 +76,7 @@ import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } 
 import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { createLightboxNavigationLifecycle } from './lightbox-navigation-lifecycle.js?v=20261006-lightbox-navigation-v1';
 import { createLightboxResourceLifecycle } from './lightbox-resource-lifecycle.js?v=20261011-resource-decode-v2';
-import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261023-public-modal-v3';
+import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=20261030-modal-background-v4';
 import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.148.4}
+\newcommand{\version}{0.148.5}
 \newcommand{\manualdate}{30 October 2026}
 
 \hypersetup{
@@ -2503,6 +2503,12 @@ therefore do~not~leave old content visible until an~abrupt removal.
 The~slideshow blend excludes the~viewer background so~removing the~incoming cover keeps
 the~same colors and~brightness, including changes between cropped and~original
 frames.
+
+During slideshow navigation, the~covered gallery retains its~modal isolation
+without being reactivated between photographs. Closing the~viewer restores
+the~original background state, including nested editors and~maps. Native
+fullscreen retains an~opaque backing, and~touch swipe styling preserves
+the~photograph fade.
 
 Zooming above 100\% immediately requests the~protected full-quality source for~the~active photograph. The~existing preview remains visible until the~larger image is~ready, and~the~current zoom and~pan position are~preserved. In~normal, full-screen, and~mobile full-screen modes, this transfer shows the~same progress bar with a~percentage and~a~byte count. Changing photographs, closing the~viewer, or~starting a~newer full-quality request cancels the~previous transfer. A~failed or~cancelled full-quality request leaves the~protected preview in~place.
 

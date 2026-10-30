@@ -30,7 +30,7 @@
  *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261024-short-presentation-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261030-modal-background-v4';
 
 const optionalPublicModules = {
     quickPhotoTags: './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5',

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.148.4}
+\newcommand{\version}{0.148.5}
 \newcommand{\manualdate}{30.~října~2026}
 
 \hypersetup{
@@ -2486,6 +2486,10 @@ postupně mizí současně s~objevováním nového. Při rozdílných tvarech sn
 tak odhalené části předchozí fotografie nezmizí náhle až na~konci přechodu.
 Prolínání v~prezentaci nezahrnuje pozadí prohlížeče, takže odstranění překryvného snímku
 zachová stejné barvy i~jas, také při střídání oříznutých a~celých snímků.
+Při střídání fotografií zůstává galerie na~pozadí souvisle blokovaná bez
+opakovaného odblokování. Zavření prohlížeče obnoví původní stav i~u~vnořených
+editorů a~map. Nativní celá obrazovka má neprůhledné pozadí a~dotykové styly
+posunu zachovávají prolínání fotografií.
 
 Přiblížení nad 100~\% okamžitě vyžádá chráněný zdroj plné kvality aktivní fotografie. Stávající náhled zůstává viditelný, dokud větší obrázek není připraven, a~aktuální přiblížení i~poloha posunutí se zachovávají. V~běžném, celoobrazovkovém i~mobilním celoobrazovkovém režimu přenos zobrazuje stejný ukazatel průběhu s~procentem a~počtem bajtů. Změna fotografie, zavření prohlížeče nebo zahájení novějšího požadavku plné kvality ruší předchozí přenos. Neúspěšný nebo zrušený požadavek plné kvality ponechá chráněný náhled na místě.
 

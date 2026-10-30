@@ -1,5 +1,84 @@
 # Patch notes
 
+## Version 0.148.5
+
+Improved fullscreen slideshow stability by keeping covered gallery content
+continuously isolated during photo changes and preserving opacity fades on
+touch clients.
+
+### Highlights
+
+#### Stable background isolation
+
+- Removed repeated reactivation and isolation of the covered gallery during
+  lightbox navigation and transition-layer updates. Unchanged background
+  branches remained inert throughout playback.
+- Preserved original isolation state when nested editors or maps moved,
+  appeared or closed, and restored covered content and opener focus when the
+  viewer closed.
+- Matched the native fullscreen backdrop to the viewer's opaque `#050505`
+  shell, independently of photograph opacity or decoded-image replacement.
+
+#### Touch slideshow transitions
+
+- Preserved the incoming photograph's opacity transition alongside touch
+  swipe transforms. Swipe styling no longer replaced the fade with a
+  transform-only transition while the outgoing photograph faded away.
+
+### Technical Details
+
+#### Frontend lifecycle and compatibility
+
+- Updated `public/assets/gallery-modules/public-modal-lifecycle.js` to
+  reconcile the desired covered siblings incrementally. Retained branches
+  kept their saved baseline without repeated property writes; removed or
+  moved branches were restored before new isolation baselines were captured.
+- Updated `public/assets/styles/lightbox.css` with an explicit native
+  fullscreen backdrop and `public/assets/styles/mobile-gallery.css` with
+  complementary opacity and swipe transitions.
+- Advanced the complete shared import chain through the lightbox, deferred
+  viewer, Admin side panel, operations module and public entrypoints so
+  authenticated and anonymous pages loaded the same modal owner revision.
+- Preserved CSS fullscreen fallback, image authorization, decoding, crop
+  geometry, cancellation and existing translated controls. No database
+  migration, stored-media change or translation-catalog expansion was added.
+
+#### Tests and documentation
+
+- Extended `tests/fixtures/public_ux.html` to count native `inert` property
+  writes and attribute changes on retained gallery content, and covered
+  pre-existing inert state, late or removed branches, nested maps, moved
+  editors and focus restoration.
+- Extended `tests/fixtures/lightbox_content_fit.html` and
+  `tests/lightbox_race_browser_test.mjs` with actual trusted S native
+  fullscreen entry, CSS fallback and touch playback. Added shell DOM/style
+  checks on animation-frame callbacks and screenshot patches outside the
+  photographs during a paused fade and final handoff.
+- Added an optional visible-viewport screenshot mode in
+  `tests/support/headless_browser_fixture.mjs`, while retaining full-document
+  capture for existing callers. Checked actual crop/probe geometry and equal
+  raster scale, and retained PNG, RGB and geometry on backing failures.
+- Retained the existing photograph-color comparisons in both crop directions
+  and required real opacity animations on both fading layers.
+- Updated `TESTING.md`, `docs/SMART_GALLERIES.md`, the compatibility register
+  and all four maintained manual sources, including the limits of isolated
+  browser coverage and the local acceptance observations.
+
+### User Impact
+
+#### For visitors
+
+- Kept the gallery behind an active viewer continuously isolated while
+  photographs changed, with consistent native fullscreen backing.
+- Restored smooth complementary slideshow fades on touch clients while
+  preserving swipe navigation.
+
+#### For administrators
+
+- Preserved nested editor and map ownership and the original background
+  state when viewer layers moved or closed, without changing gallery-save
+  or media-access workflows.
+
 ## Version 0.148.4
 
 Improved Smart Gallery attachment editing and corrected lightbox slideshow

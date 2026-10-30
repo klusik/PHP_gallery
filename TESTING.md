@@ -1133,7 +1133,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.148.4. Release verification uses the
+This guide applies to PHP Gallery Version 0.148.5. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -4202,6 +4202,30 @@ The registered `public_ux_browser_test.mjs` adds isolated 320/390px and rotated
 landscape checks with production CSS. It covers tag-card width, modal focus
 entry/wrap/return, background isolation, reparented editor focus, unavailable maps,
 header route context, one-finger swipe and two-finger pinch/pan handoff.
+Background probes count native `inert` property writes and attribute mutations,
+not only the final boolean: navigating the retained viewer and installing,
+replacing or removing transition children must produce zero writes on unchanged
+covered gallery branches. Late siblings, removed branches, pre-existing inert
+state and nested map/editor moves retain their separate restore/focus checks.
+The content-fit screenshot journey includes conspicuous gallery content behind
+selected production public/mobile stylesheets. It checks shell DOM geometry
+and computed styles on each animation frame, plus a corner screenshot patch
+outside the photographs during
+a paused fade and both sides of the live-image handoff. Separate lanes cover
+desktop/narrow CSS fallback, a real trusted S key after ordinary photo opening
+with native fullscreen ownership, and touch swipe styling. Both photo layers
+must retain real opacity transitions. Native backing must match the viewer's
+`#050505` shell. These captures request only the visible viewport, verify equal
+CSS-to-raster scale on both axes and retain failure PNG/geometry/RGB evidence.
+The native lane uses wider cropped/original sources so screen aspect changes
+leave visible letterboxing; every lane verifies that the backing patch lies
+outside both image boxes before reading pixels. The other lanes retain their
+16:9 and 4:3 corpus. The background patch is inset from the native viewer's
+rounded keyboard focus outline, rather than interpreting that visible control
+chrome as gallery leakage. This isolated fixture does not load the authenticated Admin
+bundle, generated Theme/custom styles or actual Smart Gallery markup. It cannot
+prove absence of every GPU/display-only frame artifact on a user's Chrome
+installation; retain actual-device acceptance.
 The map browser fixture also
 checks marker names and standalone-map Escape. The PHP
 `public_ux_presentation_test.php` exercises rich-text snippets, all four

@@ -19,7 +19,7 @@
  */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -50,6 +50,11 @@ const screenshotPatchRadius = 2;
 // Consumers: interactPixels. Rationale: 1 admits raster rounding, but rejects
 // the observed 5-level background addition in the previous compositor path.
 const handoffChannelTolerance = 1;
+// Purpose: Match the opaque #050505 fullscreen shell in actual screenshots.
+// Type: integer. Units: 8-bit sRGB channel levels. Scope: backdrop probes.
+// Consumers: interactPixels. Rationale: 5 distinguishes the dark shell from
+// the conspicuous magenta/green gallery painted underneath the fixture.
+const fullscreenBackingChannel = 5;
 if (!executable || executable.startsWith('--')) {
     console.log('SKIP lightbox race browser test: supply the path to an installed Chrome/Edge executable.');
     process.exit(0);
@@ -64,7 +69,7 @@ if (!executable || executable.startsWith('--')) {
  * Browser protocol operations consumed by the trusted-key fixture driver.
  * @typedef {object} LightboxRaceBrowserControls
  * @property {function(string):Promise<LightboxRaceJsonValue|undefined>} evaluate Evaluates one synchronous page expression and returns its JSON value.
- * @property {function():Promise<string>} captureScreenshot Captures the current owned page as a base64 PNG.
+ * @property {function({fullPage?:boolean}=):Promise<string>} captureScreenshot Captures the owned document or visible viewport as a base64 PNG.
  * @property {function('keyDown'|'keyUp',string):Promise<void>} key Sends one trusted browser key transition.
  */
 
@@ -200,6 +205,11 @@ async function screenshotPatches(controls, png) {
         const context = canvas.getContext('2d');
         context.drawImage(raster, 0, 0);
         const ratio = raster.naturalWidth / innerWidth;
+        if (ratio !== raster.naturalHeight / innerHeight) {
+            throw new Error('Viewport screenshot must retain equal CSS-to-raster scale: '
+                + JSON.stringify({raster: [raster.naturalWidth, raster.naturalHeight],
+                    viewport: [innerWidth, innerHeight]}));
+        }
         const radius = ${screenshotPatchRadius};
         const side = radius * 2 + 1;
         const points = JSON.parse(document.querySelector('[data-pixel-advance]')
@@ -225,7 +235,7 @@ async function screenshotPatches(controls, png) {
 }
 
 /**
- * Compare real composited pixels at both sides of each automatic crop handoff.
+ * Drive native S entry and compare backing/colors across automatic crop handoffs.
  * @param {LightboxRaceBrowserControls} controls Owned screenshot and fixture controls.
  * @returns {Promise<void>} Resolves after both directions retain their rendered colors.
  */
@@ -236,9 +246,41 @@ async function interactPixels(controls) {
         const phase = await controls.evaluate(
             `document.querySelector('[data-pixel-advance]')?.dataset.pixelPhase || ''`);
         if (typeof phase === 'string' && phase && !captures.has(phase)) {
-            const patches = await screenshotPatches(
-                controls, await controls.captureScreenshot());
+            if (phase === 'manual-s') {
+                captures.set(phase, []);
+                await controls.key('keyDown', 's');
+                await controls.key('keyUp', 's');
+                await controls.evaluate(
+                    `document.querySelector('[data-pixel-advance]').click()`);
+                continue;
+            }
+            const png = await controls.captureScreenshot({fullPage: false});
+            const patches = await screenshotPatches(controls, png);
             captures.set(phase, patches);
+            // The final patch is outside both landscape image fits and the HUD.
+            // Its exact 5/5/5 backing must survive mid-fade as well as handoff.
+            const backing = patches[patches.length - 1];
+            if (backing.some(channel => Math.abs(channel - fullscreenBackingChannel)
+                > handoffChannelTolerance)) {
+                const diagnostics = await controls.evaluate(`({
+                    viewport: [innerWidth, innerHeight],
+                    fullscreen: document.fullscreenElement?.className || '',
+                    shell: document.querySelector('[data-lightbox]').getBoundingClientRect().toJSON(),
+                    outgoing: document.querySelector('[data-lightbox-zoom-surface]').getBoundingClientRect().toJSON(),
+                    incoming: document.querySelector('.lightbox-transition-image')?.getBoundingClientRect().toJSON() || null,
+                    clip: document.querySelector('.lightbox-transition-image')?.style.clipPath || '',
+                    samples: document.querySelector('[data-pixel-advance]').dataset.pixelSamples,
+                    capture: 'viewport'
+                })`);
+                const evidenceRoot = path.join(root, 'cache', 'test-audit');
+                await mkdir(evidenceRoot, {recursive: true});
+                const evidencePath = path.join(evidenceRoot,
+                    `lightbox-backing-${process.pid}.png`);
+                await writeFile(evidencePath, Buffer.from(png, 'base64'));
+                assert.fail(`${phase}: gallery must never show through fullscreen backing; `
+                    + `RGB=${JSON.stringify(backing)}; ${JSON.stringify(diagnostics)}; `
+                    + `screenshot=${evidencePath}`);
+            }
             if (phase.startsWith('stable-')) {
                 const covered = captures.get(phase.replace('stable-', 'covered-'));
                 assert.ok(covered, 'The opaque cover must be captured before its live image');
@@ -361,6 +403,25 @@ try {
         assert.ok(pixels.result?.includes('BROWSER PASS'),
             'Cropped/original handoffs must retain their actual rendered colors');
     }
+    const nativePixels = await runHeadlessBrowserFixture(executable,
+        `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels&native`,
+        'lightbox-native-background-profile-', {
+            viewport: contentFitViewports[0], interact: interactPixels,
+        });
+    console.log(nativePixels.result);
+    assert.equal(nativePixels.exitCode, 0, 'Native slideshow browser must exit successfully');
+    assert.ok(nativePixels.result?.includes('BROWSER PASS'),
+        'Plain photo opening followed by trusted S must retain native fullscreen backing');
+    const touchPixels = await runHeadlessBrowserFixture(executable,
+        `${fixtureUrl}tests/fixtures/lightbox_content_fit.html?pixels&touch`,
+        'lightbox-touch-background-profile-', {
+            viewport: contentFitViewports[1], touchEmulation: true,
+            interact: interactPixels,
+        });
+    console.log(touchPixels.result);
+    assert.equal(touchPixels.exitCode, 0, 'Touch slideshow browser must exit successfully');
+    assert.ok(touchPixels.result?.includes('BROWSER PASS'),
+        'Touch swipe styling must preserve both slideshow opacity transitions');
 } finally {
     server.close();
 }
