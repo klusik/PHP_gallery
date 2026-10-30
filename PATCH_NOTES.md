@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 0.149.0
+
+Updated public and administrator controls to use compact icon buttons while preserving accessible labels and responsive touch targets.
+
+### Highlights
+
+#### Accessible icon controls
+
+- Replaced public preview, Exit preview, Admin/login, Test run, Updates, and
+  Logout controls with compact 32px-square icon buttons. Preserved localized
+  accessible labels and added native tooltips; preview guidance remained
+  available as an accessible description.
+- Updated the gallery-map action to use a pin icon with a localized accessible
+  name and tooltip. Expanded header and map controls to at least 44px on narrow
+  screens or with coarse pointer input.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `app/views/layout.php`, `app/views/public_gallery_pages.php`, and
+  `public/assets/styles/utilities.css` for the icon controls, accessible
+  descriptions, tooltips, and responsive target sizes.
+
+#### Tests and documentation
+
+- Extended `tests/theme_public_css_cascade_test.php` to cover accessible labels
+  and tooltips, preview state, and disabled Test run markup. Updated
+  `tests/fixtures/public_ux.html` for icon-only preview markup.
+- Updated `TESTING.md` with manual desktop, narrow-screen, keyboard-focus, and
+  touch-target inspection guidance.
+- Updated `docs/ADMIN_DESIGN.md` and the English, Czech, German, and Swedish
+  manuals to document the controls and their accessibility and responsive
+  behavior.
+
+### User Impact
+
+#### For visitors
+
+- Used the compact preview and gallery-map controls while retaining accessible
+  names and larger targets on narrow screens or with coarse pointer input.
+
+#### For administrators
+
+- Used compact icon controls for Admin/login, Test run, Updates, and Logout,
+  with localized accessible labels, tooltips, and responsive target sizes.
+
+#### For maintainers
+
+- Added CSS cascade coverage for the updated accessible control markup and
+  documented manual viewport, keyboard-focus, and touch-target checks.
+
 ## Version 0.148.6
 
 Improved Smart Gallery fullscreen playback by suspending covered page painting
