@@ -2,26 +2,43 @@
 
 ## Version 0.149.2
 
-Updated the Windows companion’s self-update shutdown so the uploader exited after the external helper confirmed it was ready, without waiting for background workers.
+Updated the Windows companion’s self-update shutdown so the uploader exited
+after the external helper confirmed it was ready, without waiting for background
+workers.
+
+The change fixed an update deadlock: the always-running GamePresence observer
+was counted as active work but was never asked to stop. Even an idle uploader
+with Watcher stopped could therefore refuse its own update. This patch removed
+the separate worker-by-worker drain so background observers no longer blocked
+installation.
 
 ### Highlights
 
 #### Faster self-update handoff
 
-- Updated WinApp to `0.11.2`. After the helper acknowledged readiness, the uploader closed through its shared shutdown owner, terminated app-owned multiprocessing children, and exited without waiting for threads.
-- Kept the app open when helper preparation failed, and preserved the existing behavior for ordinary Exit.
+- Updated WinApp to `0.11.2`. After the helper acknowledged readiness, the
+  uploader closed through its shared shutdown owner, terminated app-owned
+  multiprocessing children, and exited without waiting for threads. - Kept the
+  app open when helper preparation failed, and preserved the existing behavior
+  for ordinary Exit.
 
 ### Technical Details
 
 #### Windows companion
 
-- Updated `winapp/uploader/update_ui.py` and `winapp/gallery_watch_upload.pyw` to exit after the confirmed update handoff.
-- The helper rechecked the installer, waited for the installed app to exit, installed and verified the new version, then restarted the uploader as the original user.
-- Updated `winapp/README.md`, `TESTING.md`, the four manuals, and `docs/COMPATIBILITY_LIFECYCLE.md` with the handoff behavior and compatibility notes.
+- Updated `winapp/uploader/update_ui.py` and `winapp/gallery_watch_upload.pyw`
+  to exit after the confirmed update handoff. - The helper rechecked the
+  installer, waited for the installed app to exit, installed and verified the
+  new version, then restarted the uploader as the original user. - Updated
+  `winapp/README.md`, `TESTING.md`, the four manuals, and
+  `docs/COMPATIBILITY_LIFECYCLE.md` with the handoff behavior and compatibility
+  notes.
 
 #### Tests
 
-- Updated `winapp/tests/test_update_ui.py` and `winapp/tests/test_redesign.py` to cover active background work, helper failure, readiness-only exit, and termination of active or already-exited child processes.
+- Updated `winapp/tests/test_update_ui.py` and `winapp/tests/test_redesign.py`
+  to cover active background work, helper failure, readiness-only exit, and
+  termination of active or already-exited child processes.
 
 ### User Impact
 
@@ -31,8 +48,12 @@ Updated the Windows companion’s self-update shutdown so the uploader exited af
 
 #### For administrators
 
-- WinApp updates no longer waited for background threads after the helper confirmed readiness. The shutdown did not save unsaved settings or guarantee pending, unflushed work; persisted settings, credentials, checkpoints, and flight artifacts remained available.
-- Users of older clients that remained stuck waiting for workers needed to close the app and launch the installer manually.
+- WinApp updates no longer waited for background threads after the helper
+  confirmed readiness. The shutdown did not save unsaved settings or guarantee
+  pending, unflushed work; persisted settings, credentials, checkpoints, and
+  flight artifacts remained available. - Users of older clients that remained
+  stuck waiting for workers needed to close the app and launch the installer
+  manually.
 
 ## Version 0.149.1
 
