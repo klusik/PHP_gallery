@@ -1,9 +1,33 @@
 # PHP Gallery Architecture
 
+## Gallery identity and rename ownership
+
+The source title owns the sanitized physical gallery leaf. Creation derives it
+through `gallery_folder_segment()` and rejects occupied destinations. Editor
+title saves use the existing gallery writer and subtree move; the root title
+and complete descendant path map commit together in the mutation model. The
+folder field is informational. Public slugs retain their independent URL role.
+Date-organized children derive their folder from the actual source title too.
+
+Media Renamer stages verified exclusively owned thumbnails before changing
+originals. It publishes those unchanged cache bytes only after the persisted
+destination source owns the derivative identity. Ambiguous/locked artifacts
+retain explicit invalidation/warning fallbacks. Gallery AJAX applies reuse the
+bounded selection planner and report confirmed 15-image slices; completion
+bubbles from the retained editor container through the shared mutation owner,
+refreshing image metadata without replacing settings drafts.
+Gallery and site-wide forms use one required inline review checkbox, checked
+again by the AJAX owner and server, without a duplicate native dialog.
+Completion notices distinguish preserved thumbnails from invalidated stale
+derivatives instead of combining their counters under an invalidation label.
+The refreshed workspace owns the single live completion notice; the canonical
+success envelope leaves its global message empty to avoid duplicate banners.
+
 ## Visitor progress and content evidence
 
 `public_gallery_visit_progress()` prepares one authorized projection only after
-a successful Home/Gallery/Smart/Tag document. It checks the actual Admin identity,
+a successful Home/Gallery/Smart/Tag document. It checks the actual Admin
+identity,
 independently of preview flags. The gallery lookup service seeds its canonical
 request cache from one bounded gallery inventory before applying existing
 listing/password/NSFW policy. Invalid physical parent chains and invalid Smart
@@ -118,7 +142,8 @@ The existing `models/galleries.php` owner contains the SQL primitives;
 these already-loaded gallery owners avoids extra files on the no-due route.
 The maintenance bootstrap admits ordinary PHP GET/HEAD
 requests before dispatch, including anonymous visitors and crawlers, while
-excluding read-only media and explicit maintenance transports. The central scheduler handles heavy maintenance separately in bounded owner
+excluding read-only media and explicit maintenance transports. The central
+scheduler handles heavy maintenance separately in bounded owner
 slices after the response; foreground publication does not run those owners.
 
 The existing `site-request-trigger` root owns the indexed due check. An empty
@@ -248,7 +273,8 @@ source and rule-count inputs stay fresh on every explicit run. No persistent
 source-analysis cache, extra runtime file or logical module is added; inspection
 reuses the already loaded passive Core observer under unchanged closure limits.
 
-The gallery editor prepares one Media management main tab containing the independent
+The gallery editor prepares one Media management main tab containing the
+independent
 image manager and existing music/PDF/presentation/artwork forms. The image
 preloader replaces only its original Images container; it does not own sibling
 media sections. One shared file chooser uses the existing image, PDF and audio
@@ -273,7 +299,8 @@ shared Admin-log receipt API. The Model distinguishes dirty legacy source
 metadata from absence only after verified source resolution fails; no dirty
 snapshot is promoted or silently reconciled. Diagnostics preserve failure stage,
 selected identity, committed-write state and a response/log reference without
-raw exceptions, SQL or absolute storage paths. PHP error logging is the permanent
+raw exceptions, SQL or absolute storage paths. PHP error logging is the
+permanent
 fallback when the Admin writer cannot persist. Expected runtime delta is no new
 source file or logical root; actual dependency closure remains hosted evidence.
 
@@ -309,7 +336,8 @@ filter. Unique indexes protect both the fingerprint and the globally unique
 eight-character lowercase hexadecimal code. Identical requests reuse one row;
 a short-code collision never overwrites it. Clean URLs use the application-root
 `/presentation=<code>`; non-rewrite installations use
-`index.php?presentation=<code>`. Root lookup reads only gallery kind/ID; ordinary
+`index.php?presentation=<code>`. Root lookup reads only gallery kind/ID;
+ordinary
 gallery authorization then precedes settings/media reads. Smart destinations
 re-enter the normal dispatcher and preserve its capability and source guards.
 Resolved options reach the existing browser owner through escaped metadata;
@@ -323,7 +351,8 @@ Missing/unknown link storage refuses creation/resolution with a safe error;
 ordinary galleries and existing long links still work. Lazy System Health
 exposes this storage dependency. No new runtime file or logical module is
 introduced; existing owners contain the new declarations. The observed installed
-plan has 98 modules, 450 unique files, 4,103 direct entries and 3,653 duplicates,
+plan has 98 modules, 450 unique files, 4,103 direct entries and 3,653
+duplicates,
 exactly at the unchanged duplicate ceiling. Expected logical-module/new-runtime
 file deltas are zero; hosted preparation must establish actual closure metrics.
 Public URLs snapshot these options; explicit link values override later gallery
@@ -383,7 +412,8 @@ Passive pages only read cached totals. See the accounting scope in
 Gallery music selections and ordered preferences use a confined hidden sidecar.
 `app/services/gallery_music.php` and its private projection/repository parts own
 source selection, revisioned updates and one-original migration checkpoints.
-`app/models/gallery_music.php` owns v1/v2 atomic index persistence. Immutable new
+`app/models/gallery_music.php` owns v1/v2 atomic index persistence. Immutable
+new
 audio originals use the protected `data/music/` repository through
 `app/services/music_repository.php`; existing gallery-local files remain valid.
 The separate SQL catalog owns logical identities, asset metadata, stable
@@ -406,7 +436,8 @@ Maintenance Center registers `music.repository` as optional and selected by
 default. Administrators can deselect it before approval. Analysis observes
 readiness without moving files. Execution loads
 the complete existing attachment owner only for this task, verifies at most one
-original, switches its index reference and resumes verified local cleanup through
+original, switches its index reference and resumes verified local cleanup
+through
 a persisted journal. Central originals survive gallery deletion and Trash.
 Storage reporting adds their SQL byte totals once and accounts remaining local
 copies separately; ordinary gallery links never duplicate physical totals.
@@ -430,7 +461,8 @@ Unknown or dirty rows omit the optional badge. Cards place nonzero PDF/music
 badges in a compact right-aligned stack below the photo-count badge; when that
 badge is enabled, the opened gallery's action bar places the same counts inline
 immediately to its left. Public rendering reads projection rows only and never
-reads or hashes original media; source originals and indexes remain authoritative.
+reads or hashes original media; source originals and indexes remain
+authoritative.
 Supported mutations invalidate projection
 state before source changes, while manual filesystem edits require the explicit
 bounded Maintenance Center reconciliation. The first successful public HTML
@@ -2875,7 +2907,8 @@ Normal worker invocations use a wall-clock budget of at most 12 seconds and
 normally 7 to 8 seconds in Admin or CLI, with smaller request-triggered
 background slices. If PHP has a finite `max_execution_time`, the requested
 budget leaves a five-second reserve. Enabled request-time automatic discovery
-uses the saved 5/15/30/60-minute interval, default five minutes; GitHub headers and
+uses the saved 5/15/30/60-minute interval, default five minutes; GitHub headers
+and
 server-provided backoff windows remain authoritative. Remote release-metadata
 discovery is separately bounded to approximately eight seconds and divides the
 remaining budget across unprobed stable branches; a discovery invocation that
@@ -2921,11 +2954,14 @@ than 20,000 entries, files above 32 MiB, and more than 512 MiB total
 uncompressed data. Its central-directory scan checkpoints every 500 entries.
 `extract` writes one entry through a `.part` file and checkpoints the entry
 index. `package_validate` requires the complete PHP Gallery source-root
-contract and the selected stable target floor. Persisted legacy jobs retain their
+contract and the selected stable target floor. Persisted legacy jobs retain
+their
 compatibility reader. The publisher verifier is retained behind
-`APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED`, currently `false` until explicitly
+`APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED`, currently `false` until
+explicitly
 enabled. Package and ready sweeps are skipped; staging and activation pin/check
-the actual selected source bytes. Archive ownership, required files and DB/backup
+the actual selected source bytes. Archive ownership, required files and
+DB/backup
 recovery evidence remain separate enforced contracts.
 Canonical non-core assets use private exact-byte SHA-256 identities; snapshots
 also use raw hashes rather than text normalization.
@@ -2971,15 +3007,19 @@ already equals the prepared file is treated as completed, so a killed activation
 can continue without rewriting work already committed. Obsolete managed paths
 are removed only after prepared replacements have been processed.
 
-Before waiting for ordinary readers to finish, the prepared job atomically writes
-`maintenance.lock` in the installation root. The early runtime checks this marker before
+Before waiting for ordinary readers to finish, the prepared job atomically
+writes
+`maintenance.lock` in the installation root. The early runtime checks this
+marker before
 acquiring a shared lease or loading the mutable application graph and returns
 `503 Service Unavailable` with
 `Cache-Control: no-store` while activation is incomplete. Corrupt or incomplete
-marker state fails closed. New jobs retain the gate through forward migrations and required finalization.
+marker state fails closed. New jobs retain the gate through forward migrations
+and required finalization.
 A durable `runtime_committed` checkpoint closes the rollback observation window
 and reopens the website before resumable physical cleanup. Pausing or retrying
-cleanup never recreates maintenance; legacy jobs retain their original receipts. The authenticated updater recovery/status path
+cleanup never recreates maintenance; legacy jobs retain their original receipts.
+The authenticated updater recovery/status path
 remains reachable so an interrupted activation can continue. Existing requests
 finish before the exclusive lease allows file publication. New visitors can no
 longer indefinitely replace the readers that have already finished.
@@ -3024,8 +3064,10 @@ checkpoint pause request; the UI repeats the requested replacement action.
 FTP completion skips package activation; stable recovery downloads one pinned
 stable commit and overwrites every declared file, including same-version bytes.
 Both preserve unlisted files and skip obsolete-file pruning. All manifest
-diagnostics, when enabled, including absent/invalid metadata and content differences, become
-warning receipts only for explicit recoveries. Metadata cannot veto installation;
+diagnostics, when enabled, including absent/invalid metadata and content
+differences, become
+warning receipts only for explicit recoveries. Metadata cannot veto
+installation;
 actual source bytes are independently pinned through staging and activation.
 Safe paths and required runtime files remain mandatory. Ordinary update
 validation uses the same disabled publisher-sweep flag. Explicit recovery never
@@ -3072,7 +3114,8 @@ Failures before `activate` leave active application files untouched. Retry of
 download/archive/extraction/package-validation failures discards untrusted
 package artifacts, validators, and extraction checkpoints and restarts from
 the same immutable commit URL. Legacy moving-branch preparation failures remain
-stopped when that identity is unavailable. Failures after validation retain release and
+stopped when that identity is unavailable. Failures after validation retain
+release and
 rollback data and retry the failed checkpoint. A failed or running
 pre-activation job may be cancelled, which removes transient artifacts and frees
 the active-job slot without changing application files. Cancellation is
@@ -3086,7 +3129,8 @@ only, so a terminated PHP process releases the real kernel lock automatically
 and stale metadata does not require unsafe lock deletion.
 
 Existing `updates_jobs/download.php` and `activation.php` own package/backup
-verification; `errors.php` and `lifecycle.php` own timeout, quarantine and one automatic
+verification; `errors.php` and `lifecycle.php` own timeout, quarantine and one
+automatic
 rollback child for every launch mode. Undefined functions and deterministic
 integrity failures stop same-package repetition. Transient failures allow three
 automatic attempts after 60/120/240 seconds. At least 600 seconds after first
@@ -3107,7 +3151,8 @@ Early runtime and bootstrap hold shared request leases; activation requires
 exclusive ownership, yields on contention and opens a durable observation window
 before file changes. New target packages preserve the gate through migrations
 and required finalization, then commit the runtime before physical cleanup.
-Older jobs retain their original completion boundary. Authenticated Admin update requests and
+Older jobs retain their original completion boundary. Authenticated Admin update
+requests and
 unexpired hashed job-bound private tickets retain their later controller checks.
 The existing dependency-free early response owner presents a compact maintenance
 document for browser GET/HEAD requests accepting HTML. Its inline style uses
@@ -3119,7 +3164,8 @@ responses without automatic replay. Cache, noindex and restrictive HTML content
 policy headers keep this temporary response private and self-contained.
 Ordinary admission during an open window records a durable use witness. Any such
 use, a closed/missing window or an older unsupported package prevents automatic
-rollback. Actual fresh schema/ledger equality and explicit zero migration effects
+rollback. Actual fresh schema/ledger equality and explicit zero migration
+effects
 are additionally required; no-migration intent is committed before the runner.
 Database migrations and domain data are never reversed. Arbitrary external
 database writers require operator coordination.
@@ -3135,10 +3181,12 @@ Autoupdate OFF/beta still prevent new automatic installation.
 
 Recovery adds no runtime part file or logical module: it reuses existing updater
 owners, adds two read-only queries to the existing schema model and cooperative
-lease handling to the existing early-runtime file. Generated-plan, duplicate/include
+lease handling to the existing early-runtime file. Generated-plan,
+duplicate/include
 and route ratchets must establish actual counts without raising baselines.
 The new gate remains closed after a failure, so autonomous recovery while gated
-requires hosting CLI cron or authenticated Admin work; public 503 requests cannot
+requires hosting CLI cron or authenticated Admin work; public 503 requests
+cannot
 run the scheduler. See [deployment and legacy limits](docs/AUTOUPDATE.md).
 
 ### Browser and background execution
@@ -3156,9 +3204,11 @@ Automatic stable updates also create `trigger=background` jobs. Discovery and
 package processing are deliberately separate invocations, so a slow metadata
 probe cannot be followed by a second long package slice in the same request.
 Safe normal page requests may advance a small slice through
-`application_autoupdate_maybe_run()`. After a successful visit the Core maintenance
+`application_autoupdate_maybe_run()`. After a successful visit the Core
+maintenance
 boundary registers a shutdown handoff for a running automatic stable job.
-The deferred `updates_background.php` owner holds single-use hashed tickets and a
+The deferred `updates_background.php` owner holds single-use hashed tickets and
+a
 nonblocking installation-wide chain lock. The existing configured-origin
 maintenance transport carries each ticket under its private token; the
 controller validates both before loading the worker. Each independent request
@@ -3167,7 +3217,8 @@ without waiting for the successor's response. No idle timer or browser poll is
 needed. A live chain lease keeps other visitors out of heavy updater work.
 Private maintenance requests bypass all implicit request maintenance before
 authentication. Manual jobs, beta operations, blocked SEO requests and failed
-visitor responses cannot start this chain. Caught background failures wait at least
+visitor responses cannot start this chain. Caught background failures wait at
+least
 60 seconds, then pass through `application_update_retry_job()` so package-stage
 failures discard untrusted partial artifacts before another worker attempt.
 `scripts/application_update.php` provides a bounded CLI cron runner for idle
@@ -3703,7 +3754,8 @@ spatial variation. A uniform dark fade remains unchanged. Up to two retained
 blended boundary lines may precede the transition evidence. Uncertain edges,
 subtitle/logo pixels and
 natural dark gradients stay visible while independently proven edges can fit.
-Excessive bands retain their extent; pixel-read refusal keeps the original frame.
+Excessive bands retain their extent; pixel-read refusal keeps the original
+frame.
 No learning model, source rewrite, gallery scan or
 additional image request is involved. The sample canvas is released immediately.
 
@@ -4607,13 +4659,15 @@ Historic sessions remain readable without synthesizing absent measurements.
 Its saved-PDF metadata reader tolerates missing pypdf with an unknown page
 count,
 so browsing/opening existing files does not depend on the rendering environment.
-`flight_render.py` coordinates one spawned renderer per selected language, bounded
+`flight_render.py` coordinates one spawned renderer per selected language,
+bounded
 by the four supported languages. The parent prepares both shared map PNGs once,
 avoiding concurrent tile-cache writes; children isolate ReportLab/font state and
 receive only normalized analysis, map bytes and reserved output paths. Parent
 callbacks journal each completion in its actual finish order. All children join
 before success, error or cancellation returns; queued renders can be cancelled,
-running atomic renders finish and remain recoverable. `flight_workflow.py` starts
+running atomic renders finish and remain recoverable. `flight_workflow.py`
+starts
 gallery delivery only after this complete-set barrier; credentials/receipts stay
 in the parent. The launcher's existing freeze_support handles frozen startup.
 
@@ -6485,14 +6539,16 @@ envelope and coordinator.
 Gallery Display reuses `gallery_grid.php` for the physical-gallery photo-card
 format allowlist and `app_settings` for `gallery_photo_card_ratio.<id>`. Default
 emits no override; explicit ratios reach only that gallery's photo grid through
-the controller/view model and a CSS variable shared by both thumbnail structures.
+the controller/view model and a CSS variable shared by both thumbnail
+structures.
 Public normalization/CSS lookup reads the closed ratio map directly; localized
 editor option models are built only by the Admin presentation boundary.
 No schema migration, new runtime module or thumbnail regeneration is required.
 The format survives gallery.json import/export and Trash recovery; subtree
 deletion removes its setting. Display groups use the shared glass treatment.
 Isolated switch POSTs retain the existing authenticated editor route, CSRF,
-edit-revision lease and mutation envelope. Only the selected switch is submitted;
+edit-revision lease and mutation envelope. Only the selected switch is
+submitted;
 canonical state and revision are acknowledged without clearing text drafts.
 Writes serialize per mounted form; uncertainty prevents replay. Grid settings
 remain a coupled staged object, and recursive bounds copying remains explicit.

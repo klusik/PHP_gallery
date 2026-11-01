@@ -1004,8 +1004,9 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 
         Returns:
             None: Independent widget spies verify the action container below
-                the title, Finish beside SimBrief within it, and the constrained
-                expanding title and offline Abandon action; no Tk root is built.
+                the title, Finish beside SimBrief within it, the expanding
+                identity's source/title bindings and offline Abandon action;
+                no Tk root is built.
         """
         app = mock.Mock()
         app.flights.text.return_value = "Finish flight…"
@@ -1013,8 +1014,12 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         # Distinct widgets preserve the real parent/child grid hierarchy.
         widgets.Frame.side_effect = lambda *_args, **_kwargs: mock.Mock()
         widgets.Button.side_effect = lambda *_args, **_kwargs: mock.Mock()
+        title_widget = mock.Mock()
         with (
             mock.patch.object(MAIN, "ttk", widgets),
+            mock.patch.object(
+                MAIN, "GalleryIdentityLabel", return_value=title_widget,
+            ) as title_factory,
             mock.patch.object(MAIN, "GlassCard", side_effect=lambda *_args, **_kwargs: mock.Mock()),
             mock.patch.object(MAIN, "icon_button"),
             mock.patch.object(MAIN, "help_button"),
@@ -1023,10 +1028,15 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         finish = widgets.Button.call_args_list[0]
         self.assertEqual("Finish flight…", finish.kwargs["text"])
         self.assertEqual(app.flight_action, finish.kwargs["command"])
-        title = widgets.Label.call_args_list[0]
-        self.assertEqual(1, title.kwargs["width"])
+        title = title_factory.call_args
+        self.assertIs(app.gallery_label_var, title.args[1])
+        self.assertIs(app.gallery_title_var, title.args[2])
+        title_widget.grid.assert_called_once_with(
+            row=0, column=0, sticky="ew",
+        )
         actions = finish.args[0]
         self.assertIsNot(actions, title.args[0])
+        title.args[0].columnconfigure.assert_called_once_with(0, weight=1)
         title.args[0].grid.assert_called_once_with(row=0, column=0, sticky="ew")
         actions.grid.assert_called_once_with(row=1, column=0, sticky="w", pady=(6, 0))
         app.finish_flight_button.grid.assert_called_once_with(row=0, column=0, sticky="w")
@@ -1136,7 +1146,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.events.put({
             "kind": "connection_ready",
             "payload": {
-                "gallery_label": "Gallery",
+                "gallery_label": "parent/006",
+                "gallery_title": "Renamed gallery / chapter",
                 "normalized_url": resolved_url,
                 "explicit_test": True,
             },
@@ -1144,6 +1155,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.config = types.SimpleNamespace(gallery_url=saved_url, api_key=api_key)
         app.config_store = mock.Mock()
         app.gallery_label_var = mock.Mock()
+        app.gallery_title_var = mock.Mock()
         app.connection_status_var = mock.Mock()
         app.connection_detail_var = mock.Mock()
         app.gallery_url_var = mock.Mock()
@@ -1165,6 +1177,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         self.assertEqual(saved_url, app.config.gallery_url)
         app.gallery_url_var.set.assert_not_called()
         app.connection_status_var.set.assert_called_once_with("Connected")
+        app.gallery_label_var.set.assert_called_once_with("Target gallery: parent/006")
+        app.gallery_title_var.set.assert_called_once_with("Renamed gallery / chapter")
         app.root.after.assert_called_once()
 
 class WatcherActionTests(unittest.TestCase):

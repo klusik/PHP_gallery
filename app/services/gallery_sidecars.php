@@ -1007,8 +1007,19 @@ function create_empty_gallery(array $input): array
  * unknown schemas and seed failures leave optional counts absent without
  * affecting gallery creation.
  *
- * @param array<string,mixed> $input Normalized creation fields.
- * @return array<string,mixed> Created row with id, title and relative folder_path plus supported schema fields.
+ * @param array{title?:string, description?:string, tags?:string,
+ *     folder_name?:string, parent_id?:int|string, visibility?:string,
+ *     voting_enabled?:bool|int|string, show_filenames?:bool|int|string,
+ *     sort_order?:int|string, content_language?:string,
+ *     translations?:array<string, array{title?:string, description?:string}>,
+ *     gallery_date?:string|null, gallery_date_end?:string|null,
+ *     count_badge_visibility?:string, lightbox_browsing_mode?:string,
+ *     presentation?:array<string, int|string|bool|null>|null} $input Creation
+ *     metadata; legacy folder_name is ignored because the sanitized title owns
+ *     the directory name.
+ * @return array{id:int|string, title:string, folder_path:string,
+ *     parent_id?:int|string|null, ...} Created physical gallery and its
+ *     supported persisted metadata.
  */
 function create_empty_gallery_owned(array $input): array
 {
@@ -1123,18 +1134,17 @@ function create_empty_gallery_owned(array $input): array
     }
 
     // $folderName stores an intermediate value used by the surrounding gallery workflow.
-    $folderName = trim((string) ($input['folder_name'] ?? ''));
+    // The title owns the physical leaf; stale clients cannot create an
+    // independently named folder or silently acquire a suffixed identity.
+    $folderName = gallery_folder_segment($title);
     // $requestedFolderPath stores the preferred folder path before suffix fallback is applied.
     $requestedFolderPath = gallery_child_folder_path(
         $parent,
-        $folderName !== '' ? $folderName : $title,
+        $folderName,
     );
     gallery_creation_assert_catalog_preserved($requestedFolderPath);
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
-    $folderPath = unique_gallery_child_folder_path(
-        $parent,
-        $folderName !== '' ? $folderName : $title,
-    );
+    $folderPath = $requestedFolderPath;
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = gallery_target_abs_path($folderPath);
     gallery_creation_assert_catalog_preserved($folderPath);

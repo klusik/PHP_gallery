@@ -11,6 +11,7 @@
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261021-upload-media-v1';
 import {beginAdminPanelOpen, deactivateAdminPanel} from '/public/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20261012-pdf-files-v1';
+import {setupAdminMediaRenamer} from '/public/assets/gallery-modules/admin-media-renamer.js?v=20261101-owned-cache-batches-v6';
 
 // Pace lifecycle condition checks without starving browser resource tasks.
 // Type: number; Units: milliseconds; Scope: one synthetic wait iteration;
@@ -183,6 +184,88 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
         await waitFor(() => imageBatchRequestCount > preparedRequestCount && widget.dataset.preloadState === 'ready');
         check(!preparedBulkForm.isConnected && panel.querySelector('[name="title"]').value === 'Typed after Save',
             'Image metadata mutations still rebuild Images without replacing the settings draft.');
+        setupAdminMediaRenamer();
+        // Thirty-five images cross two complete 15-image slices and a final
+        // five-image boundary. Held responses prove intermediate real progress.
+        for (const mismatch of [false, true]) {
+            const renameWorkspace = document.createElement('section');
+            renameWorkspace.id = 'fixture-renamer';
+            // An injected English Admin scope must not inherit the public
+            // page's language; absent catalog values use its English fallback.
+            renameWorkspace.dataset.adminI18nScope = '';
+            renameWorkspace.dataset.adminI18nLanguage = 'en';
+            renameWorkspace.innerHTML = '<form method="post" action="/__fixture_rename" data-admin-media-renamer-form data-media-renamer-apply="gallery" data-media-renamer-target="#fixture-renamer">'
+                + '<input name="action" value="rename_files"><input name="gallery_ids[]" value="42">'
+                + '<input name="csrf_token" value="fixture">'
+                + '<input type="checkbox" name="confirm_media_rename"'
+                + ' value="1" required>'
+                + Array.from({length: 35}, (_, index) => '<input name="rename_candidate_image_ids[]" value="' + (index + 1) + '">').join('')
+                + '<button type="submit">Apply</button></form>';
+            widget.parentElement.append(renameWorkspace);
+            const renameForm = renameWorkspace.querySelector('form');
+            const renameFetch = window.fetch;
+            const renameGates = [];
+            let refreshCount = 0;
+            const beforeRenameRefresh = imageBatchRequestCount;
+            window.fetch = async (input, options) => {
+                if (new URL(String(input), location.href).pathname !== '/__fixture_rename') return renameFetch(input, options);
+                check(options.method === 'POST' && options.credentials === 'same-origin'
+                    && options.body.get('csrf_token') === 'fixture'
+                    && options.body.get('action') === 'rename_files', 'Rename batches retain gallery POST/CSRF ownership.');
+                if (options.body.get('renamer_action') === 'apply_refresh') {
+                    refreshCount += 1;
+                    return new Response(JSON.stringify({ok: true, panel_html: '<p data-renamer-complete>Complete</p>',
+                        mutation: {type: 'image.media_rename', entity: 'image', action: 'rename', entity_ids: [1]}, contexts: []}),
+                    {headers: {'Content-Type': 'application/json'}});
+                }
+                const ids = options.body.getAll('batch_image_ids[]');
+                check(ids.length > 0 && ids.length <= 15 && options.body.getAll('rename_candidate_image_ids[]').length === 0,
+                    'Physical rename submits only its bounded current selection.');
+                return new Promise(resolve => renameGates.push({ids, release: valid => resolve(new Response(
+                    JSON.stringify({ok: true, processed: valid ? ids.length : 0, result: {renamed: ids.length, details: [], warnings: [], failures: []}}),
+                    {headers: {'Content-Type': 'application/json'}},
+                ))}));
+            };
+            try {
+                renameForm.dispatchEvent(new SubmitEvent('submit', {
+                    bubbles: true,
+                    cancelable: true,
+                    submitter: renameForm.querySelector('button'),
+                }));
+                check(renameGates.length === 0 && refreshCount === 0,
+                    'A synthetic submit cannot bypass inline review.');
+                renameForm.querySelector('[name="confirm_media_rename"]')
+                    .checked = true;
+                renameForm.requestSubmit(renameForm.querySelector('button'));
+                await waitFor(() => renameGates.length === 1);
+                const renameBar = renameWorkspace.querySelector('progress');
+                check(renameBar.value === 0, 'No rename progress is claimed before server confirmation.');
+                check(renameWorkspace.textContent.includes(
+                    'Starting physical rename batches...',
+                ), 'Rename progress uses the injected Admin language.');
+                renameGates.shift().release(true);
+                await waitFor(() => renameGates.length === 1);
+                check(renameBar.value === 43, 'First confirmed 15/35 batch advances real progress.');
+                renameGates.shift().release(!mismatch);
+                if (mismatch) {
+                    await waitFor(() => !renameForm.querySelector('button').disabled);
+                    check(renameBar.value === 43 && refreshCount === 0 && renameForm.isConnected,
+                        'Incomplete server evidence stops later batches and never paints false completion.');
+                } else {
+                    await waitFor(() => renameGates.length === 1);
+                    check(renameBar.value === 86 && renameGates[0].ids.length === 5,
+                        'Second confirmation advances 30/35 before the final bounded slice.');
+                    renameGates.shift().release(true);
+                    await waitFor(() => renameWorkspace.querySelector('[data-renamer-complete]'));
+                    await waitFor(() => imageBatchRequestCount > beforeRenameRefresh && widget.dataset.preloadState === 'ready');
+                    check(refreshCount === 1 && panel.querySelector('[name="title"]').value === 'Typed after Save',
+                        'Rename refreshes Images once while preserving the unsaved settings draft.');
+                }
+            } finally {
+                window.fetch = renameFetch;
+                renameWorkspace.remove();
+            }
+        }
         for (const width of [390, 320, 1280]) {
             const viewport = await nativeFetch('/__viewport?width=' + width);
             check(viewport.ok, 'Owned preload viewport adapter is available.');

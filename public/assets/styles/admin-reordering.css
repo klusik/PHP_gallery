@@ -158,7 +158,37 @@ body.admin-gallery-order-active {
 .admin-images-preload-track { height: 3px; background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; }
 .admin-images-preload-track > span { display: block; height: 100%; background: var(--accent, #607d8b); }
 .admin-images-preload small { font-size: .75rem; }
-.admin-images-preload button { margin-inline-start: .5rem; }
+.admin-page .admin-images-preload button[data-images-preload-retry] {
+    margin-inline-start: .5rem;
+    min-height: 28px;
+    padding: .15rem .45rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--accent, #607d8b);
+    font: inherit;
+    font-size: .8rem;
+    line-height: 1.25;
+}
+.admin-page .admin-images-preload button[data-images-preload-retry]:hover {
+    background: color-mix(in srgb, var(--accent, #607d8b) 10%, transparent);
+}
+.admin-page .admin-images-preload button[data-images-preload-retry]:focus-visible {
+    outline: 2px solid var(--accent, #607d8b);
+    outline-offset: 2px;
+}
+.admin-page .admin-images-preload button[data-images-preload-retry]:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page .admin-images-preload button[data-images-preload-retry] {
+        min-height: 44px;
+        margin-inline-start: .25rem;
+        max-width: 100%;
+    }
+}
 .admin-tab[aria-disabled="true"] { opacity: .45; cursor: wait; }
 img[data-admin-thumbnail-failed] { min-width: 48px; min-height: 48px; background: color-mix(in srgb, currentColor 10%, transparent); font-size: .65rem; }
 

@@ -97,7 +97,7 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
         '<div class="thumbnail-progress admin-media-renamer-progress" data-admin-media-renamer-progress role="status" aria-live="polite" hidden><progress class="thumbnail-progress-bar" value="0" max="100" data-admin-media-renamer-progress-bar></progress><p class="muted" data-admin-media-renamer-progress-text></p></div>';
     $notice = (string) ($viewModel['notice'] ?? '');
     if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
+        echo '<div class="notice" role="status">' . e($notice) . '</div>';
     }
     echo (string) ($viewModel['scope_form_html'] ?? '');
 
@@ -130,7 +130,12 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
 /**
  * Render the gallery-level Media Renamer panel.
  *
- * @param array<string,mixed> $viewModel Controller-prepared gallery-panel state.
+ * @param array{log_url?:string, notice?:string, pattern_form_html?:string,
+ *     error?:string, plan_table_html?:string, execution_details_html?:string,
+ *     rename_count?:int, rename_image_ids?:list<int>, apply_url?:string,
+ *     csrf_html?:string, gallery_id?:int, pattern?:string} $viewModel Prepared
+ *     panel fragments, semantic gallery identity and executable preview image
+ *     IDs.
  * @return void Render the gallery-level Media Renamer panel.
  */
 function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
@@ -141,7 +146,7 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
             . '">';
     $notice = (string) ($viewModel['notice'] ?? '');
     if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
+        echo '<div class="notice" role="status">' . e($notice) . '</div>';
     }
     echo
         '<div class="admin-media-renamer-heading"><p class="admin-kicker">'
@@ -182,13 +187,17 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
     echo
         '<form method="post" action="'
             . e((string) ($viewModel['apply_url'] ?? ''))
-            . '" class="admin-inline-form" data-admin-media-renamer-form data-media-renamer-target="#admin-edit-renamer" data-media-renamer-confirm="'
-            . e(t(
-                'admin.media_renamer.apply_gallery_confirm',
-                'Physically rename the planned files in this gallery now?',
-            ))
-            . '">';
+            . '" class="admin-inline-form" data-admin-media-renamer-form'
+            . ' data-media-renamer-apply="gallery"'
+            . ' data-media-renamer-target="#admin-edit-renamer">';
     echo (string) ($viewModel['csrf_html'] ?? '');
+    echo '<input type="hidden" name="action" value="rename_files">';
+    echo '<input type="hidden" name="gallery_ids[]" value="'
+        . (int) ($viewModel['gallery_id'] ?? 0) . '">';
+    foreach ($viewModel['rename_image_ids'] ?? [] as $imageId) {
+        echo '<input type="hidden" name="rename_candidate_image_ids[]" value="'
+            . (int) $imageId . '">';
+    }
     echo
         '<input type="hidden" name="id" value="'
             . (int) ($viewModel['gallery_id'] ?? 0)
@@ -199,7 +208,9 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
             . e((string) ($viewModel['pattern'] ?? ''))
             . '">';
     echo
-        '<label class="checkbox-label admin-media-renamer-confirm"><input type="checkbox" name="confirm_media_rename" value="1"'
+        '<label class="checkbox-label admin-media-renamer-confirm">'
+            . '<input type="checkbox" name="confirm_media_rename"'
+            . ' value="1" required'
             . ($renameCount > 0 ? '' : ' disabled')
             . '> '
             . e(t(
@@ -566,12 +577,10 @@ function view_render_admin_media_renamer_apply_form(array $viewModel): void
     echo
         '<form method="post" action="'
             . e((string) ($viewModel['action_url'] ?? ''))
-            . '" class="admin-inline-form" data-admin-media-renamer-form data-media-renamer-target="[data-admin-media-renamer-workspace=site]" data-media-renamer-confirm="'
-            . e(t(
-                'admin.media_renamer.apply_site_confirm',
-                'Physically rename the planned files now?',
-            ))
-            . '" data-media-renamer-apply-total="'
+            . '" class="admin-inline-form" data-admin-media-renamer-form'
+            . ' data-media-renamer-target="'
+            . '[data-admin-media-renamer-workspace=site]"'
+            . ' data-media-renamer-apply-total="'
             . count($candidateImageIds)
             . '">';
     echo (string) ($viewModel['csrf_html'] ?? '');
@@ -617,7 +626,9 @@ function view_render_admin_media_renamer_apply_form(array $viewModel): void
                 . '">';
     }
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="confirm_media_rename" value="1"'
+        '<label class="checkbox-label">'
+            . '<input type="checkbox" name="confirm_media_rename"'
+            . ' value="1" required'
             . ($renameCount > 0 ? '' : ' disabled')
             . '> '
             . e(t(

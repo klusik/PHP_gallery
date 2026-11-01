@@ -197,6 +197,13 @@ try {
         'Could not create owned concurrency file fixture.',
     );
     $hash = hash_file('sha256', $folder . '/original.jpg');
+    $childRelative = $relative . '/child';
+    $stmt->execute([
+        $id, $childRelative, hash('sha256', $childRelative), 'child',
+        'Child', '', 'public',
+    ]);
+    $childId = (int) $pdo->lastInsertId();
+    check(mkdir($folder . '/child'), 'Could not create the owned descendant folder.');
     $route = '/index.php?page=admin_edit_gallery&id=' . $id;
 
     $stage = 'two independent sessions and stale side-effect refusal';
@@ -216,6 +223,17 @@ try {
         'First session edit',
     );
     $saved = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $oldFolder = $folder;
+    $relative = dirname($relative) . '/accepted-first-session';
+    $folder = $directory . '/galleries/' . $relative;
+    $child = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$childId]);
+    check(
+        $saved['folder_path'] === $relative
+            && $child['folder_path'] === $relative . '/child'
+            && !is_dir($oldFolder) && is_dir($folder . '/child')
+            && hash_file('sha256', $folder . '/original.jpg') === $hash,
+        'Title save must rename its sanitized folder and descendant paths without changing original bytes.',
+    );
     check(
         ($success['edit_revision'] ?? '') === (string) $saved['edit_revision'],
         'Success response did not carry its exact persisted revision.',
@@ -754,7 +772,9 @@ try {
     echo
         "PASS real HTTP selected cover delete/move pruning and automatic fallback\n";
     $stage = 'scheduled publication through actual editor and anonymous crawler';
-    $publicationPath = 'seed/publication-' . bin2hex(random_bytes(4));
+    $publicationNonce = bin2hex(random_bytes(4));
+    $publicationTitle = 'Scheduled visitor publication ' . $publicationNonce;
+    $publicationPath = 'seed/scheduled-visitor-publication-' . $publicationNonce;
     $publicationFolder = $directory . '/galleries/' . $publicationPath;
     check(mkdir($publicationFolder), 'Could not create owned publication folder.');
     $publicationInsert = $pdo->prepare(
@@ -764,7 +784,7 @@ try {
     );
     $publicationInsert->execute([
         $seed['root_id'], $publicationPath, hash('sha256', $publicationPath),
-        basename($publicationPath), 'Scheduled visitor publication', '',
+        basename($publicationPath), $publicationTitle, '',
         'unpublished', 'listed',
     ]);
     $publicationId = (int) $pdo->lastInsertId();

@@ -2093,6 +2093,9 @@ try {
         'Edit',
     );
     $updated = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $gallery = $updated;
+    $folder = $directory . '/galleries/' . $updated['folder_path'];
+    $original = $folder . '/' . $image['relative_path'];
     check(
         $updated['title'] === $edit['title']
             && $updated['description'] === $edit['description']

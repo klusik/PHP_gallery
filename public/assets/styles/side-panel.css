@@ -1826,6 +1826,12 @@ body.has-admin-side-panel {
 .admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-hero .admin-hero-actions { display: none; }
 .admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) #admin-edit-images { padding: 0.8rem; }
 .admin-side-panel-edit-workspace:has(#admin-edit-media.is-active) .admin-edit-gallery-savebar { display: none; }
+/* The renamer owns its confirmation/apply form. Keep the settings footer from
+ * covering these controls, especially when it grows on narrow screens. */
+.admin-side-panel-edit-workspace:has(#admin-edit-renamer.is-active)
+    [data-admin-gallery-savebar] {
+    display: none;
+}
 .admin-gallery-images .admin-image-bulk-primary select { width: auto; max-width: 13rem; }
 .admin-gallery-images .admin-image-bulk-primary button,
 .admin-gallery-images .admin-image-bulk-primary select,

@@ -887,6 +887,57 @@ namespace {
                 'New public ownership must never inherit another source\'s old bytes.',
             );
         }
+        // A uniquely owned cache survives a rename byte-for-byte, but is never
+        // published under a prospective name before its persisted owner changes.
+        $transferSource = $reuse;
+        $transferSource['filename'] = 'transfer_source.jpg';
+        $transferSource['relative_path'] = 'transfer_source.jpg';
+        $transferTarget = $transferSource;
+        $transferTarget['filename'] = 'transfer_target.jpg';
+        $transferTarget['relative_path'] = 'transfer_target.jpg';
+        $transferItems = [['image' => $transferSource, 'target_image' => $transferTarget]];
+        $GLOBALS['identity_rows'] = [$transferSource];
+        \Gallery\Services\thumbnail_legacy_identity_cache_clear();
+        $oldCache = thumbnail_abs_path($transferSource, $gallery, 600, 'webp');
+        $newCache = thumbnail_abs_path($transferTarget, $gallery, 600, 'webp');
+        $pixels = 'exclusive source pixels preserved without decoding';
+        file_put_contents($oldCache, $pixels);
+        $created[] = $oldCache;
+        $created[] = $newCache;
+        $preserved = \Gallery\Services\media_renamer_preinvalidate_thumbnail_caches(
+            $transferItems, $gallery, $root, [$oldCache],
+        );
+        assert_identity(
+            is_file($oldCache) && $preserved['cleaned'] === 0,
+            'An admitted owned source cache must survive pre-invalidation.',
+        );
+        $staging = \Gallery\Services\media_renamer_staging_path($oldCache);
+        $created[] = $staging;
+        assert_identity(rename($oldCache, $staging), 'Owned thumbnail must stage successfully.');
+        assert_identity(!is_file($newCache), 'Prospective identity must not receive cache pixels before commit.');
+        $entry = [
+            'from' => $oldCache, 'to' => $newCache, 'staging' => $staging,
+            'kind' => 'derivative', 'label' => 'transfer', 'required' => false,
+        ];
+        $refusedTransfer = \Gallery\Services\media_renamer_restore_thumbnail_caches(
+            [$entry], $transferItems, $gallery, $root,
+        );
+        assert_identity(
+            $refusedTransfer['moved'] === 0 && $refusedTransfer['failures'] === 1
+                && !is_file($newCache) && !is_file($staging),
+            'Uncommitted target identity must refuse and discard staged pixels.',
+        );
+        file_put_contents($staging, $pixels);
+        $GLOBALS['identity_rows'] = [$transferTarget];
+        \Gallery\Services\thumbnail_legacy_identity_cache_clear();
+        $transferred = \Gallery\Services\media_renamer_restore_thumbnail_caches(
+            [$entry], $transferItems, $gallery, $root,
+        );
+        assert_identity(
+            $transferred['moved'] === 1 && $transferred['failures'] === 0
+                && file_get_contents($newCache) === $pixels && !is_file($staging),
+            'Committed exclusive target must receive unchanged source cache bytes.',
+        );
         echo "thumbnail_source_identity_test: PASS\n";
     } finally {
         foreach ($created as $path) {

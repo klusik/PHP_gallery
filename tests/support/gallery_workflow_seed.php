@@ -8,6 +8,7 @@
  * Responsibilities:
  *   - Prepare disposable application data for workflow verification.
  * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  * Apply actual migrations and generate synthetic galleries and photographs.
  */
 declare(strict_types=1);
@@ -38,12 +39,13 @@ try {
     \Gallery\Services\set_app_setting('password_reset_enabled', '0');
     \Gallery\Services\set_app_setting('admin_upload_auto_rename_enabled', '0');
     $root = \Gallery\Services\create_empty_gallery([
-        'title' => 'Workflow seed',
+        // Stable fixture paths follow the same title-derived naming rule.
+        'title' => 'Seed',
         'folder_name' => 'seed',
         'visibility' => 'public',
     ]);
     $protected = \Gallery\Services\create_empty_gallery([
-        'title' => 'Workflow protected',
+        'title' => 'Protected',
         'folder_name' => 'protected',
         'parent_id' => $root['id'],
         'visibility' => 'public',

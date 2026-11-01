@@ -157,6 +157,7 @@ except ImportError:  # pragma: no cover
 
 if tk is not None:
     from uploader.ui_theme import (
+        GalleryIdentityLabel,
         GlassCard,
         configure_theme,
         help_button,
@@ -4590,7 +4591,12 @@ class ImportPreflightThread(threading.Thread):
         self.events.put({"kind": kind, "payload": dict(payload)})
 
     def run(self) -> None:
-        """Build and persist a preflight plan without uploading source media."""
+        """Build a preflight plan and publish current gallery metadata.
+
+        Returns:
+            None: Saves the plan and emits connection metadata or a warning;
+                no source media is uploaded.
+        """
         upload_url = normalize_upload_url(self.config.gallery_url)
         parsed = parse.urlparse(upload_url) if upload_url else None
         target_label = parsed.netloc if parsed and parsed.netloc else "Gallery connection not configured"
@@ -4694,6 +4700,7 @@ class ImportPreflightThread(threading.Thread):
 
         remote_duplicates = 0
         gallery_label = target_label
+        gallery_title = ""
         if candidates and upload_url and self.config.api_key.strip() and not self.stop_event.is_set():
             existing_hashes: Set[str] = set()
             try:
@@ -4708,6 +4715,7 @@ class ImportPreflightThread(threading.Thread):
                     folder_label = str(payload.get("gallery_folder", "") or "").strip()
                     if folder_label:
                         gallery_label = folder_label
+                    gallery_title = str(payload.get("gallery_title", "") or "").strip()
                     rows = payload.get("existing", [])
                     if isinstance(rows, list):
                         for row in rows:
@@ -4721,7 +4729,11 @@ class ImportPreflightThread(threading.Thread):
                             item.transition("skipped_duplicate", "Remote gallery inventory already contains this content.")
                             remote_duplicates += 1
                 job.target_gallery_label = gallery_label
-                self.emit("connection_ready", {"gallery_label": gallery_label, "normalized_url": upload_url})
+                self.emit("connection_ready", {
+                    "gallery_label": gallery_label,
+                    "gallery_title": gallery_title,
+                    "normalized_url": upload_url,
+                })
             except Exception as exc:  # noqa: BLE001
                 discovery.warnings.append("Remote duplicate preflight was unavailable: " + str(exc))
                 self.emit("connection_warning", {"message": str(exc), "normalized_url": upload_url})
@@ -5027,6 +5039,7 @@ class WatcherApp:
         self.connection_status_var = tk.StringVar(value="Not tested")
         self.connection_detail_var = tk.StringVar(value="Save or test the gallery connection in Settings.")
         self.gallery_label_var = tk.StringVar(value="Target gallery: unknown")
+        self.gallery_title_var = tk.StringVar(value="")
         self.watcher_activity_var = tk.StringVar(value="Watch: stopped")
         self.import_activity_var = tk.StringVar(value="Import: idle")
         self.ai_activity_var = tk.StringVar(value="AI: stopped")
@@ -5818,8 +5831,9 @@ class WatcherApp:
             parent (tk.Misc): Tkinter frame that receives the controls.
 
         Returns:
-            None: Adds gallery, offline abandonment, folder, UTC and flight
-                controls, retaining SimBrief widgets for contextual visibility.
+            None: Adds a wrapping gallery name with hierarchy help, offline
+                abandonment, folder, UTC and flight controls, retaining
+                SimBrief widgets for contextual visibility.
         """
         parent.columnconfigure(0, weight=1)
         hero = GlassCard(parent, padding=(14, 8))
@@ -5828,10 +5842,11 @@ class WatcherApp:
         target = ttk.Frame(hero, style="Card.TFrame")
         target.grid(row=0, column=0, sticky="ew")
         target.columnconfigure(0, weight=1)
-        ttk.Label(
-            target, textvariable=self.gallery_label_var, style="Section.TLabel",
-            width=1,
-        ).grid(row=0, column=0, sticky="ew")
+        GalleryIdentityLabel(
+            target, self.gallery_label_var, self.gallery_title_var,
+        ).grid(
+            row=0, column=0, sticky="ew"
+        )
         icon_button(
             target, "settings", self.open_connection_dialog,
             "Gallery connection and API key",
@@ -6119,7 +6134,8 @@ class WatcherApp:
             parent (tk.Misc): Tk container receiving the import controls.
 
         Returns:
-            None: Builds manual import and offline flight-abandonment controls.
+            None: Builds manual import with a wrapping gallery name, hierarchy
+                help and offline flight-abandonment controls.
         """
         parent.columnconfigure(0, weight=1)
         card = GlassCard(parent, padding=(14, 10))
@@ -6131,10 +6147,11 @@ class WatcherApp:
         identity = ttk.Frame(target, style="Card.TFrame")
         identity.grid(row=0, column=0, sticky="ew")
         identity.columnconfigure(0, weight=1)
-        ttk.Label(
-            identity, textvariable=self.gallery_label_var, style="Section.TLabel",
-            width=1,
-        ).grid(row=0, column=0, sticky="ew")
+        GalleryIdentityLabel(
+            identity, self.gallery_label_var, self.gallery_title_var,
+        ).grid(
+            row=0, column=0, sticky="ew"
+        )
         icon_button(
             identity, "settings", self.open_connection_dialog,
             "Gallery connection and API key",
@@ -7819,6 +7836,7 @@ class WatcherApp:
         self.api_key_var.set("")
         self.connection_status_var.set("Not configured")
         self.gallery_label_var.set("Target gallery: unknown")
+        self.gallery_title_var.set("")
         message = self.flights.text("flight_abandoned")
         self.connection_detail_var.set(message)
         self.write_log(message, "system")
@@ -8022,7 +8040,12 @@ class WatcherApp:
         self.write_log("API key copied to clipboard by explicit user action.", "system")
 
     def test_connection(self) -> None:
-        """Perform a minimal authenticated inventory request without uploading files."""
+        """Refresh connection status and current gallery metadata.
+
+        Returns:
+            None: Starts an authenticated inventory check without uploading
+                files, or reports why the request cannot start.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
@@ -8044,11 +8067,20 @@ class WatcherApp:
         self.refresh_revoke_button_state()
 
         def tester() -> None:
-            """Run the HTTP check away from Tkinter."""
+            """Read current gallery metadata without blocking Tkinter.
+
+            Returns:
+                None: Enqueues connection metadata or a connection error.
+            """
             try:
                 payload, resolved_url = post_json_resolved(upload_url, api_key, {"action": "inventory", "files": [], "deep_check": False}, timeout_seconds=20.0)
                 label = str(payload.get("gallery_folder", "") or payload.get("gallery", "") or "gallery").strip()
-                self.events.put({"kind": "connection_ready", "payload": {"gallery_label": label, "normalized_url": resolved_url, "explicit_test": True}})
+                self.events.put({"kind": "connection_ready", "payload": {
+                    "gallery_label": label,
+                    "gallery_title": str(payload.get("gallery_title", "") or "").strip(),
+                    "normalized_url": resolved_url,
+                    "explicit_test": True,
+                }})
             except Exception as exc:  # noqa: BLE001
                 self.events.put({"kind": "connection_error", "payload": {"message": str(exc), "normalized_url": upload_url, "explicit_test": True}})
 
@@ -8504,6 +8536,9 @@ class WatcherApp:
                         label = str(payload.get("gallery_label", "gallery") or "gallery")
                         resolved_url = str(payload.get("normalized_url", "") or "")
                         self.gallery_label_var.set("Target gallery: " + label)
+                        self.gallery_title_var.set(
+                            str(payload.get("gallery_title", "") or "").strip()
+                        )
                         self.connection_status_var.set("Connected")
                         self.connection_detail_var.set("Authenticated endpoint available: " + resolved_url)
                         if explicit:
@@ -8559,6 +8594,7 @@ class WatcherApp:
                     message = str(payload.get("message", "API key revoked.") or "API key revoked.")
                     self.connection_status_var.set("Not configured")
                     self.gallery_label_var.set("Target gallery: unknown")
+                    self.gallery_title_var.set("")
                     self.connection_detail_var.set(
                         "Server revocation confirmed; local cleanup needs retry."
                         if cleanup_error else

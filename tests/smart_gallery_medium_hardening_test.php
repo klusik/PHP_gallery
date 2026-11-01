@@ -174,7 +174,7 @@ smart_gallery_medium_hardening_assert(
     php_source_contains($moveWrapper, 'gallery_edit_writer_begin()')
         && php_source_contains(
             $moveWrapper,
-            'return move_gallery_folder_to_parent_owned($galleryId, $parentId, $folderName, $smartGalleryGraphPrevalidated);',
+            'return move_gallery_folder_to_parent_owned($galleryId, $parentId, $folderName, $smartGalleryGraphPrevalidated, $title);',
         )
         && php_source_contains($moveWrapper, 'finally')
         && php_source_contains($moveWrapper, 'gallery_edit_writer_end($writerLock);'),

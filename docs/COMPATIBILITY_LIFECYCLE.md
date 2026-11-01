@@ -1,10 +1,27 @@
 # Compatibility lifecycle and retirement register
 
+## WinApp gallery title metadata
+
+The authenticated upload inventory response exposes additive `gallery_title`
+metadata independently of `gallery_folder`. WinApp keeps the physical identity
+for existing consumers and uses the title for presentation. CMS title saves
+derive the physical leaf with the existing slug sanitizer and move the subtree;
+the root title and path map commit together. Creation uses the same derivation
+and rejects collisions rather than allocating a different suffixed identity.
+The connection
+test and import preflight refresh both values. `GalleryIdentityLabel` retains
+the folder leaf when older servers omit the title; installed server-version
+usage is unknown, so this compatibility fallback remains supported. A renamed
+human-readable title requires the updated inventory API. No schema or access
+policy
+changes, public-page scraping or additional network requests are introduced.
+
 ## WinApp optional game context
 
 `game_presence.py` owns label selection: SimConnect first, then offline exact
 process rules restricted by `windows_game_processes.py` to the current account's
-SID and existing limited query rights. Missing/denied APIs, catalogs or identities,
+SID and existing limited query rights. Missing/denied APIs, catalogs or
+identities,
 unknown games and ambiguous matches permanently retain general game wording;
 they never gate watching, recording, reports or key handling. The bundled
 Discord snapshot is incomplete; profile JSON additions require no app rebuild.
@@ -36,7 +53,8 @@ evidence currently justifies retiring it.
 
 ## Lightbox content fit and original-frame support
 
-Owners: `lightbox.js` and `lightbox-zoom-model.js`. Content fit is a browser-only
+Owners: `lightbox.js` and `lightbox-zoom-model.js`. Content fit is a
+browser-only
 enhancement of the existing viewer. Missing Canvas support, denied/tainted pixel
 reads and differently framed derivatives permanently use the full frame.
 Uncertain edges keep their extent while independently proven borders can fit.
@@ -94,14 +112,16 @@ this refinement. Independently proven asymmetric edges remain supported.
 
 Regression sources cover synthetic noise, dark/black/transparent frames,
 asymmetric/four-sided mattes and subtitle contamination, with a browser JPEG
-fixture for fitting/override/zoom/fullscreen/cache and pixel refusal. The reported
+fixture for fitting/override/zoom/fullscreen/cache and pixel refusal. The
+reported
 concert screenshot originally failed because the lower content edge had about
 20% bright pixels, a downsampled mixed boundary line, and dim side gradients.
 The corrected detector was inspected on that exact authorized image in normal,
 2560x1080 fullscreen and a 390x844 viewport: both horizontal bands fit, full
 image width and natural side gradients remain, and analysis was about 1.8 ms on
 the authoring machine. Synthetic
-desktop preview observed about 1.9--3.7 ms for the initial sample on the authoring
+desktop preview observed about 1.9--3.7 ms for the initial sample on the
+authoring
 machine; this is not a low-end-device or whole-slideshow guarantee. Real mobile
 performance, broader film/game corpora and assistive
 technology acceptance remain manual coverage. Cache retains at most 64
@@ -129,7 +149,8 @@ The paired mean-step rule addresses those edges using independently qualified
 content beside the opposite matte. Synthetic vectors cover both axes and
 orientations, retained gradual boundaries and unqualified flat pairs; compressed
 browser patterns cover sparse illumination and a flat wall. Actual screenshots
-remain local diagnostic inputs. Broader dark-scene false positives and real-phone
+remain local diagnostic inputs. Broader dark-scene false positives and
+real-phone
 performance remain unknown; the original-frame override remains permanent.
 Local Chromium inspection of their authorized 1600-pixel previews with the
 worktree viewer fitted both to the exact horizontal interval [0.125, 0.875]
@@ -151,7 +172,8 @@ false positives and real-phone performance remain unknown.
 Live Chromium inspection fitted all three reported previews and originals to
 [0.125, 0.875] horizontally with full height. At 1440x900 and 390x844, all three
 retained their scene and subtitles through original-frame override, full-source
-zoom and fullscreen. The prior 0003/0004 cases still fitted both pillars. Initial
+zoom and fullscreen. The prior 0003/0004 cases still fitted both pillars.
+Initial
 analysis was about 9--13 ms on the authoring machine; this does not establish
 low-end-device performance or hosted FULL qualification. A captured production
 Canvas sample also exposed a level-9 compression speck on the outer boundary;
@@ -193,7 +215,8 @@ blend: an actual local slideshow's opaque cover was about 5 sRGB levels brighter
 than the stable image at identical geometry. Removing it caused a second pulse.
 The local 37-to-38 sequence was captured before and after this correction with
 an empty soundtrack. Its mean end-of-fade color difference fell from about
-5 levels to below 0.3 levels; image resampling still differs at individual edges.
+5 levels to below 0.3 levels; image resampling still differs at individual
+edges.
 The existing Chromium owner also compares screenshot patches before/after real
 automatic cropped-to-original and original-to-cropped handoffs at 1440x900 and
 390x844. Its decode acknowledgement gate holds the fully opaque cover for a
@@ -359,7 +382,8 @@ Absent JavaScript or Popover API support, native disclosures remain usable.
 Without JavaScript, explicit Save/POST forms remain the permanent compatibility
 transport; enhanced switches save immediately with visible feedback, serializing
 each form. Unknown completion blocks further writes until a passive reload and
-never replays a possibly completed mutation. JSON refusals reconcile authoritative
+never replays a possibly completed mutation. JSON refusals reconcile
+authoritative
 values without bypassing authentication, CSRF, capabilities or GPS schema gates.
 The existing domain controllers own both transports; independent GPS override
 reset and path regeneration keep their explicit workflows. Canonical factory
@@ -376,7 +400,8 @@ Settings owns the native light-dismiss help in `admin_settings.php`,
 `admin-settings-workspace.js` and `admin-feature-settings.css`. Browsers without
 popover support permanently receive inline descriptions and no inert question
 marks. This presentation fallback preserves help and native forms without
-requiring JavaScript or changing persistence. Usage of older browsers is unknown;
+requiring JavaScript or changing persistence. Usage of older browsers is
+unknown;
 there is no version-based retirement. Desktop/narrow acceptance covers native
 popover positioning, Escape, outside-click dismissal and switch label geometry.
 The unsupported-browser fallback and system forced-color rendering have source
@@ -407,12 +432,15 @@ local file differences and old stuck jobs. Reset/finish FTP and Install stable
 supersede active and gate-owner jobs under real worker/runtime locks, retain
 original records, backups and marker bytes, and complete forward migrations.
 Stable recovery overwrites all declared files even at the current version;
-when enabled, all manifest diagnostics are warnings, including missing, malformed, stale or
-version-mismatched metadata. Content warnings retain relative file/hash evidence;
+when enabled, all manifest diagnostics are warnings, including missing,
+malformed, stale or
+version-mismatched metadata. Content warnings retain relative file/hash
+evidence;
 metadata warnings retain the exception owner and reference. Neither vetoes
 forward recovery. Staging independently pins the selected actual source bytes.
 Reset closes ordinary admission before draining existing readers so visitor
-traffic cannot starve takeover; actual writes retain the exclusive runtime lease.
+traffic cannot starve takeover; actual writes retain the exclusive runtime
+lease.
 Safe paths, required files and runtime ownership remain enforced. Publisher
 content sweeps and FTP diagnostic sweeps are currently disabled by
 `APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED = false` until explicitly enabled;
@@ -422,19 +450,24 @@ automatic previous-database rollback; a newer manual tree prevents old package
 replay. The fallback owner is the existing updater service and remains supported
 while FTP and historical job records are supported; no retirement is inferred.
 
-The 0.144.4 live incident confirmed a modified `public/assets/styles/utilities.css`
+The 0.144.4 live incident confirmed a modified
+`public/assets/styles/utilities.css`
 and a manual completion stopped before migrations (reference `FF5BC089547B`).
 The old retry incorrectly selected download for FTP work. Regression covers this
-CSS warning, missing FTP manifest, malformed stable manifest, correct retry stage,
-worker contention, admission closure with a live reader, same-version stable overwrite,
+CSS warning, missing FTP manifest, malformed stable manifest, correct retry
+stage,
+worker contention, admission closure with a live reader, same-version stable
+overwrite,
 old gate takeover, retained extras/backups, all-stage pause and delayed browser
 responses. Live deployment of the repaired version and production database
 compatibility remain unverified until the operator installs and finishes it.
 Server-policy reconciliation keeps its dependency-light legacy bootstrap root
-when no root is supplied; the full updater passes its validated installation root.
+when no root is supplied; the full updater passes its validated installation
+root.
 This preserves old migration callers without loading the full updater into an
 already active old PHP request. The reconciliation service owns this permanent
-compatibility default; removal requires proof those bootstrap callers are retired.
+compatibility default; removal requires proof those bootstrap callers are
+retired.
 
 Owners: update lifecycle/recovery services, early runtime isolation and the
 schema-inspection SQL model. Recovery covers failed background, Admin/API and
@@ -444,7 +477,8 @@ eligible 600 seconds after the first failure. A killed slice is converted into
 bounded failure recovery rather than replayed indefinitely. Running paused
 manual work retains its owner.
 An admitted failed-job retry may autonomously finish later slices while keeping
-its original manual trigger; it does not enable takeover of ordinary paused work.
+its original manual trigger; it does not enable takeover of ordinary paused
+work.
 
 New jobs pin a full trusted GitHub commit and preserve actual staged identities.
 The retained optional verifier can check complete core-policy manifest coverage
@@ -453,7 +487,8 @@ package policy and exact-byte raw SHA-256 identities; original snapshots also
 use raw hashes so binary/line-ending mutations cannot disappear in text
 normalization. Legacy moving-branch failures without immutable identity
 cannot receive a different package on retry. Reference `F05D71A153A2` is
-non-retryable even when its original record says otherwise. Persisted legacy jobs
+non-retryable even when its original record says otherwise. Persisted legacy
+jobs
 retain their manifest compatibility reader; it is never applied to new jobs.
 The English service fallback remains supported for direct CLI consumers without
 a translation owner; normal Admin uses all four maintained catalogs.
@@ -461,7 +496,8 @@ a translation owner; normal Admin uses all four maintained catalogs.
 Ordinary package activation closes admission before requesting the exclusive
 runtime lease, including jobs already waiting at `activate` after an FTP code
 replacement. Existing readers may finish; new ordinary requests receive 503
-before acquiring a shared lease. Rollback ownership/evidence rules are preserved.
+before acquiring a shared lease. Rollback ownership/evidence rules are
+preserved.
 The live 0.144.6 to 0.144.7 job demonstrated repeated runtime waits; the fixture
 now covers an actual background job with an existing reader, independent new
 reader refusal, disabled sweep cursors and successful completion after release.
@@ -472,7 +508,8 @@ pre-activation drain, with no migration intent or activation writes and an empty
 Admin session name. The updater owner now preserves configured session names
 after session close and retains paced private successors for progressed,
 gate-closed runtime waits. This is permanent support for visitor-triggered
-post-response updates; public visits cannot restart work while gated. No-progress
+post-response updates; public visits cannot restart work while gated.
+No-progress
 worker-lock contention and failed jobs still stop. The HTTP fixture covers the
 real early gate and successors. The live 0.144.10 to 0.144.11 update completed
 with the Admin Updates page open; its completion record reported the target
@@ -489,7 +526,8 @@ unchanged. Actual HTTP fixtures cover headers, representation, HEAD, no lease
 admission and return to the same URL after gate removal. The maintainer reviewed
 the local demo; production verification of this presentation remains pending.
 
-Pre-activation failures release only the active pointer. Post-activation rollback
+Pre-activation failures release only the active pointer. Post-activation
+rollback
 uses one independent child and the verified original snapshot, preserving both
 identities, archives, hashes and diagnostics. It requires protocol-1 runtime
 isolation, no ordinary-runtime-use witness, fresh matching actual schema/ledger,
@@ -532,7 +570,8 @@ forward repair in `docs/AUTOUPDATE.md`; copying updater files, editing a job
 target or merely restoring files cannot prove database compatibility.
 Disposable fixtures exercise real SQL replay, locks and file activation.
 Live hosting, external writes, production data compatibility and actual
-deployment acceptance remain unknown; no usage assumption retires legacy readers.
+deployment acceptance remain unknown; no usage assumption retires legacy
+readers.
 
 ## Browser-local Admin navigation
 
@@ -590,7 +629,8 @@ flags while content baselines still merge monotonically. Later genuine opens
 within that reset order are retained. The branch action never creates New or
 acknowledges existing New; shared Smart identities affect all their placements.
 Missing/unknown index schema and dirty/oversized evidence preserve ordinary
-gallery navigation and explicitly omit New evidence. Do not replace an unavailable
+gallery navigation and explicitly omit New evidence. Do not replace an
+unavailable
 watermark with generic gallery/image modification timestamps or visitor writes.
 The public panel also omits technical availability warnings and does not claim
 that unknown evidence means no new content. Existing bounded server diagnostics
@@ -688,7 +728,8 @@ permanent support.
 
 Public text projection retains authored captions and titles. Filename-derived
 alt names use a localized gallery/photo-number fallback without changing stored
-metadata or configured visible filenames. Description snippets retain link labels
+metadata or configured visible filenames. Description snippets retain link
+labels
 and code text while removing rich-text syntax; result rendering still escapes
 them. EN/CS/DE/SV cardinal forms use the existing translation helper; catalogs
 opt in with cardinal keys while keys without variants retain their base text.
@@ -747,7 +788,8 @@ Publish. The initial unlisted-preserving implementation was superseded: the
 manual editor couples unpublished visibility to unlisted, so preserving that
 flag prevented ordinary scheduled galleries from ever entering discovery.
 Password, NSFW, token and parent access policies are unchanged. An unrelated
-unchanged full-form save still preserves independent unlisted state. Existing PDF
+unchanged full-form save still preserves independent unlisted state. Existing
+PDF
 publication markers and the shared zero-wait writer lease remain authoritative.
 Unknown schema, ownership errors and invalid PDF children retain their pending
 deadline for a later eligible visit. No schedule is imported from sidecars or
@@ -783,21 +825,25 @@ Chooser duplicate prevention is presentation policy: directly assigned and
 live album sources retain their independent stored semantics. Batches recheck
 current membership and reuse canonical single-item mutations rather than
 introducing a second persistence path. Evidence is owned by the existing local
-Music browser and repository database fixtures; deployment-wide usage is unknown.
+Music browser and repository database fixtures; deployment-wide usage is
+unknown.
 
 Owners: gallery music model/service and its private projection/migration parts,
-the central repository service, catalog SQL model/service and Maintenance Center.
+the central repository service, catalog SQL model/service and Maintenance
+Center.
 V1 gallery indexes and local immutable originals remain permanently readable.
 Legacy permission, order and preference edits preserve v1 wire format and its
 revision semantics until a central source or live album upgrades the index.
-New uploads use `data/music/`; v2 sidecars preserve direct references, live album
+New uploads use `data/music/`; v2 sidecars preserve direct references, live
+album
 groups, ordered source identities and interrupted local cleanup. Public reads
 never migrate files or hash every original. Destination gallery authorization
 and saved download/visibility flags govern explicitly assigned shared music.
 No public repository asset endpoint or portable foreign logical ID is trusted.
 
 Schema migration is forward-only and does not relocate existing files. Only an
-maintenance task selected in an approved plan switches verified old originals to central
+maintenance task selected in an approved plan switches verified old originals to
+central
 references and removes positively matching local bytes. It processes one source
 per step, retains stable track/song identity, and stops on uncertainty with its
 last successful cursor intact. Assignment/removal/Trash do not delete central
@@ -815,7 +861,8 @@ include legacy/v2 reads, live album changes, interrupted migration, access,
 shared-file retention, accounting and in-place editor actions.
 
 The former `admin-edit-documents` and `admin-edit-images` tabs remain permanent
-bookmark aliases for Upload media/PDF and Upload media/Images. The gallery editor
+bookmark aliases for Upload media/PDF and Upload media/Images. The gallery
+editor
 URL owner preserves the drawer request and active language; the shared browser
 tab owner resolves old Images hashes. Existing bookmark usage is unknown;
 removing these aliases is not authorized. The image preload retains its original
@@ -857,9 +904,11 @@ pass without failed galleries records completion. This is one-time bootstrap,
 not periodic or broad maintenance. Maintenance Center also provides a
 default-selected optional manual legacy reconciliation with a persisted cursor,
 at most 25 galleries per step, at most one legacy OFP candidate hash per step
-and a 25 MiB hash cap. When an OFP manifest has no valid digest, the worker stores
+and a 25 MiB hash cap. When an OFP manifest has no valid digest, the worker
+stores
 `ofp_pdf_sha256` through atomic manifest replacement under the shared persistent
-root lock. It also serializes music reads with the private `.gallery-music/.lock`;
+root lock. It also serializes music reads with the private
+`.gallery-music/.lock`;
 busy locks defer a gallery. Newly created galleries with no source metadata may
 receive insert-only ready-empty rows. Analysis does not inspect originals or
 write projections. Failed galleries remain dirty and omitted for a later retry;
@@ -896,8 +945,10 @@ request settles. Safari 26.4 supports
 `requestFullscreen({keyboardLock: 'browser'})` for quick-tag-capable viewer
 entry; Escape reaches the page while the browser retains a 1.5-second
 hold-Escape fullscreen exit and automatically releases the lock on fullscreen
-exit or tab switch. See the [Chrome Keyboard Lock documentation](https://developer.chrome.com/docs/capabilities/web-apis/keyboard-lock)
-and [WebKit's Safari 26.4 notes](https://webkit.org/blog/17862/webkit-features-for-safari-26-4/).
+exit or tab switch. See the
+[Chrome Keyboard Lock documentation](https://developer.chrome.com/docs/capabilities/web-apis/keyboard-lock)
+and
+[WebKit's Safari 26.4 notes](https://webkit.org/blog/17862/webkit-features-for-safari-26-4/).
 
 Where the lock is unsupported or rejected, keep native browser behavior:
 fullscreen may exit first, which closes the row without automatically
@@ -950,7 +1001,8 @@ updater workflow or recovery data are retired.
 ## Windows startup, shared profile and tray availability
 
 Owners: `winapp/uploader/windows_startup.py`, `gallery_watch_upload.pyw` and
-`installer.iss`. Missing legacy `start_with_windows` preferences default to true;
+`installer.iss`. Missing legacy `start_with_windows` preferences default to
+true;
 explicit false survives migration and upgrades. Only frozen Windows apps own
 the per-user Run entry. Source/non-Windows execution permanently remains usable
 without registration. Helpers and runtime/version probes retain early dispatch;
@@ -964,7 +1016,8 @@ initialization failures. Retirement requires an alternative visible entry point
 that cannot strand the process. Explicit relaunch restores the same window and
 preserves current workers; import recovery waits until the window is opened.
 Central regressions cover registry fakes, state-admission ordering and tray
-fallback; native Windows subprocess cases cover event delivery and crash cleanup.
+fallback; native Windows subprocess cases cover event delivery and crash
+cleanup.
 Installed logon/UAC/uninstall and cross-session usability evidence is unknown
 until manual qualification. No installer, existing profile or previous binary
 artifact is retired by this source change.
@@ -994,7 +1047,8 @@ dispatch responses permit reuse of an unmoved ref; active work and advanced
 release refs are preserved. Registered real-Git fixtures cover creation,
 retry/duplicate suppression, source separation and adverse handoff metadata.
 Live first-release dispatch/permissions remain unmeasured until a separately
-authorized release. No existing tag, origin, review or published asset is retired.
+authorized release. No existing tag, origin, review or published asset is
+retired.
 
 ## Release-note provider availability and external editorial work
 
@@ -1122,7 +1176,8 @@ Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,
 Legacy sessions without simbrief.json remain valid. Dispatch values are planned
 evidence and never overwrite simulator measurements. The OFP snapshot
 participates
-in the analysis checksum; the template identity prevents reuse of earlier layouts.
+in the analysis checksum; the template identity prevents reuse of earlier
+layouts.
 Explicit local regeneration retains all previous PDF revisions and receipts.
 Version 0.6.1 fits both map extents independently of print DPI and omits the
 redundant capture-scope paragraph. Existing PDFs remain unchanged; actual
@@ -1353,6 +1408,20 @@ preference persistence, finalization exclusion and scrollbar overflow. Actual
 simulator/aircraft/build and installed-upgrade acceptance remain separate.
 
 ## Media-renamer long original filenames
+
+The renamer stages exclusively owned JPG/WebP cache files alongside originals,
+removes stale prospective targets, commits original names and rows, and
+publishes
+cached pixels only after checking their new persisted exclusive owner.
+Successful transfers preserve bytes without image decoding. Shared/unverified
+legacy caches retain conservative invalidation; locked cache moves fall back to
+explicit warnings, while unsafe pre-commit cache removal aborts the original
+rename. This permanent fallback protects source ownership and
+Windows/shared-host
+file locks; usage incidence remains unknown. Gallery selection applies use
+15-image browser requests with server-confirmed progress. Native full-form
+rename remains supported without JavaScript. No access or serving rule is
+relaxed.
 
 Owner: `app/services/media_renamer.php`. Same-directory staging permanently uses
 a fixed 83-byte hash basename instead of appending the original name. Production
@@ -1954,7 +2023,8 @@ archives before any server write. The inherited ZIP worker owner covers sparse
 integrity skips, exact lost-ACK replay and malformed-later-archive refusal.
 These synthetic scenarios do not measure real browser-process memory or prove
 Safari/Firefox/physical large-archive acceptance; that usage remains unknown.
-Both modes retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and
+Both modes retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds,
+and
 explicit
 ZIP64/multi-disk refusal. Apple's actual exported ZIP appends 205 zero bytes
 after
@@ -2655,7 +2725,8 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
 
 ### CORE-3 — Module validation lifetime and optional opcode caching
 
-- **Owner:** `app/runtime/ModuleLoader.php` and the existing early Test Run trace.
+- **Owner:** `app/runtime/ModuleLoader.php` and the existing early Test Run
+  trace.
 - **Protected behavior:** Complete composed-plan shape/path/graph validation
   remains per loader/request, including unselected modules. A physical path is
   checked once per `load()` preflight, before includes, and checked afresh when
@@ -2890,7 +2961,8 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
   aircraft fallback owners. The 0.9.0 source refresh uses the official MSFS 2024
   SDK Core 1.7.3 `SimConnect SDK/lib/SimConnect.dll`; its complete source URL,
   size and SHA256 are retained in `winapp/README.md`.
-- **Evidence / limits:** On 2026-10-23, bounded official CDN acquisition verified
+- **Evidence / limits:** On 2026-10-23, bounded official CDN acquisition
+  verified
   ZIP CRC and MSI File/Component/Directory mapping before extracting the DLL
   without installing the SDK. Static PE32+/x64 validation and required exports
   passed; the old and new binaries expose the same 117 named exports. No usable

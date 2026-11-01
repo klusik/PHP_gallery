@@ -1894,19 +1894,27 @@ function gallery_image_belongs_to_gallery_branch(
 }
 
 /**
- * Relocate a physical subtree under the gallery writer lease and rewrite its catalog paths.
+ * Relocate a physical subtree under the gallery writer lease and rewrite its
+ * catalog paths.
  *
  * @param int $galleryId Existing physical subtree root.
  * @param ?int $parentId New parent, or null/zero for gallery storage root.
- * @param ?string $folderName Optional requested leaf name; null retains the current leaf.
- * @param bool $smartGalleryGraphPrevalidated True only for a caller that already validated the complete final parent map and will run final hierarchy maintenance.
- * @return array{moved:bool,from:string,to:string,galleries:int} Relative source/target paths and rewritten row count; moved=false is a no-op.
+ * @param ?string $folderName Optional requested leaf name; null retains the
+ *     current leaf.
+ * @param bool $smartGalleryGraphPrevalidated True only for a caller that
+ *     already validated the complete final parent map and will run final
+ *     hierarchy maintenance.
+ * @param ?string $title New source title to persist with the root's new path;
+ *     null preserves the existing title.
+ * @return array{moved:bool, from:string, to:string, galleries:int} Relative
+ *     source/target paths and rewritten row count; moved=false is a no-op.
  */
 function move_gallery_folder_to_parent(
     int $galleryId,
     ?int $parentId,
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
+    ?string $title = null,
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
@@ -1915,6 +1923,7 @@ function move_gallery_folder_to_parent(
             $parentId,
             $folderName,
             $smartGalleryGraphPrevalidated,
+            $title,
         );
     } finally {
         gallery_edit_writer_end($writerLock);
@@ -1922,19 +1931,25 @@ function move_gallery_folder_to_parent(
 }
 
 /**
- * Perform move gallery folder to parent while the caller owns the gallery writer lease.
+ * Perform move gallery folder to parent while the caller owns the gallery
+ * writer lease.
  *
  * @param int $galleryId Gallery subtree to relocate.
  * @param ?int $parentId Destination parent or root.
  * @param ?string $folderName Optional replacement leaf directory name.
- * @param bool $smartGalleryGraphPrevalidated Whether the caller already validated the attachment graph.
- * @return array{moved:bool,from:string,to:string,galleries:int} Physical move result and affected hierarchy count.
+ * @param bool $smartGalleryGraphPrevalidated Whether the caller already
+ *     validated the attachment graph.
+ * @param ?string $title New root title, committed atomically with the path map;
+ *     null retains it.
+ * @return array{moved:bool, from:string, to:string, galleries:int} Physical
+ *     move result and affected hierarchy count.
  */
 function move_gallery_folder_to_parent_owned(
     int $galleryId,
     ?int $parentId,
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
+    ?string $title = null,
 ): array {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -2000,10 +2015,11 @@ function move_gallery_folder_to_parent_owned(
     // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
     $currentFolderName = gallery_folder_name_from_path($oldPath);
     // $targetFolderName stores an intermediate value used by the surrounding gallery workflow.
-    $targetFolderName =
-        $folderName !== null && trim($folderName) !== ''
+    $targetFolderName = $title !== null
+        ? gallery_folder_segment($title)
+        : ($folderName !== null && trim($folderName) !== ''
             ? gallery_folder_segment($folderName)
-            : $currentFolderName;
+            : $currentFolderName);
     if ($targetFolderName === '') {
         throw new RuntimeException('Gallery folder name cannot be empty.');
     }
@@ -2084,6 +2100,9 @@ function move_gallery_folder_to_parent_owned(
             'folder_path_hash' => hash('sha256', $path),
             'parent_id' => $rowParentId,
         ];
+        if ((int) $id === $galleryId && $title !== null) {
+            $updates[array_key_last($updates)]['title'] = $title;
+        }
     }
 
     // $moved stores whether the filesystem rename must be rolled back after a persistence failure.

@@ -56,11 +56,21 @@ use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\media_renamer_execute_gallery;
+use function Gallery\Services\media_renamer_execute_gallery_image_batch;
 use function Gallery\Services\media_renamer_normalize_pattern;
 use function Gallery\Services\smart_gallery_assign_children_to_gallery;
 use function Gallery\Services\smart_gallery_validate_children_assignment;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
+
+/**
+ * Bound each gallery rename request to the browser runner's admitted slice.
+ * Type: int. Units: image IDs per request. Scope: gallery renamer POST.
+ * Consumers: gallery apply_batch admission.
+ * Rationale: 15 keeps filesystem work short enough for visible progress and
+ * matches the existing site-wide browser batch size without unbounded input.
+ */
+const MEDIA_RENAMER_GALLERY_BATCH_LIMIT = 15;
 
 /**
  * Handle one gallery editor POST request.
@@ -596,8 +606,11 @@ function admin_edit_gallery_handle_ai_reprocess(array $gallery): void
  * Requires an explicit confirmation because the rename touches files on disk.
  * Failures are logged and reported without leaving the panel.
  *
- * @param array<string, mixed> $gallery Gallery row being edited.
- * @param bool $mediaRenamerFeatureEnabled Whether the renamer feature is enabled.
+ * @param array{id:int|string, folder_path:string, title?:string} $gallery
+ *     Authorized physical gallery owning the bounded batches and final
+ *     response.
+ * @param bool $mediaRenamerFeatureEnabled Whether the renamer feature is
+ *     enabled.
  * @return void Emit a panel response or flash a message and redirect.
  */
 function admin_edit_gallery_handle_media_rename(
@@ -648,11 +661,64 @@ function admin_edit_gallery_handle_media_rename(
         flash_message('admin_notice', $notice);
         redirect_to($renamerReturnUrl);
     }
+    $batchAction = admin_wants_json()
+        ? (string) ($_POST['renamer_action'] ?? '')
+        : '';
     try {
-        $renameResult = media_renamer_execute_gallery(
-            (int) $gallery['id'],
-            $renamerPattern,
-        );
+        if ($batchAction === 'apply_batch') {
+            $batchImageIds = admin_media_renamer_image_ids_from_post('batch_image_ids');
+            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_GALLERY_BATCH_LIMIT) {
+                header('Content-Type: application/json');
+                http_response_code(400);
+                echo json_encode(admin_mutation_error_envelope(
+                    t('admin.media_renamer.progress_failed', 'Rename request failed.'),
+                    'media_rename_invalid_batch',
+                    null,
+                    ['redirect_url' => $renamerReturnUrl],
+                ));
+                return;
+            }
+            $renameResult = media_renamer_execute_gallery_image_batch(
+                (int) $gallery['id'],
+                $batchImageIds,
+                $renamerPattern,
+            );
+            $batchRenamedIds = array_values(array_map(
+                static fn(array $detail): int => (int) $detail['image_id'],
+                array_filter(
+                    $renameResult['details'],
+                    static fn(array $detail): bool => $detail['status'] === 'renamed',
+                ),
+            ));
+            $batchContexts = [];
+            if ($batchRenamedIds !== []) {
+                $batchState = gallery_lightbox_state_summary($gallery, false, false);
+                $batchContexts[] = \Gallery\Core\admin_mutation_public_gallery_context(
+                    (int) $gallery['id'],
+                    gallery_public_url($gallery),
+                    admin_mutation_postcondition('gallery_image_revision', [
+                        'gallery_id' => (int) $gallery['id'],
+                        'revision' => (string) $batchState['revision'],
+                    ]),
+                );
+            }
+            $batchPayload = admin_mutation_success_envelope(
+                '',
+                admin_mutation_descriptor('image.media_rename', 'image', 'rename', $batchRenamedIds),
+                null,
+                $batchContexts,
+                ['redirect_url' => $renamerReturnUrl],
+            );
+            header('Content-Type: application/json');
+            echo json_encode(array_merge($batchPayload, [
+                'processed' => count($renameResult['details']),
+                'result' => admin_media_renamer_bounded_result($renameResult),
+            ]));
+            return;
+        }
+        $renameResult = $batchAction === 'apply_refresh'
+            ? admin_media_renamer_result_payload_from_post()
+            : media_renamer_execute_gallery((int) $gallery['id'], $renamerPattern);
         if (function_exists(
             'Gallery\\Controllers\\admin_media_renamer_log_event',
         )) {
@@ -680,12 +746,18 @@ function admin_edit_gallery_handle_media_rename(
         }
         $notice = t(
             'admin.media_renamer.gallery_result_notice',
-            'Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
+            'Renamed {renamed} file(s), preserved {moved} thumbnails, '
+                . 'removed {cleaned} stale derivative cache file(s), '
+                . 'saw {missing} missing file(s), skipped {skipped} row(s), '
+                . 'updated {titles} derived title(s), and removed '
+                . '{archives} stale ZIP archive row(s).',
             [
                 'renamed' => (string) (int) ($renameResult['renamed'] ?? 0),
-                'derivatives' => (string) (
-                    (int) ($renameResult['derivatives_moved'] ?? 0)
-                    + (int) ($renameResult['derivatives_cleaned'] ?? 0)
+                'moved' => (string) (int) (
+                    $renameResult['derivatives_moved'] ?? 0
+                ),
+                'cleaned' => (string) (int) (
+                    $renameResult['derivatives_cleaned'] ?? 0
                 ),
                 'missing' => (string) (int) ($renameResult['missing'] ?? 0),
                 'skipped' => (string) (
@@ -796,7 +868,8 @@ function admin_edit_gallery_handle_media_rename(
         }
         $payload = $renameResult !== null
             ? admin_mutation_success_envelope(
-                $notice,
+                // The refreshed renamer owns the single live result notice.
+                '',
                 admin_mutation_descriptor(
                     'image.media_rename',
                     'image',
@@ -817,7 +890,7 @@ function admin_edit_gallery_handle_media_rename(
                 ['redirect_url' => $renamerReturnUrl],
             );
         echo json_encode(array_merge($payload, [
-            'message' => $notice,
+            'message' => $renameResult !== null ? '' : $notice,
             'panel_html' => admin_media_renamer_render_gallery_panel_html(
                 $updatedGallery,
                 $renamerPattern,
@@ -825,6 +898,7 @@ function admin_edit_gallery_handle_media_rename(
                 $renameResult,
             ),
             'gallery_id' => (int) $updatedGallery['id'],
+            'result' => $renameResult,
         ]));
         return;
     }

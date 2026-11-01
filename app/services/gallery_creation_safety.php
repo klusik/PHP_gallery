@@ -149,8 +149,9 @@ function gallery_creation_target_observation(string $relativePath): string
 /**
  * Refuse missing/ambiguous catalog reuse; never perform cleanup as a create side effect.
  *
- * Existing healthy galleries may still cause the normal intentional duplicate
- * suffix selection. A missing descendant-only catalog is protected as well.
+ * Healthy occupied folders remain reserved; creation separately refuses their
+ * reuse because a suffixed folder would disagree with the source title.
+ * A missing descendant-only catalog is protected as well.
  *
  * @param string $relativePath Requested gallery folder path.
  * @return void

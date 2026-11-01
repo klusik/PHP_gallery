@@ -245,8 +245,12 @@ function application_worker(
  * @param list<string> $shared Cookies obtained from the genuine login form.
  * @param list<string> $independent Independently logged-in cookie jar.
  * @param string $csrf Actual logged-in session CSRF token for the private holder POST.
- * @return array{scenario:string,reader_entry_observed:bool,same_completed_before_release:bool,overlap_ms:float,requests:array<string,array<string,mixed>>}
- *   Bounded timings/statuses only; no cookie, CSRF or application response data.
+ * @return array{scenario:string, reader_entry_observed:bool,
+ *     same_completed_before_release:bool, overlap_ms:float,
+ *     requests:array<string, array{status:int, total_ms:float,
+ *     first_byte_ms:float, session_start_ms:float, handler:string}>}
+ *     Bounded timings/statuses only; no cookie, CSRF or application response
+ *     data. Failed transport, admission or ordering assertions throw.
  */
 function application_sample(
     array $workers,
@@ -281,8 +285,9 @@ function application_sample(
             'same' => $shared,
             'independent' => $independent,
         ] as $role => $cookies) {
+            // Completion omits exact matches; See is a strict prefix of Seed.
             $path =
-                '/index.php?page=admin_gallery_title_completion&q=Workflow&parent_id=0&scenario='
+                '/index.php?page=admin_gallery_title_completion&q=See&parent_id=0&scenario='
                 . $scenario
                 . '&reader='
                 . $role;

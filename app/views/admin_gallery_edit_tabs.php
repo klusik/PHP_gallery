@@ -687,7 +687,7 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
             . e((string) ($labels['folder_name'] ?? 'Folder name'))
             . '<input name="folder_name" value="'
             . e((string) ($viewModel['folder_name'] ?? ''))
-            . '" autocomplete="off" required><span class="muted">'
+            . '" autocomplete="off" readonly><span class="muted">'
             . e((string) ($labels['folder_rename_help'] ?? ''))
             . '</span></label></div>';
     echo

@@ -971,10 +971,10 @@ function view_render_admin_new_gallery_fields(
         echo
             '<label class="admin-side-panel-field"><span>'
                 . e(t('admin.gallery_editor.folder_name', 'Folder name'))
-                . '</span><input name="folder_name" autocomplete="off"><small>'
+                . '</span><input name="folder_name" autocomplete="off" readonly><small>'
                 . e(t(
                     'admin.gallery_editor.derive_from_gallery_name',
-                    'Leave empty to derive it from the gallery name.',
+                    'Derived automatically from the gallery name.',
                 ))
                 . '</small></label>';
         echo
@@ -1044,10 +1044,10 @@ function view_render_admin_new_gallery_fields(
     echo
         '<label>'
             . e(t('admin.gallery_editor.folder_name', 'Folder name'))
-            . '<input name="folder_name" autocomplete="off"><span class="muted">'
+            . '<input name="folder_name" autocomplete="off" readonly><span class="muted">'
             . e(t(
                 'admin.gallery_editor.derive_from_gallery_name',
-                'Leave empty to derive it from the gallery name.',
+                'Derived automatically from the gallery name.',
             ))
             . '</span></label>';
     echo (string) ($formModel['parent_picker_html'] ?? '');
@@ -1253,12 +1253,21 @@ function view_render_admin_new_gallery_quick_fields(
 }
 
 /**
- * Keep destination and visibility visible while disclosing secondary creation controls.
+ * Keep destination and visibility visible while disclosing secondary creation
+ * controls.
  *
- * @param array<string,mixed> $formModel Prepared creation presentation data.
+ * @param array{create_submission?:array<string, string|int|bool|null>,
+ *     submitted?:array<string, string|int|bool|null>,
+ *     parent_picker_html?:string, count_badge?:array{schema_ready?:bool,
+ *     options?:list<array{value:string, label:string}>},
+ *     localization?:array{enabled?:bool, languages?:list<string>,
+ *     presentation?:array<string, array{label?:string, flag?:string}>}, ...}
+ *     $formModel Prepared creation values, parent picker, count choices and
+ *     localization labels.
  * @param bool $panelMode Whether this is the side-panel form.
  * @param int $prefillParentId Selected parent gallery ID.
- * @return void Emits prepared location, date and optional controls without altering submitted field names.
+ * @return void Emits prepared location, date and optional controls without
+ *     altering submitted field names.
  */
 function view_render_admin_new_gallery_advanced_fields(
     array $formModel,
@@ -1289,10 +1298,10 @@ function view_render_admin_new_gallery_advanced_fields(
             . e(t('admin.gallery_editor.folder_name', 'Folder name'))
             . '</span><input name="folder_name" value="'
             . e((string) ($submitted['folder_name'] ?? ''))
-            . '" autocomplete="off"><small>'
+            . '" autocomplete="off" readonly><small>'
             . e(t(
                 'admin.gallery_editor.derive_from_gallery_name',
-                'Leave empty to derive it from the gallery name.',
+                'Derived automatically from the gallery name.',
             ))
             . '</small></label>';
     echo

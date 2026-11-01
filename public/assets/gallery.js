@@ -135,7 +135,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261030-smart-paint-v5';
+} from './gallery-modules/admin-operations.js?v=20261101-owned-cache-batches-v6';
 
 /**
  * Runs a setup callback after the DOM is ready.

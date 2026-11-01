@@ -886,6 +886,7 @@ def _install_focus_styles(style: ttk.Style) -> None:
     for name in ("TButton", "Primary.TButton", "Icon.TButton",
                  "IconPrimary.TButton", "TEntry", "TCombobox"):
         style.map(name, bordercolor=[("focus", focus)])
+    style.map("Gallery.Section.TLabel", foreground=[("focus", focus)])
 
 
 def icon_button(parent: tk.Misc, icon: str,
@@ -988,12 +989,97 @@ class _TooltipState:
     window: tk.Toplevel | None = None
 
 
-def _attach_tooltip(widget: ttk.Button, message: str) -> None:
+class GalleryIdentityLabel(ttk.Label):
+    """Show the current gallery title and its physical folder hierarchy."""
+
+    def __init__(
+        self, parent: tk.Misc, source: tk.StringVar,
+        title: tk.StringVar | None = None,
+    ) -> None:
+        """Bind a wrapping gallery heading to the existing full identity.
+
+        Args:
+            parent (tk.Misc): Container allocating the heading's available width.
+            source (tk.StringVar): Full identity prefixed with Target gallery.
+            title (tk.StringVar | None): Current server display title; None
+                supports callers with only the physical folder identity.
+        Returns:
+            None: Creates a focusable heading and live hierarchy tooltip.
+        """
+        self._source = source
+        self._title = title
+        self._display_name = tk.StringVar(master=parent)
+        self._hierarchy = tk.StringVar(master=parent)
+        super().__init__(
+            parent, textvariable=self._display_name, style="Gallery.Section.TLabel",
+            width=1, takefocus=True, justify="left",
+        )
+        self._trace = source.trace_add("write", self._refresh)
+        self._title_trace = (
+            title.trace_add("write", self._refresh) if title is not None else None
+        )
+        self.bind("<Configure>", self._wrap, add="+")
+        self.bind("<Destroy>", self._dispose, add="+")
+        self._refresh()
+        _attach_tooltip(self, self._hierarchy)
+
+    def _refresh(self, *_args: str) -> None:
+        """Show the server title separately from the physical folder hierarchy.
+
+        Args:
+            *_args (str): Tcl trace variable name, array index and write action.
+        Returns:
+            None: Refreshes presentation without changing the source identity.
+        """
+        value = self._source.get().removeprefix("Target gallery: ")
+        parts = [part for part in value.replace("\\", "/").split("/") if part]
+        if not parts or value == "unknown":
+            self._display_name.set("Target gallery: unknown")
+            self._hierarchy.set("Target gallery: unknown")
+            return
+        title = self._title.get().strip() if self._title is not None else ""
+        # Older inventory APIs omit the title. Keep their folder leaf usable;
+        # this presentation fallback never rewrites the authoritative identity.
+        heading = "Gallery: " + (title or parts[-1])
+        self._display_name.set(heading)
+        # Each arrow is one folder edge; line breaks retain the complete path
+        # without spending heading width on the potentially long parent names.
+        self._hierarchy.set(heading + "\n\nFolder hierarchy\n" + "\n".join(
+            ("  " * depth + "└ " if depth else "") + part
+            for depth, part in enumerate(parts)
+        ))
+
+    def _wrap(self, event: tk.Event) -> None:
+        """Wrap the leaf name within the width allocated by the current layout.
+
+        Args:
+            event (tk.Event): Configure event containing the heading width.
+        Returns:
+            None: Keeps even a long leaf name readable after window resizing.
+        """
+        # Tk treats zero as no wrapping; one pixel is the smallest valid width.
+        self.configure(wraplength=max(1, event.width))
+
+    def _dispose(self, event: tk.Event) -> None:
+        """Release the source trace when this heading is destroyed.
+
+        Args:
+            event (tk.Event): Destroy event identifying the removed widget.
+        Returns:
+            None: Stops updates to a heading whose Tk widget no longer exists.
+        """
+        if event.widget is self:
+            self._source.trace_remove("write", self._trace)
+            if self._title is not None and self._title_trace is not None:
+                self._title.trace_remove("write", self._title_trace)
+
+
+def _attach_tooltip(widget: tk.Misc, message: str | tk.StringVar) -> None:
     """Bind a delayed tooltip to pointer and keyboard focus events.
 
     Args:
-        widget (ttk.Button): Interactive widget that owns tooltip bindings.
-        message (str): Short text displayed in the tooltip window.
+        widget (tk.Misc): Widget that owns pointer and keyboard tooltip bindings.
+        message (str | tk.StringVar): Fixed help or live formatted tooltip text.
 
     Returns:
         None: Bindings manage popup creation, dismissal and destruction.
@@ -1043,7 +1129,8 @@ def _attach_tooltip(widget: ttk.Button, message: str) -> None:
             popup.attributes("-topmost", True)
             label = tk.Label(
                 popup,
-                text=message,
+                text=message if isinstance(message, str) else "",
+                textvariable=message if isinstance(message, tk.StringVar) else "",
                 bg=_PALETTE["surface"],
                 fg=_PALETTE["ink"],
                 padx=9,
@@ -1086,6 +1173,7 @@ def _attach_tooltip(widget: ttk.Button, message: str) -> None:
     widget.bind("<Leave>", hide, add="+")
     widget.bind("<FocusIn>", schedule, add="+")
     widget.bind("<FocusOut>", hide, add="+")
+    widget.bind("<Escape>", hide, add="+")
     widget.bind("<Destroy>", hide, add="+")
 
 

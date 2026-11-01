@@ -94,7 +94,7 @@ $contracts = [
     'app/models/gallery_mutations.php' => [
         'gallery_mutation_model_delete_images' => 1,
         'gallery_mutation_model_move_images' => 4,
-        'gallery_mutation_model_update_gallery_paths' => 1,
+        'gallery_mutation_model_update_gallery_paths' => 2,
         'gallery_mutation_model_sync_parent_map' => 2,
         'gallery_mutation_model_null_fixed_rows' => 0,
     ],

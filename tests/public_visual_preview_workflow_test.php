@@ -368,9 +368,9 @@ try {
         'home_http='
         . $home['status']
         . ';home_seed='
-        . (str_contains($home['body'], 'Workflow seed') ? '1' : '0');
+        . (str_contains($home['body'], 'Seed') ? '1' : '0');
     check(
-        $home['status'] === 200 && str_contains($home['body'], 'Workflow seed'),
+        $home['status'] === 200 && str_contains($home['body'], 'Seed'),
         'Administrator preview did not render the actual public home page.',
     );
     $stageDiagnostic =
@@ -396,10 +396,10 @@ try {
         'gallery_http='
         . $gallery['status']
         . ';gallery_seed='
-        . (str_contains($gallery['body'], 'Workflow seed') ? '1' : '0');
+        . (str_contains($gallery['body'], 'Seed') ? '1' : '0');
     check(
         $gallery['status'] === 200
-            && str_contains($gallery['body'], 'Workflow seed'),
+            && str_contains($gallery['body'], 'Seed'),
         'Administrator preview did not render the actual public gallery page.',
     );
     $stageDiagnostic =
@@ -585,7 +585,7 @@ try {
         'gallery_http='
         . $anonymousRoot['status']
         . ';gallery_seed='
-        . (str_contains($anonymousRoot['body'], 'Workflow seed') ? '1' : '0');
+        . (str_contains($anonymousRoot['body'], 'Seed') ? '1' : '0');
     $galleryCacheControl = strtolower(
         (string) ($anonymousRoot['headers']['cache-control'] ?? ''),
     );
@@ -596,7 +596,7 @@ try {
         . (str_contains($galleryCacheControl, 'no-store') ? '1' : '0');
     check(
         $anonymousRoot['status'] === 200
-            && str_contains($anonymousRoot['body'], 'Workflow seed'),
+            && str_contains($anonymousRoot['body'], 'Seed'),
         'Signed-in anonymous simulation must render a genuinely public gallery.',
     );
     visualPreviewWorkflowAssertNoStore(
@@ -1570,7 +1570,7 @@ try {
             foreach ($titleNodes as $titleNode) {
                 if (str_contains(
                     (string) $titleNode->textContent,
-                    'Workflow seed',
+                    'Seed',
                 )) {
                     $rootTitleFound = true;
                     break;
@@ -1583,7 +1583,7 @@ try {
             'root_hero' => $heroNodes !== false && $heroNodes->length > 0,
             'gallery_title_class' => $galleryTitleClassFound,
             'root_gallery_title' => $rootTitleFound,
-            'root_title_anywhere' => str_contains($html, 'Workflow seed'),
+            'root_title_anywhere' => str_contains($html, 'Seed'),
         ];
     };
     $assertFollowedPreviewFallback = static function (
@@ -1615,11 +1615,19 @@ try {
             : '';
         $protectedChildListingIsSafe = $listedProtectedChildExpected
             ? $hasListedProtectedChildCard
-            && str_contains($protectedCardHtml, 'Workflow protected')
+            && str_contains($protectedCardHtml, 'Protected')
             && str_contains($protectedCardHtml, 'gallery-locked-preview')
             && preg_match('/<img\\b/i', $protectedCardBody) !== 1
             : !$hasListedProtectedChildCard
-            && !str_contains($response['body'], 'Workflow protected');
+            && !str_contains($response['body'], 'Protected');
+        // The authorized locked child card may link to its public URL, which
+        // now matches its canonical folder. Denied context must not leak that
+        // path elsewhere; all hero, media and locked-card checks remain strict.
+        $outsideProtectedCard = str_replace(
+            $protectedCardHtml,
+            '',
+            $response['body'],
+        );
         check(
             $response['status'] === 200
                 && $documentFacts['public_body']
@@ -1642,7 +1650,7 @@ try {
                 )
                 && $protectedChildListingIsSafe
                 && !str_contains(
-                    strtolower($response['body']),
+                    strtolower($outsideProtectedCard),
                     'seed/protected',
                 ),
             $label
@@ -1754,7 +1762,7 @@ try {
         . ($protectedFollowedChildCard ? '1' : '0')
         . ';protected_gallery_follow_child_title='
         . (
-            str_contains($protectedFollowedChildCardHtml, 'Workflow protected')
+            str_contains($protectedFollowedChildCardHtml, 'Protected')
                 ? '1'
                 : '0'
         )
@@ -1899,7 +1907,7 @@ try {
             . $privateFollowed['status']
             . ';private_gallery_follow_seed='
             . (
-                str_contains($privateFollowed['body'], 'Workflow seed')
+                str_contains($privateFollowed['body'], 'Seed')
                     ? '1'
                     : '0'
             );
@@ -1958,7 +1966,7 @@ try {
             )
             . ';private_home_follow_private_root_absent='
             . (
-                !str_contains($homeFollowed['body'], 'Workflow seed')
+                !str_contains($homeFollowed['body'], 'Seed')
                     ? '1'
                     : '0'
             );
@@ -2061,7 +2069,7 @@ try {
                 )
                 . ';cycle_home_follow_private_root_absent='
                 . (
-                    !str_contains($cycleFollowed['body'], 'Workflow seed')
+                    !str_contains($cycleFollowed['body'], 'Seed')
                         ? '1'
                         : '0'
                 );

@@ -520,6 +520,14 @@ function admin_media_renamer_render_gallery_panel_html(
         'plan_table_html' => $planTableHtml,
         'execution_details_html' => $executionDetailsHtml,
         'rename_count' => $renameCount,
+        'rename_image_ids' => array_values(array_map(
+            static fn(array $item): int => (int) $item['image_id'],
+            array_filter(
+                $plan['items'],
+                static fn(array $item): bool => !empty($item['can_rename'])
+                    && $item['status'] === 'rename',
+            ),
+        )),
         'apply_url' => url_for('admin_edit_gallery'),
         'csrf_html' => csrf_field(),
         'gallery_id' => $galleryId,
@@ -1351,14 +1359,16 @@ function admin_media_renamer_result_notice(array $result): string
 {
     $message = t(
         'admin.media_renamer.result_notice',
-        'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
+        'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), '
+            . 'preserved {moved} thumbnails, removed {cleaned} stale derivative '
+            . 'cache file(s), skipped {skipped} row(s), saw {missing} missing '
+            . 'file(s), updated {titles} derived title(s), and removed '
+            . '{archives} stale ZIP archive row(s).',
         [
             'galleries' => (string) (int) ($result['galleries_processed'] ?? 0),
             'renamed' => (string) (int) ($result['renamed'] ?? 0),
-            'derivatives' => (string) (
-                (int) ($result['derivatives_moved'] ?? 0)
-                + (int) ($result['derivatives_cleaned'] ?? 0)
-            ),
+            'moved' => (string) (int) ($result['derivatives_moved'] ?? 0),
+            'cleaned' => (string) (int) ($result['derivatives_cleaned'] ?? 0),
             'skipped' => (string) (
                 (int) ($result['skipped'] ?? 0)
                 + (int) ($result['collisions'] ?? 0)

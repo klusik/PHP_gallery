@@ -217,7 +217,7 @@ function admin_edit_gallery_render_identity_tab(
             ),
             'folder_rename_help' => t(
                 'admin.gallery_editor.folder_rename_help',
-                'Changing this renames the folder on disk.',
+                'Changing the gallery title also renames this folder on disk.',
             ),
             'parent_gallery' => t(
                 'admin.gallery_editor.parent_gallery',
