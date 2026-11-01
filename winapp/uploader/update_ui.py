@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Module Type: Windows Tooling
-# Purpose: Coordinate nonmodal self-update UI and safe background-work drain.
+# Purpose: Coordinate nonmodal self-update UI and external installer handoff.
 # Responsibilities:
 #   - Keep update scheduling separate from gallery credentials and saved settings.
 #   - Stop new work before installer handoff and wait without blocking Tk.
@@ -12,7 +12,6 @@
 
 import json
 import math
-import multiprocessing
 import os
 from pathlib import Path
 import queue
@@ -20,7 +19,7 @@ from dataclasses import asdict
 import sys
 import threading
 import time
-from typing import Callable, Iterable, Optional, Protocol, TYPE_CHECKING
+from typing import Callable, Optional, Protocol, TYPE_CHECKING
 
 from uploader.state_store import atomic_write_json
 from uploader.self_update import ReleaseAsset
@@ -48,8 +47,14 @@ class UpdateApplication(Protocol):
         """Open an explicitly selected installer using the Windows shell."""
         ...
 
-    def close(self) -> None:
-        """Run ordinary application shutdown after updater cancellation."""
+    def close(self, *, for_update: bool = False) -> None:
+        """Close the application, immediately after verified update handoff.
+
+        Args:
+            for_update (bool): Terminate the app after helper readiness when True.
+        Returns:
+            None: Closes normally or exits the process for installation.
+        """
         ...
 
     def set_update_available(self, version: Optional[str]) -> None:
@@ -72,34 +77,31 @@ UPDATE_STATE_MAX_BYTES = 16384
 
 
 class InstallGate:
-    """Deterministic admission barrier and bounded drain state, independent of Tk."""
+    """Pause new operations only while preparing the external helper."""
 
-    def __init__(self, timeout: float = 120.0) -> None:
-        """Initialize a closed-over deadline policy without desktop dependencies."""
-        self.timeout = timeout
+    def __init__(self) -> None:
+        """Initialize open admission without a worker-completion deadline.
+
+        Returns:
+            None: Starts with new work permitted.
+        """
         self.active = False
-        self.deadline = 0.0
 
-    def begin(self, now: float) -> None:
-        """Close admission before any worker receives a stop request."""
+    def begin(self) -> None:
+        """Pause new work while the verified installer is handed off.
+
+        Returns:
+            None: Marks helper preparation active.
+        """
         self.active = True
-        self.deadline = now + self.timeout
-
-    def poll(self, now: float, blockers: Iterable[str]) -> str:
-        """Return waiting/ready/timeout; an expired drain reopens admission."""
-        if not self.active:
-            return "idle"
-        if not list(blockers):
-            return "ready"
-        if now >= self.deadline:
-            self.cancel()
-            return "timeout"
-        return "waiting"
 
     def cancel(self) -> None:
-        """Refuse installation without closing the usable application."""
+        """Restore admission when helper preparation fails.
+
+        Returns:
+            None: Leaves the application available for another attempt.
+        """
         self.active = False
-        self.deadline = 0.0
 
 
 def read_update_state(state_path: Path) -> dict[str, object]:
@@ -312,7 +314,10 @@ class UpdateController:
             return
         if self.installer is not None:
             if getattr(sys, "frozen", False):
-                self.status.set("Installer verified. Installation stops active work and closes the app after completion.")
+                self.status.set(
+                    "Installer verified.\n"
+                    "Update closes, installs and restarts the app."
+                )
                 self.action.configure(state="normal", text="Update", command=self.install)
             else:
                 self.status.set("Installer verified. Open installer starts manual installation; this source application remains open.")
@@ -331,7 +336,7 @@ class UpdateController:
         if getattr(sys, "frozen", False):
             return (
                 f"Version {self.asset.version} is available (installed: {self.version}). "
-                "Update downloads and verifies Setup, safely stops work, closes this app "
+                "Update downloads and verifies Setup, closes this app "
                 "and restarts it after installation. Windows may request administrator approval."
             )
         return (
@@ -464,26 +469,11 @@ class UpdateController:
                 raise
         self.run_worker(work)
 
-    def blockers(self) -> list[str]:
-        """Include pending callbacks, all work threads and thumbnail child processes."""
-        result = []
-        for attr in ("connection_test_running", "api_key_revoke_running", "semantic_ai_install_running"):
-            if getattr(self.app, attr, False):
-                result.append(attr)
-        ignored = (threading.main_thread(), getattr(self.app, "tray_thread", None), self.worker)
-        for thread in threading.enumerate():
-            if thread not in ignored and thread.is_alive():
-                result.append(thread.name)
-        for process in multiprocessing.active_children():
-            if process.is_alive():
-                result.append(process.name)
-        return result
-
     def install(self) -> None:
-        """Close admission, including UTC writes, before draining active work.
+        """Hand off the installer without waiting for application workers.
 
         Returns:
-            None: Starts guarded drain or opens a source-mode installer.
+            None: Prepares the helper or opens a source-mode installer.
         """
         if self.busy or self.installer is None or self.asset is None or self.gate.active:
             return
@@ -494,34 +484,10 @@ class UpdateController:
             self.set_status(str(exc) + " Open the downloaded installer manually to install this application.")
             self.app.open_local_path(self.installer)
             return
-        self.gate.begin(time.monotonic())
+        self.gate.begin()
         self.action.configure(state="disabled")
-        self.set_status("Preparing installation: stopping new work and waiting for active operations...")
-        for attr in (
-            "flights", "utc_sync", "preflight_worker", "worker",
-            "manual_worker", "ai_worker"
-        ):
-            worker = getattr(self.app, attr, None)
-            if worker is not None and worker.is_alive():
-                worker.stop()
-        self.app.ai_worker_stop_requested = True
-        self.root.after(100, self.drain)
-
-    def drain(self) -> None:
-        """Poll instead of joining on Tk; timeout leaves the application open."""
-        if not self.gate.active or self.app.exiting:
-            return
-        blockers = self.blockers()
-        state = self.gate.poll(time.monotonic(), blockers)
-        if state == "waiting":
-            self.status.set("Waiting for active work to finish: " + ", ".join(blockers))
-            self.root.after(200, self.drain)
-        elif state == "timeout":
-            self.set_status("Installation refused: active operations did not finish in time. The app remains open; retry when work has stopped.")
-            self.action.configure(state="normal")
-        elif state == "ready":
-            self.set_status("Preparing the external update helper...")
-            self.run_worker(self.handoff)
+        self.set_status("Preparing the external update helper...")
+        self.run_worker(self.handoff)
 
     def handoff(self) -> None:
         """Require the external helper's readiness acknowledgment before app exit."""
@@ -584,7 +550,11 @@ class UpdateController:
                     continue
                 self.installer = value
                 if getattr(sys, "frozen", False):
-                    self.set_status("Installer verified. Installation stops active work, waits for completion, and closes the app. Windows may request administrator approval.")
+                    self.set_status(
+                        "Installer verified.\n"
+                        "Update closes, installs and restarts the app.\n"
+                        "Windows may request administrator approval."
+                    )
                     self.auto_install = True
                 else:
                     self.set_status("Installer verified. Open installer starts manual installation; this source application and source folder remain open and intact.")
@@ -626,8 +596,6 @@ class UpdateController:
                     self.auto_install = False
                     self.install()
             elif kind == "handoff_ready":
-                self.app.exiting = True
-                self.app.stop_tray_icon()
-                self.root.destroy()
+                self.app.close(for_update=True)
                 return
         self.root.after(200, self.poll)

@@ -1,5 +1,18 @@
 # Compatibility lifecycle and retirement register
 
+## WinApp update process exit
+
+The updater permanently retains verified downloads, installed-path validation,
+helper readiness and post-install version verification. Once the helper is
+ready, the common application close owner terminates app-owned multiprocessing
+children and exits the whole uploader without waiting for individual threads.
+Persisted checkpoints remain recoverable; unsaved/unflushed work is not promised
+to survive. Ordinary Exit retains its graceful behavior. Older installed
+clients with a worker-drain deadlock require manual installation after closing
+the old app. User-reported evidence identified the always-running GamePresence
+observer as a blocker; hosted controller/shutdown tests cover immediate handoff
+and helper failure. Installed Windows acceptance remains a separate check.
+
 ## Consistency evidence and imported disk names
 
 Consistency inspection permanently retains explicit unknown/manual findings for

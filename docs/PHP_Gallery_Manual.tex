@@ -1867,18 +1867,20 @@ same-release \filepath{winapp-update.json}. Missing or~conflicting integrity
 data refuses the~update; identical installers in~several CMS releases
 are~accepted. Gallery credentials are~never sent to~GitHub.
 
-Choose \ui{Update} to~download with progress and~optional cancellation, verify
-the~installer, stop new work and~wait up~to~120 seconds for~background tasks
-to~finish safely. An~unsuccessful drain refuses installation and~keeps
-the~uploader available. An~external helper rechecks the~download and~requests
-Windows UAC approval. Self-update never force-closes workers; normal manually
-launched installers retain their existing shutdown policy. Actual installation
-progress comes through a~local session-specific channel. After success,
-the~helper restarts the~uploader as~the~original user with saved settings
-and~jobs. There is~no~automatic rollback. Native Python/source runs offer
-the~verified installer for~manual launch. If~Windows reports that a~restart
-is~required, restart Windows before reopening the~uploader; cancelling UAC
-reopens the~existing installation.
+Choose \ui{Update} to~download with progress and~optional cancellation and
+verify the~installer. Once the~external helper acknowledges readiness,
+the~application terminates its~own child workers and~exits the~whole uploader
+process immediately. It~does not~wait for~background threads or~ask to~remain
+in~the~tray. Helper preparation failure leaves the~application open.
+Already persisted settings, credentials and~job checkpoints remain available;
+unsaved settings and~unflushed work are~not~saved by~this immediate exit.
+The~helper rechecks the~installer, waits for~the~installed executable to~exit,
+requests Windows UAC approval, installs and~verifies the~new version, then
+restarts the~uploader as~the~original user. Installation progress remains visible.
+There is~no~automatic rollback. Python/source runs offer the~verified installer
+for~manual launch. A~required Windows reboot remains explicit; cancelling UAC
+reopens the~existing installation. Older clients blocked waiting for~workers
+need a~manual installer launch after fully closing the~old application.
 
 
 \subsection{Flight recording and reports}

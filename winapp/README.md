@@ -597,18 +597,24 @@ is not an independent publisher code-signing guarantee. Older release assets
 without digest metadata may therefore require a manual installer download.
 
 The nonmodal notice offers **Update** and **Later**. Update downloads with
-actual
-byte progress and **Cancel download**, verifies the installer, then safely stops
-new work and waits for uploads, thumbnail workers, preflight, AI analysis,
-connection tests, key revocation and dependency repair to finish. Tk stays
-responsive. A drain timeout refuses installation and leaves the app usable.
-Update shutdown does not save unsaved Settings fields. Import workers preserve
-recoverable job state through their ordinary stop path; saved credentials,
-settings and job data remain under `%APPDATA%\PHPGalleryUploader`.
+actual byte progress and **Cancel download**, verifies the installer, and
+prepares the external helper. Only after helper readiness does the application
+terminate its own multiprocessing children and exit the entire uploader
+process, including all background threads. There is no worker enumeration,
+drain deadline or keep-running prompt in this update path. A helper preparation
+failure leaves the application open.
+
+Update shutdown does not save unsaved Settings fields or finish pending work.
+Already persisted settings, credentials, import checkpoints and flight artifacts
+remain under `%APPDATA%\PHPGalleryUploader` for existing recovery workflows;
+unflushed work is not promised to survive immediate exit. Older installed
+clients stuck waiting for background work require a manual installer launch
+after fully closing the old uploader; a downloaded installer cannot change the
+code already running in that client.
 
 For the installed standalone EXE, a copied external helper acknowledges
 readiness
-before the application completely exits, including its tray icon. The helper
+before the application completely exits. The helper
 waits for both PyInstaller processes from that installation to exit, invokes
 Setup with the existing installation directory, and verifies the installed
 version before restarting the app. Windows may request administrator approval.
@@ -675,8 +681,9 @@ in `%APPDATA%\PHPGalleryUploader` survive upgrades and uninstalling.
 
 Directly launched Setup closes uploader processes whose executable path matches
 its selected installation directory, including the tray app and PyInstaller's
-onefile parent/child processes. Self-update never force-closes these processes:
-it waits for safe worker drain and refuses replacement while an exact-path
+onefile parent/child processes. Self-update exits its own process and terminates
+its multiprocessing children after helper readiness. The helper refuses
+replacement while an exact-path
 process remains. Setup checks the fresh process list for up to three seconds
 and refuses installation if shutdown cannot be verified. Copies running from
 another directory are untouched. These checks also apply to silent installation.
@@ -1149,7 +1156,8 @@ When watching is active it starts a separate SimConnect worker for **both MSFS
 2020 and MSFS 2024**. Toggling it takes effect immediately; stopping the watcher
 from the window or tray stops UTC work but remembers the selection. Closing to
 the tray keeps watching/synchronization active. Use the tray's exit action for a
-complete shutdown. Installer drain cancels and waits for UTC work.
+complete shutdown. Update shutdown exits the UTC worker with the application
+process.
 
 The worker checks every **10 seconds**, comparing `ABSOLUTE TIME` (seconds since
 0001-01-01 UTC) with Windows UTC, including the date. Differences of **60
@@ -1443,7 +1451,7 @@ This keeps versioned persistence, ZIP safety, media capability detection, job
 models, and diagnostic redaction independent from Tkinter. `self_update.py` owns
 release discovery, verified downloads and download-session storage;
 `update_helper.py` owns external installer handoff; `update_ui.py` coordinates
-the nonmodal notice and safe worker drain.
+the nonmodal notice and immediate process-exit handoff.
 
 ## Verification
 

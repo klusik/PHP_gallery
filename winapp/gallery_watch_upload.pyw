@@ -7865,14 +7865,33 @@ class WatcherApp:
             return
         self.flights.begin(True)
 
-    def close(self) -> None:
+    def close(self, *, for_update: bool = False) -> None:
         """Coordinate shutdown while preserving update and import state.
 
+        Args:
+            for_update (bool): Immediately terminate this app and its child
+                processes after the external update helper acknowledges readiness.
         Returns:
             None: Retains the update indicator when shutdown is deferred or
                 canceled, and clears it only before confirmed app teardown.
                 Confirmed teardown also stops the simulator-presence observer.
+                Update shutdown exits the process without waiting for threads;
+                only already persisted job state is available after restart.
         """
+        if for_update:
+            self.exiting = True
+            try:
+                # Children belong to this app; the standalone update helper is
+                # a separate subprocess and must survive this process exit.
+                for process in multiprocessing.active_children():
+                    try:
+                        process.terminate()
+                    except (OSError, ValueError):
+                        pass
+            finally:
+                # Exit all threads together, including optional observers and
+                # non-daemon work. Do not enter Python's thread/atexit joins.
+                os._exit(0)
         self.flights.stop()
         self.utc_sync.stop()
         if getattr(self, "updates", None) is not None and self.updates.request_close():
