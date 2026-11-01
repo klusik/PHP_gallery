@@ -24,6 +24,9 @@ use function Gallery\Services\gallery_consistency_step;
 use function Gallery\Services\gallery_consistency_prepare_repairs;
 use function Gallery\Views\view_render_gallery_consistency_page;
 use function Gallery\Views\view_render_gallery_consistency_results;
+use function Gallery\Services\gallery_consistency_source_names;
+use const Gallery\Views\GALLERY_CONSISTENCY_RESULT_PAGE;
+use function Gallery\Views\view_gallery_consistency_findings;
 
 /**
  * Render the explicit consistency page or advance one session-owned job.
@@ -217,7 +220,9 @@ function cms_admin_gallery_consistency_payload(array $job, int $page): array
         'html' => $job['status'] !== 'running'
             && $job['status'] !== 'executing'
             && $job['status'] !== 'browser'
-            ? view_render_gallery_consistency_results($job, $page) : '',
+            ? view_render_gallery_consistency_results(
+                $job, $page, cms_admin_gallery_consistency_source_names($job, $page),
+            ) : '',
     ];
 }
 
@@ -230,4 +235,28 @@ function cms_admin_gallery_consistency_browser_config(): array
 {
     \Gallery\Core\cms_runtime_kernel()->load('domain-admin-dashboard');
     return \Gallery\Services\browser_thumbnail_rebuild_browser_config();
+}
+
+/**
+ * Resolve bounded visible photo examples without rescanning photos or disk.
+ * @param \Gallery\Services\ConsistencyJob $job Captured report finding groups.
+ * @param int $page Requested zero-based page, clamped like the result view.
+ * @return array<int,string> Catalog filenames for known IDs still in the same
+ *     gallery; missing/moved rows retain the view's explicit identity fallback.
+ */
+function cms_admin_gallery_consistency_source_names(array $job, int $page): array
+{
+    $pages = max(1, (int) ceil(count($job['groups']) / GALLERY_CONSISTENCY_RESULT_PAGE));
+    $page = max(0, min($page, $pages - 1));
+    $ids = [];
+    foreach (array_slice($job['groups'], $page * GALLERY_CONSISTENCY_RESULT_PAGE,
+        GALLERY_CONSISTENCY_RESULT_PAGE, true) as $group
+    ) {
+        foreach (view_gallery_consistency_findings($group['issues']) as $finding) {
+            foreach ($finding['samples'] as $sample) {
+                if ($sample['id'] > 0) $ids[$sample['id']] = $group['id'];
+            }
+        }
+    }
+    return gallery_consistency_source_names($ids);
 }

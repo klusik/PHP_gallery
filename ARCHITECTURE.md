@@ -18,6 +18,12 @@ under a time admission budget, while checksum/pixel decoding is opt-in.
 Proposal presentation shares the actual repair name policy and retains slashes
 as hierarchy, showing both final segment and complete paths. Older completed
 reports reconstruct proposals from their captured catalog without a new scan.
+The result view groups reasons and known source variants, retaining exact counts
+and manual ownership boundaries. The controller passes bounded displayed IDs
+through the consistency service, which validates gallery membership through the
+existing image model; names-only receipts perform no photo lookup. Contextual
+help explains before/reason/after without changing the captured findings,
+exported evidence or server-owned repair selection.
 Successful repair queues remove their confirmed findings and retain the same
 report for another subset. Remaining proposals use a refreshed catalog snapshot,
 with no photo rescan. Batch admission advances the sequence; old delayed repair

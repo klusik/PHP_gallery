@@ -104,7 +104,7 @@ import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperat
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
-import { setupGalleryConsistency } from './gallery-modules/gallery-consistency.js?v=20261101-consistency-remaining-v7';
+import { setupGalleryConsistency } from './gallery-modules/gallery-consistency.js?v=20261101-consistency-findings-v8';
 import { setupAdminCron } from './gallery-modules/admin-cron.js?v=20261023-cron-v6';
 import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261024-cache-continuation-v6';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';

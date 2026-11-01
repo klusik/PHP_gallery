@@ -2043,4 +2043,155 @@ return [
     'admin.consistency.remaining_clear' =>
         'In diesem Bericht verbleiben keine Befunde. Alle ausgewählten '
         . 'Reparaturen wurden bestätigt.',
+    'admin.consistency.brief_symlink' =>
+        'Symbolischer Link',
+    'admin.consistency.brief_directory_missing' =>
+        'Ordner fehlt',
+    'admin.consistency.brief_directory_unreadable' =>
+        'Ordner nicht lesbar',
+    'admin.consistency.brief_name_mismatch' =>
+        'Name oder Ordner abweichend',
+    'admin.consistency.brief_parent_mismatch' =>
+        'Übergeordnete Galerie abweichend',
+    'admin.consistency.brief_parent_missing' =>
+        'Übergeordnete Galerie fehlt',
+    'admin.consistency.brief_sidecar_invalid' =>
+        'Titeldatei nicht lesbar',
+    'admin.consistency.brief_sidecar_mismatch' =>
+        'Titeldatei abweichend',
+    'admin.consistency.brief_unsafe_path' =>
+        'Pfad nicht verifiziert',
+    'admin.consistency.brief_image_parent_missing' =>
+        'Galerieeintrag fehlt',
+    'admin.consistency.brief_original_missing' =>
+        'Original fehlt',
+    'admin.consistency.brief_original_unreadable' =>
+        'Original nicht lesbar',
+    'admin.consistency.brief_source_changed' =>
+        'Original geändert',
+    'admin.consistency.brief_content_unchecked' =>
+        'Inhalt nicht verifiziert',
+    'admin.consistency.brief_metadata_duplicate' =>
+        'Doppelte Vorschaueinträge',
+    'admin.consistency.brief_metadata_extra' =>
+        'Nicht benötigte Vorschaueinträge',
+    'admin.consistency.brief_metadata_unavailable' =>
+        'Vorschauspeicher nicht verfügbar',
+    'admin.consistency.brief_metadata_mismatch' =>
+        'Vorschaueinträge abweichend',
+    'admin.consistency.brief_metadata_orphans' =>
+        'Einträge ohne Original',
+    'admin.consistency.brief_thumbnail_missing' =>
+        'Vorschaubilder fehlen',
+    'admin.consistency.brief_thumbnail_stale' =>
+        'Veraltete Vorschaubilder',
+    'admin.consistency.brief_thumbnail_invalid' =>
+        'Ungültige Vorschaubilder',
+    'admin.consistency.brief_thumbnail_decode_failed' =>
+        'Nicht lesbare Vorschaubilder',
+    'admin.consistency.brief_content_suspect' =>
+        'Inhalt prüfen',
+    'admin.consistency.brief_display_master_missing' =>
+        'DNG-Vorschau fehlt',
+    'admin.consistency.brief_identity_unverified' =>
+        'Zuordnung nicht verifiziert',
+    'admin.consistency.brief_derivative_unowned' =>
+        'Nicht zugeordnete Vorschaubilder',
+    'admin.consistency.brief_original_unindexed' =>
+        'Foto nicht erfasst',
+    'admin.consistency.brief_directory_unindexed' =>
+        'Ordner nicht erfasst',
+    'admin.consistency.brief_pending_move' =>
+        'Verschieben unvollständig',
+    'admin.consistency.brief_move_state_unknown' =>
+        'Verschiebestatus unbekannt',
+    'admin.consistency.brief_source_collision' =>
+        'Widersprüchliche Originaleinträge',
+    'admin.consistency.brief_source_changed_during_check' =>
+        'Während der Analyse geändert',
+    'admin.consistency.why' =>
+        'Warum prüfen',
+    'admin.consistency.proposed_changes' =>
+        'Vorgeschlagene Änderungen',
+    'admin.consistency.findings' =>
+        'Befunde',
+    'admin.consistency.photos' =>
+        'Fotos',
+    'admin.consistency.photo' =>
+        'Foto',
+    'admin.consistency.examples' =>
+        'Fotos / Dateien',
+    'admin.consistency.technical' =>
+        'Technische Details',
+    'admin.consistency.unassigned_thumbnail' =>
+        'Vorschaudateien ohne verifiziertes Foto',
+    'admin.consistency.after_manual' =>
+        'Unverändert. Manuell prüfen; Dateien werden nicht automatisch '
+        . 'gelöscht.',
+    'admin.consistency.short_action_gallery' =>
+        'Vorschlag anwenden',
+    'admin.consistency.short_action_image' =>
+        'Im Browser erzeugen',
+    'admin.consistency.short_action_metadata' =>
+        'Einträge aktualisieren',
+    'admin.consistency.short_action_source' =>
+        'Vom Datenträger aktualisieren',
+    'admin.consistency.short_action_import' =>
+        'Vom Datenträger importieren',
+    'admin.consistency.short_action_scan' =>
+        'Foto registrieren',
+    'admin.consistency.why_catalog' =>
+        'Die physische Ordnerstruktur ist maßgeblich. Namen, übergeordnete '
+        . 'Verknüpfungen und Titeldatei müssen dazu passen. Der Vorschlag '
+        . 'zeigt konkrete Änderungen; Schrägstriche erhalten die '
+        . 'Verschachtelung.',
+    'admin.consistency.why_thumbnail' =>
+        'Dies sind erzeugte Vorschauen, keine Originalfotos. Die aktuellen '
+        . 'Einstellungen benötigen die aufgeführten Größen und Formate. Die '
+        . 'Reparatur erzeugt betroffene Varianten im Browser und erhält '
+        . 'Originale sowie andere gültige Vorschauen.',
+    'admin.consistency.why_metadata_extra' =>
+        'Die aktuellen Einstellungen benötigen diese Größe oder dieses '
+        . 'Format nicht mehr. Die Einträge können von früheren Einstellungen '
+        . 'stammen; das allein beweist keine beschädigte Vorschau. '
+        . 'Automatisches Löschen wird nicht vorgeschlagen.',
+    'admin.consistency.why_metadata' =>
+        'Die Datenbank beschreibt Vorschaudateien und ihre Quelle. Fehlende '
+        . 'oder abweichende Einträge können eine gültige Datei unbenutzbar '
+        . 'machen. Eine angebotene Metadatenreparatur liest vorhandene '
+        . 'Dateien, ohne deren Bild neu zu kodieren.',
+    'admin.consistency.why_schema' =>
+        'Die Speicherstruktur für Vorschaueinträge fehlt oder konnte nicht '
+        . 'verifiziert werden. Prüfen Sie zuerst Installation und Datenbank. '
+        . 'Fehlender Speicher gilt nicht als Schreibberechtigung.',
+    'admin.consistency.why_unowned' =>
+        'Eine Vorschaudatei existiert, ihr aktuelles Original lässt sich '
+        . 'aber nicht sicher bestimmen. Es kann sich um einen älteren Cache '
+        . 'handeln. Ähnliche Dateinamen beweisen keine Zuordnung; die '
+        . 'Reparatur ordnet sie weder neu zu noch löscht sie.',
+    'admin.consistency.why_unindexed' =>
+        'Das Foto oder der Ordner existiert auf dem Datenträger, fehlt aber '
+        . 'im Galeriekatalog. Die Registrierung übernimmt es unter den '
+        . 'bestehenden Zugriffsregeln. Das Original wird nicht gelöscht; '
+        . 'Ordnernormalisierung wird vor dem Schreiben geprüft.',
+    'admin.consistency.why_source' =>
+        'Das Original auf dem Datenträger weicht von den gespeicherten '
+        . 'Angaben ab. Die Reparatur liest die Quelle erneut und aktualisiert '
+        . 'abgeleitete Daten. Das Original bleibt maßgeblich; nötige '
+        . 'Vorschaubilder entstehen im Browser.',
+    'admin.consistency.why_content' =>
+        'Der Inhaltsvergleich war nicht verfügbar oder meldet nur eine '
+        . 'visuelle Ähnlichkeitswarnung. Er beweist keine Pixelzuordnung. '
+        . 'Prüfen Sie Original und Vorschau manuell; dies erlaubt keinen '
+        . 'automatischen Ersatz.',
+    'admin.consistency.why_pending' =>
+        'Eine frühere Verschiebung hat keinen verifizierten Endzustand. '
+        . 'Lösen Sie zuerst deren Wiederherstellungsablauf. Dieser Bericht '
+        . 'wiederholt keine unsichere Verschiebung.',
+    'admin.consistency.why_manual' =>
+        'Verfügbarkeit, Zugriff oder eindeutige Zuordnung sind nicht '
+        . 'verifiziert. Prüfen Sie Dateien und Katalog vor Änderungen. Der '
+        . 'Befund bleibt zur manuellen Prüfung erhalten; Dateien werden nicht '
+        . 'gelöscht.',
+    'admin.consistency.finding_help' => 'Erklärung des Befunds',
 ];

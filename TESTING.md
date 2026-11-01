@@ -7974,3 +7974,13 @@ leave the app open; only acknowledged readiness calls the common close owner
 with update intent. Shutdown tests require termination of all app-owned child
 processes and whole-process exit without thread joins, a tray prompt or updater
 recursion, including an already-exited child. Normal Exit tests remain intact.
+
+Consistency presentation fixtures render the real PHP result view, require
+per-photo variant grouping, exact category totals, bounded examples, escaped
+catalog filenames and hashed evidence only in technical disclosures. Unowned
+files never gain a guessed source. Controller name reads are batched for the
+same visible sample IDs and absent for names-only reports. The existing Node
+fixture exercises delegated help on focus/hover, pinning, Escape/focus return,
+outside dismissal and restoration before result replacement. Live IAB review
+uses 6.1-terra on desktop/narrow views with the production CSS cascade and a
+read-only copy of report findings; it never starts repairs for visual testing.

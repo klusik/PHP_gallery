@@ -12,6 +12,15 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /** Escape the actual result view without the full HTTP bootstrap.
+     * @param string|null $value Safe or hostile fixture text.
+     * @return string HTML-safe text, including escaped attribute quotes.
+     */
+    function e(?string $value): string
+    {
+        return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
+    }
+
     /** Read the isolated active repair checkpoint without a real session.
      * @param string $key Expected consistency session key.
      * @return \Gallery\Services\ConsistencyJob|null Fixture checkpoint.
@@ -52,6 +61,21 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Models {
+    /** Resolve known catalog IDs at the bounded presentation-query boundary.
+     * @param array<int,int> $imageIds Sampled IDs, never derivative names.
+     * @return array<int,array{id:int,gallery_id:int,filename:string,
+     *     relative_path:string,file_size:int}> Matching fixture catalog rows.
+     */
+    function image_model_rows_by_ids(array $imageIds): array
+    {
+        $GLOBALS['consistency_name_lookups'][] = $imageIds;
+        $rows = [];
+        foreach ($GLOBALS['consistency_images'] as $image) {
+            if (in_array($image['id'], $imageIds, true)) $rows[$image['id']] = $image;
+        }
+        return $rows;
+    }
+
     /**
      * Supply the existing journal model at the deferred-owner adapter boundary.
      * @return list<array{operation_id:string}> No pending fixture operations.
@@ -118,6 +142,19 @@ namespace Gallery\Models {
 }
 
 namespace Gallery\Services {
+    /** Read checked-in labels for the real view rather than duplicating prose.
+     * @param string $key Requested UI catalog identity.
+     * @param string|null $fallback Explicit missing-label fallback.
+     * @return string English catalog text or the fallback/key.
+     */
+    function t(string $key, ?string $fallback = null): string
+    {
+        $GLOBALS['consistency_view_labels'] ??= json_decode(file_get_contents(
+            dirname(__DIR__) . '/app/lang/en.json',
+        ), true);
+        return $GLOBALS['consistency_view_labels'][$key] ?? $fallback ?? $key;
+    }
+
     /** Supply one fixture source through the existing lookup seam.
      * @param int $id Source catalog identity.
      * @param bool $fresh Whether a current row was requested.
@@ -385,6 +422,8 @@ namespace {
     require_once dirname(__DIR__) . '/app/services/gallery_consistency.php';
     require_once dirname(__DIR__) . '/app/services/browser_thumbnail_rebuild.php';
     require_once dirname(__DIR__) . '/app/controllers/shared_layout.php';
+    require_once dirname(__DIR__) . '/app/views/gallery_consistency.php';
+    require_once dirname(__DIR__) . '/app/controllers/admin_gallery_consistency.php';
 
     /**
      * Require an observable consistency invariant.
@@ -426,8 +465,84 @@ namespace {
     );
     $browserFiles = [];
     try {
+        $GLOBALS['consistency_name_lookups'] = [];
+        $displayIssues = [];
+        foreach (['300:webp', '600:webp', '960:webp'] as $variant) {
+            $displayIssues[] = ['code'=>'thumbnail_missing',
+                'path'=>'long_hash_thumbnail_' . $variant . '.webp',
+                'image_id'=>1,'repair'=>'image','details'=>$variant];
+        }
+        $displayIssues[] = ['code'=>'derivative_unowned',
+            'path'=>'same_prefix_but_unverified_thumb600.webp',
+            'image_id'=>0,'repair'=>'','details'=>''];
+        $displayIssues[] = ['code'=>'original_unindexed',
+            'path'=>'new <photo>.jpg','image_id'=>0,'repair'=>'scan','details'=>''];
+        $display = ['mode'=>'report','results'=>[], 'groups'=>['g1'=>[
+            'id'=>1,'title'=>'Fixture <gallery>','path'=>'disk-name',
+            'issues'=>$displayIssues,
+        ]]];
+        $beforeDisplay = serialize($display);
+        $grouped = \Gallery\Views\view_gallery_consistency_findings($displayIssues);
+        consistency_check(count($grouped) === 3 && $grouped[0]['count'] === 3
+            && count($grouped[0]['photos']) === 1
+            && count($grouped[0]['samples']) === 1
+            && count(reset($grouped[0]['samples'])['variants']) === 3,
+            'Variants must share one known photo example with exact counts.');
+        consistency_check($grouped[1]['photos'] === []
+            && $grouped[1]['repair'] === ''
+            && reset($grouped[1]['samples'])['id'] === 0,
+            'Unverified derivatives must never acquire an inferred original.');
+        $displayNames = \Gallery\Controllers\cms_admin_gallery_consistency_source_names(
+            $display, 0,
+        );
+        consistency_check($displayNames === [1=>'source.png']
+            && $GLOBALS['consistency_name_lookups'] === [[1]],
+            'Presentation must batch catalog names without scanning photos.');
+        $movedDisplay = $display;
+        $movedDisplay['groups']['g1']['id'] = 2;
+        consistency_check(\Gallery\Controllers\cms_admin_gallery_consistency_source_names(
+            $movedDisplay, 0,
+        ) === [], 'A catalog photo moved to another gallery must not gain a guessed name.');
+        $displayHtml = \Gallery\Views\view_render_gallery_consistency_results(
+            $display, 0, [1=>'Original <name>.png'],
+        );
+        consistency_check(str_contains($displayHtml, 'Original &lt;name&gt;.png')
+            && !str_contains($displayHtml, '<photo>')
+            && str_contains($displayHtml, 'Why it matters'),
+            'Rendered examples must escape source names and include contextual help.');
+        $document = new DOMDocument();
+        // DOMDocument uses HTML4; suppress its expected unknown-section notice.
+        $document->loadHTML('<?xml encoding="utf-8" ?>' . $displayHtml,
+            LIBXML_NOERROR | LIBXML_NOWARNING);
+        $xpath = new DOMXPath($document);
+        consistency_check($xpath->query('//section[@class="consistency-finding"]')->length === 3
+            && $xpath->query('//details[@class="consistency-technical"]//li[contains(., "long_hash_thumbnail")]')->length === 3,
+            'Technical variant identities belong only to nested evidence details.');
+        consistency_check(serialize($display) === $beforeDisplay,
+            'Formatting must not change findings, ownership or repair plans.');
+        $many = array_fill(0, \Gallery\Views\GALLERY_CONSISTENCY_FINDING_SAMPLES + 1,
+            $displayIssues[0]);
+        // One more distinct source than the display boundary must remain counted.
+        foreach ($many as $index => &$issue) $issue['image_id'] = $index + 1;
+        unset($issue);
+        $bounded = \Gallery\Views\view_gallery_consistency_findings($many)[0];
+        consistency_check(count($bounded['samples'])
+            === \Gallery\Views\GALLERY_CONSISTENCY_FINDING_SAMPLES
+            && $bounded['count'] === count($many),
+            'Display sampling must preserve totals beyond its bounded examples.');
+        $boundedDisplay = $display;
+        $boundedDisplay['groups']['g1']['issues'] = $many;
+        \Gallery\Controllers\cms_admin_gallery_consistency_source_names($boundedDisplay, 0);
+        consistency_check(count(end($GLOBALS['consistency_name_lookups']))
+            === \Gallery\Views\GALLERY_CONSISTENCY_FINDING_SAMPLES,
+            'Photo name lookup must obey the same display sample bound.');
         $names = \Gallery\Services\gallery_consistency_start('names');
         \Gallery\Services\gallery_consistency_step($names);
+        $lookupsBefore = $GLOBALS['consistency_name_lookups'];
+        consistency_check(\Gallery\Controllers\cms_admin_gallery_consistency_source_names(
+            $names, 0,
+        ) === [] && $GLOBALS['consistency_name_lookups'] === $lookupsBefore,
+            'Names-only report rendering must not query the photo catalog.');
         consistency_check($names['status'] === 'complete'
             && $names['total'] === 1 && $names['expected'] === []
             && $names['disk_checked'] === 0

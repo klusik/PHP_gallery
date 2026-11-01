@@ -40,6 +40,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use RuntimeException;
+use function Gallery\Models\image_model_rows_by_ids;
 use function Gallery\Models\gallery_consistency_model_galleries;
 use function Gallery\Models\gallery_consistency_model_images;
 use function Gallery\Models\gallery_consistency_model_snapshot;
@@ -298,4 +299,24 @@ function gallery_consistency_add(
         'code' => $code, 'path' => $file, 'image_id' => $imageId,
         'repair' => $repair, 'details' => $details,
     ];
+}
+
+/**
+ * Resolve catalog filenames only for sources still in their expected gallery.
+ * @param array<int,int> $galleryIdsByImageId Bounded sampled source IDs mapped
+ *     to their report gallery ID; no filename or thumbnail-name inference.
+ * @return array<int,string> Known source filenames keyed by image ID; missing
+ *     or moved catalog rows are omitted without reading original files.
+ */
+function gallery_consistency_source_names(array $galleryIdsByImageId): array
+{
+    if ($galleryIdsByImageId === []) return [];
+    $names = [];
+    $images = image_model_rows_by_ids(array_keys($galleryIdsByImageId));
+    foreach ($images as $id => $image) {
+        if ((int) $image['gallery_id'] === $galleryIdsByImageId[$id]) {
+            $names[$id] = basename((string) $image['filename']);
+        }
+    }
+    return $names;
 }

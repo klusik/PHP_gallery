@@ -43,6 +43,22 @@ scan or changed findings. Slashes retain their hierarchy; normalization
 applies per segment. A raw readable folder can match the visible title but
 still need sanitization, for example `Holiday Photos` to `holiday-photos`.
 
+Findings are summarized by reason, with exact finding/photo counts and one
+short repair action or manual-review status. Open Photos / files for examples:
+variants of one known photo share its catalog filename and size/format list.
+Technical cache filenames, including path hashes, stay inside Technical details.
+Unassigned derivatives remain a separate manual category; similar names never
+establish a source owner. Records for a size/format outside the current policy
+may be historical leftovers, not damaged pixels, and have no automatic deletion.
+
+Each question mark explains Now, Why it matters and After repair. Hover or focus
+opens the anchored help; activation pins it, Escape returns focus, and outside
+click dismisses it. Native disclosures remain available without enhancement.
+The controller resolves only the bounded displayed photo IDs from the catalog,
+checking that each still belongs to the report gallery. Missing identities use
+an explicit photo ID. Names-only reports perform no photo lookup. No original
+files are opened for this presentation and no repair/export findings change.
+
 Across the file and deep scopes the report checks:
 
 - Gallery directory existence/readability, the sanitized primary title against
@@ -81,7 +97,8 @@ under its existing limits. Receipts confirm actual completed records. Physical
 traversal has an unknown total, so that phase uses an indeterminate bar plus
 the actual inspected-entry count. No timer estimates completion. Only affected
 galleries/folders appear, in compact expandable rows. Results are paged by 40
-galleries; each disclosure samples 12 findings. The authenticated JSON export
+galleries; each disclosure samples at most 12 photo/file examples, shared
+across finding categories. The authenticated JSON export
 retains all findings and excludes raw access-bearing catalog rows. Selection
 survives result pagination.
 

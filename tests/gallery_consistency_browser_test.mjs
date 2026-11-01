@@ -127,6 +127,7 @@ const renderStart = source.indexOf('        function renderReceipt(receipt)');
 const renderEnd = source.indexOf('\n        /**', renderStart);
 assert.ok(renderStart >= 0 && renderEnd > renderStart);
 const inputs = ['g1', 'g2'].map(key => ({dataset:{consistencyGroup:key},checked:true}));
+const closeSnapshots = [];
 const renderer = vm.createContext({
     state:{mode:'repair',status:'running',sequence:9},
     selected:new Set(['g1']), proposalMoves:[],
@@ -135,7 +136,7 @@ const renderer = vm.createContext({
     reportScope:{}, browserNotice:{}, browserProgress:{}, progress:{},
     bar:{}, count:{}, status:{}, repairToolbar:{}, exportLink:{}, resume:{},
     results:{innerHTML:'old rows',querySelectorAll:()=>inputs},
-    updateProposals:()=>{},
+    updateProposals:()=>{}, closeHelp:()=>closeSnapshots.push(renderer.results.innerHTML),
 });
 vm.runInContext(source.slice(renderStart, renderEnd), renderer);
 const completed = {mode:'repair',status:'complete',sequence:10,token:'same-report',
@@ -154,4 +155,85 @@ renderer.renderReceipt({...completed,sequence:12,repairable_groups:0,html:'no re
 assert.equal(renderer.repairToolbar.hidden, true);
 assert.equal(renderer.results.innerHTML, 'no remaining rows');
 assert.equal(renderer.selected.size, 0);
+assert.deepEqual(closeSnapshots,['old rows','remaining gallery','another result page'],
+    'Each result replacement must restore portalled help before removing its trigger.');
 console.log('Consistency browser reconciliation, remaining selection and exact variants: PASS');
+
+// Exercise the production delegated help owner with narrow viewport geometry.
+const helpStart = source.indexOf('function setupConsistencyHelp(');
+const helpEnd = source.indexOf('/**\n * Reconcile one pending browser task', helpStart);
+assert.ok(helpStart >= 0 && helpEnd > helpStart);
+const handlers = () => ({events:new Map(),addEventListener:(kind,fn)=>{}});
+const rootHelp = handlers();
+const documentHelp = handlers();
+const windowHelp = handlers();
+for (const owner of [rootHelp, documentHelp, windowHelp]) {
+    owner.addEventListener = (kind, fn) => {
+        const list = owner.events.get(kind) || [];
+        list.push(fn);
+        owner.events.set(kind, list);
+    };
+}
+const timers = new Set();
+const body = {append:node=>{node.parent=body;}};
+const trigger = {
+    attrs:new Map(),setAttribute:(key,value)=>trigger.attrs.set(key,value),
+    getBoundingClientRect:()=>({left:350,top:792,bottom:820}),
+    focus:()=>{documentHelp.focused=trigger;},
+    closest:selector=>selector.includes('> summary') ? trigger : disclosure,
+};
+const helpPanel = {
+    parent:null,offsetWidth:350,offsetHeight:230,style:{},classes:new Set(),
+    contains:node=>node===helpPanel,
+    removeAttribute:key=>{if(key==='style')helpPanel.style={};},
+    classList:{add:value=>helpPanel.classes.add(value),
+        remove:value=>helpPanel.classes.delete(value)},
+};
+const disclosure = {
+    open:false,append:node=>{node.parent=disclosure;},
+    querySelector:selector=>selector==='summary' ? trigger : helpPanel,
+    contains:node=>node===trigger || node===disclosure
+        || (node===helpPanel && helpPanel.parent===disclosure),
+};
+helpPanel.parent=disclosure;
+rootHelp.contains = node=>node===disclosure;
+documentHelp.body=body;
+// 390 by 844 is an explicit narrow viewport boundary vector.
+documentHelp.documentElement={clientWidth:390,clientHeight:844};
+const helpContext = vm.createContext({
+    document:documentHelp,window:windowHelp,rootHelp,
+    CONSISTENCY_HELP_EDGE:Number(source.match(/const CONSISTENCY_HELP_EDGE = ([0-9]+)/)[1]),
+    CONSISTENCY_HELP_LEAVE_MS:Number(source.match(/const CONSISTENCY_HELP_LEAVE_MS = ([0-9]+)/)[1]),
+    setTimeout:fn=>{timers.add(fn);return fn;},
+    clearTimeout:fn=>timers.delete(fn),
+});
+vm.runInContext(source.slice(helpStart,helpEnd),helpContext);
+const closeHelp = helpContext.setupConsistencyHelp(rootHelp);
+const emit = (owner, kind, target, extra={}) => {
+    for(const fn of owner.events.get(kind)||[]) fn({target,preventDefault:()=>{},...extra});
+};
+emit(rootHelp,'focusin',trigger);
+assert.equal(disclosure.open,true,'Focus must explain a finding without a click.');
+assert.equal(helpPanel.parent,body,'Help must escape filtered layout containers.');
+assert.ok(Number.parseFloat(helpPanel.style.left) + helpPanel.offsetWidth <= 390);
+assert.ok(Number.parseFloat(helpPanel.style.top) + helpPanel.offsetHeight <= 844);
+emit(rootHelp,'click',trigger);
+emit(documentHelp,'pointerover',{});
+assert.equal(timers.size,0,'Explicit activation must pin help for reading.');
+emit(documentHelp,'keydown',trigger,{key:'Escape'});
+assert.equal(disclosure.open,false);
+assert.equal(helpPanel.parent,disclosure);
+assert.equal(documentHelp.focused,trigger,'Escape must return focus to its trigger.');
+emit(rootHelp,'pointerover',trigger);
+emit(documentHelp,'pointerover',{});
+assert.equal(timers.size,1,'Transient hover help must close after leaving.');
+for(const callback of [...timers]) callback();
+assert.equal(disclosure.open,false);
+emit(rootHelp,'click',trigger);
+emit(documentHelp,'click',{});
+assert.equal(disclosure.open,false,'Outside click must dismiss pinned help.');
+emit(rootHelp,'focusin',trigger);
+closeHelp();
+assert.equal(helpPanel.parent,disclosure,'Result replacement must restore help first.');
+assert.equal(helpPanel.classes.size,0,'Closed help must not leak a fixed panel.');
+console.log('Consistency delegated hover, focus, pin and dismissal: PASS');
