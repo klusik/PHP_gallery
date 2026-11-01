@@ -1,5 +1,168 @@
 # Patch notes
 
+## Version 0.149.1
+
+Improved gallery identity, thumbnail preservation and maintenance workflows so
+administrators could understand what was connected, what needed attention and
+what had actually finished. The patch addressed a chain of related problems:
+long paths obscured the selected gallery in WinApp, gallery titles could drift
+from physical folder names, and a successful file rename could discard usable
+thumbnails and leave missing previews behind.
+
+The maintenance changes addressed the cost and uncertainty that followed those
+problems. Comparing names did not need a full photograph scan, valid thumbnail
+pixels did not need to be encoded again just because a filename changed, and
+repairing one subset did not need to force another analysis before the next.
+The patch made those operations more selective, explained proposed changes
+before writing, and kept real processing progress visible above the findings.
+
+### Highlights
+
+#### Clear gallery identity from WinApp to physical folders
+
+- Updated WinApp Watcher and Import to show `Gallery:` with the current display
+  title, wrap long titles, and present the physical folder hierarchy in a
+  structured tooltip. This made the actual target recognizable even when it
+  was deeply nested instead of giving most of the space to a long path.
+- Synchronized gallery creation and title edits with the sanitized physical
+  folder name. Title and descendant path changes were committed together;
+  conflicting destinations were refused instead of assigning a different
+  suffixed identity.
+- Fixed discovery and import to follow disk naming authority. A sidecar title
+  was retained only when its sanitized identity agreed with the physical leaf;
+  newly imported folders were normalized through the guarded subtree mover.
+  Historical unrelated galleries remained available for explicit review.
+
+#### Renaming that preserved useful thumbnail work
+
+- Preserved verified, exclusively owned thumbnail bytes during media renaming
+  and published them under their new identities only after the renamed source
+  owned those destinations. This avoided unnecessary regeneration and missing
+  previews caused solely by discarding an otherwise usable cache.
+- Retained explicit invalidation and warning handling for ambiguous or
+  unavailable derivatives rather than assigning unverified pixels to a photo.
+- Added bounded AJAX renaming progress, retained unsaved renamer settings when
+  switching editor tabs, and used inline review and a contextual result notice.
+  Larger selections no longer depended on one apparently frozen page operation
+  before showing the completed result.
+
+#### Consistency reports with an appropriate cost and a clear proposal
+
+- Added Gallery consistency as a Maintenance Center tab, with a read-only
+  report followed by separately selected repairs.
+- Made Names and paths (DB only) the initial scope, comparing recorded names,
+  folder paths and parent relationships without inspecting photographs or disk
+  directories. Kept Files and thumbnails for physical/header/metadata checks,
+  and made checksum and pixel comparison an explicit deeper scope.
+- Listed only affected galleries in compact, paged rows. Added concrete current
+  and proposed titles, final folder segments, complete paths, parents and
+  sidecar values, so a normalization suggestion showed both what existed and
+  what would change. Slashes continued to represent nested folders.
+- Kept missing originals, ambiguous ownership, unverified content and unknown
+  cache files visible for manual review. Content similarity did not authorize
+  automatic replacement or deletion.
+
+#### Browser repairs with visible, reusable progress
+
+- Routed consistency thumbnail repairs through the existing browser
+  ZIP/worker/upload pipeline. Server-owned tickets restricted each operation to
+  its source and required size/format variants, while valid unrelated variants
+  and originals were preserved.
+- Counted repair tasks only after server validation of persisted output and
+  metadata. Reconciled lost upload replies before doing more work, and kept
+  browser failures visible without silently starting PHP image generation.
+  Unsupported browser source formats remained explicit refusals.
+- Placed browser processing progress next to the main workflow progress, above
+  the gallery list, so it stayed discoverable during long reports.
+- Removed confirmed findings after each successful subset and removed empty
+  gallery rows. Enabled the next selection immediately from the same report,
+  retained unselected and manual findings, and preserved completed receipts in
+  the export. Existing completed checkpoints adopted this remaining-list
+  behavior without a new photograph scan.
+- Fenced each new batch with its receipt sequence so a delayed request from an
+  earlier selection could not start another batch. Kept failed or uncertain
+  work visible instead of treating it as confirmed success.
+
+#### One maintenance destination
+
+- Consolidated the former Overview maintenance groups into Maintenance Center
+  System tools, alongside Installation and Gallery consistency. Preserved old
+  maintenance links by redirecting them to the corresponding tool group.
+- Fixed Create missing thumbnails to respect the existing browser-processing
+  checkbox, as Create all already did. The global missing-thumbnail warning
+  opened those controls so administrators could see the selected engine.
+  Consistency repairs always used browser workers independently of that choice.
+
+### Technical Details
+
+#### Backend and storage ownership
+
+- Added `app/controllers/admin_gallery_consistency.php`,
+  `app/models/gallery_consistency.php` and the
+  `app/services/gallery_consistency.php` service with focused inspection and
+  repair parts. Reused existing gallery, image and thumbnail storage and
+  mutation owners for session-owned reports and bounded repair queues.
+- Retained authentication, CSRF, catalog/source leases, collision checks and
+  schema admission before writes. Required conclusive writable schema state;
+  missing or unknown storage was not treated as permission to repair.
+- Refreshed remaining catalog proposals after successful repairs without
+  rescanning photos. Catalog changes outside the workflow, session expiry and
+  interrupted uncertain writes still required fresh evidence or reconciliation.
+- Kept failure context bounded to safe exception provenance and stable reasons,
+  without exposing raw exception text, SQL, credentials or absolute paths.
+- Reduced translation lookup allocations and metadata discovery retention.
+  Moved shared updater error reduction to the lightweight job reader so public
+  galleries did not acquire the full updater worker for safe diagnostics.
+
+#### Frontend and companion
+
+- Added `public/assets/gallery-modules/gallery-consistency.js` and
+  `public/assets/styles/gallery-consistency.css` for scope selection, real
+  receipts, compact proposals, persistent paged selection and subsequent repair
+  batches. Preserved selection across pages and cleared completed selections.
+- Extended the existing browser thumbnail coordinator and worker with exact
+  variant selection and scoped publication, preserving the general rebuild
+  workflow for its existing callers.
+- Updated WinApp to `0.11.1` for the gallery identity presentation. Kept the
+  folder leaf fallback for servers that omitted the additive title metadata.
+- Synchronized English, Czech, German and Swedish catalogs and manuals,
+  including the scopes, disk authority, browser processing and continuation
+  behavior. Rewrapped edited documentation for readable source lines.
+
+#### Regression coverage
+
+- Added service, Node and real HTTP coverage for report-only inspection,
+  exact browser variants, source ownership, upload acknowledgements, partial or
+  lost replies, metadata confirmation and preservation of valid bytes.
+- Exercised sequential child and parent repairs from the same report, remaining
+  row removal, retained history, manual findings, delayed batch refusal and
+  current path proposals after earlier moves.
+- Retained rename, collision, stale-request, replay, subtree and import
+  regressions, and protected lightweight public loading while keeping complete
+  Admin/background updater owners. Verified desktop and narrow presentation.
+
+### User Impact
+
+#### For visitors
+
+- Preserved usable thumbnail pixels through verified renames, reducing avoidable
+  missing-preview periods while keeping original photographs intact.
+
+#### For administrators
+
+- Made the selected WinApp gallery easier to recognize and aligned primary
+  titles with their sanitized physical folder identities.
+- Made maintenance decisions inspectable before writing: administrators could
+  choose an appropriate analysis scope, review exact proposed values and repair
+  successive subsets without repeatedly scanning the collection.
+- Kept both workflow and browser progress near the controls, and distinguished
+  confirmed work from manual findings, unsupported formats and uncertainty.
+
+#### For maintainers
+
+- Added focused evidence for ownership, preservation and continuation behavior
+  while retaining existing runtime limits and safe legacy entry points.
+
 ## Version 0.149.0
 
 Updated public and administrator controls to use compact icon buttons while preserving accessible labels and responsive touch targets.
