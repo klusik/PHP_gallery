@@ -729,7 +729,7 @@ namespace {
                 && $GLOBALS['content_csrf'] === 1
                 && str_contains(
                     $GLOBALS['content_redirect'],
-                    'dashboard_tab=maintenance',
+                    'page=admin_maintenance_center',
                 )
                 && str_contains(
                     $GLOBALS['content_redirect'],

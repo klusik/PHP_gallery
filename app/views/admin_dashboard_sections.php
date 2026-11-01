@@ -205,8 +205,9 @@ function view_render_admin_dashboard_metric_grid(array $model): void
             'Checked only on request.',
         ))
         . '<br><a class="admin-metric-inline-link" href="'
-        . e(url_for('admin', ['maintenance_tab' => 'media'])
-            . '#admin-tab-maintenance')
+        . e(url_for('admin_maintenance_center', [
+            'tab' => 'tools', 'maintenance_tab' => 'media',
+        ]))
         . '">'
         . e(t('admin.dashboard.thumbnail_scan_link', 'Check thumbnails'))
         . '</a>'
@@ -429,8 +430,11 @@ function view_render_admin_dashboard_discover_card(): void
 
 /**
  * Render the overview card that points to grouped maintenance tools.
- * @param array<string,mixed> $model Prepared maintenance_center_status availability and resumable-job state.
- * @return void Outputs Maintenance Center actions and the direct Maintenance fallback link.
+ * @param array{maintenance_center_status?:array{available?:bool,resumable?:bool,
+ *     active?:bool,active_status?:string,active_progress_percent?:int|float,
+ *     last_completed_at?:string},system_action_required?:bool,...} $model
+ *     Prepared central job state and existing shared System Health action flag.
+ * @return void Outputs Maintenance Center links and any prepared health warning.
  */
 function view_render_admin_dashboard_open_maintenance_card(array $model): void
 {
@@ -458,8 +462,16 @@ function view_render_admin_dashboard_open_maintenance_card(array $model): void
         );
     echo
         '<article class="admin-action-card admin-maintenance-center-card"><strong>'
-            . e(t('admin.maintenance_center.title', 'Maintenance Center'))
-            . '</strong>';
+            . e(t('admin.maintenance_center.title', 'Maintenance Center'));
+    if (view_admin_dashboard_bool($model, 'system_action_required')) {
+        echo ' <a class="button secondary admin-maintenance-health-warning" href="'
+            . e(url_for('admin_maintenance_center', [
+                'tab' => 'tools', 'maintenance_tab' => 'system',
+            ])) . '">'
+            . e(t('admin.dashboard.maintenance_system_health_tab', 'System health'))
+            . ' · ' . e(t('admin.dashboard.badge_action', 'Action')) . '</a>';
+    }
+    echo '</strong>';
     if (!$available) {
         echo
             '<span>'
@@ -509,20 +521,21 @@ function view_render_admin_dashboard_open_maintenance_card(array $model): void
             . '">'
             . e($actionLabel)
             . '</a><a class="button secondary" href="'
-            . e(url_for('admin', ['dashboard_tab' => 'maintenance'])
-                . '#admin-tab-maintenance')
+            . e(url_for('admin_maintenance_center', ['tab' => 'tools']))
             . '">'
             . e(t('admin.dashboard.open_maintenance', 'Open maintenance'))
             . '</a></div></article>';
 }
 
 /**
- * Render the Maintenance tab as nested, logical tool groups.
+ * Render Maintenance Center's System tools as nested logical groups.
  *
  * @param array<string,mixed> $model Maintenance-enabled admin_dashboard_view_model() map;
  *   runtime_support_status.policy.action_required and image_move_pending_status.action_required
- *   are booleans; capability-keyed schema records carry the shared three-state diagnosis.
- * @return void Emit the compact heading/report toolbar, tool tabs and prepared health badges.
+ *   are booleans; capability-keyed schema records carry the shared three-state
+ *   diagnosis. Optional maintenance_embedded=true omits the legacy heading.
+ * @return void Emit tool tabs and prepared badges, with the legacy heading only
+ *   for already-open clients of the retained deferred endpoint.
  * @see \Gallery\Services\admin_dashboard_view_model()
  */
 function view_render_admin_dashboard_maintenance_panel(array $model): void
@@ -623,22 +636,24 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         ],
     ];
 
-    echo '<header class="admin-maintenance-compact-toolbar"><h2>'
-        . e(t('admin.dashboard.system_tools', 'System tools')) . '</h2>';
-    view_render_admin_dashboard_compact_help(
-        'admin-maintenance-intro-help',
-        t('admin.dashboard.system_tools', 'System tools'),
-        [t(
-            'admin.dashboard.system_tools_hint',
-            'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.',
-        )],
-    );
-    view_render_admin_gallery_report_maintenance_card(
-        $model,
-        'button secondary admin-maintenance-report-shortcut',
-        true,
-    );
-    echo '</header>';
+    if (empty($model['maintenance_embedded'])) {
+        echo '<header class="admin-maintenance-compact-toolbar"><h2>'
+            . e(t('admin.dashboard.system_tools', 'System tools')) . '</h2>';
+        view_render_admin_dashboard_compact_help(
+            'admin-maintenance-intro-help',
+            t('admin.dashboard.system_tools', 'System tools'),
+            [t(
+                'admin.dashboard.system_tools_hint',
+                'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.',
+            )],
+        );
+        view_render_admin_gallery_report_maintenance_card(
+            $model,
+            'button secondary admin-maintenance-report-shortcut',
+            true,
+        );
+        echo '</header>';
+    }
     echo
         '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
     $requestedMaintenanceTab = strtolower(trim(
@@ -3711,6 +3726,9 @@ function view_render_admin_dashboard_thumbnail_card(
     echo '</form>';
 
     echo '</details>';
+    echo '<a class="admin-consistency-link" href="'
+        . e(url_for('admin_maintenance_center', ['tab' => 'consistency'])) . '">'
+        . e(t('admin.consistency.title', 'Gallery consistency')) . '</a>';
     echo
         '<form method="post" action="'
             . e(url_for('admin_check_thumbnail_maintenance'))

@@ -45,6 +45,78 @@ use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\url_for;
 
+/**
+ * Resolve a scoped consistency ticket through its existing inventory owner.
+ * @param array{consistency_token?:string,consistency_sequence?:int|string,...}
+ *     $input Authenticated source/upload fields; absent ticket keeps legacy scope.
+ * @return \Gallery\Services\ConsistencyBrowserTarget|null Revalidated target,
+ *     or null for the established general rebuild workflow.
+ */
+function browser_thumbnail_rebuild_consistency_target(array $input): ?array
+{
+    if (!isset($input['consistency_token'])) return null;
+    \Gallery\Core\cms_runtime_kernel()->load('domain-admin-galleries-discovery');
+    return gallery_consistency_browser_target(
+        (string) $input['consistency_token'],
+        (int) ($input['consistency_sequence'] ?? -1),
+    );
+}
+
+/**
+ * Publish one scoped batch while owning the existing gallery writer lease.
+ * @param array{error?:int,tmp_name?:string,name?:string,type?:string,size?:int,...}
+ *     $uploadedZip Native upload record for a prepared thumbnail ZIP.
+ * @param string $sessionId Browser batch idempotency namespace.
+ * @param int $batchIndex Exact batch number within that namespace.
+ * @param array{consistency_token:string,consistency_sequence:int|string,...}
+ *     $input Session-owned consistency ticket supplied with the upload.
+ * @return array{ok:bool,created:int,skipped:int,failed:int,errors:list<string>,
+ *     error:?string,image_ids:list<int>,cached?:bool} Existing publication receipt.
+ */
+function browser_thumbnail_rebuild_store_consistency_batch(
+    array $uploadedZip,
+    string $sessionId,
+    int $batchIndex,
+    array $input,
+): array {
+    \Gallery\Core\cms_runtime_kernel()->load('domain-admin-dashboard');
+    $lock = gallery_edit_writer_begin();
+    try {
+        $namespace = hash('sha256', (string) $input['consistency_token']
+            . ':' . (string) $input['consistency_sequence'] . ':' . $sessionId);
+        return browser_thumbnail_rebuild_store_prepared_zip_batch(
+            $uploadedZip, $namespace, $batchIndex, $input,
+        );
+    } finally {
+        gallery_edit_writer_end($lock);
+    }
+}
+
+/**
+ * Retain a server publication acknowledgement for an exact prepared variant.
+ * @param \Gallery\Services\ConsistencyBrowserTarget $target Validated ticket.
+ * @param string $variant Size/format identity actually accepted by the writer.
+ * @return void Updates only the active ticket's private session checkpoint.
+ */
+function browser_thumbnail_rebuild_record_consistency_variant(
+    array $target,
+    string $variant,
+): void {
+    $job = \Gallery\Core\session_context_get('gallery_consistency_job');
+    if (!is_array($job) || ($job['status'] ?? '') !== 'browser'
+        || ($job['sequence'] ?? -1) !== $target['sequence']
+        || ($job['browser_pending']['image_id'] ?? 0) !== $target['image_id']
+        || !hash_equals((string) ($job['token'] ?? ''), $target['token'])
+    ) {
+        throw new RuntimeException('consistency_browser_stale');
+    }
+    $job['browser_pending']['uploaded'][] = $variant;
+    $job['browser_pending']['uploaded'] = array_values(array_unique(
+        $job['browser_pending']['uploaded'],
+    ));
+    \Gallery\Core\session_context_set('gallery_consistency_job', $job);
+}
+
 const BROWSER_THUMBNAIL_SOURCE_ZIP_MAX_ENTRY_BYTES = 0xffffffff;
 
 /**
@@ -442,12 +514,18 @@ function browser_thumbnail_rebuild_request_image_ids(array $input): array
 /**
  * Build a source ZIP chunk plan for a browser thumbnail rebuild.
  *
- * @param array<string,mixed> $input Browser rebuild request fields selecting the image scope, offset, and byte cap.
- * @return array{version:int,kind:string,offset:int,next_offset:int,total:int,processed:int,done:bool,source_chunk_bytes:int,source_payload_bytes:int,source_item_cap:int,items:list<array{image_id:int,gallery_id:int,filename:string,relative_path:string,entry_path:string,size:int,target_formats:list<'jpg'|'webp'>,expected_variants:int,source_path:string}>,skipped:list<array{image_id:int,reason:string}>} Bounded source-image ZIP manifest plan and skip reasons for unavailable or unsupported items.
+ * @param array{scope?:string,thumbnail_gallery_id?:int|string,
+ *     include_subgalleries?:bool|int|string,image_ids?:list<int|string>,
+ *     gallery_ids?:list<int|string>,offset?:int|string,source_chunk_bytes?:int|string,
+ *     consistency_token?:string,consistency_sequence?:int|string,...} $input
+ *     Authenticated source selection, byte limit and optional exact task ticket.
+ * @return array{version:int,kind:string,offset:int,next_offset:int,total:int,processed:int,done:bool,source_chunk_bytes:int,source_payload_bytes:int,source_item_cap:int,items:list<array{image_id:int,gallery_id:int,filename:string,relative_path:string,entry_path:string,size:int,target_formats:list<'jpg'|'webp'>,expected_variants:int,target_variants?:list<string>,source_path:string}>,skipped:list<array{image_id:int,reason:string}>} Bounded source-image ZIP manifest plan and skip reasons for unavailable or unsupported items.
  */
 function browser_thumbnail_rebuild_source_chunk_plan(array $input): array
 {
-    $imageIds = browser_thumbnail_rebuild_request_image_ids($input);
+    $consistency = browser_thumbnail_rebuild_consistency_target($input);
+    $imageIds = $consistency !== null ? [$consistency['image_id']]
+        : browser_thumbnail_rebuild_request_image_ids($input);
     $total = count($imageIds);
     $offset = max(0, (int) ($input['offset'] ?? 0));
     $maxBytes = browser_thumbnail_rebuild_requested_chunk_bytes(
@@ -562,7 +640,12 @@ function browser_thumbnail_rebuild_source_chunk_plan(array $input): array
                     $targetFormats,
                 ),
             'source_path' => $sourcePath,
+            'target_variants' => $consistency['variants'] ?? [],
         ];
+        if ($consistency !== null) {
+            $items[array_key_last($items)]['expected_variants'] =
+                count($consistency['variants']);
+        }
         $bytes += $size + $zipOverhead;
     }
 
@@ -777,7 +860,7 @@ function browser_thumbnail_rebuild_stream_file_payload(
 /**
  * Stream a source chunk plan as a store-only ZIP file.
  *
- * @param array{version:int,kind:string,offset:int,next_offset:int,total:int,processed:int,done:bool,source_chunk_bytes:int,source_payload_bytes:int,source_item_cap:int,items:list<array{image_id:int,gallery_id:int,filename:string,relative_path:string,entry_path:string,size:int,target_formats:list<'jpg'|'webp'>,expected_variants:int,source_path:string}>,skipped:list<array{image_id:int,reason:string}>} $plan Source chunk plan returned by browser_thumbnail_rebuild_source_chunk_plan.
+ * @param array{version:int,kind:string,offset:int,next_offset:int,total:int,processed:int,done:bool,source_chunk_bytes:int,source_payload_bytes:int,source_item_cap:int,items:list<array{image_id:int,gallery_id:int,filename:string,relative_path:string,entry_path:string,size:int,target_formats:list<'jpg'|'webp'>,expected_variants:int,target_variants?:list<string>,source_path:string}>,skipped:list<array{image_id:int,reason:string}>} $plan Source chunk plan returned by browser_thumbnail_rebuild_source_chunk_plan.
  * @param callable(string):void $emit Response-body chunk writer.
  * @return void Streams a store-only ZIP containing manifest.json and readable source entries.
  */
@@ -813,6 +896,7 @@ function browser_thumbnail_rebuild_stream_source_zip(
                     (array) ($item['target_formats'] ?? []),
                 )
             ),
+            'target_variants' => array_values((array) ($item['target_variants'] ?? [])),
         ];
         $entries[] = $item;
     }
@@ -923,16 +1007,21 @@ function browser_thumbnail_rebuild_manifest_from_entries(array $entries): array
 /**
  * Store one browser-prepared thumbnail ZIP batch.
  *
- * @param array<string,mixed> $uploadedZip PHP uploaded-file record for the prepared ZIP.
+ * @param array{error?:int,tmp_name?:string,name?:string,type?:string,size?:int,...}
+ *     $uploadedZip Native prepared ZIP upload record.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
+ * @param array{consistency_token?:string,consistency_sequence?:int|string,...}
+ *     $input Optional authenticated session ticket; default retains general scope.
  * @return array{ok:bool,created:int,skipped:int,failed:int,errors:list<string>,error:?string,image_ids:list<int>,cached?:bool} Batch outcome, deduplicated diagnostic messages, affected image identifiers, and optional cache marker.
  */
 function browser_thumbnail_rebuild_store_prepared_zip_batch(
     array $uploadedZip,
     string $sessionId,
     int $batchIndex,
+    array $input = [],
 ): array {
+    $consistency = browser_thumbnail_rebuild_consistency_target($input);
     if (
         ($cached = browser_upload_cached_batch_response(
             0,
@@ -972,6 +1061,15 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(
     $entries = browser_upload_parse_store_zip($tmpName, $maxBatchBytes);
     $manifest = browser_thumbnail_rebuild_manifest_from_entries($entries);
     $items = array_values((array) ($manifest['items'] ?? []));
+    if ($consistency !== null) {
+        foreach ($items as $item) {
+            if (!is_array($item)
+                || (int) ($item['image_id'] ?? 0) !== $consistency['image_id']
+            ) {
+                throw new RuntimeException('consistency_browser_stale');
+            }
+        }
+    }
 
     $created = 0;
     $failed = 0;
@@ -1024,6 +1122,13 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(
             }
             $size = (int) ($variant['size'] ?? 0);
             $format = strtolower((string) ($variant['format'] ?? ''));
+            $variantKey = $size . ':' . $format;
+            if ($consistency !== null
+                && !in_array($variantKey, $consistency['variants'], true)
+            ) {
+                $skipped++;
+                continue; // Valid unrelated variants are never rewritten.
+            }
             $zipPath = normalize_relative_path(
                 (string) ($variant['path'] ?? ''),
             );
@@ -1056,6 +1161,19 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(
                     $format,
                 );
                 $targetDir = dirname($targetPath);
+                $geometry = $consistency !== null
+                    ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
+                if ($consistency !== null && is_file($targetPath)
+                    && !in_array($variantKey, $consistency['force'], true)
+                    && filemtime($targetPath) >= filemtime($sourcePath)
+                    && is_array($geometry)
+                    && !empty(thumbnail_file_geometry_status($targetPath,
+                        (int) $geometry['width'], (int) $geometry['height'], $size)['valid'])
+                ) {
+                    $storedVariantKeys[$variantKey] = true;
+                    $skipped++;
+                    continue;
+                }
                 if (!is_dir($targetDir)) {
                     @mkdir($targetDir, 0775, true);
                 }
@@ -1100,6 +1218,11 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(
                     }
                 }
                 $storedVariantKeys[$size . ':' . $format] = true;
+                if ($consistency !== null) {
+                    browser_thumbnail_rebuild_record_consistency_variant(
+                        $consistency, $variantKey,
+                    );
+                }
                 $created++;
             } catch (Throwable $exception) {
                 $failed++;
@@ -1109,6 +1232,9 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(
         foreach (thumbnail_sizes() as $requiredSize) {
             foreach ($targetFormats as $requiredFormat) {
                 $requiredKey = (int) $requiredSize . ':' . $requiredFormat;
+                if ($consistency !== null
+                    && !in_array($requiredKey, $consistency['variants'], true)
+                ) continue;
                 if (isset($storedVariantKeys[$requiredKey])) {
                     continue;
                 }

@@ -176,13 +176,18 @@ namespace Gallery\Services {
         ];
     }
 
-    $gallery = ['folder_path' => 'gallery'];
+    $gallery = ['folder_path' => '006', 'title' => 'Renamed gallery / chapter'];
 
     $routine = upload_automation_gallery_inventory_response(
         7,
         $gallery,
         $candidates,
         false,
+    );
+    upload_automation_inventory_load_assert(
+        $routine['gallery_title'] === 'Renamed gallery / chapter'
+            && $routine['gallery_folder'] === '006',
+        'inventory distinguishes the current display title from the physical folder',
     );
     upload_automation_inventory_load_assert(
         $GLOBALS['upload_automation_inventory_gallery_abs_path_calls'] === 0,

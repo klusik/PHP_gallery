@@ -92,7 +92,7 @@ import { setupAdminTelemetryWorkspace } from './gallery-modules/admin-telemetry-
 import { setupAdminTagsWorkspace } from './gallery-modules/admin-tags-workspace.js?v=20261027-compact-tags-v2';
 import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261027-compact-factory-v2';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261027-compact-feature-settings-v1';
-import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261027-media-settings-v3';
+import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261101-central-maintenance-v4';
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20261002-theme-language-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261021-smart-photo-tags-v2';
@@ -104,6 +104,7 @@ import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperat
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
+import { setupGalleryConsistency } from './gallery-modules/gallery-consistency.js?v=20261101-consistency-remaining-v7';
 import { setupAdminCron } from './gallery-modules/admin-cron.js?v=20261023-cron-v6';
 import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261024-cache-continuation-v6';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
@@ -135,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261030-smart-paint-v5';
+} from './gallery-modules/admin-operations.js?v=20261101-consistency-browser-v8';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -186,6 +187,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminDuplicatePhotoDetector();
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
+    setupGalleryConsistency();
     setupAdminMaintenanceCenter();
     setupAdminCron();
     setupAdminGalleryBenchmark();

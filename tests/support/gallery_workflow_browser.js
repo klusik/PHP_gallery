@@ -9,6 +9,7 @@
  *   - Deliver an unsaved authenticated widget draft into protected Home and Gallery iframes.
  *   - Check live page, placement and device changes while guarding persisted widget state.
  * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  * Real same-origin application journey executed by a standalone headless Chromium fixture.
  */
 (
@@ -1025,7 +1026,7 @@ async () => {
         expect(draftStyle?.textContent === draftText.value);
         expect(previewDocument.querySelector('main, article, .gallery-card, [data-gallery-id]'));
         const anonymousSeedCard = Array.from(previewDocument.querySelectorAll('.gallery-card-title-link[href]'))
-            .find(link => link.textContent.trim() === 'Workflow seed');
+            .find(link => link.textContent.trim() === 'Seed');
         stage = 'real Home exposes the accessible seed gallery ' + Boolean(anonymousSeedCard);
         expect(anonymousSeedCard);
         const anonymousSeedRouteUrl = new URL(anonymousSeedCard.href);
@@ -1053,7 +1054,7 @@ async () => {
         stage = 'request anonymous gallery through its canonical public path';
         const publicGalleryResponse = await editorWindow.fetch(publicGalleryUrl.href, {credentials: 'same-origin', cache: 'no-store'});
         const publicGalleryHtml = await publicGalleryResponse.text();
-        const publicGalleryHasSeed = /Workflow seed/.test(publicGalleryHtml);
+        const publicGalleryHasSeed = /Seed/.test(publicGalleryHtml);
         const publicGalleryCacheControl = publicGalleryResponse.headers.get('Cache-Control') || '';
         const publicGalleryPrivateNoStore = /private/i.test(publicGalleryCacheControl) && /no-store/i.test(publicGalleryCacheControl);
         stage = 'anonymous gallery response status ' + publicGalleryResponse.status + ' seed-content ' + publicGalleryHasSeed
@@ -1257,7 +1258,7 @@ async () => {
         const protectedGalleryPublicDocument = new DOMParser().parseFromString(protectedGalleryPublicHtml, 'text/html');
         const protectedGalleryPasswordGate = Boolean(protectedGalleryPublicDocument.querySelector('input[name="gallery_password"]'));
         const protectedFallbackResponseUrl = new URL(protectedGalleryPublicResponse.url);
-        const protectedFallbackHasSeed = protectedGalleryPublicDocument.querySelector('h1')?.textContent.trim() === 'Workflow seed';
+        const protectedFallbackHasSeed = protectedGalleryPublicDocument.querySelector('h1')?.textContent.trim() === 'Seed';
         const anonymousSeedRouteParameters = [...anonymousSeedRouteUrl.searchParams]
             .filter(([name]) => !['preview', 'view_as'].includes(name));
         const protectedFallbackIsSeedRoute = protectedFallbackResponseUrl.origin === anonymousSeedRouteUrl.origin
@@ -1327,7 +1328,7 @@ async () => {
         };
         const actualHomeDocument = visualFrame.contentDocument;
         const seedCardLink = Array.from(actualHomeDocument.querySelectorAll('.gallery-card-title-link[href]'))
-            .find(link => link.textContent.trim() === 'Workflow seed');
+            .find(link => link.textContent.trim() === 'Seed');
         stage = 'seed gallery card present ' + Boolean(seedCardLink);
         expect(seedCardLink);
         const seedGalleryHref = seedCardLink.href;
@@ -1362,7 +1363,7 @@ async () => {
         const seedGalleryUrl = visualFrame.contentWindow.location.href;
         const seedGalleryDocument = visualFrame.contentDocument;
         const protectedCardLink = Array.from(seedGalleryDocument.querySelectorAll('.gallery-card-title-link[href]'))
-            .find(link => link.textContent.trim() === 'Workflow protected');
+            .find(link => link.textContent.trim() === 'Protected');
         stage = 'protected gallery card present ' + Boolean(protectedCardLink);
         expect(protectedCardLink);
         const protectedGalleryHref = protectedCardLink.href;
@@ -1391,7 +1392,7 @@ async () => {
         expect(followedProtectedPreservesEditor);
         const protectedHeading = visualFrame.contentDocument.querySelector('.hero h1, h1');
         const protectedHeadingMatched = Boolean(protectedHeading && protectedHeading.matches('h1.gallery-title')
-            && protectedHeading.textContent.trim() === 'Workflow protected');
+            && protectedHeading.textContent.trim() === 'Protected');
         stage = 'protected route shows expected gallery heading ' + protectedHeadingMatched;
         expect(protectedHeadingMatched);
         protectedHeading.click();
@@ -1439,7 +1440,7 @@ async () => {
             anonymousFallbackUrl.searchParams.get('preview') === 'visual'
                 && anonymousFallbackUrl.searchParams.get('view_as') === 'anonymous'
                 && !anonymousFallbackUrl.searchParams.has('visual_notice'),
-            visualFrame.contentDocument.querySelector('h1')?.textContent.trim() === 'Workflow seed',
+            visualFrame.contentDocument.querySelector('h1')?.textContent.trim() === 'Seed',
             anonymousFallbackStatus?.textContent === anonymousFallbackLabels?.dataset.visualEditorAnonymousFallbackNoticeLabel,
             draftText.value === entryCssBytes
                 && visualFrame.contentDocument.querySelector('style[data-theme-visual-editor-draft]')?.textContent === styledPreviewCss,
@@ -1480,7 +1481,7 @@ async () => {
         await seedBackLoad;
         await until(() => routeMatches(visualFrame.contentWindow.location.href, seedGalleryUrl)
             && routeMatches(visualFrame.contentDocument.URL, seedGalleryUrl)
-            && visualFrame.contentDocument.querySelector('h1')?.textContent.trim() === 'Workflow seed'
+            && visualFrame.contentDocument.querySelector('h1')?.textContent.trim() === 'Seed'
             && visualFrame.contentDocument?.querySelector('style[data-theme-visual-editor-draft]')?.textContent.includes('color: #123456;')
             && visualFrameDocumentCommitted(visualFrame, styledPreviewCss)
             && visualFrame.contentDocument.querySelector('h1.gallery-title')

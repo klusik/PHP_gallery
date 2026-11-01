@@ -217,10 +217,13 @@ async function processUploadImage(payload) {
 
 
 /**
- * Process one downloaded source image for the browser thumbnail rebuild path.
- *
- * @param {Record<string, *>} payload Worker payload.
- * @return {Promise<void>} Completion promise.
+ * Prepare the exact requested thumbnail variants from downloaded source bytes.
+ * @param {{blob:Blob,sizes:Array<number|string>,formats:Array<string>,
+ *     targetVariants?:Array<string>,expectedVariants?:number,imageId?:number|string,
+ *     id?:number|string,filename?:string,entryPath?:string,
+ *     jpegQuality?:number,webpQuality?:number}} payload Source identity, allowed
+ *     variant pairs, configured dimensions and encoder quality fractions.
+ * @return {Promise<void>} Posts prepared blobs or propagates a decoder failure.
  */
 async function processRebuildImage(payload) {
     if (!self.OffscreenCanvas || !self.createImageBitmap) {
@@ -232,7 +235,12 @@ async function processRebuildImage(payload) {
     }
     const bitmap = await self.createImageBitmap(blob, {imageOrientation: 'from-image'});
     try {
-        const sizes = Array.isArray(payload.sizes) ? payload.sizes.map(Number).filter((size) => Number.isInteger(size) && size > 0) : [];
+        const requested = new Set(Array.isArray(payload.targetVariants)
+            ? payload.targetVariants.map(String) : []);
+        const sizes = (Array.isArray(payload.sizes)
+            ? payload.sizes.map(Number).filter(size => Number.isInteger(size) && size > 0)
+            : []).filter(size => requested.size === 0
+                || [...requested].some(key => key.startsWith(`${size}:`)));
         const formats = Array.isArray(payload.formats) ? payload.formats.map(String).filter((format) => ['jpg', 'webp'].includes(format)) : [];
         const expectedVariants = Math.max(1, Number(payload.expectedVariants || (sizes.length * formats.length)));
         const imageId = Number.parseInt(String(payload.imageId || 0), 10);
@@ -247,6 +255,7 @@ async function processRebuildImage(payload) {
             }
             context.drawImage(bitmap, 0, 0, dimensions.width, dimensions.height);
             for (const format of formats) {
+                if (requested.size > 0 && !requested.has(`${size}:${format}`)) continue;
                 const mimeType = format === 'webp' ? 'image/webp' : 'image/jpeg';
                 const quality = format === 'webp' ? Number(payload.webpQuality || 0.82) : Number(payload.jpegQuality || 0.82);
                 const blobVariant = await canvas.convertToBlob({type: mimeType, quality});
@@ -271,6 +280,7 @@ async function processRebuildImage(payload) {
                 filename: String(payload.filename || ''),
                 entryPath: String(payload.entryPath || ''),
                 targetFormats: formats,
+                targetVariants: [...requested],
                 expectedVariants,
                 variants,
             },

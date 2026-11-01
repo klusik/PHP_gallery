@@ -721,15 +721,21 @@ function gallery_mutation_model_move_images(
 /**
  * Persist an explicit moved-gallery path/parent map in one new transaction.
  *
- * Paths, SHA-256 hashes, parent graph and row existence must be validated by the
+ * Paths, SHA-256 hashes, parent graph and row existence must be validated by
+ * the
  * service while holding writer ownership. This method neither renames folders
- * nor regenerates public paths; absent IDs are not detected by row-count checks.
+ * nor regenerates public paths; absent IDs are not detected by row-count
+ * checks.
  * Normal return commits all statements. An exception attempts rollback only
- * while PDO still reports an active transaction and does not prove filesystem state.
+ * while PDO still reports an active transaction and does not prove filesystem
+ * state.
  *
- * @param list<array{id:int,folder_path:string,folder_path_hash:string,parent_id:int|null}> $updates New gallery-relative paths, hashes and nullable parent IDs for the complete moved subtree.
+ * @param list<array{id:int, folder_path:string, folder_path_hash:string,
+ *     parent_id:int|null, title?:string}> $updates Complete subtree path map,
+ *     with an optional root title committed in the same transaction.
  * @param string $now Shared SQL timestamp for every row in the map.
- * @return void Empty input does nothing; otherwise starts/commits its own transaction.
+ * @return void Empty input does nothing; otherwise starts/commits its own
+ *     transaction.
  * @author Rudolf Klusal
  */
 function gallery_mutation_model_update_gallery_paths(
@@ -745,16 +751,27 @@ function gallery_mutation_model_update_gallery_paths(
         $stmt = $pdo->prepare(
             'UPDATE galleries SET folder_path = ?, folder_path_hash = ?, parent_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
         );
+        $titleStmt = null;
         foreach ($updates as $update) {
-            $stmt->execute([
+            $values = [
                 (string) $update['folder_path'],
                 (string) $update['folder_path_hash'],
                 $update['parent_id'] === null
                     ? null
                     : (int) $update['parent_id'],
                 $now,
-                (int) $update['id'],
-            ]);
+            ];
+            if (array_key_exists('title', $update)) {
+                $titleStmt ??= $pdo->prepare(
+                    'UPDATE galleries SET folder_path = ?, folder_path_hash = ?, parent_id = ?, updated_at = ?, title = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+                );
+                $values[] = $update['title'];
+                $values[] = (int) $update['id'];
+                $titleStmt->execute($values);
+            } else {
+                $values[] = (int) $update['id'];
+                $stmt->execute($values);
+            }
         }
         $pdo->commit();
     } catch (Throwable $exception) {

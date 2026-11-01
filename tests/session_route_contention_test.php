@@ -184,7 +184,7 @@ try {
     $anonymous = [];
     $denial = application_request(
         $origin,
-        '/index.php?page=admin_gallery_title_completion&q=Workflow',
+        '/index.php?page=admin_gallery_title_completion&q=See',
         $fixture->token,
         $anonymous,
     );
@@ -301,7 +301,7 @@ try {
     );
     $restored = application_request(
         $workers[1]['origin'],
-        '/index.php?page=admin_gallery_title_completion&q=Workflow&parent_id=0',
+        '/index.php?page=admin_gallery_title_completion&q=See&parent_id=0',
         $fixture->token,
         $restoredJar,
     );
@@ -343,7 +343,7 @@ try {
     );
     $title = application_request(
         $origin,
-        '/index.php?page=admin_gallery_title_completion&q=Workflow',
+        '/index.php?page=admin_gallery_title_completion&q=See',
         $fixture->token,
         $restoredJar,
     );
@@ -356,7 +356,7 @@ try {
     );
     $picker = application_request(
         $origin,
-        '/index.php?page=admin_gallery_picker_search&q=Workflow',
+        '/index.php?page=admin_gallery_picker_search&q=See',
         $fixture->token,
         $restoredJar,
     );
@@ -370,7 +370,7 @@ try {
     );
     $htmlPicker = application_request(
         $origin,
-        '/index.php?page=admin_gallery_picker_search&format=html&q=Workflow',
+        '/index.php?page=admin_gallery_picker_search&format=html&q=See',
         $fixture->token,
         $restoredJar,
     );
@@ -410,7 +410,7 @@ try {
     check($logout['status'] === 302, 'Actual logout failed.');
     $denial = application_request(
         $origin,
-        '/index.php?page=admin_gallery_title_completion&q=Workflow',
+        '/index.php?page=admin_gallery_title_completion&q=See',
         $fixture->token,
         $restoredJar,
     );
@@ -420,7 +420,7 @@ try {
     );
     $denial = application_request(
         $origin,
-        '/index.php?page=admin_gallery_title_completion&q=Workflow',
+        '/index.php?page=admin_gallery_title_completion&q=See',
         $fixture->token,
         $oldRememberJar,
     );

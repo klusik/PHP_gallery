@@ -195,14 +195,15 @@ function gallery_metadata_organizer_date_title(string $date): string
 }
 
 /**
- * Return a stable folder name for a daily destination gallery.
+ * Derive the physical folder from the daily gallery's actual source title.
  *
  * @param string $date Date in YYYY-MM-DD format.
- * @return string Text result for the caller.
+ * @return string Sanitized source title, using the same naming policy as
+ *     creation.
  */
 function gallery_metadata_organizer_date_folder_name(string $date): string
 {
-    return $date;
+    return gallery_folder_segment(gallery_metadata_organizer_date_title($date));
 }
 
 /**

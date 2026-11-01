@@ -62,14 +62,17 @@ the next ordinary app launch also reconciles the signed-in user's preference.
 Logon starts with the window withdrawn before painting and exposes the tray
 icon. A missing, failed or stalled tray restores the window within five seconds
 so the app remains accessible. Import-recovery prompts wait until the user opens
-the window. Watching/importing still requires its existing explicit Start action.
-Source/Python runs never add an OS startup entry; their startup switch is disabled.
+the window. Watching/importing still requires its existing explicit Start
+action.
+Source/Python runs never add an OS startup entry; their startup switch is
+disabled.
 
 All Windows desktop launches sharing the app profile use one native mutex,
 including copies from different executable/source locations and Windows
 sessions. A second manual launch signals the existing process to restore/focus
 its window, then exits before opening logs, configuration or state. Another
-logon launch keeps the existing process hidden. Restoring never restarts workers.
+logon launch keeps the existing process hidden. Restoring never restarts
+workers.
 An existing process in another Windows session must be opened in that session.
 Native coordination failure refuses a second writer. Normal exit or a crash
 releases ownership without a stale lock file. `--once` refuses overlapping work
@@ -184,19 +187,34 @@ flight wording. Cyberpunk 2077, the Mass Effect trilogy, Skyrim and Dragon Age
 have localized Begin/Finish easter eggs; unknown/ambiguous games retain general
 wording. Button actions, recording, reports and key handling remain unchanged.
 The SimBrief Load/Unload button, its settings icon and status appear only for
-a detected flight; changing context hides/restores them without unloading a plan.
+a detected flight; changing context hides/restores them without unloading a
+plan.
 Abandon uses **Abandon flight…** or **Abandon game…** consistently in Watcher,
 Import and progress, including its localized confirmation and completion text.
-Abandonment stops uploader work and clears the local key; the game keeps running.
+Abandonment stops uploader work and clears the local key; the game keeps
+running.
 
 The bundled offline catalog covers 10,405 games and 10,888 Windows executable
 rules from a dated Discord snapshot; it is broad rather than complete. Detection
 never downloads data or sends a process list. Add process names/phrases to
-`%APPDATA%\PHPGalleryUploader\game-contexts.json` and restart, without rebuilding.
-See [game context rules and examples](../docs/WINAPP_GAME_CONTEXTS.md) for schema,
+`%APPDATA%\PHPGalleryUploader\game-contexts.json` and restart, without
+rebuilding.
+See [game context rules and examples](../docs/WINAPP_GAME_CONTEXTS.md) for
+schema,
 source provenance, account filtering, ambiguity and deliberate catalog updates.
 
-Long gallery names shrink inside their own row. One click stops acquisition,
+Watcher and Import show `Gallery: <title>` using the current display title from
+the authenticated inventory response, with long names wrapping inside their
+row. The gallery title owns its sanitized physical folder name: saving a title
+change also renames the folder and updates descendant paths. Inventory keeps
+the human-readable title and sanitized storage path distinct as values.
+Older APIs without `gallery_title` display the final folder segment.
+Hover over or focus the name to see the complete physical folder
+hierarchy on separate indented lines, from the root to the selected gallery.
+The heading and tooltip follow connection changes; the full identity remains
+available to flight records and import history.
+
+One click on Finish stops acquisition,
 drains accepted work, creates all four PDF editions and completes their required
 delivery before revoking the saved key. No confirmation or success message box
 appears; successful progress closes after durable local key cleanup. Errors
@@ -212,7 +230,8 @@ credentials and restart never restore it. Recovery actions wrap into two rows.
 
 **Abandon flight…** is available beside Finish in Watcher and Import and in
 ordinary flight progress. Use it when the gallery was deleted, its key was
-revoked, or you want to leave the current connection without completing delivery.
+revoked, or you want to leave the current connection without completing
+delivery.
 After explicit confirmation it stops recording and upload producers, waits for
 in-flight requests to settle, marks unresolved sessions/import bindings as
 abandoned and removes the saved key from this PC. No connection test, report
@@ -624,10 +643,10 @@ at `winapp/dist/0.3.2/winapp-update.json`.
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.11.0**; this source version
+Gallery CMS release. The current source targets **0.11.1**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.11.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.11.1/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -637,7 +656,8 @@ the primary **Update** action remains distinct.
 Develop integration compares the complete tracked installer inputs with current
 `main`. If runtime, assets, dependencies, build/installer inputs or `VERSION`
 changed, the candidate version must be strictly greater than main's. Tests,
-`README.md` and `AGENTS.md` do not trigger this requirement. Several integrations
+`README.md` and `AGENTS.md` do not trigger this requirement. Several
+integrations
 may retain one upcoming version while main still has its previous version.
 After publication advances main, the next runtime change needs another bump.
 This admission runs before FULL and is rechecked before protected publication;
@@ -883,7 +903,8 @@ Accepted manual imports are allowed to finish; other requests must settle before
 the revocation call. The UI shows active work and the current phase.
 
 Unsaved URL/API-key edits must be saved or reverted before revocation. The
-request runs off the Tkinter UI thread. Revoke clears the local API key only after
+request runs off the Tkinter UI thread. Revoke clears the local API key only
+after
 the gallery confirms server-side revocation; if the request fails, the key is
 retained for retry. Closing is blocked while the server response is pending, so
 a server-revoked key cannot remain silently stored locally.
@@ -1238,7 +1259,8 @@ introduced.
 Build checks reject missing/wrong-architecture DLLs, missing required exports or
 an embedded payload whose SHA256 differs from that source DLL. This Microsoft
 native binary is copied unchanged from `SimConnect SDK/lib/SimConnect.dll` in
-the official [MSFS 2024 SDK Core 1.7.3 archive](https://sdk.flightsimulator.com/msfs2024/files/installers/1.7.3/MSFS2024_SDK_Core_Installer_1.7.3.zip).
+the official
+[MSFS 2024 SDK Core 1.7.3 archive](https://sdk.flightsimulator.com/msfs2024/files/installers/1.7.3/MSFS2024_SDK_Core_Installer_1.7.3.zip).
 The 2026-10-23 update replaces the previous 85,504-byte binary with the
 84,480-byte SDK copy, SHA256
 `b10de7adf4c62e5f66c89dd6d01b64091bbbcec83411cfe191d6b85fbee61d15`.
@@ -1248,7 +1270,8 @@ file-version metadata, so the SDK package version identifies provenance rather
 than an invented DLL version. The current
 [retail SDK release notes](https://docs.flightsimulator.com/msfs2024/retail/introduction/sdk-release-notes/)
 list 1.7.3. Live MSFS 2020/2024 acceptance remains separate from these checks.
-The [Microsoft SDK terms](https://docs.flightsimulator.com/msfs2024/retail/introduction/sdk-eula/)
+The
+[Microsoft SDK terms](https://docs.flightsimulator.com/msfs2024/retail/introduction/sdk-eula/)
 apply; the project's MIT license does not replace them or establish separate
 redistribution permission.
 

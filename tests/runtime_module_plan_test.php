@@ -98,6 +98,20 @@ assert_contract(
 );
 
 $routeModules = $plans['route_modules'];
+$publicFiles = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure(
+    $plans, $routeModules['gallery'],
+)['files'];
+assert_contract(
+    !in_array('app/services/updates_jobs.php', $publicFiles, true),
+    'Public gallery discovery and safe error references must not load updater workers.',
+);
+foreach (['domain-updates', 'updater-work'] as $workerModule) {
+    $workerFiles = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure(
+        $plans, $workerModule,
+    )['files'];
+    assert_contract(in_array('app/services/updates_jobs.php', $workerFiles, true),
+        'Explicit Admin/background updater owners must retain the complete worker.');
+}
 $bulkModule = (string) ($routeModules['admin_bulk_images'] ?? '');
 assert_contract(
     $bulkModule === 'domain-admin-images-bulk',

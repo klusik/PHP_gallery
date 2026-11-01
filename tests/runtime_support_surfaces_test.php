@@ -400,10 +400,10 @@ namespace {
     }
     runtime_surface_assert(
         str_contains(
-            runtime_surface_source('app/views/admin_dashboard.php'),
-            "!empty(\$runtimeSupport['policy']['action_required'])",
+            runtime_surface_source('app/views/admin_dashboard_sections.php'),
+            "view_admin_dashboard_bool(\$model, 'system_action_required')",
         ),
-        'Initial Maintenance badge must expose a runtime warning before deferred content opens.',
+        'Overview Maintenance Center shortcut must retain the prepared health warning.',
     );
     runtime_surface_assert(
         php_source_contains(

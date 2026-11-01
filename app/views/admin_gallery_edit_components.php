@@ -141,8 +141,13 @@ function view_render_admin_gallery_ai_reprocess_panel(array $viewModel): void
 }
 
 /**
- * Render bulk image actions and controller-prepared bounded destination controls.
- * @param array<string,mixed> $viewModel Controller-prepared image bulk/move toolbar state.
+ * Render bulk image actions and controller-prepared bounded destination
+ * controls.
+ * @param array{gallery_id?:int,
+ *     browser_thumbnail_rebuild_config?:array{enabled:bool, ...},
+ *     parent_picker_html?:string, csrf_html?:string, bulk_action_url?:string,
+ *     ...} $viewModel Prepared image action URLs, browser rebuild mode and
+ *     bounded destination picker markup.
  * @return void Render gallery actions and move controls.
  */
 function view_render_admin_image_bulk_toolbar(array $viewModel): void
@@ -298,7 +303,7 @@ function view_render_admin_image_bulk_toolbar(array $viewModel): void
             . e(t('admin.gallery_editor.example_gallery_title'))
             . '"></label><label><span>'
             . e(t('admin.gallery_editor.optional_folder_slug'))
-            . '</span><input type="text" name="new_gallery_folder_name" placeholder="'
+            . '</span><input type="text" name="new_gallery_folder_name" readonly placeholder="'
             . e(t('admin.gallery_editor.derive_from_title'))
             . '"></label><small><span aria-hidden="true">ⓘ</span> '
             . e(t('admin.gallery_editor.new_gallery_move_help'))

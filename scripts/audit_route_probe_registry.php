@@ -27,7 +27,7 @@ return [
         'response_kind' => 'html',
         'response_markers' => [
             'data-public-gallery-index-grid',
-            'Workflow seed',
+            'Seed',
         ],
         'route' => 'home',
         'request_uri' => '/',

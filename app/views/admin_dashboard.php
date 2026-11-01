@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Keep Admin dashboard markup out of the controller
- *   - Render maintenance cards, notices, tabs, and gallery table rows
+ *   - Render Overview, notices, tabs and gallery table rows
  *   - Avoid database reads while rendering dashboard rows
  *
  * Author:
@@ -54,13 +54,11 @@ use function Gallery\Services\t;
  *
  * @param array<string,mixed> $model Dashboard read model from admin_dashboard_view_model(),
  *   including gallery rows/counts, feature booleans and canonical nested health records.
- * @return void Emit the dashboard, action badges and deferred Maintenance placeholder.
+ * @return void Emit Overview and the deferred Galleries workspace.
  * @see \Gallery\Services\admin_dashboard_view_model()
  */
 function view_render_admin_dashboard(array $model): void
 {
-    $gpsMapOverrideReady = !empty($model['gps_map_override_ready']);
-    $migrationPending = !empty($model['migration_pending']);
     $galleries = is_array($model['galleries'] ?? null)
         ? $model['galleries']
         : [];
@@ -72,55 +70,7 @@ function view_render_admin_dashboard(array $model): void
         $model['update_label'] ?? t('admin.menu.updates', 'Updates')
     );
     $totalGalleries = (int) ($model['total_galleries'] ?? count($galleries));
-    $totalImages = (int) ($model['total_images'] ?? 0);
-    $missingThumbnailVariants = (int) (
-        $model['missing_thumbnail_variants'] ?? 0
-    );
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
-    // Security/auth schema health surfaces before the deferred Maintenance panel opens.
-    $securitySchemaStatuses = is_array(
-        $model['security_schema_statuses'] ?? null,
-    )
-        ? $model['security_schema_statuses']
-        : [];
-    // Destructive/ingestion schema health uses the same badge so paused mutations are visible immediately.
-    $mutationSchemaStatuses = is_array(
-        $model['mutation_schema_statuses'] ?? null,
-    )
-        ? $model['mutation_schema_statuses']
-        : [];
-    $runtimeSupport = is_array($model['runtime_support_status'] ?? null)
-        ? $model['runtime_support_status']
-        : [];
-    $systemHealthActionRequired =
-        !empty($runtimeSupport['policy']['action_required']);
-    $systemHealthActionRequired =
-        $systemHealthActionRequired
-        || !empty($model['image_move_pending_status']['action_required']);
-    foreach (array_merge(
-        $securitySchemaStatuses,
-        $mutationSchemaStatuses,
-        (array) ($model['presentation_schema_statuses'] ?? []),
-    ) as $schemaStatus) {
-        if (
-            is_array($schemaStatus)
-            && in_array(
-                (string) ($schemaStatus['state'] ?? 'unknown'),
-                ['missing', 'unknown'],
-                true,
-            )
-        ) {
-            $systemHealthActionRequired = true;
-            break;
-        }
-    }
-    $maintenanceBadge = $migrationPending || $systemHealthActionRequired
-        ? t('admin.dashboard.badge_action', 'Action')
-        : (
-            $missingThumbnailVariants > 0
-                ? (string) $missingThumbnailVariants
-                : null
-        );
 
     $adminTabs = [
         [
@@ -134,11 +84,6 @@ function view_render_admin_dashboard(array $model): void
             || !empty($model['overview_loaded'])
                 ? $totalGalleries
                 : null,
-        ],
-        [
-            'id' => 'admin-tab-maintenance',
-            'label' => t('admin.dashboard.tab_maintenance', 'Maintenance'),
-            'badge' => $maintenanceBadge,
         ],
     ];
 
@@ -162,7 +107,9 @@ function view_render_admin_dashboard(array $model): void
             'class' => $updateButtonClass,
         ];
     }
-    echo '<div class="admin-dashboard-page" data-admin-dashboard-workspace>';
+    echo '<div class="admin-dashboard-page" data-admin-dashboard-workspace'
+        . ' data-maintenance-url="'
+        . e(url_for('admin_maintenance_center', ['tab' => 'tools'])) . '">';
     echo
         '<header class="admin-dashboard-toolbar"><h1>'
             . e(t('admin.dashboard.tab_overview', 'Overview'))
@@ -191,17 +138,6 @@ function view_render_admin_dashboard(array $model): void
             $tab['id'],
             strlen('admin-tab-'),
         )];
-        $maintenanceTab = (string) ($model['requested_maintenance_tab'] ?? '');
-        if (
-            $tab['id'] === 'admin-tab-maintenance'
-            && in_array(
-                $maintenanceTab,
-                ['content', 'media', 'navigation', 'trash', 'system'],
-                true,
-            )
-        ) {
-            $tabParams['maintenance_tab'] = $maintenanceTab;
-        }
         $tab['href'] =
             url_for('admin', $tabParams)
             . ($tab['id'] === 'admin-tab-overview' ? '' : '#' . $tab['id']);
@@ -238,50 +174,6 @@ function view_render_admin_dashboard(array $model): void
         $activeTab === 'admin-tab-galleries',
     );
 
-    ob_start();
-    if (!empty($model['maintenance_loaded'])) {
-        view_render_admin_dashboard_maintenance_panel($model);
-    } else {
-        $requestedMaintenanceTab = strtolower(trim(
-            (string) ($model['requested_maintenance_tab'] ?? ''),
-        ));
-        $maintenanceEndpointParams = in_array(
-            $requestedMaintenanceTab,
-            ['content', 'media', 'navigation', 'system', 'trash'],
-            true,
-        )
-            ? ['maintenance_tab' => $requestedMaintenanceTab]
-            : [];
-        echo
-            '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="'
-                . e(url_for(
-                    'admin_dashboard_maintenance',
-                    $maintenanceEndpointParams,
-                ))
-                . '" data-maintenance-log-endpoint="'
-                . e(url_for('admin_dashboard_maintenance_client_log'))
-                . '" data-csrf-token="'
-                . e(csrf_token())
-                . '" role="status"><p class="muted">'
-                . e(t(
-                    'admin.dashboard.maintenance_loading',
-                    'Loading maintenance tools…',
-                ))
-                . '</p><noscript><a href="'
-                . e(url_for('admin_storage_statistics'))
-                . '">'
-                . e(t(
-                    'admin.storage.open_details',
-                    'Open storage and maintenance details',
-                ))
-                . '</a></noscript></div>';
-    }
-    $maintenanceHtml = (string) ob_get_clean();
-    render_admin_tab_panel(
-        'admin-tab-maintenance',
-        $maintenanceHtml,
-        $activeTab === 'admin-tab-maintenance',
-    );
     echo '</div>';
 }
 

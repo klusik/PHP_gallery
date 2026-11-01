@@ -1894,19 +1894,27 @@ function gallery_image_belongs_to_gallery_branch(
 }
 
 /**
- * Relocate a physical subtree under the gallery writer lease and rewrite its catalog paths.
+ * Relocate a physical subtree under the gallery writer lease and rewrite its
+ * catalog paths.
  *
  * @param int $galleryId Existing physical subtree root.
  * @param ?int $parentId New parent, or null/zero for gallery storage root.
- * @param ?string $folderName Optional requested leaf name; null retains the current leaf.
- * @param bool $smartGalleryGraphPrevalidated True only for a caller that already validated the complete final parent map and will run final hierarchy maintenance.
- * @return array{moved:bool,from:string,to:string,galleries:int} Relative source/target paths and rewritten row count; moved=false is a no-op.
+ * @param ?string $folderName Optional requested leaf name; null retains the
+ *     current leaf.
+ * @param bool $smartGalleryGraphPrevalidated True only for a caller that
+ *     already validated the complete final parent map and will run final
+ *     hierarchy maintenance.
+ * @param ?string $title New source title to persist with the root's new path;
+ *     null preserves the existing title.
+ * @return array{moved:bool, from:string, to:string, galleries:int} Relative
+ *     source/target paths and rewritten row count; moved=false is a no-op.
  */
 function move_gallery_folder_to_parent(
     int $galleryId,
     ?int $parentId,
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
+    ?string $title = null,
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
@@ -1915,6 +1923,7 @@ function move_gallery_folder_to_parent(
             $parentId,
             $folderName,
             $smartGalleryGraphPrevalidated,
+            $title,
         );
     } finally {
         gallery_edit_writer_end($writerLock);
@@ -1922,19 +1931,25 @@ function move_gallery_folder_to_parent(
 }
 
 /**
- * Perform move gallery folder to parent while the caller owns the gallery writer lease.
+ * Perform move gallery folder to parent while the caller owns the gallery
+ * writer lease.
  *
  * @param int $galleryId Gallery subtree to relocate.
  * @param ?int $parentId Destination parent or root.
  * @param ?string $folderName Optional replacement leaf directory name.
- * @param bool $smartGalleryGraphPrevalidated Whether the caller already validated the attachment graph.
- * @return array{moved:bool,from:string,to:string,galleries:int} Physical move result and affected hierarchy count.
+ * @param bool $smartGalleryGraphPrevalidated Whether the caller already
+ *     validated the attachment graph.
+ * @param ?string $title New root title, committed atomically with the path map;
+ *     null retains it.
+ * @return array{moved:bool, from:string, to:string, galleries:int} Physical
+ *     move result and affected hierarchy count.
  */
 function move_gallery_folder_to_parent_owned(
     int $galleryId,
     ?int $parentId,
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
+    ?string $title = null,
 ): array {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -2000,10 +2015,11 @@ function move_gallery_folder_to_parent_owned(
     // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
     $currentFolderName = gallery_folder_name_from_path($oldPath);
     // $targetFolderName stores an intermediate value used by the surrounding gallery workflow.
-    $targetFolderName =
-        $folderName !== null && trim($folderName) !== ''
+    $targetFolderName = $title !== null
+        ? gallery_folder_segment($title)
+        : ($folderName !== null && trim($folderName) !== ''
             ? gallery_folder_segment($folderName)
-            : $currentFolderName;
+            : $currentFolderName);
     if ($targetFolderName === '') {
         throw new RuntimeException('Gallery folder name cannot be empty.');
     }
@@ -2028,7 +2044,9 @@ function move_gallery_folder_to_parent_owned(
     }
     // $newAbs stores an intermediate value used by the surrounding gallery workflow.
     $newAbs = gallery_target_abs_path($newPath);
-    if (file_exists($newAbs)) {
+    if (file_exists($newAbs) && (
+        is_link($newAbs) || realpath($oldAbs) !== realpath($newAbs)
+    )) {
         throw new RuntimeException(
             'Destination folder already exists on disk.',
         );
@@ -2084,6 +2102,9 @@ function move_gallery_folder_to_parent_owned(
             'folder_path_hash' => hash('sha256', $path),
             'parent_id' => $rowParentId,
         ];
+        if ((int) $id === $galleryId && $title !== null) {
+            $updates[array_key_last($updates)]['title'] = $title;
+        }
     }
 
     // $moved stores whether the filesystem rename must be rolled back after a persistence failure.
@@ -2209,6 +2230,7 @@ function import_galleries_owned(
     // $folderPaths stores the ordered import queue expanded from the admin selection.
     $folderPaths =
         admin_gallery_discovery_expand_requested_import_paths($folderPaths);
+    gallery_import_assert_canonical_targets($folderPaths);
 
     // Variable $imported stores this steps working value.
     $imported = 0;
@@ -2232,6 +2254,7 @@ function import_galleries_owned(
         $imported++;
     }
 
+    gallery_normalize_imported_folders($importedIds);
     sync_gallery_parent_ids();
     if ($importedIds && public_path_schema_ready()) {
         refresh_gallery_public_paths();
@@ -2281,6 +2304,7 @@ function import_galleries_without_thumbnails_owned(array $folderPaths): array
     // $folderPaths stores the ordered import queue expanded from the admin selection.
     $folderPaths =
         admin_gallery_discovery_expand_requested_import_paths($folderPaths);
+    gallery_import_assert_canonical_targets($folderPaths);
 
     // $imported stores an intermediate value used by the surrounding gallery workflow.
     $imported = 0;
@@ -2300,6 +2324,7 @@ function import_galleries_without_thumbnails_owned(array $folderPaths): array
         $importedIds[] = (int) $gallery['id'];
         $imported++;
     }
+    gallery_normalize_imported_folders($importedIds);
     sync_gallery_parent_ids();
     if ($importedIds && public_path_schema_ready()) {
         refresh_gallery_public_paths();
@@ -2313,6 +2338,84 @@ function import_galleries_without_thumbnails_owned(array $folderPaths): array
         'gallery_ids' => $importedIds,
         'thumbnails' => 0,
     ];
+}
+
+/**
+ * Canonicalize only newly imported folder leaves through the guarded mover.
+ *
+ * Work deepest first so imported parent moves retain every descendant's stable
+ * catalog identity. Disk-derived titles, not conflicting sidecar titles, own
+ * this canonical spelling. Destination collisions refuse the move.
+ * @param list<int> $galleryIds Newly imported identities; existing peers are
+ *     never swept or silently normalized by an ordinary import.
+ * @return list<array{from:string,to:string}> Confirmed prefix changes; moves
+ *     refresh complete subtree catalog paths and sidecars.
+ */
+function gallery_normalize_imported_folders(array $galleryIds): array
+{
+    $rows = [];
+    $moves = [];
+    foreach ($galleryIds as $id) {
+        $row = find_gallery($id, true);
+        if ($row) {
+            $rows[] = $row;
+        }
+    }
+    usort($rows, static fn(array $left, array $right): int =>
+        substr_count((string) $right['folder_path'], '/')
+        <=> substr_count((string) $left['folder_path'], '/'));
+    foreach ($rows as $row) {
+        $title = gallery_disk_source_title(
+            (string) $row['folder_path'], (string) $row['title'],
+        );
+        if (gallery_folder_segment($title) !== gallery_folder_name_from_path(
+            (string) $row['folder_path'],
+        )) {
+            $result = move_gallery_folder_to_parent(
+                (int) $row['id'],
+                isset($row['parent_id']) ? (int) $row['parent_id'] : null,
+                null, false, $title,
+            );
+            if ($result['moved']) {
+                $moves[] = ['from' => $result['from'], 'to' => $result['to']];
+            }
+        }
+    }
+    return $moves;
+}
+
+/**
+ * Refuse canonical disk-name collisions before importing any selected row.
+ * @param list<string> $folderPaths Expanded physical import scope.
+ * @return void Throws for empty leaves, competing targets or occupied paths;
+ *     never adds numeric suffixes that would break the disk/title invariant.
+ */
+function gallery_import_assert_canonical_targets(array $folderPaths): void
+{
+    $targets = [];
+    foreach ($folderPaths as $path) {
+        if (find_gallery_by_folder_path($path)) {
+            continue;
+        }
+        $leaf = gallery_folder_segment(gallery_folder_name_from_path($path));
+        if ($leaf === '') {
+            throw new RuntimeException('Imported folder has no usable name.');
+        }
+        $parent = normalize_relative_path(dirname($path));
+        $target = ($parent === '' ? '' : $parent . '/') . $leaf;
+        $sourceAbs = gallery_abs_path($path);
+        $targetAbs = gallery_target_abs_path($target);
+        if ((isset($targets[$target]) && $targets[$target] !== $path)
+            || (file_exists($targetAbs) && (
+                is_link($targetAbs) || realpath($sourceAbs) !== realpath($targetAbs)
+            ))
+        ) {
+            throw new RuntimeException(
+                'Canonical import folder is already occupied: ' . $target,
+            );
+        }
+        $targets[$target] = $path;
+    }
 }
 
 /**

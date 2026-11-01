@@ -33,6 +33,231 @@
  */
 
 return [
+    'admin.consistency.browser_notice' =>
+        'Vorschaubildreparaturen verwenden Browser-Worker. Diesen Tab '
+            . 'offen lassen; der Server prüft und speichert nur angeforderte '
+            . 'Varianten.',
+    'admin.consistency.consistency_browser_incomplete' =>
+        'Der Browser hat noch nicht alle erforderlichen gültigen '
+            . 'Varianten veröffentlicht. Meldung prüfen und den Fortschritt '
+            . 'abgleichen.',
+    'admin.consistency.consistency_browser_stale' =>
+        'Quelle oder Browseraufgabe wurde geändert. Vor der Reparatur '
+            . 'eine neue Analyse starten.',
+    'admin.consistency.consistency_browser_unsupported' =>
+        'Der konfigurierte Browserablauf kann diese Quelle nicht '
+            . 'verarbeiten. Format und Quell-ZIP-Limit prüfen; manuelle '
+            . 'Prüfung kann nötig sein.',
+    'admin.consistency.consistency_browser_unavailable' =>
+        'Browserverarbeitung ist deaktiviert oder nicht verfügbar. '
+            . 'Browser-Upload aktivieren und einen unterstützten Browser '
+            . 'verwenden. Kein Rückfall auf PHP-Erzeugung.',
+    'admin.consistency.browser' =>
+        'Vorschaubilder werden im Browser erzeugt',
+    'admin.consistency.leaf_value' =>
+        'Ordnername (letztes Segment)',
+    'admin.consistency.report_scope' =>
+        'Berichtsumfang',
+    'admin.consistency.action_scan' =>
+        'Dieses Foto vom Datenträger registrieren.',
+    'admin.consistency.action_import' =>
+        'Diesen Ordner/dieses Foto mit kanonischen Namen registrieren.',
+    'admin.consistency.action_source' =>
+        'Original vom Datenträger neu einlesen und Ableitungen '
+            . 'erzeugen.',
+    'admin.consistency.action_metadata' =>
+        'Vorschaubildmetadaten aus vorhandenen Dateien erneuern.',
+    'admin.consistency.action_image' =>
+        'Erforderliche Varianten in Browser-Workern erzeugen; Originale '
+            . 'und gültige Vorschaubilder behalten.',
+    'admin.consistency.action_gallery' =>
+        'Vorgeschlagene Galerieänderungen anwenden und Sidecar-Titel '
+            . 'abgleichen.',
+    'admin.consistency.sidecar_value' =>
+        'Titel in gallery.json',
+    'admin.consistency.parent_value' =>
+        'Pfad der Elterngalerie',
+    'admin.consistency.folder_value' =>
+        'Ordnerpfad',
+    'admin.consistency.title_value' =>
+        'Galeriename',
+    'admin.consistency.plan_note' =>
+        'Nur die Schreibweise der Segmente ändert sich; Schrägstriche '
+            . 'bewahren die Unterordnerstruktur. Elternumbenennungen '
+            . 'aktualisieren Nachfahrenpfade. Physische Ziele werden vor dem '
+            . 'Schreiben geprüft.',
+    'admin.consistency.empty_value' =>
+        'Nicht gesetzt / fehlt',
+    'admin.consistency.proposed' =>
+        'Nach der Reparatur',
+    'admin.consistency.current' =>
+        'Jetzt',
+    'admin.consistency.scope_hint_content' =>
+        'Liest zusätzlich Originalprüfsummen und dekodiert Bildinhalte. '
+            . 'Bei großen Sammlungen bewusst aufwendig; nicht verfügbare '
+            . 'Dekodierung bleibt ungeprüft.',
+    'admin.consistency.scope_hint_files' =>
+        'Prüft echte Dateien, Bildheader, Abmessungen, Zeiten und '
+            . 'Metadaten stapelweise. Originalprüfsummen und Bildinhalt '
+            . 'werden nicht geprüft.',
+    'admin.consistency.scope_hint_names' =>
+        'Vergleicht Galerienamen, erfasste Pfade und Eltern in der '
+            . 'Datenbank. Keine Prüfung von Fotos, Vorschaubildern oder '
+            . 'physischen Ordnern.',
+    'admin.consistency.scope_content' =>
+        'Tiefe Inhaltsprüfung (langsam)',
+    'admin.consistency.scope_files' =>
+        'Dateien und Vorschaubilder',
+    'admin.consistency.scope_names' =>
+        'Namen und Pfade (nur DB)',
+    'admin.consistency.scope' =>
+        'Prüfung',
+    'admin.consistency.installation' => 'Installation',
+    'admin.consistency.title' =>
+        'Galeriekonsistenz',
+    'admin.consistency.back' =>
+        'Wartung',
+    'admin.consistency.analyze' =>
+        'Galerie analysieren',
+    'admin.consistency.selected' =>
+        'Auswahl reparieren',
+    'admin.consistency.all' =>
+        'Alles Reparierbare reparieren',
+    'admin.consistency.resume' =>
+        'Fortschritt prüfen / fortsetzen',
+    'admin.consistency.busy' =>
+        'Nächsten Stapel vorbereiten…',
+    'admin.consistency.report_done' =>
+        'Bericht fertig. Galerien zur Reparatur auswählen; manuelle '
+            . 'Befunde bleiben getrennt.',
+    'admin.consistency.repair_done' =>
+        'Reparaturen abgeschlossen. Repariert:',
+    'admin.consistency.galleries' =>
+        'Galerieordner und Namen prüfen',
+    'admin.consistency.images' =>
+        'Originale und Vorschaubilder prüfen',
+    'admin.consistency.disk' =>
+        'Geprüfte Datenträgereinträge',
+    'admin.consistency.repairs' =>
+        'Ausgewählte Befunde reparieren',
+    'admin.consistency.stale' =>
+        'Der Katalog wurde geändert. Vor Reparaturen neu analysieren.',
+    'admin.consistency.blocked' =>
+        'Vorgang angehalten. Befunde prüfen und vor weiteren Reparaturen '
+            . 'neu analysieren.',
+    'admin.consistency.uncertain' =>
+        'Abschluss unbestätigt. Status ohne erneuten Schreibvorgang '
+            . 'prüfen; nach Abbruch neu analysieren.',
+    'admin.consistency.consistency_failed' =>
+        'Anfrage fehlgeschlagen. Status prüfen oder neu analysieren.',
+    'admin.consistency.consistency_stale' =>
+        'Der Katalog wurde geändert. Neu analysieren.',
+    'admin.consistency.consistency_report_required' =>
+        'Ein abgeschlossener aktueller Bericht ist erforderlich.',
+    'admin.consistency.consistency_selection_empty' =>
+        'Keine reparierbaren Befunde ausgewählt.',
+    'admin.consistency.consistency_uncertain' =>
+        'Status der vorherigen Reparatur prüfen.',
+    'admin.consistency.select_first' =>
+        'Mindestens eine reparierbare Galerie auswählen.',
+    'admin.consistency.help_label' =>
+        'Umfang und Grenzen der Konsistenzprüfung',
+    'admin.consistency.help' =>
+        'Umfang wählen: nur DB-Namen, echte Dateien und Bildheader oder '
+            . 'aufwendige Prüfsummen-/Pixelprüfung. Vorschläge zeigen '
+            . 'aktuelle und resultierende Werte vor der Reparatur. Ungeprüfte '
+            . 'Inhalte und mehrdeutige Dateien erfordern manuelle Prüfung. '
+            . 'Originale und gültige Vorschaubilder bleiben erhalten.',
+    'admin.consistency.export' =>
+        'Bericht exportieren',
+    'admin.consistency.javascript' =>
+        'JavaScript für Analyse und Reparaturfortschritt aktivieren.',
+    'admin.consistency.affected' =>
+        'Betroffene Galerien / Ordner',
+    'admin.consistency.select' =>
+        'Galerie auswählen',
+    'admin.consistency.fixable' =>
+        'Reparierbare Befunde',
+    'admin.consistency.manual' =>
+        'Manuelle Prüfung',
+    'admin.consistency.export_more' =>
+        'Weitere Befunde enthält der Berichtsexport.',
+    'admin.consistency.repaired' =>
+        'Reparatur bestätigt',
+    'admin.consistency.failed' =>
+        'Reparatur fehlgeschlagen / angehalten',
+    'admin.consistency.pages' =>
+        'Seiten betroffener Galerien',
+    'admin.consistency.previous' =>
+        'Zurück',
+    'admin.consistency.next' =>
+        'Weiter',
+    'admin.consistency.symlink' =>
+        'Symbolischer Link: Eigentum manuell prüfen',
+    'admin.consistency.directory_missing' =>
+        'Galerieordner fehlt',
+    'admin.consistency.directory_unreadable' =>
+        'Verzeichnis nicht vollständig lesbar',
+    'admin.consistency.name_mismatch' =>
+        'Galeriename oder Ordner muss normalisiert werden',
+    'admin.consistency.parent_mismatch' =>
+        'Katalog-Elternteil weicht vom Datenträger ab',
+    'admin.consistency.parent_missing' =>
+        'Physischer Elternordner nicht erfasst',
+    'admin.consistency.sidecar_invalid' =>
+        'gallery.json fehlt oder ist ungültig',
+    'admin.consistency.sidecar_mismatch' =>
+        'Sidecar-Titel weicht vom Katalog ab',
+    'admin.consistency.unsafe_path' =>
+        'Pfadzugehörigkeit nicht verifiziert',
+    'admin.consistency.image_parent_missing' =>
+        'Foto verweist auf fehlende Galerie',
+    'admin.consistency.original_missing' =>
+        'Originaldatei fehlt',
+    'admin.consistency.original_unreadable' =>
+        'Originaldatei nicht lesbar',
+    'admin.consistency.source_changed' =>
+        'Originalinhalt oder Größe weicht von Metadaten ab',
+    'admin.consistency.content_unchecked' =>
+        'Inhaltsvergleich nicht möglich: Dekodierung fehlt oder abgelehnt',
+    'admin.consistency.metadata_duplicate' =>
+        'Doppelte Vorschaumetadaten',
+    'admin.consistency.metadata_extra' =>
+        'Metadatenvariante außerhalb aktiver Erzeugungsrichtlinie',
+    'admin.consistency.metadata_unavailable' =>
+        'Vorschaumetadatenschema fehlt oder ist unbestätigt',
+    'admin.consistency.metadata_mismatch' =>
+        'Vorschaumetadaten fehlen oder sind inkonsistent',
+    'admin.consistency.metadata_orphans' =>
+        'Vorschaumetadaten verweisen auf fehlende Fotodatensätze',
+    'admin.consistency.thumbnail_missing' =>
+        'Erwartetes Vorschaubild fehlt',
+    'admin.consistency.thumbnail_stale' =>
+        'Vorschaubild ist älter als das Original',
+    'admin.consistency.thumbnail_invalid' =>
+        'Vorschaumaße oder Bildkopf ungültig',
+    'admin.consistency.thumbnail_decode_failed' =>
+        'Vorschaubild nicht dekodierbar',
+    'admin.consistency.content_suspect' =>
+        'Vorschauinhalt weicht deutlich ab: manuell prüfen',
+    'admin.consistency.display_master_missing' =>
+        'DNG-Anzeigemaster fehlt oder ist veraltet',
+    'admin.consistency.identity_unverified' =>
+        'Original- oder Vorschauzugehörigkeit unbestätigt',
+    'admin.consistency.derivative_unowned' =>
+        'Erzeugte Datei ohne bestätigten Katalogbesitzer',
+    'admin.consistency.original_unindexed' =>
+        'Original auf Datenträger, aber nicht erfasst',
+    'admin.consistency.directory_unindexed' =>
+        'Ordner enthält Fotos, ist aber nicht erfasst',
+    'admin.consistency.pending_move' =>
+        'Eine Bildverschiebung wartet auf Wiederherstellung',
+    'admin.consistency.move_state_unknown' =>
+        'Offene Bildverschiebungen konnten nicht geprüft werden',
+    'admin.consistency.source_collision' =>
+        'Mehrere Quelldatensätze beanspruchen dieselbe Datei',
+    'admin.consistency.source_changed_during_check' =>
+        'Original während der Analyse geändert: erneut prüfen',
     'gallery_migration.import_tab' => 'Galerie importieren',
     'gallery_migration.import_instructions' => 'Öffnen Sie API in der Quellgalerie, erzeugen Sie einen Schlüssel und kopieren Sie die Galerie-Import-URL und den Schlüssel hierher.',
     'gallery_migration.import_destination' => 'Erstellt hier eine neue Untergalerie mit Fotos und vorhandenen Vorschaubildern.',
@@ -1809,4 +2034,13 @@ return [
     'admin.gallery_editor.display_gallery_cards' => 'Galeriekarten',
     'admin.gallery_editor.display_navigation' => 'Navigation und Karten',
     'admin.gallery_editor.display_interactions' => 'Besucherinteraktionen',
+    'admin.consistency.report_snapshot' =>
+        'Bestätigte Reparaturen wurden entfernt. Dies sind die '
+        . 'verbleibenden Befunde dieser Analyse; manuelle Befunde '
+        . 'bleiben sichtbar. Wählen Sie die nächste Teilmenge.',
+    'admin.consistency.variants_confirmed' =>
+        'Bestätigte Vorschaubildvarianten',
+    'admin.consistency.remaining_clear' =>
+        'In diesem Bericht verbleiben keine Befunde. Alle ausgewählten '
+        . 'Reparaturen wurden bestätigt.',
 ];

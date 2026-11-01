@@ -30,7 +30,33 @@
  *   2026-06-03
  */
 
-import {i18n} from './admin-core.js?v=20260512-admin-core-v1';
+import {i18nForElement} from './admin-core.js?v=20261003-scoped-i18n-v1';
+import {captureAdminPanelOwner} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
+
+// Bound each physical request while retaining the existing site-wide cadence.
+// Type: number; Units: image IDs per request; Scope: gallery/site rename runs.
+// Consumers: submitApplyInBatches. Rationale: 15 matches gallery POST admission
+// and gives visible server-confirmed progress without one long request.
+const renameBatchSize = 15;
+
+/**
+ *  @typedef {{gallery_id?:number, galleries_requested?:number,
+ *     galleries_processed?:number, renamed:number, already_matches:number,
+ *     missing:number, skipped:number, collisions:number,
+ *     derivatives_moved:number, derivatives_cleaned:number,
+ *     derivative_failures:number, zip_archives_deleted:number,
+ *     titles_updated:number, details:Array<{gallery_id:number, gallery:string,
+ *     image_id:number, old:string, new:string, status:string, notes:string[]}>,
+ *     warnings:string[], failures:string[]}} MediaRenameResult
+ */
+
+/**
+ * @typedef {import('./admin-mutation-completion.js').MutationEnvelopeCandidate
+ *     & {ok?:boolean, result?:MediaRenameResult, processed?:number,
+ *     availability?:Record<string, {rename_count:number, warning_count:number}>,
+ *     panel_html?:string, body_html?:string, error?:string, message?:string}}
+ *     MediaRenamerPayload
+ */
 
 let mediaRenamerReady = false;
 
@@ -110,33 +136,58 @@ async function handleMediaRenamerSubmit(event) {
     }
 
     const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
-    const confirmMessage = form.dataset.mediaRenamerConfirm || '';
-    if (confirmMessage && !window.confirm(confirmMessage)) {
+    const review = form.querySelector(
+        'input[type="checkbox"][name="confirm_media_rename"]',
+    );
+    // Keep the explicit inline review even for synthetic submit events.
+    // The server independently requires the same confirmation field.
+    if (review instanceof HTMLInputElement && !review.checked) {
         event.preventDefault();
+        review.reportValidity();
         return;
     }
 
     event.preventDefault();
     const workspace = findRenamerWorkspace(form);
+    const mutationTarget = workspace?.parentElement || document;
+    const sourcePanel = form.closest('[data-admin-side-panel]');
+    const panelOwner = sourcePanel ? captureAdminPanelOwner(sourcePanel) : {
+        isCurrent: () => mutationTarget.isConnected,
+        signal: undefined,
+    };
+    const publishMutation = payload => {
+        if (payload.mutation && Array.isArray(payload.contexts)) {
+            (mutationTarget.isConnected ? mutationTarget : document).dispatchEvent(
+                new CustomEvent('php-gallery:auxiliary-mutation-success', {
+                    bubbles: true,
+                    detail: {source: 'media-renamer', result: payload, panelOwner},
+                }),
+            );
+        }
+    };
     const progress = ensureRenamerProgress(form, workspace);
     // Single-response reads have no server progress samples; show activity without invented percentages.
-    progress.dataset.indeterminate = !isAvailabilityCheckSubmitter(submitter) && !isSiteWideApplyForm(form) && !form.dataset.mediaRenamerConfirm ? '1' : '0';
-    setRenamerProgress(progress, 8, i18n('admin.media_renamer.progress_starting', 'Preparing rename request...'));
+    progress.dataset.indeterminate = !isAvailabilityCheckSubmitter(submitter) && !isBatchedApplyForm(form) ? '1' : '0';
+    setRenamerProgress(progress, isBatchedApplyForm(form) ? 0 : 8, i18nForElement(form, 'admin.media_renamer.progress_starting', 'Preparing rename request...'));
     setRenamerFormDisabled(form, true);
 
     try {
         if (isAvailabilityCheckSubmitter(submitter)) {
             const payload = await submitAvailabilityCheckInBatches(form, submitter, progress);
-            setRenamerProgress(progress, 92, i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
-            replaceRenamerWorkspace(form, payload);
+            setRenamerProgress(progress, 92, i18nForElement(form, 'admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
+            if (panelOwner.isCurrent()) replaceRenamerWorkspace(form, payload);
             setRenamerProgress(null, 100, '');
             return;
         }
 
-        if (isSiteWideApplyForm(form)) {
+        if (isBatchedApplyForm(form)) {
             const payload = await submitApplyInBatches(form, submitter, progress);
-            setRenamerProgress(progress, 92, i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
-            replaceRenamerWorkspace(form, payload);
+            setRenamerProgress(progress, 100, i18nForElement(form,
+                'admin.media_renamer.progress_refreshing',
+                'Refreshing the renamer view...',
+            ));
+            if (panelOwner.isCurrent()) replaceRenamerWorkspace(form, payload);
+            publishMutation(payload);
             setRenamerProgress(null, 100, '');
             return;
         }
@@ -144,19 +195,17 @@ async function handleMediaRenamerSubmit(event) {
         const response = await submitRenamerForm(form, submitter, (percent, label) => setRenamerProgress(progress, percent, label));
         const payload = await parseRenamerJsonResponse(response, form);
         if (!response.ok || payload.ok === false) {
-            throw new Error(payload.error || payload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+            throw new Error(payload.error || payload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
         }
-        setRenamerProgress(progress, 92, i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
-        replaceRenamerWorkspace(form, payload);
-        if (payload.mutation && Array.isArray(payload.contexts)) {
-            document.dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {
-                bubbles: true,
-                detail: {source: 'media-renamer', result: payload},
-            }));
-        }
+        setRenamerProgress(progress, 92, i18nForElement(form, 'admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
+        if (panelOwner.isCurrent()) replaceRenamerWorkspace(form, payload);
+        publishMutation(payload);
         setRenamerProgress(null, 100, '');
     } catch (error) {
-        setRenamerProgress(progress, 100, error instanceof Error ? error.message : String(error));
+        if (error?.confirmedMutation) publishMutation(error.confirmedMutation);
+        const bar = progress.querySelector('[data-admin-media-renamer-progress-bar]');
+        progress.dataset.indeterminate = '0';
+        setRenamerProgress(progress, Number(bar?.value || 0), error instanceof Error ? error.message : String(error));
         setRenamerFormDisabled(form, false);
     }
 }
@@ -175,66 +224,80 @@ function isAvailabilityCheckSubmitter(submitter) {
 }
 
 /**
- * Detect the site-wide physical apply form.
+ * Detect gallery and site-wide physical apply forms with prepared image IDs.
  *
  * @param {HTMLFormElement} form Submitted form.
  * @return {boolean} True when the form should be applied through photo batches.
  */
-function isSiteWideApplyForm(form) {
+function isBatchedApplyForm(form) {
     const action = form.querySelector('input[name="renamer_action"]');
-    return action instanceof HTMLInputElement
+    return ((action instanceof HTMLInputElement
         && action.value === 'apply'
-        && form.dataset.mediaRenamerTarget === '[data-admin-media-renamer-workspace=site]'
+        && form.dataset.mediaRenamerTarget === '[data-admin-media-renamer-workspace=site]')
+        || form.dataset.mediaRenamerApply === 'gallery')
         && form.querySelectorAll('input[name="rename_candidate_image_ids[]"]').length > 0;
 }
 
 /**
- * Run physical renames in small AJAX batches so long operations do not look frozen
- * and are less likely to hit PHP/shared-hosting request timeouts.
+ * Run bounded physical rename batches with confirmed progress between requests.
+ * Short requests also reduce the risk of shared-hosting request timeouts.
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {HTMLElement|null} progress Progress element.
- * @return {Promise<object>} Final workspace JSON payload.
+ * @return {Promise<
+ *     import('./admin-mutation-completion.js').MutationEnvelopeCandidate
+ *     & {result?:MediaRenameResult, panel_html?:string, body_html?:string,
+ *     error?:string}>} Final server completion envelope and refreshed
+ *     workspace.
  */
 async function submitApplyInBatches(form, submitter, progress) {
     const imageIds = renameCandidateImageIdsFromForm(form);
     const total = imageIds.length;
-    const batchSize = 15;
     let processed = 0;
     const aggregate = emptyApplyResult();
+    let confirmedMutation = null;
     aggregate.galleries_requested = galleryIdsFromForm(form).length;
 
     updateApplyButton(submitter, processed, total);
-    setRenamerProgress(progress, 10, i18n('admin.media_renamer.apply_progress_start', 'Starting physical rename batches...'));
+    setRenamerProgress(progress, 0, i18nForElement(form, 'admin.media_renamer.apply_progress_start', 'Starting physical rename batches...'));
 
-    if (total > 0) {
-        for (let offset = 0; offset < total; offset += batchSize) {
-            const batchIds = imageIds.slice(offset, offset + batchSize);
+    try {
+        for (let offset = 0; offset < total; offset += renameBatchSize) {
+            const batchIds = imageIds.slice(offset, offset + renameBatchSize);
             const response = await submitApplyBatch(form, batchIds);
             const payload = await parseRenamerJsonResponse(response, form);
             if (!response.ok || payload.ok === false) {
-                throw new Error(payload.error || payload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+                throw new Error(payload.error || payload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
+            }
+            if (payload.mutation && Array.isArray(payload.contexts)) {
+                confirmedMutation = payload;
+            }
+            if (!Number.isSafeInteger(payload.processed) || payload.processed !== batchIds.length) {
+                throw new Error(i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
             }
             mergeApplyResult(aggregate, payload.result || {});
-            processed += batchIds.length;
+            processed += payload.processed;
             updateApplyButton(submitter, processed, total);
-            const percent = total > 0 ? 10 + Math.round((processed / total) * 78) : 88;
-            setRenamerProgress(progress, percent, i18n('admin.media_renamer.apply_progress_counter', 'Renamed photo batch {processed}/{total}...', {
+            const percent = Math.round(processed * 100 / total);
+            setRenamerProgress(progress, percent, i18nForElement(form, 'admin.media_renamer.apply_progress_counter', 'Processed photos {processed}/{total}...', {
                 processed: String(processed),
                 total: String(total),
             }));
         }
-    }
 
-    aggregate.galleries_processed = aggregate.galleries_requested;
-    const finalResponse = await submitApplyFinalRefresh(form, aggregate);
-    const finalPayload = await parseRenamerJsonResponse(finalResponse, form);
-    if (!finalResponse.ok || finalPayload.ok === false) {
-        throw new Error(finalPayload.error || finalPayload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
-    }
+        aggregate.galleries_processed = aggregate.galleries_requested;
+        const finalResponse = await submitApplyFinalRefresh(form, aggregate);
+        const finalPayload = await parseRenamerJsonResponse(finalResponse, form);
+        if (!finalResponse.ok || finalPayload.ok === false) {
+            throw new Error(finalPayload.error || finalPayload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
+        }
 
-    return finalPayload;
+        return finalPayload;
+    } catch (error) {
+        if (error instanceof Error && confirmedMutation) error.confirmedMutation = confirmedMutation;
+        throw error;
+    }
 }
 
 /**
@@ -282,6 +345,7 @@ async function submitApplyBatch(form, batchIds) {
     body.delete('batch_image_ids[]');
     batchIds.forEach((imageId) => body.append('batch_image_ids[]', imageId));
     body.set('renamer_action', 'apply_batch');
+    if (form.dataset.mediaRenamerApply === 'gallery') body.set('action', 'rename_files');
     body.set('ajax', '1');
 
     const requestUrl = formActionUrl(form);
@@ -302,13 +366,15 @@ async function submitApplyBatch(form, batchIds) {
  * Submit the final refresh after all physical rename batches have completed.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @param {object} aggregate Aggregate result from all batches.
+ * @param {MediaRenameResult} aggregate Server-confirmed counters and per-image
+ *     outcomes from all batches.
  * @return {Promise<Response>} Fetch response.
  */
 async function submitApplyFinalRefresh(form, aggregate) {
     const body = new FormData(form);
     body.delete('rename_candidate_image_ids[]');
     body.set('renamer_action', 'apply_refresh');
+    if (form.dataset.mediaRenamerApply === 'gallery') body.set('action', 'rename_files');
     body.set('batch_result_payload', JSON.stringify(aggregate));
     body.set('ajax', '1');
 
@@ -377,12 +443,13 @@ function mergeApplyResult(target, source) {
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {number} processed Processed photo count.
  * @param {number} total Total photo count.
+ * @return {void} Updates a live submit button, or ignores another submitter.
  */
 function updateApplyButton(submitter, processed, total) {
     if (!(submitter instanceof HTMLButtonElement)) {
         return;
     }
-    const baseLabel = submitter.dataset.originalLabel || submitter.textContent || i18n('admin.media_renamer.apply_site_button', 'Apply planned renames');
+    const baseLabel = submitter.dataset.originalLabel || submitter.textContent || i18nForElement(submitter, 'admin.media_renamer.apply_site_button', 'Apply planned renames');
     submitter.dataset.originalLabel = baseLabel;
     submitter.textContent = `${baseLabel} ${processed}/${total}`;
 }
@@ -393,7 +460,8 @@ function updateApplyButton(submitter, processed, total) {
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {HTMLElement|null} progress Progress element.
- * @return {Promise<object>} Final workspace JSON payload.
+ * @return {Promise<MediaRenamerPayload>} Final workspace JSON payload;
+ *     rejects failed or invalid endpoint responses.
  */
 async function submitAvailabilityCheckInBatches(form, submitter, progress) {
     const galleryIds = availabilityGalleryIdsFromForm(form);
@@ -403,7 +471,7 @@ async function submitAvailabilityCheckInBatches(form, submitter, progress) {
     let processed = 0;
 
     updateAvailabilityButton(submitter, processed, total);
-    setRenamerProgress(progress, 12, i18n('admin.media_renamer.availability_progress_start', 'Checking rename availability...'));
+    setRenamerProgress(progress, 12, i18nForElement(form, 'admin.media_renamer.availability_progress_start', 'Checking rename availability...'));
 
     if (total > 0) {
         for (let offset = 0; offset < total; offset += batchSize) {
@@ -411,13 +479,13 @@ async function submitAvailabilityCheckInBatches(form, submitter, progress) {
             const response = await submitAvailabilityBatch(form, batchIds);
             const payload = await parseRenamerJsonResponse(response, form);
             if (!response.ok || payload.ok === false) {
-                throw new Error(payload.error || payload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+                throw new Error(payload.error || payload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
             }
             Object.assign(availability, payload.availability || {});
             processed += batchIds.length;
             updateAvailabilityButton(submitter, processed, total);
             const percent = total > 0 ? 12 + Math.round((processed / total) * 72) : 84;
-            setRenamerProgress(progress, percent, i18n('admin.media_renamer.availability_progress_counter', 'Checked {processed}/{total} galleries...', {
+            setRenamerProgress(progress, percent, i18nForElement(form, 'admin.media_renamer.availability_progress_counter', 'Checked {processed}/{total} galleries...', {
                 processed: String(processed),
                 total: String(total),
             }));
@@ -427,7 +495,7 @@ async function submitAvailabilityCheckInBatches(form, submitter, progress) {
     const finalResponse = await submitAvailabilityFinalRefresh(form, availability);
     const finalPayload = await parseRenamerJsonResponse(finalResponse, form);
     if (!finalResponse.ok || finalPayload.ok === false) {
-        throw new Error(finalPayload.error || finalPayload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+        throw new Error(finalPayload.error || finalPayload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
     }
 
     return finalPayload;
@@ -522,12 +590,13 @@ function formActionUrl(form) {
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {number} processed Processed gallery count.
  * @param {number} total Total gallery count.
+ * @return {void} Updates a live submit button, or ignores another submitter.
  */
 function updateAvailabilityButton(submitter, processed, total) {
     if (!(submitter instanceof HTMLButtonElement)) {
         return;
     }
-    const baseLabel = submitter.dataset.originalLabel || submitter.textContent || i18n('admin.media_renamer.check_availability_button', 'Check availability');
+    const baseLabel = submitter.dataset.originalLabel || submitter.textContent || i18nForElement(submitter, 'admin.media_renamer.check_availability_button', 'Check availability');
     submitter.dataset.originalLabel = baseLabel;
     submitter.textContent = `${baseLabel} ${processed}/${total}`;
 }
@@ -545,7 +614,7 @@ async function submitRenamerForm(form, submitter, updateProgress) {
     const action = submitter?.getAttribute('formaction') || form.getAttribute('action') || window.location.href;
     const url = new URL(action, window.location.href);
 
-    updateProgress(18, i18n('admin.media_renamer.progress_sending', 'Sending request to the server...'));
+    updateProgress(18, i18nForElement(form, 'admin.media_renamer.progress_sending', 'Sending request to the server...'));
     if (method === 'get') {
         const params = new URLSearchParams(new FormData(form));
         if (submitter instanceof HTMLButtonElement && submitter.name) {
@@ -553,7 +622,7 @@ async function submitRenamerForm(form, submitter, updateProgress) {
         }
         params.set('ajax', '1');
         url.search = params.toString();
-        updateProgress(45, i18n('admin.media_renamer.progress_preview', 'Building preview from current database state...'));
+        updateProgress(45, i18nForElement(form, 'admin.media_renamer.progress_preview', 'Building preview from current database state...'));
         const requestUrl = url.toString();
         const response = await fetch(requestUrl, {
             method: 'GET',
@@ -574,10 +643,10 @@ async function submitRenamerForm(form, submitter, updateProgress) {
     body.set('ajax', '1');
     const requestAction = body.get('renamer_action');
     updateProgress(35, requestAction === 'filter'
-        ? i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...')
+        ? i18nForElement(form, 'admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...')
         : requestAction === 'preview'
-            ? i18n('admin.media_renamer.progress_preview', 'Building preview from current database state...')
-            : i18n('admin.media_renamer.progress_running', 'Renaming files, updating database rows, and refreshing derived assets...'));
+            ? i18nForElement(form, 'admin.media_renamer.progress_preview', 'Building preview from current database state...')
+            : i18nForElement(form, 'admin.media_renamer.progress_running', 'Renaming files, updating database rows, and refreshing derived assets...'));
     const requestUrl = url.toString();
     const response = await fetch(requestUrl, {
         method: 'POST',
@@ -681,7 +750,8 @@ function setRenamerFormDisabled(form, disabled) {
  *
  * @param {Response} response Fetch response.
  * @param {HTMLFormElement} form Submitted form.
- * @return {Promise<object>} Parsed JSON payload.
+ * @return {Promise<MediaRenamerPayload>} Decoded endpoint contract; rejects
+ *     non-JSON or malformed JSON after reporting the diagnostic.
  */
 async function parseRenamerJsonResponse(response, form) {
     const contentType = response.headers.get('content-type') || '';
@@ -691,7 +761,7 @@ async function parseRenamerJsonResponse(response, form) {
     const snippet = trimmed.slice(0, 1200);
 
     if (!contentType.toLowerCase().includes('application/json')) {
-        const message = buildNonJsonMessage(response, contentType, snippet);
+        const message = buildNonJsonMessage(response, contentType, snippet, form);
         await logRenamerClientError(form, {
             message,
             status: response.status,
@@ -710,7 +780,7 @@ async function parseRenamerJsonResponse(response, form) {
     } catch (error) {
         const message = error instanceof Error
             ? error.message
-            : i18n('admin.media_renamer.invalid_json', 'Server returned invalid JSON.');
+            : i18nForElement(form, 'admin.media_renamer.invalid_json', 'Server returned invalid JSON.');
         await logRenamerClientError(form, {
             message,
             status: response.status,
@@ -721,7 +791,7 @@ async function parseRenamerJsonResponse(response, form) {
             redirected: response.redirected,
             snippet,
         });
-        throw new Error(i18n('admin.media_renamer.invalid_json_with_snippet', 'Server returned invalid JSON. First response bytes: {snippet}', {snippet: snippet.slice(0, 180)}));
+        throw new Error(i18nForElement(form, 'admin.media_renamer.invalid_json_with_snippet', 'Server returned invalid JSON. First response bytes: {snippet}', {snippet: snippet.slice(0, 180)}));
     }
 }
 
@@ -731,12 +801,13 @@ async function parseRenamerJsonResponse(response, form) {
  * @param {Response} response Fetch response.
  * @param {string} contentType Response content type.
  * @param {string} snippet First response bytes.
+ * @param {HTMLFormElement} form Submitted form owning the Admin language.
  * @return {string} Visible error text.
  */
-function buildNonJsonMessage(response, contentType, snippet) {
+function buildNonJsonMessage(response, contentType, snippet, form) {
     const prefix = response.redirected
-        ? i18n('admin.media_renamer.non_json_redirect', 'Server redirected the AJAX request and returned non-JSON content.')
-        : i18n('admin.media_renamer.non_json_response', 'Server returned non-JSON content to the AJAX request.');
+        ? i18nForElement(form, 'admin.media_renamer.non_json_redirect', 'Server redirected the AJAX request and returned non-JSON content.')
+        : i18nForElement(form, 'admin.media_renamer.non_json_response', 'Server returned non-JSON content to the AJAX request.');
     const details = [
         `HTTP ${response.status}`,
         contentType ? `Content-Type: ${contentType}` : '',
@@ -798,13 +869,16 @@ async function logRenamerClientError(form, details) {
  * Replace the current renamer workspace from the JSON response.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @param {object} payload Payload value.
+ * @param {MediaRenamerPayload} payload Confirmed response with replacement
+ *     panel_html or body_html markup.
+ * @return {void} Replaces the owned workspace, or throws for missing markup
+ *     or a missing destination.
  */
 function replaceRenamerWorkspace(form, payload) {
     const selector = form.dataset.mediaRenamerTarget || '';
     const target = selector ? document.querySelector(selector) : findRenamerWorkspace(form);
     if (!(target instanceof HTMLElement)) {
-        throw new Error(i18n('admin.media_renamer.refresh_target_missing', 'The rename completed, but its panel result could not be refreshed. Reopen the tool to verify the saved result.'));
+        throw new Error(i18nForElement(form, 'admin.media_renamer.refresh_target_missing', 'The rename completed, but its panel result could not be refreshed. Reopen the tool to verify the saved result.'));
     }
 
     if (typeof payload.panel_html === 'string' && payload.panel_html !== '') {
@@ -815,5 +889,5 @@ function replaceRenamerWorkspace(form, payload) {
         target.outerHTML = payload.body_html;
         return;
     }
-    throw new Error(i18n('admin.media_renamer.refresh_markup_missing', 'The rename completed, but the server did not return refreshed panel markup. Reopen the tool to verify the saved result.'));
+    throw new Error(i18nForElement(form, 'admin.media_renamer.refresh_markup_missing', 'The rename completed, but the server did not return refreshed panel markup. Reopen the tool to verify the saved result.'));
 }

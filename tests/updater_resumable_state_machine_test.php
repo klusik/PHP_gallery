@@ -1093,8 +1093,10 @@ assert_updater_resumable(
 
 $serviceFiles = glob($root . '/app/services/updates_*.php') ?: [];
 foreach ($serviceFiles as $serviceFile) {
-    if (basename($serviceFile) === 'updates_jobs.php') {
-        $source = module_source($serviceFile);
+    $source = basename($serviceFile) === 'updates_jobs.php'
+        ? module_source($serviceFile)
+        : (string) file_get_contents($serviceFile);
+    if (basename($serviceFile) === 'updates_job_lookup.php') {
         // Exclude the boundary's one intentional internal-message extraction line
         // before auditing the remaining updater service for raw disclosure.
         $source =
@@ -1104,19 +1106,10 @@ foreach ($serviceFiles as $serviceFile) {
                 $source,
                 1,
             ) ?? $source;
-        assert_updater_resumable(
-            !php_source_contains($source, '->getMessage()'),
-            'Updater service exposes raw exception messages outside the redaction boundary: '
-                . basename($serviceFile),
-        );
-        continue;
     }
     assert_updater_resumable(
-        !str_contains(
-            (string) file_get_contents($serviceFile),
-            '->getMessage()',
-        ),
-        'Updater service exposes raw exception messages: '
+        !php_source_contains($source, '->getMessage()'),
+        'Updater service exposes raw exception messages outside the redaction boundary: '
             . basename($serviceFile),
     );
 }

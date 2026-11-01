@@ -8,6 +8,7 @@
  * Responsibilities:
  *   - Delegate to the disposable workflow runner under its existing opt-in guards.
  * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  * Real browser workflow registration through the ordinary central PHP regression suite.
  */
 declare(strict_types=1);
@@ -88,7 +89,8 @@ try {
     );
     $pdo = fixtureDatabase($directory, $token);
     $rows = $pdo->query(
-        "SELECT id, title, folder_path, visibility FROM galleries WHERE folder_path LIKE 'browser-workflow%'",
+        'SELECT id, title, folder_path, visibility FROM galleries '
+            . "WHERE folder_path LIKE 'browser-%'",
     )->fetchAll(PDO::FETCH_ASSOC);
     check(
         count($rows) === 1 && $rows[0]['title'] === 'Browser edited 2',

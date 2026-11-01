@@ -1235,7 +1235,10 @@ function admin_gallery_discovery_candidate_from_path(
     );
     $parentPath = admin_gallery_discovery_parent_path($relativePath);
 
-    $title = (string) ($metadata['title'] ?? basename($relativePath));
+    $title = gallery_disk_source_title(
+        $relativePath,
+        (string) ($metadata['title'] ?? ''),
+    );
     $titleConflict = admin_gallery_discovery_existing_sibling_title_conflict(
         $relativePath,
         $title,

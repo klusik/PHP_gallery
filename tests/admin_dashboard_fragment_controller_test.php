@@ -35,6 +35,15 @@ namespace Gallery\Core {
         return '/index.php?' . http_build_query(['page' => $route] + $params);
     }
 
+    /** Capture a legacy destination without ending the isolated request.
+     * @param string $url Controller-prepared canonical destination.
+     * @return void Records the redirect for assertions.
+     */
+    function redirect_to(string $url): void
+    {
+        $GLOBALS['overview_redirect'] = $url;
+    }
+
     /** Return fixture request method. @return string GET or POST. */
     function request_method(): string
     {
@@ -164,6 +173,7 @@ namespace {
             $GLOBALS['overview_fail'] =
                 $GLOBALS['overview_token_seeded'] = false;
         $GLOBALS['overview_reads'] = $GLOBALS['overview_log'] = [];
+        $GLOBALS['overview_redirect'] = '';
         $GLOBALS['overview_method'] = 'GET';
         $_GET = ['surface' => 'overview'];
         http_response_code(200);
@@ -247,7 +257,6 @@ namespace {
         '' => [false, 'shell', 'overview'],
         'overview' => [false, 'overview', 'overview'],
         'galleries' => [false, 'galleries', 'galleries'],
-        'maintenance' => [true, 'shell', 'maintenance'],
     ] as $tab => $expected) {
         overview_http_reset();
         $_GET = ['dashboard_tab' => $tab];
@@ -258,13 +267,18 @@ namespace {
             'Shell and direct fallback URLs select only their required data',
         );
     }
-    overview_http_reset();
-    $_GET = ['maintenance_tab' => 'media'];
-    overview_http_request('Gallery\\Controllers\\cms_admin');
-    overview_http_check(
-        $GLOBALS['overview_reads'] === [[true, 'shell']]
-            && $GLOBALS['overview_model']['maintenance_loaded'],
-        'Maintenance deep links must stay directly usable without preparing gallery covers',
-    );
+    foreach ([['maintenance_tab' => 'media'], ['dashboard_tab' => 'maintenance']]
+        as $legacyQuery
+    ) {
+        overview_http_reset();
+        $_GET = $legacyQuery;
+        overview_http_request('Gallery\\Controllers\\cms_admin');
+        overview_http_check(
+            $GLOBALS['overview_reads'] === []
+                && $GLOBALS['overview_redirect'] === '/index.php?'
+                    . 'page=admin_maintenance_center&tab=tools&maintenance_tab=media',
+            'Legacy maintenance links must redirect before loading dashboard data',
+        );
+    }
     echo "Dashboard deferred HTTP tests passed.\n";
 }

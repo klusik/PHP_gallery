@@ -7,10 +7,11 @@
  * Responsibilities:
  *   - Detect eager maintenance work during ordinary dashboard rendering.
  * File: tests/admin_dashboard_deferred_maintenance_test.php
- * Purpose: Verify that dashboard maintenance work is deferred until activation.
+ * Purpose: Keep maintenance out of Overview and preserve legacy navigation.
  *
  * Author:
  *   Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  */
 
 declare(strict_types=1);
@@ -45,6 +46,8 @@ $viewSource = (string) file_get_contents(__DIR__
     . '/../app/views/admin_dashboard.php');
 $sectionsSource = (string) file_get_contents(__DIR__
     . '/../app/views/admin_dashboard_sections.php');
+$centerSource = (string) file_get_contents(__DIR__
+    . '/../app/controllers/admin_maintenance_center.php');
 $tabsSource = (string) file_get_contents(__DIR__
     . '/../public/assets/gallery-modules/admin-tabs.js');
 $bootstrapSource =
@@ -76,28 +79,27 @@ assert_admin_dashboard_deferred_contains(
 );
 assert_admin_dashboard_deferred_contains(
     $controllerSource,
-    'admin_dashboard_view_model($maintenanceLoaded, $surface)',
-    'explicit Maintenance deep links render maintenance during the main request',
+    'admin_dashboard_view_model(false, $surface)',
+    'Overview does not prepare maintenance work',
 );
 assert_admin_dashboard_deferred_contains(
     $controllerSource,
     "['content', 'media', 'navigation', 'system', 'trash']",
     'Maintenance deep-link allowlist includes the Trash subtab',
 );
+if (str_contains($viewSource, 'data-admin-dashboard-maintenance-placeholder')
+    || php_source_contains($viewSource, "'id' => 'admin-tab-maintenance'")) {
+    throw new RuntimeException('Overview must not duplicate Maintenance Center.');
+}
 assert_admin_dashboard_deferred_contains(
-    $viewSource,
-    'data-admin-dashboard-maintenance-placeholder',
-    'dashboard renders a deferred maintenance placeholder',
+    $controllerSource,
+    "redirect_to(url_for('admin_maintenance_center', [",
+    'legacy maintenance destinations redirect to their central owner',
 );
 assert_admin_dashboard_deferred_contains(
-    $viewSource,
-    '$maintenanceEndpointParams',
-    'dashboard forwards the selected Maintenance deep link to its deferred endpoint',
-);
-assert_admin_dashboard_deferred_contains(
-    $viewSource,
-    "['content', 'media', 'navigation', 'system', 'trash']",
-    'dashboard deferred endpoint preserves every supported Maintenance deep link',
+    $centerSource,
+    "\\Gallery\\Services\\admin_dashboard_view_model(true, 'shell')",
+    'System tools explicitly prepares only its maintenance model',
 );
 assert_admin_dashboard_deferred_contains(
     $tabsSource,
@@ -125,18 +127,13 @@ assert_admin_dashboard_deferred_contains(
     'browser maintenance failures are logged',
 );
 assert_admin_dashboard_deferred_contains(
-    $viewSource,
-    'data-maintenance-log-endpoint',
-    'dashboard exposes its maintenance diagnostics endpoint',
-);
-assert_admin_dashboard_deferred_contains(
     $tabsSource,
     "body.set('response_snippet'",
     'browser reports the failed maintenance response snippet',
 );
 assert_admin_dashboard_deferred_contains(
     $sectionsSource,
-    "['maintenance_tab' => 'media']",
+    "['tab' => 'tools', 'maintenance_tab' => 'media']",
     'thumbnail gap metric links to media maintenance',
 );
 assert_admin_dashboard_deferred_contains(

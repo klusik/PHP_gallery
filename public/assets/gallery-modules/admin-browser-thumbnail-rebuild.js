@@ -34,7 +34,59 @@
 
 import { i18n, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
 
-const workerScriptUrl = new URL('./browser-image-worker.js?v=20260610-thumbnail-serial-v5', import.meta.url);
+/**
+ * Normalized endpoint, worker and encoder settings for the existing pipeline.
+ * @typedef {Object} BrowserRebuildConfig
+ * @property {boolean} enabled Browser processing is enabled by saved settings.
+ * @property {string} sourceEndpoint Authenticated source ZIP URL.
+ * @property {string} uploadEndpoint Authenticated prepared ZIP URL.
+ * @property {number} workerCount Effective worker count.
+ * @property {number} maxWorkers Configured worker ceiling.
+ * @property {number} hardCap Hard worker ceiling.
+ * @property {number} uploadLimitBytes Server upload ceiling.
+ * @property {number} batchTargetBytes Prepared ZIP target size.
+ * @property {number} maxItemsPerBatch Source items per upload batch.
+ * @property {number} sourceChunkBytes Source ZIP byte ceiling.
+ * @property {number} sourceChunkItemCap Source ZIP item ceiling.
+ * @property {Array<string>} thumbnailFormats Configured supported formats.
+ * @property {Array<number>} thumbnailSizes Configured pixel sizes.
+ * @property {number} jpegQuality JPEG quality fraction.
+ * @property {number} webpQuality WebP quality fraction.
+ */
+/**
+ * A downloaded source or its prepared worker output with exact variant scope.
+ * @typedef {Object} BrowserRebuildItem
+ * @property {number} imageId Source catalog identity.
+ * @property {string} filename Source display filename.
+ * @property {string} entryPath Source ZIP entry path.
+ * @property {Array<string>} targetFormats Source-compatible formats.
+ * @property {Array<string>=} targetVariants Exact size:format restrictions.
+ * @property {number} expectedVariants Required prepared variant count.
+ * @property {Blob=} blob Downloaded source bytes before preparation.
+ * @property {Array<{size:number,format:string,width:number,height:number,
+ *     path:string,blob:Blob}>=} variants Browser-encoded output variants.
+ */
+const workerScriptUrl = new URL('./browser-image-worker.js?v=20261101-consistency-variants-v6', import.meta.url);
+
+/** Bound automatic missing-only follow-up passes for the general rebuild tool.
+ * Type: number. Units: passes. Scope: one general browser rebuild operation.
+ * Consumers: runBrowserThumbnailRebuild. Rationale: 3 retains the established
+ * transient-gap repair bound; consistency owns separate verified receipts.
+ */
+const BROWSER_THUMBNAIL_REPAIR_PASSES = 3;
+
+/**
+ * Check the established worker/encoder capability before queuing any repairs.
+ * @param {HTMLFormElement} form Prepared browser endpoint and settings carrier.
+ * @return {{ok:boolean,reason:string}} Capability result with a visible refusal.
+ */
+export function browserThumbnailRebuildAvailable(form) {
+    const config = browserThumbnailRebuildConfig(form);
+    if (!config.enabled) return {ok:false, reason:i18n(
+        'browser_upload.error_disabled', 'Browser-side upload is disabled in Admin settings.',
+    )};
+    return browserThumbnailRebuildCapability(config);
+}
 
 /**
  * Return whether the administrator requested browser-assisted thumbnail rebuild.
@@ -52,8 +104,10 @@ export function browserThumbnailRebuildRequested(form) {
  *
  * @param {HTMLFormElement} form Thumbnail maintenance form.
  * @param {HTMLElement} progress Progress root.
- * @param {object} options Optional behavior flags.
- * @return {Promise<Record<string, *>>} Aggregate result.
+ * @param {{scope?:string,singlePass?:boolean}} options Source scope and whether
+ *     the owning consistency queue performs its own explicit verification.
+ * @return {Promise<{processed:number,created:number,skipped:number,failed:number,
+ *     sourceSkipped:number,errors:Array<string>}>} Confirmed aggregate counts.
  */
 export async function runBrowserThumbnailRebuild(form, progress, options = {}) {
     const config = browserThumbnailRebuildConfig(form);
@@ -73,6 +127,10 @@ export async function runBrowserThumbnailRebuild(form, progress, options = {}) {
     updateRebuildProgress(progress, 0, 0, aggregate, preparingLabel);
 
     const initialPass = await runBrowserThumbnailRebuildScope(form, progress, config, sessionId, aggregate, requestedScope, batchIndex, 0);
+    if (options.singlePass && initialPass.total > 0
+        && initialPass.sourceItemsProcessed === 0) {
+        throw new Error('consistency_browser_unsupported');
+    }
     batchIndex = initialPass.batchIndex;
     displayTotal = Math.max(displayTotal, initialPass.total);
 
@@ -80,7 +138,10 @@ export async function runBrowserThumbnailRebuild(form, progress, options = {}) {
     // inventory. This catches any browser-side transient gap without making the
     // administrator start another rebuild manually. When the administrator asked
     // for missing thumbnails only, every pass stays inside the missing scope.
-    for (let repairPass = 1; repairPass <= 3; repairPass += 1) {
+    for (let repairPass = 1;
+        !options.singlePass && repairPass <= BROWSER_THUMBNAIL_REPAIR_PASSES;
+        repairPass += 1
+    ) {
         const createdBefore = Number(aggregate.created || 0);
         const repairResult = await runBrowserThumbnailRebuildScope(form, progress, config, sessionId, aggregate, 'missing', batchIndex, repairPass);
         batchIndex = repairResult.batchIndex;
@@ -246,10 +307,12 @@ function normalizeThumbnailFormats(formats, fallback) {
  * sets were missing for those images. The rebuild must now fail loudly before
  * any upload batch can be acknowledged for an incomplete source chunk.
  *
- * @param {Array<Record<string, *>>} items Manifest source items.
+ * @param {Array<{image_id:number,filename:string,entry_path:string,
+ *     target_formats:Array<string>,target_variants?:Array<string>,
+ *     expected_variants:number}>} items Authorized source manifest entries.
  * @param {Map<string, Blob>} entries Parsed source ZIP entries.
- * @param {Record<string, *>} config Browser configuration.
- * @return {Array<Record<string, *>>} Worker input items.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
+ * @return {Array<BrowserRebuildItem>} Downloaded worker inputs.
  */
 function sourceItemsFromManifest(items, entries, config) {
     const sourceItems = [];
@@ -267,6 +330,8 @@ function sourceItemsFromManifest(items, entries, config) {
             filename: String(item.filename || ''),
             entryPath,
             targetFormats: normalizeThumbnailFormats(item.target_formats, config.thumbnailFormats),
+            targetVariants: Array.isArray(item.target_variants)
+                ? item.target_variants.map(String) : [],
             expectedVariants: Math.max(1, Number(item.expected_variants || 0)),
             blob,
         });
@@ -280,11 +345,12 @@ function sourceItemsFromManifest(items, entries, config) {
 /**
  * Return how many thumbnail variants one source item must produce.
  *
- * @param {Record<string, *>} item Source or prepared item.
- * @param {Record<string, *>} config Browser configuration.
+ * @param {BrowserRebuildItem} item Source or prepared worker item.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
  * @return {number} Required variant count.
  */
 function expectedVariantCountForSourceItem(item, config) {
+    if (item.targetVariants?.length) return item.targetVariants.length;
     const formats = normalizeThumbnailFormats(item.targetFormats, config.thumbnailFormats);
     const sizes = Array.isArray(config.thumbnailSizes) ? config.thumbnailSizes : [];
     return Math.max(1, formats.length * sizes.length);
@@ -293,8 +359,9 @@ function expectedVariantCountForSourceItem(item, config) {
 /**
  * Assert that a prepared worker result contains every requested variant.
  *
- * @param {Record<string, *>} item Prepared worker result.
- * @param {Record<string, *>} config Browser configuration.
+ * @param {BrowserRebuildItem} item Prepared worker result.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
+ * @return {void} Refuses a worker result with missing required variants.
  */
 function assertPreparedRebuildItemComplete(item, config) {
     const variants = Array.isArray(item.variants) ? item.variants : [];
@@ -307,7 +374,7 @@ function assertPreparedRebuildItemComplete(item, config) {
 /**
  * Verify browser support for the browser rebuild path.
  *
- * @param {Record<string, *>} config Browser configuration.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
  * @return {{ok: boolean, reason: string} } Capability result.
  */
 function browserThumbnailRebuildCapability(config) {
@@ -338,7 +405,7 @@ function browserThumbnailRebuildSessionId() {
  * Download one source ZIP chunk from the server.
  *
  * @param {HTMLFormElement} form Thumbnail maintenance form.
- * @param {Record<string, *>} config Browser configuration.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
  * @param {string} sessionId Rebuild session id.
  * @param {number} offset Source image offset.
  * @param {'all'|'missing'} scope Requested rebuild scope.
@@ -348,6 +415,10 @@ async function downloadSourceChunk(form, config, sessionId, offset, scope = 'all
     const body = new FormData();
     body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
     body.set('ajax', '1');
+    for (const name of ['consistency_token', 'consistency_sequence']) {
+        const value = form.querySelector(`input[name="${name}"]`)?.value;
+        if (value) body.set(name, value);
+    }
     body.set('scope', scope === 'missing' ? 'missing' : 'all');
     const galleryId = form.querySelector('[data-create-all-thumbnails][name="thumbnail_gallery_id"]')?.value || '';
     if (galleryId) body.set('thumbnail_gallery_id', galleryId);
@@ -384,9 +455,10 @@ function parseZipInWorker(zipBlob) {
 /**
  * Run source images through a bounded worker pool.
  *
- * @param {Array<Record<string, *>>} items Source items.
- * @param {Record<string, *>} config Browser configuration.
- * @param {(item: Record<string, *>, completed: number, total: number) => Promise<void>} onItem Prepared item callback.
+ * @param {Array<BrowserRebuildItem>} items Downloaded source worker inputs.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
+ * @param {function(BrowserRebuildItem,number,number):Promise<void>}
+ *     onItem Serial callback after each completed source.
  * @return {Promise<void>} Result value for the caller.
  */
 function processSourceItemsWithWorkerPool(items, config, onItem) {
@@ -395,6 +467,10 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
         return Promise.resolve();
     }
     const workerCount = Math.max(1, Math.min(Number(config.workerCount || 1), total));
+    // Bound one worker decode/encode before releasing its resources.
+    // Type: number. Units: milliseconds. Scope: one rebuild worker task.
+    // Consumers: processSourceItemsWithWorkerPool. Rationale: 120000 supports
+    // large browser-decodable images while stalled workers cannot hold a queue.
     const taskTimeoutMs = 120000;
     let nextIndex = 0;
     let completed = 0;
@@ -476,6 +552,7 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
                 blob: item.blob,
                 sizes: config.thumbnailSizes,
                 formats: normalizeThumbnailFormats(item.targetFormats, config.thumbnailFormats),
+                targetVariants: item.targetVariants || [],
                 expectedVariants: expectedVariantCountForSourceItem(item, config),
                 jpegQuality: config.jpegQuality,
                 webpQuality: config.webpQuality,
@@ -524,7 +601,7 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
 /**
  * Create a memory-only batcher for prepared thumbnail upload archives.
  *
- * @param {Record<string, *>} config Browser configuration.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
  * @param {string} sessionId Rebuild session id.
  * @param {number} chunkIndex Source chunk index.
  * @param {number} startBatchIndex First global batch index.
@@ -657,17 +734,23 @@ async function uploadPreparedThumbnailBatchWithRetry(form, config, sessionId, ba
  * Upload one prepared thumbnail batch.
  *
  * @param {HTMLFormElement} form Thumbnail maintenance form.
- * @param {Record<string, *>} config Browser configuration.
+ * @param {BrowserRebuildConfig} config Normalized worker configuration.
  * @param {string} sessionId Rebuild session id.
- * @param {Record<string, *>} batch Prepared batch.
+ * @param {{blob:Blob}} batch Prepared store-only ZIP bytes.
  * @param {number} batchIndex Global batch index.
  * @param {number} totalBatches Total batches inside current source chunk.
- * @return {Promise<Record<string, *>>} Server response.
+ * @return {Promise<{ok:boolean,created:number,skipped:number,failed:number,
+ *     errors:Array<string>,error?:string|null,image_ids?:Array<number>,
+ *     cached?:boolean}>} Server publication receipt.
  */
 async function uploadPreparedThumbnailBatch(form, config, sessionId, batch, batchIndex, totalBatches) {
     const body = new FormData();
     body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
     body.set('ajax', '1');
+    for (const name of ['consistency_token', 'consistency_sequence']) {
+        const value = form.querySelector(`input[name="${name}"]`)?.value;
+        if (value) body.set(name, value);
+    }
     body.set('upload_session_id', sessionId);
     body.set('batch_index', String(batchIndex));
     body.set('total_batches', String(totalBatches));

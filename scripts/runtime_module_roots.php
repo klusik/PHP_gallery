@@ -167,6 +167,10 @@ return [
     ],
     // Distinct public surfaces share some declarations but need different domain closures.
     'handler_modules' => [
+        // Consistency is the explicit catalog/disk inventory and ingestion
+        // workflow. Reuse discovery's existing auth, catalog, scanner and
+        // thumbnail closure instead of creating another logical domain root.
+        'Gallery\\Controllers\\cms_admin_gallery_consistency' => 'domain-admin-galleries-discovery',
         // The Admin owner already contains the complete layout/auth closure;
         // retain the lightweight private-worker route owner separately.
         'Gallery\\Controllers\\cms_admin_cron_overview' => 'domain-admin-maintenance-center',
@@ -274,6 +278,50 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Scoped browser requests explicitly load the inventory/dashboard
+        // owners before validating tickets or acquiring their writer lease.
+        'Gallery\\Services\\browser_thumbnail_rebuild_consistency_target' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Services\\gallery_consistency_browser_target',
+        ],
+        'Gallery\\Services\\browser_thumbnail_rebuild_store_consistency_batch' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Services\\gallery_edit_writer_begin',
+            'Gallery\\Services\\gallery_edit_writer_end',
+        ],
+        'Gallery\\Controllers\\cms_admin_gallery_consistency_browser_config' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Services\\browser_thumbnail_rebuild_browser_config',
+        ],
+        // The new native Maintenance Center tab loads the already reviewed
+        // gallery inventory owner before delegating; its default tab stays lazy.
+        'Gallery\\Controllers\\cms_admin_maintenance_center' => [
+            'Gallery\\Controllers\\cms_admin_gallery_consistency',
+            'Gallery\\Services\\admin_dashboard_view_model',
+            'Gallery\\Views\\view_render_admin_dashboard_maintenance_panel',
+        ],
+        // Explicit consistency jobs load the already complete dashboard owner
+        // before journal reads or thumbnail/storage cache invalidation. The
+        // report page and ordinary discovery never acquire these worker edges.
+        'Gallery\\Services\\gallery_consistency_load_maintenance_owner' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            // Presence probes precede the explicit load too; they are not
+            // eager ownership edges into the discovery page's closure.
+            'Gallery\\Models\\gallery_image_move_model_pending',
+            'Gallery\\Services\\thumbnail_maintenance_summary_cache_clear',
+        ],
+        'Gallery\\Services\\gallery_consistency_start' => [
+            'Gallery\\Services\\gallery_image_move_pending',
+        ],
+        'Gallery\\Services\\gallery_consistency_repair_step' => [
+            'Gallery\\Services\\gallery_image_move_pending',
+        ],
+        'Gallery\\Services\\gallery_consistency_repair_target' => [
+            'Gallery\\Services\\thumbnail_maintenance_summary_cache_clear',
+        ],
+        'Gallery\\Services\\gallery_consistency_browser_verify' => [
+            'Gallery\\Services\\thumbnail_maintenance_summary_cache_clear',
+        ],
         // Core bootstrap requires dispatch.php before Kernel::run enters any
         // controller. Root presentations re-enter that already loaded security
         // boundary; feature plans must not acquire its bootstrap dependency tree.
@@ -485,6 +533,33 @@ return [
             'Gallery\\Services\\application_autoupdate_dry_run',
             'Gallery\\Services\\application_autoupdate_run_installing_check',
             'Gallery\\Services\\admin_test_run_record_maintenance_event',
+        ],
+        // These installer branches run only after the injected updater-work
+        // loader, or inside the explicit domain-updates Admin/legacy owner.
+        // Shared cached-status readers must not eagerly own worker code.
+        'Gallery\\Services\\application_autoupdate_dry_run_locked' => [
+            'Gallery\\Services\\application_update_safe_error',
+        ],
+        'Gallery\\Services\\application_autoupdate_run_installing_check_locked' => [
+            'Gallery\\Services\\application_update_start_job',
+            'Gallery\\Services\\application_update_safe_error',
+        ],
+        'Gallery\\Services\\install_application_beta' => [
+            'Gallery\\Services\\application_update_start_job',
+        ],
+        'Gallery\\Services\\restore_application_stable_release' => [
+            'Gallery\\Services\\application_update_start_job',
+        ],
+        'Gallery\\Services\\clean_reinstall_current_application_version' => [
+            'Gallery\\Services\\application_update_start_job',
+        ],
+        'Gallery\\Services\\install_application_update' => [
+            'Gallery\\Services\\application_update_start_job',
+        ],
+        // This legacy diagnostic probes only owners already loaded by its
+        // request. Its function_exists guard deliberately retains unknown data.
+        'Gallery\\Services\\admin_test_run_subsystem_snapshot' => [
+            'Gallery\\Services\\application_update_job_public_state',
         ],
         'Gallery\\Services\\site_maintenance_register_request_trigger' => [
             'Gallery\\Services\\site_maintenance_run',

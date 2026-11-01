@@ -1,10 +1,13 @@
 # Cache inventory, retention and independent reclamation
 
-Admin > Maintenance > Media and cache uses the same compact translucent groups
+Admin > Maintenance Center > System tools > Media and cache uses the same
+compact translucent groups
 as Features and Content and display. Whole groups flow down one to three columns
 according to available workspace width, retaining independent heights. Updater
 cleanup, cache evidence, thumbnails, scheduling and available media shortcuts
-have matching heading strips and transparent actions. Plain question marks open
+have matching heading strips and transparent actions. The Overview shortcut
+retains the prepared System Health warning and links directly to its central
+tool group. Plain question marks open
 contextual help; unknown scan status and disabled-action reasons stay visible.
 The native disclosures retain compatibility settings and operational detail.
 Archive and renamer names and their trailing shortcuts share their destination.
@@ -16,7 +19,10 @@ update its controls and summary. A lost or invalid response preserves the intent
 and requires a passive reload, without an automatic write retry. The limit is
 fifteen seconds. The classic Save/POST remains available without JavaScript.
 Browser thumbnail rebuilding is an option for its explicit task, not a saved
-schedule preference. Scan, generation, deletion, reset and token rotation retain
+schedule preference. Both Create all and Create missing respect that checkbox;
+a browser failure remains visible without starting server generation. The global
+warning links to these controls so the engine choice is explicit. Scan,
+generation, deletion, reset and token rotation retain
 their existing separate actions and safety requirements.
 
 **Clean updater cache now** runs one forced bounded slice in place;
@@ -30,6 +36,17 @@ envelope to the existing completion owner. This singleton cache operation has
 no catalog entity IDs or affected public media render contexts.
 
 Issue: [#212](https://github.com/klusik/PHP_gallery/issues/212).
+
+## Explicit gallery consistency
+
+**Gallery consistency** opens the report-first Maintenance Center tab. It compares
+catalog and physical media, lists only affected galleries and offers explicit
+selected/all repair queues. Its confirmed progress and private session receipts
+are independent of sampled dashboard counts and rotating cache measurements.
+Its thumbnail repairs always use browser workers with exact variant tickets;
+server confirmation advances progress after validated publication. Keep the tab
+open. Errors remain visible and never start server generation automatically.
+See [scope, limits and disk-authoritative imports](GALLERY_CONSISTENCY.md).
 
 ## Persistent rotating regions
 
@@ -133,7 +150,7 @@ Maintenance subtab choices use the allowlisted `maintenance_tab` query,
 including
 the primary tab href, keyboard and history navigation. Reload aligns the
 explicit
-Maintenance anchor once after load and deferred content; passive polling never
+System tools anchor once after load; passive polling never
 scrolls or changes the URL.
 
 ### Historical ZIP and update archives
@@ -376,7 +393,8 @@ establish the production incident's cause.
 
 ## Producer-specific lifecycle (#212)
 
-Admin > Maintenance > Media and cache adds **Cache inventory and retention**.
+Admin > Maintenance Center > System tools > Media and cache adds
+**Cache inventory and retention**.
 **Scan cache** builds a non-destructive resumable preview; the browser continues
 bounded slices while the mounted surface remains visible. **Clean eligible
 cache**

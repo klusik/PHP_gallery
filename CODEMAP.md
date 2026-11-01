@@ -1,5 +1,13 @@
 # PHP Gallery Code Map
 
+- Gallery consistency: `app/controllers/admin_gallery_consistency.php` owns
+  authenticated session receipts; `app/models/gallery_consistency.php` owns
+  catalog reads; `app/services/gallery_consistency.php` and its private parts own
+  read-only inspection and selected repairs. `app/views/gallery_consistency.php`,
+  `gallery-consistency.js` and `gallery-consistency.css` own the compact workspace.
+  Disk-title policy belongs to `gallery_paths.php`; canonical import/move
+  orchestration remains in `gallery_mutations.php`.
+
 - Media masters: `app/services/feature_flags/registry.php` owns the independent
   PDF/music capabilities. Shared editor actions and browser PDF batch admission
   enforce them without disabling ordinary photo settings/uploads.

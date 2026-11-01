@@ -529,10 +529,20 @@ function upload_automation_inventory_disk_matches(
  * Build the API response that tells the active side which files already exist.
  *
  * @param int $galleryId Gallery id authorized by the API key.
- * @param array<string,mixed> $gallery Gallery row authorized by the API key.
- * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
- * @param bool $deepCheck Whether to perform the bounded filesystem fallback used only after ambiguous upload failures.
- * @return array<string,mixed> JSON-safe inventory response.
+ * @param array{folder_path?:string|null, title?:string|null} $gallery
+ *     Authorized gallery row with its physical folder and current display
+ *     title.
+ * @param array<int, array{client_id:string, filename:string, size:int,
+ *     sha256:string}> $candidates Normalized client inventory candidates.
+ * @param bool $deepCheck Whether to perform the bounded filesystem fallback
+ *     used only after ambiguous upload failures.
+ * @return array{ok:bool, action:string, gallery_id:int, gallery_title:string,
+ *     gallery_folder:string, checked:int, matched:int,
+ *     existing:list<array{client_id:string, filename:string, size:int,
+ *     sha256:string, remote_filename:string, remote_relative_path:string,
+ *     remote_image_id:int, matched_by:string}>, deep_check_applied:bool,
+ *     fingerprint:string, server_time:string} JSON-safe inventory with separate
+ *     display title and physical folder.
  */
 function upload_automation_gallery_inventory_response(
     int $galleryId,
@@ -584,6 +594,7 @@ function upload_automation_gallery_inventory_response(
         'ok' => true,
         'action' => 'inventory',
         'gallery_id' => $galleryId,
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
         'gallery_folder' => (string) ($gallery['folder_path'] ?? ''),
         'checked' => count($candidates),
         'matched' => count($existing),

@@ -41,6 +41,45 @@ use function Gallery\Core\e;
 use function Gallery\Services\t;
 
 /**
+ * Render native Maintenance Center tabs from controller-prepared destinations.
+ * @param array{installation_url:string,tools_url?:string,consistency_url:string}
+ *     $navigation Destinations for installation, tools and consistency.
+ * @param string $active Selected installation, tools or consistency tab.
+ * @return void Emits compact links with an accessible current-page state.
+ */
+function view_render_maintenance_center_tabs(
+    array $navigation,
+    string $active,
+): void {
+    $tabs = [
+        'installation' => [
+            'url' => $navigation['installation_url'],
+            'label' => t('admin.consistency.installation', 'Installation'),
+        ],
+        'consistency' => [
+            'url' => $navigation['consistency_url'],
+            'label' => t('admin.consistency.title', 'Gallery consistency'),
+        ],
+    ];
+    if (!empty($navigation['tools_url'])) {
+        $tabs = array_slice($tabs, 0, 1, true) + [
+            'tools' => [
+                'url' => $navigation['tools_url'],
+                'label' => t('admin.dashboard.system_tools', 'System tools'),
+            ],
+        ] + array_slice($tabs, 1, null, true);
+    }
+    echo '<nav class="maintenance-center-tabs" aria-label="'
+        . e(t('admin.maintenance_center.title', 'Maintenance Center')) . '">';
+    foreach ($tabs as $id => $tab) {
+        echo '<a href="' . e($tab['url']) . '"'
+            . ($id === $active ? ' aria-current="page"' : '') . '>'
+            . e($tab['label']) . '</a>';
+    }
+    echo '</nav>';
+}
+
+/**
  * Render a tooltip from controller-prepared factory metadata for one preference.
  *
  * @param array{content_factory_defaults?:array<string,bool>} $model Canonical

@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/support/gallery_workflow_http.php';
+require_once __DIR__ . '/support/store_zip.php';
 
 use GalleryWorkflow\Http;
 use function GalleryWorkflow\check;
@@ -33,6 +34,142 @@ use function GalleryWorkflow\validateFixture;
  *     failure to complete must fail instead of spinning indefinitely.
  */
 const GALLERY_WORKFLOW_STORAGE_MAX_STEPS = 32;
+
+/** Bound the small disposable consistency journey without hiding stuck cursors.
+ * Type: int. Units: HTTP receipts. Scope: this fixture's report/repair phases.
+ * Consumers: galleryWorkflowConsistencyRun. Rationale: 128 permits the seeded
+ * catalog plus filesystem pages, while a non-advancing worker must fail.
+ */
+const GALLERY_WORKFLOW_CONSISTENCY_MAX_STEPS = 128;
+
+/**
+ * Exercise actual source ZIP, scoped publication and confirmation HTTP endpoints.
+ * @param Http $client Fixture administrator with its retained session.
+ * @param array{token:string,sequence:int,processed:int,status:string,
+ *     browser:array{image_id:int,variants:int},...} $state Prepared browser task.
+ * @param string $csrf Fixture administrator CSRF token.
+ * @return array{token:string,sequence:int,processed:int,status:string,...}
+ *     Verified next receipt. Supplied fixture variants model browser output;
+ *     no PHP generator is used to complete the selected repair.
+ */
+function galleryWorkflowConsistencyBrowser(Http $client, array $state, string $csrf): array
+{
+    $ticket = ['csrf_token' => $csrf, 'consistency_token' => $state['token'],
+        'consistency_sequence' => (string) $state['sequence']];
+    $verify = ['csrf_token' => $csrf, 'action' => 'browser_verify',
+        'token' => $state['token'], 'sequence' => (string) $state['sequence']];
+    $beforeUpload = $client->request('/index.php?page=admin_gallery_consistency',
+        $verify, true);
+    check($beforeUpload['status'] === 200
+        && $beforeUpload['json']['status'] === 'browser'
+        && $beforeUpload['json']['processed'] === $state['processed'],
+        'An absent browser upload must not advance the repair.');
+    $source = $client->request('/index.php?page=admin_thumbnail_browser_source_chunk',
+        $ticket + ['scope' => 'all', 'image_ids' => ['999999999']], true);
+    check($source['status'] === 200 && str_starts_with($source['body'], "PK\x03\x04"),
+        'Scoped source request must return an actual ZIP.');
+    // The established store-only source ZIP begins with manifest.json. These
+    // offsets and widths are fixed ZIP local-header structure, not test policy.
+    $nameLength = unpack('v', substr($source['body'], 26, 2))[1];
+    $extraLength = unpack('v', substr($source['body'], 28, 2))[1];
+    $dataLength = unpack('V', substr($source['body'], 18, 4))[1];
+    check(substr($source['body'], 30, $nameLength) === 'manifest.json',
+        'Source ZIP must carry its authoritative manifest first.');
+    $manifest = json_decode(substr($source['body'], 30 + $nameLength + $extraLength,
+        $dataLength), true, 512, JSON_THROW_ON_ERROR);
+    check(count($manifest['items']) === 1
+        && (int) $manifest['items'][0]['image_id'] === $state['browser']['image_id'],
+        'A browser ticket must override forged broad or unrelated image selection.');
+    $required = $manifest['items'][0]['target_variants'];
+    check(count($required) === $state['browser']['variants'] && $required !== [],
+        'Source manifest must expose the exact prepared variant scope.');
+    $imageId = $state['browser']['image_id'];
+    $entries = [];
+    $variants = [];
+    foreach ($GLOBALS['consistency_browser_variants'][$imageId] ?? [] as $key => $bytes) {
+        [$size, $format] = explode(':', $key);
+        $path = 'thumbs/image-' . $imageId . '/' . $size . '.' . $format;
+        $variants[] = ['size' => (int) $size, 'format' => $format, 'path' => $path];
+        // Even invalid extra bytes must never replace unrelated valid files.
+        $entries[] = ['name' => $path, 'data' => in_array($key, $required, true)
+            ? $bytes : 'UNREQUESTED VARIANT MUST NOT BE PUBLISHED'];
+    }
+    check($variants !== [], 'Browser fixture needs saved generated variant bytes.');
+    array_unshift($entries, ['name' => 'manifest.json', 'data' => json_encode([
+        'items' => [['image_id' => $imageId, 'variants' => $variants]],
+    ], JSON_THROW_ON_ERROR)]);
+    $zipPath = tempnam(sys_get_temp_dir(), 'gallery-consistency-browser-');
+    check(is_string($zipPath), 'Cannot allocate a disposable browser upload ZIP.');
+    try {
+        file_put_contents($zipPath, gallery_workflow_store_zip($entries));
+        $upload = $ticket + ['upload_session_id' => 'consistency-' . $state['sequence'],
+            'batch_index' => '0', 'total_batches' => '1',
+            'zip_batch' => new CURLFile($zipPath, 'application/zip', 'prepared.zip')];
+        $published = $client->request('/index.php?page=admin_thumbnail_browser_upload_batch',
+            $upload, true);
+        check($published['status'] === 200 && $published['json']['ok'] === true
+            && $published['json']['created'] === count($required),
+            'Only requested browser-prepared variants may be published.');
+        $duplicate = $client->request('/index.php?page=admin_thumbnail_browser_upload_batch',
+            $upload, true);
+        check($duplicate['status'] === 200 && !empty($duplicate['json']['cached']),
+            'A repeated upload must return its durable idempotent receipt.');
+    } finally {
+        unlink($zipPath);
+    }
+    $after = $client->request('/index.php?page=admin_gallery_consistency', $verify, true);
+    check($after['status'] === 200
+        && $after['json']['processed'] === $state['processed'] + 1
+        && $after['json']['sequence'] === $state['sequence'] + 1,
+        'The server must confirm actual browser output exactly once.');
+    return $after['json'];
+}
+
+/**
+ * Complete a consistency job through actual authenticated HTTP receipts.
+ * @param Http $client Fixture administrator with a retained session.
+ * @param array{token:string,status:string,processed:int,total:int,
+ *     sequence:int,...} $state Last confirmed job receipt.
+ * @param string $csrf Fixture administrator CSRF token.
+ * @return array{token:string,status:string,processed:int,total:int,
+ *     sequence:int,...} Completed receipt; failure/stale progress fails the test.
+ */
+function galleryWorkflowConsistencyRun(Http $client, array $state, string $csrf): array
+{
+    for ($step = 0; $step < GALLERY_WORKFLOW_CONSISTENCY_MAX_STEPS; $step++) {
+        if ($state['status'] === 'browser') {
+            $state = galleryWorkflowConsistencyBrowser($client, $state, $csrf);
+            continue;
+        }
+        if ($state['status'] !== 'running') {
+            if ($state['status'] !== 'complete') {
+                $export = $client->request(
+                    '/index.php?page=admin_gallery_consistency&format=json',
+                )['json'];
+                $diagnostics = array_values(array_filter(array_map(
+                    static fn(array $result): array => $result['failure'] ?? [],
+                    $export['results'] ?? [],
+                )));
+                throw new RuntimeException('Consistency ' . $state['status']
+                    . ': ' . json_encode($diagnostics, JSON_THROW_ON_ERROR));
+            }
+            return $state;
+        }
+        $response = $client->request('/index.php?page=admin_gallery_consistency', [
+            'csrf_token' => $csrf, 'action' => 'step',
+            'token' => $state['token'], 'sequence' => (string) $state['sequence'],
+        ], true);
+        check($response['status'] === 200 && is_array($response['json'])
+            && ($response['json']['ok'] ?? false) === true,
+            'Consistency step must return confirmed JSON.');
+        $next = $response['json'];
+        check($next['sequence'] === $state['sequence'] + 1
+            && $next['processed'] >= $state['processed'],
+            'Consistency receipts must advance monotonically.');
+        $state = $next;
+    }
+    throw new RuntimeException('Consistency job exceeded its fixture step bound.');
+}
 
 /**
  * Produce a small valid one-page PDF with deterministic cross-reference offsets.
@@ -274,6 +411,138 @@ try {
         'Uploaded original hash mismatch.',
     );
     echo "PASS gallery workflow multipart upload metadata and original hash\n";
+
+    $stage = 'consistency report and selected repair';
+    $consistencyRoute = '/index.php?page=admin_gallery_consistency';
+    $center = $admin->request('/index.php?page=admin_maintenance_center');
+    check($center['status'] === 200
+        && str_contains($center['body'], 'class="maintenance-center-tabs"')
+        && str_contains($center['body'], 'tab=consistency'),
+        'Maintenance Center must expose native installation/consistency tabs.');
+    $toolsTab = $admin->request(
+        '/index.php?page=admin_maintenance_center&tab=tools&maintenance_tab=media',
+    );
+    check($toolsTab['status'] === 200
+        && str_contains($toolsTab['body'], 'data-maintenance-center-tools')
+        && str_contains($toolsTab['body'], 'data-browser-thumbnail-rebuild-toggle')
+        && !str_contains($toolsTab['body'], 'data-maintenance-center '),
+        'System tools must embed the existing media owner and explicit engine choice.');
+    $legacyTools = $admin->request(
+        '/index.php?page=admin&dashboard_tab=maintenance&maintenance_tab=media',
+    );
+    check($legacyTools['status'] === 302,
+        'Legacy Overview maintenance URLs must redirect to Maintenance Center.');
+    $consistencyTab = $admin->request(
+        '/index.php?page=admin_maintenance_center&tab=consistency',
+    );
+    check($consistencyTab['status'] === 200
+        && str_contains($consistencyTab['body'], 'data-gallery-consistency')
+        && !str_contains($consistencyTab['body'], 'data-maintenance-center '),
+        'Consistency tab must render its own explicit job without starting installation work.');
+    check($anonymous->request($consistencyRoute, [
+        'action' => 'start', 'csrf_token' => $csrf,
+    ], true)['status'] >= 400, 'Anonymous consistency access must fail.');
+    check($admin->request($consistencyRoute, [
+        'action' => 'start', 'csrf_token' => 'invalid',
+    ], true)['status'] === 409, 'Consistency must reject invalid CSRF.');
+    envelope($admin->request('/index.php?page=admin_create_thumbnails', [
+        'csrf_token' => $csrf, 'scope' => 'all',
+        'thumbnail_gallery_id' => (string) $id,
+    ], true), 'Prepare consistency thumbnail fixture');
+    $thumbSnapshot = [];
+    foreach (glob($folder . '/thumbs/*') ?: [] as $thumbPath) {
+        if (is_file($thumbPath)) {
+            $thumbSnapshot[$thumbPath] = [
+                hash_file('sha256', $thumbPath), filemtime($thumbPath),
+            ];
+        }
+    }
+    $GLOBALS['consistency_browser_variants'] = [];
+    foreach (array_keys($thumbSnapshot) as $thumbPath) {
+        // Canonical and legacy stems share this established variant suffix.
+        check(preg_match('/_thumb([0-9]+)\.(jpg|webp)$/D', $thumbPath, $match) === 1,
+            'Generated fixture thumbnail has no size/format identity.');
+        $GLOBALS['consistency_browser_variants'][(int) $image['id']][
+            $match[1] . ':' . $match[2]
+        ] = (string) file_get_contents($thumbPath);
+    }
+    $webpPaths = array_values(array_filter(
+        array_keys($thumbSnapshot),
+        static fn(string $path): bool => str_ends_with($path, '.webp'),
+    ));
+    check(count($webpPaths) > 1, 'Consistency fixture needs generated WebP variants.');
+    $missingThumb = $webpPaths[0];
+    unlink($missingThumb);
+    $pdo->prepare('UPDATE galleries SET title = ? WHERE id = ?')->execute([
+        'Conflicting catalog title', $id,
+    ]);
+    $namesStart = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'start', 'scope' => 'names',
+    ], true);
+    $namesReport = galleryWorkflowConsistencyRun($admin, $namesStart['json'], $csrf);
+    check($namesReport['scope'] === 'names'
+        && $namesReport['total'] === countRows($pdo, 'galleries')
+        && $namesReport['disk_checked'] === 0
+        && str_contains($namesReport['html'], 'consistency-change')
+        && str_contains($namesReport['html'], 'Conflicting catalog title'),
+        'Names-only HTTP analysis must exclude photographs and expose its exact proposal.');
+    $start = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'start',
+    ], true);
+    check($start['status'] === 200 && is_array($start['json']),
+        'Consistency report must start with JSON.');
+    $report = galleryWorkflowConsistencyRun($admin, $start['json'], $csrf);
+    clearstatcache();
+    check(!is_file($missingThumb)
+        && row($pdo, 'SELECT title FROM galleries WHERE id = ?', [$id])['title']
+            === 'Conflicting catalog title',
+        'Read-only consistency analysis changed media or catalog data.');
+    $export = $admin->request($consistencyRoute . '&format=json');
+    $exported = json_decode($export['body'], true, 512, JSON_THROW_ON_ERROR);
+    $findings = $exported['groups']['g' . $id]['issues'] ?? [];
+    check(in_array('thumbnail_missing', array_column($findings, 'code'), true)
+        && in_array('name_mismatch', array_column($findings, 'code'), true),
+        'Full report must expose the seeded thumbnail and disk-title conflicts.');
+    check(!isset($exported['galleries']) && !isset($exported['fingerprint']),
+        'Report export must not expose raw access-bearing catalog snapshots.');
+    $repair = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'repair',
+        'token' => $report['token'], 'groups' => ['g' . $id],
+        'sequence' => (string) $report['sequence'],
+    ], true);
+    check($repair['status'] === 200 && is_array($repair['json'])
+        && $repair['json']['processed'] === 0 && !is_file($missingThumb),
+        'Repair planning must not mutate targets before progress begins.');
+    $repaired = galleryWorkflowConsistencyRun($admin, $repair['json'], $csrf);
+    clearstatcache();
+    check($repaired['failed'] === 0 && is_file($missingThumb)
+        && hash_file('sha256', $original) === hash_file('sha256', $sample),
+        'Selected repair must restore the missing derivative and preserve originals.');
+    $remainingExport = $admin->request($consistencyRoute . '&format=json');
+    $remainingReport = json_decode($remainingExport['body'], true, 512, JSON_THROW_ON_ERROR);
+    check(!isset($remainingReport['groups']['g' . $id])
+        && $remainingReport['results'] !== [],
+        'Confirmed gallery repairs must disappear while export retains receipts.');
+    $gallery = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    check($gallery['title'] === basename($gallery['folder_path']),
+        'Repair must take the conflicting title from physical disk identity.');
+    // Subsequent rejected-edit vectors compare against the now-repaired title.
+    $fields['title'] = $gallery['title'];
+    foreach ($thumbSnapshot as $thumbPath => $evidence) {
+        if ($thumbPath !== $missingThumb) {
+            clearstatcache(true, $thumbPath);
+            check($evidence === [hash_file('sha256', $thumbPath), filemtime($thumbPath)],
+                'Selected repair rewrote an already valid thumbnail.');
+        }
+    }
+    // A duplicate final step is a passive receipt, never a second repair.
+    $duplicate = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'step', 'token' => $repaired['token'],
+        'sequence' => (string) ($repaired['sequence'] - 1),
+    ], true);
+    check($duplicate['json']['processed'] === $repaired['processed'],
+        'A repeated receipt must not replay a completed mutation.');
+    echo "PASS gallery workflow consistency dry report selected repair and receipts\n";
 
     $stage = 'real Smart Gallery direct photo-tag scope';
     // Three owned photos form exact same-photo vectors: both image tags, one
@@ -2093,6 +2362,9 @@ try {
         'Edit',
     );
     $updated = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $gallery = $updated;
+    $folder = $directory . '/galleries/' . $updated['folder_path'];
+    $original = $folder . '/' . $image['relative_path'];
     check(
         $updated['title'] === $edit['title']
             && $updated['description'] === $edit['description']
@@ -2393,6 +2665,118 @@ try {
         'Repeat restore duplicated persistence.',
     );
     echo "PASS gallery workflow trash subtree restoration and repeat control\n";
+
+    $stage = 'selected nested consistency proposal';
+    $planFields = array_replace($fields, [
+        'title' => 'Plan Parent', 'parent_id' => 0,
+        'operation_key' => $admin->operationKey(
+            '/index.php?page=admin_new_gallery&panel=1',
+        ),
+    ]);
+    $planParent = (int) envelope($admin->request(
+        '/index.php?page=admin_new_gallery', $planFields, true,
+    ), 'Create proposal parent')['gallery_id'];
+    $planFields = array_replace($planFields, [
+        'title' => 'Plan Child', 'parent_id' => $planParent,
+        'operation_key' => $admin->operationKey(
+            '/index.php?page=admin_new_gallery&panel=1',
+        ),
+    ]);
+    $planChild = (int) envelope($admin->request(
+        '/index.php?page=admin_new_gallery', $planFields, true,
+    ), 'Create proposal child')['gallery_id'];
+    // Seed a historical noncanonical nested directory in disposable storage.
+    $planRoot = $directory . '/galleries/';
+    check(rename($planRoot . 'plan-parent/plan-child',
+        $planRoot . 'plan-parent/Plan Child')
+        && rename($planRoot . 'plan-parent', $planRoot . 'Plan Parent'),
+        'Could not prepare the isolated historical path vector.');
+    // The derived lookup key must describe the seeded legacy path too; leaving
+    // the previous hash would model a different catalog corruption/collision.
+    $planUpdate = $pdo->prepare('UPDATE galleries SET folder_path = ?, '
+        . 'folder_path_hash = ? WHERE id = ?');
+    $planUpdate->execute(['Plan Parent', hash('sha256', 'Plan Parent'), $planParent]);
+    $planUpdate->execute(['Plan Parent/Plan Child',
+        hash('sha256', 'Plan Parent/Plan Child'), $planChild]);
+    $planStart = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'start', 'scope' => 'names',
+    ], true);
+    $planReport = galleryWorkflowConsistencyRun($admin, $planStart['json'], $csrf);
+    $planExport = $admin->request($consistencyRoute . '&format=json')['json'];
+    $planChanges = array_column(
+        $planExport['groups']['g' . $planChild]['changes'], 'proposed', 'field',
+    );
+    check($planChanges['folder_value'] === 'Plan Parent/plan-child',
+        'An unselected existing parent must retain its exact physical spelling.');
+    $planRepair = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'repair',
+        'token' => $planReport['token'], 'groups' => ['g' . $planChild],
+        'sequence' => (string) $planReport['sequence'],
+    ], true);
+    $planAfter = galleryWorkflowConsistencyRun($admin, $planRepair['json'], $csrf);
+    $planActual = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$planChild]);
+    check($planActual['folder_path'] === $planChanges['folder_value']
+        && (int) $planActual['parent_id'] === $planParent
+        && is_dir($planRoot . $planChanges['folder_value'])
+        && is_dir($planRoot . 'Plan Parent'),
+        'Actual selected repair must match its proposal and preserve the unselected parent.');
+    $planRemaining = $admin->request($consistencyRoute . '&format=json')['json'];
+    check(!isset($planRemaining['groups']['g' . $planChild])
+        && isset($planRemaining['groups']['g' . $planParent])
+        && $planAfter['repairable_groups'] > 0 && $planAfter['moves'] !== [],
+        'A completed subset must disappear and leave the next subset selectable.');
+    $oldAdmission = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'repair', 'token' => $planReport['token'],
+        'sequence' => (string) $planReport['sequence'], 'all' => '1',
+    ], true);
+    check($oldAdmission['status'] === 409 && is_dir($planRoot . 'Plan Parent'),
+        'A delayed previous batch request must not start repairs on remaining rows.');
+    $nextRepair = $admin->request($consistencyRoute, [
+        'csrf_token' => $csrf, 'action' => 'repair', 'token' => $planAfter['token'],
+        'sequence' => (string) $planAfter['sequence'], 'groups' => ['g' . $planParent],
+    ], true);
+    check($nextRepair['status'] === 200,
+        'The next subset must be admitted without starting a new report.');
+    $nextCompleted = galleryWorkflowConsistencyRun($admin, $nextRepair['json'], $csrf);
+    clearstatcache();
+    $nextExport = $admin->request($consistencyRoute . '&format=json')['json'];
+    check($nextCompleted['token'] === $planReport['token']
+        && !isset($nextExport['groups']['g' . $planChild])
+        && !isset($nextExport['groups']['g' . $planParent])
+        && count($nextExport['results']) > count($planRemaining['results'])
+        && is_dir($planRoot . 'plan-parent/plan-child'),
+        'Sequential repairs must reuse the report, retain history and move descendants.');
+    echo "PASS gallery workflow selected nested proposal equals physical repair\n";
+
+    $stage = 'disk-authoritative gallery import';
+    $rawImport = 'Import Disk Name';
+    $rawImportFolder = $directory . '/galleries/' . $rawImport;
+    mkdir($rawImportFolder);
+    copy($sample, $rawImportFolder . '/imported.jpg');
+    file_put_contents($rawImportFolder . '/gallery.json', json_encode([
+        'title' => 'Conflicting Sidecar Title', 'visibility' => 'unpublished',
+    ], JSON_THROW_ON_ERROR));
+    $import = $admin->request('/index.php?page=admin_import', [
+        'csrf_token' => $csrf, 'folders' => [$rawImport],
+        'discovery_action' => 'import_in_place', 'ajax' => '1',
+    ], true);
+    check($import['status'] === 200 && ($import['json']['ok'] ?? false) === true,
+        'Disk-authoritative import did not complete.');
+    clearstatcache();
+    $importedDisk = row($pdo, 'SELECT * FROM galleries WHERE folder_path = ?', [
+        'import-disk-name',
+    ]);
+    check($importedDisk['title'] === $rawImport
+        && is_file($directory . '/galleries/import-disk-name/imported.jpg')
+        && !is_dir($rawImportFolder),
+        'Import must take its title from disk and canonicalize the actual folder.');
+    $importedSidecar = json_decode((string) file_get_contents(
+        $directory . '/galleries/import-disk-name/gallery.json',
+    ), true, 512, JSON_THROW_ON_ERROR);
+    check($importedSidecar['title'] === $rawImport,
+        'Conflicting imported sidecar title survived disk normalization.');
+    echo "PASS gallery workflow disk-authoritative import and canonical folder\n";
+    $beforeDelete = countRows($pdo, 'galleries');
 
     $stage = 'expired session';
     $admin->request('/index.php?page=admin_logout', ['csrf_token' => $csrf]);

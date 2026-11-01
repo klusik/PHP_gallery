@@ -1398,11 +1398,13 @@ function cms_admin_thumbnail_browser_upload_batch(): void
             (string) ($_POST['upload_session_id'] ?? ''),
         ) ?: bin2hex(random_bytes(8));
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
-        $response = browser_thumbnail_rebuild_store_prepared_zip_batch(
-            $_FILES['zip_batch'] ?? [],
-            $sessionId,
-            $batchIndex,
-        );
+        $response = isset($_POST['consistency_token'])
+            ? \Gallery\Services\browser_thumbnail_rebuild_store_consistency_batch(
+                $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex, $_POST,
+            )
+            : browser_thumbnail_rebuild_store_prepared_zip_batch(
+                $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex,
+            );
         cms_admin_thumbnail_browser_json_response($response);
     } catch (Throwable $exception) {
         admin_log_event(

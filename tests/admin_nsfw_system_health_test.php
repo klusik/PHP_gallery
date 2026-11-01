@@ -199,12 +199,10 @@ nsfw_health_assert_same(
     str_contains($dashboardView, "['missing', 'unknown']"),
     'System Health action badge states',
 );
-$dashboardPageView = (string) file_get_contents(__DIR__
-    . '/../app/views/admin_dashboard.php');
 nsfw_health_assert_same(
     true,
-    str_contains($dashboardPageView, "['missing', 'unknown']"),
-    'Maintenance action badge states',
+    str_contains($dashboardView, "view_admin_dashboard_bool(\$model, 'system_action_required')"),
+    'Overview maintenance shortcut retains the prepared System Health warning',
 );
 $diagnosticsController = (string) file_get_contents(__DIR__
     . '/../app/controllers/admin_diagnostics.php');

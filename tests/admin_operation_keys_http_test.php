@@ -150,12 +150,31 @@ try {
                 === 'operation_payload_conflict',
         'Changed payload reused a completed key.',
     );
+    $duplicateTitle = $admin->request(
+        $createRoute,
+        array_replace($fields, [
+            'operation_key' => $admin->operationKey($createRoute . '&panel=1'),
+        ]),
+        true,
+    );
+    // A failed claimed create retains the existing conservative 503 contract;
+    // it must still refuse a title/folder alias and preserve the catalog.
+    check(
+        $duplicateTitle['status'] === 503
+            && ($duplicateTitle['json']['ok'] ?? true) === false
+            && ($duplicateTitle['json']['error_code'] ?? '')
+                === 'operation_outcome_unknown'
+            && countRows($pdo, 'galleries') === ($before + 1),
+        'A fresh key must refuse a title/folder collision without an alias.',
+    );
     $another = envelope(
         $admin->request(
             $createRoute,
             array_replace($fields, [
                 'operation_key' => $admin->operationKey($createRoute
                     . '&panel=1'),
+                // A new intent needs a distinct canonical folder/title.
+                'title' => $intent . ' next',
             ]),
             true,
         ),
@@ -164,7 +183,7 @@ try {
     check(
         (int) $another['gallery_id'] !== $id
             && countRows($pdo, 'galleries') === ($before + 2),
-        'Fresh key suppressed an intentional duplicate.',
+        'Fresh key suppressed an intentional distinct gallery.',
     );
     $reauthenticated = new Http($origin);
     $newCsrf = $reauthenticated->login($seed);

@@ -141,6 +141,7 @@ use function Gallery\Services\gallery_filename_display_schema_ready;
 use function Gallery\Services\gallery_flight_map_row;
 use function Gallery\Services\gallery_flight_map_unresolved_from_row;
 use function Gallery\Services\gallery_folder_name_from_path;
+use function Gallery\Services\gallery_folder_segment;
 use function Gallery\Services\gallery_gps_map_storage_value;
 use function Gallery\Services\gallery_grid_form_columns;
 use function Gallery\Services\gallery_grid_form_rows;
@@ -1572,7 +1573,7 @@ function admin_save_gallery_owned_input(
         $completeForm
         || admin_gallery_input_has_any_key($input, [
             'parent_id',
-            'folder_name',
+            'title',
         ]);
     // Variable $parentId stores this steps working value.
     $parentId = isset($gallery['parent_id'])
@@ -1582,7 +1583,7 @@ function admin_save_gallery_owned_input(
     $moveResult = null;
     if ($shouldMoveGallery) {
         // Variable $parentId stores this steps working value.
-        $parentId = (int) ($input['parent_id'] ?? 0);
+        $parentId = (int) ($input['parent_id'] ?? $gallery['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
         $parentId = $parentId > 0 && find_gallery($parentId) ? $parentId : null;
         // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
@@ -1590,9 +1591,10 @@ function admin_save_gallery_owned_input(
             (string) $gallery['folder_path'],
         );
         // $submittedFolderName stores an intermediate value used by the surrounding gallery workflow.
-        $submittedFolderName = trim(
-            (string) ($input['folder_name'] ?? $currentFolderName),
-        );
+        $submittedFolderName = gallery_folder_segment($title);
+        if ($submittedFolderName === '') {
+            throw new RuntimeException('Gallery title must produce a nonempty folder name.');
+        }
         // $folderNameChanged stores an intermediate value used by the surrounding gallery workflow.
         $folderNameChanged =
             $submittedFolderName !== ''
@@ -1607,6 +1609,8 @@ function admin_save_gallery_owned_input(
                     $galleryId,
                     $parentId,
                     $folderNameChanged ? $submittedFolderName : null,
+                    false,
+                    $title,
                 );
                 if (!empty($moveResult['moved'])) {
                     admin_log_event(

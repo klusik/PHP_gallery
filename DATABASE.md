@@ -1,5 +1,18 @@
 # PHP Gallery Database Documentation
 
+## Explicit media consistency reports
+
+Gallery consistency adds no table or migration. Its model reads physical gallery
+identities, paged source rows and thumbnail metadata. Names-only leases omit
+source-row queries entirely; the other scopes include source membership. The
+controller stores the
+report and sequential repair receipts in the authenticated PHP session; exports
+exclude raw catalog/access fields. Repairs require conclusive ownership and
+thumbnail metadata schema readiness before any target mutation and reuse the
+existing scanner/mover/metadata models. Disk-derived import titles and canonical
+folder paths preserve the existing gallery IDs and descendant relationships.
+See [report scope and repair admission](docs/GALLERY_CONSISTENCY.md).
+
 ## Gallery content evidence, without visitor records
 
 `202610250001_gallery_visit_content.php` adds three derived tables:
@@ -78,7 +91,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.149.0. Version 0.97 adds the recoverable gallery-trash
+application version 0.149.1. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
