@@ -1,5 +1,89 @@
 # Patch notes
 
+## Version 0.149.3
+
+Made Gallery consistency reports easier to understand before selecting repairs.
+The previous list repeated a long technical filename and the same instructions
+for every thumbnail size. A single photo could occupy many rows, while findings
+such as unassigned previews or records left by older settings did not explain
+what they meant or what the proposed repair would change.
+
+This patch kept the overview short and moved the explanation beside each
+finding. It preserved the complete exported evidence and existing repair rules,
+so a more readable report did not become permission to guess file ownership or
+delete historical thumbnails.
+
+### Highlights
+
+#### Compact reasons, useful photo examples
+
+- Grouped findings by reason and available repair, showing exact finding and
+  distinct catalog-photo counts with one short action or manual-review status.
+- Combined known variants of the same photo under its catalog filename and a
+  readable size/format list. Moved cache filenames and path hashes into nested
+  Technical details instead of exposing them as the main photo identity.
+- Shared the bounded example allowance across categories so a large first
+  category did not consume every example. Kept complete findings in the JSON
+  export, independently of paging and the displayed examples.
+- Kept unassigned thumbnail files in a separate manual category. Similar
+  filenames were not treated as evidence that they belonged to an original.
+
+#### Explanation where it is needed
+
+- Added contextual question-mark help explaining Now, Why it matters and After
+  repair. Hover or keyboard focus opened help; activation kept it open for
+  reading; Escape returned focus and an outside click dismissed it.
+- Explained that records outside the active size/format policy could be
+  leftovers from earlier settings, without claiming damaged pixels or proposing
+  automatic deletion. Clarified unindexed originals, unavailable metadata,
+  uncertain content comparisons and interrupted moves.
+- Retained concrete current/proposed gallery values and nested paths, while
+  moving the longer plan explanation into the same compact help pattern.
+- Kept help within the viewport, with Theme glass styling, visible focus and
+  narrow-screen touch targets. Preserved native disclosures without enhancement.
+
+### Technical Details
+
+#### Presentation and bounded catalog reads
+
+- Extended `app/views/gallery_consistency.php` with pure grouping and escaped
+  presentation helpers. Kept captured findings, repair policies, selection keys,
+  task admission and export contents unchanged.
+- Prepared filenames through the consistency service and existing image model
+  for only the displayed sample IDs. Checked their current gallery membership; missing or moved rows
+  retained an explicit photo-ID fallback instead of a guessed name.
+- Kept names-only reports free of photograph lookups and performed no source
+  file reads for this presentation. Added no database schema or migration.
+- Extended the existing delegated consistency help owner to support refreshed
+  rows and restore its portalled panel before result replacement. Advanced the
+  owning browser import revision.
+
+#### Coverage and documentation
+
+- Added real-view coverage for variant grouping, exact totals, escaped names,
+  technical evidence disclosure, manual ownership boundaries and bounded lookup.
+- Covered missing/moved source names, names-only exclusion, delegated hover and
+  focus, activation, Escape/focus return, outside dismissal and help cleanup
+  before replacing results. Retained browser repair and subset-selection tests.
+- Synchronized English, Czech, German and Swedish catalogs and manual sources,
+  plus the architecture, testing and consistency references.
+
+### User Impact
+
+#### For administrators
+
+- Reduced repeated report text while making each reason and repair outcome
+  available beside its summary. Made automatic actions and manual findings
+  easier to distinguish before choosing galleries to repair.
+- Preserved the complete export and existing analysis/repair behavior. A saved
+  report gained the presentation without a new photograph scan.
+
+#### For visitors and Windows companion users
+
+- Left public gallery behavior, photograph files and the Windows companion
+  unchanged. Increased only the gallery patch version to `0.149.3`; WinApp
+  remained `0.11.2` with its existing installer.
+
 ## Version 0.149.2
 
 Updated the Windows companion’s self-update shutdown so the uploader exited

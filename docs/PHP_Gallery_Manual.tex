@@ -64,7 +64,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.149.2}
+\newcommand{\version}{0.149.3}
 \newcommand{\manualdate}{1 November 2026}
 
 \hypersetup{
@@ -4064,6 +4064,16 @@ pixels; large collections require substantially more work. Each report names
 its~actual scope. Expanded rows show \ui{Now} and~\ui{After repair} values
 for~proposed title, path, parent or~sidecar changes, before any repair
 is~chosen.
+
+Findings are~grouped by~reason with exact counts and~a~short action or~manual
+status. Photo/file examples combine a~known original's variants under its
+catalog filename; technical cache names and~path hashes stay in~nested details.
+A~question mark explains the~current state, why~it~matters and~the~repair result.
+Hover or~focus opens help, activation pins it, and~Escape or~outside click
+closes it. Native disclosures remain available. Unassigned previews remain
+manual; unused size/format records may~be~historical, not~damaged images.
+Only bounded displayed photo IDs are~looked up~in~the~catalog, without reading
+photo files; names-only reports perform no~photo lookup. The~export stays complete.
 
 Only affected galleries appear in~compact expandable rows. Select individual
 galleries or~use \ui{Repair~all~available}; manual findings remain separate.

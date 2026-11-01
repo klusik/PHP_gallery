@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{0.149.2}
+\newcommand{\version}{0.149.3}
 \newcommand{\manualdate}{1.~listopadu~2026}
 
 \hypersetup{
@@ -4052,6 +4052,16 @@ Po ztrátě odpovědi nejprve zkontroluje uložený výsledek. Nepodporované zd
 RAW/HEIC i~chyby prohlížeče zůstávají viditelné bez náhradního generování
 v~PHP. Výpis ukáže zbývající nálezy a~počet potvrzených variant.
 Průběh práce v~prohlížeči je u~hlavního progressbaru nad seznamem nálezů.
+
+Nálezy se seskupují podle důvodu s~přesnými počty a~stručnou akcí nebo stavem
+ručního posouzení. Ukázky spojí varianty známé fotografie pod jejím názvem
+z~katalogu; technické názvy cache a~hashe cest jsou v~dalších detailech.
+Otazník vysvětlí současný stav, důvod i~výsledek opravy. Nápovědu otevře najetí
+nebo focus, aktivace ji ponechá otevřenou a~Escape či klik mimo ji zavře.
+Nativní rozbalení zůstává dostupné. Nepřiřazené náhledy vyžadují ruční kontrolu;
+nepoužívané velikosti či formáty mohou být pozůstatkem staršího nastavení.
+V~katalogu se dohledají jen omezené ukázky fotografií, bez čtení jejich souborů;
+report názvů a~cest fotografie nedohledává. Export dál obsahuje všechny nálezy.
 
 Kompaktní rozbalovací řádky obsahují pouze dotčené galerie. Vyberte jednotlivé
 galerie nebo použijte \ui{Opravit~vše~opravitelné}; ruční nálezy zůstávají

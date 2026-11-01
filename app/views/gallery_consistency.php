@@ -14,6 +14,10 @@
  *     source_chunk_bytes:int,source_chunk_item_cap:int,thumbnail_sizes:list<int>,
  *     thumbnail_formats:list<string>,jpeg_quality:int,webp_quality:int,
  *     supported_mime_types:list<string>}
+ * @phpstan-type ConsistencySample array{id:int,path:string,variants:list<string>}
+ * @phpstan-type ConsistencyFindingGroup array{code:string,repair:string,
+ *     count:int,photos:array<int,true>,samples:array<string,ConsistencySample>,
+ *     evidence:list<string>}
  */
 declare(strict_types=1);
 
@@ -34,8 +38,9 @@ use function Gallery\Services\t;
 const GALLERY_CONSISTENCY_RESULT_PAGE = 40;
 
 /** Bound expanded samples without truncating the stored/exported report.
- * Type: int. Units: findings. Scope: one gallery disclosure.
- * Consumers: view_render_gallery_consistency_results. Rationale: 12 samples
+ * Type: int. Units: source samples. Scope: one gallery disclosure.
+ * Consumers: view_gallery_consistency_findings and result rendering.
+ * Rationale: 12 samples
  * expose causes without inserting thousands of photo rows into the document.
  */
 const GALLERY_CONSISTENCY_FINDING_SAMPLES = 12;
@@ -120,7 +125,8 @@ function view_render_gallery_consistency_page(
         . '<button type="button" data-consistency-action="resume" hidden>'
         . e(view_gallery_consistency_text('resume')) . '</button>'
         . '<details class="consistency-help"><summary aria-label="'
-        . e(view_gallery_consistency_text('help_label')) . '">?</summary><p>'
+        . e(view_gallery_consistency_text('help_label'))
+        . '">?</summary><p class="consistency-help-content">'
         . e(view_gallery_consistency_text('help')) . '</p></details>'
         . '<a data-consistency-export hidden href="'
         . e(url_for('admin_gallery_consistency', ['format' => 'json'])) . '">'
@@ -162,9 +168,15 @@ function view_render_gallery_consistency_page(
  * @param \Gallery\Services\ConsistencyJob $job Completed safe report model;
  *     only finding groups and repair receipts are rendered.
  * @param int $page Zero-based affected-gallery page, clamped to available rows.
+ * @param array<int,string> $sourceNames Bounded catalog filenames prepared by
+ *     the controller; missing identities retain an explicit photo ID.
  * @return string Escaped HTML fragment retaining native selection/disclosures.
  */
-function view_render_gallery_consistency_results(array $job, int $page = 0): string
+function view_render_gallery_consistency_results(
+    array $job,
+    int $page = 0,
+    array $sourceNames = [],
+): string
 {
     $count = count($job['groups']);
     $pages = max(1, (int) ceil($count / GALLERY_CONSISTENCY_RESULT_PAGE));
@@ -201,8 +213,12 @@ function view_render_gallery_consistency_results(array $job, int $page = 0): str
         echo '</span></summary>';
         if (($group['changes'] ?? []) !== []
         ) {
-            echo '<div class="consistency-plan"><p>'
-                . e(view_gallery_consistency_text('plan_note')) . '</p>';
+            echo '<div class="consistency-plan"><div class="consistency-plan-heading">'
+                . e(view_gallery_consistency_text('proposed_changes'))
+                . view_gallery_consistency_help(
+                    $key . '-plan', 'proposed_changes', 'plan_note', 'why_catalog',
+                    'action_gallery',
+                ) . '</div>';
             foreach ($group['changes'] as $change) {
                 echo '<strong>' . e(view_gallery_consistency_text($change['field']))
                     . '</strong><dl class="consistency-change">';
@@ -222,25 +238,14 @@ function view_render_gallery_consistency_results(array $job, int $page = 0): str
             }
             echo '</div>';
         }
-        echo '<ul>';
-        foreach (array_slice(
-            $group['issues'], 0, GALLERY_CONSISTENCY_FINDING_SAMPLES,
-        ) as $issue) {
-            echo '<li><span>' . e(view_gallery_consistency_text($issue['code']))
-                . '</span>';
-            $evidence = array_filter([$issue['path'], $issue['details']],
-                static fn(string $value): bool => $value !== '');
-            if ($evidence !== []) {
-                echo '<small>' . e(implode(' · ', $evidence)) . '</small>';
-            }
-            echo '<small>' . e(view_gallery_consistency_text(
-                $issue['repair'] === '' ? 'manual'
-                    : 'action_' . $issue['repair'],
-            )) . '</small></li>';
+        foreach (view_gallery_consistency_findings($group['issues']) as $finding) {
+            echo view_gallery_consistency_finding($key, $finding, $sourceNames);
         }
         if (count($group['issues']) > GALLERY_CONSISTENCY_FINDING_SAMPLES) {
-            echo '<li>' . e(view_gallery_consistency_text('export_more')) . '</li>';
+            echo '<small class="consistency-sample-note">'
+                . e(view_gallery_consistency_text('export_more')) . '</small>';
         }
+        echo '<ul class="consistency-receipts">';
         foreach ($job['results'] as $result) {
             if ($result['key'] === $key) {
                 echo '<li class="consistency-receipt">'
@@ -273,4 +278,182 @@ function view_render_gallery_consistency_results(array $job, int $page = 0): str
         echo '<span>' . ($page + 1) . ' / ' . $pages . '</span></nav>';
     }
     return (string) ob_get_clean();
+}
+
+/**
+ * Group display findings by reason without changing source/repair ownership.
+ * @param list<\Gallery\Services\ConsistencyIssue> $issues Exact report findings.
+ * @return list<ConsistencyFindingGroup> Counts with bounded per-photo examples;
+ *     unknown derivatives remain file examples, never inferred photo owners.
+ */
+function view_gallery_consistency_findings(array $issues): array
+{
+    $groups = [];
+    $sampleCount = 0;
+    foreach ($issues as $issue) {
+        $key = $issue['code'] . ':' . $issue['repair'];
+        if (!isset($groups[$key])) {
+            $groups[$key] = [
+                'code' => $issue['code'], 'repair' => $issue['repair'],
+                'count' => 0, 'photos' => [], 'samples' => [], 'evidence' => [],
+            ];
+        }
+        $group = &$groups[$key];
+        $group['count']++;
+        $id = (int) $issue['image_id'];
+        if ($id > 0) $group['photos'][$id] = true;
+        unset($group);
+    }
+    // Share the fixed sample budget across reasons so a large first category
+    // does not hide examples for every subsequent manual finding.
+    $perGroup = max(1, intdiv(GALLERY_CONSISTENCY_FINDING_SAMPLES,
+        max(1, count($groups))));
+    foreach ($issues as $issue) {
+        $key = $issue['code'] . ':' . $issue['repair'];
+        $group = &$groups[$key];
+        $id = (int) $issue['image_id'];
+        $sampleKey = $id > 0 ? 'image:' . $id : 'file:' . $issue['path'];
+        if (($id > 0 || $issue['path'] !== '')
+            && !isset($group['samples'][$sampleKey])
+            && $sampleCount < GALLERY_CONSISTENCY_FINDING_SAMPLES
+            && count($group['samples']) < $perGroup
+        ) {
+            $group['samples'][$sampleKey] = [
+                'id' => $id, 'path' => $issue['path'], 'variants' => [],
+            ];
+            $sampleCount++;
+        }
+        if (isset($group['samples'][$sampleKey])) {
+            if (preg_match('/^([0-9]+):(jpg|webp)$/', $issue['details'], $parts)) {
+                $label = ($parts[2] === 'webp' ? 'WebP' : 'JPG')
+                    . ' ' . $parts[1] . ' px';
+                $group['samples'][$sampleKey]['variants'][$label] = $label;
+            }
+        }
+        if (count($group['evidence']) < GALLERY_CONSISTENCY_FINDING_SAMPLES
+            && ($issue['path'] !== '' || $issue['details'] !== '')
+        ) {
+            $group['evidence'][] = implode(' · ', array_filter([
+                $issue['path'], $issue['details'],
+            ], static fn(string $value): bool => $value !== ''));
+        }
+        unset($group);
+    }
+    foreach ($groups as &$group) {
+        foreach ($group['samples'] as &$sample) {
+            $sample['variants'] = array_values($sample['variants']);
+            natsort($sample['variants']);
+            $sample['variants'] = array_values($sample['variants']);
+        }
+        unset($sample);
+    }
+    unset($group);
+    return array_values($groups);
+}
+
+/**
+ * Render one native help disclosure with meaning, reason and repair outcome.
+ * @param string $id Stable gallery/reason identity for the accessible relation.
+ * @param string $label Localized category suffix naming the help trigger.
+ * @param string $current Catalog suffix explaining the observed state.
+ * @param string $reason Catalog suffix explaining the reason for attention.
+ * @param string $after Catalog suffix describing the admitted repair or review.
+ * @return string Escaped native help, enhanced in place for hover/focus/touch.
+ */
+function view_gallery_consistency_help(
+    string $id,
+    string $label,
+    string $current,
+    string $reason,
+    string $after,
+): string {
+    $panelId = 'consistency-help-' . $id;
+    $html = '<details class="consistency-help"><summary aria-controls="'
+        . e($panelId) . '" aria-describedby="' . e($panelId) . '" aria-label="'
+        . e(view_gallery_consistency_text('finding_help') . ': '
+            . view_gallery_consistency_text($label)) . '">?</summary>'
+        . '<div class="consistency-help-content" id="' . e($panelId) . '">';
+    foreach (['current' => $current, 'why' => $reason, 'proposed' => $after] as $key => $value) {
+        $html .= '<p><strong>' . e(view_gallery_consistency_text($key))
+            . '</strong><span>' . e(view_gallery_consistency_text($value))
+            . '</span></p>';
+    }
+    return $html . '</div></details>';
+}
+
+/**
+ * Render one compact reason row with optional photo examples and diagnostics.
+ * @param string $key Stable report gallery key; never a repair target.
+ * @param ConsistencyFindingGroup $finding Presentation group of exact findings.
+ * @param array<int,string> $sourceNames Safe filenames from the current catalog.
+ * @return string Escaped concise summary, contextual help and native details.
+ */
+function view_gallery_consistency_finding(
+    string $key,
+    array $finding,
+    array $sourceNames,
+): string {
+    $code = $finding['code'];
+    $reason = match ($code) {
+        'name_mismatch', 'parent_mismatch', 'parent_missing',
+        'sidecar_invalid', 'sidecar_mismatch' => 'why_catalog',
+        'thumbnail_missing', 'thumbnail_stale', 'thumbnail_invalid',
+        'thumbnail_decode_failed', 'display_master_missing' => 'why_thumbnail',
+        'metadata_extra' => 'why_metadata_extra',
+        'metadata_duplicate', 'metadata_mismatch' => 'why_metadata',
+        'metadata_unavailable' => 'why_schema',
+        'derivative_unowned' => 'why_unowned',
+        'original_unindexed', 'directory_unindexed' => 'why_unindexed',
+        'source_changed' => 'why_source',
+        'content_suspect', 'content_unchecked' => 'why_content',
+        'pending_move', 'move_state_unknown' => 'why_pending',
+        default => 'why_manual',
+    };
+    $after = $finding['repair'] === '' ? 'after_manual'
+        : 'action_' . $finding['repair'];
+    $html = '<section class="consistency-finding"><div class="consistency-finding-heading">'
+        . '<strong>' . e(view_gallery_consistency_text('brief_' . $code))
+        . '</strong><span class="consistency-finding-count">'
+        . e(view_gallery_consistency_text('findings')) . ': ' . $finding['count'];
+    if ($finding['photos'] !== []) {
+        $html .= ' · ' . e(view_gallery_consistency_text('photos'))
+            . ': ' . count($finding['photos']);
+    }
+    $html .= '</span><span class="consistency-finding-action">'
+        . e(view_gallery_consistency_text($finding['repair'] === ''
+            ? 'manual' : 'short_action_' . $finding['repair'])) . '</span>'
+        . view_gallery_consistency_help(
+            $key . '-' . $code . '-' . $finding['repair'],
+            'brief_' . $code, $code, $reason, $after,
+        ) . '</div>';
+    if ($finding['samples'] !== []) {
+        $html .= '<details class="consistency-examples"><summary>'
+            . e(view_gallery_consistency_text('examples')) . '</summary><ul>';
+        $samples = $code === 'derivative_unowned'
+            ? array_slice($finding['samples'], 0, 1) : $finding['samples'];
+        foreach ($samples as $sample) {
+            $name = $sample['id'] > 0
+                ? ($sourceNames[$sample['id']] ?? view_gallery_consistency_text('photo')
+                    . ' #' . $sample['id'])
+                : ($code === 'derivative_unowned'
+                    ? view_gallery_consistency_text('unassigned_thumbnail')
+                    : basename($sample['path']));
+            $html .= '<li><span>' . e($name) . '</span>';
+            if ($sample['variants'] !== []) {
+                $html .= '<small>' . e(implode(' · ', $sample['variants'])) . '</small>';
+            }
+            $html .= '</li>';
+        }
+        $html .= '</ul>';
+    }
+    if ($finding['evidence'] !== []) {
+        $html .= '<details class="consistency-technical"><summary>'
+            . e(view_gallery_consistency_text('technical')) . '</summary><ul>';
+        foreach ($finding['evidence'] as $evidence) {
+            $html .= '<li>' . e($evidence) . '</li>';
+        }
+        $html .= '</ul></details>';
+    }
+    if ($finding['samples'] !== []) $html .= '</details>';
+    return $html . '</section>';
 }

@@ -94,6 +94,138 @@ export function consistencyProposedPath(source, base, moves, selected) {
     return target.join('/');
 }
 
+/** Permit pointer travel between a question mark and its anchored help.
+ * Type: number. Units: milliseconds. Scope: transient consistency help.
+ * Consumers: setupConsistencyHelp. Rationale: 150 avoids closing across the
+ * small trigger/panel gap; click-pinned help still closes on Escape/outside.
+ */
+const CONSISTENCY_HELP_LEAVE_MS = 150;
+
+/**
+ * Enhance native help disclosures, including dynamically replaced report rows.
+ * @param {HTMLElement} root Owning report workspace with native details help.
+ * @return {function():void} Close/restore the active panel before replacing rows.
+ */
+function setupConsistencyHelp(root) {
+    let active = null;
+    let panel = null;
+    let pinned = false;
+    let leaveTimer;
+
+    /** Restore native content and clear transient help state.
+     * @return {void} Leaves no portalled panel or delayed close behind.
+     */
+    function closeHelp() {
+        clearTimeout(leaveTimer);
+        if (active && panel) {
+            active.append(panel);
+            active.open = false;
+            panel.classList.remove('consistency-help-panel');
+            panel.removeAttribute('style');
+            active.querySelector('summary').setAttribute('aria-expanded', 'false');
+        }
+        active = null;
+        panel = null;
+        pinned = false;
+    }
+
+    /** Keep open help beside its trigger and inside the visible viewport.
+     * @return {void} Repositions without changing layout or starting work.
+     */
+    function positionHelp() {
+        if (!active || !panel) return;
+        if (!root.contains(active)) return closeHelp();
+        const trigger = active.querySelector('summary').getBoundingClientRect();
+        const edge = CONSISTENCY_HELP_EDGE;
+        const width = document.documentElement.clientWidth;
+        const height = document.documentElement.clientHeight;
+        panel.style.maxWidth = `${width - edge - edge}px`;
+        panel.style.maxHeight = `${height - edge - edge}px`;
+        panel.style.left = `${Math.max(edge, Math.min(
+            trigger.left, width - panel.offsetWidth - edge,
+        ))}px`;
+        const below = trigger.bottom + edge;
+        const top = below + panel.offsetHeight <= height - edge
+            ? below : trigger.top - panel.offsetHeight - edge;
+        panel.style.top = `${Math.max(edge, Math.min(
+            top, height - panel.offsetHeight - edge,
+        ))}px`;
+    }
+
+    /** Open one existing disclosure without inferring report or repair state.
+     * @param {HTMLDetailsElement} disclosure Native help details beside its reason.
+     * @param {boolean} pin Whether explicit activation keeps the help open.
+     * @return {void} Exposes escaped server text on hover, focus or activation.
+     */
+    function openHelp(disclosure, pin = false) {
+        clearTimeout(leaveTimer);
+        if (active !== disclosure) {
+            closeHelp();
+            active = disclosure;
+            panel = active.querySelector('.consistency-help-content');
+            if (!panel) return closeHelp();
+            active.open = true;
+            active.querySelector('summary').setAttribute('aria-expanded', 'true');
+            // Portal outside backdrop-filter containing blocks, as before.
+            document.body.append(panel);
+            panel.classList.add('consistency-help-panel');
+        }
+        pinned = pinned || pin;
+        positionHelp();
+    }
+
+    /** Locate help independently of source rows or their current page.
+     * @param {EventTarget|null} target Pointer/focus/click target in the document.
+     * @return {HTMLDetailsElement|null} Owning native disclosure, or no help trigger.
+     */
+    function disclosureFor(target) {
+        return target?.closest?.('.consistency-help > summary')
+            ?.closest('.consistency-help') || null;
+    }
+
+    root.addEventListener('pointerover', event => {
+        const disclosure = disclosureFor(event.target);
+        if (disclosure) openHelp(disclosure);
+    });
+    root.addEventListener('focusin', event => {
+        const disclosure = disclosureFor(event.target);
+        if (disclosure) openHelp(disclosure);
+    });
+    root.addEventListener('click', event => {
+        const disclosure = disclosureFor(event.target);
+        if (!disclosure) return;
+        event.preventDefault();
+        if (active === disclosure && pinned) closeHelp();
+        else openHelp(disclosure, true);
+    });
+    document.addEventListener('pointerover', event => {
+        if (!active) return;
+        if (active.contains(event.target) || panel.contains(event.target)) {
+            clearTimeout(leaveTimer);
+        } else if (!pinned && !active.contains(document.activeElement)) {
+            clearTimeout(leaveTimer);
+            leaveTimer = setTimeout(closeHelp, CONSISTENCY_HELP_LEAVE_MS);
+        }
+    });
+    document.addEventListener('focusin', event => {
+        if (active && !active.contains(event.target)
+            && !panel.contains(event.target)) closeHelp();
+    });
+    document.addEventListener('click', event => {
+        if (active && !active.contains(event.target)
+            && !panel.contains(event.target)) closeHelp();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || !active) return;
+        const trigger = active.querySelector('summary');
+        closeHelp();
+        trigger.focus();
+    });
+    window.addEventListener('resize', positionHelp);
+    window.addEventListener('scroll', positionHelp, true);
+    return closeHelp;
+}
+
 /**
  * Reconcile one pending browser task before generating or counting any output.
  * @param {HTMLElement} root Authenticated consistency request owner.
@@ -156,54 +288,7 @@ export function setupGalleryConsistency() {
         scopeHint.textContent = labels['scope_hint_' + scopeSelect.value];
         const repairToolbar = root.querySelector('[data-consistency-repair-toolbar]');
         const exportLink = root.querySelector('[data-consistency-export]');
-        const help = root.querySelector('.consistency-help');
-        const helpPanel = help?.querySelector('p');
-
-        /**
-         * Clamp the nonblocking help panel beside its native disclosure trigger.
-         * @return {void} Leaves the native details/summary keyboard interaction.
-         */
-        function positionHelp() {
-            if (!help || !helpPanel) {
-                return;
-            }
-            if (!help.open) {
-                help.append(helpPanel);
-                return;
-            }
-            // Backdrop-filter establishes a fixed-position containing block.
-            // Portal only the open panel so viewport coordinates stay correct;
-            // restore native details content when closed or without JavaScript.
-            document.body.append(helpPanel);
-            helpPanel.classList.add('consistency-help-panel');
-            const panel = helpPanel;
-            const trigger = help.querySelector('summary').getBoundingClientRect();
-            const edge = CONSISTENCY_HELP_EDGE;
-            panel.style.position = 'fixed';
-            panel.style.right = 'auto';
-            panel.style.left = `${Math.max(edge, Math.min(
-                trigger.left, window.innerWidth - panel.offsetWidth - edge,
-            ))}px`;
-            panel.style.top = `${Math.max(edge, Math.min(
-                trigger.bottom, window.innerHeight - panel.offsetHeight - edge,
-            ))}px`;
-        }
-        help?.addEventListener('toggle', positionHelp);
-        window.addEventListener('resize', positionHelp);
-        window.addEventListener('scroll', positionHelp, true);
-        document.addEventListener('click', (event) => {
-            if (help?.open && event.target instanceof Node
-                && !help.contains(event.target) && !helpPanel?.contains(event.target)
-            ) {
-                help.open = false;
-            }
-        });
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && help?.open) {
-                help.open = false;
-                help.querySelector('summary').focus();
-            }
-        });
+        const closeHelp = setupConsistencyHelp(root);
 
         /**
          * Reconcile path previews with selected ancestors without filesystem I/O.
@@ -263,6 +348,7 @@ export function setupGalleryConsistency() {
                         : labels.report_done
                     : labels[receipt.status] || labels.blocked;
             if (typeof receipt.html === 'string' && receipt.html !== '') {
+                closeHelp();
                 results.innerHTML = receipt.html;
                 results.querySelectorAll('[data-consistency-group]').forEach((input) => {
                     input.checked = selected.has(input.dataset.consistencyGroup);
