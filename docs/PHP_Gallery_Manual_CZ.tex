@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{0.149.1}
+\newcommand{\version}{0.149.2}
 \newcommand{\manualdate}{1.~listopadu~2026}
 
 \hypersetup{
@@ -1867,18 +1867,19 @@ vyžaduje SHA256 ze souboru GitHubu nebo odpovídajícího
 aktualizaci odmítnou; shodné instalátory ve více vydáních CMS jsou přijímány.
 Přihlašovací údaje galerie se na GitHub neposílají.
 
-Volba \ui{Update} stáhne instalátor s~průběhem a~možností zrušení, ověří jej,
-zastaví novou práci a~nejvýše 120 sekund počká na bezpečné dokončení úloh.
-Neúspěšné dokončení odmítne instalaci a~nahrávač zůstane dostupný. Externí
-pomocný proces soubor znovu ověří a~vyžádá souhlas Windows UAC. Vlastní
-aktualizace pracovní procesy násilně neukončuje; běžně ručně spuštěný instalátor
-zachovává dosavadní pravidla ukončení. Skutečný průběh instalace přichází
-místním kanálem konkrétní relace. Po úspěchu se nahrávač spustí pod původním
-uživatelem s~uloženými nastaveními a~úlohami. Automatický návrat předchozí verze
-není k~dispozici. Spuštění z~Pythonu či zdrojových souborů nabídne ověřený
-instalátor k~ručnímu spuštění. Pokud Windows požaduje restart, před opětovným
-spuštěním nahrávače restartujte Windows; zrušení UAC znovu otevře stávající
-instalaci.
+Volba \ui{Update} stáhne a~ověří instalátor s~průběhem a~možností zrušit stahování.
+Po potvrzení připravenosti externího pomocníka aplikace ukončí vlastní pracovní
+podprocesy a~okamžitě celý proces nahrávače. Nečeká na dokončení vláken ani
+nenabízí ponechání v~tray. Selhání přípravy pomocníka ponechá aplikaci otevřenou.
+Již uložená nastavení, přihlašovací údaje a~checkpointy úloh zůstávají dostupné;
+neuložená nastavení a~dosud nezapsaná práce se při okamžitém ukončení neukládají.
+Pomocník znovu ověří instalátor, počká na ukončení instalovaného programu,
+vyžádá Windows UAC, nainstaluje a~ověří novou verzi a~spustí nahrávač pod
+původním uživatelem. Průběh instalace zůstává viditelný. Automatický rollback
+není k~dispozici. Python či zdrojové spuštění nabídne ověřený instalátor ručně.
+Požadovaný restart Windows zůstává výslovný; zrušení UAC znovu otevře původní
+instalaci. Starší klient zaseknutý čekáním na workery vyžaduje ruční spuštění
+instalátoru po úplném ukončení staré aplikace.
 
 
 \subsection{Záznam letů a zprávy}

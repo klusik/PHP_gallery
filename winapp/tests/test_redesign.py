@@ -1637,6 +1637,39 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.root.destroy.assert_not_called()
         app.simulator_presence.stop.assert_not_called()
 
+    def test_update_close_exits_all_threads_without_worker_checks(self) -> None:
+        """Kill app-owned children and exit despite active or unknown workers.
+
+        Returns:
+            None: Confirms no drain, revocation prompt or updater recursion.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.exiting = False
+        app.updates = mock.Mock()
+        app.api_key_revoke_running = True
+        app.flights = mock.Mock()
+        app.simulator_presence = mock.Mock()
+        child = mock.Mock()
+        failed_child = mock.Mock()
+        failed_child.terminate.side_effect = OSError('already exited')
+        with mock.patch.object(
+            MAIN.multiprocessing, 'active_children',
+            return_value=[failed_child, child],
+        ), mock.patch.object(
+            MAIN.os, '_exit', side_effect=SystemExit(0),
+        ) as exit_process, mock.patch.object(MAIN, 'messagebox') as dialogs:
+            with self.assertRaises(SystemExit):
+                MAIN.WatcherApp.close(app, for_update=True)
+        self.assertTrue(app.exiting)
+        failed_child.terminate.assert_called_once_with()
+        child.terminate.assert_called_once_with()
+        exit_process.assert_called_once_with(0)
+        app.flights.stop.assert_not_called()
+        app.simulator_presence.join.assert_not_called()
+        app.updates.request_close.assert_not_called()
+        dialogs.showwarning.assert_not_called()
+        dialogs.askyesno.assert_not_called()
+
     def test_confirmed_close_clears_update_offer_before_teardown(self) -> None:
         """Clear the persistent offer only when shutdown reaches teardown.
 

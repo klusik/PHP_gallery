@@ -1226,7 +1226,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.149.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.149.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -7967,3 +7967,10 @@ the first real lookup. The nested legacy fixture updates both folder_path and
 its derived folder_path_hash, preserving the actual catalog lookup invariant;
 collision rejection remains strict. This separates historical naming repair
 from deliberately corrupted ownership indexes.
+
+WinApp updater controller regressions require helper preparation despite active
+GamePresence, uploads, key revocation and dependency repair. Helper failure must
+leave the app open; only acknowledged readiness calls the common close owner
+with update intent. Shutdown tests require termination of all app-owned child
+processes and whole-process exit without thread joins, a tray prompt or updater
+recursion, including an already-exited child. Normal Exit tests remain intact.

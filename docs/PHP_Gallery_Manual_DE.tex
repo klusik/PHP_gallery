@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{0.149.1}
+\newcommand{\version}{0.149.2}
 \newcommand{\manualdate}{1.~November~2026}
 
 \hypersetup{
@@ -2075,20 +2075,22 @@ desselben Releases. Fehlende oder widersprüchliche Daten verhindern das Update;
 identische Installer in mehreren CMS-Releases werden akzeptiert.
 Galerie-Zugangsdaten werden nie an GitHub gesendet.
 
-\ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter,
-prüft ihn, sperrt neue Arbeit und wartet bis zu 120 Sekunden auf den sicheren
-Abschluss der Hintergrundaufgaben. Misslingt dieser Abschluss, wird die
-Installation verweigert und der Uploader bleibt verfügbar. Ein externer
-Hilfsprozess prüft die Datei erneut und fordert Windows-UAC-Zustimmung an. Das
-Selbstupdate beendet keine Arbeiter gewaltsam; normal manuell gestartete
-Installer behalten ihre bisherige Beendigungsregel. Der tatsächliche
-Installationsfortschritt kommt über einen lokalen sitzungsspezifischen Kanal.
-Nach Erfolg startet der Uploader als ursprünglicher Benutzer mit gespeicherten
-Einstellungen und Aufgaben. Es gibt kein automatisches Rollback. Native Python-
-oder Quellcode-Ausführungen bieten den geprüften Installer zum manuellen Start
-an. Wenn Windows einen Neustart verlangt, starten Sie Windows vor dem erneuten
-Öffnen des Uploaders neu; ein UAC-Abbruch öffnet die vorhandene Installation
-erneut.
+\ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter
+und prüft ihn. Sobald der externe Hilfsprozess seine Bereitschaft bestätigt,
+beendet die Anwendung ihre eigenen Arbeitskindprozesse und sofort den gesamten
+Uploader-Prozess. Sie wartet nicht auf Threads und bietet keinen Verbleib im
+Tray an. Scheitert die Vorbereitung des Helfers, bleibt die Anwendung offen.
+Bereits gespeicherte Einstellungen, Zugangsdaten und Aufgabencheckpoints
+bleiben erhalten; ungespeicherte Einstellungen und noch nicht geschriebene
+Arbeit werden beim sofortigen Beenden nicht gespeichert. Der Helfer prüft den
+Installer erneut, wartet auf das Ende der installierten Anwendung, fordert
+Windows-UAC-Zustimmung an, installiert und prüft die neue Version und startet
+den Uploader als ursprünglicher Benutzer. Installationsfortschritt bleibt
+sichtbar. Es gibt kein automatisches Rollback. Python-/Quellcode-Ausführungen
+bieten den geprüften Installer zum manuellen Start. Ein nötiger Windows-Neustart
+bleibt ausdrücklich; ein UAC-Abbruch öffnet die alte Installation erneut.
+Ältere beim Warten auf Worker blockierte Clients benötigen einen manuellen
+Installerstart nach vollständigem Schließen der alten Anwendung.
 
 
 \subsection{Flugaufzeichnung und Berichte}

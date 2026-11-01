@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Module Type: Windows Tooling
-# Purpose: Verify deterministic updater admission, draining and handoff behavior.
+# Purpose: Verify updater admission and whole-process installer handoff.
 # Responsibilities:
 #   - Exercise installer refusal and helper readiness without desktop mutation.
 # Repository: https://github.com/klusik/PHP_gallery
@@ -44,9 +44,9 @@ class UpdateControllerTests(unittest.TestCase):
         controller.root.winfo_height = Mock(return_value=600)
         controller.app = SimpleNamespace(root=controller.root, exiting=False,
                                          stop_tray_icon=Mock(), write_log=Mock(),
-                                         set_update_available=Mock())
+                                         set_update_available=Mock(), close=Mock())
         controller.version = '1.0.0'
-        controller.gate = InstallGate(timeout=10)
+        controller.gate = InstallGate()
         controller.events = queue.Queue()
         controller.busy = False
         controller.close_pending = False
@@ -64,75 +64,75 @@ class UpdateControllerTests(unittest.TestCase):
         controller.asset = SimpleNamespace(version='1.2.3', sha256='a' * 64, size=100)
         return controller
 
-    def test_admission_and_deadline(self) -> None:
-        """Verify admission and deadline."""
-        gate = InstallGate(timeout=10)
-        gate.begin(50)
-        self.assertTrue(gate.active)
-        self.assertEqual(gate.poll(59, ['upload']), 'waiting')
-        self.assertEqual(gate.poll(60, ['upload']), 'timeout')
-        self.assertFalse(gate.active)
-        gate.begin(100)
-        self.assertEqual(gate.poll(101, []), 'ready')
-        self.assertTrue(gate.active)
+    def test_admission_until_helper_result(self) -> None:
+        """Pause new work only until helper success or failure.
 
-    def test_install_stops_workers_after_admission_closes_without_saving_forms(self) -> None:
-        """Verify install stops workers after admission closes without saving forms."""
+        Returns:
+            None: Confirms admission has no worker-drain deadline.
+        """
+        gate = InstallGate()
+        self.assertFalse(gate.active)
+        gate.begin()
+        self.assertTrue(gate.active)
+        gate.cancel()
+        self.assertFalse(gate.active)
+
+    def test_install_hands_off_with_active_background_work(self) -> None:
+        """Prepare the helper even with presence, uploads and API work active.
+
+        Returns:
+            None: Confirms no thread enumeration, worker stop or form saving.
+        """
         controller = self.controller()
-        worker = SimpleNamespace(is_alive=lambda: True, stop=Mock())
-        worker.stop.side_effect = lambda: self.assertTrue(controller.gate.active)
-        controller.app.manual_worker = worker
-        controller.app.current_config = Mock(side_effect=AssertionError('unsaved form read'))
-        controller.app.config_store = SimpleNamespace(save=Mock(side_effect=AssertionError('config overwrite')))
-        with patch('uploader.update_helper.installed_identity', return_value=Path('PHPGalleryUploader.exe')):
+        controller.run_worker = Mock()
+        controller.app.simulator_presence = Mock()
+        controller.app.manual_worker = Mock()
+        controller.app.api_key_revoke_running = True
+        controller.app.semantic_ai_install_running = True
+        controller.app.current_config = Mock()
+        controller.app.config_store = SimpleNamespace(save=Mock())
+        with patch(
+            'uploader.update_helper.installed_identity',
+            return_value=Path('PHPGalleryUploader.exe'),
+        ), patch(
+            'uploader.update_ui.threading.enumerate',
+            side_effect=AssertionError('worker enumeration blocks updates'),
+        ):
             controller.install()
-        worker.stop.assert_called_once()
+        controller.run_worker.assert_called_once_with(controller.handoff)
+        controller.app.manual_worker.stop.assert_not_called()
+        controller.app.simulator_presence.stop.assert_not_called()
         controller.app.current_config.assert_not_called()
         controller.app.config_store.save.assert_not_called()
-        self.assertTrue(controller.gate.active)
-        controller.root.destroy.assert_not_called()
-
-    def test_timeout_reopens_admission_and_does_not_launch(self) -> None:
-        """Verify timeout reopens admission and does not launch."""
-        controller = self.controller()
-        controller.gate.begin(0)
-        controller.blockers = lambda: ['connection test']
-        controller.run_worker = Mock()
-        with patch('uploader.update_ui.time.monotonic', return_value=11):
-            controller.drain()
-        self.assertFalse(controller.gate.active)
-        controller.run_worker.assert_not_called()
-        controller.root.destroy.assert_not_called()
-
-    def test_ready_drain_schedules_handoff_without_closing(self) -> None:
-        """Verify ready drain schedules handoff without closing."""
-        controller = self.controller()
-        controller.gate.begin(0)
-        controller.blockers = lambda: []
-        controller.run_worker = Mock()
-        controller.drain()
-        controller.run_worker.assert_called_once_with(controller.handoff)
-        controller.root.destroy.assert_not_called()
+        controller.app.close.assert_not_called()
         self.assertTrue(controller.gate.active)
 
     def test_failed_handshake_leaves_app_open_and_reopens_gate(self) -> None:
-        """Verify failed handshake leaves app open and reopens gate."""
+        """Keep the application usable when helper preparation fails.
+
+        Returns:
+            None: Confirms failure reopens admission and never requests exit.
+        """
         controller = self.controller()
-        controller.gate.begin(0)
+        controller.gate.begin()
         controller.events.put(('error', 'Helper readiness timed out'))
         controller.poll()
         self.assertFalse(controller.gate.active)
         controller.root.destroy.assert_not_called()
+        controller.app.close.assert_not_called()
 
-    def test_only_ready_event_closes_tray_and_window(self) -> None:
-        """Verify only ready event closes tray and window."""
+    def test_only_ready_event_requests_whole_process_exit(self) -> None:
+        """Delegate shutdown only after the helper readiness acknowledgement.
+
+        Returns:
+            None: Confirms the common exit owner receives the update intent.
+        """
         controller = self.controller()
-        controller.gate.begin(0)
+        controller.gate.begin()
         controller.events.put(('handoff_ready', None))
         controller.poll()
-        self.assertTrue(controller.app.exiting)
-        controller.app.stop_tray_icon.assert_called_once()
-        controller.root.destroy.assert_called_once()
+        controller.app.close.assert_called_once_with(for_update=True)
+        controller.root.destroy.assert_not_called()
 
     def test_source_mode_offers_installer_without_draining(self) -> None:
         """Verify source mode offers installer without draining."""
@@ -142,16 +142,6 @@ class UpdateControllerTests(unittest.TestCase):
             controller.install()
         self.assertFalse(controller.gate.active)
         controller.app.open_local_path.assert_called_once_with(controller.installer)
-
-    def test_connection_repair_threads_and_processes_are_blockers(self) -> None:
-        """Verify connection repair threads and processes are blockers."""
-        controller = self.controller()
-        controller.app.connection_test_running = True
-        controller.app.semantic_ai_install_running = True
-        fake_thread = SimpleNamespace(name='connection', is_alive=lambda: True)
-        fake_process = SimpleNamespace(name='thumbnail process', is_alive=lambda: True)
-        with patch('uploader.update_ui.threading.enumerate', return_value=[threading.main_thread(), fake_thread]), patch('uploader.update_ui.multiprocessing.active_children', return_value=[fake_process]):
-            self.assertEqual(controller.blockers(), ['connection_test_running', 'semantic_ai_install_running', 'connection', 'thumbnail process'])
 
     def test_hourly_check_state_is_independent_and_handles_clock_reversal(self) -> None:
         """Verify hourly check state is independent and handles clock reversal."""
@@ -279,7 +269,7 @@ class UpdateControllerTests(unittest.TestCase):
         controller = self.controller()
         controller.app.set_update_available('1.2.3')
         controller.app.set_update_available.reset_mock()
-        controller.gate.begin(0)
+        controller.gate.begin()
         controller.show = Mock()
         self.assertTrue(controller.request_close())
         controller.show.assert_called_once_with()
