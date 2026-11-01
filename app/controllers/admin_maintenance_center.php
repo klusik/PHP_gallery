@@ -266,10 +266,35 @@ function admin_maintenance_center_json_action(
 function cms_admin_maintenance_center(): void
 {
     require_admin();
-    $actorId = admin_maintenance_center_actor_id();
-    $model = maintenance_center_page_model($actorId);
+    if (($_GET['tab'] ?? '') === 'consistency') {
+        if (!function_exists(__NAMESPACE__ . '\\cms_admin_gallery_consistency')) {
+            cms_runtime_kernel()->load('domain-admin-galleries-discovery');
+        }
+        cms_admin_gallery_consistency();
+        return;
+    }
+    if (($_GET['tab'] ?? '') === 'tools') {
+        cms_runtime_kernel()->load('domain-admin-dashboard');
+        $tools = \Gallery\Services\admin_dashboard_view_model(true, 'shell');
+        $section = (string) ($_GET['maintenance_tab'] ?? 'media');
+        $tools['requested_maintenance_tab'] = in_array(
+            $section, ['content', 'media', 'navigation', 'trash', 'system'], true,
+        ) ? $section : 'media';
+        $tools['maintenance_embedded'] = true;
+        ob_start();
+        \Gallery\Views\view_render_admin_dashboard_maintenance_panel($tools);
+        $model = ['active_tab' => 'tools', 'tools_html' => (string) ob_get_clean()];
+    } else {
+        $actorId = admin_maintenance_center_actor_id();
+        $model = maintenance_center_page_model($actorId);
+    }
     $model['csrf_token'] = csrf_token();
     $model['dashboard_url'] = url_for('admin');
+    $model['installation_url'] = url_for('admin_maintenance_center');
+    $model['tools_url'] = url_for('admin_maintenance_center', ['tab' => 'tools']);
+    $model['consistency_url'] = url_for('admin_maintenance_center', [
+        'tab' => 'consistency',
+    ]);
     $model['storage_maintenance_url'] = url_for('admin_storage_statistics', [
         'tab' => 'maintenance',
     ]);

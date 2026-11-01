@@ -4464,34 +4464,99 @@ Umstellung auf Modern löscht \ui{Alte JPG-Vorschaubilder entfernen} nur erzeugt
 JPEG-Vorschaubilddateien; Originale, WebP-Ableitungen und DNG-Anzeigemaster
 bleiben erhalten.
 
+\textbf{Galeriekonsistenz.} Öffnen Sie \ui{Wartungszentrum} >
+\ui{Galeriekonsistenz}. Die Tabs bündeln Installation, Systemwerkzeuge und
+Galeriekonsistenz. Die bisherigen Wartungswerkzeuge der Übersicht,
+einschließlich Medienumbenennung und Vorschaubilder, stehen unter
+Systemwerkzeuge. Alte Wartungslinks werden dorthin umgeleitet; das vertikale
+Hauptmenü erhält keinen Eintrag. \ui{Galerie~analysieren} erstellt zuerst nur
+einen Bericht über Ordner, Primärtitel, Elternbeziehungen, Sidecar-Titel,
+Originale, erwartete Vorschaubilder und Metadaten. Er findet auch nicht
+erfasste Fotos, herrenlose Ableitungen und offene Bildverschiebungen. Fehlende
+Originale und nicht verfügbare Nachweise bleiben ausdrückliche Befunde.
+
+Der Verweis im~Überblick zeigt weiterhin Hinweise zum~Systemzustand neben
+dem~Titel des~Wartungszentrums.
+
+Der anfängliche Umfang \ui{Namen und Pfade (nur DB)} vergleicht
+Galeriemetadaten ohne Fotos oder physische Ordner zu öffnen. \ui{Dateien und
+Vorschaubilder} prüft echte Dateien, Header, Zeiten und Metadaten stapelweise.
+\ui{Tiefe Inhaltsprüfung (langsam)} liest zusätzlich Prüfsummen und dekodiert
+Pixel; große Sammlungen erfordern erheblich mehr Arbeit. Jeder Bericht nennt
+seinen Umfang. Aufgeklappte Zeilen zeigen \ui{Jetzt} und \ui{Nach der
+Reparatur} für Titel, Pfad, Eltern oder Sidecar vor der Reparaturauswahl.
+
+Ein Browserfehler bleibt sichtbar und startet nie still die Servererzeugung.
+Die Wahl gilt für alle sowie fehlende Vorschaubilder; der globale Hinweis
+öffnet zuerst diese Steuerelemente. Konsistenzreparaturen verwenden immer
+Browser-Worker. Lassen Sie den Tab geöffnet. Nur angeforderte Varianten werden
+erzeugt und veröffentlicht; andere gültige Dateien behalten Inhalt und Zeit.
+Der Server prüft Quellidentität und gespeicherte Ergebnisse vor dem Fortschritt.
+Verlorene Antworten werden zuerst mit gespeicherten Dateien abgeglichen.
+Nicht unterstützte RAW/HEIC-Quellen und Browserfehler bleiben sichtbar, ohne
+PHP-Ersatzgenerierung. Ergebnisse zeigen verbleibende Befunde und bestätigte
+Variantenzahlen.
+Der Browserfortschritt steht beim Hauptfortschritt über der Befundliste.
+
+Nur betroffene Galerien erscheinen als kompakte aufklappbare Zeilen. Wählen
+Sie Galerien oder \ui{Alles~Reparierbare~reparieren}; manuelle Befunde bleiben
+getrennt. Der Katalogfortschritt zählt fertige Datensätze, die
+Datenträgersuche tatsächlich geprüfte Einträge ohne erfundene Gesamtzahl und
+Reparaturen eine bestätigte Aufgabe je Stapel. Der JSON-Export enthält alle
+Befunde jenseits der Seiten und Detailbeispiele. JavaScript ist erforderlich;
+der Prüfstand bleibt in der Administratorsitzung.
+
+Reparaturen prüfen Katalog und Quellzugehörigkeit erneut, erhalten Originale
+und gültige Vorschauen und halten bei Fehlern sichtbar an. Nach verlorenen
+Antworten zuerst den Status prüfen; Schreibvorgänge werden nicht automatisch
+wiederholt. Bestätigte Befunde verschwinden nach jedem erfolgreichen Stapel;
+leere Galeriezeilen werden entfernt. Die nächste Teilmenge ist sofort ohne neue
+Analyse wählbar. Manuelle und nicht gewählte Befunde bleiben, Exportbelege
+bewahren die Historie. Alte abgeschlossene Jobs übernehmen diese Liste beim
+Öffnen. Vorschläge aktualisieren sich nur aus der DB, ohne erneute Fotoprüfung.
+Verspätete frühere Stapelanfragen werden abgelehnt; fremde Katalogänderungen
+benötigen weiterhin einen neuen Bericht. Kleine RGB-Vergleiche markieren
+verdächtige Inhalte zur manuellen Prüfung; Ähnlichkeit beweist keine
+Bildidentität. Fehlende Dekodierung, unklare Dateien und fehlende Originale
+werden nicht automatisch repariert. Versteckte/interne Speicher und andere
+Anlagen behalten ihre eigenen Wartungswerkzeuge.
+
+Auch beim Import bestimmt der Datenträger den Namen. Ein Sidecar-Titel bleibt
+nur erhalten, wenn seine bereinigte Form zum physischen Ordnernamen passt.
+Sonst liefert der Ordner den Titel. Neue Importordner werden mit dem
+geschützten Teilbaumverschieber von unten nach oben normalisiert.
+Zielkonflikte verweigern den Import; andere bestehende Galerien werden nicht
+still umbenannt. Historische Abweichungen benötigen die explizite Reparatur.
+
 Ein vollständiger Durchlauf von \ui{Fehlende Vorschaubilder prüfen} untersucht
-importierte Fotos und vermerkt Galerien mit fehlenden, veralteten,
-metadatenlosen oder im Seitenverhältnis falschen erzeugten Varianten, ohne etwas
-zu erstellen. Das gespeicherte Ergebnis ermöglicht \ui{Fehlende Vorschaubilder
-erstellen}, das nur die gemeldeten Bilder bearbeitet. \ui{Alle Vorschaubilder
-erstellen} unter Wartung umfasst alle Galerien; dieselbe Aktion im Bildereditor
-einer Galerie umfasst diese Galerie und bei ausgewähltem \ui{Untergalerien
-einschließen} ihre Nachkommen. Diese administrativen Vorgänge bleiben der
-primäre bewusste Wartungsablauf. Öffentliches Durchsehen startet keinen
-unbegrenzten Reparaturdurchlauf; der aktuelle Renderer besitzt jedoch eine
-kleine geschützte Hintergrundvorbereitung für bestimmte Karten, die wegen einer
+importierte Fotos und vermerkt Galerien mit fehlenden, veralteten oder im
+Seitenverhältnis falschen erzeugten Varianten, ohne etwas zu erstellen. Das
+gespeicherte Ergebnis ermöglicht \ui{Fehlende Vorschaubilder erstellen}, das
+nur die gemeldeten Bilder bearbeitet. \ui{Alle Vorschaubilder erstellen} unter
+Wartung umfasst alle Galerien; dieselbe Aktion im Bildereditor einer Galerie
+umfasst diese Galerie und bei ausgewähltem \ui{Untergalerien einschließen}
+ihre Nachkommen. Diese administrativen Vorgänge bleiben der primäre bewusste
+Wartungsablauf. Öffentliches Durchsehen startet keinen unbegrenzten
+Reparaturdurchlauf; der aktuelle Renderer besitzt jedoch eine kleine
+geschützte Hintergrundvorbereitung für bestimmte Karten, die wegen einer
 fehlenden erwarteten Ableitung auf autorisierte Originalmedien ausweichen
 mussten.
 
 \ui{Vorschaubilddatenbank aktualisieren} gleicht Datenbankmetadaten mit
 vorhandenen erzeugten Dateien ab und entfernt erzeugte Dateien mit falschem
-Seitenverhältnis, statt sie zu veröffentlichen. \ui{Alle Vorschaubilder löschen}
-ist ein separat bestätigter destruktiver Cachevorgang; Originalfotos bleiben
-unberührt, und Ableitungen können später neu erstellt werden.
+Seitenverhältnis, statt sie zu veröffentlichen. \ui{Alle Vorschaubilder
+löschen} ist ein separat bestätigter destruktiver Cachevorgang; Originalfotos
+bleiben unberührt, und Ableitungen können später neu erstellt werden.
 
-\ui{Browserseitiger Vorschaubildneuaufbau} ist bei diesen Neuerzeugungsaktionen
-standardmäßig ausgewählt, sofern Browserverarbeitung verfügbar ist. Deaktivieren
-Sie das Kontrollkästchen für Servererzeugung. Der Server sendet Originaldateien
-in begrenzten Quell-ZIP-Blöcken an den authentifizierten Browser; dieser erzeugt
-Vorschaubildvarianten, und vorbereitete Vorschaubild-ZIP-Chargen werden zur
-serverseitigen Prüfung und Installation zurückgeladen. Quellblock- und
-Chargengrenzen werden in den Browseruploadeinstellungen konfiguriert, sodass der
-Ablauf keine einzelne übergroße PHP-Anfrage benötigt.
+\ui{Browserseitiger Vorschaubildneuaufbau} ist bei diesen
+Neuerzeugungsaktionen standardmäßig ausgewählt, sofern Browserverarbeitung
+verfügbar ist. Deaktivieren Sie das Kontrollkästchen für Servererzeugung. Der
+Server sendet Originaldateien in begrenzten Quell-ZIP-Blöcken an den
+authentifizierten Browser; dieser erzeugt Vorschaubildvarianten, und
+vorbereitete Vorschaubild-ZIP-Chargen werden zur serverseitigen Prüfung und
+Installation zurückgeladen. Quellblock- und Chargengrenzen werden in den
+Browseruploadeinstellungen konfiguriert, sodass der Ablauf keine einzelne
+übergroße PHP-Anfrage benötigt.
 
 \subsubsection{Geschützte öffentliche Vorschaubildvorbereitung}
 \index{v00265@Vorschaubildvorbereitung}
@@ -7983,6 +8048,11 @@ Die bestehende Test-Run-Aufzeichnung trennt Planladen, vollständige Prüfung,
 Abhängigkeitsplanung und Includes. Entwicklermessungen verwenden isolierte
 öffentliche und Admin-Anfragen mit kalten und warmen Opcode-Stichproben;
 Produktionslatenz wird damit nicht nachgewiesen.
+Gemeinsame Update-Erkennung liest sichere Fehler und undurchsichtige
+Referenzen aus dem schlanken Job-Reader. Öffentliche Galerien laden dafür
+keinen Updater-Worker. Explizite Admin-/Hintergrundinstallationen behalten den
+vollständigen Worker; optionale Diagnose beobachtet bereits geladene Owner.
+
 Der Compiler prüft den privaten Trace-Callback ausdrücklich; nur lokale
 Loader-Operationen übergeben ihn, ohne zusätzliche Modulabhängigkeit.
 

@@ -244,6 +244,12 @@ export function setupAdminDashboardWorkspace() {
     setupAdminCacheCleanup();
     const root = document.querySelector('[data-admin-dashboard-workspace]');
     if (!(root instanceof HTMLElement) || root.dataset.dashboardBound === '1') return;
+    // Fragment-only bookmarks never reach the server redirect. The prepared
+    // destination keeps that permanent compatibility in the same UI owner.
+    if (location.hash === '#admin-tab-maintenance' && root.dataset.maintenanceUrl) {
+        window.location.replace(root.dataset.maintenanceUrl);
+        return;
+    }
     root.dataset.dashboardBound = '1';
     setupDashboardContentAutosave(root);
     setupDashboardCompactHelp(root);
@@ -330,7 +336,12 @@ export function setupAdminDashboardWorkspace() {
         const value = maintenanceIds.get(selected?.dataset.adminSubtabTarget);
         if (!value) return;
         const url = new URL(location.href);
-        url.searchParams.set('dashboard_tab', 'maintenance');
+        if (root.hasAttribute('data-maintenance-center-tools')) {
+            url.searchParams.delete('dashboard_tab');
+            url.searchParams.set('tab', 'tools');
+        } else {
+            url.searchParams.set('dashboard_tab', 'maintenance');
+        }
         url.searchParams.set('maintenance_tab', value);
         url.hash = 'admin-tab-maintenance';
         const primary = root.querySelector('[data-admin-tab-target="admin-tab-maintenance"]');
@@ -340,7 +351,8 @@ export function setupAdminDashboardWorkspace() {
     root.addEventListener('click', rememberMaintenance);
     root.addEventListener('keydown', rememberMaintenance);
     window.addEventListener('popstate', () => {
-        const value = new URL(location.href).searchParams.get('maintenance_tab') || 'content';
+        const value = new URL(location.href).searchParams.get('maintenance_tab')
+            || (root.hasAttribute('data-maintenance-center-tools') ? 'media' : 'content');
         const primary = root.querySelector('[data-admin-tab-target="admin-tab-maintenance"]');
         if (primary instanceof HTMLAnchorElement && location.hash === '#admin-tab-maintenance') primary.href = location.href;
         const id = [...maintenanceIds].find(([,candidate]) => candidate === value)?.[0];

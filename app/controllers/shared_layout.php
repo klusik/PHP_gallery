@@ -98,6 +98,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin.css',
         'assets/styles/admin-layout.css',
         'assets/styles/admin-dashboard.css',
+        'assets/styles/gallery-consistency.css',
         'assets/styles/admin-maintenance-center.css',
         'assets/styles/admin-cron.css',
         'assets/styles/admin-telemetry.css',
@@ -632,9 +633,10 @@ function shared_layout_browser_i18n_language(?string $language = null): string
 /**
  * Prepare merged dictionaries consumed by the pure browser-i18n View formatter.
  *
- * @param ?string $language Requested language code.
- * @param ?string $fallbackLanguage Additional fallback catalog, defaulting to the configured site language.
- * @return array{language:string,strings:array<string,mixed>} Resolved language and merged browser translation catalog.
+ * @param ?string $language Requested language code, or the active language.
+ * @param ?string $fallbackLanguage Fallback catalog, or the configured default.
+ * @return array{language:string,strings:array<string,string>} Resolved language
+ *     and its dictionary with default strings retained for absent keys.
  */
 function shared_layout_browser_i18n_model(
     ?string $language = null,
@@ -644,12 +646,17 @@ function shared_layout_browser_i18n_model(
     $defaultLanguage = $fallbackLanguage !== null
         ? shared_layout_browser_i18n_language($fallbackLanguage)
         : translation_default_language();
+    $strings = translation_load_language($defaultLanguage);
+    if ($resolvedLanguage !== $defaultLanguage) {
+        // Catalog keys are strings. Replace existing values without merge's
+        // combined-entry preallocation; identical languages need no copy at all.
+        $strings = array_replace(
+            $strings, translation_load_language($resolvedLanguage),
+        );
+    }
     return [
         'language' => $resolvedLanguage,
-        'strings' => array_merge(
-            translation_load_language($defaultLanguage),
-            translation_load_language($resolvedLanguage),
-        ),
+        'strings' => $strings,
     ];
 }
 

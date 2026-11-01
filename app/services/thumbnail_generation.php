@@ -397,11 +397,28 @@ function thumbnail_source_decode_failure_result(
  * RAW display derivatives retain their separate converter. Raster refusal keeps
  * the accepted original and defers invalid-cache cleanup until decode succeeds.
  *
- * @param array<string,mixed> $image Stored image identity and relative source metadata.
- * @param array<string,mixed> $gallery Authorized owning gallery and storage context.
- * @param list<int>|null $requestedSizes Standard target sides to generate, or null for all configured sizes.
- * @param array{prefer_imagick_webp_exif?:bool} $options Whether the optional metadata-preserving writer may be attempted.
- * @return array{created:int,skipped:int,webp_skipped:int,failed:int,errors:list<string>,created_files:list<string>,target_formats:list<string>,thumbnail_policy:array<string,mixed>|null,invalid_geometry_deleted?:int,invalid_geometry_files?:list<string>,decode_status?:array<string,mixed>,message?:string} Derivative counts, bounded decode evidence and per-target diagnostics.
+ * @param array{id:int|string,gallery_id:int|string,filename:string,
+ *     relative_path:string,width?:int|string,height?:int|string,
+ *     display_width?:int|string,display_height?:int|string,
+ *     exif_orientation?:int|string,thumbnail_derivative_version?:int|string,
+ *     thumbnail_source_identity_version?:int|string,...} $image Persisted source
+ *     identity and optional decoder/geometry metadata.
+ * @param array{id?:int|string,folder_path:string,...} $gallery Authorized owner
+ *     and physical storage context.
+ * @param list<int>|null $requestedSizes Standard target sides, or null for all.
+ * @param array{prefer_imagick_webp_exif?:bool,replace_variants?:list<string>}
+ *     $options Optional writer policy and explicit size:format replacements
+ *     admitted by a separately confirmed consistency repair.
+ * @return array{created:int,skipped:int,webp_skipped:int,failed:int,
+ *     errors:list<string>,created_files:list<string>,target_formats:list<string>,
+ *     thumbnail_policy:array{mode:string,compatibility_mode:string,
+ *         formats_requested:list<string>,target_formats:list<string>,
+ *         enabled_sizes:list<int>,requested_sizes:list<int>,jpg_quality:int,
+ *         webp_quality:int,webp_available_for_source:bool,
+ *         webp_unavailable_reason:?string}|null,
+ *     invalid_geometry_deleted?:int,invalid_geometry_files?:list<string>,
+ *     decode_status?:array{allowed:bool,reason:string,message:string},
+ *     message?:string} Counts, decode evidence and per-target diagnostics.
  */
 function create_image_thumbnails_result(
     array $image,
@@ -535,6 +552,11 @@ function create_image_thumbnails_result(
             if (
                 is_file($targetPath)
                 && filemtime($targetPath) >= $sourceMtime
+                && !in_array(
+                    $size . ':' . $format,
+                    $options['replace_variants'] ?? [],
+                    true,
+                )
             ) {
                 // $geometryStatus stores whether a fresh cache file has the right aspect ratio.
                 $geometryStatus = thumbnail_file_geometry_status(

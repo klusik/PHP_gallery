@@ -53,12 +53,6 @@ namespace Gallery\Services {
         return ['active' => false];
     }
 
-    /** Return safe diagnostics. @param \Throwable $error Fixture transport failure. @return array{message:string,reference:string} Safe failure. */
-    function application_update_safe_error(\Throwable $error): array
-    {
-        return ['message' => 'Fixture failure', 'reference' => 'fixture'];
-    }
-
     /** Return passive discovery. @param int $ttl Cache lifetime. @param bool $refresh Whether HTTP is allowed. @return array<string,mixed> Cached release metadata. */
     function cached_application_update_check(int $ttl, bool $refresh): array
     {
@@ -90,6 +84,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__ . '/../app/services/updates_job_lookup.php';
     require_once __DIR__ . '/../app/services/updates_remote.php';
     require_once __DIR__ . '/../app/services/updates_patch_notes.php';
     // The real wait predicate delegates to the gateway policy fixture.
@@ -101,6 +96,18 @@ namespace {
         if (!$value)
             throw new \RuntimeException($message);
     }
+
+    $safe = \Gallery\Services\application_update_safe_error(
+        new \RuntimeException('https://private.invalid/token?secret=value'),
+    );
+    metadata_budget_assert(
+        !function_exists('Gallery\\Services\\application_update_start_job')
+            && $safe['reference'] === strtoupper(substr(hash('sha256',
+                'https://private.invalid/token?secret=value'), 0,
+                \Gallery\Services\APPLICATION_UPDATE_ERROR_REFERENCE_LENGTH))
+            && !str_contains(json_encode($safe), 'private.invalid'),
+        'Shared discovery diagnostics must stay redacted without worker loading.',
+    );
 
     $GLOBALS['budget_root'] =
         sys_get_temp_dir() . '/gallery-metadata-' . bin2hex(random_bytes(6));

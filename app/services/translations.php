@@ -31,6 +31,11 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Prefer small, readable changes over broad rewrites.
  *
+ * @phpstan-type TranslationCatalogValue string|int|float|bool|null|
+ *     list<TranslationCatalogValue>|array<string,TranslationCatalogValue>
+ * @phpstan-type TranslationCatalog array<array-key,TranslationCatalogValue>
+ * @phpstan-type TranslationCatalogChunks list<TranslationCatalog>
+ *
  * Last Updated:
  *   2026-08-13
  */
@@ -509,9 +514,9 @@ function translation_clear_runtime_cache(): void
 }
 
 /**
- * Handle translation detected language packs.
+ * Discover editable language packs without flattening their lookup caches.
  *
- * Part of the related application service.
+ * Counts retain native duplicate-key semantics across bounded chunks.
  *
  * @return list<array{code:string,name:string,has_json:bool,has_php:bool,string_count:int,loaded:bool}> Detected language packs and their loadable dictionary status.
  */
@@ -563,17 +568,16 @@ function translation_detected_language_packs(): array
     }
 
     foreach (array_keys($packs) as $code) {
-        // $strings stores the currently loadable dictionary for one detected language.
-        $strings = translation_load_language((string) $code);
-        $packs[$code]['string_count'] = count($strings);
-        $packs[$code]['loaded'] = $strings !== [];
-        if (
-            isset($strings['_language_name'])
-            && is_string($strings['_language_name'])
-            && trim($strings['_language_name']) !== ''
-        ) {
-            $packs[$code]['name'] = trim($strings['_language_name']);
+        // Pack discovery runs on public pages too: retain bounded lookup maps
+        // rather than materializing every language just to count/name it.
+        $chunks = translation_catalog_metadata_chunks((string) $code);
+        $packs[$code]['string_count'] = translation_catalog_chunks_count($chunks);
+        $packs[$code]['loaded'] = $chunks !== [];
+        $name = translation_catalog_chunks_value($chunks, '_language_name');
+        if (is_string($name) && trim($name) !== '') {
+            $packs[$code]['name'] = trim($name);
         }
+        unset($chunks);
     }
 
     ksort($packs);
@@ -1096,24 +1100,124 @@ function translation_active_language(): string
     return translation_public_language();
 }
 
-/**
- * Load one language file. Invalid or missing files produce an empty dictionary.
- *
- * @param string $language Language value.
- * @return array Structured result data for the caller.
+/** Keep lookup storage below large hash-table reallocation boundaries.
+ * Type: int.
+ * Units: translation keys per chunk.
+ * Scope: one request's cached language catalog.
+ * Consumers: translation_catalog_read_chunks and translation_catalog_chunks.
+ * Rationale: 1024 bounds individual tables while arbitrary catalog growth does
+ *     not retain a doubled sparse table in every public rendering request.
  */
-function translation_load_language(string $language): array
+const TRANSLATION_CATALOG_CHUNK_KEYS = 1024;
+
+/**
+ * Read the maintained one-entry-per-line JSON format with native value parsing.
+ * @param string $path Trusted catalog path under the application language root.
+ * @param bool $metadataOnly Keep values only for the language display name;
+ *     discovery needs keys/counts without retaining thousands of translated texts.
+ * @return TranslationCatalogChunks|null Parsed chunks, or null when formatting
+ *     requires the permanent native JSON compatibility reader.
+ */
+function translation_catalog_read_chunks(string $path, bool $metadataOnly = false): ?array
+{
+    $stream = @fopen($path, 'rb');
+    if ($stream === false) {
+        return null;
+    }
+    $opened = false;
+    $closed = false;
+    $hasEntry = false;
+    $comma = false;
+    $chunks = [];
+    $current = [];
+    try {
+        while (($raw = fgets($stream)) !== false) {
+            $line = trim($raw);
+            if ($line === '') {
+                continue;
+            }
+            if (!$opened) {
+                if ($line !== '{') {
+                    return null;
+                }
+                $opened = true;
+                continue;
+            }
+            if ($closed) {
+                return null;
+            }
+            if ($line === '}') {
+                if ($comma) {
+                    return null; // A trailing comma is not valid JSON.
+                }
+                $closed = true;
+                continue;
+            }
+            if ($hasEntry && !$comma) {
+                return null;
+            }
+            $comma = str_ends_with($line, ',');
+            $entry = $comma ? substr($line, 0, -1) : $line;
+            $decoded = json_decode('{' . $entry . '}', true);
+            // One physical line must contain exactly one JSON object member.
+            if (!is_array($decoded) || count($decoded) !== 1
+                || json_last_error() !== JSON_ERROR_NONE
+            ) {
+                return null;
+            }
+            $key = array_key_first($decoded);
+            $current[$key] = $metadataOnly && $key !== '_language_name'
+                ? null : $decoded[$key];
+            $hasEntry = true;
+            if (count($current) >= TRANSLATION_CATALOG_CHUNK_KEYS) {
+                $chunks[] = $current;
+                $current = [];
+            }
+        }
+    } finally {
+        fclose($stream);
+    }
+    if (!$opened || !$closed) {
+        return null;
+    }
+    if ($current !== []) {
+        $chunks[] = $current;
+    }
+    return $chunks;
+}
+
+/**
+ * Inspect language-pack metadata without retaining its translated text values.
+ * @param string $language Requested normalized catalog language.
+ * @return TranslationCatalogChunks Key-only chunks with the display name;
+ *     editable noncanonical JSON/PHP packs retain their native reader semantics.
+ */
+function translation_catalog_metadata_chunks(string $language): array
+{
+    $language = translation_normalize_language_code($language);
+    if ($language === '') return [];
+    $path = translation_language_dir() . '/' . $language . '.json';
+    $chunks = is_file($path) ? translation_catalog_read_chunks($path, true) : null;
+    return $chunks ?? translation_catalog_chunks($language, false);
+}
+
+/**
+ * Read bounded catalog chunks using the existing runtime invalidation version.
+ * @param string $language Requested language code, normalized before file access.
+ * @param bool $retain Whether a newly read pack should stay cached. Discovery
+ *     reads metadata only and releases unused language dictionaries immediately.
+ * @return TranslationCatalogChunks Parsed/cached values; missing/invalid packs
+ *     are empty.
+ */
+function translation_catalog_chunks(string $language, bool $retain = true): array
 {
     static $cache = [];
     static $cacheVersion = -1;
-    $currentCacheVersion = (int) (
-        $GLOBALS['cms_translation_cache_version'] ?? 0
-    );
-    if ($cacheVersion !== $currentCacheVersion) {
+    $version = (int) ($GLOBALS['cms_translation_cache_version'] ?? 0);
+    if ($cacheVersion !== $version) {
         $cache = [];
-        $cacheVersion = $currentCacheVersion;
+        $cacheVersion = $version;
     }
-
     $language = translation_normalize_language_code($language);
     if ($language === '') {
         return [];
@@ -1121,26 +1225,84 @@ function translation_load_language(string $language): array
     if (array_key_exists($language, $cache)) {
         return $cache[$language];
     }
-
-    // $jsonPath stores the preferred editable language-pack path.
-    $jsonPath = translation_language_dir() . '/' . $language . '.json';
-    if (is_file($jsonPath)) {
-        // $decoded stores the parsed JSON language dictionary.
-        $decoded = json_decode((string) file_get_contents($jsonPath), true);
-        $cache[$language] = is_array($decoded) ? $decoded : [];
-        return $cache[$language];
+    $base = translation_language_dir() . '/' . $language;
+    if (is_file($base . '.json')) {
+        $chunks = translation_catalog_read_chunks($base . '.json');
+        if ($chunks !== null) {
+            return $retain ? $cache[$language] = $chunks : $chunks;
+        }
+        // Language packs are editable. Arbitrary valid JSON formatting remains
+        // permanently supported by PHP's native decoder; invalid JSON is empty.
+        $values = json_decode((string) file_get_contents($base . '.json'), true);
+    } elseif (is_file($base . '.php')) {
+        // Existing installations may still use only their native PHP catalog.
+        $values = require $base . '.php';
+    } else {
+        $values = [];
     }
+    $chunks = is_array($values)
+        ? array_chunk($values, TRANSLATION_CATALOG_CHUNK_KEYS, true) : [];
+    return $retain ? $cache[$language] = $chunks : $chunks;
+}
 
-    // $phpPath stores the legacy native fallback dictionary path.
-    $phpPath = translation_language_dir() . '/' . $language . '.php';
-    if (!is_file($phpPath)) {
-        $cache[$language] = [];
-        return [];
+/**
+ * Find a raw catalog value with native last-duplicate-key semantics.
+ * @param TranslationCatalogChunks $chunks Catalog chunks in original order.
+ * @param string $key Requested key.
+ * @return TranslationCatalogValue Raw JSON value, or null for an absent/null key.
+ */
+function translation_catalog_chunks_value(array $chunks, string $key): mixed
+{
+    for ($index = count($chunks) - 1; $index >= 0; $index--) {
+        if (array_key_exists($key, $chunks[$index])) {
+            return $chunks[$index][$key];
+        }
     }
+    return null;
+}
 
-    $strings = require $phpPath;
-    $cache[$language] = is_array($strings) ? $strings : [];
-    return $cache[$language];
+/**
+ * Count distinct native keys without allocating a complete flat dictionary.
+ * @param TranslationCatalogChunks $chunks Bounded native catalog chunks.
+ * @return int Unique key count; later duplicate definitions count once.
+ */
+function translation_catalog_chunks_count(array $chunks): int
+{
+    $count = 0;
+    foreach ($chunks as $index => $chunk) {
+        foreach ($chunk as $key => $value) {
+            for ($later = $index + 1; $later < count($chunks); $later++) {
+                if (array_key_exists($key, $chunks[$later])) continue 2;
+            }
+            $count++;
+        }
+    }
+    return $count;
+}
+
+/**
+ * Resolve one key without materializing the complete language dictionary.
+ * @param string $language Requested language code.
+ * @param string $key Exact catalog key, including an optional cardinal suffix.
+ * @return TranslationCatalogValue Raw JSON value, or null when absent/null.
+ */
+function translation_catalog_value(string $language, string $key): mixed
+{
+    return translation_catalog_chunks_value(translation_catalog_chunks($language), $key);
+}
+
+/**
+ * Materialize a complete language dictionary for explicit bulk consumers.
+ *
+ * Ordinary t() calls use bounded cached chunks directly. Invalid/missing files
+ * retain the existing empty-dictionary result and native-format compatibility.
+ * @param string $language Requested language code.
+ * @return TranslationCatalog Complete JSON/PHP dictionary, or empty.
+ */
+function translation_load_language(string $language): array
+{
+    $chunks = translation_catalog_chunks($language);
+    return $chunks === [] ? [] : array_replace(...$chunks);
 }
 
 /**
@@ -1586,7 +1748,6 @@ function t(
 
     $active = translation_active_language();
     $default = translation_default_language();
-    $activeStrings = translation_load_language($active);
 
     $count = $parameters['count'] ?? null;
     if (is_int($count)) {
@@ -1596,27 +1757,24 @@ function t(
         if ($active === 'cs' && $count >= 2 && $count <= 4) {
             $suffix = '.few';
         }
-        if ($suffix !== '' && isset($activeStrings[$key . $suffix])) {
+        if ($suffix !== ''
+            && translation_catalog_value($active, $key . $suffix) !== null
+        ) {
             $key .= $suffix;
         }
     }
 
-    if (
-        array_key_exists($key, $activeStrings)
-        && is_string($activeStrings[$key])
-    ) {
-        return translation_interpolate($activeStrings[$key], $parameters);
+    $activeValue = translation_catalog_value($active, $key);
+    if (is_string($activeValue)) {
+        return translation_interpolate($activeValue, $parameters);
     }
 
     if ($active !== $default) {
-        $defaultStrings = translation_load_language($default);
-        if (
-            array_key_exists($key, $defaultStrings)
-            && is_string($defaultStrings[$key])
-        ) {
+        $defaultValue = translation_catalog_value($default, $key);
+        if (is_string($defaultValue)) {
             translation_record_missing_key($key, $active, $default);
             return translation_admin_missing_key_text(
-                translation_interpolate($defaultStrings[$key], $parameters),
+                translation_interpolate($defaultValue, $parameters),
                 $key,
             );
         }

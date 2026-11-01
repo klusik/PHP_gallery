@@ -665,14 +665,15 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
             . e((string) ($summary['inventory_fingerprint'] ?? ''))
             . '">';
     echo
-        '<button type="submit" class="secondary" formaction="'
-            . e(url_for('admin_create_thumbnails'))
-            . '" name="scope" value="missing" data-create-missing-thumbnails>'
+        '<a class="button secondary" href="'
+            . e(url_for('admin_maintenance_center', [
+                'tab' => 'tools', 'maintenance_tab' => 'media',
+            ])) . '">'
             . e(t(
-                'admin.thumbnails.create_missing',
-                'Create missing thumbnails',
+                'admin.dashboard.thumbnail_maintenance',
+                'Thumbnail maintenance',
             ))
-            . '</button>';
+            . '</a>';
     echo
         '<button type="submit" class="secondary">'
             . e(t('admin.thumbnails.dismiss_7_days', 'Dismiss for 7 days'))

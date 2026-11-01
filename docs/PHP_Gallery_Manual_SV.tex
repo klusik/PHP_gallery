@@ -4144,33 +4144,93 @@ har växlats till Modern raderar \ui{Ta bort äldre JPG-miniatyrbilder} endast
 genererade JPEG-miniatyrbildsfiler; original, WebP-derivat och
 DNG-visningsmaster bevaras.
 
+\textbf{Gallerikonsistens.} Öppna \ui{Underhållscenter} >
+\ui{Gallerikonsistens}. Flikarna samlar Installation, Systemverktyg och
+Gallerikonsistens. De tidigare underhållsverktygen i~Översikt, inklusive
+mediebyte och miniatyrer, finns nu under Systemverktyg. Gamla underhållslänkar
+omdirigeras dit; den vertikala huvudmenyn får ingen ny post.
+\ui{Analysera~galleri} skapar först endast en rapport om mappar, primära namn,
+föräldrarelationer, sidofilstitlar, original, förväntade miniatyrer och
+metadata. Den hittar även oregistrerade foton, derivat utan ägare och väntande
+bildflyttar. Saknade original och otillgängliga bevis förblir uttryckliga
+fynd.
+
+Länken i~Översikt behåller varningar om~systemhälsa vid~underhållscentrets
+rubrik.
+
+Det första omfånget \ui{Namn och sökvägar (endast DB)} jämför gallerimetadata
+utan att öppna foton eller fysiska mappar. \ui{Filer och miniatyrer}
+kontrollerar faktiska filer, huvuden, tider och metadata i~omgångar. \ui{Djup
+innehållskontroll (långsam)} läser även kontrollsummor och avkodar pixlar;
+stora samlingar kräver betydligt mer arbete. Varje rapport anger sitt omfång.
+Expanderade rader visar \ui{Nu} och \ui{Efter reparation} för föreslagna
+titel-, sökvägs-, föräldra- eller sidofilsändringar före valet.
+
+Ett webbläsarfel förblir synligt och startar aldrig tyst servergenerering.
+Valet gäller både alla och saknade miniatyrer; den globala varningen öppnar
+först dessa kontroller. Konsistensreparation använder alltid webbläsarens
+arbetare. Håll fliken öppen. Endast begärda varianter skapas och publiceras;
+andra giltiga filer behåller innehåll och tidsstämplar. Servern kontrollerar
+källidentitet och lagrade resultat innan uppgiftsräknaren går vidare.
+Förlorade svar stäms först av mot lagrade filer. RAW/HEIC-källor utan stöd och
+webbläsarfel förblir synliga utan reservgenerering i PHP. Resultat märker de
+återstående fynden och visar bekräftade variantantal.
+Webbläsarens förlopp visas vid huvudförloppet ovanför fyndlistan.
+
+Endast berörda gallerier visas som kompakta expanderbara rader. Välj gallerier
+eller \ui{Reparera~alla~åtgärdbara}; manuella fynd förblir separata.
+Katalogförloppet räknar färdiga poster, disksökningen faktiskt kontrollerade
+poster utan ett påhittat totalantal och reparationer en bekräftad uppgift per
+omgång. JSON-exporten innehåller alla fynd utöver sidor och detaljexempel.
+JavaScript krävs och kontrollpunkten sparas i administratörens session.
+
+Reparationer kontrollerar katalog och källägarskap igen, bevarar original och
+giltiga miniatyrer och stoppas synligt vid fel. Efter ett förlorat svar ska
+status kontrolleras först; skrivningar upprepas aldrig automatiskt. Bekräftade
+fynd försvinner efter varje lyckad omgång och tomma gallerirader tas bort.
+Nästa delmängd kan väljas direkt utan ny analys. Manuella och ej valda fynd
+finns kvar; exportkvitton bevarar historiken. Äldre slutförda jobb antar samma
+lista när de öppnas. Förslag uppdateras endast från DB utan ny fotokontroll.
+Försenade tidigare omgångsanrop avvisas; externa katalogändringar kräver
+fortfarande en ny rapport. Små RGB-jämförelser markerar misstänkt innehåll för
+manuell granskning; likhet bevisar inte bildidentitet. Avkodning som saknas,
+oklara filer och saknade original repareras inte automatiskt. Dold/intern
+lagring och andra bilagor har egna underhållsverktyg.
+
+Även import följer disken. En sidofilstitel behålls bara om dess rensade form
+motsvarar den fysiska mappens namn. Annars ger mappen titeln. Nya importerade
+mappar normaliseras djupast först med den skyddade underträdsflyttaren.
+Målkonflikter avvisar importen; andra befintliga gallerier döps inte om tyst.
+Historiska avvikelser kräver uttrycklig reparation.
+
 En fullständig körning av \ui{Kontrollera saknade miniatyrbilder} undersöker
 importerade fotografier och registrerar gallerier med genererade varianter som
-saknas, är inaktuella, saknar metadata eller har fel bildförhållande, utan att
-skapa någonting. Det lagrade resultatet aktiverar \ui{Skapa saknade
-miniatyrbilder}, som bara behandlar rapporterade bilder. \ui{Skapa alla
-miniatyrbilder} under Underhåll omfattar alla gallerier; samma åtgärd i ett
-galleris bildredigerare omfattar det galleriet och, när \ui{Inkludera
-undergallerier} är valt, dess undergallerier. Dessa administrationsåtgärder
-förblir det främsta avsiktliga underhållsflödet. Offentlig bläddring startar
-ingen obegränsad reparationsgenomgång, men den aktuella renderaren har en liten
-skyddad bakgrundsförvärmning för specifika kort som behövde falla tillbaka på
-behöriga originalmedier eftersom ett förväntat derivat saknades.
+saknas, är inaktuella eller har fel bildförhållande, utan att skapa någonting.
+Det lagrade resultatet aktiverar \ui{Skapa saknade miniatyrbilder}, som bara
+behandlar rapporterade bilder. \ui{Skapa alla miniatyrbilder} under Underhåll
+omfattar alla gallerier; samma åtgärd i ett galleris bildredigerare omfattar
+det galleriet och, när \ui{Inkludera undergallerier} är valt, dess
+undergallerier. Dessa administrationsåtgärder förblir det främsta avsiktliga
+underhållsflödet. Offentlig bläddring startar ingen obegränsad
+reparationsgenomgång, men den aktuella renderaren har en liten skyddad
+bakgrundsförvärmning för specifika kort som behövde falla tillbaka på behöriga
+originalmedier eftersom ett förväntat derivat saknades.
 
-\ui{Uppdatera miniatyrbildsdatabasen} stämmer av databasmetadata mot befintliga
-genererade filer och tar bort genererade filer med fel bildförhållande i stället
-för att publicera dem. \ui{Radera alla miniatyrbilder} är en separat bekräftad
-destruktiv cacheåtgärd; originalfotografier förblir orörda och derivaten kan
-byggas om senare.
+\ui{Uppdatera miniatyrbildsdatabasen} stämmer av databasmetadata mot
+befintliga genererade filer och tar bort genererade filer med fel
+bildförhållande i stället för att publicera dem. \ui{Radera alla
+miniatyrbilder} är en separat bekräftad destruktiv cacheåtgärd;
+originalfotografier förblir orörda och derivaten kan byggas om senare.
 
 \ui{Webbläsarbaserad ombyggnad av miniatyrbilder} väljs som standard för dessa
 omgenereringsåtgärder när webbläsarbearbetning är tillgänglig. Avmarkera
-kryssrutan för att använda servergenerering. Servern skickar originalfiler till
-den autentiserade webbläsaren i begränsade original-ZIP-delar, webbläsaren
-genererar miniatyrbildsvarianter och förberedda miniatyrbilds-ZIP-omgångar
-laddas upp tillbaka för servervalidering och installation. Gränser för
-originaldelar och omgångar konfigureras med webbläsaruppladdningsinställningarna
-så att arbetsflödet inte beror på en enda överstor PHP-begäran.
+kryssrutan för att använda servergenerering. Servern skickar originalfiler
+till den autentiserade webbläsaren i begränsade original-ZIP-delar,
+webbläsaren genererar miniatyrbildsvarianter och förberedda
+miniatyrbilds-ZIP-omgångar laddas upp tillbaka för servervalidering och
+installation. Gränser för originaldelar och omgångar konfigureras med
+webbläsaruppladdningsinställningarna så att arbetsflödet inte beror på en enda
+överstor PHP-begäran.
 
 \subsubsection{Skyddad offentlig förvärmning av miniatyrbilder}
 \index{f00095@förvärmning av miniatyrbilder}
@@ -7446,6 +7506,11 @@ behåll tidsstämpelkontroll eller återställning vid distribution. Befintlig
 Test Run-spårning skiljer planladdning, full validering, beroendeplanering och
 includes. Utvecklarmätningar använder isolerade offentliga/Admin-begäranden
 med kalla och varma opcode-prov; de fastställer inte produktionslatens.
+Gemensam uppdateringsidentifiering läser säkra fel och ogenomskinliga
+referenser från den lätta jobbläsaren. Offentliga gallerier laddar ingen
+uppdateringsarbetare för detta. Uttryckliga Admin-/bakgrundsinstallationer
+behåller hela arbetaren; valfri diagnostik observerar redan laddade ägare.
+
 Kompilatorn granskar den privata spårningscallbacken uttryckligen; endast lokala
 laddaroperationer skickar den, utan ytterligare modulberoende.
 

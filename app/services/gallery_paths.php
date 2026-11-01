@@ -400,6 +400,27 @@ function gallery_folder_name_from_path(string $folderPath): string
 }
 
 /**
+ * Resolve a primary title from disk while retaining compatible readable prose.
+ *
+ * A sidecar may keep accents, spaces and capitalization only when its sanitized
+ * title identifies the same physical leaf. A conflicting title cannot rename
+ * an imported folder behind the administrator's back.
+ * @param string $folderPath Gallery-root-relative physical directory.
+ * @param string $candidate Existing catalog/sidecar primary title, or empty.
+ * @return string Compatible primary title, otherwise the actual disk leaf.
+ */
+function gallery_disk_source_title(
+    string $folderPath,
+    string $candidate = '',
+): string {
+    $leaf = gallery_folder_name_from_path($folderPath);
+    $candidate = trim($candidate);
+    return $candidate !== ''
+        && gallery_folder_segment($candidate) === gallery_folder_segment($leaf)
+        ? $candidate : $leaf;
+}
+
+/**
  * Build a relative child folder path under an optional parent gallery.
  *
  * @param ?array $parent Parent value.

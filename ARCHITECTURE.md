@@ -9,6 +9,40 @@ and complete descendant path map commit together in the mutation model. The
 folder field is informational. Public slugs retain their independent URL role.
 Date-organized children derive their folder from the actual source title too.
 
+Explicit consistency reporting is owned by `gallery_consistency.php` and its
+inspection/repair parts. Its model owns source keysets and catalog leases;
+the controller owns session checkpoints, CSRF and non-replayed receipts. The
+Maintenance Center tab separates analysis from selected repairs. Names-only
+checks omit photograph queries and physical I/O; file/header work is batched
+under a time admission budget, while checksum/pixel decoding is opt-in.
+Proposal presentation shares the actual repair name policy and retains slashes
+as hierarchy, showing both final segment and complete paths. Older completed
+reports reconstruct proposals from their captured catalog without a new scan.
+Successful repair queues remove their confirmed findings and retain the same
+report for another subset. Remaining proposals use a refreshed catalog snapshot,
+with no photo rescan. Batch admission advances the sequence; old delayed repair
+requests cannot start another batch. Exported receipts preserve prior work.
+Thumbnail repairs issue session-owned image/variant tickets to the existing
+browser worker pipeline. Source ZIP selection and uploaded publication are
+restricted by that ticket. The server holds the writer lease, validates source
+bytes and confirms persisted variants before advancing; it never generates
+pixels for consistency repair. Upload acknowledgements reconcile lost replies.
+Discovery and import resolve primary titles through `gallery_disk_source_title`:
+the physical leaf wins a conflicting sidecar. New import leaves are normalized
+deepest first by the existing subtree mover after destination preflight.
+See [consistency scope and repair policy](docs/GALLERY_CONSISTENCY.md).
+Explicit jobs defer journal/cache calls to the existing dashboard maintenance
+owner, keeping discovery's direct file ownership unchanged apart from new
+feature files. Browser dictionaries reuse identical locales and overlay string
+keys without merge's combined-count preallocation; larger Admin catalogs do not
+require a public-route memory allowance increase.
+
+Shared updater discovery uses opaque references and the unchanged safe error
+reducer from `updates_job_lookup.php`; these reads do not load updater workers.
+Installation-only branches follow the existing explicit Admin/updater-work
+loader. The guarded legacy subsystem snapshot observes only already-loaded
+worker presentation. Native legacy includes still expose the same declarations.
+
 Media Renamer stages verified exclusively owned thumbnails before changing
 originals. It publishes those unchanged cache bytes only after the persisted
 destination source owns the derivative identity. Ambiguous/locked artifacts
@@ -1409,7 +1443,17 @@ The maintained catalog format is `app/lang/<code>.json`.
 `translation_load_language()` prefers JSON and loads a legacy PHP dictionary
 only when the JSON file is absent. The `en.php`, `cs.php`, `de.php`, and
 `sv.php` dictionaries therefore exist only for compatibility and are not the
-canonical catalogs.
+canonical catalogs. Ordinary `t()` lookups use bounded cached chunks through
+the translation service itself; the maintained one-member-per-line
+format is read incrementally using native JSON value decoding. Editable valid
+JSON with other formatting retains the native full-decoder path. Invalid JSON
+still yields an empty catalog. `translation_load_language()` materializes the
+complete dictionary only for explicit bulk consumers such as browser assets.
+The same cache-version invalidation applies to both lookup paths. Public pack
+discovery counts distinct chunk keys directly and reads its language name from
+the chunks, avoiding a transient flat dictionary for every detected language.
+Metadata-only discovery releases otherwise unused language dictionaries; active
+and fallback lookups retain only their own requested packs in the cache.
 
 Server-side `t()` lookup order is active JSON/PHP pack, configured default
 English pack, provided inline English fallback, then the key itself. Browser
@@ -1874,13 +1918,13 @@ Important view files:
 | `app/views/admin_dashboard.php` | Dashboard page composition, top-level Admin tabs, and gallery table rendering. |
 | `app/views/admin_dashboard_sections.php` | Reusable dashboard overview and grouped maintenance subtab sections. |
 
-The main Admin dashboard keeps its initial request bounded: the Maintenance tab
-is rendered through the authenticated `admin_dashboard_maintenance` JSON
-endpoint only when the tab is first activated. This keeps database usage
-metadata, navigation-data status, maintenance state, and related optional-schema
-checks out of ordinary gallery navigation. The server-rendered placeholder
-remains safe without JavaScript and links to the dedicated maintenance details
-page as a fallback.
+The main Admin dashboard keeps its initial request bounded: Overview and
+Galleries load their own read models. Maintenance groups live only under
+Maintenance Center > System tools, whose controller explicitly loads the
+existing dashboard owner before preparing its maintenance-only model. Saved
+Overview maintenance query links redirect there. The authenticated legacy
+`admin_dashboard_maintenance` endpoint remains for already-open older clients;
+new Overview markup does not offer a second maintenance tab or placeholder.
 | `app/views/admin_gallery_forms.php` | Gallery admin form sections. |
 | `app/views/gallery_descriptions.php` | Gallery description rendering helpers. |
 | `app/views/navigation_data.php` | Navigation data admin rendering. |
@@ -4904,8 +4948,11 @@ values.
 ## Maintenance Center Orchestration
 
 The Admin Maintenance Center is the central browser-driven orchestrator above
-the existing specialized maintenance owners. It deliberately does not replace
-Telemetry, Trash, Logs, Database Maintenance, or thumbnail diagnostics. The main
+the existing specialized maintenance owners. Native Installation, System tools
+and Gallery consistency tabs separate installation jobs, the former Overview
+tool groups and report-first media analysis. Their controllers prepare only the
+selected tab. Existing specialized owners still execute thumbnail/cache work,
+Trash, Telemetry, Logs and Database Maintenance. The main
 module is split to keep policy and workflow readable:
 
 ```text

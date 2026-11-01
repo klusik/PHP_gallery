@@ -221,6 +221,8 @@ const APPLICATION_UPDATE_RECOVERY_MANIFEST_BYTES = 8 * 1024 * 1024;
 const APPLICATION_UPDATE_RECOVERY_PROTOCOL_BYTES = 65536;
 
 // This module is split into focused part files under app/services/updates_jobs/.
+// Shared redaction stays available for legacy direct worker includes too.
+require_once __DIR__ . '/updates_job_lookup.php';
 // Per-request time budget and runtime limit resolution.
 require_once __DIR__ . '/updates_jobs/budget.php';
 // Safe error reduction and retry classification.

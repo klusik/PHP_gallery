@@ -75,7 +75,7 @@ function view_render_admin_gallery_report_page(
             . '</p></div>';
     echo
         '<div class="admin-hero-actions"><a class="button secondary" href="'
-            . e(url_for('admin') . '#admin-tab-maintenance')
+            . e(url_for('admin_maintenance_center', ['tab' => 'tools']))
             . '">'
             . e(t(
                 'admin.gallery_report.back_to_maintenance',

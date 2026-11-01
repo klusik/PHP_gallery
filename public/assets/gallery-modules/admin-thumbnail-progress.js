@@ -31,7 +31,7 @@
  */
 
 import { adminUrlWithParams, ensureThumbnailProgress, i18n, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
-import { browserThumbnailRebuildRequested, runBrowserThumbnailRebuild } from './admin-browser-thumbnail-rebuild.js?v=20260925-gallery-scope-fix-v1';
+import { browserThumbnailRebuildRequested, runBrowserThumbnailRebuild } from './admin-browser-thumbnail-rebuild.js?v=20261101-consistency-scope-v2';
 
 
 /**
@@ -178,7 +178,30 @@ export function setupThumbnailProgress() {
             if (missingButton instanceof HTMLButtonElement && missingButton.disabled) {
                 return;
             }
-            await runThumbnailJob(missingForm, null, {scope: 'missing'});
+            const useBrowser = browserThumbnailRebuildRequested(missingForm);
+            missingButton.disabled = true;
+            try {
+                if (useBrowser) {
+                    await runBrowserThumbnailRebuild(
+                        missingForm,
+                        ensureThumbnailProgress(missingForm),
+                        {scope: 'missing'},
+                    );
+                } else {
+                    await runThumbnailJob(missingForm, null, {scope: 'missing'});
+                }
+            } catch (error) {
+                const message = error instanceof Error
+                    ? error.message : String(error);
+                updateThumbnailProgress(
+                    ensureThumbnailProgress(missingForm),
+                    0, 0, 0, 0, message,
+                );
+            } finally {
+                if (useBrowser) {
+                    missingButton.disabled = false;
+                }
+            }
             return;
         }
         const maintenanceForm = button.closest('[data-thumbnail-maintenance-action-form]');

@@ -5,8 +5,8 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/services/updates_job_lookup.php
  * Module Type: Service
- * Purpose: Read active updater job state without loading worker and activation logic.
- * Responsibilities: Preserve safe job lookup APIs for request policy and legacy callers.
+ * Purpose: Read updater state and reduce references without loading worker logic.
+ * Responsibilities: Preserve job lookups and stable opaque failure references.
  * Author: Rudolf Klusal
  * Contact: https://github.com/klusik
  * License: MIT License (see LICENSE file in repository)
@@ -18,6 +18,13 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
+
+/** Retain the installed opaque updater failure-reference protocol.
+ * Type: int. Units: hexadecimal SHA-256 characters. Scope: safe diagnostics.
+ * Consumers: application_update_error_reference and existing stored job errors.
+ * Rationale: 12 preserves correlation with legacy references without messages.
+ */
+const APPLICATION_UPDATE_ERROR_REFERENCE_LENGTH = 12;
 
 /**
  * Return the updater workspace used for job state and related artifacts.
@@ -199,4 +206,131 @@ function application_update_last_job(): ?array
         @unlink($pointerPath);
         return null;
     }
+}
+
+/**
+ * Return a short safe reference for an internal updater failure.
+ *
+ * @param string $message Internal exception message.
+ * @return string Stable diagnostic reference.
+ */
+function application_update_error_reference(string $message): string
+{
+    return strtoupper(substr(hash('sha256', $message), 0,
+        APPLICATION_UPDATE_ERROR_REFERENCE_LENGTH));
+}
+
+
+/** Identify publisher file differences using safe repository-relative paths. */
+final class ApplicationUpdateFileIntegrityException extends RuntimeException
+{
+    /**
+     * Carry actionable file evidence without server paths or exception text.
+     * @param string $relativeFile Validated updater-owned relative file identity.
+     * @param string $expectedHash Manifest SHA-256, or empty for missing coverage.
+     * @param string $actualHash Complete observed normalized SHA-256.
+     * @return void Initializes bounded evidence and the stable failure reference.
+     */
+    public function __construct(
+        public readonly string $relativeFile,
+        public readonly string $expectedHash,
+        public readonly string $actualHash,
+    ) {
+        parent::__construct('Recovery package failed core-manifest integrity validation.');
+    }
+}
+
+
+/**
+ * Return bounded recovery guidance for a package-publisher integrity failure.
+ * @return string Stable safe guidance without private package or server details.
+ */
+function application_update_manifest_mismatch_message(): string
+{
+    return 'This release package does not match its integrity manifest. Retrying the same build cannot repair it; cancel this job and select a newer release or beta code.';
+}
+
+/**
+ * Convert arbitrary updater failures into an Admin-safe message and reference.
+ *
+ * The returned payload deliberately excludes the exception text, filesystem
+ * paths, URLs, SQL, credentials, tokens, and stack traces.
+ *
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $error A Throwable
+ *     contributes its message; other values are string-cast only to derive the
+ *     opaque reference and retry classification. Sensitive details are omitted.
+ * @return array{message:string,reference:string,retryable:bool} Safe message,
+ *     opaque diagnostic reference and retryability, without internal details.
+ */
+function application_update_safe_error(mixed $error): array
+{
+    $internal = $error instanceof Throwable
+        ? $error->getMessage()
+        : (string) $error;
+    $reference = application_update_error_reference($internal);
+    $lower = strtolower($internal);
+
+    $retryable = !($error instanceof \Error)
+        && !str_contains($lower, 'call to undefined function');
+    if ($error instanceof ApplicationUpdateFileIntegrityException) {
+        $message = application_update_manifest_mismatch_message()
+            . ' File: ' . $error->relativeFile . '.';
+        $retryable = false;
+    } elseif (
+        str_contains($lower, 'failed core-manifest integrity validation')
+        || str_contains(
+            $lower,
+            'installable file that is missing from the core manifest',
+        )
+        || str_contains($lower, 'version markers do not agree')
+    ) {
+        $message = application_update_manifest_mismatch_message();
+        $retryable = false;
+    } elseif (str_contains($lower, 'quarantined')) {
+        $message = 'This update commit failed previously and is excluded from automatic installation. Select a newer verified release.';
+        $retryable = false;
+    } elseif (str_contains($lower, 'newer manual deployment')) {
+        $message = 'New application files were uploaded manually. Use Finish FTP update in Advanced tools to verify them and complete forward migrations. The older package will not be resumed.';
+        $retryable = false;
+    } elseif (str_contains($lower, 'recovery')) {
+        $message = 'Automatic recovery could not verify the package, database or backup safety. Preserve the jobs and backups and ask the administrator to verify a compatible release in maintenance mode.';
+        $retryable = false;
+    } elseif (
+        str_contains($lower, 'archive')
+        || str_contains($lower, 'zip')
+        || str_contains($lower, 'extract')
+    ) {
+        $message = 'The downloaded update package could not be prepared or validated.';
+    } elseif (
+        str_contains($lower, 'migration')
+        || str_contains($lower, 'schema')
+    ) {
+        $message = 'The database migration stage could not be completed safely.';
+    } elseif (
+        str_contains($lower, 'download')
+        || str_contains($lower, 'http')
+        || str_contains($lower, 'curl')
+        || str_contains($lower, 'github')
+    ) {
+        $message = 'The update download could not be completed.';
+    } elseif (
+        str_contains($lower, 'backup')
+        || str_contains($lower, 'rollback')
+    ) {
+        $message = 'The updater could not prepare or use the rollback data safely.';
+    } elseif (
+        str_contains($lower, 'activate')
+        || str_contains($lower, 'replace')
+        || str_contains($lower, 'rename')
+    ) {
+        $message = 'The prepared update could not be activated safely.';
+    } else {
+        $message = 'The update job could not continue safely.';
+    }
+
+    return [
+        'message' => $message,
+        'reference' => $reference,
+        'retryable' => $retryable,
+    ];
 }

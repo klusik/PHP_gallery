@@ -113,14 +113,14 @@ use function Gallery\Services\admin_log_event;
 
 /**
  * Render the main Admin dashboard.
- * @return void Outputs the authenticated dashboard shell or an explicitly requested tab.
+ * @return void Outputs Overview/Galleries or redirects legacy maintenance links.
  */
 function cms_admin(): void
 {
     require_admin();
     admin_render_profile_start('admin_dashboard');
-    // Explicit maintenance deep links render their target during the main request so the requested tool is
-    // immediately usable and does not depend on a second deferred AJAX request succeeding.
+    // Saved links retain their selected tool after maintenance moved to the
+    // central workspace. No maintenance model is loaded by ordinary Overview.
     $requestedMaintenanceTab = strtolower(trim(
         (string) ($_GET['maintenance_tab'] ?? ''),
     ));
@@ -130,16 +130,21 @@ function cms_admin(): void
         true,
     );
     $requestedTab = (string) ($_GET['dashboard_tab'] ?? '');
-    $activeTab = $maintenanceDeepLink || $requestedTab === 'maintenance'
-        ? 'maintenance'
-        : ($requestedTab === 'galleries' ? 'galleries' : 'overview');
-    $maintenanceLoaded = $maintenanceDeepLink || $activeTab === 'maintenance';
+    if ($maintenanceDeepLink || $requestedTab === 'maintenance') {
+        redirect_to(url_for('admin_maintenance_center', [
+            'tab' => 'tools',
+            'maintenance_tab' => $maintenanceDeepLink
+                ? $requestedMaintenanceTab : 'media',
+        ]));
+        return;
+    }
+    $activeTab = $requestedTab === 'galleries' ? 'galleries' : 'overview';
     // Explicit URLs also serve no-JavaScript navigation; ordinary Overview paints before totals are read.
     $surface = $activeTab === 'galleries'
         ? 'galleries'
         : ($requestedTab === 'overview' ? 'overview' : 'shell');
     $dashboardModel = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model(
-        $maintenanceLoaded,
+        false,
         $surface,
     ));
     $dashboardModel['active_tab'] = $activeTab;
@@ -150,7 +155,7 @@ function cms_admin(): void
     $dashboardModel['maintenance_center_status'] = maintenance_center_dashboard_status(
         $dashboardActorId > 0 ? $dashboardActorId : null,
     );
-    $dashboardModel['maintenance_loaded'] = $maintenanceLoaded;
+    $dashboardModel['maintenance_loaded'] = false;
     $dashboardModel['requested_maintenance_tab'] = $requestedMaintenanceTab;
     $dashboardModel['notices'] = admin_dashboard_notice_messages(
         $_GET,
@@ -704,8 +709,8 @@ function admin_dashboard_content_return_url(string $fallbackUrl): string
     $tab = $_POST['maintenance_return'] ?? '';
     return (
         in_array($tab, ['content', 'system'], true)
-            ? url_for('admin', [
-                'dashboard_tab' => 'maintenance',
+            ? url_for('admin_maintenance_center', [
+                'tab' => 'tools',
                 'maintenance_tab' => $tab,
             ])
             : $fallbackUrl

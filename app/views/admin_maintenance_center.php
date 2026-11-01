@@ -70,6 +70,11 @@ function view_maintenance_center_json(?array $value): string
  *   blocked_by_other_job?: bool,
  *   installation_blocker?: array<string, mixed>|null,
  *   csrf_token?: string,
+ *   installation_url?: string,
+ *   consistency_url?: string,
+ *   tools_url?: string,
+ *   active_tab?: string,
+ *   tools_html?: string,
  *   storage_maintenance_url?: string,
  *   dashboard_url?: string
  * } $model Prepared workflow state, navigation URLs, CSRF token, and endpoints.
@@ -484,6 +489,20 @@ function view_render_admin_maintenance_center_page(array $model): void
             . '">'
             . view_admin_menu_icon('overview')
             . '</a></nav></section>';
+
+    view_render_maintenance_center_tabs([
+        'installation_url' => (string) ($model['installation_url'] ?? ''),
+        'tools_url' => (string) ($model['tools_url'] ?? ''),
+        'consistency_url' => (string) ($model['consistency_url'] ?? ''),
+    ], (string) ($model['active_tab'] ?? 'installation'));
+
+    if (($model['active_tab'] ?? '') === 'tools') {
+        echo '<div data-admin-dashboard-workspace data-maintenance-center-tools>'
+            . '<div id="admin-tab-maintenance">'
+            . (string) ($model['tools_html'] ?? '') . '</div></div>';
+        render_footer();
+        return;
+    }
 
     if (!$available) {
         echo

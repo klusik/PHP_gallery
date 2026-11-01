@@ -4040,11 +4040,74 @@ to~Modern, \ui{Remove legacy JPG thumbnails} deletes only generated JPEG
 thumbnail files; originals, WebP derivatives, and~DNG display masters
 are~preserved.
 
+\textbf{Gallery consistency.} Open \ui{Maintenance~Center} >
+\ui{Gallery~consistency}. Its~tabs group Installation, System tools
+and~Gallery consistency. The~former Overview maintenance tools, including
+media renaming and~thumbnail controls, now live in~System tools. Saved
+maintenance links redirect here; the~main vertical menu gains no~item.
+\ui{Analyze~gallery} first creates a~read-only report of~physical folders,
+primary names, parent relationships, sidecar titles, original files, expected
+thumbnails and~their metadata. It~also finds unindexed photographs, unowned
+derivatives and~pending image moves. Missing originals and~unavailable
+evidence remain explicit findings.
+
+The Overview shortcut retains System Health warnings beside the Maintenance
+Center title.
+
+The~initial scope is~\ui{Names and~paths (DB~only)}: it~compares gallery
+metadata without opening photographs or~physical folders. \ui{Files
+and~thumbnails} checks real files, headers, times and~metadata in~batches.
+\ui{Deep content verification (slow)} additionally reads checksums and~decodes
+pixels; large collections require substantially more work. Each report names
+its~actual scope. Expanded rows show \ui{Now} and~\ui{After repair} values
+for~proposed title, path, parent or~sidecar changes, before any repair
+is~chosen.
+
+Only affected galleries appear in~compact expandable rows. Select individual
+galleries or~use \ui{Repair~all~available}; manual findings remain separate.
+Catalog progress counts records completed in~batches, disk discovery shows
+its~actual entry count without inventing a~total, and~repairs confirm one task
+per~batch. The~JSON export includes all findings beyond the~paged list
+and~detail samples. The~browser needs JavaScript and~keeps its~checkpoint
+in~the~Admin session.
+
+Repairs revalidate catalog and~source ownership, preserve originals and~valid
+thumbnails, and~stop visibly on~failure. Lost responses require a~status
+check, never automatic write replay. Confirmed findings disappear after each
+successful batch; empty gallery rows vanish. Select another subset immediately
+without a~new analysis. Manual and~unselected findings remain; exported receipts
+retain history. Older completed jobs adopt this list on~opening. Catalog
+proposals refresh from DB without inspecting photos again. Delayed earlier
+batch requests are~refused; external catalog changes still require a~new report.
+Small
+RGB comparisons flag suspicious image content for~manual review; similarity
+does not~prove image identity. Unsupported decoding, ambiguous files
+and~missing originals are~not~automatically repaired. Hidden/internal storage
+and~non-image attachments retain their separate maintenance tools.
+
+Disk names also govern import. A~sidecar title survives only when
+its~sanitized form agrees with the~physical leaf. Otherwise the~disk leaf
+supplies the~title. New imported folders are~canonicalized deepest first
+through the~guarded subtree mover. Conflicting destinations refuse import;
+unrelated existing galleries are~not~silently renamed. Explicit consistency
+repair handles historical discrepancies.
+
+A~browser failure remains visible and~never starts server generation silently.
+This choice applies to~both Create all and~Create missing; the~global warning
+opens these controls first. Consistency repair always uses browser workers.
+Keep the~tab open. Only requested variants are~generated and~published;
+valid unrelated files retain their bytes and~timestamps. The~server validates
+source identity and~stored output before advancing the~task count. Lost
+replies first reconcile stored output. Unsupported RAW/HEIC sources and~browser
+errors remain visible without PHP generation fallback. Results retain a~labeled
+list of~remaining findings and~show confirmed variant counts.
+Browser processing progress sits with the~main progress above the~finding list.
+
 A~full \ui{Check missing thumbnails} pass inspects imported photographs
-and~records galleries with missing, stale, metadata-missing, or~wrong-ratio
-generated variants without creating anything. The~stored result enables
-\ui{Create missing thumbnails}, which targets only the~reported images.
-\ui{Create all thumbnails} in~Maintenance covers all galleries; the~same action
+and~records galleries with missing, stale, or~wrong-ratio generated variants
+without creating anything. The~stored result enables \ui{Create missing
+thumbnails}, which targets only the~reported images. \ui{Create all
+thumbnails} in~Maintenance covers all galleries; the~same action
 in~a~gallery's Images editor covers that gallery and, when \ui{Include
 subgalleries} is~selected, its descendants. These Admin operations remain
 the~primary deliberate maintenance workflow. Public browsing does~not~start
@@ -4061,11 +4124,11 @@ can~be~rebuilt later.
 \ui{Browser-side thumbnail rebuild} is~selected by~default for~these
 regeneration actions when browser processing is~available. Clear its checkbox
 to~use server generation. The~server sends original files to~the~authenticated
-browser in~bounded source ZIP chunks, the~browser generates thumbnail variants,
-and~prepared thumbnail ZIP batches are~uploaded back for~server validation
-and~installation. The~source-chunk and~batch limits are~configured with
-the~browser-upload settings so~the~workflow does~not~depend on~one oversized PHP
-request.
+browser in~bounded source ZIP chunks, the~browser generates thumbnail
+variants, and~prepared thumbnail ZIP batches are~uploaded back for~server
+validation and~installation. The~source-chunk and~batch limits are~configured
+with the~browser-upload settings so~the~workflow does~not~depend on~one
+oversized PHP request.
 
 \subsubsection{Guarded public thumbnail warmup}
 \index{thumbnail warmup}
@@ -7221,6 +7284,11 @@ measurements use disposable public/Admin requests and~distinguish opcode-cold
 and~warm samples; they do~not~establish production latency.
 The~compiler explicitly reviews the~private tracing callback; only local loader
 operations supply it, with no~additional module dependency.
+
+Shared updater discovery reads safe errors and~opaque references from
+the~lightweight job reader. Public galleries do~not~load the~updater worker
+for~these values. Explicit Admin/background installer owners retain the~complete
+worker; optional subsystem diagnostics observe already-loaded owners.
 
 Thumbnail delivery reuses the~existing complete public-media module.
 Compilation accepts this dependency only while its~full file closure already

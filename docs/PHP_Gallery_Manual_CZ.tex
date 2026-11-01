@@ -4020,31 +4020,90 @@ WebP také náhradní náhledy JPEG. Po trvalém přepnutí instalace na Modern�
 \ui{Odstranit starší náhledy JPG} odstraňuje pouze generované soubory náhledů
 JPEG; originály, odvozeniny WebP a~zobrazovací předlohy DNG se zachovávají.
 
+\textbf{Konzistence galerie.} Otevřete \ui{Centrum~údržby} >
+\ui{Konzistence~galerie}. Taby sdružují Instalaci, Systémové nástroje
+a~Konzistenci galerie. Nástroje původní údržby v~Přehledu, včetně přejmenování
+médií a~náhledů, jsou nyní v~Systémových nástrojích. Staré odkazy na údržbu se
+sem přesměrují; v~hlavním vertikálním menu nová položka nepřibývá.
+\ui{Analyzovat~galerii} nejprve vytvoří pouze report složek, primárních názvů,
+rodičovských vazeb, názvů v~sidecarech, originálů, očekávaných náhledů
+a~jejich metadat. Najde také neevidované fotografie, odvozeniny bez vlastníka
+a~nedokončené přesuny obrázků. Chybějící originály a~nedostupné důkazy
+zůstávají výslovnými nálezy.
+
+Odkaz Centra údržby v~Přehledu zachovává upozornění na~stav systému.
+
+Výchozí rozsah \ui{Názvy a~cesty (jen DB)} porovná metadata galerií
+bez~otevírání fotografií nebo fyzických složek. \ui{Soubory a~náhledy} dávkově
+kontrolují skutečné soubory, hlavičky, časy a~metadata. \ui{Hloubková kontrola
+obsahu (pomalá)} navíc čte kontrolní součty a~dekóduje pixely; velké sbírky
+vyžadují výrazně více práce. Report uvádí skutečný rozsah. Rozbalené řádky
+ukazují hodnoty \ui{Teď} a~\ui{Po opravě} pro navržené změny názvu, cesty,
+rodiče nebo sidecaru ještě před výběrem opravy.
+
+Chyba zpracování v~prohlížeči zůstane viditelná a~nikdy potichu nespustí
+generování na serveru. Volba platí pro vytvoření všech i~chybějících náhledů;
+globální upozornění nejprve otevře tyto ovládací prvky. Oprava konzistence
+vždy používá browser workery. Nechte tab otevřený. Vytvářejí a~publikují se
+jen požadované varianty; ostatní platné soubory si zachovají obsah i~čas.
+Server před posunem počtu úloh ověří identitu zdroje a~uložené výsledky.
+Po ztrátě odpovědi nejprve zkontroluje uložený výsledek. Nepodporované zdroje
+RAW/HEIC i~chyby prohlížeče zůstávají viditelné bez náhradního generování
+v~PHP. Výpis ukáže zbývající nálezy a~počet potvrzených variant.
+Průběh práce v~prohlížeči je u~hlavního progressbaru nad seznamem nálezů.
+
+Kompaktní rozbalovací řádky obsahují pouze dotčené galerie. Vyberte jednotlivé
+galerie nebo použijte \ui{Opravit~vše~opravitelné}; ruční nálezy zůstávají
+oddělené. Průběh katalogu počítá hotové záznamy, průchod disku skutečně
+zkontrolované položky bez vymyšleného celku a~opravy potvrzují jednu úlohu
+v~dávce. Export JSON obsahuje všechny nálezy nad rámec stránkování a~ukázek.
+Prohlížeč potřebuje JavaScript a~stav uchovává v~administrátorské relaci.
+
+Opravy znovu ověřují katalog a~vlastnictví zdrojů, zachovávají originály
+a~platné náhledy a~při chybě se viditelně zastaví. Po ztracené odpovědi
+nejprve ověřte stav; zápis se automaticky neopakuje. Potvrzené nálezy po úspěšné
+dávce zmizí a~prázdné řádky galerií se odeberou. Další část vyberete rovnou
+bez nové analýzy. Ruční a~nevybrané nálezy zůstávají; export uchová historii
+oprav. Stejně se při otevření převedou starší dokončené úlohy. Návrhy cest se
+obnoví z~DB bez opakované kontroly fotek. Opožděné požadavky předchozí dávky se
+odmítnou; cizí změny katalogu dál vyžadují nový report. Malé porovnání RGB
+označí podezřelý obsah k~ručnímu posouzení;
+podobnost nedokazuje totožnost fotografie. Nepodporované dekódování,
+nejednoznačné soubory a~chybějící originály se automaticky neopravují. Skrytá
+a~interní úložiště a~přílohy jiných typů mají samostatnou údržbu.
+
+Import se také řídí diskem. Název v~sidecaru zůstane pouze tehdy, když jeho
+sanitizovaná podoba odpovídá fyzické koncové složce. Jinak název určí disk.
+Nově importované složky se normalizují od nejhlubších pomocí chráněného
+přesunu podstromu. Kolize cíle import odmítne; ostatní existující galerie se
+tiše nepřejmenovávají. Historické nesrovnalosti řeší výslovná oprava
+konzistence.
+
 Úplná kontrola \ui{Zkontrolovat chybějící náhledy} prozkoumá importované
-fotografie a~zaznamená galerie s~chybějícími, zastaralými, metadatově neúplnými
-nebo poměrově nesprávnými generovanými variantami, aniž by něco vytvářela.
-Uložený výsledek umožňuje volbu \ui{Vytvořit chybějící náhledy}, která se
-zaměřuje pouze na hlášené obrázky. \ui{Vytvořit všechny náhledy} v~Údržbě
-zahrnuje všechny galerie; stejná akce v~editoru Obrázky galerie zahrnuje tuto
-galerii a~při volbě \ui{Zahrnout podgalerie} také její potomky. Tyto operace
-administrace zůstávají hlavním záměrným postupem údržby. Veřejné procházení
-nespouští neomezenou hromadnou opravu, ale současný vykreslovač má malou
-chráněnou přípravu na pozadí pro konkrétní karty, které musely použít povolené
-původní médium, protože očekávaná odvozenina chyběla.
+fotografie a~zaznamená galerie s~chybějícími, zastaralými nebo poměrově
+nesprávnými generovanými variantami, aniž by něco vytvářela. Uložený výsledek
+umožňuje volbu \ui{Vytvořit chybějící náhledy}, která se zaměřuje pouze na
+hlášené obrázky. \ui{Vytvořit všechny náhledy} v~Údržbě zahrnuje všechny
+galerie; stejná akce v~editoru Obrázky galerie zahrnuje tuto galerii a~při
+volbě \ui{Zahrnout podgalerie} také její potomky. Tyto operace administrace
+zůstávají hlavním záměrným postupem údržby. Veřejné procházení nespouští
+neomezenou hromadnou opravu, ale současný vykreslovač má malou chráněnou
+přípravu na pozadí pro konkrétní karty, které musely použít povolené původní
+médium, protože očekávaná odvozenina chyběla.
 
 \ui{Obnovit databázi náhledů} uvádí databázová metadata do souladu
-s~existujícími generovanými soubory a~odstraňuje generované soubory s~nesprávným
-poměrem stran místo jejich zveřejnění. \ui{Odstranit všechny náhledy} je
-samostatně potvrzovaná destruktivní operace mezipaměti; zdrojové fotografie
-zůstávají nedotčené a~odvozeniny lze později obnovit.
+s~existujícími generovanými soubory a~odstraňuje generované soubory
+s~nesprávným poměrem stran místo jejich zveřejnění. \ui{Odstranit všechny
+náhledy} je samostatně potvrzovaná destruktivní operace mezipaměti; zdrojové
+fotografie zůstávají nedotčené a~odvozeniny lze později obnovit.
 
 \ui{Obnova náhledů v~prohlížeči} je u~těchto akcí obnovy vybrána jako výchozí,
 je-li dostupné zpracování v~prohlížeči. Pro generování na serveru zrušte její
 zaškrtnutí. Server posílá původní soubory ověřenému prohlížeči v~omezených
 zdrojových blocích ZIP, prohlížeč generuje varianty náhledů a~připravené dávky
-ZIP náhledů se nahrávají zpět k~ověření a~instalaci serverem. Limity zdrojových
-bloků a~dávek se nastavují spolu s~nahráváním v~prohlížeči, takže postup
-nezávisí na jediném nadměrném požadavku PHP.
+ZIP náhledů se nahrávají zpět k~ověření a~instalaci serverem. Limity
+zdrojových bloků a~dávek se nastavují spolu s~nahráváním v~prohlížeči, takže
+postup nezávisí na jediném nadměrném požadavku PHP.
 
 \subsubsection{Chráněná veřejná příprava náhledů}
 \index{p00169@předběžná příprava náhledů}
@@ -7179,6 +7238,11 @@ požadavky a~rozlišuje studenou opcode cache od zahřátých vzorků; neprokazu
 latenci produkce.
 Kompilátor výslovně eviduje revizi privátního trasovacího callbacku; předávají
 jej pouze místní operace loaderu a~nepřidává závislost na dalším modulu.
+
+Sdílené zjišťování aktualizací čte bezpečné chyby a~neprůhledné reference
+z~lehkého readeru jobů. Veřejná galerie kvůli nim nenačítá updater worker.
+Explicitní Admin a~background instalace zachovávají úplný worker; volitelná
+diagnostika subsystémů pozoruje již načtené ownery.
 
 Doručování náhledů sdílí stávající úplný modul veřejných médií.
 Kompilace přijme tuto závislost pouze tehdy, když celá jeho množina souborů

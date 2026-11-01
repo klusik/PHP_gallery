@@ -1,5 +1,48 @@
 # Testing Guide
 
+## Gallery consistency
+
+`gallery_consistency_test.php` loads the real report/repair planners and path
+policy against disposable filesystem data and model adapters. It covers missing
+originals, absent metadata, variant completeness, unavailable content decoding,
+exclusive-ownership refusal, byte/mtime preservation, selected-task deduplication,
+disk-authoritative titles and stale-report refusal.
+The same fixture checks identical-locale dictionary reuse and translated
+overrides with retained default keys at the shared layout owner.
+
+The existing disposable `gallery_workflow_integration_test.php` exercises the
+authenticated consistency route, CSRF, a complete dry report and JSON export,
+selected repairs, canonical title reconciliation, original/valid-thumbnail
+preservation and duplicate receipt rejection. Its final import vector starts
+with a conflicting sidecar title and a noncanonical physical folder, then checks
+the actual canonical directory, catalog and sidecar after import.
+The same HTTP journey downloads a ticket-scoped original ZIP despite a forged
+client selection, publishes only requested variants, replays a cached upload
+receipt and confirms the repair separately. Extra invalid unrequested variants
+cannot replace valid files. The unit fixture covers source leases, forced
+decoder repairs and acknowledgement requirements. The Node fixture
+`gallery_consistency_browser_test.mjs` exercises production reconciliation and
+worker pair selection, including lost replies, partial output and visible
+failure without PHP fallback.
+Sequential-subset coverage reuses one HTTP report to repair a child and then its
+parent, confirms row removal and current proposals, preserves receipt history,
+and rejects delayed earlier-batch admission. Unit vectors retain manual and
+failed findings and adopt older completed checkpoints without photo reads. The
+production Node receipt renderer covers re-enabled controls, cleared completed
+selection, selection retained across pages and the empty remaining-list state.
+The runtime-plan fixture also excludes updater workers from the public gallery
+closure while requiring them in explicit Admin/background owners. The metadata
+budget fixture uses the real shared error reducer and verifies redaction and
+stable references without loading any worker. Disposable local memory captures
+diagnose the observed hosted regression; hosted exact-SHA limits remain binding.
+
+Manual appearance coverage uses desktop and narrow Codex browser views: compact
+affected rows, long names/paths, native selection, pagination, help anchoring,
+Escape/outside dismissal and real phase/count progress. A source check does not
+establish appearance or live installation health. Large RAW files, all image
+codecs, external filesystem races and real device accessibility remain separate
+coverage; unavailable evidence must stay visible in reports.
+
 ## Visitor progress and notification bell
 
 `gallery_visit_migration_upgrade_test.php` preloads an old gallery model,
@@ -7875,3 +7918,52 @@ Viewport changes use the captured native harness transport and await two
 rendering frames before checking the committed width and responsive layout.
 This lets native resize delivery and ResizeObserver state settle without
 relaxing separator visibility, disabled-state or overflow assertions.
+
+## Unified maintenance and targeted browser generation
+
+The real gallery HTTP workflow checks native Installation, System tools and
+Gallery consistency destinations without starting a job on GET. Legacy
+Overview maintenance queries redirect before preparing its model; existing
+controller regressions retain authentication and isolated-data assertions.
+`thumbnail_missing_browser_routing_test.mjs` drives the production delegated
+click owner with held worker/transport seams. It verifies missing-only browser
+and explicit server dispatch, duplicate exclusion, visible failures and no
+silent browser-to-server fallback. It runs through the central Node registry.
+Live desktop/narrow review uses 6.1-terra in Codex IAB; inspect nested tab
+history, wrapping, focus and Theme actions without mutating real gallery data.
+
+`translation_catalog_chunks_test.php` exercises canonical catalogs across the
+production chunk boundary, Unicode/escaped and non-string JSON values,
+last-duplicate-key behavior, malformed JSON, editable minified/multiline packs,
+cache-version invalidation and the absent-JSON PHP compatibility reader.
+Public route memory/latency budgets remain owned by the hosted runtime probes;
+this fixture does not replace or relax them. Bulk browser dictionaries retain
+their existing fallback/override regression coverage.
+
+Names-only fixtures require zero source-catalog snapshots/reads and zero disk
+observations, with exact before/after proposals for conflicting titles and
+readable noncanonical folders. File mode retains missing-variant findings and
+repair byte leases without pixel decoding. A batch-boundary vector requires
+multiple source observations per HTTP step rather than one request per photo.
+The real HTTP workflow retains original/valid-thumbnail hashes and explicit
+repair postconditions. No end-to-end throughput figure is claimed for a live
+40,000-photo collection; scope exclusions remain visible in each report.
+
+The nested real HTTP vector seeds historical names in disposable folders, then
+repairs only the child and requires the exact displayed path and unchanged
+unselected parent. `gallery_consistency_proposals_test.mjs` drives the production
+selected-ancestor preview across parent/child combinations, unrelated prefixes
+and root-parent values. Old report presentation is a no-write snapshot copy.
+
+The catalog fixture uses the complete actual service in a disposable app tree,
+including real path normalization and the session adapter. Duplicate-key counts
+also cover public pack discovery without materializing a full map. Health
+warning contracts now follow the Overview Maintenance Center shortcut instead
+of the removed Overview Maintenance tab; the System Health badge stays covered.
+Failed nested HTTP receipts expose only safe exception provenance to CI output.
+
+Metadata-only language reads also prove that unused packs are not retained for
+the first real lookup. The nested legacy fixture updates both folder_path and
+its derived folder_path_hash, preserving the actual catalog lookup invariant;
+collision rejection remains strict. This separates historical naming repair
+from deliberately corrupted ownership indexes.

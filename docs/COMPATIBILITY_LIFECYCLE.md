@@ -1,5 +1,42 @@
 # Compatibility lifecycle and retirement register
 
+## Consistency evidence and imported disk names
+
+Consistency inspection permanently retains explicit unknown/manual findings for
+unavailable/refused decoders, ambiguous legacy derivative ownership and content
+similarity. A path-derived naming hash is not content provenance. The RGB review
+threshold is heuristic; production false-positive/negative rates are unknown.
+It never authorizes automatic replacement or orphan deletion. Supported legacy
+JPG caches remain recognized even when current generation policy prefers WebP.
+
+Import now rejects conflicting sidecar naming authority, retaining readable
+titles only when their sanitized identity agrees with disk. Newly imported
+physical leaves are canonicalized through the existing guarded subtree mover;
+occupied destinations refuse the import. Existing unrelated legacy discrepancies
+remain until explicit consistency repair. Regression evidence is owned by the
+consistency model fixture and disposable HTTP import/repair journey; source
+implementation does not establish production data health or every codec.
+Completed successful repair checkpoints retain a reusable remaining-finding
+list. Older completed jobs adopt the same behavior from their server-owned
+queue; no fresh photo/disk scan is required. Only confirmed task findings are
+removed; manual, unselected and failed work remains. Exported receipts persist.
+New batch admission requires the current sequence to prevent delayed replay.
+Catalog/source leases still refuse external changes; interruption remains
+explicit uncertainty rather than automatic write replay.
+Consistency thumbnail repairs permanently require the configured browser
+pipeline and supported browser decoders. Missing capabilities or unsupported
+RAW/HEIC sources stay explicit failures; no automatic server generation is
+permitted. Existing System tools retain their explicit server/browser choice.
+Ticket ownership, source checksum, upload acknowledgements and persisted-file
+verification protect resume after uncertainty. Hosted HTTP/Node fixtures own
+regression evidence; codec prevalence and production throughput remain unknown.
+Shared updater error reduction remains available through the lightweight job
+reader and native legacy worker includes. References, safe messages, exception
+identity and retry classification are unchanged. Only explicit installer owners
+acquire the full worker; optional subsystem diagnostics retain unknown values
+when that owner is absent. Runtime-plan and discovery-budget regressions protect
+both lazy public reads and complete Admin/background loading.
+
 ## WinApp gallery title metadata
 
 The authenticated upload inventory response exposes additive `gallery_title`
@@ -2641,13 +2678,40 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
   `app/services/translations.php` and
   `app/lang/`.
 - **Evidence / tests:** `tests/translation_catalog_consistency_test.php`
-  validates maintained catalogs, but current evidence does not prove it
-  executes the absent-JSON PHP fallback.
+  validates maintained catalogs. `tests/translation_catalog_chunks_test.php`
+  exercises large canonical packs, last-duplicate-key semantics, native JSON
+  formatting, malformed input, cache invalidation and absent-JSON PHP fallback.
 - **Usage:** Format fallback adoption is unknown.
 - **Earliest safe retirement:** Only after supported packages and upgrade
   scenarios guarantee every supported JSON pack, the product owner explicitly
   ends PHP-catalog compatibility, and an absent-pack regression is replaced by
-  a documented fail-safe. The current coverage gap must remain explicit.
+  a documented fail-safe.
+
+The translation service privately caches bounded chunks to avoid oversized PHP
+hash tables on public requests. Maintained one-member-per-line JSON uses native
+per-value decoding; minified or multiline editable JSON permanently retains the
+native whole-document reader. The optimization never accepts invalid JSON or
+silently changes to PHP when JSON is present. Bulk dictionary consumers retain
+their complete return shape. Pack metadata discovery does not retain dictionaries
+for otherwise unused languages. Canonical metadata discovery retains only keys
+and the language display name, releasing other values after native parsing;
+explicit lookups still use request caching. Production formatting adoption is
+unknown; keep both formatting paths while editable packs are supported.
+
+### ADMIN-MAINT-1 — Historical Overview maintenance links
+
+Owner: Admin dashboard/Maintenance Center controllers and dashboard
+workspace JS.
+System tools now owns the former Overview maintenance groups. Saved query links
+redirect before loading dashboard data; fragment-only bookmarks use the
+controller-rendered destination in browser JS. Already-open older clients retain
+the authenticated deferred endpoint and its diagnostics. Without JavaScript,
+fragment-only links land on Overview and the Maintenance Center menu remains
+available. Adoption is unknown, so these small navigation adapters remain
+permanent while historical Admin URLs are supported. The deferred-controller
+fixture covers guards and redirect work exclusion; the HTTP gallery workflow
+covers all three native tabs and a legacy redirect. Desktop/narrow IAB review
+uses 6.1-terra. No new root menu item or storage migration is introduced.
 
 ### I18N-2 — Canonical English and key fallback
 
@@ -3681,3 +3745,29 @@ leases,
 unknown content and retained copies; exact hosted FULL and production acceptance
 remain separate gates. Existing API fields retain their meanings; the optional
 manual `operation` evidence separates current progress from historical totals.
+
+
+## Consistency scope and large catalogs
+
+Owner: gallery consistency service and its model/controller/browser workspace.
+The first implementation decoded each source and used one HTTP request per
+photograph. Local report evidence contains 41 name findings and 119 missing
+variants among 44 groups; the user reports 40,000 production photographs.
+Names-only analysis now excludes source-catalog reads and all physical I/O.
+File/header mode excludes original checksum/pixel verification explicitly; deep
+content mode remains opt-in and preserves unavailable-decoder findings.
+Affected sources still capture hashes for repair admission. Batches amortize
+request overhead and count only completed observations, with a time admission
+limit. Fixed-size SHA-256 path keys bound repeated long-path storage; integer
+owners avoid repeated string IDs. Existing in-flight unscoped session jobs
+retain path-key and deep-content behavior until replaced by a new analysis.
+Retain that session adapter while such checkpoints may exist; adoption is
+unknown. New scope, queue and no-write fixtures accompany the existing actual
+HTTP repair postconditions. Live 40,000-photo throughput is unmeasured.
+
+Completed old reports reconstruct preview values from their captured catalog,
+without rerunning media analysis. Browser proposals apply only selected existing
+ancestor spellings; a single child repair preserves unselected existing parents.
+The real HTTP nested fixture compares the shown child path to the actual folder,
+while the Node preview fixture covers parent/child selection combinations and
+strict sibling-prefix boundaries. Both retain separators and hierarchy.

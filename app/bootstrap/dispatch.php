@@ -256,6 +256,7 @@ function cms_route_handlers(): array
         'admin_navigraph_disconnect' => '\\Gallery\\Controllers\\cms_admin_navigraph_disconnect',
         'admin_navigraph_refresh' => '\\Gallery\\Controllers\\cms_admin_navigraph_refresh',
         'admin_check_thumbnail_maintenance' => '\\Gallery\\Controllers\\cms_admin_check_thumbnail_maintenance',
+        'admin_gallery_consistency' => '\\Gallery\\Controllers\\cms_admin_gallery_consistency',
         'admin_create_thumbnails' => '\\Gallery\\Controllers\\cms_admin_create_thumbnails',
         'admin_thumbnail_browser_source_chunk' => '\\Gallery\\Controllers\\cms_admin_thumbnail_browser_source_chunk',
         'admin_thumbnail_browser_upload_batch' => '\\Gallery\\Controllers\\cms_admin_thumbnail_browser_upload_batch',

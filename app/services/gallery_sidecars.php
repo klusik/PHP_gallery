@@ -639,7 +639,10 @@ function gallery_folder_candidate_metadata(string $folderPath): array
 
     return [
         'folder_path' => $folderPath,
-        'title' => $metadata['title'] ?? basename($folderPath),
+        'title' => gallery_disk_source_title(
+            $folderPath,
+            (string) ($metadata['title'] ?? ''),
+        ),
         'description' => $metadata['description'] ?? '',
         'content_language' => content_language_normalize(
             $metadata['content_language'] ?? null,
