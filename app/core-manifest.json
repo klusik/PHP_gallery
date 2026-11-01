@@ -6,7 +6,7 @@
     "files": {
         ".htaccess": "sha256:527a0839805e09e9559d4e69d89987ac2f3c8651016f8324c137d98c5f7c8b29",
         "ARCHITECTURE.md": "sha256:ed5903408df0786050f3fedb983134bbbdd7de434c40f04a2125c2bc766bc124",
-        "PATCH_NOTES.md": "sha256:b6dcbcb25f3cf8ecec8e36edd3be033cf99de27effdd5981d799e17e500b25b4",
+        "PATCH_NOTES.md": "sha256:c3b0d4bb8a20ef998474ce1fa0024e0cb5484b47890b62244009beebed47aa97",
         "README.md": "sha256:d0ab8fe57fc07388fef5b19a49cc3c1f9655a0c11296b573a2e97c576b9109c3",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
         "app/AGENTS.md": "sha256:f55eabe4fbb35858958b5b2888e7a25069a101acbcc3e7bcd3810391ec2bbda8",
