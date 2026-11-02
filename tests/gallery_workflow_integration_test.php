@@ -2812,6 +2812,21 @@ try {
     );
     check(($preferenceResult['setting_values']['newest_uploads_first'] ?? null) === true,
         'Display must return the confirmed saved ordering preference.');
+    // The Images form works without script and must use the same guarded row.
+    $withoutScript = $preference;
+    unset($withoutScript['ajax']);
+    $withoutScript['value'] = '0';
+    $withoutScript['edit_revision'] = (string) $preferenceResult['edit_revision'];
+    $fallbackResponse = $admin->request($orderingRoute, $withoutScript);
+    $fallbackGallery = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId]);
+    check($fallbackResponse['status'] === 302
+        && (int) $fallbackGallery['newest_uploads_first'] === 0,
+        'The native Images form must save and redirect without JavaScript.');
+    $withoutScript['value'] = '1';
+    $withoutScript['edit_revision'] = (string) $fallbackGallery['edit_revision'];
+    check($admin->request($orderingRoute, $withoutScript)['status'] === 302
+        && (int) row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId])['newest_uploads_first'] === 1,
+        'The native Images form must also enable the same saved preference.');
     foreach (['first.jpg', 'second.jpg'] as $uploadName) {
         $orderingUpload = [
             'csrf_token' => $csrf,

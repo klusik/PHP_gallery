@@ -1203,7 +1203,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
 /**
  * Render the Images tab from controller-prepared rows and URLs.
  *
- * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,created_at?:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}>,cover_selection_mode?:'legacy'|'single'|'automatic'|'multi',cover_selection_revision?:string,cover_multi_supported?:bool,edit_revision?:string,labels:array<string,string>} $viewModel Prepared image rows, three-state cover revision, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
+ * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,created_at?:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}>,cover_selection_mode?:'legacy'|'single'|'automatic'|'multi',cover_selection_revision?:string,cover_multi_supported?:bool,edit_revision?:string,preference_url?:string,newest_uploads_first?:array{ready:bool,checked:bool,factory:string,label:string,help:string,save_label:string},labels:array<string,string>} $viewModel Prepared image rows, three-state cover revision, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
  * @return void Render compact image controls using the shared public-card renderers.
  */
 function view_render_admin_gallery_images_tab(array $viewModel): void
@@ -1229,7 +1229,40 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
 
     ob_start();
     echo '<div class="admin-gallery-images">';
+    echo '<div class="admin-image-header">';
     view_render_admin_tab_intro($intro);
+    $preference = (array) ($viewModel['newest_uploads_first'] ?? []);
+    if (!empty($preference['ready'])) {
+        $owner = 'admin-gallery-settings-' . (int) ($viewModel['gallery_id'] ?? 0);
+        echo '<form method="post" class="admin-image-order-preference" action="'
+            . e((string) ($viewModel['preference_url'] ?? ''))
+            . '" data-gallery-preference-editor="' . e($owner) . '">'
+            . (string) ($viewModel['csrf_html'] ?? '')
+            . '<input type="hidden" name="id" value="'
+            . (int) ($viewModel['gallery_id'] ?? 0) . '">'
+            . '<input type="hidden" name="edit_revision" value="'
+            . e((string) ($viewModel['edit_revision'] ?? '')) . '">'
+            . '<input type="hidden" name="action" value="save_display_preference">'
+            . '<input type="hidden" name="preference" value="newest_uploads_first">'
+            . '<input type="hidden" name="value" value="0">'
+            . '<div class="admin-display-switch-row"><label class="checkbox-label">'
+            . '<input type="checkbox" name="value" value="1"'
+            . (!empty($preference['checked']) ? ' checked' : '')
+            . ' data-gallery-display-preference="newest_uploads_first"'
+            . ' title="' . e((string) ($preference['factory'] ?? ''))
+            . '" aria-description="' . e((string) ($preference['factory'] ?? ''))
+            . '"> <span>' . e((string) ($preference['label'] ?? ''))
+            . '</span></label>';
+        view_render_admin_gallery_display_help(
+            (string) ($preference['label'] ?? ''),
+            (string) ($preference['help'] ?? ''),
+        );
+        echo '<span data-gallery-display-status role="status" aria-live="polite"></span>'
+            . '<noscript><button type="submit">'
+            . e((string) ($preference['save_label'] ?? 'Save gallery'))
+            . '</button></noscript></div></form>';
+    }
+    echo '</div>';
     echo
         '<form method="post" action="'
             . e((string) ($viewModel['bulk_action_url'] ?? ''))

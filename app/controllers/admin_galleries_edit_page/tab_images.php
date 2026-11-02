@@ -41,6 +41,7 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\normalize_gallery_visibility;
+use function Gallery\Services\gallery_edit_revision;
 use function Gallery\Services\gallery_cover_selection_ids;
 use function Gallery\Services\gallery_cover_selection_mode;
 use function Gallery\Services\gallery_cover_selection_revision;
@@ -55,7 +56,7 @@ use function Gallery\Views\view_render_admin_gallery_image_rows;
 /**
  * Render the Images tab panel.
  *
- * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, three-state cover choice, revision and thumbnail URL policy inputs.
+ * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null,newest_uploads_first?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, three-state cover choice, revision and thumbnail URL policy inputs.
  * @param list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,created_at?:string,sort_order?:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> $images Ordered direct rows mapped to canonical presentation fields.
  * @param string $activeEditTab Currently selected editor tab.
  * @param bool $rowsOnly Whether only canonical table rows are requested.
@@ -163,6 +164,23 @@ function admin_edit_gallery_render_images_tab(
         'active' => $activeEditTab === 'admin-edit-images',
         'gallery_id' => (int) $gallery['id'],
         'csrf_html' => csrf_field(),
+        'preference_url' => url_for('admin_edit_gallery', ['id' => $gallery['id']]),
+        'edit_revision' => gallery_edit_revision($gallery),
+        'newest_uploads_first' => [
+            'ready' => array_key_exists('newest_uploads_first', $gallery),
+            'checked' => (int) ($gallery['newest_uploads_first'] ?? 0) === 1,
+            'factory' => t(
+                'admin.dashboard.content_factory_tooltip',
+                'Factory default: {value}',
+                ['value' => t('admin.common.disabled', 'Disabled')],
+            ),
+            'label' => t('admin.gallery_editor.newest_uploads_first', 'Newest uploads first'),
+            'help' => t(
+                'admin.gallery_editor.newest_uploads_first_help',
+                'After an upload or a changed scan, reorder this gallery by registration time, newest first. Existing photos can be sorted now in Media management. Manual ordering remains available until the next upload or changed scan.',
+            ),
+            'save_label' => t('admin.gallery_editor.save_gallery', 'Save gallery'),
+        ],
         'bulk_action_url' => url_for('admin_bulk_images'),
         'reorder_url' => url_for('admin_reorder_images'),
         'bulk_toolbar_html' => $bulkToolbarHtml,
