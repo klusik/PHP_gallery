@@ -771,9 +771,9 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
             . '>';
     echo
         '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="'
-            . e($label)
+            . e($label . ': ' . $options[$visibility][1])
             . '" title="'
-            . e($label)
+            . e($label . ': ' . $options[$visibility][1])
             . '"><span class="public-admin-visibility-icon '
             . e($options[$visibility][0])
             . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">'

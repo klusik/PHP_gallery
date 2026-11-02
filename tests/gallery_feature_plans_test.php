@@ -97,13 +97,13 @@ namespace Gallery\Models {
 
     /** Record an exact-row write without expanding descendants a second time.
      * @param list<int> $ids Exact changed row identifiers.
-     * @param bool $enabled Requested value.
+     * @param bool|null $enabled Requested value, or null for inherited maps.
      * @param string $field Fixed fixture storage field.
      * @return int Number of disposable rows changed.
      */
     function feature_fixture_write(
         array $ids,
-        bool $enabled,
+        ?bool $enabled,
         string $field,
     ): int {
         if (!$GLOBALS['feature_locked'])
@@ -111,7 +111,7 @@ namespace Gallery\Models {
         $GLOBALS['feature_writes'][] = [$ids, $field, $enabled];
         foreach ($GLOBALS['feature_rows'] as &$row)
             if (in_array($row['id'], $ids, true)) {
-                $row[$field] = (int) $enabled;
+                $row[$field] = $enabled === null ? null : (int) $enabled;
                 $row['edit_revision']++;
             }
         unset($row);
@@ -129,7 +129,7 @@ namespace Gallery\Models {
         ?bool $enabled,
         string $now,
     ): int {
-        return feature_fixture_write($ids, (bool) $enabled, 'gps_map_enabled');
+        return feature_fixture_write($ids, $enabled, 'gps_map_enabled');
     }
 
     /** Persist disposable filename flags.
@@ -370,6 +370,46 @@ namespace {
         );
     }
 
+    feature_fixture_reset();
+    // Gallery-only clicks must never expand the selected row to its children.
+    $single = [[
+        'root_id' => 1,
+        'feature' => 'game',
+        'enabled' => true,
+        'scope' => 'gallery',
+    ]];
+    $preview = \Gallery\Services\gallery_feature_plan_preview($single);
+    $result = \Gallery\Services\gallery_feature_plan_apply(
+        $single,
+        $preview['fingerprint'],
+    );
+    feature_fixture_assert(
+        $preview['gallery_count'] === 1
+            && $result['entity_ids'] === [1]
+            && $GLOBALS['feature_rows'][0]['voting_enabled'] === 1
+            && $GLOBALS['feature_rows'][0]['picture_game_enabled'] === 1
+            && $GLOBALS['feature_rows'][1]['voting_enabled'] === 0,
+        'single gallery game change enables voting without changing descendants',
+    );
+    foreach ([true, false, null] as $override) {
+        $singleMap = [[
+            'root_id' => 2,
+            'feature' => 'maps',
+            'enabled' => $override,
+            'scope' => 'gallery',
+        ]];
+        $preview = \Gallery\Services\gallery_feature_plan_preview($singleMap);
+        \Gallery\Services\gallery_feature_plan_apply(
+            $singleMap,
+            $preview['fingerprint'],
+        );
+        feature_fixture_assert(
+            $GLOBALS['feature_rows'][1]['gps_map_enabled']
+                === ($override === null ? null : (int) $override)
+                && $GLOBALS['feature_rows'][2]['gps_map_enabled'] === null,
+            'three map preferences persist only on the selected gallery',
+        );
+    }
     feature_fixture_reset();
     $game = [['root_id' => 1, 'feature' => 'game', 'enabled' => true]];
     $preview = \Gallery\Services\gallery_feature_plan_preview($game);

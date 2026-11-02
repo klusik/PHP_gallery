@@ -168,9 +168,7 @@ function admin_dashboard_parent_sync_fingerprint(): string
  *   false leaves image-move row discovery deferred without probing its journal rows.
  * @param string $surface complete preserves historical callers; shell omits totals and gallery rows;
  *   overview reads indexed totals only; galleries resolves the workspace on demand.
- * @return array<string,mixed> Dashboard presentation map with the nested health records
- *   above, gallery hierarchy data, maintenance summaries and localized status labels;
- *   content_factory_defaults maps canonical boolean setting IDs to defaults.
+ * @return array{galleries:list<array{id:int|string,view_gps_map_enabled?:bool,view_gps_map_override_off_enabled?:bool,...}>,overview_loaded:bool,galleries_loaded:bool,content_factory_defaults:array<string,bool>,...} Dashboard presentation map with the nested health records above, hierarchy data, maintenance summaries and localized status labels.
  * @see runtime_support_health_status()
  * @see admin_image_move_pending_health_status()
  * @see admin_mutation_schema_health_statuses()
@@ -367,6 +365,22 @@ function admin_dashboard_view_model(
             $galleries[$index]['view_gps_map_enabled'] =
                 $gpsMapReady
                 && gallery_effective_gps_map_enabled($gallery, $galleryLookup);
+            // Resolve what this row would inherit without its own OFF override.
+            $galleries[$index]['view_gps_map_override_off_enabled'] = false;
+            if (
+                $gpsMapReady && $gpsMapOverrideReady
+                && array_key_exists('gps_map_enabled', $gallery)
+                && $gallery['gps_map_enabled'] !== null
+                && (int) $gallery['gps_map_enabled'] === 0
+            ) {
+                $inheritedGallery = $gallery;
+                $inheritedGallery['gps_map_enabled'] = null;
+                $galleries[$index]['view_gps_map_override_off_enabled'] =
+                    gallery_effective_gps_map_enabled(
+                        $inheritedGallery,
+                        $galleryLookup,
+                    );
+            }
             $galleries[$index]['view_background_source_set'] =
                 $backgroundSourceReady
                 && gallery_background_source($gallery) !== null;

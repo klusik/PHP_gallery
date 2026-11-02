@@ -1484,4 +1484,182 @@ button.gallery-row-action.secondary {
     font-size: 0.8rem;
 }
 
+/* Compact per-gallery controls retain clear state without framed text chips. */
+.admin-page .admin-gallery-workspace .admin-gallery-tree-table {
+    min-width: 820px;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-tree-table th:nth-child(3) {
+    width: 64px;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-tree-table th:nth-child(4) {
+    width: 130px;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-state-cell,
+.admin-page .admin-gallery-workspace .admin-gallery-feature-cell {
+    white-space: nowrap;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature-cell {
+    padding-left: 4px;
+    padding-right: 4px;
+    font-size: 0;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-password-control {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature,
+.admin-page .admin-gallery-workspace .admin-gallery-visibility-fallback,
+.admin-page .admin-gallery-workspace button.admin-gallery-access-label[data-admin-gallery-password-toggle],
+.admin-page .admin-gallery-workspace [data-admin-gallery-visibility] .public-admin-visibility-trigger {
+    position: relative;
+    display: inline-grid;
+    place-content: center;
+    place-items: center;
+    width: 24px;
+    height: 28px;
+    min-width: 24px;
+    min-height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: min(var(--radius, 8px), 8px);
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink, #182230);
+    vertical-align: middle;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-on {
+    background: transparent;
+    color: var(--accent, #2563a8);
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature > svg,
+.admin-page .admin-gallery-workspace .admin-gallery-access-label svg {
+    display: block;
+    width: 19px;
+    height: 19px;
+    margin: 0;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-access-label > :is(
+    [data-password-locked-icon], [data-password-unlocked-icon],
+    [data-password-token-icon]):not([hidden]) {
+    display: grid;
+    place-items: center;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-inherit.is-effective-on {
+    color: var(--accent, #2563a8);
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-inherit.is-effective-off {
+    opacity: .4;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-off {
+    background: transparent;
+    opacity: .4;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-off.is-overriding-on {
+    color: var(--warning, #c66a00);
+    opacity: 1;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-off::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 1px;
+    background: currentColor;
+    content: '';
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-visibility-fallback.is-unpublished,
+.admin-page .admin-gallery-workspace .admin-gallery-visibility-fallback.is-private {
+    opacity: .5;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-visibility-fallback.is-private::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 18px;
+    height: 1px;
+    background: currentColor;
+    content: '';
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-inherit::after {
+    position: absolute;
+    top: calc(50% + 5px);
+    left: calc(50% + 5px);
+    width: 5px;
+    height: 5px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    background: var(--panel, #fff);
+    content: '';
+}
+
+.admin-page .admin-gallery-workspace :is(button.admin-gallery-feature,
+    button.admin-gallery-access-label, .public-admin-visibility-trigger):hover {
+    background: transparent;
+    color: var(--ink, #182230);
+    text-decoration: none;
+    opacity: 1;
+}
+
+.admin-page .admin-gallery-workspace :is(button.admin-gallery-feature,
+    button.admin-gallery-access-label, .public-admin-visibility-trigger):focus-visible {
+    outline: 2px solid var(--accent, #2563a8);
+    outline-offset: 2px;
+}
+
+.admin-gallery-workspace [data-password-locked-icon][hidden],
+.admin-gallery-workspace [data-password-unlocked-icon][hidden],
+.admin-gallery-workspace [data-password-token-icon][hidden] {
+    display: none;
+}
+
+.admin-gallery-workspace .admin-gallery-feature-feedback:empty {
+    display: none;
+}
+
+.admin-page .admin-gallery-workspace [data-admin-gallery-visibility] .public-admin-visibility-options,
+.admin-page .admin-gallery-workspace .admin-gallery-password-editor {
+    border: 1px solid color-mix(in srgb, var(--ink, #182230) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel, #fff) 42%, transparent);
+    backdrop-filter: blur(12px);
+    color: var(--ink, #182230);
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page .admin-gallery-workspace .admin-gallery-tree-table th:nth-child(3) {
+        width: 100px;
+    }
+    .admin-page .admin-gallery-workspace .admin-gallery-tree-table th:nth-child(4) {
+        width: 236px;
+    }
+    .admin-page .admin-gallery-workspace .admin-gallery-feature,
+    .admin-page .admin-gallery-workspace button.admin-gallery-access-label[data-admin-gallery-password-toggle],
+    .admin-page .admin-gallery-workspace [data-admin-gallery-visibility] .public-admin-visibility-trigger {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
 

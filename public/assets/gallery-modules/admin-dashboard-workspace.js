@@ -12,8 +12,8 @@
  * Existing tab/bulk modules and authenticated domain routes retain their authority.
  */
 import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261102-gallery-search-v2';
-import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261021-smart-photo-tags-v2';
-import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261021-smart-photo-tags-v2';
+import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261102-compact-controls-v3';
+import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261102-compact-controls-v3';
 import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261021-smart-photo-tags-v2';
 import { completeAdminMutation } from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 
@@ -515,7 +515,7 @@ export function setupAdminDashboardWorkspace() {
 
     /**
      * Refresh only owned Admin metadata after a confirmed persistent mutation.
-     * @return {void} Invalidates the read while retaining stable local feature drafts.
+     * @return {void} Invalidates the read while retaining the stable gallery region.
      */
     function refreshGalleries() {
         const region = reads.find(/** Select the stable owner of gallery metadata. @param {HTMLElement} candidate Read surface. @return {boolean} Whether it owns gallery metadata. */ candidate => candidate.dataset.dashboardRead === 'galleries');

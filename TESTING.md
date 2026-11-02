@@ -1265,7 +1265,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.150.4. Release verification uses the
+This guide applies to PHP Gallery Version 0.150.5. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -8036,6 +8036,11 @@ also verify classic and browser uploads, WebDAV scanning, setting autosave,
 one-time ordering, private photos, drawer persistence and narrow layouts.
 
 ### Admin gallery search and bulk actions
+
+The gallery feature plan and browser fixtures cover single-gallery immediate
+updates, the three map override states, voting/game coupling, stale snapshots,
+fragment replacement and lost replies without automatic write replay. The real
+installation still needs desktop and narrow-screen visual and interaction checks.
 
 The existing gallery tree browser fixture covers partial and approximate names,
 accent normalization, collapsed ancestors, status intersection, safe bulk
