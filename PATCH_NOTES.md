@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.150.4
+
+Improved gallery administration with faster name filtering and a grouped bulk
+action chooser.
+
+### Highlights
+
+#### Gallery search and bulk actions
+
+- Added live gallery name filtering with case and accent normalization and
+  limited typo tolerance, including adjacent character swaps.
+- Included matching galleries in collapsed branches with non-selectable parent
+  context and preserved the saved tree expansion state.
+- Grouped available bulk actions in an anchored panel with icons and retained
+  the native selection control when JavaScript is unavailable.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-gallery-list.js` and
+  `app/views/admin_dashboard.php` to coordinate filtering, tree visibility,
+  selection and the bulk action chooser.
+- Preserved search and eligible selections when gallery metadata refreshes and
+  blocked hierarchy reordering while filters are active.
+
+#### Tests
+
+- Extended `tests/fixtures/admin_gallery_tree.html` and
+  `tests/fixtures/admin_dashboard_workspace.html` for search, selection,
+  collapsed branches, action selection and refresh behavior.
+
+### User Impact
+
+#### For administrators
+
+- Made galleries easier to find by partial name or a small typing error and
+  made bulk actions easier to browse.
+
+#### For visitors
+
+- Public gallery behavior did not change.
+
 ## Version 0.150.3
 
 Unified the appearance of switches and buttons across public and Admin

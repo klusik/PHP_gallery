@@ -242,7 +242,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.150.3';
+const CMS_VERSION = '0.150.4';
 ```
 
 Update-related code uses:
