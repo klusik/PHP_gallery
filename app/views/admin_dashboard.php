@@ -250,115 +250,102 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
             . '</span></div>';
     echo '</header><div class="admin-gallery-command-panel">';
     echo '<div class="bulk-row admin-gallery-controls">';
+    echo '<label class="admin-gallery-search-label" hidden>'
+        . e(t('admin.gallery_list.search_label', 'Search galleries'))
+        . '<input type="search" data-gallery-name-filter autocomplete="off" placeholder="'
+        . e(t('admin.gallery_list.search_placeholder', 'Gallery name'))
+        . '"></label>';
     echo
         '<label>'
             . e(t('admin.dashboard.filter', 'Filter'))
             . '<select data-gallery-visibility-filter><option value="all">'
             . e(t('admin.dashboard.filter_all_statuses', 'All statuses'))
             . '</option><option value="unpublished">'
-            . e(t(
-                'admin.dashboard.filter_only_unpublished',
-                'Only unpublished',
-            ))
+            . e(t('admin.dashboard.filter_only_unpublished', 'Only unpublished'))
             . '</option><option value="public">'
             . e(t('admin.dashboard.filter_only_public', 'Only public'))
             . '</option><option value="private">'
             . e(t('admin.dashboard.filter_only_private', 'Only private'))
             . '</option></select></label>';
-    echo
-        '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
-    echo
-        '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> '
-            . e(t('admin.dashboard.select_displayed', 'Select displayed'))
-            . '</label><label>'
-            . e(t('admin.dashboard.bulk_action', 'Bulk action'))
-            . '<select name="action"><option value="scan">'
-            . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images'))
-            . '</option><option value="thumbs">'
-            . e(t(
-                'admin.dashboard.bulk_create_thumbnails',
-                'Create thumbnails',
-            ))
-            . '</option><option value="public">'
-            . e(t('admin.dashboard.bulk_set_public', 'Set public'))
-            . '</option><option value="unpublished">'
-            . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished'))
-            . '</option><option value="private">'
-            . e(t('admin.dashboard.bulk_set_private', 'Set private'))
-            . '</option><option value="delete">'
-            . e(
-                $galleryTrashEnabled
-                    ? t(
-                        'admin.dashboard.bulk_trash_selected',
-                        'Move selected galleries to trash',
-                    )
-                    : t(
-                        'admin.dashboard.bulk_delete_selected',
-                        'Delete selected galleries',
-                    ),
-            )
-            . '</option>';
+    echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary aria-live="polite"></span>';
+    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> '
+        . e(t('admin.dashboard.select_displayed', 'Select displayed'))
+        . '</label>';
+
+    // Keep the native select as the form owner and no-JavaScript fallback.
+    // The enhanced panel uses the same action values and localized labels.
+    $actionGroups = [
+        [t('admin.gallery_list.group_images', 'Images'), 'galleries', [
+            ['scan', t('admin.dashboard.bulk_scan_images', 'Scan/import images')],
+            ['thumbs', t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')],
+        ]],
+        [t('admin.gallery_list.group_visibility', 'Visibility'), 'integrity', [
+            ['public', t('admin.dashboard.bulk_set_public', 'Set public')],
+            ['unpublished', t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')],
+            ['private', t('admin.dashboard.bulk_set_private', 'Set private')],
+        ]],
+    ];
     if ($gpsMapReady) {
-        echo
-            '<option value="maps_on">'
-                . e(t(
-                    'admin.dashboard.bulk_enable_gps_maps',
-                    'Force GPS maps on',
-                ))
-                . '</option><option value="maps_off">'
-                . e(t(
-                    'admin.dashboard.bulk_disable_gps_maps',
-                    'Force GPS maps off',
-                ))
-                . '</option>';
+        $mapActions = [
+            ['maps_on', t('admin.dashboard.bulk_enable_gps_maps', 'Force GPS maps on')],
+            ['maps_off', t('admin.dashboard.bulk_disable_gps_maps', 'Force GPS maps off')],
+        ];
         if ($gpsMapOverrideReady) {
-            echo
-                '<option value="maps_inherit">'
-                    . e(t(
-                        'admin.dashboard.bulk_inherit_gps_maps',
-                        'Use GPS map default',
-                    ))
-                    . '</option>';
+            $mapActions[] = ['maps_inherit', t('admin.dashboard.bulk_inherit_gps_maps', 'Use GPS map default')];
         }
+        $actionGroups[] = [t('admin.gallery_list.group_maps', 'GPS maps'), 'navigation', $mapActions];
     }
     if ($filenameDisplayReady) {
-        echo
-            '<option value="filenames_on">'
-                . e(t(
-                    'admin.dashboard.bulk_show_file_names',
-                    'Show file names',
-                ))
-                . '</option><option value="filenames_off">'
-                . e(t(
-                    'admin.dashboard.bulk_hide_file_names',
-                    'Hide file names',
-                ))
-                . '</option>';
+        $actionGroups[] = [t('admin.gallery_list.group_filenames', 'File names'), 'logs', [
+            ['filenames_on', t('admin.dashboard.bulk_show_file_names', 'Show file names')],
+            ['filenames_off', t('admin.dashboard.bulk_hide_file_names', 'Hide file names')],
+        ]];
     }
     if ($votingReady) {
-        echo
-            '<option value="vote_on">'
-                . e(t('admin.dashboard.bulk_enable_voting', 'Enable voting'))
-                . '</option><option value="vote_off">'
-                . e(t('admin.dashboard.bulk_disable_voting', 'Disable voting'))
-                . '</option>';
+        $actionGroups[] = [t('admin.gallery_list.group_voting', 'Voting'), 'features', [
+            ['vote_on', t('admin.dashboard.bulk_enable_voting', 'Enable voting')],
+            ['vote_off', t('admin.dashboard.bulk_disable_voting', 'Disable voting')],
+        ]];
     }
     if ($pictureGameReady) {
-        echo
-            '<option value="game_on">'
-                . e(t(
-                    'admin.dashboard.bulk_enable_picture_game',
-                    'Enable picture game',
-                ))
-                . '</option><option value="game_off">'
-                . e(t(
-                    'admin.dashboard.bulk_disable_picture_game',
-                    'Disable picture game',
-                ))
-                . '</option>';
+        $actionGroups[] = [t('admin.gallery_list.group_game', 'Picture game'), 'smart', [
+            ['game_on', t('admin.dashboard.bulk_enable_picture_game', 'Enable picture game')],
+            ['game_off', t('admin.dashboard.bulk_disable_picture_game', 'Disable picture game')],
+        ]];
     }
+    $actionGroups[] = [t('admin.gallery_list.group_removal', 'Removal'), 'trash', [[
+        'delete',
+        $galleryTrashEnabled
+            ? t('admin.dashboard.bulk_trash_selected', 'Move selected galleries to trash')
+            : t('admin.dashboard.bulk_delete_selected', 'Delete selected galleries'),
+    ]]];
+    echo '<label data-gallery-action-fallback>'
+        . e(t('admin.dashboard.bulk_action', 'Bulk action'))
+        . '<select name="action">';
+    foreach ($actionGroups as [$groupLabel, $icon, $actions]) {
+        echo '<optgroup label="' . e($groupLabel) . '">';
+        foreach ($actions as [$value, $label]) {
+            echo '<option value="' . e($value) . '">' . e($label) . '</option>';
+        }
+        echo '</optgroup>';
+    }
+    echo '</select></label>';
+    echo '<details class="admin-gallery-action-widget" data-gallery-media-widget data-gallery-action-widget hidden>'
+        . '<summary aria-expanded="false"><span>'
+        . e(t('admin.dashboard.bulk_action', 'Bulk action'))
+        . ': </span><span data-gallery-action-current></span></summary>'
+        . '<div class="admin-gallery-action-panel" data-gallery-media-panel>';
+    foreach ($actionGroups as [$groupLabel, $icon, $actions]) {
+        echo '<section><h3>' . view_admin_menu_icon($icon) . e($groupLabel) . '</h3>';
+        foreach ($actions as [$value, $label]) {
+            echo '<button type="button" data-gallery-action-value="'
+                . e($value) . '">' . e($label) . '</button>';
+        }
+        echo '</section>';
+    }
+    echo '</div></details>';
     echo
-        '</select></label><button type="submit">'
+        '<button type="submit">'
             . e(t('admin.dashboard.apply', 'Apply'))
             . '</button><span class="admin-gallery-tree-controls"><button type="button" class="secondary" data-gallery-tree-action="collapse-all">'
             . e(t('admin.dashboard.collapse_all', 'Collapse all'))

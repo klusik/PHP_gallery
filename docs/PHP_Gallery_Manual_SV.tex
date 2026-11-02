@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{0.150.3}
+\newcommand{\version}{0.150.4}
 \newcommand{\manualdate}{2~november~2026}
 
 \hypersetup{
@@ -3018,6 +3018,17 @@ webbläsaren, inte en ändring av åtkomstpolicyn. En rad som filtret döljer
 avmarkeras också, och huvudmarkeringen töms, så att en dold gammal kryssruta
 inte oavsiktligt ingår i nästa massåtgärd. Sammanfattningen anger antalet visade
 och möjliga gallerier.
+
+Gallerilistan söker namn lokalt medan du skriver, utan hänsyn till versaler
+eller accenter. Längre ord tillåter en infogning, borttagning, ersättning eller
+växling av intilliggande tecken; liknande träffar markeras. Sökningen hittar även
+dolda undergallerier och visar överordnade gallerier som icke valbar kontext.
+Statusfiltret gäller träffarna. När sökningen rensas återställs den sparade
+trädvyn. \ui{Välj visade} väljer bara synliga träffar och dolda val avmarkeras.
+Sortering är spärrad under sökning eller aktivt statusfilter. Menyn för
+massåtgärder grupperar tillgängliga åtgärder med ikoner; valet utförs först med
+\ui{Verkställ}. Borttagning av ett galleri omfattar även dess undergallerier,
+vilket bekräftelsen anger.
 
 Galleriträdet stöder utfällning och hopfällning per gren samt \ui{Fäll ihop
 alla} och \ui{Fäll ut alla}. Det kommer ihåg vilka gallerigrenar administratören

@@ -64,7 +64,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.150.3}
+\newcommand{\version}{0.150.4}
 \newcommand{\manualdate}{2 November 2026}
 
 \hypersetup{
@@ -2955,6 +2955,17 @@ or~private. Filtering is~a~browser-side view aid, not~an~access-policy change.
 A~row hidden by~the~filter is~also unchecked, and~the~master selection
 is~cleared, so~a~hidden stale checkbox cannot accidentally enter the~next bulk
 action. The~summary reports the~displayed/eligible gallery count.
+
+The~gallery list searches names locally while typing, ignoring case and~accents.
+Longer words allow one insertion, deletion, replacement or~adjacent swap;
+approximate results are~labelled. Search includes collapsed descendants and
+shows their ancestors as~non-selectable context. The~status filter still applies
+to~matches. Clearing search restores the~saved collapse state. Only matching
+visible galleries are~selected by~\ui{Select displayed}; hidden selections
+are~cleared. Reordering is~unavailable while search or~a~status filter is~active.
+The~bulk action chooser groups available operations with icons; choosing an~action
+does not~execute it~until \ui{Apply}. Removal of~a~selected gallery also affects
+its~subgalleries, as~the~confirmation explains.
 
 The~gallery tree supports per-branch expand/collapse plus \ui{Collapse all}
 and~\ui{Expand all}. It~remembers which gallery branches the~administrator

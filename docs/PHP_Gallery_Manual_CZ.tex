@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{0.150.3}
+\newcommand{\version}{0.150.4}
 \newcommand{\manualdate}{2.~listopadu~2026}
 
 \hypersetup{
@@ -2938,6 +2938,17 @@ v~prohlížeči, nikoli změna pravidel přístupu. U~řádku skrytého filtrem 
 zruší zaškrtnutí a~vymaže se hlavní výběr, aby se skryté zastaralé zaškrtnutí
 nemohlo omylem dostat do další hromadné akce. Shrnutí uvádí počet zobrazených
 a~způsobilých galerií.
+
+Seznam galerií vyhledává názvy přímo v~prohlížeči při psaní, bez ohledu
+na~velikost písmen a~diakritiku. U~delších slov toleruje jedno vložení,
+vynechání, nahrazení nebo prohození sousedních znaků; podobné shody označí.
+Prohledává i~sbalené větve a~nadřazené galerie ukazuje jako nevolitelný kontext.
+Stavový filtr platí pro nalezené galerie. Po~vymazání hledání se obnoví původní
+sbalení. Volba \ui{Vybrat zobrazené} vybírá jen odpovídající viditelné galerie;
+skrytý výběr se zruší. Při hledání nebo aktivním stavovém filtru nelze měnit
+pořadí. Panel hromadných akcí seskupuje dostupné operace s~ikonami; volba akci
+nespustí před potvrzením tlačítkem \ui{Použít}. Odstranění vybrané galerie
+zahrnuje i~její podgalerie, jak uvádí potvrzení.
 
 Strom galerií podporuje rozbalení a~sbalení jednotlivých větví i~volby
 \ui{Sbalit vše} a~\ui{Rozbalit vše}. Pamatuje si, které větve správce sbalil.

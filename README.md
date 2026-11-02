@@ -60,7 +60,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.150.3
+**Current Version:** 0.150.4
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -248,6 +248,11 @@ live simulator verification limits.
   Admin-only lookup, with Unicode-safe suffixes, keyboard/pointer acceptance,
   and accessible help in full-page and side-panel create forms; see
   [title completion](docs/TITLE_COMPLETION.md)
+- **Admin gallery search** - Filter names as you type, including collapsed
+  descendants, accent-insensitive partial names and one typo per longer word.
+  Ancestors are non-selectable context, and reordering is paused during filtering.
+- **Grouped gallery actions** - Choose available bulk actions in a compact,
+  icon-labelled panel; the native select remains available without JavaScript.
 - **Bulk operations** - Rename, delete, move, reorder, or change visibility for
   multiple galleries at once
 - **Gallery metadata** - Title, description, optional date range, cover image,

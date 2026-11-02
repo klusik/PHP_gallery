@@ -11,7 +11,7 @@
  * Load read-only Overview totals after paint and gallery previews only when their tab is opened.
  * Existing tab/bulk modules and authenticated domain routes retain their authority.
  */
-import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
+import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261102-gallery-search-v2';
 import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261021-smart-photo-tags-v2';
 import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261021-smart-photo-tags-v2';
@@ -421,12 +421,15 @@ export function setupAdminDashboardWorkspace() {
      */
     function replaceGalleries(region, html) {
         const filterValue = region.querySelector('[data-gallery-visibility-filter]')?.value || 'all';
+        const searchValue = region.querySelector('[data-gallery-name-filter]')?.value || '';
         const bulkAction = region.querySelector('select[name="action"]')?.value || '';
         const selected = new Set(Array.from(region.querySelectorAll('input[name="gallery_ids[]"]:checked'),
             /** Preserve one explicitly selected row identity. @param {HTMLInputElement} input Selected gallery checkbox. @return {string} Stable row identity. */ input => input.value));
         region.innerHTML = html;
         const filter = region.querySelector('[data-gallery-visibility-filter]');
         if (filter instanceof HTMLSelectElement) filter.value = filterValue;
+        const search = region.querySelector('[data-gallery-name-filter]');
+        if (search instanceof HTMLInputElement) search.value = searchValue;
         const action = region.querySelector('select[name="action"]');
         if (action instanceof HTMLSelectElement && Array.from(action.options).some(
             /** Check that the prior bulk operation remains available. @param {HTMLOptionElement} option Available bulk operation. @return {boolean} Whether it matches prior intent. */ option => option.value === bulkAction)) action.value = bulkAction;
@@ -434,7 +437,7 @@ export function setupAdminDashboardWorkspace() {
         setupAdminGalleryTree();
         setupAdminGalleryReordering();
         for (const input of region.querySelectorAll('input[name="gallery_ids[]"]')) {
-            if (input.closest('[data-gallery-row]')?.dataset.hiddenByFilter !== '1') input.checked = selected.has(input.value);
+            if (!input.disabled && !input.closest('[data-gallery-row]')?.hidden) input.checked = selected.has(input.value);
         }
         setupAdminGalleryFeatures();
         setupAdminGalleryQuickAccess();

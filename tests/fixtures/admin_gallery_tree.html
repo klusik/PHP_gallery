@@ -23,6 +23,8 @@ License: MIT License (see LICENSE file in repository)
 </head><body class="admin-page"><main id="workspace"><!-- PRODUCTION_GALLERY_MARKUP --></main><pre id="results"></pre>
 <script type="module">
 import {setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering} from '/public/assets/gallery-modules/admin-gallery-list.js';
+import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk-actions.js';
+import {setupGalleryMediaPanels} from '/public/assets/gallery-modules/gallery-media-panels.js';
 import {isThumbnailSubmission, thumbnailEndpoint} from '/public/assets/gallery-modules/admin-core.js';
 const host = document.getElementById('workspace');
 const original = host.innerHTML;
@@ -106,6 +108,7 @@ function payload(expected) {
     check(JSON.stringify(Array.from(host.querySelectorAll('[data-gallery-row]'), /** Read canonical row metadata. @param {HTMLTableRowElement} item Live row. @return {{id:string,parent_id:string}} Current hierarchy. */ item => ({id:item.dataset.galleryId,parent_id:item.dataset.parentId}))) === JSON.stringify(want), 'DOM matches complete successful hierarchy');
 }
 try {
+    setupAdminBulkSelection(); setupGalleryMediaPanels();
     reset();
     check(host.querySelectorAll('[data-gallery-row]').length === 6, 'actual PHP renderer supplies six galleries');
     check(!host.textContent.includes('Warning:') && row(1).querySelectorAll('.admin-gallery-feature').length === 5 && !!host.querySelector('option[value="maps_inherit"]'), 'complete feature and access-ready render has no warnings and preserves GPS inheritance');
@@ -178,6 +181,36 @@ try {
         check(line.left >= workspaceBox.left && line.right <= workspaceBox.right + 1, 'long error text wraps without horizontal clipping');
     }
     check(errorStatus.scrollWidth <= errorStatus.clientWidth + 1, 'long error status has no concealed horizontal overflow');
+    reset();
+    const search = host.querySelector('[data-gallery-name-filter]');
+    row(3).dataset.galleryTitle = 'Mass Effect';
+    row(1).querySelector('[data-gallery-toggle]').click(); await settle();
+    const collapsePosts = posts.length;
+    for (const typo of ['Mass Efect', 'Mass Effcet', 'Mass Efffect']) {
+        search.value = typo; search.dispatchEvent(new Event('input', {bubbles:true}));
+        check(!row(3).hidden && row(3).textContent.includes('Similar match'), `fuzzy match finds ${typo}`);
+        check(!row(1).hidden && !row(2).hidden && row(1).querySelector('[name="gallery_ids[]"]').disabled, 'collapsed ancestors are disabled context');
+    }
+    check(posts.length === collapsePosts && row(1).classList.contains('is-collapsed'), 'search does not persist expansion');
+    const all = host.querySelector('[data-select-all]'); all.checked = true; all.dispatchEvent(new Event('change', {bubbles:true}));
+    check(row(3).querySelector('[name="gallery_ids[]"]').checked && !row(1).querySelector('[name="gallery_ids[]"]').checked && !row(2).querySelector('[name="gallery_ids[]"]').checked, 'select displayed excludes ancestor context');
+    const status = host.querySelector('[data-gallery-visibility-filter]'); status.value = 'private'; status.dispatchEvent(new Event('change', {bubbles:true}));
+    check(row(3).hidden && !row(3).querySelector('[name="gallery_ids[]"]').checked, 'status filter intersects search and clears hidden selection');
+    status.value = 'all'; status.dispatchEvent(new Event('change', {bubbles:true}));
+    search.value = 'Mass Efxctt'; search.dispatchEvent(new Event('input', {bubbles:true}));
+    check(row(3).hidden && host.querySelector('[data-gallery-filter-summary]').textContent.includes('0'), 'multiple errors are not claimed as a single edit');
+    row(3).dataset.galleryTitle = 'Žluťoučký kůň';
+    search.value = 'zlutoucky'; search.dispatchEvent(new Event('input', {bubbles:true}));
+    check(!row(3).hidden && !row(3).textContent.includes('Similar match'), 'accent-insensitive direct match');
+    search.value = ''; search.dispatchEvent(new Event('input', {bubbles:true}));
+    check(row(2).hidden && row(3).hidden && !row(1).querySelector('[name="gallery_ids[]"]').disabled, 'clearing restores original collapse and selection availability');
+    const chooser = host.querySelector('[data-gallery-action-widget]');
+    chooser.querySelector('summary').click();
+    chooser.querySelector('[data-gallery-action-value="thumbs"]').click();
+    check(host.querySelector('select[name="action"]').value === 'thumbs' && chooser.querySelector('[data-gallery-action-current]').textContent.includes('thumbnails'), 'panel selection keeps the existing form action');
+    await Promise.all(chooser.querySelector('[data-gallery-media-panel]').getAnimations().map(animation => animation.finished.catch(() => {})));
+    await Promise.resolve();
+    check(!chooser.open, 'selecting an action dismisses the shared disclosure');
     document.getElementById('results').textContent = `BROWSER PASS ${assertions} assertions`;
 } catch (error) { document.getElementById('results').textContent = `BROWSER FAIL ${error.message}`; }
 </script></body></html>

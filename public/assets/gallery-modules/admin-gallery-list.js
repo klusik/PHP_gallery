@@ -41,6 +41,104 @@ let adminGalleryTreeBinding = null;
 /** @type {WeakSet<Element>} Tables whose local reorder handlers have already been installed. */
 const adminGalleryReorderBindings = new WeakSet();
 
+/**
+ * Permit one edit only for search words of at least four characters.
+ * Type: number. Units: Unicode characters. Scope: one search word.
+ * Consumers: galleryNameMatch. Rationale: short words otherwise match too broadly.
+ */
+const GALLERY_FUZZY_MIN_LENGTH = 4;
+/**
+ * Limit approximate matching to one edit per search word.
+ * Type: number. Units: edits. Scope: one query word and candidate prefix.
+ * Consumers: galleryOneEdit. Rationale: prevent broad unrelated results.
+ */
+const GALLERY_FUZZY_MAX_EDITS = 1;
+
+/** Normalize gallery names for case and accent insensitive matching.
+ * @param {string} text User query or prepared gallery title.
+ * @returns {string} Lowercase text without combining accent marks.
+ */
+function normalizeGallerySearch(text) {
+    return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase().trim();
+}
+
+/** Check whether two words differ by at most one edit or adjacent transposition.
+ * @param {string} left First normalized word.
+ * @param {string} right Second normalized word or prefix.
+ * @returns {boolean} Whether one insertion, deletion, substitution or swap suffices.
+ */
+function galleryOneEdit(left, right) {
+    const a = Array.from(left), b = Array.from(right);
+    if (Math.abs(a.length - b.length) > GALLERY_FUZZY_MAX_EDITS) return false;
+    let i = 0, j = 0, edits = 0;
+    while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { i++; j++; continue; }
+        edits++;
+        if (edits > GALLERY_FUZZY_MAX_EDITS) return false;
+        if (a.length === b.length && a[i] === b[j + 1]
+            && a[i + 1] === b[j]) { i += 2; j += 2; }
+        else if (a.length > b.length) i++;
+        else if (a.length < b.length) j++;
+        else { i++; j++; }
+    }
+    return edits + (i < a.length || j < b.length ? 1 : 0)
+        <= GALLERY_FUZZY_MAX_EDITS;
+}
+
+/** Classify a title as direct, approximate or unmatched for a query.
+ * @param {string} title Normalized gallery title.
+ * @param {string} query Normalized user input.
+ * @returns {string} Empty string, 'direct' or 'approximate'.
+ */
+function galleryNameMatch(title, query) {
+    if (!query || title.includes(query)) return 'direct';
+    const words = title.split(/\s+/u);
+    const terms = query.split(/\s+/u);
+    let approximate = false;
+    for (const term of terms) {
+        if (words.some(word => word.includes(term))) continue;
+        if (Array.from(term).length < GALLERY_FUZZY_MIN_LENGTH) return '';
+        const matched = words.some(word => {
+            const chars = Array.from(word);
+            const length = Array.from(term).length;
+            return [length - 1, length, length + 1].some(size =>
+                size > 0 && galleryOneEdit(term, chars.slice(0, size).join('')));
+        });
+        if (!matched) return '';
+        approximate = true;
+    }
+    return approximate ? 'approximate' : 'direct';
+}
+
+/** Enhance the native action select using the shared media disclosure owner.
+ * @param {HTMLFormElement|null} form Gallery bulk form containing both controls.
+ * @returns {void} Synchronizes the chosen option and retains native fallback.
+ */
+function setupGalleryActionPanel(form) {
+    const select = form?.querySelector('select[name="action"]');
+    const fallback = form?.querySelector('[data-gallery-action-fallback]');
+    const widget = form?.querySelector('[data-gallery-action-widget]');
+    const current = widget?.querySelector('[data-gallery-action-current]');
+    if (!(select instanceof HTMLSelectElement) || !fallback || !widget || !current) return;
+    const sync = () => {
+        current.textContent = select.selectedOptions[0]?.textContent || '';
+        widget.querySelectorAll('[data-gallery-action-value]').forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.galleryActionValue === select.value));
+        });
+    };
+    widget.querySelectorAll('[data-gallery-action-value]').forEach(button => {
+        button.setAttribute('data-media-close', '');
+        button.addEventListener('click', () => {
+            select.value = button.dataset.galleryActionValue;
+            select.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+    });
+    select.addEventListener('change', sync);
+    sync();
+    fallback.hidden = true;
+    widget.hidden = false;
+}
+
 // Function `setupAdminGalleryFilters` executes this focused behavior.
 /**
  * Handle setup admin gallery filters.
@@ -60,73 +158,82 @@ export function setupAdminGalleryFilters() {
     if (adminGalleryFilterBinding) {
         document.removeEventListener('galleryRowsChanged', adminGalleryFilterBinding.summaryListener);
     }
-    // Variable `form` stores this steps working value.
     const form = filter.closest('form');
-    // Variable `rows` stores this steps working value.
     const rows = Array.from(document.querySelectorAll('[data-gallery-row]'));
-    // Variable `summary` stores this steps working value.
     const summary = document.querySelector('[data-gallery-filter-summary]');
-    // Variable `selectAll` stores this steps working value.
-    const selectAll = form ? form.querySelector('[data-select-all="gallery_ids[]"]') : null;
+    const search = form?.querySelector('[data-gallery-name-filter]');
+    const selectAll = form?.querySelector('[data-select-all="gallery_ids[]"]');
+    const byId = new Map(rows.map(row => [row.dataset.galleryId, row]));
+    setupGalleryActionPanel(form);
+    if (search instanceof HTMLInputElement) search.closest('label').hidden = false;
 
-    // Function `updateSummary` executes this focused behavior.
-    /**
-     * Update summary.
-     *
-     * Used by browser-side gallery behavior.
-     * @return {void} Writes the current visible and matching gallery totals.
-     */
-    function updateSummary() {
-        // displayed stores state or configuration for the gallery front-end flow.
-        let displayed = 0;
-        // total stores state or configuration for the gallery front-end flow.
-        let total = 0;
-        // selectedVisibility stores state or configuration for the gallery front-end flow.
-        const selectedVisibility = filter.value || 'all';
-        rows.forEach((row) => {
-            // matchesFilter stores state or configuration for the gallery front-end flow.
-            const matchesFilter = selectedVisibility === 'all' || row.dataset.galleryVisibility === selectedVisibility;
-            if (matchesFilter && row.dataset.hiddenByTree !== '1') {
-                total++;
-            }
-            if (!row.hidden) {
-                displayed++;
-            }
-        });
-        if (summary) {
-            summary.textContent = i18n('admin.gallery_list.displayed_summary', '{displayed} / {total} galleries displayed', {displayed, total});
-        }
-    }
-
-    // Function `applyFilter` executes this focused behavior.
-    /**
-     * Apply filter.
-     *
-     * Used by browser-side gallery behavior.
+    /** Apply name and visibility filters without changing saved tree expansion.
+     * @returns {void} Updates result, context, checkbox and summary states.
      */
     function applyFilter() {
-        // selectedVisibility stores state or configuration for the gallery front-end flow.
-        const selectedVisibility = filter.value || 'all';
-        rows.forEach((row) => {
-            // A filtered-out row is also unchecked. This prevents a hidden
-            // stale selection from being included in the next bulk action.
-            const matches = selectedVisibility === 'all' || row.dataset.galleryVisibility === selectedVisibility;
-            setGalleryRowHiddenReason(row, 'filter', !matches);
-            if (!matches) {
-                row.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]').forEach((checkbox) => {
-                    checkbox.checked = false;
-                });
+        const query = normalizeGallerySearch(search?.value || '');
+        const visibility = filter.value || 'all';
+        const matches = new Map();
+        const ancestors = new Set();
+        for (const row of rows) {
+            const result = galleryNameMatch(normalizeGallerySearch(row.dataset.galleryTitle || ''), query);
+            if (result && (visibility === 'all' || row.dataset.galleryVisibility === visibility)) {
+                matches.set(row, result);
+                if (query) {
+                    let parent = byId.get(row.dataset.parentId);
+                    while (parent && !ancestors.has(parent)) {
+                        ancestors.add(parent);
+                        parent = byId.get(parent.dataset.parentId);
+                    }
+                }
             }
-        });
-        if (selectAll instanceof HTMLInputElement) {
-            selectAll.checked = false;
         }
-        updateSummary();
+        let displayed = 0;
+        let total = 0;
+        for (const row of rows) {
+            const result = matches.get(row);
+            const context = Boolean(query && !result && ancestors.has(row));
+            let parent = byId.get(row.dataset.parentId);
+            let collapsed = false;
+            while (!query && parent) {
+                if (parent.classList.contains('is-collapsed')) { collapsed = true; break; }
+                parent = byId.get(parent.dataset.parentId);
+            }
+            setGalleryRowHiddenReason(row, 'tree', collapsed);
+            setGalleryRowHiddenReason(row, 'filter', !result && !context);
+            row.classList.toggle('is-gallery-search-context', context);
+            const checkbox = row.querySelector('input[name="gallery_ids[]"]');
+            if (checkbox instanceof HTMLInputElement) {
+                // Never submit a stale hidden selection or an ancestor shown only for context.
+                checkbox.disabled = context;
+                if (row.hidden || context) checkbox.checked = false;
+            }
+            row.querySelector('[data-gallery-search-match]')?.remove();
+            if (query && (context || result === 'approximate')) {
+                const badge = document.createElement('span');
+                badge.dataset.gallerySearchMatch = '';
+                badge.className = 'admin-gallery-search-match';
+                badge.textContent = context
+                    ? i18n('admin.gallery_list.search_context', 'Parent gallery')
+                    : i18n('admin.gallery_list.search_approximate', 'Similar match');
+                row.querySelector('.admin-gallery-summary-text')?.append(badge);
+            }
+            if (result && !collapsed) total++;
+            if (result && !row.hidden) displayed++;
+        }
+        if (selectAll instanceof HTMLInputElement) selectAll.checked = false;
+        if (summary) summary.textContent = query
+            ? i18n('admin.gallery_list.search_results', '{count} matching galleries', {count: matches.size})
+            : i18n('admin.gallery_list.displayed_summary', '{displayed} / {total} galleries displayed', {displayed, total});
     }
 
-    document.addEventListener('galleryRowsChanged', updateSummary);
-    adminGalleryFilterBinding = {filter, summaryListener: updateSummary};
+    document.addEventListener('galleryRowsChanged', applyFilter);
+    adminGalleryFilterBinding = {filter, summaryListener: applyFilter};
     filter.addEventListener('change', applyFilter);
+    search?.addEventListener('input', applyFilter);
+    search?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') event.preventDefault();
+    });
     applyFilter();
 }
 
@@ -292,13 +399,15 @@ export function setupAdminGalleryTree() {
      * Refresh visibility.
      *
      * Used by browser-side gallery behavior.
+     * @returns {void} Reconciles collapse state and informs gallery filter owners.
      */
     function refreshVisibility() {
         syncTreeControls();
         // Variable `rows` stores this steps working value.
         const rows = currentRows();
         // Variable `collapsed` stores this steps working value.
-        const collapsed = new Set(collapsedIds().map(String));
+        const searching = Boolean(document.querySelector('[data-gallery-name-filter]')?.value.trim());
+        const collapsed = new Set(searching ? [] : collapsedIds().map(String));
         rows.forEach((row) => {
             // Variable `parentId` stores this steps working value.
             let parentId = row.dataset.parentId || '0';
@@ -418,6 +527,7 @@ export function setupAdminGalleryReordering() {
     // csrfInput stores the CSRF token generated by the PHP form helper.
     const csrfInput = form.querySelector('input[name="csrf_token"]');
     const visibilityFilter = form.querySelector('[data-gallery-visibility-filter]');
+    const nameFilter = form.querySelector('[data-gallery-name-filter]');
     if (!body || !reorderUrl || !csrfInput) {
         return;
     }
@@ -464,7 +574,8 @@ export function setupAdminGalleryReordering() {
      * @return {boolean} Whether filtering permits gallery movement.
      */
     function galleryReorderingAllowed() {
-        return !visibilityFilter || visibilityFilter.value === 'all';
+        return (!visibilityFilter || visibilityFilter.value === 'all')
+            && !nameFilter?.value.trim();
     }
 
     /**
@@ -476,7 +587,7 @@ export function setupAdminGalleryReordering() {
             return;
         }
         if (!galleryReorderingAllowed()) {
-            setStatus(i18n('admin.gallery_list.filter_blocks_ordering', 'Choose All statuses to reorder or nest galleries.'), 'filtered');
+            setStatus(i18n('admin.gallery_list.filter_blocks_ordering', 'Clear the search and choose All statuses to reorder or nest galleries.'), 'filtered');
         } else {
             setStatus(i18n('admin.gallery_list.ready', 'Gallery ordering ready.'), 'idle');
         }
@@ -1370,6 +1481,11 @@ export function setupAdminGalleryReordering() {
         if (draggedRows.length > 0) {
             cancelReorder();
         }
+        updateReorderingFilterStatus();
+    });
+    nameFilter?.addEventListener('input', () => {
+        clearPendingDrag();
+        if (draggedRows.length > 0) cancelReorder();
         updateReorderingFilterStatus();
     });
     updateReorderingFilterStatus();
