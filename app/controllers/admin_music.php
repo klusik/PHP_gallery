@@ -268,7 +268,24 @@ function cms_admin_music(): void
             $catalog['songs'] ?? [],
         );
         $songDetails = music_catalog_song_details($songIds);
-        $tagRowsBySong = tags_for_entities('music_song', $songIds);
+        $albums = music_catalog_album_tree();
+        $dirtyStatus = music_catalog_dirty_status();
+        $albumMembers = $albumId > 0
+            ? music_catalog_album_members(
+                $albumId,
+                ADMIN_MUSIC_PAGE_SIZE,
+                $albumOffset,
+            )
+            : [];
+        // Album members can be outside the current catalog page or search.
+        $tagSongIds = array_values(array_unique(array_merge(
+            $songIds,
+            array_map(
+                static fn(array $member): int => (int) ($member['id'] ?? 0),
+                $albumMembers,
+            ),
+        )));
+        $tagRowsBySong = tags_for_entities('music_song', $tagSongIds);
         $songTags = [];
         $songTagLabels = [];
         foreach ($tagRowsBySong as $songId => $tagRows) {
@@ -294,15 +311,6 @@ function cms_admin_music(): void
         foreach ($galleryRows as $galleryId => $gallery) {
             $galleryUrls[$galleryId] = admin_music_gallery_url($gallery);
         }
-        $albums = music_catalog_album_tree();
-        $dirtyStatus = music_catalog_dirty_status();
-        $albumMembers = $albumId > 0
-            ? music_catalog_album_members(
-                $albumId,
-                ADMIN_MUSIC_PAGE_SIZE,
-                $albumOffset,
-            )
-            : [];
     } catch (Throwable $exception) {
         $catalog = ['revision' => $revision, 'songs' => [], 'total' => 0];
         $songDetails = [];

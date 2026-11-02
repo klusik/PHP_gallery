@@ -90,7 +90,7 @@ body.admin-page {
 </style>
 </head><body class="admin-page"><pre id="results"></pre><main id="mount">${markup}</main>
 <script type="module">
-import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261102-album-upload-v2';
+import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261102-album-song-edit';
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261027-appearance-state-v1';
 import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
@@ -839,15 +839,26 @@ try {
         && memberRows[0].textContent.includes('Midnight Drive')
         && memberRows[1].textContent.includes('Quiet Morning'),
         'Selected album membership ordering is missing.');
-    check(memberRows[0].querySelector('input[name="position"]')?.value === '0',
+    check(memberRows[0].querySelector(':scope > form input[name="position"]')?.value === '0',
         'Album member order control did not retain its prepared position.');
     check(Array.from(memberRows[1].querySelectorAll('input[name="position"]'))
         .map(input => input.value).join(',') === '0,2',
         'The second album member must move above the first or after its current position.');
-    check(Array.from(memberRows[0].querySelectorAll('form[data-admin-music-form]'))
+    check(Array.from(memberRows[0].querySelectorAll(':scope > form[data-admin-music-form]'))
         .map(form => form.querySelector('input[name="action"]')?.value)
         .join(',') === 'album_reorder_song,album_reorder_song,album_remove_song',
         'Native drag ordering must retain the existing move-up, move-down, and remove form actions.');
+    const albumTitle = memberRows[0].querySelector('[data-admin-music-title-edit]');
+    albumTitle.click();
+    const albumEditor = memberRows[0].querySelector('.admin-music-song-edit');
+    check(albumEditor.open && albumEditor.querySelector('textarea[name="title"]')?.value === 'Midnight Drive',
+        'Album titles must open the shared title editor for the selected song.');
+    albumEditor.querySelector('[data-admin-music-context="tags"]').click();
+    const albumTags = memberRows[0].querySelector('.admin-music-tags');
+    check(!albumEditor.open && albumTags.open
+        && albumTags.querySelector('input[name="tags"]')?.value === 'ambient, road',
+        'Album title shortcut must open the shared tag editor with the current tags.');
+    root.querySelector('.admin-music-tabs').click();
 
     const calls = [];
     const searchRequests = [];
@@ -870,6 +881,7 @@ try {
             writeBodies.push({
                 action: body.get('action'),
                 title: body.get('title'),
+                tags: body.get('tags'),
                 albumTitle: body.get('album_title'),
                 songId: body.get('song_id'),
                 albumId: body.get('album_id'),
@@ -1176,6 +1188,36 @@ try {
     root.querySelector(
         '.admin-music-tabs [data-admin-tab-target="admin-music-tab-albums"]',
     ).click();
+    const albumPageUrl = location.href;
+    let albumMember = root.querySelector('.admin-music-album-members > li');
+    albumMember.querySelector('[data-admin-music-title-edit]').click();
+    let albumTitleForm = albumMember.querySelector('textarea[name="title"]').form;
+    albumTitleForm.querySelector('textarea').value = 'Album edit';
+    albumTitleForm.requestSubmit();
+    await waitForIdle();
+    root = document.querySelector('[data-admin-music]');
+    check(writeBodies.at(-1)?.action === 'title'
+        && writeBodies.at(-1)?.songId === '101'
+        && writeBodies.at(-1)?.title === 'Album edit'
+        && writeBodies.at(-1)?.returnTab === 'admin-music-tab-albums'
+        && location.href === albumPageUrl
+        && root.querySelector('#admin-music-tab-albums')?.hidden === false,
+        'Album title saves must use the shared mutation and keep the album tab open.');
+    albumMember = root.querySelector('.admin-music-album-members > li');
+    albumMember.querySelector('[data-admin-music-title-edit]').click();
+    albumMember.querySelector('[data-admin-music-context="tags"]').click();
+    const albumTagForm = albumMember.querySelector('input[name="tags"]').form;
+    albumTagForm.querySelector('input[name="tags"]').value = 'fixture tag';
+    albumTagForm.requestSubmit();
+    await waitForIdle();
+    root = document.querySelector('[data-admin-music]');
+    check(writeBodies.at(-1)?.action === 'tags'
+        && writeBodies.at(-1)?.songId === '101'
+        && writeBodies.at(-1)?.tags === 'fixture tag'
+        && writeBodies.at(-1)?.returnTab === 'admin-music-tab-albums'
+        && location.href === albumPageUrl
+        && root.querySelector('#admin-music-tab-albums')?.hidden === false,
+        'Album tag saves must use the shared mutation and keep the album tab open.');
     const albumCreateForm = root.querySelector('form.admin-music-new-album');
     albumCreateForm.querySelector('input[name="album_title"]').value
         = 'Fixture album';

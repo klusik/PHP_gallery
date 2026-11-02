@@ -339,6 +339,8 @@ Paged browser phases await their terminal source/error state after native JSON
 body decoding. Responsive row assertions retain all three membership actions,
 check the separate Play/drag controls and reserve readable title space; narrow
 screens move the membership forms to a second row.
+Album rows reuse the song title and tag editors and their mutation pipeline.
+The controller also loads tags for members outside the displayed catalog page.
 The render adapter resolves key-only icon names from the real English catalog;
 unknown labels remain empty and fail the retained accessibility assertions.
 `admin_music_gallery_url_test.php` retains canonical URL cases and checks that

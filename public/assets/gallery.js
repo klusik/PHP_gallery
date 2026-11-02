@@ -72,7 +72,7 @@ import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261029-manual-zip-v1';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261102-repeat-modes-v1';
-import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261102-album-upload-v2';
+import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261102-album-song-edit';
 import {
     setupGalleryMusicPlayback,
 } from './gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
