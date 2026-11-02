@@ -221,9 +221,9 @@ function view_render_admin_theme_live_preview(array $preview): void
     echo
         '<header class="theme-preview-header"><strong data-theme-preview-brand>'
             . e($siteName)
-            . '</strong><nav><span class="theme-preview-link">'
+            . '</strong><nav><span class="theme-preview-link ui-button">'
             . e(t('admin.theme.appearance.preview_home', 'Home'))
-            . '</span><span class="theme-preview-link">'
+            . '</span><span class="theme-preview-link ui-button">'
             . e(t('admin.theme.appearance.preview_galleries', 'Galleries'))
             . '</span></nav></header>';
     echo

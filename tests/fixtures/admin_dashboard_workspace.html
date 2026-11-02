@@ -11,10 +11,16 @@ License: MIT
 -->
 <html lang="en"><meta charset="utf-8"><title>Dashboard fixture</title>
 <link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-feature-settings.css">
 <link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
+<style>
+/* Simulate the legacy site-wide override and a deliberate scoped override. */
+button, .button, input[type="submit"] { background: rgb(1, 2, 3); }
+.admin-page button.fixture-custom { background: rgb(4, 5, 6); }
+</style>
 <body class="admin-page"><main>
 <div class="admin-dashboard-page" data-admin-dashboard-workspace>
 <header class="admin-dashboard-toolbar"><h1>Overview</h1><button id="primary-action">Primary action</button></header>
@@ -49,7 +55,16 @@ License: MIT
 <label>Budget<input type="number" name="site_maintenance_time_budget_seconds" min="3" max="120" value="20"></label>
 <button type="submit">Save</button></form></article>
 </div></section>
-</div></main><pre id="results">BROWSER PENDING</pre>
+</div></main>
+<div id="button-component-fixture">
+<button type="button">Native button</button>
+<input type="submit" value="Submit">
+<a class="button" href="#button-component-fixture">Legacy link</a>
+<a class="ui-button ui-button--secondary" href="#button-component-fixture">Secondary</a>
+<button class="ui-button--danger" type="button">Delete</button>
+<button type="button" disabled>Disabled</button>
+<button class="fixture-custom" type="button">Custom</button>
+</div><pre id="results">BROWSER PENDING</pre>
 <div id="cache-region-fixtures" hidden><!-- PRODUCTION_CACHE_REGIONS_MARKUP --></div>
 <script type="module">
 import {setupAdminDashboardWorkspace} from '/public/assets/gallery-modules/admin-dashboard-workspace.js';
@@ -57,6 +72,11 @@ import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk-actions.js';
 const originalFetch = window.fetch.bind(window);
+/* Type: integer. Units: CSS pixels. Scope: shared button fixture.
+ * Consumers: computed minimum-height assertions at desktop and narrow widths.
+ * Rationale: preserve the compact and touch target sizes in the UI contract. */
+const BUTTON_DESKTOP_MIN_HEIGHT = 28;
+const BUTTON_TOUCH_MIN_HEIGHT = 44;
 let assertions = 0, summaryReads = 0, galleryReads = 0, releaseSummary = null, releaseGalleries = null, primaryClicks = 0;
 let contentSaveMode = 'success', contentWrites = 0, releaseContentSave = null;
 let scheduleWrites = 0;
@@ -172,6 +192,18 @@ window.fetch = /** Confine production reads to owned fixture data. @param {strin
     throw new Error('Unexpected fixture request: ' + path);
 };
 try {
+    const buttonSamples = [...document.querySelectorAll('#button-component-fixture > *')];
+    check(buttonSamples.every(element =>
+        parseFloat(getComputedStyle(element).minHeight) === BUTTON_DESKTOP_MIN_HEIGHT),
+        'Native and link actions share the compact desktop minimum');
+    check(getComputedStyle(buttonSamples[2]).display === 'inline-flex'
+        && getComputedStyle(buttonSamples[4]).color !== getComputedStyle(buttonSamples[0]).color
+        && parseFloat(getComputedStyle(buttonSamples[5]).opacity) < 1,
+        'Link layout, destructive and disabled states remain distinct');
+    check(getComputedStyle(buttonSamples[0]).backgroundColor !== 'rgb(1, 2, 3)'
+        && getComputedStyle(buttonSamples[2]).backgroundColor !== 'rgb(1, 2, 3)'
+        && getComputedStyle(buttonSamples[6]).backgroundColor === 'rgb(4, 5, 6)',
+        'Admin defaults outrank legacy global styling but allow targeted custom CSS');
     document.querySelector('#primary-action').addEventListener('click', /** Observe an available primary action. @return {number} Previous click count. */ () => primaryClicks++);
     setupAdminTabsInRoot(document);
     setupAdminBulkSelection();
@@ -484,6 +516,9 @@ try {
     check(lifecycleHost.querySelector('[data-cache-region-details] details').open && location.href === cacheUrl && lifecycleHost.dataset.panelOpen === '1',
         'Refresh preserves open technical details, panel and URL');
     await originalFetch('/__viewport?width=390');
+    check(buttonSamples.every(element =>
+        parseFloat(getComputedStyle(element).minHeight) === BUTTON_TOUCH_MIN_HEIGHT),
+        'Native and link actions share the narrow touch minimum');
     const regionBounds = lifecycleHost.querySelector('[data-cache-region-view]').getBoundingClientRect();
     check(regionBounds.width <= 390 && lifecycleHost.querySelector('[data-cache-region-view]').scrollWidth <= Math.ceil(regionBounds.width),
         'Mobile regional rows wrap long paths without horizontal overflow');

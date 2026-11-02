@@ -24,19 +24,9 @@
 .admin-page .admin-telemetry-page[data-telemetry-workspace] :is(h1, p, form, label) {
     margin: 0;
 }
-.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(button, .button, a) {
+.admin-page .admin-telemetry-page[data-telemetry-workspace] a:not(.button):not(.ui-button) {
     color: var(--ink);
-    background: transparent;
-    box-shadow: none;
     text-decoration: none;
-}
-.admin-page .admin-telemetry-page[data-telemetry-workspace] button {
-    font: inherit;
-    min-height: 28px;
-    padding: .15rem .4rem;
-    border: 1px solid var(--telemetry-line);
-    border-radius: min(var(--radius, 8px), 8px);
-    cursor: pointer;
 }
 .admin-page .admin-telemetry-page[data-telemetry-workspace] [hidden] {
     display: none !important;

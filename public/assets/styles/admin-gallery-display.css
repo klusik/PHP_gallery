@@ -79,7 +79,7 @@
     box-shadow: none;
 }
 
-#admin-edit-display .admin-display-group :is(select, button) {
+#admin-edit-display .admin-display-group select {
     min-height: 28px;
     padding: .2rem .4rem;
     border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);

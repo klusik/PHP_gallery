@@ -178,42 +178,13 @@
     color: var(--admin-muted-text);
 }
 
-.admin-page button,
-.admin-page .button,
-.admin-page a.button,
-.admin-page input[type="submit"] {
-    min-height: 32px;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-weight: 700;
-    line-height: 1.2;
-}
-
-.admin-page .button:not(.secondary):not(.danger),
-.admin-page button:not(.secondary):not(.danger),
-.admin-page input[type="submit"]:not(.secondary):not(.danger) {
-    border-color: var(--admin-brand);
-    background: var(--admin-brand);
-    color: #ffffff;
-}
-
-.admin-page .button.secondary,
-.admin-page button.secondary,
-.admin-page a.button.secondary,
 .admin-page .tree-toggle {
     border-color: var(--admin-border);
     background: var(--admin-surface);
     color: var(--admin-brand);
 }
 
-.admin-page .button.danger,
-.admin-page button.danger,
-.admin-page .secondary.danger {
-    border-color: rgba(163, 58, 47, 0.28);
-    color: var(--admin-danger);
-}
-
-.admin-page input,
+.admin-page input:where(:not([type="submit"]):not([type="button"])),
 .admin-page textarea,
 .admin-page select {
     min-height: 32px;

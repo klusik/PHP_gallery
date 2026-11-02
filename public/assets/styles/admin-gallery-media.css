@@ -1238,17 +1238,7 @@
     width: auto;
     min-height: 28px;
     padding: 0.25rem 0.6rem;
-    color: var(--ink);
     font-size: 0.82rem;
-    border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-    border-radius: min(var(--radius, 6px), 6px);
-    background: transparent;
-    box-shadow: none;
-    text-decoration: none;
-}
-
-:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-actions button[type="submit"] {
-    border-color: color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
 :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-panel :focus-visible,

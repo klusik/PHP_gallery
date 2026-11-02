@@ -64,6 +64,7 @@ const html = String.raw`<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 </head><body class="admin-page"><pre id="results"></pre><main>${initial.html}</main>
 <script type="module">
@@ -216,6 +217,7 @@ const files = new Map([
     ['/public/assets/styles/base.css', 'public/assets/styles/base.css'],
     ['/public/assets/styles/admin.css', 'public/assets/styles/admin.css'],
     ['/public/assets/styles/admin-cinematic.css', 'public/assets/styles/admin-cinematic.css'],
+    ['/public/assets/styles/ui-button.css', 'public/assets/styles/ui-button.css'],
     ['/public/assets/styles/ui-switch.css', 'public/assets/styles/ui-switch.css'],
     ['/public/assets/gallery-modules/admin-features.js', 'public/assets/gallery-modules/admin-features.js'],
 ]);

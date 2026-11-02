@@ -361,9 +361,6 @@
     height: 1.8rem;
     min-height: 1.8rem;
     padding: .25rem;
-    border: 1px solid transparent;
-    border-radius: .35rem;
-    background: var(--admin-surface-soft, #f1f5fa);
     color: var(--accent, #365fab);
     text-decoration: none;
     cursor: pointer;

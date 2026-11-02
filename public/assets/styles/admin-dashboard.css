@@ -607,21 +607,6 @@
     background: #fcfdff;
 }
 
-.admin-page .button,
-.admin-page button,
-.admin-page input[type="submit"],
-.admin-page .nav a {
-    border-radius: 7px;
-}
-
-.admin-page .button.secondary,
-.admin-page button.secondary,
-.admin-page .nav a.secondary {
-    border-color: #b8c5d0;
-    background: #ffffff;
-    color: #1f5f8f;
-}
-
 .admin-devmode-panel--secondary {
     border-radius: 14px;
     background: #fbfcfd;

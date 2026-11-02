@@ -442,29 +442,10 @@
     min-width: 0;
     min-height: 1.75rem;
     margin: 0;
-    padding: 0.25rem 0.5rem;
-    border: 0;
-    border-radius: 5px;
-    color: var(--admin-accent, #315f9b);
-    background: transparent;
-    box-shadow: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-decoration: none;
 }
-[data-gallery-upload-form] [data-gallery-upload-submit],
-#admin-edit-media .gallery-media-upload-toolbar .button,
-.admin-tabs .admin-gallery-top-save {
-    background: color-mix(in srgb, var(--accent) 9%, transparent);
-}
+
 [data-gallery-upload-form] .admin-side-panel-actions .button.primary {
     min-width: 0;
-}
-[data-gallery-upload-form] :is(button, .button):hover,
-#admin-edit-images :is(button, .button):hover,
-#admin-edit-media .gallery-media-upload-toolbar .button:hover,
-.admin-tabs .admin-gallery-top-save:hover {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .admin-tabs:has(.admin-gallery-top-save) {
     display: flex;
@@ -1957,11 +1938,7 @@ body.has-admin-side-panel {
     min-width: 2rem;
     min-height: 2rem;
     padding: 0;
-    border-radius: 7px;
-    border-color: #d5dde7;
-    background: #f8fafc;
     color: #334155;
-    box-shadow: none;
     font-size: 0.9rem;
 }
 #admin-edit-images .admin-image-row-actions .public-admin-edit-button:hover,

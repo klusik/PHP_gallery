@@ -1049,9 +1049,6 @@ button.gallery-row-action.secondary {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    border: 1px solid #cbd9e7;
-    border-radius: 5px;
-    background: #fff;
     font-size: 0.95rem;
     line-height: 1;
 }

@@ -184,6 +184,7 @@ const page = String.raw`<!doctype html><html lang="en"><head>
 <link rel="stylesheet" href="/public/assets/styles/admin-gallery-display.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-gallery-media.css">
 <link rel="stylesheet" href="/public/assets/styles/breadcrumbs.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 <style>
 body.admin-page { margin: 1rem; }
@@ -911,6 +912,7 @@ try {
         + '<link rel="stylesheet" href="/public/assets/styles/utilities.css">'
         + '<link rel="stylesheet" href="/public/assets/styles.css">'
         + '<link rel="stylesheet" href="/public/assets/styles/breadcrumbs.css">'
+        + '<link rel="stylesheet" href="/public/assets/styles/ui-button.css">'
         + '<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">'
         + '</head><body><div class="gallery-attachment-applets"></div></body></html>';
     const drawerReady = new Promise((resolve, reject) => {
@@ -938,7 +940,7 @@ try {
         && !drawerPdf.closest('#admin-edit-media')
         && drawerDisclosure?.tagName === 'DETAILS'
         && drawerDisclosure.open
-        && drawerStylesheets.length === 9
+        && drawerStylesheets.length === 10
         && drawerStylesheets.every(link => link.sheet)
         && iconStylesAreCompact(drawerIcons, PUBLIC_ICON_HITBOX_MAX_PX),
     'Public drawer actions must retain native disclosure behavior and compact visible SVG controls under the public stylesheet stack: '

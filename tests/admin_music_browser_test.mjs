@@ -57,6 +57,7 @@ const page = String.raw`<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/public.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-layout.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
@@ -253,6 +254,10 @@ try {
     setupGalleryMusicPlayback();
     setupGalleryMusicPlayback();
     let root = document.querySelector('[data-admin-music]');
+    const rowPlayStyleSample = root.querySelector('.admin-music-row-play');
+    check(rowPlayStyleSample && getComputedStyle(rowPlayStyleSample).borderStyle === 'none'
+        && getComputedStyle(rowPlayStyleSample).backgroundColor === 'rgba(0, 0, 0, 0)',
+        'Catalog row Play uses the borderless contextual action');
     const catalogPlayer = root.querySelector('.admin-music-catalog');
     const muteControl = catalogPlayer.querySelector('[data-music-action="mute"]');
     muteControl.click();

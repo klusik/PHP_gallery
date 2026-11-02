@@ -24,6 +24,7 @@ if (!executable || executable.startsWith('--')) {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = String.raw`<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><link rel="stylesheet" href="/public/assets/styles/lightbox.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 <style>
 body { margin: 8px; font: 16px sans-serif; }

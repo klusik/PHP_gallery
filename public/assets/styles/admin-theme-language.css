@@ -567,8 +567,8 @@
     font-weight: 650;
 }
 
-.admin-page #admin-theme-tab-language :is(button, .button,
-    input:not(.ui-switch), select, textarea) {
+.admin-page #admin-theme-tab-language :is(input:not(.ui-switch):not([type="submit"]):not([type="button"]),
+        select, textarea) {
     box-sizing: border-box;
     min-height: 28px;
     margin: 0;
@@ -583,10 +583,6 @@
 }
 
 .admin-page #admin-theme-tab-language :is(a, button, summary) { text-decoration: none; }
-.admin-page #admin-theme-tab-language :is(button, .button):hover {
-    background: var(--language-tint);
-    color: var(--ink);
-}
 
 .admin-page #admin-theme-tab-language :is(a, button, input, select, textarea, summary):focus-visible {
     outline: 2px solid var(--accent);
@@ -798,17 +794,6 @@
     [data-language-autosave-ready='1'] #admin-theme-language-subtab-settings:not([hidden]))
     .admin-theme-save-panel { display: none; }
 
-.admin-page #admin-theme-form:has(#admin-theme-tab-language:not([hidden]))
-    .admin-theme-save-panel :is(button, .button) {
-    min-height: 28px;
-    padding: 3px 7px;
-    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-    border-radius: min(var(--radius, 8px), 6px);
-    background: transparent;
-    color: var(--ink);
-    box-shadow: none;
-    font-size: .8rem;
-}
 
 @media (max-width: 640px), (pointer: coarse) {
     .admin-page #admin-theme-tab-language :is(button, .button, select,
